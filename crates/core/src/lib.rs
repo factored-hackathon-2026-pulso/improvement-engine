@@ -9,6 +9,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+pub mod enriched_history;
 pub mod quota_grant;
 pub mod run_config;
 pub mod sandbox;

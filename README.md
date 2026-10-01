@@ -12,7 +12,7 @@ python -m unittest discover -s tests -p "test_*_contract.py" -v
 python contracts/validate_fixtures.py
 ```
 
-The GitHub Actions workflow additionally checks formatting, Clippy, Rust unit/integration harnesses, contract unit tests and the complete contract-fixture validator on Windows and Linux. U02 adds tenant-scoped immutable artifact repositories and a PostgreSQL migration/adapter; U03 adds synthetic sealed-source validation. It does not implement detection, an Agent Core runtime, a model gateway, authenticated real-data ingestion, or any external call. Infrastructure lives in sibling `infra`.
+The GitHub Actions workflow additionally checks formatting, Clippy, Rust unit/integration harnesses, contract unit tests and the complete contract-fixture validator on Windows and Linux. U02 adds tenant-scoped immutable artifact repositories and a PostgreSQL migration/adapter; U03 adds synthetic sealed-source validation. U04 adds an in-memory, discovery-safe projection for adapter-supplied E0 enriched-history rows: it seals namespace/world/cutoff plus file/schema/transform/policy digests and availability per field/group, blocks labels/precomputed signals/final outcomes, and blocks exposure entirely when provenance drifts. It does not implement detection, an Agent Core runtime, a model gateway, authenticated real-data ingestion, or any external call. Infrastructure lives in sibling `infra`.
 
 `rust-ci` also invokes the reviewed, SHA-pinned reusable PostgreSQL workflow in
 `pulso-factored/infra`. That isolated GitHub-hosted database runs U02's ignored
@@ -20,4 +20,4 @@ destructive migration test; the engine supplies neither a database URL nor
 secrets. Its first green caller run is the evidence that the cross-repository
 boundary and real PostgreSQL gate work.
 
-Start with [AGENTS.md](AGENTS.md), [CONTEXT.md](CONTEXT.md), the [contract journal](docs/journal/0002-layer-0-contract-envelope.md), the [workspace journal](docs/journal/0003-layer-0-rust-workspace.md), the [source-validation journal](docs/journal/0004-u03-source-contract-validation.md) and the [artifact-store journal](docs/journal/0004-u02-immutable-artifact-store.md).
+Start with [AGENTS.md](AGENTS.md), [CONTEXT.md](CONTEXT.md), the [contract journal](docs/journal/0002-layer-0-contract-envelope.md), the [workspace journal](docs/journal/0003-layer-0-rust-workspace.md), the [source-validation journal](docs/journal/0004-u03-source-contract-validation.md), the [artifact-store journal](docs/journal/0004-u02-immutable-artifact-store.md) and the [enriched-history journal](docs/journal/0006-u04-enriched-history.md).
