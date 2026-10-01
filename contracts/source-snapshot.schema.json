@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pulso-factored/improvement-engine/contracts/source-snapshot.schema.json",
+  "title": "Pulso SourceSnapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "tenant_id", "source_namespace", "world_ref", "observed_cutoff", "sources"],
+  "properties": {
+    "contract_version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minor"],
+      "properties": {"major": {"const": 1}, "minor": {"type": "integer", "minimum": 0}}
+    },
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "source_namespace": {"type": "string", "minLength": 1},
+    "world_ref": {"type": "string", "minLength": 1},
+    "observed_cutoff": {"type": "string", "format": "date-time"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["table", "uri", "file_digest", "header_digest", "row_count", "source_contract_ref"],
+        "properties": {
+          "table": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "uri": {"type": "string", "pattern": "^(file|s3)://"},
+          "file_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "header_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "row_count": {"type": "integer", "minimum": 0},
+          "source_contract_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "version", "digest"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]*$"},
+              "version": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
+              "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

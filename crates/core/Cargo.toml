@@ -1,0 +1,11 @@
+[package]
+name = "improvement-engine-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+name = "improvement_engine_core"
+path = "src/lib.rs"

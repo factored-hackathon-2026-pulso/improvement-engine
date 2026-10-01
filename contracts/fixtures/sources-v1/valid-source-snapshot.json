@@ -1,0 +1,21 @@
+{
+  "contract_version": {"major": 1, "minor": 0},
+  "tenant_id": "demo",
+  "source_namespace": "bank_history",
+  "world_ref": "supplied-synthetic-v1",
+  "observed_cutoff": "2026-09-01T00:00:00Z",
+  "sources": [
+    {
+      "table": "call_center_interactions",
+      "uri": "file:///approved-data/call_center_interactions.csv",
+      "file_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "header_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "row_count": 10,
+      "source_contract_ref": {
+        "id": "call_center_interactions",
+        "version": "v1",
+        "digest": "sha256:b40f76df8fd97cc646b2c44a83e2dca5873ee2c14a64031359ded23eb5c5cf17"
+      }
+    }
+  ]
+}

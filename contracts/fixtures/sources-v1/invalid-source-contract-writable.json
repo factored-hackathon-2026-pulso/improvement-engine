@@ -1,0 +1,14 @@
+{
+  "contract_version": {"major": 1, "minor": 0},
+  "source_namespace": "bank_history",
+  "source_kind": "original",
+  "table": "call_center_interactions",
+  "primary_key": ["interaction_id"],
+  "event_clock": "interaction_date",
+  "read_only": false,
+  "access_policy": {"permitted_classifications": ["internal"]},
+  "columns": [
+    {"name": "interaction_id", "logical_type": "text", "nullable": false, "purpose": "identity", "classification": "internal"},
+    {"name": "interaction_date", "logical_type": "timestamp", "nullable": false, "purpose": "event_clock", "classification": "internal"}
+  ]
+}

@@ -1,0 +1,41 @@
+name: rust-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
+      - name: Check formatting
+        run: cargo +1.98.1 fmt --all --check
+      - name: Lint
+        run: cargo +1.98.1 clippy --workspace --all-targets -- -D warnings
+      - name: Unit-test harness
+        run: cargo +1.98.1 test --workspace --lib
+      - name: Integration tests
+        run: cargo +1.98.1 test --workspace
+      - name: Contract-fixture harness
+        run: python -m unittest discover -s tests -p "test_*_contract.py" -v
+      - name: Validate contract fixtures
+        run: python contracts/validate_fixtures.py
