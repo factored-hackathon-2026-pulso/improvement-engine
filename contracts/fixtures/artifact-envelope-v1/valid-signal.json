@@ -1,0 +1,22 @@
+{
+  "contract_version": {"major": 1, "minor": 0},
+  "tenant_id": "demo",
+  "artifact": {
+    "id": "018f1234-5678-7abc-8def-0123456789ab",
+    "revision": 1,
+    "kind": "signal",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "payload": {
+    "metric_ref": "contact_rate_v1",
+    "population_ref": "demo_population_v1"
+  },
+  "parent_refs": [
+    {
+      "tenant_id": "demo",
+      "id": "018f1234-5678-7abc-8def-0123456789ac",
+      "revision": 2,
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

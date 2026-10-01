@@ -1,0 +1,11 @@
+{
+  "contract_version": {"major": 1, "minor": 0},
+  "tenant_id": "demo",
+  "artifact": {
+    "id": "018f1234-5678-7abc-8def-0123456789ab",
+    "revision": 0,
+    "kind": "signal",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "payload": {}
+}

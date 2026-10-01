@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pulso-factored/improvement-engine/contracts/source-ref.schema.json",
+  "title": "Pulso SourceRef v1",
+  "description": "Logical reference to a readonly source row; it never creates a foreign key into the source dataset.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tenant_id", "source_namespace", "world_ref", "snapshot_ref", "table", "source_pk", "file_digest", "observed_cutoff"],
+  "properties": {
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "source_namespace": {"type": "string", "minLength": 1},
+    "world_ref": {"type": "string", "minLength": 1},
+    "snapshot_ref": {"$ref": "artifact-ref.schema.json"},
+    "table": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "source_pk": {"type": "string", "minLength": 1},
+    "file_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "observed_cutoff": {"type": "string", "format": "date-time"}
+  }
+}

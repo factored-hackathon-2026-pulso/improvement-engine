@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pulso-factored/improvement-engine/contracts/artifact-envelope.schema.json",
+  "title": "Pulso artifact envelope v1",
+  "description": "Small immutable envelope for a Pulso-owned artifact revision. It is not an Agent Core entity body.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "tenant_id", "artifact", "payload"],
+  "properties": {
+    "contract_version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minor"],
+      "properties": {
+        "major": {"const": 1},
+        "minor": {"type": "integer", "minimum": 0}
+      }
+    },
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "artifact": {"$ref": "#/$defs/artifactIdentity"},
+    "payload": {"type": "object"},
+    "run_config_ref": {"$ref": "#/$defs/artifactRef"},
+    "source_snapshot_ref": {"$ref": "#/$defs/artifactRef"},
+    "parent_refs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifactRef"},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "uuidV7": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "kind", "digest"],
+      "properties": {
+        "id": {"$ref": "#/$defs/uuidV7"},
+        "revision": {"type": "integer", "minimum": 1},
+        "kind": {
+          "enum": [
+            "signal",
+            "opportunity",
+            "proposal",
+            "capability_bundle",
+            "scenario_set",
+            "evaluation",
+            "memory_wiki",
+            "detector",
+            "run_config",
+            "source_snapshot"
+          ]
+        },
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_id", "id", "revision", "digest"],
+      "properties": {
+        "tenant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "id": {"$ref": "#/$defs/uuidV7"},
+        "revision": {"type": "integer", "minimum": 1},
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

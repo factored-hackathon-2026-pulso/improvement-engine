@@ -1,0 +1,15 @@
+{
+  "tenant_id": "demo",
+  "source_namespace": "bank_history",
+  "world_ref": "supplied-synthetic-v1",
+  "snapshot_ref": {
+    "tenant_id": "demo",
+    "id": "018f1234-5678-7abc-8def-0123456789ac",
+    "revision": 1,
+    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "table": "call_center_interactions",
+  "source_pk": "synthetic-interaction-1",
+  "file_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "observed_cutoff": "2026-09-01T00:00:00Z"
+}
