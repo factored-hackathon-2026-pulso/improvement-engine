@@ -13,6 +13,9 @@ prueba de migración PostgreSQL ignorada de U02 contra su contenedor efímero.
 El caller no transmite secretos, no construye un segundo servicio PostgreSQL,
 no define URL/consentimiento destructivo y no convierte el gate en opcional.
 El job se activa con la misma política de PR y `main` que el CI existente.
+También admite `workflow_dispatch`, para volver a ejecutar el mismo gate
+inmutable después de recuperar una configuración de GitHub Actions que haya
+impedido siquiera planificar el workflow.
 
 ## Evidencia de TDD
 

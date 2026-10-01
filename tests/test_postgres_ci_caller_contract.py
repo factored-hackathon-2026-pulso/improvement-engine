@@ -1,6 +1,7 @@
 """Keep the real U02 PostgreSQL gate delegated to the reviewed infra workflow."""
 
 from pathlib import Path
+import re
 import unittest
 
 
@@ -15,9 +16,17 @@ CALLER = (
 class PostgresCiCallerContractTest(unittest.TestCase):
     def test_ci_calls_the_pinned_reusable_postgres_migration_gate(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
+        trigger_block = re.search(
+            r"(?ms)^on:\n(?P<triggers>.*?)(?=^permissions:)", workflow
+        )
 
         self.assertIn("pull_request:", workflow)
         self.assertIn("branches: [main]", workflow)
+        self.assertIsNotNone(trigger_block)
+        self.assertRegex(
+            trigger_block.group("triggers"),
+            r"(?m)^  workflow_dispatch:\s*$\n^$",
+        )
         self.assertIn("postgres-artifact-migration:", workflow)
         self.assertIn(f"uses: {CALLER}", workflow)
         self.assertIn("permissions:\n      contents: read", workflow)
