@@ -1,33 +1,48 @@
-# 0005 — I02: caller CI PostgreSQL reutilizable
+# 0005 — I03: PostgreSQL CI autocontenido
 
 ## Comportamiento entregado
 
-El workflow `rust-ci` conserva su matriz portátil de formato, lint, pruebas
-Rust y contratos. Además ejecuta el job
-`postgres-artifact-migration`, que llama exclusivamente al workflow reusable
-de `pulso-factored/infra` fijado al commit
-`8f6df2e1916480b4dcacc5e60094d0f2c76d69d2`.
+El job `postgres-artifact-migration` vive en `improvement-engine` y ejecuta
+la única prueba PostgreSQL ignorada de U02 contra el digest inmutable de
+`postgres:17`, un servicio efímero de GitHub Actions. Conserva checkout fijado,
+credenciales persistentes
+deshabilitadas, permisos globales mínimos (`contents: read`) y Rust 1.98.1.
+La URL y el consentimiento destructivo se declaran sólo en el paso de la
+prueba y apuntan al contenedor aislado; no hay secretos de GitHub ni workflow
+reutilizable externo.
 
-El workflow llamado hace checkout de este repositorio y ejecuta la única
-prueba de migración PostgreSQL ignorada de U02 contra su contenedor efímero.
-El caller no transmite secretos, no construye un segundo servicio PostgreSQL,
-no define URL/consentimiento destructivo y no convierte el gate en opcional.
-El job se activa con la misma política de PR y `main` que el CI existente.
+El adaptador PostgreSQL y la prueba de migración convierten sus UUID de texto
+con `$n::text::uuid`. Así el driver enlaza parámetros `TEXT` y PostgreSQL hace
+la conversión explícita: se corrige el fallo real donde un `&str` se intentaba
+enviar a un parámetro tipado `UUID`.
+
+La primera ejecución real también reveló que la helper directa de la prueba
+intentaba enviar `&str` a `$7::jsonb`. Ahora materializa `serde_json::Value`
+con `json!({})`, mientras el adaptador ya entrega su `Value` de payload. El
+gate PostgreSQL prueba así los límites de binding UUID y JSONB del driver, no
+sólo la sintaxis de la migración.
+
+## Límite de propiedad
+
+`improvement-engine` posee sus dependencias de desarrollo e integración:
+servicios efímeros de CI, Compose/LocalStack y fixtures. El repositorio
+`infra` posee Terraform, infraestructura AWS, despliegues y operación; no es
+una dependencia para construir o validar el motor. Este cambio elimina el
+acoplamiento a permisos entre repositorios y SHA externo.
 
 ## Evidencia de TDD
 
-1. Se añadió primero `tests/test_postgres_ci_caller_contract.py`. El primer
-   ciclo falló porque `postgres-artifact-migration` no existía en `ci.yml`.
-2. El caller mínimo con SHA y permiso `contents: read` dejó el contrato en
-   verde. La prueba también bloquea secretos, una URL/consentimiento local,
-   una imagen PostgreSQL duplicada y bypasses de error en el caller.
-3. La ejecución remota del PR es la evidencia necesaria de que GitHub permite
-   el reusable workflow privado y de que la migración se ejecuta de verdad;
-   una comprobación local de YAML no equivale a ese gate.
+1. Se transformó primero el contrato Python del caller remoto al contrato de
+   un servicio PostgreSQL local. Falló porque `ci.yml` todavía tenía `uses:
+   pulso-factored/infra/...`.
+2. El job local dejó el contrato verde y bloquea referencias a `infra`,
+   secretos, bypasses y jobs opcionales.
+3. La prueba de migración ignorada conserva el caso que reprodujo el error de
+   binding UUID; su ejecución en GitHub Actions es la evidencia de la base
+   PostgreSQL real. Las comprobaciones estructurales no lo sustituyen.
 
-## Límite y operación
+## Limitación
 
-Si el SHA debe actualizarse, el cambio se revisa como actualización explícita
-de dependencia de infraestructura, con su nuevo commit y su nueva CI. No se
-usa una rama, tag mutable ni `secrets: inherit`. El acceso de Actions entre los
-dos repositorios continúa siendo un prerrequisito administrado por GitHub.
+El servicio de CI valida la migración y el adaptador contra PostgreSQL real,
+pero no despliega ni prueba recursos AWS. Esos recursos pertenecen a `infra`
+y se validarán allí con Terraform y sus propios gates.

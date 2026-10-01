@@ -27,9 +27,13 @@ fn append(
             (Some(tenant), Some(id), Some(revision), Some(digest))
         })
         .unwrap_or((None, None, None, None));
+    // `postgres` implements ToSql for `serde_json::Value` (not `&str`) when
+    // the SQL parameter is JSONB. Keep this direct migration seam typed so
+    // the real PostgreSQL CI regression covers both UUID and JSONB bindings.
+    let payload = json!({});
     client.query_one(
         "SELECT pulso_append_artifact_revision(
-            $1, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8, $9::uuid, $10, $11
+            $1, $2::text::uuid, $3, $4, $5, $6, $7::jsonb, $8, $9::text::uuid, $10, $11
         )",
         &[
             &tenant,
@@ -38,7 +42,7 @@ fn append(
             &revision,
             &kind,
             &digest,
-            &"{}",
+            &payload,
             &source_tenant,
             &source_id,
             &source_revision,

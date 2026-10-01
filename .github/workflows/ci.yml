@@ -13,12 +13,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # U02 is intentionally run by infrastructure's reviewed, isolated PostgreSQL
-  # boundary. The immutable SHA is part of this repository's CI contract.
+  # The durable U02 seam is exercised against an ephemeral database owned by
+  # this service's CI. Deployment infrastructure is intentionally not a test
+  # dependency of the engine.
   postgres-artifact-migration:
-    uses: pulso-factored/infra/.github/workflows/postgres-integration.yml@8f6df2e1916480b4dcacc5e60094d0f2c76d69d2
-    permissions:
-      contents: read
+    name: PostgreSQL artifact migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+        env:
+          POSTGRES_DB: pulso_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pulso_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal
+      - name: Run isolated immutable artifact migration test
+        env:
+          PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test
+          PULSO_ALLOW_DESTRUCTIVE_TEST_DB: "1"
+        run: cargo +1.98.1 test --locked --workspace migration_enforces_cas_immutability_and_source_snapshot_kind -- --ignored
 
   verify:
     name: verify (${{ matrix.os }})

@@ -312,7 +312,7 @@ impl ArtifactRepository for PostgresArtifactRepository {
         self.client
             .query_one(
                 "SELECT public.pulso_append_artifact_revision(
-                    $1, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8, $9::uuid, $10, $11
+                    $1, $2::text::uuid, $3, $4, $5, $6, $7::jsonb, $8, $9::text::uuid, $10, $11
                 )",
                 &[
                     &draft.tenant_id,
@@ -346,7 +346,7 @@ impl ArtifactRepository for PostgresArtifactRepository {
         let row = self
             .client
             .query_opt(
-                "SELECT * FROM public.pulso_get_artifact_revision($1, $2::uuid, $3)",
+                "SELECT * FROM public.pulso_get_artifact_revision($1, $2::text::uuid, $3)",
                 &[&tenant_id, &artifact_id, &revision],
             )
             .map_err(storage_error)?;
