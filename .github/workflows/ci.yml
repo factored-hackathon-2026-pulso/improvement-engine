@@ -13,6 +13,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # U02 is intentionally run by infrastructure's reviewed, isolated PostgreSQL
+  # boundary. The immutable SHA is part of this repository's CI contract.
+  postgres-artifact-migration:
+    uses: pulso-factored/infra/.github/workflows/postgres-integration.yml@8f6df2e1916480b4dcacc5e60094d0f2c76d69d2
+    permissions:
+      contents: read
+
   verify:
     name: verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
