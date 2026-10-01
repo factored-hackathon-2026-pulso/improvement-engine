@@ -22,3 +22,10 @@ self-contained while sibling `infra` owns Terraform, AWS deployment and
 operational infrastructure.
 
 Start with [AGENTS.md](AGENTS.md), [CONTEXT.md](CONTEXT.md), the [contract journal](docs/journal/0002-layer-0-contract-envelope.md), the [workspace journal](docs/journal/0003-layer-0-rust-workspace.md), the [source-validation journal](docs/journal/0004-u03-source-contract-validation.md), the [artifact-store journal](docs/journal/0004-u02-immutable-artifact-store.md), the [enriched-history journal](docs/journal/0006-u04-enriched-history.md) and the [wiki-scratch journal](docs/journal/0006-u15-wiki-scratch.md).
+
+U08/U12 add a local investigation foundation: embedded in-memory SQLite receives
+only an approved source representation and runs a bounded `SELECT` AST, never
+raw SQL. Sessions bind run, tenant, grant, snapshot and TTL; source writes and
+egress are denied. Sealed receipts feed a reproducible descriptive rate with an
+explicit denominator and missingness. It neither imports bank data nor opens
+filesystem/network; see the [investigation journal](docs/journal/0008-u08-u12-investigation-foundation.md).
