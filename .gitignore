@@ -1,0 +1,11 @@
+/target/
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+node_modules/
+data/
+output/
+.scratch/
+*.tfstate*
