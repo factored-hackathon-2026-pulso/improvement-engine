@@ -224,6 +224,25 @@ impl QuotaReservation {
             requested_at_unix_seconds,
         })
     }
+
+    /// The caller-owned trigger key that scopes this reservation's idempotency.
+    pub fn idempotency_key(&self) -> &str {
+        &self.idempotency_key
+    }
+
+    pub fn tenant_id(&self) -> &str {
+        &self.window.tenant_id
+    }
+
+    pub fn config_identity(&self) -> &RunConfigIdentity {
+        &self.config_identity
+    }
+
+    /// Stable request identity, exposed so a compound durable reducer can
+    /// reject a changed quota payload before it returns an old job receipt.
+    pub fn request_digest(&self) -> String {
+        reservation_digest(self)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
