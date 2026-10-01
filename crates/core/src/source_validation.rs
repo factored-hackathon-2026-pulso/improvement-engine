@@ -287,11 +287,23 @@ impl SourceSnapshot {
         }
         Ok(())
     }
+
+    /// Immutable source identity exposed to approved, read-only adapters.
+    #[must_use]
+    pub fn provenance(&self) -> SourceProvenance {
+        SourceProvenance {
+            tenant_id: self.tenant_id.clone(),
+            source_namespace: self.source_namespace.clone(),
+            world_ref: self.world_ref.clone(),
+            observed_cutoff: self.observed_cutoff.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceProvenance {
     pub tenant_id: String,
+    pub source_namespace: String,
     pub world_ref: String,
     pub observed_cutoff: String,
 }
@@ -393,6 +405,7 @@ pub fn validate_source_file(
     Ok(SourceValidationReport {
         provenance: SourceProvenance {
             tenant_id: snapshot.tenant_id.clone(),
+            source_namespace: snapshot.source_namespace.clone(),
             world_ref: snapshot.world_ref.clone(),
             observed_cutoff: snapshot.observed_cutoff.clone(),
         },

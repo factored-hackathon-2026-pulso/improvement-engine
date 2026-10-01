@@ -35,6 +35,7 @@ fn accepts_a_golden_synthetic_source_and_preserves_snapshot_provenance() {
 
     assert!(report.findings.is_empty());
     assert_eq!(report.provenance.tenant_id, "demo");
+    assert_eq!(report.provenance.source_namespace, "bank_history");
     assert_eq!(report.provenance.world_ref, "supplied-synthetic-v1");
     assert_eq!(report.provenance.observed_cutoff, "2026-09-01T00:00:00Z");
 }
