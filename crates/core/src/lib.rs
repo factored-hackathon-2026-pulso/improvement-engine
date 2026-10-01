@@ -9,8 +9,10 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+pub mod core_task;
 pub mod durable_jobs;
 pub mod enriched_history;
+pub mod jev_decision;
 pub mod quota_grant;
 pub mod run_config;
 pub mod sandbox;
