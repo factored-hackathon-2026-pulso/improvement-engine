@@ -9,6 +9,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+pub mod sandbox;
 pub mod source_validation;
 
 /// Stable identifier used by diagnostics and future service composition.
