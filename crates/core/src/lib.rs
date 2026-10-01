@@ -14,6 +14,7 @@ pub mod quota_grant;
 pub mod run_config;
 pub mod sandbox;
 pub mod source_validation;
+pub mod wiki_scratch;
 
 /// Stable identifier used by diagnostics and future service composition.
 pub fn service_name() -> &'static str {
