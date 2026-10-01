@@ -1,1 +1,2 @@
 * text=auto eol=lf
+contracts/fixtures/sources-v1/validation/*.csv -text
