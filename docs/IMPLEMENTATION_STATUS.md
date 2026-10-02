@@ -63,6 +63,12 @@ green unit test as proof that a broader product flow is complete.
   opaque provenance capability after U33 records and then canonically attests
   the exact receipt against the current, live memory state. No raw pages,
   cache, publication, Scout, runtime or release capability is exposed.
+- U17: sealed change compiler. Only an opaque authorization composed from a
+  U35 eligible proposal and U16 mechanism proxy can compile an untrusted Flow
+  into immutable drafts. Its full scope, route, exact canonical Flow body and
+  typed executable write predicate are rechecked; U18 remains responsible for
+  atomically evaluating that predicate and writing to the registry. This slice
+  neither persists, executes nor releases a candidate.
 
 ## Delivery discipline
 
