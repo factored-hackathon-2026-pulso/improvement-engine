@@ -167,16 +167,16 @@ mod tests {
 
     #[test]
     fn only_a_real_u04b_projection_can_bind_e0_table_field_and_replay_commitments() {
+        // Deliberately non-canonical source bytes: root and nested-object key
+        // order differ from the normal serializer and leading/trailing spaces
+        // participate in the U04 binding.
         let raw_snapshot = format!(
-            "\n  {}  \n",
-            json!({
-                "contract_version": {"major": 1, "minor": 0},
-                "tenant_id": "tenant_a", "source_namespace": "platform_history",
-                "world_ref": "world_a", "observed_cutoff": "1970-01-01T00:01:40Z",
-                "sources": [{"table":"case", "uri":"file://fixture.csv", "file_digest":digest('a'),
-                    "header_digest":digest('b'), "row_count":1,
-                    "source_contract_ref":{"id":"case", "version":"v1", "digest":digest('c')}}]
-            })
+            r#"
+ {{ "world_ref":"world_a", "sources":[{{"row_count":1,"header_digest":"{}","table":"case","source_contract_ref":{{"version":"v1","digest":"{}","id":"case"}},"uri":"file://fixture.csv","file_digest":"{}"}}], "tenant_id":"tenant_a", "observed_cutoff":"1970-01-01T00:01:40Z", "contract_version":{{"minor":0,"major":1}}, "source_namespace":"platform_history" }}
+"#,
+            digest('b'),
+            digest('c'),
+            digest('a'),
         );
         let snapshot = SourceSnapshot::from_json(&raw_snapshot).expect("fixed source snapshot");
         let row = json!({"event_time":"1970-01-01T00:01:40Z", "status":"completed"});
