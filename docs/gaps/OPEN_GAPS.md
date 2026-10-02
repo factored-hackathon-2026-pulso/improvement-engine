@@ -7,7 +7,13 @@ Issues and continues without waiting here.
 
 ## Active gaps
 
-None at this revision.
+| Gap | Owner | Blocked capability | Evidence needed | Safe fallback |
+|---|---|---|---|---|
+| Engine-local Compose/LocalStack replacement | improvement-engine | Reproducible local integration stack after infra-local cleanup | Versioned local manifest, launcher and opt-in smoke test in this repository | Ephemeral PostgreSQL CI only; do not claim local-stack readiness |
+| Private debug ingress | engine + infra + security | AWS `/internal/v1/debug` console | Approved listener/auth/proxy/private-access contract and integration test | Keep debug transport unexposed in AWS |
+| Database runtime secret binding | engine + infra | ECS task connection to RDS | Environment-bound secret ARN/schema, least-privilege IAM, rotation and smoke evidence | No deployment claim; use isolated test database only |
+| Controlled external egress | infra + security + external-provider owner | Live model/provider calls from AWS runtime | Approved `egress_profile`, destination policy and redacted observability | `aws_private_endpoints_only`; dependency remains unavailable |
+| Operational alarm contract | engine + infra + service owner | Actionable continuous operation | Metric namespace/dimensions, destination, runbooks and firing/resolved evidence | Resource telemetry only; do not call the service operationally monitored |
 
 ## Operating rule
 
