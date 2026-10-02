@@ -32,6 +32,11 @@ green unit test as proof that a broader product flow is complete.
   commitments and scope, includes `do_nothing`, and caps a supported route at
   `mechanism_proxy`. U20/U35 still own the sealed outcome/oracle and final
   eligibility gates.
+- U36: protected-fixture sandbox identity boundary. A protected arm receives
+  an opaque issuer capability only through trusted composition; identities are
+  nonce-registered to that arm, checked with the sandbox-owned clock, and
+  rejected on revocation, expiry, forging, or cross-arm use. This is fixture
+  protection, not a production identity-provider implementation.
 
 ## Delivery discipline
 
