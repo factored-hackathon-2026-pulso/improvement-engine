@@ -99,7 +99,7 @@ fn event_for_job(
         "execution",
         code,
         RunEventStatus::new(event_status).unwrap(),
-        Some("test-reason".into()),
+        Some("test_reason".into()),
         None,
         None,
         None,
