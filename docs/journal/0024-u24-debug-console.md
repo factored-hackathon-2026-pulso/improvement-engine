@@ -19,6 +19,13 @@ opaco que sólo crea la API; sin esa capability no se puede fabricar un
 internamente. Así se conserva U07 para otros transportes, pero la frontera de
 debug no permite inyectar `tenant_b` en una request.
 
+La composición (`DebugConsoleApi`, `DebugIdentityPort`, issuer y principal)
+permanece `pub(crate)` hasta que exista el `control-api` real que la componga
+con SSO/OIDC. Esta decisión evita que un consumidor externo seleccione un
+`DebugIdentityPort` propio y reciba el issuer; no presentamos un mock de
+identidad como endpoint utilizable. El futuro adapter deberá aterrizar en una
+slice explícita y preservar esta capability de composición.
+
 Conserva el cursor opaco de U07 y mapea los fallos a estados de transporte
 seguros. En particular, un cursor vencido o purgado es `Gone`, sin reconstruir
 una línea de tiempo ni afirmar que el run terminó; un run inexistente es

@@ -4,6 +4,11 @@
 //! not read artifacts, source data, SQL, prompts, or platform state directly;
 //! transports may render its safe projection without gaining a mutation path.
 
+// The authenticated composition is deliberately crate-private until the
+// real control-api composition root exists. It is exercised by unit tests but
+// cannot become a public alternate authentication path in this slice.
+#![allow(dead_code)]
+
 use crate::run_activity::{
     ActivityApiStatus, ActivityCursorSigner, ActivityEntry, ActivityKind, AuthenticatedTenant,
     InMemoryCursorRegistry, ListRunActivityRequest, RunActivityError, RunActivityHandler,
@@ -192,7 +197,7 @@ impl DebugTimelineResponse {
 /// Opaque browser/session material handed to a trusted identity adapter. It is
 /// not a tenant selector and may not be used as an authorization result.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DebugAuthenticationRequest {
+pub(crate) struct DebugAuthenticationRequest {
     session_ref: String,
 }
 
@@ -214,7 +219,7 @@ impl DebugAuthenticationRequest {
 /// Error returned by the trusted identity composition. The API maps it to a
 /// safe transport status and never serializes the raw reason to the console.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DebugAuthenticationError {
+pub(crate) enum DebugAuthenticationError {
     InvalidRequest,
     Denied,
     Unavailable,
@@ -223,7 +228,7 @@ pub enum DebugAuthenticationError {
 /// Authenticated principal usable only after a trusted identity adapter has
 /// received the non-constructible issuer capability below.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DebugViewer {
+pub(crate) struct DebugViewer {
     tenant: AuthenticatedTenant,
 }
 
@@ -235,8 +240,12 @@ pub struct DebugViewer {
 ///
 /// let _forged = DebugViewerIssuer { _private: () };
 /// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::debug_console::DebugConsoleApi;
+/// ```
 #[derive(Debug)]
-pub struct DebugViewerIssuer {
+pub(crate) struct DebugViewerIssuer {
     _private: (),
 }
 
@@ -254,7 +263,7 @@ impl DebugViewerIssuer {
 /// The adapter receives a fresh issuer only while authenticating one request.
 /// It can map verified SSO/OIDC identity to a tenant, but an untrusted caller
 /// cannot provide a `DebugViewer` or an issuer to the read endpoint.
-pub trait DebugIdentityPort {
+pub(crate) trait DebugIdentityPort {
     fn authenticate(
         &mut self,
         request: DebugAuthenticationRequest,
@@ -265,7 +274,7 @@ pub trait DebugIdentityPort {
 /// Untrusted request values for the debug timeline. Tenant identity is
 /// deliberately absent and is derived from `DebugViewer` inside the API.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DebugTimelineRequest {
+pub(crate) struct DebugTimelineRequest {
     run_id: String,
     cursor: Option<String>,
     page_size: usize,
@@ -301,7 +310,7 @@ impl DebugTimelineRequest {
 /// Authentication happens through an explicit trusted port. This adapter does
 /// not accept a caller-provided U07 tenant DTO, maps transport-safe statuses,
 /// and offers no mutation operation.
-pub struct DebugConsoleApi<'a, ReadModel, Identity> {
+pub(crate) struct DebugConsoleApi<'a, ReadModel, Identity> {
     console: DebugConsole<'a, ReadModel>,
     identity: Identity,
 }
@@ -310,12 +319,12 @@ impl<'a, ReadModel: RunActivityReadModel, Identity: DebugIdentityPort>
     DebugConsoleApi<'a, ReadModel, Identity>
 {
     #[must_use]
-    pub fn new(console: DebugConsole<'a, ReadModel>, identity: Identity) -> Self {
+    pub(crate) fn new(console: DebugConsole<'a, ReadModel>, identity: Identity) -> Self {
         Self { console, identity }
     }
 
     #[must_use]
-    pub fn read_timeline(
+    pub(crate) fn read_timeline(
         &mut self,
         authentication: DebugAuthenticationRequest,
         request: DebugTimelineRequest,
@@ -374,4 +383,173 @@ fn is_identifier(value: &str) -> bool {
     let mut chars = value.chars();
     matches!(chars.next(), Some(c) if c.is_ascii_lowercase())
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::run_activity::{ActivityEvent, RunActivityProjection};
+    use std::cell::RefCell;
+
+    const TENANT: &str = "tenant_a";
+    const JOB: &str = "job:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const DIGEST: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    struct SessionIdentity;
+
+    impl DebugIdentityPort for SessionIdentity {
+        fn authenticate(
+            &mut self,
+            request: DebugAuthenticationRequest,
+            issuer: &DebugViewerIssuer,
+        ) -> Result<DebugViewer, DebugAuthenticationError> {
+            let tenant = match request.session_ref() {
+                "session_a" => TENANT,
+                "session_b" => "tenant_b",
+                _ => return Err(DebugAuthenticationError::Denied),
+            };
+            Ok(issuer.issue(AuthenticatedTenant::new(tenant).expect("fixed tenant")))
+        }
+    }
+
+    fn auth(session: &str) -> DebugAuthenticationRequest {
+        DebugAuthenticationRequest::new(session).expect("fixed auth request")
+    }
+
+    fn request(cursor: Option<String>, page_size: usize) -> DebugTimelineRequest {
+        DebugTimelineRequest::new(JOB, cursor, page_size).expect("fixed read request")
+    }
+
+    fn event(event_id: &str, at: u64) -> ActivityEvent {
+        ActivityEvent::new(TENANT, JOB, event_id, at, ActivityKind::Admitted, DIGEST)
+            .expect("fixed event")
+    }
+
+    #[test]
+    fn authenticated_debug_read_projects_only_safe_timeline_fields_without_mutation() {
+        let mut projection = RunActivityProjection::new();
+        projection.project(event("event_admitted", 10)).unwrap();
+        let revision = projection.revision(TENANT, JOB).unwrap();
+        let console = DebugConsole::new(
+            &projection,
+            ActivityCursorSigner::new("test-secret").unwrap(),
+        );
+        let mut api = DebugConsoleApi::new(console, SessionIdentity);
+
+        let response = api.read_timeline(auth("session_a"), request(None, 100));
+        let timeline = response.timeline().expect("timeline");
+
+        assert_eq!(response.status(), DebugTimelineStatus::Ok);
+        assert_eq!(timeline.events().len(), 1);
+        assert_eq!(timeline.events()[0].event_id(), "event_admitted");
+        assert_eq!(timeline.events()[0].kind(), &ActivityKind::Admitted);
+        assert_eq!(timeline.events()[0].evidence_digest(), DIGEST);
+        assert_eq!(
+            response.accessible_status_summary(),
+            "Timeline loaded: 1 event; no continuation."
+        );
+        assert_eq!(projection.revision(TENANT, JOB), Some(revision));
+    }
+
+    #[test]
+    fn request_cannot_select_a_tenant_and_cross_tenant_cursor_is_rejected() {
+        let mut projection = RunActivityProjection::new();
+        projection.project(event("event_first", 10)).unwrap();
+        projection.project(event("event_second", 20)).unwrap();
+        let console = DebugConsole::new(
+            &projection,
+            ActivityCursorSigner::new("test-secret").unwrap(),
+        );
+        let mut api = DebugConsoleApi::new(console, SessionIdentity);
+
+        let first = api.read_timeline(auth("session_a"), request(None, 1));
+        let cursor = first.next_cursor().expect("continuation").to_owned();
+        let foreign = api.read_timeline(auth("session_b"), request(Some(cursor), 1));
+
+        assert_eq!(foreign.status(), DebugTimelineStatus::BadRequest);
+        assert!(foreign.timeline().is_none());
+        assert_eq!(
+            foreign.accessible_status_summary(),
+            "Timeline request cannot be processed."
+        );
+    }
+
+    #[test]
+    fn gone_and_not_found_responses_are_safe_and_never_invent_a_timeline() {
+        let projection = RefCell::new(RunActivityProjection::new());
+        projection
+            .borrow_mut()
+            .project(event("event_first", 10))
+            .unwrap();
+        projection
+            .borrow_mut()
+            .project(event("event_second", 20))
+            .unwrap();
+        let console = DebugConsole::new(
+            &projection,
+            ActivityCursorSigner::new("test-secret").unwrap(),
+        );
+        let mut api = DebugConsoleApi::new(console, SessionIdentity);
+        let first = api.read_timeline(auth("session_a"), request(None, 1));
+        let cursor = first.next_cursor().expect("continuation").to_owned();
+        assert_eq!(
+            first.accessible_status_summary(),
+            "Timeline loaded: 1 event; continuation available."
+        );
+        projection
+            .borrow_mut()
+            .project(event("event_third", 30))
+            .unwrap();
+
+        let gone = api.read_timeline(auth("session_a"), request(Some(cursor), 1));
+        let missing = api.read_timeline(
+            auth("session_a"),
+            DebugTimelineRequest::new(
+                "job:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                None,
+                1,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(gone.status(), DebugTimelineStatus::Gone);
+        assert!(gone.timeline().is_none());
+        assert_eq!(
+            gone.accessible_status_summary(),
+            "Timeline changed; reload the current snapshot to continue."
+        );
+        assert_eq!(missing.status(), DebugTimelineStatus::NotFound);
+        assert!(missing.timeline().is_none());
+        assert_eq!(missing.accessible_status_summary(), "Run not available.");
+    }
+
+    #[test]
+    fn denied_identity_has_a_stable_safe_summary() {
+        struct Denied;
+        impl DebugIdentityPort for Denied {
+            fn authenticate(
+                &mut self,
+                _: DebugAuthenticationRequest,
+                _: &DebugViewerIssuer,
+            ) -> Result<DebugViewer, DebugAuthenticationError> {
+                Err(DebugAuthenticationError::Denied)
+            }
+        }
+
+        let projection = RunActivityProjection::new();
+        let console = DebugConsole::new(
+            &projection,
+            ActivityCursorSigner::new("test-secret").unwrap(),
+        );
+        let mut api = DebugConsoleApi::new(console, Denied);
+
+        let response = api.read_timeline(auth("session_a"), request(None, 1));
+
+        assert_eq!(response.status(), DebugTimelineStatus::BadRequest);
+        assert!(response.timeline().is_none());
+        assert_eq!(
+            response.accessible_status_summary(),
+            "Timeline request cannot be processed."
+        );
+    }
 }
