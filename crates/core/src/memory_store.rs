@@ -328,6 +328,13 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
             .revision
             .checked_add(1)
             .ok_or(MemoryError::SnapshotInvalid)?;
+        // Validate every fallible state transition before the immutable append.
+        // Otherwise a saturated memory head would leave a new snapshot that no
+        // head can ever select.
+        let next_head_version = head
+            .head_version
+            .checked_add(1)
+            .ok_or(MemoryError::SnapshotInvalid)?;
         let next_payload = json!({
             "available_at_unix_seconds": request.access.allowed_at_unix_seconds,
             "purpose": request.scope.purpose,
@@ -347,10 +354,7 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
         let next_head = MemoryHead {
             scope: request.scope.clone(),
             snapshot_ref: next.reference(),
-            head_version: head
-                .head_version
-                .checked_add(1)
-                .ok_or(MemoryError::SnapshotInvalid)?,
+            head_version: next_head_version,
         };
         self.bound_snapshots
             .insert(reference_key(&next.reference()), request.scope.clone());
@@ -500,4 +504,103 @@ fn receipt_id(
     ))
     .expect("memory receipt inputs serialize deterministically");
     format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wiki_scratch::{
+        InMemoryWikiGrantAuthority, WikiGrant, WikiScratchPort, WikiTransform,
+        WikiTransformOperation,
+    };
+    use crate::{ArtifactKind, InMemoryArtifactRepository};
+
+    const TENANT: &str = "tenant-a";
+    const WIKI_ID: &str = "018f50a1-7f00-7000-8000-000000000001";
+
+    fn scope() -> MemoryScope {
+        MemoryScope::new(
+            TENANT,
+            "investigation",
+            "world-a",
+            "campaign-a",
+            "continuous",
+            "train",
+        )
+    }
+
+    fn binding() -> MemoryScopeBinding {
+        MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train")
+    }
+
+    #[test]
+    fn publish_overflow_does_not_append_an_orphan_snapshot_or_advance_the_head() {
+        let mut artifacts = InMemoryArtifactRepository::default();
+        let initial = artifacts
+            .append(
+                None,
+                ArtifactDraft::new(
+                    TENANT,
+                    WIKI_ID,
+                    1,
+                    ArtifactKind::MemoryWiki,
+                    json!({
+                        "available_at_unix_seconds": 100,
+                        "purpose": "investigation",
+                        "pages": {"index.md": "original"}
+                    }),
+                    None,
+                ),
+            )
+            .unwrap();
+        let access = WikiAccess::new_scoped(
+            "run-1",
+            TENANT,
+            "investigation",
+            "grant-1",
+            initial.reference(),
+            100,
+            binding(),
+        );
+        let mut authority = InMemoryWikiGrantAuthority::default();
+        authority.issue(WikiGrant::new_scoped(
+            "grant-1",
+            "run-1",
+            TENANT,
+            "investigation",
+            initial.reference(),
+            binding(),
+        ));
+        let mut workspace = authority.mount(&mut artifacts, access.clone()).unwrap();
+        let transform = authority
+            .transform(
+                &mut workspace,
+                &access,
+                WikiTransform::new(vec![WikiTransformOperation::replace("index.md", "next")]),
+            )
+            .unwrap();
+        let memory_scope = scope();
+        let mut registry = InMemoryMemoryRegistry::default();
+        registry
+            .seed_head(&mut artifacts, memory_scope.clone(), initial.reference())
+            .unwrap();
+
+        // Fixture only: persistent adapters can restore a head written at this
+        // boundary; exercising the public publish API must still be atomic at
+        // the numeric limit.
+        registry.heads.get_mut(&memory_scope).unwrap().head_version = u64::MAX;
+
+        assert_eq!(
+            registry
+                .publish(
+                    &mut artifacts,
+                    &authority,
+                    MemoryPublishRequest::new(memory_scope.clone(), u64::MAX, access, transform),
+                )
+                .unwrap_err(),
+            MemoryError::SnapshotInvalid
+        );
+        assert_eq!(registry.heads[&memory_scope].head_version, u64::MAX);
+        assert!(artifacts.get(TENANT, WIKI_ID, 2).unwrap().is_none());
+    }
 }
