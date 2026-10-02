@@ -1355,7 +1355,7 @@ fn is_rfc3339_utc(value: &str) -> bool {
 /// without accepting a caller-provided replay clock. The civil-date algorithm
 /// is proleptic Gregorian and intentionally has no timezone/dependency input.
 #[allow(dead_code)] // Reached through the future trusted U04-B/U23 composition root.
-fn rfc3339_utc_to_unix_seconds(value: &str) -> Option<u64> {
+pub(crate) fn rfc3339_utc_to_unix_seconds(value: &str) -> Option<u64> {
     if !is_rfc3339_utc(value) {
         return None;
     }

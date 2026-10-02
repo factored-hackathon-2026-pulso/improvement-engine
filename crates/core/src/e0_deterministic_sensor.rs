@@ -11,6 +11,7 @@ use std::collections::BTreeSet;
 
 use crate::ArtifactReference;
 use crate::e0_query_lab::VerifiedE0QueryResult;
+use crate::enriched_history::rfc3339_utc_to_unix_seconds;
 
 /// A declared boolean diagnostic over one E0-projected field and its event
 /// clock. It names neither a business outcome nor a causal explanation.
@@ -348,66 +349,6 @@ fn digest_of<T: Serialize>(value: &T) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
-fn rfc3339_utc_to_unix_seconds(value: &str) -> Option<u64> {
-    if !(value.len() == 20
-        && value.as_bytes().get(4) == Some(&b'-')
-        && value.as_bytes().get(7) == Some(&b'-')
-        && value.as_bytes().get(10) == Some(&b'T')
-        && value.as_bytes().get(13) == Some(&b':')
-        && value.as_bytes().get(16) == Some(&b':')
-        && value.ends_with('Z')
-        && value
-            .bytes()
-            .enumerate()
-            .all(|(index, byte)| [4, 7, 10, 13, 16, 19].contains(&index) || byte.is_ascii_digit()))
-    {
-        return None;
-    }
-    let number = |start: usize, end: usize| value[start..end].parse::<i64>().ok();
-    let (year, month, day, hour, minute, second) = (
-        number(0, 4)?,
-        number(5, 7)?,
-        number(8, 10)?,
-        number(11, 13)?,
-        number(14, 16)?,
-        number(17, 19)?,
-    );
-    if year == 0
-        || !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
-        || hour > 23
-        || minute > 59
-        || second > 59
-    {
-        return None;
-    }
-    let days_in_month = match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
-        2 => 28,
-        _ => return None,
-    };
-    if day > days_in_month {
-        return None;
-    }
-    let adjusted_year = year - i64::from(month <= 2);
-    let era = if adjusted_year >= 0 {
-        adjusted_year
-    } else {
-        adjusted_year - 399
-    } / 400;
-    let year_of_era = adjusted_year - era * 400;
-    let month_from_march = month + if month > 2 { -3 } else { 9 };
-    let day_of_year = (153 * month_from_march + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    let days_since_epoch = era * 146_097 + day_of_era - 719_468;
-    let seconds = days_since_epoch
-        .checked_mul(86_400)?
-        .checked_add(hour * 3_600 + minute * 60 + second)?;
-    u64::try_from(seconds).ok()
-}
-
 /// ```compile_fail
 /// use improvement_engine_core::deterministic_sensor::DeterministicSensor;
 /// use improvement_engine_core::e0_deterministic_sensor::{
@@ -429,25 +370,22 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::e0_query_lab::E0QueryLab;
-    use crate::enriched_history::VerifiedE0QueryProjection;
+    use crate::enriched_history::{
+        AvailabilityClockMode, AvailabilityProfile, EnrichedHistoryAdapter,
+        EnrichedHistoryManifest, PackageFile, ProvenanceDigests, ReplayRowAvailability, TableInput,
+        replay_projection_digest,
+    };
     use crate::local_lab::{
         InMemoryLabGrantAuthority, InMemoryLabSourceAuthority, LabAccess, LabDataClassification,
         LabGrant, LabQuery, LabSource, LabSourceApprovalPort, LabSourceManifest, LabTable,
         LocalInvestigationLab,
     };
-    use crate::source_validation::VerifiedSourceArtifactBinding;
+    use crate::source_validation::{SourceSnapshot, resolve_source_snapshot_artifact};
+    use crate::{ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository};
+    use serde_json::json;
 
     fn digest(seed: char) -> String {
         format!("sha256:{}", seed.to_string().repeat(64))
-    }
-
-    fn source_ref(seed: char) -> ArtifactReference {
-        ArtifactReference {
-            tenant_id: "tenant_a".to_owned(),
-            id: format!("018f50a1-7f00-7000-8000-00000000000{seed}"),
-            revision: 1,
-            digest: digest(seed),
-        }
     }
 
     fn row(event_time: &str, resolved: &str) -> BTreeMap<String, String> {
@@ -461,35 +399,111 @@ mod tests {
         projection_seed: char,
         selected_columns: Vec<&str>,
     ) -> VerifiedE0QueryResult {
-        let snapshot = source_ref(projection_seed);
-        let projection = VerifiedE0QueryProjection::deterministic_for_e0_query_test(
-            "tenant_a",
-            100,
-            digest(projection_seed),
+        // Deliberately non-canonical: outer whitespace and nested/root key
+        // order are part of the U04 source-byte binding, not the U02 artifact
+        // content digest.
+        let raw_snapshot = format!(
+            r#"
+ {{ "world_ref":"world_a", "sources":[{{"row_count":3,"header_digest":"{}","table":"contacts","source_contract_ref":{{"version":"v1","digest":"{}","id":"contacts"}},"uri":"file://contacts.csv","file_digest":"{}"}}], "tenant_id":"tenant_a", "observed_cutoff":"1970-01-01T00:01:40Z", "contract_version":{{"minor":0,"major":1}}, "source_namespace":"platform_history" }}
+"#,
             digest('b'),
-            "contacts",
             digest('c'),
             digest(projection_seed),
-            digest('d'),
-            digest('e'),
-            digest('f'),
-            BTreeMap::from([
-                ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
-                ("resolved".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
-            ]),
+        );
+        let snapshot = SourceSnapshot::from_json(&raw_snapshot).unwrap();
+        let rows = vec![
+            json!({"event_time":"1970-01-01T00:01:40Z", "resolved":"true"}),
+            json!({"event_time":"1970-01-01T00:01:40Z", "resolved":"false"}),
+            json!({"event_time":"1970-01-01T00:01:40Z", "resolved":""}),
+        ];
+        let availability = (0..rows.len())
+            .map(|_| {
+                ReplayRowAvailability::new(BTreeMap::from([
+                    ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                    ("resolved".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                ]))
+            })
+            .collect::<Vec<_>>();
+        let manifest = EnrichedHistoryManifest::new_replay(
+            "platform_history",
+            "world_a",
+            "1970-01-01T00:01:40Z",
+            AvailabilityProfile::new(
+                "e0_replay",
+                1,
+                AvailabilityClockMode::replay_at_event_time("e0_zero_lag"),
+                "tenant_a",
+                snapshot.binding_digest(),
+            ),
             vec![
-                row("1970-01-01T00:01:40Z", ""),
-                row("1970-01-01T00:01:40Z", "false"),
-                row("1970-01-01T00:01:40Z", "true"),
+                PackageFile::new(
+                    "contacts",
+                    ProvenanceDigests::new(
+                        digest(projection_seed),
+                        digest('b'),
+                        digest('c'),
+                        digest('d'),
+                    ),
+                    "1970-01-01T00:01:40Z",
+                )
+                .with_field_availability(BTreeMap::from([
+                    ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                    ("resolved".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                ]))
+                .with_replay_projection_digest(replay_projection_digest(&rows, &availability))
+                .with_source_file_seal(snapshot.source_file_seal("contacts").unwrap()),
             ],
         );
+        let adapter = EnrichedHistoryAdapter::from_snapshot(manifest, &snapshot).unwrap();
+        let replay = adapter.verified_replay_availability(&snapshot).unwrap();
+        let projection = adapter
+            .verified_e0_query_projection(
+                &snapshot,
+                &replay,
+                "contacts",
+                TableInput::new(
+                    ProvenanceDigests::new(
+                        digest(projection_seed),
+                        digest('b'),
+                        digest('c'),
+                        digest('d'),
+                    ),
+                    rows,
+                )
+                .with_replay_row_availability(availability),
+            )
+            .unwrap();
+
+        let mut source_repository = InMemoryArtifactRepository::default();
+        let snapshot_artifact = source_repository
+            .append(
+                None,
+                ArtifactDraft::new(
+                    "tenant_a",
+                    format!("018f50a1-7f00-7000-8000-00000000000{projection_seed}"),
+                    1,
+                    ArtifactKind::SourceSnapshot,
+                    json!({"source_snapshot_json": raw_snapshot}),
+                    None,
+                ),
+            )
+            .unwrap()
+            .reference();
+        assert_ne!(snapshot_artifact.digest, snapshot.binding_digest());
+        let source_binding =
+            resolve_source_snapshot_artifact(&mut source_repository, &snapshot_artifact).unwrap();
+        assert_eq!(
+            source_binding.snapshot_binding_digest(),
+            snapshot.binding_digest()
+        );
+
         let source = LabSource::new(
             LabSourceManifest {
                 tenant_id: "tenant_a".to_owned(),
-                snapshot_ref: snapshot.clone(),
-                source_contract_digest: digest('c'),
+                snapshot_ref: snapshot_artifact.clone(),
+                source_contract_digest: digest('b'),
                 source_digest: digest(projection_seed),
-                transform_digest: digest('d'),
+                transform_digest: digest('c'),
                 cutoff_unix_seconds: 100,
                 classification: LabDataClassification::Treated,
                 safe_for_discovery: true,
@@ -498,22 +512,16 @@ mod tests {
                 "contacts",
                 vec!["event_time", "resolved"],
                 vec![
-                    row("1970-01-01T00:01:40Z", "true"),
-                    row("1970-01-01T00:01:40Z", "false"),
                     row("1970-01-01T00:01:40Z", ""),
+                    row("1970-01-01T00:01:40Z", "false"),
+                    row("1970-01-01T00:01:40Z", "true"),
                 ],
             )],
         )
         .unwrap();
         let approved = InMemoryLabSourceAuthority.approve(source).unwrap();
         let approved = projection
-            .bind_approved_lab_source(
-                approved,
-                VerifiedSourceArtifactBinding::deterministic_for_test(
-                    snapshot.clone(),
-                    digest(projection_seed),
-                ),
-            )
+            .bind_approved_lab_source(approved, source_binding)
             .unwrap();
         let access = LabAccess::new(
             "run_e0",
@@ -521,7 +529,7 @@ mod tests {
             "investigation",
             "grant_e0",
             "authority_e0",
-            snapshot,
+            snapshot_artifact,
             1_000,
         );
         let mut grants = InMemoryLabGrantAuthority::default();
@@ -550,6 +558,12 @@ mod tests {
     fn authenticated_e0_evidence_emits_reproducible_diagnostic_with_full_commitments() {
         let evidence = authenticated_result('a', vec!["event_time", "resolved"]);
         let window = E0DiagnosticWindow::new(100, 100).unwrap();
+        let source_artifact_digest = evidence
+            .result()
+            .receipt()
+            .source_snapshot_ref
+            .digest
+            .clone();
 
         let first =
             E0DiagnosticSensor::measure(&spec(), window, std::slice::from_ref(&evidence)).unwrap();
@@ -561,9 +575,10 @@ mod tests {
         assert_eq!(first.missing(), 1);
         assert_eq!(first.window(), window);
         assert_eq!(first.cutoff_unix_seconds(), 100);
-        assert_eq!(first.source_snapshot_binding(), digest('a'));
-        assert_eq!(first.availability_profile_digest(), digest('b'));
-        assert_eq!(first.replay_projection_digest(), digest('f'));
+        assert_ne!(first.source_snapshot_binding(), source_artifact_digest);
+        assert!(first.source_snapshot_binding().starts_with("sha256:"));
+        assert!(first.availability_profile_digest().starts_with("sha256:"));
+        assert!(first.replay_projection_digest().starts_with("sha256:"));
         assert_eq!(first.query_receipt_digests().len(), 1);
         assert!(first.has_valid_digest());
         assert!(!first.authorizes_execution_or_release());

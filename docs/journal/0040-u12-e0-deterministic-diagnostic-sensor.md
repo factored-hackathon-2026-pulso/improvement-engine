@@ -26,6 +26,10 @@ release.
   cerrados.
 - La salida expone sólo digests de receipts, no filas ni receipts mutables, y
   nunca autoriza ejecución o release.
+- U12 reutiliza el parser UTC fijo de U04-B. El contrato actual de U04 admite
+  únicamente `YYYY-MM-DDTHH:MM:SSZ`; timestamps con fracciones se rechazan
+  antes de formar la proyección E0. U12 no introduce una semántica temporal
+  más amplia o divergente.
 
 ## Fuera de alcance
 
@@ -38,8 +42,9 @@ sin cambios: consume `QueryResult` público y no es evidencia E0 autenticada.
 
 El RED inicial fue el import de `e0_deterministic_sensor` inexistente desde
 un test público de contrato (`E0432`). El GREEN agrega una ruta E0 separada y
-regresiones internas que construyen la cadena U04 fixture → U08 ledger
-governed candidate → capability E0 antes de medir. Cubren cálculo reproducible
+regresiones internas que construyen la cadena U02 raw snapshot JSON
+reordenado → U04-B V2 → U08 ledger governed candidate → capability E0 antes
+de medir. Cubren cálculo reproducible
 con commitments, ventana/cutoff, drift de proyección, campo no leído y
 denegación de labels; un doctest `compile_fail` impide entregar un
 `QueryResult` público al sensor E0.
