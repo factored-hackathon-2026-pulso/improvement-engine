@@ -39,9 +39,11 @@ efecto externo.
 
 El RED inicial fue el módulo y contratos inexistentes; el GREEN añade la
 composición mínima y la prueba E2E real U02 raw JSON → U04-B V2 → U08 → U12-E
-→ U13-E → U13-A → U14-E → U14-EQ. La matriz altera por separado candidate,
-proveniencia E0, policy, input, evidencia, snapshot y report commitment y
-demuestra denegación antes de producir una calificación.
+→ U13-E → U13-A → U14-E → U14-EQ. La matriz U14-EQ altera por separado los
+bindings del reporte: `candidate_digest`, proveniencia E0, policy, input,
+evidencia, snapshot y report commitment; todos deniegan antes de producir una
+calificación. La alteración y rehidratación directa del registro candidato es
+cobertura propia de U14-E, no una afirmación de esta matriz U14-EQ.
 
 ## Fuera de alcance
 
