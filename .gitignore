@@ -1,5 +1,6 @@
 /target/
-/target-original-projector/
+/target-*/
+/.nexus/
 .env
 .env.*
 !.env.example

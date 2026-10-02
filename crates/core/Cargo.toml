@@ -13,6 +13,7 @@ path = "src/lib.rs"
 [features]
 default = []
 test-support = []
+local-simulation = []
 
 [[test]]
 name = "model_provider"
@@ -25,6 +26,10 @@ required-features = ["test-support"]
 [[test]]
 name = "autonomous_scout"
 required-features = ["test-support"]
+
+[[test]]
+name = "local_simulation"
+required-features = ["local-simulation"]
 
 [dependencies]
 csv = "1.4"

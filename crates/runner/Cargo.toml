@@ -1,0 +1,22 @@
+[package]
+name = "improvement-engine-runner"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "UNLICENSED"
+publish = false
+
+[[bin]]
+name = "improvement-engine"
+path = "src/main.rs"
+
+[dependencies]
+improvement-engine-core = { path = "../core", features = ["local-simulation"] }
+improvement_engine_source_adapters = { package = "improvement-engine-source-adapters", path = "../source-adapters" }
+serde_json = "1.0"
+
+[dev-dependencies]
+arrow-array = "57.0.0"
+arrow-schema = "57.0.0"
+parquet = { version = "57.0.0", features = ["arrow"] }
+tempfile = "3.20.0"
