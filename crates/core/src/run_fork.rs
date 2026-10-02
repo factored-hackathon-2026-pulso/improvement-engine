@@ -95,9 +95,6 @@ struct AttestedOriginalRun {
     config_ref: ArtifactReference,
     memory_ref: ArtifactReference,
     cutoff_unix_seconds: u64,
-    control_state: ForkControlState,
-    control_version: u64,
-    final_locked: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -173,6 +170,75 @@ pub trait ForkReferencePolicy {
         cutoff_unix_seconds: u64,
     ) -> bool;
 }
+
+/// Dynamic run state is at a lifecycle authority, never caller input or a
+/// mutable field cached in the fork binding. A durable adapter evaluates this
+/// record conditionally with the child insert.
+pub trait ForkRunLifecycle {
+    fn current(&mut self, tenant_id: &str, run_id: &str) -> Option<RunLifecycle>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RunLifecycle {
+    control_state: ForkControlState,
+    control_version: u64,
+    final_locked: bool,
+}
+impl RunLifecycle {
+    pub fn new(
+        control_state: ForkControlState,
+        control_version: u64,
+        final_locked: bool,
+    ) -> Result<Self, RunForkError> {
+        if control_version == 0 {
+            return Err(RunForkError::InvalidControlVersion);
+        }
+        Ok(Self {
+            control_state,
+            control_version,
+            final_locked,
+        })
+    }
+}
+
+#[derive(Default)]
+pub struct InMemoryForkRunLifecycle {
+    records: BTreeMap<(String, String), RunLifecycle>,
+}
+impl InMemoryForkRunLifecycle {
+    pub fn attest(
+        &mut self,
+        tenant_id: impl Into<String>,
+        run_id: impl Into<String>,
+        lifecycle: RunLifecycle,
+    ) -> Result<(), RunForkError> {
+        let tenant_id = tenant_id.into();
+        let run_id = run_id.into();
+        validate_identifier(&tenant_id, "tenant_id")?;
+        validate_identifier(&run_id, "run_id")?;
+        self.records.insert((tenant_id, run_id), lifecycle);
+        Ok(())
+    }
+    pub fn revoke_to_final_lock(&mut self, tenant_id: &str, run_id: &str) {
+        if let Some(lifecycle) = self
+            .records
+            .get_mut(&(tenant_id.to_owned(), run_id.to_owned()))
+        {
+            lifecycle.final_locked = true;
+        }
+    }
+    pub fn replace(&mut self, tenant_id: &str, run_id: &str, lifecycle: RunLifecycle) {
+        self.records
+            .insert((tenant_id.to_owned(), run_id.to_owned()), lifecycle);
+    }
+}
+impl ForkRunLifecycle for InMemoryForkRunLifecycle {
+    fn current(&mut self, tenant_id: &str, run_id: &str) -> Option<RunLifecycle> {
+        self.records
+            .get(&(tenant_id.to_owned(), run_id.to_owned()))
+            .cloned()
+    }
+}
 #[derive(Default)]
 pub struct InMemoryForkReferencePolicy {
     revoked: BTreeSet<String>,
@@ -221,6 +287,13 @@ impl InMemoryForkGrantAuthority {
             auth.grant_id.clone(),
         ))
     }
+    pub fn revoke(&mut self, tenant_id: &str, actor_id: &str, grant_id: &str) {
+        self.grants.remove(&(
+            tenant_id.to_owned(),
+            actor_id.to_owned(),
+            grant_id.to_owned(),
+        ));
+    }
 }
 
 #[derive(Debug, Default)]
@@ -242,9 +315,6 @@ impl RunForkStore {
         config_ref: ArtifactReference,
         memory_ref: ArtifactReference,
         cutoff_unix_seconds: u64,
-        control_state: ForkControlState,
-        control_version: u64,
-        final_locked: bool,
         artifacts: &mut R,
         policy: &mut P,
     ) -> Result<(), RunForkError> {
@@ -255,8 +325,9 @@ impl RunForkStore {
         if cutoff_unix_seconds == 0 {
             return Err(RunForkError::InvalidCutoff);
         }
-        if control_version == 0 {
-            return Err(RunForkError::InvalidControlVersion);
+        let key = (tenant_id.clone(), run_id.clone());
+        if self.originals.contains_key(&key) {
+            return Err(RunForkError::RunAlreadyRegistered);
         }
         let original = AttestedOriginalRun {
             tenant_id: tenant_id.clone(),
@@ -265,26 +336,18 @@ impl RunForkStore {
             config_ref,
             memory_ref,
             cutoff_unix_seconds,
-            control_state,
-            control_version,
-            final_locked,
         };
         validate_original(&original, artifacts, policy)?;
-        if self
-            .originals
-            .insert((tenant_id, run_id), original)
-            .is_some()
-        {
-            return Err(RunForkError::RunAlreadyRegistered);
-        }
+        self.originals.insert(key, original);
         Ok(())
     }
-    pub fn fork<R: ArtifactRepository, P: ForkReferencePolicy>(
+    pub fn fork<R: ArtifactRepository, P: ForkReferencePolicy, L: ForkRunLifecycle>(
         &mut self,
         request: ForkRequest,
         artifacts: &mut R,
         policy: &mut P,
         grants: &InMemoryForkGrantAuthority,
+        lifecycle: &mut L,
     ) -> Result<ForkReceipt, RunForkError> {
         if !grants.allows(&request.authorization) {
             return Err(RunForkError::Unauthorized);
@@ -299,16 +362,16 @@ impl RunForkStore {
                 return Err(RunForkError::IdempotencyConflict);
             }
             let parent = self.parent(&request)?;
+            let lifecycle_record = validate_lifecycle(parent, &request.authorization, lifecycle)?;
             validate_original(parent, artifacts, policy)?;
+            if receipt.event.parent_control_version != lifecycle_record.control_version {
+                return Err(RunForkError::ControlStateConflict);
+            }
             return Ok(receipt.clone());
         }
         let parent = self.parent(&request)?.clone();
+        let lifecycle_record = validate_lifecycle(&parent, &request.authorization, lifecycle)?;
         validate_original(&parent, artifacts, policy)?;
-        if parent.control_state != request.authorization.expected_control_state
-            || parent.control_version != request.authorization.expected_control_version
-        {
-            return Err(RunForkError::ControlStateConflict);
-        }
         let run_id = format!("fork_{digest}");
         if self
             .forks
@@ -332,7 +395,7 @@ impl RunForkStore {
             actor_id: request.authorization.actor_id.clone(),
             grant_id: request.authorization.grant_id.clone(),
             reason: request.authorization.reason.clone(),
-            parent_control_version: parent.control_version,
+            parent_control_version: lifecycle_record.control_version,
         };
         let receipt = ForkReceipt {
             fork: fork.clone(),
@@ -363,9 +426,6 @@ fn validate_original<R: ArtifactRepository, P: ForkReferencePolicy>(
     artifacts: &mut R,
     policy: &mut P,
 ) -> Result<(), RunForkError> {
-    if original.final_locked {
-        return Err(RunForkError::FinalLocked);
-    }
     validate_reference(
         artifacts,
         policy,
@@ -393,6 +453,25 @@ fn validate_original<R: ArtifactRepository, P: ForkReferencePolicy>(
         original.cutoff_unix_seconds,
         false,
     )
+}
+
+fn validate_lifecycle<L: ForkRunLifecycle>(
+    original: &AttestedOriginalRun,
+    authorization: &ForkAuthorization,
+    lifecycle: &mut L,
+) -> Result<RunLifecycle, RunForkError> {
+    let live = lifecycle
+        .current(&original.tenant_id, &original.run_id)
+        .ok_or(RunForkError::LifecycleUnavailable)?;
+    if live.final_locked {
+        return Err(RunForkError::FinalLocked);
+    }
+    if live.control_state != authorization.expected_control_state
+        || live.control_version != authorization.expected_control_version
+    {
+        return Err(RunForkError::ControlStateConflict);
+    }
+    Ok(live)
 }
 fn validate_reference<R: ArtifactRepository, P: ForkReferencePolicy>(
     artifacts: &mut R,
@@ -466,6 +545,7 @@ pub enum RunForkError {
     InvalidCutoff,
     InvalidControlVersion,
     ParentNotFound,
+    LifecycleUnavailable,
     RunAlreadyRegistered,
     ReferenceUnavailable,
     CutoffMismatch,

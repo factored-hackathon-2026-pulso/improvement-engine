@@ -1,6 +1,7 @@
 use improvement_engine_core::run_fork::{
     ForkAuthorization, ForkControlState, ForkRequest, InMemoryForkGrantAuthority,
-    InMemoryForkReferencePolicy, RunForkError, RunForkStore,
+    InMemoryForkReferencePolicy, InMemoryForkRunLifecycle, RunForkError, RunForkStore,
+    RunLifecycle,
 };
 use improvement_engine_core::{
     ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository, InMemoryArtifactRepository,
@@ -15,13 +16,14 @@ const MEMORY: &str = "018f0f4e-7bbd-7000-8000-000000000013";
 
 #[test]
 fn fork_copies_only_attested_live_artifacts_and_emits_audit_receipt() {
-    let (mut store, mut artifacts, mut policy, grants) = fixture();
+    let (mut store, mut artifacts, mut policy, grants, mut lifecycle) = fixture();
     let receipt = store
         .fork(
             request("fork_001", "reason"),
             &mut artifacts,
             &mut policy,
             &grants,
+            &mut lifecycle,
         )
         .unwrap();
     assert_eq!(receipt.fork().replay_of(), "run_original");
@@ -38,14 +40,20 @@ fn fork_copies_only_attested_live_artifacts_and_emits_audit_receipt() {
 
 #[test]
 fn retry_revalidates_liveness_and_never_returns_a_fork_after_revocation() {
-    let (mut store, mut artifacts, mut policy, grants) = fixture();
+    let (mut store, mut artifacts, mut policy, grants, mut lifecycle) = fixture();
     let req = request("fork_002", "reason");
     let first = store
-        .fork(req.clone(), &mut artifacts, &mut policy, &grants)
+        .fork(
+            req.clone(),
+            &mut artifacts,
+            &mut policy,
+            &grants,
+            &mut lifecycle,
+        )
         .unwrap();
     policy.revoke(first.fork().snapshot_ref());
     assert_eq!(
-        store.fork(req, &mut artifacts, &mut policy, &grants),
+        store.fork(req, &mut artifacts, &mut policy, &grants, &mut lifecycle),
         Err(RunForkError::ReferenceUnavailable)
     );
     assert_eq!(
@@ -57,14 +65,15 @@ fn retry_revalidates_liveness_and_never_returns_a_fork_after_revocation() {
 
 #[test]
 fn fork_denies_unauthorized_cross_tenant_and_final_locked_inputs() {
-    let (mut store, mut artifacts, mut policy, mut grants) = fixture();
+    let (mut store, mut artifacts, mut policy, mut grants, mut lifecycle) = fixture();
     let unauth = InMemoryForkGrantAuthority::default();
     assert_eq!(
         store.fork(
             request("fork_003", "reason"),
             &mut artifacts,
             &mut policy,
-            &unauth
+            &unauth,
+            &mut lifecycle,
         ),
         Err(RunForkError::Unauthorized)
     );
@@ -83,7 +92,8 @@ fn fork_denies_unauthorized_cross_tenant_and_final_locked_inputs() {
             ForkRequest::new("run_original", "fork_004", cross).unwrap(),
             &mut artifacts,
             &mut policy,
-            &grants
+            &grants,
+            &mut lifecycle,
         ),
         Err(RunForkError::ParentNotFound)
     );
@@ -93,36 +103,22 @@ fn fork_denies_unauthorized_cross_tenant_and_final_locked_inputs() {
             request("fork_005", "reason"),
             &mut artifacts,
             &mut policy,
-            &grants
+            &grants,
+            &mut lifecycle,
         ),
         Err(RunForkError::ReferenceUnavailable)
     );
 
-    let (mut fresh_store, mut fresh_artifacts, mut fresh_policy, _) = fixture();
-    let source = source_ref(&mut fresh_artifacts);
-    let config = fresh_artifacts
-        .get(TENANT, CONFIG, 1)
-        .unwrap()
-        .unwrap()
-        .reference();
-    let memory = fresh_artifacts
-        .get(TENANT, MEMORY, 1)
-        .unwrap()
-        .unwrap()
-        .reference();
+    let (mut fresh_store, mut fresh_artifacts, mut fresh_policy, fresh_grants, mut fresh_lifecycle) =
+        fixture();
+    fresh_lifecycle.revoke_to_final_lock(TENANT, "run_original");
     assert_eq!(
-        fresh_store.register_attested_original(
-            TENANT,
-            "run_final",
-            source,
-            config,
-            memory,
-            100,
-            ForkControlState::Completed,
-            7,
-            true,
+        fresh_store.fork(
+            request("fork_final", "reason"),
             &mut fresh_artifacts,
-            &mut fresh_policy
+            &mut fresh_policy,
+            &fresh_grants,
+            &mut fresh_lifecycle,
         ),
         Err(RunForkError::FinalLocked)
     );
@@ -130,13 +126,14 @@ fn fork_denies_unauthorized_cross_tenant_and_final_locked_inputs() {
 
 #[test]
 fn altered_key_stale_state_and_cutoff_mismatch_fail_without_child() {
-    let (mut store, mut artifacts, mut policy, grants) = fixture();
+    let (mut store, mut artifacts, mut policy, grants, mut lifecycle) = fixture();
     store
         .fork(
             request("fork_006", "reason"),
             &mut artifacts,
             &mut policy,
             &grants,
+            &mut lifecycle,
         )
         .unwrap();
     assert_eq!(
@@ -144,7 +141,8 @@ fn altered_key_stale_state_and_cutoff_mismatch_fail_without_child() {
             request("fork_006", "changed"),
             &mut artifacts,
             &mut policy,
-            &grants
+            &grants,
+            &mut lifecycle,
         ),
         Err(RunForkError::IdempotencyConflict)
     );
@@ -163,7 +161,8 @@ fn altered_key_stale_state_and_cutoff_mismatch_fail_without_child() {
             ForkRequest::new("run_original", "fork_007", stale).unwrap(),
             &mut artifacts,
             &mut policy,
-            &grants
+            &grants,
+            &mut lifecycle,
         ),
         Err(RunForkError::ControlStateConflict)
     );
@@ -195,9 +194,6 @@ fn altered_key_stale_state_and_cutoff_mismatch_fail_without_child() {
             config.reference(),
             memory.reference(),
             100,
-            ForkControlState::Completed,
-            7,
-            false,
             &mut artifacts,
             &mut policy
         ),
@@ -236,9 +232,6 @@ fn attestation_rejects_fabricated_kind_digest_and_scope_before_registration() {
             source.reference(),
             memory.reference(),
             100,
-            ForkControlState::Completed,
-            7,
-            false,
             &mut artifacts,
             &mut policy,
         ),
@@ -255,9 +248,6 @@ fn attestation_rejects_fabricated_kind_digest_and_scope_before_registration() {
             bad_digest,
             memory.reference(),
             100,
-            ForkControlState::Completed,
-            7,
-            false,
             &mut artifacts,
             &mut policy,
         ),
@@ -273,9 +263,6 @@ fn attestation_rejects_fabricated_kind_digest_and_scope_before_registration() {
             config.reference(),
             cross_scope,
             100,
-            ForkControlState::Completed,
-            7,
-            false,
             &mut artifacts,
             &mut policy,
         ),
@@ -283,11 +270,94 @@ fn attestation_rejects_fabricated_kind_digest_and_scope_before_registration() {
     );
 }
 
+#[test]
+fn duplicate_attestation_is_rejected_before_it_can_replace_the_first_parent() {
+    let (mut store, mut artifacts, mut policy, grants, mut lifecycle) = fixture();
+    let source = source_ref(&mut artifacts);
+    let config = artifacts
+        .get(TENANT, CONFIG, 1)
+        .unwrap()
+        .unwrap()
+        .reference();
+    let memory = artifacts
+        .get(TENANT, MEMORY, 1)
+        .unwrap()
+        .unwrap()
+        .reference();
+    assert_eq!(
+        store.register_attested_original(
+            TENANT,
+            "run_original",
+            config,
+            source.clone(),
+            memory,
+            100,
+            &mut artifacts,
+            &mut policy,
+        ),
+        Err(RunForkError::RunAlreadyRegistered)
+    );
+    let receipt = store
+        .fork(
+            request("fork_duplicate", "reason"),
+            &mut artifacts,
+            &mut policy,
+            &grants,
+            &mut lifecycle,
+        )
+        .unwrap();
+    assert_eq!(receipt.fork().snapshot_ref(), &source);
+}
+
+#[test]
+fn retry_fails_closed_when_grant_is_revoked_or_lifecycle_changes_after_first_reply() {
+    let (mut store, mut artifacts, mut policy, mut grants, mut lifecycle) = fixture();
+    let request = request("fork_grant_retry", "reason");
+    store
+        .fork(
+            request.clone(),
+            &mut artifacts,
+            &mut policy,
+            &grants,
+            &mut lifecycle,
+        )
+        .unwrap();
+    grants.revoke(TENANT, "operator", "grant");
+    assert_eq!(
+        store.fork(
+            request.clone(),
+            &mut artifacts,
+            &mut policy,
+            &grants,
+            &mut lifecycle,
+        ),
+        Err(RunForkError::Unauthorized)
+    );
+    grants.authorize(TENANT, "operator", "grant").unwrap();
+    lifecycle.replace(
+        TENANT,
+        "run_original",
+        RunLifecycle::new(ForkControlState::Paused, 8, false).unwrap(),
+    );
+    assert_eq!(
+        store.fork(
+            request,
+            &mut artifacts,
+            &mut policy,
+            &grants,
+            &mut lifecycle,
+        ),
+        Err(RunForkError::ControlStateConflict)
+    );
+    assert_eq!(store.fork_count(TENANT), 1);
+}
+
 fn fixture() -> (
     RunForkStore,
     InMemoryArtifactRepository,
     InMemoryForkReferencePolicy,
     InMemoryForkGrantAuthority,
+    InMemoryForkRunLifecycle,
 ) {
     fixture_with_snapshot_cutoff(100)
 }
@@ -298,6 +368,7 @@ fn fixture_with_snapshot_cutoff(
     InMemoryArtifactRepository,
     InMemoryForkReferencePolicy,
     InMemoryForkGrantAuthority,
+    InMemoryForkRunLifecycle,
 ) {
     let mut artifacts = InMemoryArtifactRepository::default();
     let source = append(
@@ -328,16 +399,21 @@ fn fixture_with_snapshot_cutoff(
             config.reference(),
             memory.reference(),
             100,
-            ForkControlState::Completed,
-            7,
-            false,
             &mut artifacts,
             &mut policy,
         )
         .unwrap();
     let mut grants = InMemoryForkGrantAuthority::default();
     grants.authorize(TENANT, "operator", "grant").unwrap();
-    (store, artifacts, policy, grants)
+    let mut lifecycle = InMemoryForkRunLifecycle::default();
+    lifecycle
+        .attest(
+            TENANT,
+            "run_original",
+            RunLifecycle::new(ForkControlState::Completed, 7, false).unwrap(),
+        )
+        .unwrap();
+    (store, artifacts, policy, grants, lifecycle)
 }
 fn append(
     repo: &mut InMemoryArtifactRepository,
