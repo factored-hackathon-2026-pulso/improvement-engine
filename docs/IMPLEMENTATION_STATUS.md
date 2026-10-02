@@ -10,6 +10,9 @@ green unit test as proof that a broader product flow is complete.
   provenance, truthful coverage and PostgreSQL RLS contract.
 - U34: durable, fenced and truthful operator run-control receipts.
 - U13: autonomous Scout drafts with sealed source/Core/model provenance.
+- U33: scoped immutable published-memory revisions, head CAS and idempotent use
+  receipts. Its present in-memory adapter is not production-durability proof;
+  the U33 corrective slice covers an overflow atomicity regression.
 - U13-A / Issue #43: opaque, verified Scout-candidate admission. Candidate
   batches are canonical and atomic; durable reload validates member and batch
   commitments; downstream code receives a read-only capability rather than a
