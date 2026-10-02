@@ -273,6 +273,18 @@ impl ObservationEvent {
     pub fn source_event_id(&self) -> &str {
         &self.source_event_id
     }
+    pub fn source_run_ref(&self) -> &str {
+        &self.source_run_ref
+    }
+    pub fn target_system(&self) -> TargetSystem {
+        self.target_system
+    }
+    pub fn event_kind(&self) -> InteractionEventKind {
+        self.event_kind
+    }
+    pub fn layer(&self) -> Option<Layer> {
+        self.layer
+    }
     pub fn occurred_at_ms(&self) -> i64 {
         self.occurred_at_ms
     }
@@ -300,6 +312,14 @@ impl ObservationEvent {
         digest: impl Into<String>,
     ) -> Result<Self, ObservationError> {
         self.source_event_digest = Some(digest.into());
+        self.validate()?;
+        Ok(self)
+    }
+
+    /// Associates a treated event with a declared platform layer. The value is
+    /// supplied by the trusted adapter, never inferred downstream from text.
+    pub fn with_layer(mut self, layer: Layer) -> Result<Self, ObservationError> {
+        self.layer = Some(layer);
         self.validate()?;
         Ok(self)
     }
@@ -411,6 +431,9 @@ impl Coverage {
     }
     pub fn expected_population(&self) -> Option<u64> {
         self.expected_population
+    }
+    pub fn population_ref(&self) -> &str {
+        &self.population_ref
     }
 
     fn validate(&self) -> Result<(), ObservationError> {
@@ -639,6 +662,9 @@ pub struct CoreVerificationReceipt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WindowProjection {
+    window_start_ms: i64,
+    window_end_ms: i64,
+    received_as_of_ms: i64,
     events: Vec<ObservationEvent>,
     observed_events: Vec<ObservedEvent>,
     coverages: Vec<CoverageEvidence>,
@@ -646,6 +672,15 @@ pub struct WindowProjection {
 }
 
 impl WindowProjection {
+    pub fn window_start_ms(&self) -> i64 {
+        self.window_start_ms
+    }
+    pub fn window_end_ms(&self) -> i64 {
+        self.window_end_ms
+    }
+    pub fn received_as_of_ms(&self) -> i64 {
+        self.received_as_of_ms
+    }
     pub fn events(&self) -> &[ObservationEvent] {
         &self.events
     }
@@ -687,6 +722,12 @@ impl ObservedEvent {
     }
     pub fn event(&self) -> &ObservationEvent {
         &self.event
+    }
+    pub fn source_id(&self) -> &str {
+        &self.source_id
+    }
+    pub fn contract_ref(&self) -> &str {
+        &self.contract_ref
     }
 }
 
@@ -1060,6 +1101,7 @@ impl ObservationRepository for InMemoryObservationRepository {
             tenant_id,
             window_start_ms,
             window_end_ms,
+            received_as_of_ms,
             observed_events,
             coverages,
         ))
@@ -1363,6 +1405,7 @@ impl ObservationRepository for PostgresObservationRepository {
             tenant_id,
             window_start_ms,
             window_end_ms,
+            received_as_of_ms,
             observed_events,
             coverages,
         ))
@@ -1415,6 +1458,7 @@ fn make_projection(
     tenant_id: &str,
     start: i64,
     end: i64,
+    received_as_of_ms: i64,
     observed_events: Vec<ObservedEvent>,
     coverages: Vec<CoverageEvidence>,
 ) -> WindowProjection {
@@ -1437,6 +1481,7 @@ fn make_projection(
         tenant_id,
         start,
         end,
+        received_as_of_ms,
         &observed_events
             .iter()
             .map(|item| {
@@ -1456,6 +1501,9 @@ fn make_projection(
         .map(|item| item.event.clone())
         .collect();
     WindowProjection {
+        window_start_ms: start,
+        window_end_ms: end,
+        received_as_of_ms,
         events,
         observed_events,
         coverages,

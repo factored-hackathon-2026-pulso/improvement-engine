@@ -5,26 +5,45 @@
 use std::collections::BTreeMap;
 
 use postgres::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 pub mod autonomous_scout;
+pub mod change_compiler;
 pub mod core_task;
+pub mod debug_console;
 pub mod deterministic_sensor;
 pub mod durable_jobs;
+pub mod e0_deterministic_sensor;
+pub mod e0_frozen_memory_publication;
+pub mod e0_frozen_summary;
+pub mod e0_frozen_verifier;
+pub mod e0_opportunity_qualification;
+pub mod e0_query_lab;
+pub mod e0_safety_oracle;
 pub mod enriched_history;
+pub mod evaluation_plan;
+pub mod final_eligibility;
+pub mod governed_memory_use;
+pub mod governed_registry;
+pub mod independent_verifier;
 pub mod jev_decision;
 pub mod local_lab;
 pub mod memory_store;
+pub mod memory_temporal_protocol;
 pub mod model_provider;
+pub mod native_evaluation;
 pub mod platform_observations;
+pub mod platform_sensor;
 pub mod quota_grant;
 pub mod run_activity;
 pub mod run_config;
+pub mod run_fork;
 pub mod sandbox;
 pub mod source_validation;
 pub mod wiki_scratch;
+pub mod workflow_bridge;
 
 /// Stable identifier used by diagnostics and future service composition.
 pub fn service_name() -> &'static str {
@@ -68,7 +87,7 @@ impl ArtifactKind {
 }
 
 /// Stable, tenant-scoped pointer to one immutable artifact revision.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ArtifactReference {
     pub tenant_id: String,
     pub id: String,

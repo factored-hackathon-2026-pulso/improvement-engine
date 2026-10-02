@@ -16,8 +16,8 @@ scope avanza de forma explícita. Un escritor que llega con versión vieja recib
 `HeadConflict`: debe montar el head actual, rebasear su cambio en scratch y
 publicar una propuesta nueva. No hay merge textual silencioso.
 
-`MemoryUseReceipt` fija run, grant, propósito, reloj autorizado, scope, head y
-snapshot exactos. Es prueba de una lectura permitida, no prueba de que esa
+`MemoryUseReceipt` fija run, grant y su revisión, propósito, reloj autorizado,
+scope, head y snapshot exactos. Es prueba de una lectura permitida, no prueba de que esa
 lectura causó una mejora. La revocación agrega un tombstone; no modifica ni
 borra la revisión histórica. Antes de publicar o emitir un receipt se consulta
 el overlay; al clonar/restaurar el registry, el tombstone continúa denegando el
@@ -29,6 +29,13 @@ El digest del resultado U15 se verifica en Rust sobre sus páginas tipadas; SQL
 no intenta reimplementar RFC8785/JCS. Por eso el digest/páginas sólo cruzan la
 frontera SQL dentro del receipt registrado por el boundary privilegiado, nunca
 como input ejecutable del runtime genérico.
+
+`MemoryUseReceiptAttestationPort` conserva la verificación read-only de un
+receipt histórico. Para emitir una capability nueva, U22 usa el commit interno
+atómico U33: el fence privado liga request, grant/revisión, head
+identidad/versión, snapshot y liveness antes de insertar el ledger. El adapter
+resuelve grant/revisión en ese predicado, no desde una lectura previa de U22.
+Un id o versión de head alterados no se admiten.
 
 ## Estado durable
 

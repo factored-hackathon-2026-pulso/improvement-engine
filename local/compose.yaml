@@ -1,0 +1,46 @@
+name: pulso-local
+
+services:
+  postgres:
+    image: docker.io/library/postgres@sha256:aa90e97ee862e558111d34cfb8b2c4bec768c2b039fb791341686928560263b3
+    environment:
+      POSTGRES_DB: ${PULSO_POSTGRES_DB:-pulso}
+      POSTGRES_USER: ${PULSO_POSTGRES_USER:-pulso}
+      POSTGRES_PASSWORD: ${PULSO_POSTGRES_PASSWORD:?set PULSO_POSTGRES_PASSWORD in a local ignored environment file}
+    ports:
+      - 127.0.0.1:${PULSO_POSTGRES_PORT:-54329}:5432
+    volumes:
+      - pulso-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks: [pulso-internal]
+
+  localstack:
+    image: docker.io/localstack/localstack@sha256:c2cdfe8c60db3b14ad0534a95d6c8e17b2a4b7befc7e293a3833e763a8bc6c65
+    environment:
+      SERVICES: s3
+      EAGER_SERVICE_LOADING: "1"
+      PERSISTENCE: "1"
+    ports:
+      - 127.0.0.1:${PULSO_LOCALSTACK_PORT:-4566}:4566
+    volumes:
+      - pulso-localstack:/var/lib/localstack
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4566/_localstack/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks: [pulso-internal]
+
+networks:
+  pulso-internal:
+    internal: true
+
+volumes:
+  pulso-postgres:
+  pulso-localstack:

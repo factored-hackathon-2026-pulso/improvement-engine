@@ -14,7 +14,15 @@ Read CONTEXT.md and relevant docs/adr before changes. Implement detection and au
 
 ## Current verification
 
-Empty application bootstrap: no executable engine yet. Do not advertise cargo tests or product health as verified. Add tested commands with the first code slice.
+The engine has implemented, independently reviewed slices for platform
+observation ingestion (U29), durable run control (U34), and autonomous Scout
+drafts (U13). Verification remains slice-specific: inspect the relevant
+journal, PR/commit and current CI before claiming a behavior is green. Do not
+advertise product health from a structural check alone.
+
+The cumulative delivery state is recorded in `docs/IMPLEMENTATION_STATUS.md`.
+Human-owned external blockers go in `docs/gaps/OPEN_GAPS.md`; do not stop
+unrelated implementation while one is open.
 
 ## Agent skills
 

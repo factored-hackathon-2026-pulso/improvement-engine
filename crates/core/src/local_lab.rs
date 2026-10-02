@@ -242,6 +242,25 @@ impl LabSource {
 pub struct ApprovedLabSource {
     approval_id: String,
     source: LabSource,
+    // ArtifactReference.digest identifies source content in the U08 artifact
+    // domain. This optional value is instead the canonical U04
+    // SourceSnapshot binding digest and is never inferred from that artifact.
+    u04_source_snapshot_binding: Option<String>,
+}
+
+impl ApprovedLabSource {
+    /// Crate-private U04 composition hook. A public source manifest cannot
+    /// manufacture this cross-domain binding.
+    pub(crate) fn bind_verified_u04_snapshot(
+        mut self,
+        binding: crate::source_validation::VerifiedSourceArtifactBinding,
+    ) -> Result<Self, LabError> {
+        if binding.artifact_ref() != &self.source.snapshot_ref {
+            return Err(LabError::SourceApprovalDenied);
+        }
+        self.u04_source_snapshot_binding = Some(binding.snapshot_binding_digest().to_owned());
+        Ok(self)
+    }
 }
 
 /// Separate authorization seam so U03/U04 adapters can replace the local
@@ -275,6 +294,7 @@ impl LabSourceApprovalPort for InMemoryLabSourceAuthority {
         Ok(ApprovedLabSource {
             approval_id,
             source,
+            u04_source_snapshot_binding: None,
         })
     }
 }
@@ -406,6 +426,12 @@ pub struct QueryReceipt {
     pub sequence: u64,
     pub digest: String,
     pub query_digest: String,
+    /// Retained alongside the query digest so a trusted downstream boundary
+    /// can account for every source field read by the query, including filter
+    /// operands. This is integrity evidence, not an issuer signature.
+    pub queried_table: String,
+    pub queried_columns: Vec<String>,
+    pub accessed_columns: Vec<String>,
     pub depends_on: Option<String>,
     pub source_snapshot_ref: ArtifactReference,
     pub source_contract_digest: String,
@@ -418,8 +444,8 @@ pub struct QueryReceipt {
 }
 
 impl QueryReceipt {
-    /// Verifies the receipt's self-contained canonical digest before another
-    /// boundary relies on it.
+    /// Checks canonical integrity only. A matching digest proves neither who
+    /// issued this public value nor that it came from a governed lab.
     #[must_use]
     pub fn has_valid_digest(&self) -> bool {
         let mut unsigned = self.clone();
@@ -437,6 +463,27 @@ impl QueryReceipt {
 pub struct QueryResult {
     rows: QueryRows,
     receipt: QueryReceipt,
+}
+
+/// Opaque, in-process evidence that the exact completed result was retrieved
+/// from a still-authorized U08 session. It cannot be made from `QueryResult`
+/// or caller-provided manifests; only the lab ledger can mint it.
+pub(crate) struct GovernedE0QueryCandidate {
+    rows: QueryRows,
+    receipt: QueryReceipt,
+    source_table: LabTable,
+    u04_source_snapshot_binding: String,
+}
+
+impl GovernedE0QueryCandidate {
+    pub(crate) fn into_parts(self) -> (QueryRows, QueryReceipt, LabTable, String) {
+        (
+            self.rows,
+            self.receipt,
+            self.source_table,
+            self.u04_source_snapshot_binding,
+        )
+    }
 }
 
 impl QueryResult {
@@ -477,6 +524,7 @@ pub enum LabError {
     ExternalIoDenied,
     DependencyDenied,
     QueryFailed,
+    E0BindingUnavailable,
 }
 
 struct StoredSession {
@@ -484,6 +532,7 @@ struct StoredSession {
     lab_instance_nonce: u64,
     source: LabSource,
     approval_id: String,
+    u04_source_snapshot_binding: Option<String>,
     connection: Connection,
     receipts: Vec<QueryReceipt>,
     results: BTreeMap<String, QueryRows>,
@@ -539,6 +588,7 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
                 lab_instance_nonce: self.lab_instance_nonce,
                 source: approved_source.source,
                 approval_id: approved_source.approval_id,
+                u04_source_snapshot_binding: approved_source.u04_source_snapshot_binding,
                 connection,
                 receipts: Vec::new(),
                 results: BTreeMap::new(),
@@ -572,6 +622,7 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             filter.clone(),
         ));
         let (rows, dependency) = execute_select(session, &table, &columns, filter.as_ref())?;
+        let accessed_columns = accessed_columns(&columns, filter.as_ref());
         let sequence = session.receipts.len() as u64 + 1;
         let mut receipt = QueryReceipt {
             session_id: session_id.to_owned(),
@@ -582,6 +633,9 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             sequence,
             digest: String::new(),
             query_digest,
+            queried_table: table,
+            queried_columns: columns,
+            accessed_columns,
             depends_on: dependency,
             source_snapshot_ref: session.source.snapshot_ref.clone(),
             source_contract_digest: session.source.source_contract_digest.clone(),
@@ -599,6 +653,63 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
         }
         session.receipts.push(receipt.clone());
         Ok(QueryResult { rows, receipt })
+    }
+
+    /// Retrieves a completed receipt from the lab's own ephemeral ledger for
+    /// the crate-private E0 composition. The public `QueryResult::untrusted`
+    /// constructor cannot cross this boundary.
+    #[allow(dead_code)] // Called by the future crate-private E0 composition root.
+    pub(crate) fn governed_e0_candidate(
+        &self,
+        session_id: &str,
+        access: &LabAccess,
+        receipt_digest: &str,
+        now_unix_seconds: u64,
+    ) -> Result<GovernedE0QueryCandidate, LabError> {
+        let session = self
+            .sessions
+            .get(session_id)
+            .ok_or(LabError::SessionNotFound)?;
+        if !self.authority.authorize(access) || session.access != *access {
+            return Err(LabError::AccessDenied);
+        }
+        if now_unix_seconds >= session.access.expires_at_unix_seconds {
+            return Err(LabError::SessionExpired);
+        }
+        let receipt = session
+            .receipts
+            .iter()
+            .find(|receipt| receipt.digest == receipt_digest)
+            .cloned()
+            .ok_or(LabError::QueryFailed)?;
+        let rows = session
+            .results
+            .get(receipt_digest)
+            .cloned()
+            .ok_or(LabError::QueryFailed)?;
+        let source_table = session
+            .source
+            .tables
+            .iter()
+            .find(|table| table.name == receipt.queried_table)
+            .cloned()
+            .ok_or(LabError::QueryFailed)?;
+        let u04_source_snapshot_binding = session
+            .u04_source_snapshot_binding
+            .clone()
+            .ok_or(LabError::E0BindingUnavailable)?;
+        if !receipt.has_valid_digest()
+            || !receipt.binds_rows(&rows)
+            || receipt.row_count != rows.len()
+        {
+            return Err(LabError::QueryFailed);
+        }
+        Ok(GovernedE0QueryCandidate {
+            rows,
+            receipt,
+            source_table,
+            u04_source_snapshot_binding,
+        })
     }
 
     pub fn receipts(
@@ -709,6 +820,28 @@ fn load_source(source: &LabSource) -> Result<Connection, LabError> {
         .execute_batch("PRAGMA query_only = ON;")
         .map_err(|_| LabError::QueryFailed)?;
     Ok(connection)
+}
+
+fn accessed_columns(columns: &[String], filter: Option<&QueryFilter>) -> Vec<String> {
+    let mut fields = BTreeSet::from_iter(columns.iter().cloned());
+    match filter {
+        Some(QueryFilter::Equals { column, .. }) => {
+            fields.insert(column.clone());
+        }
+        Some(QueryFilter::PriorResult {
+            source_column,
+            prior_column,
+            ..
+        }) => {
+            fields.insert(source_column.clone());
+            // `prior_column` is read from another receipt, not this source;
+            // it remains digest-bound in the query and the E0 boundary denies
+            // all dependent queries before a result can be admitted.
+            let _ = prior_column;
+        }
+        None => {}
+    }
+    fields.into_iter().collect()
 }
 
 fn execute_select(

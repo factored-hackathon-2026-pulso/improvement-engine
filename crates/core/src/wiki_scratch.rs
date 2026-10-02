@@ -7,6 +7,7 @@
 //! replace the deterministic grant authority below with the service grant
 //! boundary without changing the workspace contract.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use serde::Serialize;
@@ -55,6 +56,9 @@ pub struct WikiAccess {
     pub tenant_id: String,
     pub purpose: String,
     pub grant_id: String,
+    /// Exact immutable revision of the grant selected by trusted composition.
+    /// A later grant replacement or revocation must not authorize this access.
+    pub grant_revision: u64,
     pub snapshot_ref: ArtifactReference,
     pub allowed_at_unix_seconds: u64,
     pub memory_scope: MemoryScopeBinding,
@@ -96,10 +100,17 @@ impl WikiAccess {
             tenant_id: tenant_id.into(),
             purpose: purpose.into(),
             grant_id: grant_id.into(),
+            grant_revision: 1,
             snapshot_ref,
             allowed_at_unix_seconds,
             memory_scope,
         }
+    }
+
+    #[must_use]
+    pub fn with_grant_revision(mut self, grant_revision: u64) -> Self {
+        self.grant_revision = grant_revision;
+        self
     }
 }
 
@@ -111,6 +122,7 @@ impl WikiAccess {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WikiGrant {
     grant_id: String,
+    revision: u64,
     run_id: String,
     tenant_id: String,
     purpose: String,
@@ -148,12 +160,19 @@ impl WikiGrant {
     ) -> Self {
         Self {
             grant_id: grant_id.into(),
+            revision: 1,
             run_id: run_id.into(),
             tenant_id: tenant_id.into(),
             purpose: purpose.into(),
             snapshot_ref,
             memory_scope,
         }
+    }
+
+    #[must_use]
+    pub fn with_revision(mut self, revision: u64) -> Self {
+        self.revision = revision;
+        self
     }
 }
 
@@ -162,31 +181,69 @@ pub trait WikiAuthorizationPort {
     fn authorize(&self, access: &WikiAccess, snapshot_ref: &ArtifactReference) -> bool;
 }
 
+/// Crate-private extension used by the governed-memory commit. A production
+/// implementation must resolve the exact grant revision and verify it remains
+/// live *inside the same transaction* as the U33 receipt predicate. U22 must
+/// not pre-read a fence and hand a stale authorization observation to U33.
+#[allow(dead_code)] // Consumed only by the crate-private U33 composition adapter.
+pub(crate) trait MemoryUseCommitAuthority: WikiAuthorizationPort {
+    fn memory_use_grant_is_live(&self, access: &WikiAccess) -> bool;
+}
+
 /// Test/local authority that only accepts issued exact grants.
 ///
 /// It is not an identity provider or substitute for U05. It makes the required
 /// authorization seam executable without granting host or source access.
 #[derive(Default)]
 pub struct InMemoryWikiGrantAuthority {
-    grants: BTreeMap<String, WikiGrant>,
+    grants: RefCell<BTreeMap<String, WikiGrant>>,
 }
 
 impl InMemoryWikiGrantAuthority {
-    pub fn issue(&mut self, grant: WikiGrant) {
-        self.grants.insert(grant.grant_id.clone(), grant);
+    pub fn issue(&self, grant: WikiGrant) {
+        self.grants
+            .borrow_mut()
+            .insert(grant.grant_id.clone(), grant);
+    }
+
+    pub fn revoke(&self, grant_id: &str) -> bool {
+        self.grants.borrow_mut().remove(grant_id).is_some()
+    }
+
+    #[allow(dead_code)] // Used by U33's deterministic final-boundary race regression.
+    pub(crate) fn replace_revision(&self, grant_id: &str, revision: u64) -> bool {
+        if revision == 0 {
+            return false;
+        }
+        let mut grants = self.grants.borrow_mut();
+        let Some(grant) = grants.get_mut(grant_id) else {
+            return false;
+        };
+        grant.revision = revision;
+        true
     }
 }
 
 impl WikiAuthorizationPort for InMemoryWikiGrantAuthority {
     fn authorize(&self, access: &WikiAccess, snapshot_ref: &ArtifactReference) -> bool {
-        self.grants.get(&access.grant_id).is_some_and(|grant| {
-            grant.run_id == access.run_id
-                && grant.tenant_id == access.tenant_id
-                && grant.purpose == access.purpose
-                && grant.snapshot_ref == *snapshot_ref
-                && access.snapshot_ref == *snapshot_ref
-                && grant.memory_scope == access.memory_scope
-        })
+        self.grants
+            .borrow()
+            .get(&access.grant_id)
+            .is_some_and(|grant| {
+                grant.run_id == access.run_id
+                    && grant.revision == access.grant_revision
+                    && grant.tenant_id == access.tenant_id
+                    && grant.purpose == access.purpose
+                    && grant.snapshot_ref == *snapshot_ref
+                    && access.snapshot_ref == *snapshot_ref
+                    && grant.memory_scope == access.memory_scope
+            })
+    }
+}
+
+impl MemoryUseCommitAuthority for InMemoryWikiGrantAuthority {
+    fn memory_use_grant_is_live(&self, access: &WikiAccess) -> bool {
+        self.authorize(access, &access.snapshot_ref)
     }
 }
 
@@ -345,6 +402,57 @@ pub trait WikiScratchPort {
         access: &WikiAccess,
         transform: WikiTransform,
     ) -> Result<WikiTransformResult, WikiError>;
+}
+
+/// Recomputes an already-issued scratch transform from its sealed source
+/// snapshot without exposing its pages to a new caller. Composition-only
+/// consumers use it before a governed boundary redeems a result; matching
+/// receipt strings alone are not sufficient evidence that the result came
+/// from the claimed canonical transform.
+pub(crate) fn verify_transform_result_against_snapshot<R: ArtifactRepository>(
+    repository: &mut R,
+    access: &WikiAccess,
+    transform: &WikiTransform,
+    result: &WikiTransformResult,
+) -> Result<bool, WikiError> {
+    let snapshot = repository
+        .get(
+            &access.snapshot_ref.tenant_id,
+            &access.snapshot_ref.id,
+            access.snapshot_ref.revision,
+        )
+        .map_err(|_| WikiError::SnapshotNotFound)?
+        .ok_or(WikiError::SnapshotNotFound)?;
+    if snapshot.reference() != access.snapshot_ref {
+        return Err(WikiError::SnapshotReferenceMismatch);
+    }
+    if snapshot.kind != ArtifactKind::MemoryWiki {
+        return Err(WikiError::SnapshotKindMismatch);
+    }
+    let decoded = decode_snapshot(&snapshot.payload)?;
+    if decoded.available_at_unix_seconds > access.allowed_at_unix_seconds {
+        return Err(WikiError::FutureSnapshot {
+            available_at_unix_seconds: decoded.available_at_unix_seconds,
+            allowed_at_unix_seconds: access.allowed_at_unix_seconds,
+        });
+    }
+    if decoded.purpose != access.purpose {
+        return Err(WikiError::AuthorizationDenied);
+    }
+    let mut expected_pages = decoded.pages;
+    for operation in &transform.operations {
+        apply_operation(&mut expected_pages, operation)?;
+    }
+    Ok(result.receipt.snapshot_ref == access.snapshot_ref
+        && result.receipt.run_id == access.run_id
+        && result.receipt.tenant_id == access.tenant_id
+        && result.receipt.purpose == access.purpose
+        && result.receipt.grant_id == access.grant_id
+        && result.receipt.memory_scope == access.memory_scope
+        && result.receipt.transform_digest == digest(transform)
+        && result.receipt.result_digest == digest(&expected_pages)
+        && result.result_digest == digest(&expected_pages)
+        && result.pages == expected_pages)
 }
 
 impl WikiScratchPort for InMemoryWikiGrantAuthority {

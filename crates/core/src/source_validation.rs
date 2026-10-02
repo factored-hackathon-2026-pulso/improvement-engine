@@ -217,11 +217,13 @@ pub fn load_canonical_contracts(
 #[serde(deny_unknown_fields)]
 pub struct SourceSnapshot {
     contract_version: ContractVersion,
-    pub tenant_id: String,
-    pub source_namespace: String,
-    pub world_ref: String,
-    pub observed_cutoff: String,
+    tenant_id: String,
+    source_namespace: String,
+    world_ref: String,
+    observed_cutoff: String,
     sources: Vec<SnapshotSource>,
+    #[serde(skip)]
+    raw_digest: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -243,11 +245,176 @@ struct SourceContractRef {
     digest: String,
 }
 
+/// Read-only seal for one exact file entry in an immutable source snapshot.
+/// It intentionally has no public constructor: callers obtain it only from the
+/// parsed `SourceSnapshot` and can use it to bind a downstream projection back
+/// to its table, object, header and source-contract commitments.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceFileSeal {
+    table: String,
+    uri: String,
+    file_digest: String,
+    header_digest: String,
+    source_contract_id: String,
+    source_contract_version: String,
+    source_contract_digest: String,
+}
+
+/// Opaque mapping emitted only by the immutable source-artifact registry after
+/// it reparses the stored snapshot bytes. It deliberately carries both digest
+/// domains, rather than pretending they are interchangeable.
+pub(crate) struct VerifiedSourceArtifactBinding {
+    artifact_ref: crate::ArtifactReference,
+    snapshot_binding_digest: String,
+}
+
+impl VerifiedSourceArtifactBinding {
+    pub(crate) fn artifact_ref(&self) -> &crate::ArtifactReference {
+        &self.artifact_ref
+    }
+
+    pub(crate) fn snapshot_binding_digest(&self) -> &str {
+        &self.snapshot_binding_digest
+    }
+
+    #[cfg(test)]
+    pub(crate) fn deterministic_for_test(
+        artifact_ref: crate::ArtifactReference,
+        snapshot_binding_digest: String,
+    ) -> Self {
+        Self {
+            artifact_ref,
+            snapshot_binding_digest,
+        }
+    }
+}
+
+/// Resolves a U04 mapping only from U02's immutable revision port. The exact
+/// reference, kind and stored content digest are rechecked before the exact
+/// raw snapshot JSON bytes retained under `source_snapshot_json` in the
+/// immutable artifact are parsed again. This is the sole U02 payload key for
+/// exact `SourceSnapshot` bytes; parsing a JSON value and serializing it again
+/// would create a different U04 binding domain.
+#[allow(dead_code)] // Called by the future U04/U08 composition root.
+pub(crate) fn resolve_source_snapshot_artifact<R: crate::ArtifactRepository>(
+    repository: &mut R,
+    reference: &crate::ArtifactReference,
+) -> Result<VerifiedSourceArtifactBinding, SourceDefinitionError> {
+    let draft = repository
+        .get(&reference.tenant_id, &reference.id, reference.revision)
+        .map_err(|_| SourceDefinitionError::Invalid("source artifact lookup failed"))?
+        .ok_or(SourceDefinitionError::Invalid(
+            "source artifact is not persisted",
+        ))?;
+    if draft.kind != crate::ArtifactKind::SourceSnapshot || draft.reference() != *reference {
+        return Err(SourceDefinitionError::Invalid(
+            "source artifact reference or kind mismatch",
+        ));
+    }
+    let raw = draft
+        .payload
+        .get("source_snapshot_json")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(SourceDefinitionError::Invalid(
+            "source artifact omits exact raw snapshot bytes",
+        ))?;
+    let snapshot = SourceSnapshot::from_json(raw)?;
+    if snapshot.tenant_id() != reference.tenant_id {
+        return Err(SourceDefinitionError::Invalid(
+            "artifact tenant differs from snapshot",
+        ));
+    }
+    Ok(VerifiedSourceArtifactBinding {
+        artifact_ref: reference.clone(),
+        snapshot_binding_digest: snapshot.binding_digest(),
+    })
+}
+
+impl SourceFileSeal {
+    #[must_use]
+    pub fn table(&self) -> &str {
+        &self.table
+    }
+
+    #[must_use]
+    pub fn file_digest(&self) -> &str {
+        &self.file_digest
+    }
+}
+
 impl SourceSnapshot {
+    /// Identity fields are intentionally immutable after parsing: the binding
+    /// digest commits exact snapshot bytes, and downstream consumers must not
+    /// be able to mutate provenance without constructing a new snapshot.
+    ///
+    /// ```compile_fail
+    /// # use improvement_engine_core::source_validation::SourceSnapshot;
+    /// # let mut snapshot = SourceSnapshot::from_json("{}").unwrap();
+    /// snapshot.tenant_id = "another-tenant".to_owned();
+    /// snapshot.source_namespace = "another_namespace".to_owned();
+    /// snapshot.world_ref = "another-world".to_owned();
+    /// snapshot.observed_cutoff = "2026-01-01T00:00:00Z".to_owned();
+    /// ```
     pub fn from_json(raw: &str) -> Result<Self, SourceDefinitionError> {
-        let snapshot: Self = serde_json::from_str(raw).map_err(SourceDefinitionError::Json)?;
+        let mut snapshot: Self = serde_json::from_str(raw).map_err(SourceDefinitionError::Json)?;
         snapshot.validate()?;
+        snapshot.raw_digest = sha256(raw.as_bytes());
         Ok(snapshot)
+    }
+
+    /// Digest of the immutable snapshot bytes used by availability profiles.
+    #[must_use]
+    pub fn binding_digest(&self) -> String {
+        format!("sha256:{}", self.raw_digest)
+    }
+
+    /// Whether this value was parsed through `from_json` and therefore has an
+    /// exact, canonical byte binding. A direct serde deserialization has no
+    /// trustworthy raw-byte digest and cannot bind downstream artifacts.
+    #[must_use]
+    pub fn has_canonical_binding(&self) -> bool {
+        self.raw_digest.len() == 64
+            && self
+                .raw_digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    }
+
+    #[must_use]
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    #[must_use]
+    pub fn source_namespace(&self) -> &str {
+        &self.source_namespace
+    }
+
+    #[must_use]
+    pub fn world_ref(&self) -> &str {
+        &self.world_ref
+    }
+
+    #[must_use]
+    pub fn observed_cutoff(&self) -> &str {
+        &self.observed_cutoff
+    }
+
+    /// Returns a sealed, read-only commitment for exactly one snapshot table.
+    #[must_use]
+    pub fn source_file_seal(&self, table: &str) -> Option<SourceFileSeal> {
+        self.sources
+            .iter()
+            .find(|source| source.table == table)
+            .map(|source| SourceFileSeal {
+                table: source.table.clone(),
+                uri: source.uri.clone(),
+                file_digest: source.file_digest.clone(),
+                header_digest: source.header_digest.clone(),
+                source_contract_id: source.source_contract_ref.id.clone(),
+                source_contract_version: source.source_contract_ref.version.clone(),
+                source_contract_digest: source.source_contract_ref.digest.clone(),
+            })
     }
 
     fn validate(&self) -> Result<(), SourceDefinitionError> {

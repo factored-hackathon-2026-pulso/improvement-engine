@@ -6,16 +6,141 @@
 //! That separation makes the access boundary explicit while still making the
 //! temporal and provenance controls executable in local tests.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
-use crate::source_validation::SourceSnapshot;
+use crate::local_lab::ApprovedLabSource;
+use crate::source_validation::{SourceFileSeal, SourceSnapshot, VerifiedSourceArtifactBinding};
 
 const DISCOVERY_FORBIDDEN_TABLES: &[&str] = &["labels", "signal"];
-const REQUIRED_AVAILABILITY_CLOCKS: &[&str] = &["event_time", "ingested_at"];
+const EVENT_TIME_CLOCK: &str = "event_time";
+const INGESTED_AT_CLOCK: &str = "ingested_at";
+const LEGACY_MANIFEST_VERSION: u16 = 1;
+const CURRENT_MANIFEST_VERSION: u16 = 2;
+
+/// The clock that proves when a row may participate in discovery.
+///
+/// `ReplayAtEventTime` is deliberately a separate, sealed mode for E0. It
+/// means the package has no observed physical ingestion timestamp and replay
+/// therefore assumes availability at `event_time` with a zero ingestion lag.
+/// It is not evidence about production ingestion latency.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum AvailabilityClockMode {
+    #[default]
+    ObservedIngestedAt,
+    ReplayAtEventTime {
+        assumption_label: String,
+    },
+}
+
+impl AvailabilityClockMode {
+    #[must_use]
+    pub fn observed_ingested_at() -> Self {
+        Self::ObservedIngestedAt
+    }
+
+    #[must_use]
+    pub fn replay_at_event_time(assumption_label: impl Into<String>) -> Self {
+        Self::ReplayAtEventTime {
+            assumption_label: assumption_label.into(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), EnrichedHistoryError> {
+        match self {
+            Self::ObservedIngestedAt => Ok(()),
+            Self::ReplayAtEventTime { assumption_label }
+                if is_assumption_label(assumption_label) =>
+            {
+                Ok(())
+            }
+            Self::ReplayAtEventTime { .. } => Err(EnrichedHistoryError::InvalidReplayAssumption),
+        }
+    }
+
+    fn requires_physical_ingested_at(&self) -> bool {
+        matches!(self, Self::ObservedIngestedAt)
+    }
+}
+
+/// Versioned commitment for an availability-clock interpretation. The digest
+/// commits to the mode, its assumption label and one immutable source snapshot
+/// byte representation; a caller cannot flip the clock after the profile was
+/// sealed without invalidating it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AvailabilityProfile {
+    pub profile_id: String,
+    pub profile_version: u16,
+    #[serde(default)]
+    pub availability_clock: AvailabilityClockMode,
+    /// Tenant committed by the source snapshot this profile is permitted to
+    /// bind. It is explicit in addition to the snapshot-byte digest so a
+    /// cross-tenant substitution is rejected without relying on inference.
+    pub source_tenant_id: String,
+    pub source_snapshot_digest: String,
+    pub profile_digest: String,
+}
+
+impl AvailabilityProfile {
+    #[must_use]
+    pub fn new(
+        profile_id: impl Into<String>,
+        profile_version: u16,
+        availability_clock: AvailabilityClockMode,
+        source_tenant_id: impl Into<String>,
+        source_snapshot_digest: impl Into<String>,
+    ) -> Self {
+        let profile_id = profile_id.into();
+        let source_tenant_id = source_tenant_id.into();
+        let source_snapshot_digest = source_snapshot_digest.into();
+        let profile_digest = availability_profile_digest(
+            &profile_id,
+            profile_version,
+            &availability_clock,
+            &source_tenant_id,
+            &source_snapshot_digest,
+        );
+        Self {
+            profile_id,
+            profile_version,
+            availability_clock,
+            source_tenant_id,
+            source_snapshot_digest,
+            profile_digest,
+        }
+    }
+
+    fn validate(&self) -> Result<(), EnrichedHistoryError> {
+        if !is_identifier(&self.profile_id)
+            || self.profile_version == 0
+            || self.source_tenant_id.is_empty()
+            || self.source_tenant_id.len() > 128
+            || !is_sha256_digest(&self.source_snapshot_digest)
+            || !is_sha256_digest(&self.profile_digest)
+        {
+            return Err(EnrichedHistoryError::InvalidAvailabilityProfile);
+        }
+        self.availability_clock.validate()?;
+        if self.profile_digest
+            != availability_profile_digest(
+                &self.profile_id,
+                self.profile_version,
+                &self.availability_clock,
+                &self.source_tenant_id,
+                &self.source_snapshot_digest,
+            )
+        {
+            return Err(EnrichedHistoryError::InvalidAvailabilityProfile);
+        }
+        Ok(())
+    }
+}
 
 /// Four independent seals carried by every enriched package file.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -67,6 +192,15 @@ pub struct PackageFile {
     /// nested JSON, but it receives the same immutable availability decision.
     #[serde(default)]
     pub field_availability: BTreeMap<String, String>,
+    /// Digest of the sealed E0 row/field availability projection. It is
+    /// required only for `replay_at_event_time`; it prevents a caller from
+    /// swapping temporal annotations independently from the data rows.
+    #[serde(default)]
+    pub replay_projection_digest: Option<String>,
+    /// Exact source-file commitment supplied by `SourceSnapshot`. It is
+    /// required when the package is opened through `from_snapshot`.
+    #[serde(skip)]
+    source_file_seal: Option<SourceFileSeal>,
 }
 
 impl PackageFile {
@@ -81,6 +215,8 @@ impl PackageFile {
             digests,
             available_at: available_at.into(),
             field_availability: BTreeMap::new(),
+            replay_projection_digest: None,
+            source_file_seal: None,
         }
     }
 
@@ -89,15 +225,33 @@ impl PackageFile {
         self.field_availability = field_availability;
         self
     }
+
+    #[must_use]
+    pub fn with_replay_projection_digest(mut self, replay_projection_digest: String) -> Self {
+        self.replay_projection_digest = Some(replay_projection_digest);
+        self
+    }
+
+    #[must_use]
+    pub fn with_source_file_seal(mut self, source_file_seal: SourceFileSeal) -> Self {
+        self.source_file_seal = Some(source_file_seal);
+        self
+    }
 }
 
 /// Read-only package manifest, independently sealed before the adapter runs.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EnrichedHistoryManifest {
+    #[serde(default = "legacy_manifest_version")]
+    pub manifest_version: u16,
     pub source_namespace: String,
     pub world_ref: String,
     pub observed_cutoff: String,
+    #[serde(default)]
+    pub availability_clock: AvailabilityClockMode,
+    #[serde(default)]
+    pub availability_profile: Option<AvailabilityProfile>,
     pub files: Vec<PackageFile>,
 }
 
@@ -107,12 +261,35 @@ impl EnrichedHistoryManifest {
         source_namespace: impl Into<String>,
         world_ref: impl Into<String>,
         observed_cutoff: impl Into<String>,
+        availability_clock: AvailabilityClockMode,
         files: Vec<PackageFile>,
     ) -> Self {
         Self {
+            manifest_version: LEGACY_MANIFEST_VERSION,
             source_namespace: source_namespace.into(),
             world_ref: world_ref.into(),
             observed_cutoff: observed_cutoff.into(),
+            availability_clock,
+            availability_profile: None,
+            files,
+        }
+    }
+
+    #[must_use]
+    pub fn new_replay(
+        source_namespace: impl Into<String>,
+        world_ref: impl Into<String>,
+        observed_cutoff: impl Into<String>,
+        availability_profile: AvailabilityProfile,
+        files: Vec<PackageFile>,
+    ) -> Self {
+        Self {
+            manifest_version: CURRENT_MANIFEST_VERSION,
+            source_namespace: source_namespace.into(),
+            world_ref: world_ref.into(),
+            observed_cutoff: observed_cutoff.into(),
+            availability_clock: availability_profile.availability_clock.clone(),
+            availability_profile: Some(availability_profile),
             files,
         }
     }
@@ -128,13 +305,68 @@ impl EnrichedHistoryManifest {
 pub struct TableInput {
     pub digests: ProvenanceDigests,
     pub rows: Vec<Value>,
+    replay_row_availability: Option<Vec<ReplayRowAvailability>>,
 }
 
 impl TableInput {
     #[must_use]
     pub fn new(digests: ProvenanceDigests, rows: Vec<Value>) -> Self {
-        Self { digests, rows }
+        Self {
+            digests,
+            rows,
+            replay_row_availability: None,
+        }
     }
+
+    #[must_use]
+    pub fn with_replay_row_availability(
+        mut self,
+        replay_row_availability: Vec<ReplayRowAvailability>,
+    ) -> Self {
+        self.replay_row_availability = Some(replay_row_availability);
+        self
+    }
+}
+
+/// Sealed availability annotations for one E0 replay row. They stay outside
+/// the discovery projection and are never exposed as customer attributes.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplayRowAvailability {
+    pub fields: BTreeMap<String, String>,
+}
+
+impl ReplayRowAvailability {
+    #[must_use]
+    pub fn new(fields: BTreeMap<String, String>) -> Self {
+        Self { fields }
+    }
+}
+
+/// Canonical digest of a replay projection and its per-row availability seals.
+#[must_use]
+pub fn replay_projection_digest(rows: &[Value], availability: &[ReplayRowAvailability]) -> String {
+    let mut canonical = String::new();
+    canonical.push('[');
+    for (index, (row, row_availability)) in rows.iter().zip(availability).enumerate() {
+        if index > 0 {
+            canonical.push(',');
+        }
+        canonical_json(row, &mut canonical);
+        canonical.push('|');
+        canonical.push('{');
+        for (field_index, (field, available_at)) in row_availability.fields.iter().enumerate() {
+            if field_index > 0 {
+                canonical.push(',');
+            }
+            canonical_json(&Value::String(field.clone()), &mut canonical);
+            canonical.push(':');
+            canonical_json(&Value::String(available_at.clone()), &mut canonical);
+        }
+        canonical.push('}');
+    }
+    canonical.push(']');
+    format!("sha256:{:x}", Sha256::digest(canonical.as_bytes()))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -142,6 +374,8 @@ pub struct EnrichedHistoryProvenance {
     pub source_namespace: String,
     pub world_ref: String,
     pub observed_cutoff: String,
+    pub availability_clock: AvailabilityClockMode,
+    pub availability_profile: Option<AvailabilityProfile>,
     pub digests: ProvenanceDigests,
 }
 
@@ -179,6 +413,56 @@ pub enum EnrichedHistoryError {
     InvalidManifestField {
         field: String,
     },
+    InvalidReplayAssumption,
+    UnsupportedManifestVersion {
+        manifest_version: u16,
+    },
+    MissingAvailabilityProfile,
+    InvalidAvailabilityProfile,
+    SnapshotAvailabilityProfileMismatch,
+    /// Legacy manifests have no immutable snapshot digest, so binding one to a
+    /// snapshot would leave its tenant unsealed. They remain readable through
+    /// `from_manifest`, but must not enter a snapshot-bound adapter.
+    SnapshotBindingUnavailable {
+        manifest_version: u16,
+    },
+    ReplaySnapshotBindingRequired,
+    SnapshotSourceNotListed {
+        table: String,
+    },
+    MissingSourceFileSeal {
+        table: String,
+    },
+    SourceFileSealMismatch {
+        table: String,
+    },
+    MissingReplayProjectionDigest {
+        table: String,
+    },
+    UnexpectedReplayProjectionDigest {
+        table: String,
+    },
+    ReplayProjectionDigestMismatch {
+        table: String,
+    },
+    MissingReplayRowAvailability {
+        table: String,
+    },
+    ReplayAvailabilityRowCountMismatch {
+        table: String,
+    },
+    ReplayAvailabilityFieldMismatch {
+        table: String,
+        field: String,
+    },
+    InvalidReplayFieldAvailability {
+        table: String,
+        field: String,
+    },
+    FutureFieldAtEvent {
+        table: String,
+        field: String,
+    },
     UnavailableFile {
         table: String,
     },
@@ -197,6 +481,10 @@ pub enum EnrichedHistoryError {
         table: String,
     },
     MissingAvailabilityClock {
+        table: String,
+        field: String,
+    },
+    UnexpectedAvailabilityClock {
         table: String,
         field: String,
     },
@@ -232,15 +520,238 @@ pub struct EnrichedHistoryAdapter {
     source_namespace: String,
     world_ref: String,
     observed_cutoff: String,
+    availability_clock: AvailabilityClockMode,
+    availability_profile: Option<AvailabilityProfile>,
     files: BTreeMap<String, PackageFile>,
+}
+
+/// Opaque, crate-private proof that a replay package remains bound to the
+/// exact U04-B source snapshot from which it was opened.  It exposes only the
+/// temporal/scope commitments needed by a later trusted composition; it never
+/// exposes source rows or permits a caller-provided clock.
+#[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
+pub(crate) struct VerifiedReplayAvailability {
+    tenant_id: String,
+    world_ref: String,
+    cutoff_at_unix_seconds: u64,
+    source_snapshot_digest: String,
+    availability_profile_digest: String,
+}
+
+/// Opaque U04-B proof for one discovery-safe table at the exact replay cutoff.
+/// U08-E can consume its commitments but cannot reopen package files, choose a
+/// different clock or add labels/future fields after this boundary.
+#[allow(dead_code)]
+pub(crate) struct VerifiedE0QueryProjection {
+    tenant_id: String,
+    cutoff_at_unix_seconds: u64,
+    source_snapshot_digest: String,
+    availability_profile_digest: String,
+    table: String,
+    source_contract_digest: String,
+    source_digest: String,
+    transform_digest: String,
+    field_commitment: String,
+    replay_projection_digest: String,
+    /// The complete, sealed replay projection commits the exact rows and their
+    /// per-field availability, rather than a caller-supplied lab manifest.
+    source_evidence_digest: String,
+    source_columns: Vec<String>,
+    source_rows: Vec<BTreeMap<String, String>>,
+    allowed_fields: BTreeMap<String, String>,
+}
+
+#[allow(dead_code)]
+impl VerifiedE0QueryProjection {
+    pub(crate) fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+    pub(crate) fn cutoff_at_unix_seconds(&self) -> u64 {
+        self.cutoff_at_unix_seconds
+    }
+    pub(crate) fn source_snapshot_digest(&self) -> &str {
+        &self.source_snapshot_digest
+    }
+    pub(crate) fn availability_profile_digest(&self) -> &str {
+        &self.availability_profile_digest
+    }
+    pub(crate) fn table(&self) -> &str {
+        &self.table
+    }
+    pub(crate) fn source_contract_digest(&self) -> &str {
+        &self.source_contract_digest
+    }
+    pub(crate) fn source_digest(&self) -> &str {
+        &self.source_digest
+    }
+    pub(crate) fn transform_digest(&self) -> &str {
+        &self.transform_digest
+    }
+    pub(crate) fn field_commitment(&self) -> &str {
+        &self.field_commitment
+    }
+    pub(crate) fn replay_projection_digest(&self) -> &str {
+        &self.replay_projection_digest
+    }
+    pub(crate) fn source_evidence_digest(&self) -> &str {
+        &self.source_evidence_digest
+    }
+    pub(crate) fn allows_field(&self, field: &str) -> bool {
+        self.allowed_fields.contains_key(field)
+    }
+
+    pub(crate) fn matches_lab_source(
+        &self,
+        snapshot_digest: &str,
+        table: &str,
+        columns: &[String],
+        rows: &[BTreeMap<String, String>],
+    ) -> bool {
+        self.source_snapshot_digest == snapshot_digest
+            && self.table == table
+            && self.source_columns == columns
+            && self.source_rows == rows
+    }
+
+    /// The only U04-facing composition path for an E0 lab source. It carries
+    /// the canonical snapshot binding as a separate sealed-domain value; it
+    /// never substitutes `ArtifactReference.digest` for that identity.
+    pub(crate) fn bind_approved_lab_source(
+        &self,
+        source: ApprovedLabSource,
+        binding: VerifiedSourceArtifactBinding,
+    ) -> Result<ApprovedLabSource, EnrichedHistoryError> {
+        if binding.snapshot_binding_digest() != self.source_snapshot_digest {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        source
+            .bind_verified_u04_snapshot(binding)
+            .map_err(|_| EnrichedHistoryError::SnapshotAvailabilityProfileMismatch)
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)] // Test fixture mirrors the sealed projection fields.
+    pub(crate) fn deterministic_for_e0_query_test(
+        tenant_id: impl Into<String>,
+        cutoff_at_unix_seconds: u64,
+        source_snapshot_digest: String,
+        availability_profile_digest: String,
+        table: impl Into<String>,
+        source_contract_digest: String,
+        source_digest: String,
+        transform_digest: String,
+        field_commitment: String,
+        replay_projection_digest: String,
+        allowed_fields: BTreeMap<String, String>,
+        source_rows: Vec<BTreeMap<String, String>>,
+    ) -> Self {
+        Self {
+            tenant_id: tenant_id.into(),
+            cutoff_at_unix_seconds,
+            source_snapshot_digest,
+            availability_profile_digest,
+            table: table.into(),
+            source_contract_digest,
+            source_digest,
+            transform_digest,
+            field_commitment,
+            source_evidence_digest: replay_projection_digest.clone(),
+            source_columns: allowed_fields.keys().cloned().collect(),
+            source_rows,
+            replay_projection_digest,
+            allowed_fields,
+        }
+    }
+}
+
+#[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
+impl VerifiedReplayAvailability {
+    #[must_use]
+    pub(crate) fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    #[must_use]
+    pub(crate) fn world_ref(&self) -> &str {
+        &self.world_ref
+    }
+
+    #[must_use]
+    pub(crate) fn cutoff_at_unix_seconds(&self) -> u64 {
+        self.cutoff_at_unix_seconds
+    }
+
+    #[must_use]
+    pub(crate) fn source_snapshot_digest(&self) -> &str {
+        &self.source_snapshot_digest
+    }
+
+    #[must_use]
+    pub(crate) fn availability_profile_digest(&self) -> &str {
+        &self.availability_profile_digest
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn verified_replay_availability_fixture(
+    tenant_id: &str,
+    world_ref: &str,
+    cutoff_at_unix_seconds: u64,
+    source_snapshot_digest: &str,
+    availability_profile_digest: &str,
+) -> VerifiedReplayAvailability {
+    VerifiedReplayAvailability {
+        tenant_id: tenant_id.to_owned(),
+        world_ref: world_ref.to_owned(),
+        cutoff_at_unix_seconds,
+        source_snapshot_digest: source_snapshot_digest.to_owned(),
+        availability_profile_digest: availability_profile_digest.to_owned(),
+    }
 }
 
 impl EnrichedHistoryAdapter {
     /// Validates a manifest before any rows are considered.
     pub fn from_manifest(manifest: EnrichedHistoryManifest) -> Result<Self, EnrichedHistoryError> {
+        Self::from_manifest_bound(manifest, None)
+    }
+
+    fn from_manifest_bound(
+        manifest: EnrichedHistoryManifest,
+        snapshot_binding_digest: Option<&str>,
+    ) -> Result<Self, EnrichedHistoryError> {
         validate_required_string(&manifest.source_namespace, "source_namespace")?;
         validate_required_string(&manifest.world_ref, "world_ref")?;
         validate_timestamp(&manifest.observed_cutoff, "observed_cutoff")?;
+        manifest.availability_clock.validate()?;
+        match manifest.manifest_version {
+            LEGACY_MANIFEST_VERSION => {
+                if !manifest.availability_clock.requires_physical_ingested_at()
+                    || manifest.availability_profile.is_some()
+                {
+                    return Err(EnrichedHistoryError::UnsupportedManifestVersion {
+                        manifest_version: manifest.manifest_version,
+                    });
+                }
+            }
+            CURRENT_MANIFEST_VERSION => {
+                let profile = manifest
+                    .availability_profile
+                    .as_ref()
+                    .ok_or(EnrichedHistoryError::MissingAvailabilityProfile)?;
+                profile.validate()?;
+                if profile.availability_clock != manifest.availability_clock {
+                    return Err(EnrichedHistoryError::InvalidAvailabilityProfile);
+                }
+                if snapshot_binding_digest != Some(profile.source_snapshot_digest.as_str()) {
+                    return Err(EnrichedHistoryError::ReplaySnapshotBindingRequired);
+                }
+            }
+            _ => {
+                return Err(EnrichedHistoryError::UnsupportedManifestVersion {
+                    manifest_version: manifest.manifest_version,
+                });
+            }
+        }
         if manifest.files.is_empty() {
             return Err(EnrichedHistoryError::InvalidManifestField {
                 field: "files".to_owned(),
@@ -263,6 +774,35 @@ impl EnrichedHistoryAdapter {
                 return Err(EnrichedHistoryError::InvalidManifestField {
                     field: format!("files.{}.field_availability", file.table),
                 });
+            }
+            if !manifest.availability_clock.requires_physical_ingested_at()
+                && file.field_availability.contains_key(INGESTED_AT_CLOCK)
+            {
+                return Err(EnrichedHistoryError::UnexpectedAvailabilityClock {
+                    table: file.table,
+                    field: INGESTED_AT_CLOCK.to_owned(),
+                });
+            }
+            match (
+                manifest.availability_clock.requires_physical_ingested_at(),
+                &file.replay_projection_digest,
+            ) {
+                (false, None) => {
+                    return Err(EnrichedHistoryError::MissingReplayProjectionDigest {
+                        table: file.table,
+                    });
+                }
+                (false, Some(digest)) if !is_sha256_digest(digest) => {
+                    return Err(EnrichedHistoryError::InvalidManifestField {
+                        field: format!("files.{}.replay_projection_digest", file.table),
+                    });
+                }
+                (true, Some(_)) => {
+                    return Err(EnrichedHistoryError::UnexpectedReplayProjectionDigest {
+                        table: file.table,
+                    });
+                }
+                _ => {}
             }
             for (field, available_at) in &file.field_availability {
                 if !is_identifier(field) {
@@ -288,6 +828,8 @@ impl EnrichedHistoryAdapter {
             source_namespace: manifest.source_namespace,
             world_ref: manifest.world_ref,
             observed_cutoff: manifest.observed_cutoff,
+            availability_clock: manifest.availability_clock,
+            availability_profile: manifest.availability_profile,
             files,
         })
     }
@@ -298,6 +840,14 @@ impl EnrichedHistoryAdapter {
         manifest: EnrichedHistoryManifest,
         snapshot: &SourceSnapshot,
     ) -> Result<Self, EnrichedHistoryError> {
+        if !snapshot.has_canonical_binding() {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        if manifest.manifest_version == LEGACY_MANIFEST_VERSION {
+            return Err(EnrichedHistoryError::SnapshotBindingUnavailable {
+                manifest_version: manifest.manifest_version,
+            });
+        }
         let source = snapshot.provenance();
         if manifest.source_namespace != source.source_namespace
             || manifest.world_ref != source.world_ref
@@ -305,7 +855,179 @@ impl EnrichedHistoryAdapter {
         {
             return Err(EnrichedHistoryError::SnapshotProvenanceMismatch);
         }
-        Self::from_manifest(manifest)
+        if manifest.manifest_version == CURRENT_MANIFEST_VERSION {
+            let Some(profile) = manifest.availability_profile.as_ref() else {
+                return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+            };
+            if profile.source_tenant_id != snapshot.tenant_id()
+                || profile.source_snapshot_digest != snapshot.binding_digest()
+            {
+                return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+            }
+        }
+        for file in &manifest.files {
+            let snapshot_seal = snapshot.source_file_seal(&file.table).ok_or_else(|| {
+                EnrichedHistoryError::SnapshotSourceNotListed {
+                    table: file.table.clone(),
+                }
+            })?;
+            let package_seal = file.source_file_seal.as_ref().ok_or_else(|| {
+                EnrichedHistoryError::MissingSourceFileSeal {
+                    table: file.table.clone(),
+                }
+            })?;
+            if package_seal != &snapshot_seal
+                || file.digests.file_digest != snapshot_seal.file_digest()
+            {
+                return Err(EnrichedHistoryError::SourceFileSealMismatch {
+                    table: file.table.clone(),
+                });
+            }
+        }
+        Self::from_manifest_bound(manifest, Some(&snapshot.binding_digest()))
+    }
+
+    /// Emits the only non-test temporal input accepted by U23-P.  The caller
+    /// cannot pick its tenant, world, cutoff, source digest or clock: all five
+    /// values are revalidated against the V2 U04-B replay profile and exact
+    /// parsed `SourceSnapshot` before this opaque projection is returned.
+    #[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
+    pub(crate) fn verified_replay_availability(
+        &self,
+        snapshot: &SourceSnapshot,
+    ) -> Result<VerifiedReplayAvailability, EnrichedHistoryError> {
+        if !snapshot.has_canonical_binding() {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        let Some(profile) = self.availability_profile.as_ref() else {
+            return Err(EnrichedHistoryError::MissingAvailabilityProfile);
+        };
+        if !matches!(
+            self.availability_clock,
+            AvailabilityClockMode::ReplayAtEventTime { .. }
+        ) || profile.availability_clock != self.availability_clock
+            || profile.source_tenant_id != snapshot.tenant_id()
+            || profile.source_snapshot_digest != snapshot.binding_digest()
+            || self.source_namespace != snapshot.source_namespace()
+            || self.world_ref != snapshot.world_ref()
+            || self.observed_cutoff != snapshot.observed_cutoff()
+        {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        let cutoff_at_unix_seconds = rfc3339_utc_to_unix_seconds(&self.observed_cutoff)
+            .ok_or_else(|| EnrichedHistoryError::InvalidManifestField {
+                field: "observed_cutoff".to_owned(),
+            })?;
+        Ok(VerifiedReplayAvailability {
+            tenant_id: snapshot.tenant_id().to_owned(),
+            world_ref: snapshot.world_ref().to_owned(),
+            cutoff_at_unix_seconds,
+            source_snapshot_digest: snapshot.binding_digest(),
+            availability_profile_digest: profile.profile_digest.clone(),
+        })
+    }
+
+    /// Validates one E0 input through the existing discovery and replay
+    /// validators, then returns only the table/field/projection commitments
+    /// that a later U08-E receipt must preserve.
+    #[allow(dead_code)]
+    pub(crate) fn verified_e0_query_projection(
+        &self,
+        snapshot: &SourceSnapshot,
+        replay: &VerifiedReplayAvailability,
+        table: &str,
+        input: TableInput,
+    ) -> Result<VerifiedE0QueryProjection, EnrichedHistoryError> {
+        let expected = self.verified_replay_availability(snapshot)?;
+        if expected.tenant_id != replay.tenant_id
+            || expected.world_ref != replay.world_ref
+            || expected.cutoff_at_unix_seconds != replay.cutoff_at_unix_seconds
+            || expected.source_snapshot_digest != replay.source_snapshot_digest
+            || expected.availability_profile_digest != replay.availability_profile_digest
+        {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        let discovery = self.discovery_table(table, input)?;
+        let sealed = self
+            .files
+            .get(table)
+            .ok_or_else(|| EnrichedHistoryError::UnknownTable {
+                table: table.to_owned(),
+            })?;
+        let replay_projection_digest =
+            sealed.replay_projection_digest.clone().ok_or_else(|| {
+                EnrichedHistoryError::MissingReplayProjectionDigest {
+                    table: table.to_owned(),
+                }
+            })?;
+        // A manifest may declare a broader schema than this TableInput. E0
+        // may read only fields actually present in this exact verified input.
+        let actual_fields = discovery
+            .rows
+            .iter()
+            .flat_map(|row| row.as_object().into_iter().flat_map(|object| object.keys()))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let allowed_fields = sealed
+            .field_availability
+            .iter()
+            .filter(|(field, _)| actual_fields.contains(*field) && !is_forbidden_field(field))
+            .map(|(field, available_at)| (field.clone(), available_at.clone()))
+            .collect::<BTreeMap<_, _>>();
+        if actual_fields.len() != allowed_fields.len() {
+            return Err(EnrichedHistoryError::UnavailableField {
+                table: table.to_owned(),
+                field: "unavailable_or_forbidden_input_field".to_owned(),
+            });
+        }
+        let mut source_rows = discovery
+            .rows
+            .iter()
+            .map(|row| {
+                row.as_object()
+                    .ok_or_else(|| EnrichedHistoryError::RowIsNotObject {
+                        table: table.to_owned(),
+                    })?
+                    .iter()
+                    .map(|(field, value)| {
+                        value
+                            .as_str()
+                            .map(|value| (field.clone(), value.to_owned()))
+                            .ok_or_else(|| EnrichedHistoryError::InvalidManifestField {
+                                field: format!("files.{table}.non_string_lab_value"),
+                            })
+                    })
+                    .collect::<Result<BTreeMap<_, _>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        source_rows.sort_by_key(|row| {
+            serde_json::to_vec(row).expect("BTreeMap source rows serialize deterministically")
+        });
+        let field_bytes = serde_json::to_vec(&allowed_fields)
+            .expect("BTreeMap field availability serializes deterministically");
+        let field_commitment = format!("sha256:{:x}", Sha256::digest(field_bytes));
+        if discovery.provenance.digests != sealed.digests {
+            return Err(EnrichedHistoryError::QualityBlocked {
+                table: table.to_owned(),
+                findings: Vec::new(),
+            });
+        }
+        Ok(VerifiedE0QueryProjection {
+            tenant_id: expected.tenant_id,
+            cutoff_at_unix_seconds: expected.cutoff_at_unix_seconds,
+            source_snapshot_digest: expected.source_snapshot_digest,
+            availability_profile_digest: expected.availability_profile_digest,
+            table: table.to_owned(),
+            source_contract_digest: sealed.digests.schema_digest.clone(),
+            source_digest: sealed.digests.file_digest.clone(),
+            transform_digest: sealed.digests.transform_digest.clone(),
+            field_commitment,
+            source_evidence_digest: replay_projection_digest.clone(),
+            source_columns: allowed_fields.keys().cloned().collect(),
+            source_rows,
+            replay_projection_digest,
+            allowed_fields,
+        })
     }
 
     /// Returns a deterministic, discovery-safe projection for exactly one table.
@@ -332,12 +1054,16 @@ impl EnrichedHistoryAdapter {
                 findings,
             });
         }
-        for row in &input.rows {
+        let replay_availability =
+            validate_replay_projection(table, &input, sealed, &self.availability_clock)?;
+        for (index, row) in input.rows.iter().enumerate() {
             validate_discovery_row(
                 table,
                 row,
                 &self.observed_cutoff,
+                &self.availability_clock,
                 &sealed.field_availability,
+                replay_availability.map(|values| &values[index]),
             )?;
         }
 
@@ -347,6 +1073,8 @@ impl EnrichedHistoryAdapter {
                 source_namespace: self.source_namespace.clone(),
                 world_ref: self.world_ref.clone(),
                 observed_cutoff: self.observed_cutoff.clone(),
+                availability_clock: self.availability_clock.clone(),
+                availability_profile: self.availability_profile.clone(),
                 digests: sealed.digests.clone(),
             },
             rows: input.rows,
@@ -404,7 +1132,9 @@ fn validate_discovery_row(
     table: &str,
     row: &Value,
     cutoff: &str,
+    availability_clock: &AvailabilityClockMode,
     field_availability: &BTreeMap<String, String>,
+    replay_availability: Option<&ReplayRowAvailability>,
 ) -> Result<(), EnrichedHistoryError> {
     let object = row
         .as_object()
@@ -418,6 +1148,13 @@ fn validate_discovery_row(
             field,
         });
     }
+    if !availability_clock.requires_physical_ingested_at() && object.contains_key(INGESTED_AT_CLOCK)
+    {
+        return Err(EnrichedHistoryError::UnexpectedAvailabilityClock {
+            table: table.to_owned(),
+            field: INGESTED_AT_CLOCK.to_owned(),
+        });
+    }
     for field in object.keys() {
         if !field_availability.contains_key(field) {
             return Err(EnrichedHistoryError::UnavailableField {
@@ -426,7 +1163,12 @@ fn validate_discovery_row(
             });
         }
     }
-    for field in REQUIRED_AVAILABILITY_CLOCKS {
+    let required_clocks: &[&str] = if availability_clock.requires_physical_ingested_at() {
+        &[EVENT_TIME_CLOCK, INGESTED_AT_CLOCK]
+    } else {
+        &[EVENT_TIME_CLOCK]
+    };
+    for field in required_clocks {
         let value = object.get(*field).and_then(Value::as_str).ok_or_else(|| {
             EnrichedHistoryError::MissingAvailabilityClock {
                 table: table.to_owned(),
@@ -446,7 +1188,69 @@ fn validate_discovery_row(
             });
         }
     }
+    if let Some(replay_availability) = replay_availability {
+        let event_time = object
+            .get(EVENT_TIME_CLOCK)
+            .and_then(Value::as_str)
+            .expect("replay event_time is validated before row availability");
+        for field in object.keys() {
+            let available_at = replay_availability.fields.get(field).ok_or_else(|| {
+                EnrichedHistoryError::ReplayAvailabilityFieldMismatch {
+                    table: table.to_owned(),
+                    field: field.clone(),
+                }
+            })?;
+            if !is_rfc3339_utc(available_at) {
+                return Err(EnrichedHistoryError::InvalidReplayFieldAvailability {
+                    table: table.to_owned(),
+                    field: field.clone(),
+                });
+            }
+            if available_at.as_str() > event_time {
+                return Err(EnrichedHistoryError::FutureFieldAtEvent {
+                    table: table.to_owned(),
+                    field: field.clone(),
+                });
+            }
+        }
+        for field in replay_availability.fields.keys() {
+            if !object.contains_key(field) {
+                return Err(EnrichedHistoryError::ReplayAvailabilityFieldMismatch {
+                    table: table.to_owned(),
+                    field: field.clone(),
+                });
+            }
+        }
+    }
     Ok(())
+}
+
+fn validate_replay_projection<'a>(
+    table: &str,
+    input: &'a TableInput,
+    sealed: &PackageFile,
+    availability_clock: &AvailabilityClockMode,
+) -> Result<Option<&'a [ReplayRowAvailability]>, EnrichedHistoryError> {
+    if availability_clock.requires_physical_ingested_at() {
+        return Ok(None);
+    }
+    let availability = input.replay_row_availability.as_deref().ok_or_else(|| {
+        EnrichedHistoryError::MissingReplayRowAvailability {
+            table: table.to_owned(),
+        }
+    })?;
+    if availability.len() != input.rows.len() {
+        return Err(EnrichedHistoryError::ReplayAvailabilityRowCountMismatch {
+            table: table.to_owned(),
+        });
+    }
+    let actual_digest = replay_projection_digest(&input.rows, availability);
+    if sealed.replay_projection_digest.as_deref() != Some(actual_digest.as_str()) {
+        return Err(EnrichedHistoryError::ReplayProjectionDigestMismatch {
+            table: table.to_owned(),
+        });
+    }
+    Ok(Some(availability))
 }
 
 fn find_forbidden_field(object: &serde_json::Map<String, Value>) -> Option<String> {
@@ -547,6 +1351,40 @@ fn is_rfc3339_utc(value: &str) -> bool {
     (1..=days_in_month).contains(&day)
 }
 
+/// Converts the fixed-width, already validated UTC timestamp to epoch seconds
+/// without accepting a caller-provided replay clock. The civil-date algorithm
+/// is proleptic Gregorian and intentionally has no timezone/dependency input.
+#[allow(dead_code)] // Reached through the future trusted U04-B/U23 composition root.
+pub(crate) fn rfc3339_utc_to_unix_seconds(value: &str) -> Option<u64> {
+    if !is_rfc3339_utc(value) {
+        return None;
+    }
+    let number = |start: usize, end: usize| value[start..end].parse::<i64>().ok();
+    let (year, month, day, hour, minute, second) = (
+        number(0, 4)?,
+        number(5, 7)?,
+        number(8, 10)?,
+        number(11, 13)?,
+        number(14, 16)?,
+        number(17, 19)?,
+    );
+    let adjusted_year = year - i64::from(month <= 2);
+    let era = if adjusted_year >= 0 {
+        adjusted_year
+    } else {
+        adjusted_year - 399
+    } / 400;
+    let year_of_era = adjusted_year - era * 400;
+    let month_from_march = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * month_from_march + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days_since_epoch = era * 146_097 + day_of_era - 719_468;
+    let seconds = days_since_epoch
+        .checked_mul(86_400)?
+        .checked_add(hour * 3_600 + minute * 60 + second)?;
+    u64::try_from(seconds).ok()
+}
+
 fn is_sha256_digest(value: &str) -> bool {
     value.len() == 71
         && value.starts_with("sha256:")
@@ -561,4 +1399,72 @@ fn is_identifier(value: &str) -> bool {
         && characters.all(|character| {
             character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
         })
+}
+
+fn is_assumption_label(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+        })
+}
+
+fn legacy_manifest_version() -> u16 {
+    LEGACY_MANIFEST_VERSION
+}
+
+fn availability_profile_digest(
+    profile_id: &str,
+    profile_version: u16,
+    availability_clock: &AvailabilityClockMode,
+    source_tenant_id: &str,
+    source_snapshot_digest: &str,
+) -> String {
+    let clock = match availability_clock {
+        AvailabilityClockMode::ObservedIngestedAt => "observed_ingested_at".to_owned(),
+        AvailabilityClockMode::ReplayAtEventTime { assumption_label } => {
+            format!("replay_at_event_time:{assumption_label}")
+        }
+    };
+    format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            format!(
+                "{profile_id}|{profile_version}|{clock}|{source_tenant_id}|{source_snapshot_digest}"
+            )
+            .as_bytes()
+        )
+    )
+}
+
+fn canonical_json(value: &Value, output: &mut String) {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+            output.push_str(&serde_json::to_string(value).expect("JSON value serializes"));
+        }
+        Value::Array(values) => {
+            output.push('[');
+            for (index, value) in values.iter().enumerate() {
+                if index > 0 {
+                    output.push(',');
+                }
+                canonical_json(value, output);
+            }
+            output.push(']');
+        }
+        Value::Object(values) => {
+            output.push('{');
+            let mut keys = values.keys().collect::<Vec<_>>();
+            keys.sort_unstable();
+            for (index, key) in keys.into_iter().enumerate() {
+                if index > 0 {
+                    output.push(',');
+                }
+                canonical_json(&Value::String(key.clone()), output);
+                output.push(':');
+                canonical_json(&values[key], output);
+            }
+            output.push('}');
+        }
+    }
 }

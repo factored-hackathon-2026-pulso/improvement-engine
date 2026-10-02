@@ -38,7 +38,7 @@ fn authority_for(
     reference: &improvement_engine_core::ArtifactReference,
     run_id: &str,
 ) -> InMemoryWikiGrantAuthority {
-    let mut authority = InMemoryWikiGrantAuthority::default();
+    let authority = InMemoryWikiGrantAuthority::default();
     authority.issue(WikiGrant::new(
         "grant-1",
         run_id,
@@ -252,6 +252,40 @@ fn traversal_and_failed_batch_leave_scratch_unchanged() {
         }
     );
     assert_eq!(workspace.pages(), &before);
+}
+
+#[test]
+fn create_collision_in_a_later_operation_is_atomic_and_leaves_workspace_identical() {
+    let (mut workspace, authority, request) = mounted_workspace(100);
+    let before = workspace.pages().clone();
+
+    let error = authority
+        .transform(
+            &mut workspace,
+            &request,
+            WikiTransform::new(vec![
+                WikiTransformOperation::create("prepared/frozen-e0-summary.md", "first write"),
+                WikiTransformOperation::create("index.md", "must collide"),
+            ]),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        WikiError::PageAlreadyExists {
+            path: "index.md".to_owned()
+        }
+    );
+    assert_eq!(
+        workspace.pages(),
+        &before,
+        "a failed second Create must not leak the first mutation into scratch"
+    );
+    assert!(
+        !workspace
+            .pages()
+            .contains_key("prepared/frozen-e0-summary.md")
+    );
 }
 
 #[test]
