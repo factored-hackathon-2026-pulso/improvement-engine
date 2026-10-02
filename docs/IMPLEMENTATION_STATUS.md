@@ -70,12 +70,20 @@ green unit test as proof that a broader product flow is complete.
   configured cutoff and no known PII sentinels or evaluator labels.
   This demonstrates only bounded local detection/simulation behavior, not
   native Agent Core execution, causal validation, release, or business lift.
-  Original-bank CLI was exercised against the partitioned call-center CSV
-  source and returned `unsupported_source`, no signal, zero candidates, and
-  formal `do_nothing`; this is truthful manifest preparation,
-  not completed discovery. A supported original-bank contact/repeat/SLA
-  projection remains a follow-up slice; technical errors are not inferred from
-  those tables.
+  Original-bank local execution now supports an independently sealed,
+  privacy-safe snapshot projection for call-center reason × channel. The API
+  names its metric `record_count`: it counts CSV records and does not deduplicate
+  `interaction_id`. A nonblank `reason_category` takes precedence, then a
+  nonblank `contact_reason`; both blank maps to `unclassified`. It is not an
+  event-date cohort or cutoff-filtered result; naive source timestamps are not
+  compared to the run cutoff. The local motor reports this descriptively but
+  emits no signal, candidate, or proposal. Repeat contacts, PQR/SLA, technical
+  errors, causal relationships, and outcome claims remain unsupported; customer
+  IDs, row-level facts, free text, and contact outcomes are not used. `k`
+  defaults to 5 and is configurable via `--min-contact-cell-count` (5–10,000);
+  policy version and threshold are sealed into the prepared-source manifest and
+  validated again at the core boundary. Tests are synthetic only; no real-data
+  prevalence claim is made.
 - Windows local E0 convenience wrapper: scripts/run-local-e0-e2e.ps1 invokes
   the opt-in local simulation with locked/offline Cargo, required UTC cutoff,
   default Arranque/support settings and a fresh non-overlapping output path;

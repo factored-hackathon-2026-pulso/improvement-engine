@@ -5,6 +5,43 @@ and `complaints` CSVs as streams and publishes only monthly aggregates. It is an
 exploratory measurement input for discovery; it is not a causal model, an
 operational SLA calculator, or a technical-error detector.
 
+## Local motor: supported original-contact snapshot projection
+
+`prepare_original_bank` now supports a narrower, separate projection from the
+`call_center_interactions` CSV partitions. It streams each sealed partition,
+verifies that its bytes still match the source manifest, and emits counts grouped
+only by normalized reason category × normalized channel. A nonblank
+`reason_category` value takes precedence, then a nonblank `contact_reason` is
+used; if both are blank the safe category is `unclassified`. Channel is required.
+Each valid CSV record contributes one `record_count`; this is not a count of
+unique `interaction_id` values because the projection deliberately does not
+read or deduplicate by that identifier. Contact reason values outside a
+closed Spanish/English allowlist become `unclassified`; non-empty unknown
+channels become `other`; missing channels are rejected. No source row, raw
+category, identifier, free-text, event timestamp, resolution/follow-up field, or
+agent/customer attribute is retained in the projection.
+
+These values mean counts in the exact prepared snapshot, not an event-date
+cohort or an as-of-cutoff count. `interaction_date` is deliberately not read:
+the current source contract has no timezone and does not support a safe temporal
+comparison. The run records the cutoff for provenance, but it does not filter
+these snapshot counts against it. An input record dated after that cutoff is
+still part of the static snapshot projection; this is not evidence it was
+observable at the cutoff.
+
+Small category/channel cells are suppressed using `--min-contact-cell-count`
+(default 5, configurable from 5 to 10,000). Policy version 1 and the exact
+threshold are committed into the immutable prepared-source manifest. Output
+reports included count, rejected-row count, and suppressed-cell count without
+revealing suppressed values or their counts. This is a technical small-cell
+disclosure control, not a formal anonymity or legal guarantee.
+
+The local motor can consume and report this descriptive projection, but this
+slice does not calculate repeat-contact rates, PQR/SLA measures, technical
+errors, causal associations, or an improvement candidate/proposal. Such outputs
+remain unsupported rather than being inferred from contact volume. In
+particular, `customer_id` is not used to calculate recurrence.
+
 ## Projection contract
 
 | Source | Grouping | Aggregates |
@@ -51,6 +88,11 @@ heuristic, not a formal anonymity or legal guarantee. The policy version and
 threshold are included in the projection manifest digest.
 
 ## Availability and interpretation
+
+The local original-bank runner uses the snapshot-count projection above. The
+monthly event-time projector below remains a separate API and is unsupported
+for the supplied naive-timestamp history until an explicit timezone contract
+exists.
 
 The projection is `unsupported` and emits no aggregates if any input partition
 lacks a required grouping/date field, no partition is provided, or no tracked

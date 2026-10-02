@@ -110,6 +110,137 @@ pub struct LocalRunInput {
     queries: Vec<LocalObservedQuery>,
     query_table_available: bool,
     minimum_recurring_query_support: u64,
+    contact_volume_projection: Option<LocalContactVolumeProjection>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct LocalContactVolumeCell {
+    reason_category: String,
+    channel: String,
+    record_count: u64,
+}
+
+impl LocalContactVolumeCell {
+    pub fn new(
+        reason_category: impl Into<String>,
+        channel: impl Into<String>,
+        record_count: u64,
+    ) -> Self {
+        Self {
+            reason_category: reason_category.into(),
+            channel: channel.into(),
+            record_count,
+        }
+    }
+
+    #[must_use]
+    pub fn reason_category(&self) -> &str {
+        &self.reason_category
+    }
+    #[must_use]
+    pub fn channel(&self) -> &str {
+        &self.channel
+    }
+    #[must_use]
+    pub fn record_count(&self) -> u64 {
+        self.record_count
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct LocalContactVolumeProjection {
+    semantics: String,
+    policy_version: u32,
+    minimum_cell_count: u64,
+    included_record_count: u64,
+    rejected_rows: u64,
+    suppressed_cells: u64,
+    cells: Vec<LocalContactVolumeCell>,
+}
+
+impl LocalContactVolumeProjection {
+    pub fn new(
+        policy_version: u32,
+        minimum_cell_count: u64,
+        included_record_count: u64,
+        rejected_rows: u64,
+        suppressed_cells: u64,
+        cells: Vec<LocalContactVolumeCell>,
+    ) -> Result<Self, LocalRunError> {
+        let projection = Self {
+            semantics: "snapshot_extract_counts".into(),
+            policy_version,
+            minimum_cell_count,
+            included_record_count,
+            rejected_rows,
+            suppressed_cells,
+            cells,
+        };
+        let included_sum = projection
+            .cells
+            .iter()
+            .try_fold(0_u64, |sum, cell| sum.checked_add(cell.record_count));
+        let unique_cells = projection
+            .cells
+            .iter()
+            .map(|cell| (cell.reason_category.as_str(), cell.channel.as_str()))
+            .collect::<BTreeSet<_>>();
+        if projection.policy_version == 0
+            || !(5..=10_000).contains(&projection.minimum_cell_count)
+            || unique_cells.len() != projection.cells.len()
+            || projection.cells.iter().any(|cell| {
+                !matches!(
+                    cell.reason_category.as_str(),
+                    "complaint"
+                        | "transactional"
+                        | "technical"
+                        | "general_inquiry"
+                        | "product"
+                        | "account"
+                        | "card"
+                        | "loan"
+                        | "other"
+                        | "unclassified"
+                ) || !matches!(
+                    cell.channel.as_str(),
+                    "phone" | "web" | "chat" | "email" | "branch" | "mobile_app" | "other"
+                ) || cell.record_count < projection.minimum_cell_count
+            })
+            || included_sum != Some(projection.included_record_count)
+        {
+            return Err(LocalRunError::InvalidEventProjection);
+        }
+        Ok(projection)
+    }
+
+    #[must_use]
+    pub fn included_record_count(&self) -> u64 {
+        self.included_record_count
+    }
+    #[must_use]
+    pub fn cells(&self) -> &[LocalContactVolumeCell] {
+        &self.cells
+    }
+    #[must_use]
+    pub fn minimum_cell_count(&self) -> u64 {
+        self.minimum_cell_count
+    }
+    #[must_use]
+    pub fn suppressed_cells(&self) -> u64 {
+        self.suppressed_cells
+    }
+    #[must_use]
+    pub fn rejected_rows(&self) -> u64 {
+        self.rejected_rows
+    }
+    #[must_use]
+    pub fn policy_version(&self) -> u32 {
+        self.policy_version
+    }
+    #[must_use]
+    pub fn semantics(&self) -> &str {
+        &self.semantics
+    }
 }
 
 /// Immutable commitments and point-in-time boundary for one local run.
@@ -163,6 +294,7 @@ impl LocalRunInput {
             queries: Vec::new(),
             query_table_available: false,
             minimum_recurring_query_support: DEFAULT_MIN_RECURRING_QUERY_CASES,
+            contact_volume_projection: None,
         }
     }
 
@@ -188,6 +320,15 @@ impl LocalRunInput {
         }
         self.minimum_recurring_query_support = minimum_support;
         Ok(self)
+    }
+
+    #[must_use]
+    pub fn with_contact_volume_projection(
+        mut self,
+        projection: LocalContactVolumeProjection,
+    ) -> Self {
+        self.contact_volume_projection = Some(projection);
+        self
     }
 }
 
@@ -266,6 +407,7 @@ pub struct LocalRunResult {
     pub verification_status: Option<String>,
     pub proposal: Option<ImprovementDraft>,
     pub evaluation: Option<EvaluationSummary>,
+    pub contact_volume_projection: Option<LocalContactVolumeProjection>,
     pub events: Vec<RunEvent>,
 }
 
@@ -319,17 +461,31 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
     );
 
     if input.metadata.source_kind == LocalSourceKind::OriginalBank {
+        let contact_volume_projection = input.contact_volume_projection.clone();
+        let supported_snapshot = contact_volume_projection.is_some();
         record_event(
             &mut events,
             "detection",
-            "unsupported_source",
-            "no currently allowlisted original-bank detector matches this projection",
+            if supported_snapshot {
+                "snapshot_projection_complete"
+            } else {
+                "unsupported_source"
+            },
+            if supported_snapshot {
+                "safe contact reason/channel counts are available as snapshot-extract facts only"
+            } else {
+                "no currently allowlisted original-bank detector matches this projection"
+            },
         );
         record_event(
             &mut events,
             "run_completed",
             "complete",
-            "no signal was fabricated",
+            if supported_snapshot {
+                "descriptive source projection completed; no causal or opportunity claim was made"
+            } else {
+                "no signal was fabricated"
+            },
         );
         bind_observed_cutoff(&mut events, &input.metadata.observed_cutoff_rfc3339);
         let simulation_seed = derive_digest(&format!(
@@ -347,7 +503,11 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             simulation_version: SIMULATION_VERSION.into(),
             simulation_seed,
             determinism: "deterministic_given_identical_run_input".into(),
-            terminal_status: "unsupported_source".into(),
+            terminal_status: if supported_snapshot {
+                "snapshot_projection_complete".into()
+            } else {
+                "unsupported_source".into()
+            },
             formal_route: "do_nothing".into(),
             primary_signal_policy: LOCAL_PRIMARY_SIGNAL_POLICY.into(),
             recurrence_measurement_status: "not_applicable".into(),
@@ -359,6 +519,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             verification_status: None,
             proposal: None,
             evaluation: None,
+            contact_volume_projection,
             events,
         });
     }
@@ -447,6 +608,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             verification_status: None,
             proposal: None,
             evaluation: None,
+            contact_volume_projection: None,
             events,
         });
     }
@@ -582,6 +744,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         verification_status: Some(verification_status),
         proposal: Some(improvement_draft),
         evaluation: Some(evaluation),
+        contact_volume_projection: None,
         events,
     })
 }

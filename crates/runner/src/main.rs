@@ -7,8 +7,9 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use improvement_engine_core::local_simulation::{
-    LocalObservedEvent, LocalObservedQuery, LocalRunInput, LocalRunMetadata, LocalRunResult,
-    LocalSourceKind, RunEvent, run_local_simulation,
+    LocalContactVolumeCell, LocalContactVolumeProjection, LocalObservedEvent, LocalObservedQuery,
+    LocalRunInput, LocalRunMetadata, LocalRunResult, LocalSourceKind, RunEvent,
+    run_local_simulation,
 };
 use improvement_engine_source_adapters::{
     CasePhase, E0Fact, E0HoldoutEvaluation, E0HoldoutPolicy, E0HoldoutStatus, PreparationConfig,
@@ -35,6 +36,7 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
         options.observed_cutoff,
         options.arranque_cases,
     )
+    .and_then(|config| config.with_minimum_contact_cell_count(options.minimum_contact_cell_count))
     .map_err(|error| format!("invalid source preparation config: {error}"))?;
     let prepared = match options.source.as_str() {
         "e0" => prepare_e0_package(&options.input, &config),
@@ -221,7 +223,7 @@ fn to_run_input(
             _ => None,
         })
         .collect();
-    Ok(LocalRunInput::new(
+    let input = LocalRunInput::new(
         LocalRunMetadata::new(
             run_id,
             tenant_id,
@@ -236,7 +238,33 @@ fn to_run_input(
         events,
     )
     .with_queries(queries)
-    .with_query_table_available(prepared.agent_inputs().has_available_table("copilot_query")))
+    .with_query_table_available(prepared.agent_inputs().has_available_table("copilot_query"));
+    if let Some(projection) = prepared.agent_inputs().contact_projection() {
+        let cells = prepared
+            .agent_inputs()
+            .contact_volumes()
+            .iter()
+            .map(|cell| {
+                LocalContactVolumeCell::new(
+                    cell.reason().to_owned(),
+                    cell.channel().to_owned(),
+                    cell.record_count(),
+                )
+            })
+            .collect();
+        let projection = LocalContactVolumeProjection::new(
+            projection.policy_version(),
+            projection.minimum_cell_count(),
+            projection.included_record_count(),
+            projection.rejected_rows(),
+            projection.suppressed_cells(),
+            cells,
+        )
+        .map_err(|_| "source adapter emitted an invalid contact projection".to_owned())?;
+        Ok(input.with_contact_volume_projection(projection))
+    } else {
+        Ok(input)
+    }
 }
 
 fn safe_code(value: &str) -> Result<String, String> {
@@ -336,6 +364,7 @@ struct Options {
     observed_cutoff: String,
     arranque_cases: usize,
     minimum_recurring_query_support: u64,
+    minimum_contact_cell_count: u64,
     help: bool,
 }
 
@@ -350,6 +379,7 @@ impl Options {
             observed_cutoff: "".into(),
             arranque_cases: 200,
             minimum_recurring_query_support: 20,
+            minimum_contact_cell_count: 5,
             help: false,
         };
         let mut args = args.into_iter();
@@ -389,6 +419,17 @@ impl Options {
                         );
                     }
                 }
+                "--min-contact-cell-count" => {
+                    options.minimum_contact_cell_count = value.parse().map_err(|_| {
+                        "--min-contact-cell-count must be an integer from 5 to 10000".to_owned()
+                    })?;
+                    if !(5..=10_000).contains(&options.minimum_contact_cell_count) {
+                        return Err(
+                            "--min-contact-cell-count must be an integer from 5 to 10000"
+                                .to_owned(),
+                        );
+                    }
+                }
                 _ => return Err(format!("unknown option {key}")),
             }
         }
@@ -409,7 +450,7 @@ impl Options {
 
 fn print_help() {
     println!(
-        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20]"
+        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20] [--min-contact-cell-count 5]"
     );
 }
 
@@ -484,9 +525,73 @@ mod tests {
     }
 
     #[test]
+    fn cli_rejects_contact_suppression_below_privacy_floor() {
+        let args = [
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+            "x",
+            "--output",
+            "y",
+            "--observed-cutoff",
+            "2026-10-02T12:00:00Z",
+            "--min-contact-cell-count",
+            "4",
+        ]
+        .map(OsString::from);
+
+        assert!(
+            Options::parse(args)
+                .unwrap_err()
+                .contains("integer from 5 to 10000")
+        );
+    }
+
+    #[test]
     fn safe_code_projection_rejects_arbitrary_text() {
         assert_eq!(safe_code("tool_lookup").unwrap(), "tool_lookup");
         assert!(safe_code("customer says private text").is_err());
+    }
+
+    #[test]
+    fn original_contact_snapshot_counts_reach_local_motor_without_event_claims() {
+        let root = env::temp_dir().join(make_run_id().unwrap());
+        let table = root.join("call_center_interactions");
+        fs::create_dir_all(&table).unwrap();
+        fs::write(
+            table.join("part-000.csv"),
+            concat!(
+                "interaction_id,customer_id,interaction_date,contact_reason,channel\n",
+                "id-1,c-1,2025-01-01T10:00:00,Complaint,Phone\n",
+                "id-2,c-2,2025-01-02T10:00:00,Complaint,Phone\n",
+                "id-3,c-3,2025-01-03T10:00:00,Complaint,Phone\n",
+                "id-4,c-4,2099-01-04T10:00:00,Complaint,Phone\n",
+                "id-5,c-5,2025-01-05T10:00:00,Complaint,Phone\n",
+            ),
+        )
+        .unwrap();
+        let config = PreparationConfig::new("pulso_local", "2025-07-01T00:00:00Z", 10).unwrap();
+        let prepared = prepare_original_bank(&root, &config).unwrap();
+
+        let input = to_run_input(&prepared, "run-original-snapshot", "pulso_local").unwrap();
+        let result = run_local_simulation(input).unwrap();
+
+        assert_eq!(result.terminal_status, "snapshot_projection_complete");
+        assert_eq!(result.source_kind, LocalSourceKind::OriginalBank);
+        assert!(result.signal.is_none());
+        assert!(result.proposal.is_none());
+        let contact_projection = result.contact_volume_projection.as_ref().unwrap();
+        assert_eq!(contact_projection.included_record_count(), 5);
+        assert_eq!(contact_projection.cells()[0].record_count(), 5);
+        assert!(
+            !serde_json::to_string(&result)
+                .unwrap()
+                .contains("customer_id")
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -520,6 +625,7 @@ mod tests {
             verification_status: None,
             proposal: None,
             evaluation: None,
+            contact_volume_projection: None,
             events: Vec::new(),
         };
 
