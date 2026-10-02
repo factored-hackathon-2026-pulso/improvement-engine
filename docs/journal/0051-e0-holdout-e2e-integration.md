@@ -40,8 +40,9 @@ candidate selection, or proposal construction.
    Pester first failed because the holdout was omitted (RED), then passed 9/9
    including absent-field and malformed-JSON no-leak cases (GREEN).
 
-The local augmented E0 smoke completed: 200 Arranque discovery cases and
-1,800 excluded Reproduccion cases; the discovery recurrence measured 154/200.
+The local augmented E0 smoke completed with 200 Arranque discovery cases; the
+total excluded Reproduccion population is intentionally suppressed. The
+discovery recurrence measured 154/200.
 Holdout observed query signatures for 1,539 distinct cases, with 1,433 matches
 (9,311 basis points) and `replicated` status at the 20-case threshold. Only
 these aggregates were inspected; no row values or identifiers were emitted.
@@ -81,8 +82,8 @@ because threshold four was accepted, then passed after the policy change.
 The reviewer reran focused source-adapter holdout tests (5/5), CLI E2E tests
 (3/3), and Windows Pester tests (9/9). Root reran the real local wrapper after
 the PR #54/#56 merges using a new output directory; it returned
-`complete_simulated`, 200 Arranque discovery cases, 1,800 excluded
-Reproduccion cases, 154/200 recurring-query support, and a descriptive-only
+`complete_simulated`, 200 Arranque discovery cases, suppressed replay total,
+154/200 recurring-query support, and a descriptive-only
 holdout of 1,433/1,539 queried cases. The proposal remained
 `simulated_unverified` / `not_executed`, and the formal route remained
 `do_nothing`. Only these allowlisted aggregates were inspected. Podman remains

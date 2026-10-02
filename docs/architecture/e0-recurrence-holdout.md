@@ -111,13 +111,15 @@ hypothesis, or candidate count. Holdout output is never an input to core.
 
 ## Current augmented-sample smoke
 
-On the local augmented E0 package, the runner selected 200 Arranque cases and
-excluded 1,800 Reproduccion cases from discovery. The discovery recurrence
-signal was 154/200 cases. Post-selection holdout had 1,539 queried Reproduccion
-cases, of which 1,433 shared the selected opaque signature (9,311 basis points,
-or 93.11%); status was `replicated` under the 20-case policy. These are
+On the local augmented E0 package, the runner selected 200 Arranque cases.
+The total Reproduccion population is intentionally suppressed. The discovery
+recurrence signal was 154/200 cases. Post-selection holdout had 1,539 queried
+Reproduccion cases, of which 1,433 shared the selected opaque signature
+(9,311 basis points, or 93.11%); status was `replicated` under the 20-case
+policy. These are
 descriptive package-specific aggregates only. They do not show causality,
 customer outcomes, resolution, automation success, or business value. The
-rate applies only to cases with a projected query, not all 1,800 holdout cases.
+rate applies only to cases with a projected query, not every case in the
+suppressed Reproduccion population.
 It also depends on the source package's query-signature normalization; it is
 not a semantic comparison of raw requests.

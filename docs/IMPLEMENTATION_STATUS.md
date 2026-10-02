@@ -51,8 +51,8 @@ green unit test as proof that a broader product flow is complete.
   semantic, causal, lift, or real-bank claim. Only the selected supported
   signal proceeds into the local Scout/verifier path; zero positive support
   produces an explicit no-op. The formal route is always `do_nothing`.
-  Actual local E0 smoke (2026-10-02) used 200 Arranque cases and excluded
-  1,800 Reproduccion cases. The leading opaque query signature recurred in
+  Actual local E0 smoke (2026-10-02) used 200 Arranque cases; the total
+  Reproduccion population is intentionally suppressed. The leading opaque query signature recurred in
   154/200 cases (policy floor 20); technical errors remained 0/187 supported,
   with 13 missing. The runner recorded three Scout candidates and one
   exploratory proposal. Persisted output contains the exact
