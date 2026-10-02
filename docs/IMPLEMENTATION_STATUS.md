@@ -41,6 +41,11 @@ green unit test as proof that a broader product flow is complete.
   tenant-scoped immutable source snapshot and a sealed file manifest before
   access; V1 snapshots cannot be replayed because they cannot prove that
   binding. Serialization loses non-serializable file seals and fails closed.
+- U34-F: immutable original-run fork. The only in-memory commit entry point
+  owns its grant, lifecycle, artifact-policy, idempotency and audit state; it
+  atomically predicates a sealed fence before exposing one child, receipt and
+  audit event. The local port models the durable adapter contract but is not a
+  deployed durable transaction implementation.
 
 ## Delivery discipline
 
