@@ -181,22 +181,12 @@ pub trait WikiAuthorizationPort {
     fn authorize(&self, access: &WikiAccess, snapshot_ref: &ArtifactReference) -> bool;
 }
 
-/// Opaque authorization fence returned only by a trusted grant authority for
-/// one exact grant revision. It is consumed by U22/U33's conditional commit;
-/// it is not a caller-supplied authorization claim.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct MemoryUseGrantFence {
-    grant_id: String,
-    grant_revision: u64,
-}
-
 /// Crate-private extension used by the governed-memory commit. A production
-/// implementation must resolve this revision and verify it remains live in
-/// the same transaction as the U33 receipt predicate.
+/// implementation must resolve the exact grant revision and verify it remains
+/// live *inside the same transaction* as the U33 receipt predicate. U22 must
+/// not pre-read a fence and hand a stale authorization observation to U33.
 pub(crate) trait MemoryUseCommitAuthority: WikiAuthorizationPort {
-    fn memory_use_grant_fence(&self, access: &WikiAccess) -> Option<MemoryUseGrantFence>;
-
-    fn grant_fence_is_live(&self, access: &WikiAccess, fence: &MemoryUseGrantFence) -> bool;
+    fn memory_use_grant_is_live(&self, access: &WikiAccess) -> bool;
 }
 
 /// Test/local authority that only accepts issued exact grants.
@@ -206,6 +196,18 @@ pub(crate) trait MemoryUseCommitAuthority: WikiAuthorizationPort {
 #[derive(Default)]
 pub struct InMemoryWikiGrantAuthority {
     grants: RefCell<BTreeMap<String, WikiGrant>>,
+    #[cfg(test)]
+    next_memory_use_interleaving: RefCell<Option<MemoryUseGrantInterleaving>>,
+}
+
+/// A deterministic mutation that wins after U33 has observed an initially live
+/// grant, but before it may materialize a receipt. This test-only schedule
+/// models a concurrent grant transaction in the durable adapter's predicate.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MemoryUseGrantInterleaving {
+    Revoke,
+    ReplaceWithRevision(u64),
 }
 
 impl InMemoryWikiGrantAuthority {
@@ -217,6 +219,32 @@ impl InMemoryWikiGrantAuthority {
 
     pub fn revoke(&self, grant_id: &str) -> bool {
         self.grants.borrow_mut().remove(grant_id).is_some()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn schedule_memory_use_interleaving(
+        &self,
+        interleaving: MemoryUseGrantInterleaving,
+    ) {
+        *self.next_memory_use_interleaving.borrow_mut() = Some(interleaving);
+    }
+
+    #[cfg(test)]
+    fn apply_scheduled_memory_use_interleaving(&self, grant_id: &str) {
+        let Some(interleaving) = self.next_memory_use_interleaving.borrow_mut().take() else {
+            return;
+        };
+        let mut grants = self.grants.borrow_mut();
+        match interleaving {
+            MemoryUseGrantInterleaving::Revoke => {
+                grants.remove(grant_id);
+            }
+            MemoryUseGrantInterleaving::ReplaceWithRevision(revision) => {
+                if let Some(grant) = grants.get_mut(grant_id) {
+                    grant.revision = revision;
+                }
+            }
+        }
     }
 }
 
@@ -238,28 +266,11 @@ impl WikiAuthorizationPort for InMemoryWikiGrantAuthority {
 }
 
 impl MemoryUseCommitAuthority for InMemoryWikiGrantAuthority {
-    fn memory_use_grant_fence(&self, access: &WikiAccess) -> Option<MemoryUseGrantFence> {
-        self.grants
-            .borrow()
-            .get(&access.grant_id)
-            .and_then(|grant| {
-                (grant.run_id == access.run_id
-                    && grant.revision == access.grant_revision
-                    && grant.tenant_id == access.tenant_id
-                    && grant.purpose == access.purpose
-                    && grant.snapshot_ref == access.snapshot_ref
-                    && grant.memory_scope == access.memory_scope)
-                    .then(|| MemoryUseGrantFence {
-                        grant_id: grant.grant_id.clone(),
-                        grant_revision: grant.revision,
-                    })
-            })
-    }
-
-    fn grant_fence_is_live(&self, access: &WikiAccess, fence: &MemoryUseGrantFence) -> bool {
-        fence.grant_id == access.grant_id
-            && fence.grant_revision == access.grant_revision
-            && self.authorize(access, &access.snapshot_ref)
+    fn memory_use_grant_is_live(&self, access: &WikiAccess) -> bool {
+        let live = self.authorize(access, &access.snapshot_ref);
+        #[cfg(test)]
+        self.apply_scheduled_memory_use_interleaving(&access.grant_id);
+        live
     }
 }
 

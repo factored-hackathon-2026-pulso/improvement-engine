@@ -33,8 +33,9 @@ como input ejecutable del runtime genérico.
 `MemoryUseReceiptAttestationPort` conserva la verificación read-only de un
 receipt histórico. Para emitir una capability nueva, U22 usa el commit interno
 atómico U33: el fence privado liga request, grant/revisión, head
-identidad/versión, snapshot y liveness antes de insertar el ledger. Un id o
-versión de head alterados no se admiten.
+identidad/versión, snapshot y liveness antes de insertar el ledger. El adapter
+resuelve grant/revisión en ese predicado, no desde una lectura previa de U22.
+Un id o versión de head alterados no se admiten.
 
 ## Estado durable
 

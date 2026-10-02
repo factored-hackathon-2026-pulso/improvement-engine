@@ -33,6 +33,7 @@ pub struct TemporalMemoryEvidence {
     snapshot_ref: crate::ArtifactReference,
     run_id: String,
     grant_id: String,
+    grant_revision: u64,
     purpose: String,
 }
 
@@ -103,6 +104,9 @@ impl TrustedTemporalEvidenceIssuer {
     /// Composition-only factory for a U04-B replay projection. It is
     /// crate-private: transport callers cannot select a snapshot/profile,
     /// tenant/world or cutoff and therefore cannot mint temporal evidence.
+    /// This source has no sealed outcome adapter yet (U20-E/U27), so it can
+    /// only result in an admitted `Frozen` use; `Continuous` evidence is
+    /// rejected for missing outcome evidence before U33 observes a receipt.
     #[allow(dead_code)] // Invoked by the future trusted service composition root.
     pub(crate) fn from_u04b_replay(
         replay: VerifiedReplayAvailability,
@@ -142,6 +146,7 @@ impl TrustedTemporalEvidenceIssuer {
             snapshot_ref: request.access().snapshot_ref.clone(),
             run_id: request.access().run_id.clone(),
             grant_id: request.access().grant_id.clone(),
+            grant_revision: request.access().grant_revision,
             purpose: request.access().purpose.clone(),
         }
     }
@@ -162,6 +167,7 @@ pub enum TemporalProtocolError {
     },
     MemoryAfterReplayCutoff,
     AccessTimeMismatch,
+    GrantRevisionMismatch,
     OutcomeForbiddenInFrozen,
     OutcomeRequired,
     OutcomeAfterMemoryUse,
@@ -222,6 +228,11 @@ impl MemoryTemporalAdmission {
         {
             return Err(TemporalMemoryAdmissionError::Temporal(
                 TemporalProtocolError::AccessTimeMismatch,
+            ));
+        }
+        if evidence.grant_revision != request.access().grant_revision {
+            return Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::GrantRevisionMismatch,
             ));
         }
         if evidence.protocol != protocol {
@@ -330,6 +341,7 @@ fn temporal_commitment(input: &TemporalCommitmentInput<'_>) -> String {
         &input.access.snapshot_ref,
         &input.access.run_id,
         &input.access.grant_id,
+        input.access.grant_revision,
         &input.access.purpose,
         input.allowed_at,
         input.cutoff,
@@ -662,6 +674,46 @@ mod tests {
                 .commitment,
             "raw snapshot and profile seals are part of temporal identity"
         );
+    }
+
+    #[test]
+    fn reissued_grant_revision_cannot_reuse_prior_temporal_evidence_or_leave_a_receipt() {
+        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let original_request = MemoryUseRequest::new(scope("frozen"), access.clone());
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(original_request, 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
+
+        let binding = MemoryScopeBinding::new("world-a", "campaign-a", "frozen", "train");
+        authority.issue(
+            WikiGrant::new_scoped(
+                "grant-2",
+                "run-2",
+                TENANT,
+                "investigation",
+                access.snapshot_ref.clone(),
+                binding,
+            )
+            .with_revision(2),
+        );
+        let reissued_request =
+            MemoryUseRequest::new(scope("frozen"), access.with_grant_revision(2));
+
+        assert!(matches!(
+            MemoryTemporalAdmission::admit(
+                MemoryTemporalProtocol::Frozen,
+                evidence,
+                &mut registry,
+                &mut artifacts,
+                &authority,
+                reissued_request,
+            ),
+            Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::GrantRevisionMismatch
+            ))
+        ));
+        assert!(registry.receipts().is_empty());
     }
 
     #[test]

@@ -141,9 +141,6 @@ impl MemoryUseAdmission {
         authority: &A,
         request: MemoryUseRequest,
     ) -> Result<VerifiedMemoryUse, MemoryUseAdmissionError> {
-        let grant_fence = authority
-            .memory_use_grant_fence(&request.access)
-            .ok_or(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))?;
         let receipt = publisher
             .commit_allowed_use(
                 artifacts,
@@ -153,7 +150,6 @@ impl MemoryUseAdmission {
                     request.access.clone(),
                     request.temporal_commitment.clone(),
                     request.access.snapshot_ref.clone(),
-                    grant_fence,
                 ),
             )
             .map_err(MemoryUseAdmissionError::Denied)?;
@@ -189,7 +185,8 @@ mod tests {
         MemoryUseCommitInterleaving, MemoryUseReceiptAttestationPort,
     };
     use crate::wiki_scratch::{
-        InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
+        InMemoryWikiGrantAuthority, MemoryScopeBinding, MemoryUseGrantInterleaving, WikiAccess,
+        WikiGrant,
     };
     use crate::{ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository};
     use serde_json::json;
@@ -425,6 +422,31 @@ mod tests {
             Err(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))
         ));
         assert!(registry.receipts().is_empty());
+    }
+
+    #[test]
+    fn grant_revoke_or_replacement_that_wins_inside_u33_predicate_leaves_no_receipt() {
+        for interleaving in [
+            MemoryUseGrantInterleaving::Revoke,
+            MemoryUseGrantInterleaving::ReplaceWithRevision(2),
+        ] {
+            let (mut artifacts, mut registry, authority, access) = seeded();
+            authority.schedule_memory_use_interleaving(interleaving);
+
+            assert!(matches!(
+                MemoryUseAdmission::admit(
+                    &mut registry,
+                    &mut artifacts,
+                    &authority,
+                    MemoryUseRequest::new(scope(), access),
+                ),
+                Err(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))
+            ));
+            assert!(
+                registry.receipts().is_empty(),
+                "{interleaving:?} must fail the final U33 predicate before receipt insertion"
+            );
+        }
     }
 
     #[test]

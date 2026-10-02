@@ -61,7 +61,8 @@ green unit test as proof that a broader product flow is complete.
   execution, registry mutation, release or customer exposure.
 - U22: governed published-memory admission. A second run receives only an
   opaque provenance capability after U33 atomically predicates the exact
-  request, grant revision, live head and snapshot before recording its receipt.
+  request, grant revision resolved inside its conditional boundary, live head
+  and snapshot before recording its receipt.
   No raw pages,
   cache, publication, Scout, runtime or release capability is exposed.
 - U17: sealed change compiler. Only an opaque authorization composed from a

@@ -12,8 +12,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::wiki_scratch::{
-    MemoryScopeBinding, MemoryUseCommitAuthority, MemoryUseGrantFence, WikiAccess,
-    WikiAuthorizationPort, WikiTransformResult,
+    MemoryScopeBinding, MemoryUseCommitAuthority, WikiAccess, WikiAuthorizationPort,
+    WikiTransformResult,
 };
 use crate::{ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository, RepositoryError};
 
@@ -197,17 +197,16 @@ pub(crate) trait AtomicMemoryUseCommitPort {
     ) -> Result<MemoryUseReceipt, MemoryError>;
 }
 
-/// Exact request-side authorization fence for one U33 conditional admission.
-/// Its fields are private so only U22 can create it after a trusted authority
-/// resolves the active grant revision. The storage adapter must check every
-/// field, the current head and liveness in its one commit predicate.
+/// Exact request-side fence for one U33 conditional admission. Its fields are
+/// private so only U22 can create it. The adapter—not U22—resolves the active
+/// grant revision and verifies its liveness inside the same conditional commit
+/// as every other fence.
 #[derive(Clone, Debug)]
 pub(crate) struct AtomicMemoryUseRequest {
     scope: MemoryScope,
     access: WikiAccess,
     temporal_commitment: Option<String>,
     snapshot_ref: ArtifactReference,
-    grant_fence: MemoryUseGrantFence,
 }
 
 impl AtomicMemoryUseRequest {
@@ -216,14 +215,12 @@ impl AtomicMemoryUseRequest {
         access: WikiAccess,
         temporal_commitment: Option<String>,
         snapshot_ref: ArtifactReference,
-        grant_fence: MemoryUseGrantFence,
     ) -> Self {
         Self {
             scope,
             access,
             temporal_commitment,
             snapshot_ref,
-            grant_fence,
         }
     }
 }
@@ -364,11 +361,15 @@ impl InMemoryMemoryRegistry {
             return Err(MemoryError::SnapshotMismatch);
         }
         if !request.scope.matches_binding(&request.access)
-            || !authority.grant_fence_is_live(&request.access, &request.grant_fence)
+            || !authority.authorize(&request.access, &head.snapshot_ref)
         {
             return Err(MemoryError::AccessDenied);
         }
-        if !authority.authorize(&request.access, &head.snapshot_ref) {
+        // The authority may resolve the grant from its durable current state.
+        // In the real adapter this is part of the single predicate; the test
+        // authority can make a replacement/revocation win immediately after
+        // this initial observation, forcing the final predicate below to fail.
+        if !authority.memory_use_grant_is_live(&request.access) {
             return Err(MemoryError::AccessDenied);
         }
         self.verify_live_snapshot(

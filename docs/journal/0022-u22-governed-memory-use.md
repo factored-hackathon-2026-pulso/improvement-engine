@@ -12,10 +12,10 @@ repositorio.
 U33 sigue siendo dueño del estado mutable: head, tombstones, autorización
 exacta, lectura de revisión viva e idempotencia del receipt. La admisión U22
 usa únicamente el puerto interno `AtomicMemoryUseCommitPort` con un
-`AtomicMemoryUseRequest` sellado. La autoridad emite primero un fence opaco
-para el grant y su revisión exacta; el adapter debe verificar en **una**
-operación condicional scope, snapshot, request completo, grant/revisión viva,
-head identidad/versión y tombstone/linaje, y sólo entonces insertar (o devolver
+`AtomicMemoryUseRequest` sellado. U22 no lee ni transporta un fence de grant:
+el adapter U33 resuelve grant y revisión desde su estado durable y los verifica
+en **la misma** operación condicional que scope, snapshot, request completo,
+head identidad/versión y tombstone/linaje; sólo entonces inserta (o devuelve
 idempotentemente) el receipt. U22 liga por ello scope, snapshot, run, grant,
 revisión de grant, propósito, instante permitido y commitment temporal. Un
 fence que pierde no deja receipt ni capability.

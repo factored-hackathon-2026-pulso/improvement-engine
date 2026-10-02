@@ -12,7 +12,7 @@ Su único camino no-test es `EnrichedHistoryAdapter::verified_replay_availabilit
 de U04-B V2: vuelve a comprobar el `SourceSnapshot` parseado, tenant, world,
 cutoff, digest exacto del snapshot y `AvailabilityProfile` sellado antes de que
 el composition root interno cree el issuer opaco. El commitment temporal fija
-scope completo, snapshot de memoria, run, grant, propósito, instante
+scope completo, snapshot de memoria, run, grant y su revisión, propósito, instante
 autorizado, cutoff, protocolo, digest de snapshot fuente y digest de profile;
 para Continuous también fija provenance y disponibilidad del outcome. El head
 no es un dato del issuer: U33 lo vuelve a leer dentro del commit condicional y
@@ -34,16 +34,22 @@ fuente ni interpreta labels/outcomes.
 
 `MemoryTemporalAdmission::admit` permanece `pub(crate)`. Antes de delegar a
 U22 usa exclusivamente `AtomicMemoryUseCommitPort`, también `pub(crate)`: un
-`AtomicMemoryUseRequest` privado lleva scope, snapshot, request y commitment,
-y una authority interna aporta el fence opaco de grant/revisión. Una
-implementación durable debe verificar en la misma transacción condicional head
-identidad/versión actual, tombstone/linaje, grant/revisión viva y solicitud
+`AtomicMemoryUseRequest` privado lleva scope, snapshot, request y commitment;
+no contiene una observación de autorización. La implementación durable U33
+debe resolver y comparar grant/revisión viva dentro de la misma transacción
+condicional que head identidad/versión actual, tombstone/linaje y solicitud
 exacta antes de escribir (o devolver idempotentemente) el receipt. Un fence
 fallido no deja receipt. El puerto público `MemoryPublisher` no puede emitir la
 capability. U33 recalcula la identidad incluyendo el commitment además de
 scope, snapshot, head, run, grant, revisión, purpose y reloj autorizado. Un
 cutoff/outcome/timestamp fabricado, feedback futuro o protocolo cruzado falla
 antes de registrar un receipt; no se emite `VerifiedMemoryUse`.
+
+La fábrica no-test `from_u04b_replay` sólo puede terminar en una admisión
+**Frozen** hoy: U04-B demuestra cutoff, snapshot y profile, pero aún no existe
+el adaptador sellado de outcome de U20-E/U27 que Continuous requiere. Intentar
+Continuous con dicha proyección queda denegado por outcome ausente antes de
+U33; ningún caller puede aportar ese outcome por fuera del emisor confiable.
 
 La capability resultante sigue siendo la opaca U22: no se añade un handle a
 wiki, páginas, cache, publicación o autoridad de aprendizaje.
@@ -71,6 +77,10 @@ con `E0432` porque el módulo no existía. Las iteraciones posteriores verifican
    reemplazada o revocada tampoco cruza el fence.
 8. Tenant cruzado y snapshot/profile con el mismo significado aparente pero
    distinto digest producen evidencia distinta o fallan antes del receipt.
+9. La revisión del grant forma parte de evidencia y commitment: reemitir el
+   mismo id de grant con revisión distinta no puede reutilizar la evidencia
+   anterior. Revocación o reemplazo que gana tras la observación inicial del
+   adapter también falla el predicado final sin receipt.
 
 ## Dependencias y continuación
 
