@@ -14,7 +14,9 @@ The shared validator rejects offsets, fractional seconds, invalid calendar
 dates, out-of-range clock fields, leap seconds, and trailing bytes. U16's
 canonical bridge commitment already covers its full input, including the
 cutoff; U17 carries that exact commitment into the compilation authorization.
-The regression now asserts both links of that chain.
+Regressions assert both links directly: changing only the cutoff changes the
+U16 bridge commitment, the U17 authorization commitment, and the compiled
+commitment.
 
 ## TDD evidence
 
@@ -34,19 +36,23 @@ Commands run:
 cargo +1.98.1 test -p improvement-engine-core --lib workflow_bridge_rejects_cutoffs_without_canonical_utc_second_precision
 cargo +1.98.1 test -p improvement-engine-core --lib workflow_bridge_
 cargo +1.98.1 test -p improvement-engine-core --lib eligible_readiness_compiles_one_immutable_draft_without_registry_or_release_effect
+cargo +1.98.1 test -p improvement-engine-core --lib changing_only_bridge_cutoff_changes_u17_authorization_and_compiled_commitments
 cargo +1.98.1 test -p improvement-engine-core
 cargo +1.98.1 fmt --all -- --check
 cargo +1.98.1 clippy --locked --offline -p improvement-engine-core --all-targets -- -D warnings
 git diff --check
 ```
 
-The first command failed on the intended behavioral assertion; the latter two
-targeted commands passed (3 bridge tests and 1 compiler integration test).
-The full core crate run passed: 90 unit tests, all applicable integration
-tests, and 50 doctests; 3 database/private-data tests were explicitly ignored
-by their declared environment/consent guards. Formatting, crate Clippy with
-warnings denied, and `git diff --check` passed. The wider workspace suite and
-independent adversarial review remain outstanding before integration.
+The first command failed on the intended behavioral assertion. The focused
+bridge/compiler commands passed, and the added cross-boundary cutoff test
+passed on its own. Before that final test-strengthening edit, the full core
+crate run passed: 90 unit tests, all applicable integration tests, and 50
+doctests; 3 database/private-data tests were explicitly ignored by their
+declared environment/consent guards. Formatting, crate Clippy with warnings
+denied, and `git diff --check` passed before the test-only edit; after it,
+formatting, diff check and the targeted regression passed. The repeat full
+suite was interrupted to free the build slot for the E2E adversarial review.
+The wider workspace suite remains outstanding before integration.
 
 ## Limitations
 
