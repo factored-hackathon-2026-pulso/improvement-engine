@@ -46,6 +46,15 @@ green unit test as proof that a broader product flow is complete.
   atomically predicates a sealed fence before exposing one child, receipt and
   audit event. The local port models the durable adapter contract but is not a
   deployed durable transaction implementation.
+- U20: sealed evaluation plan. Trusted composition attests the exact typed
+  baseline, oracle, development-suite and final-suite revisions before it
+  seals their scope, snapshot and evaluation semantics for a mechanism proxy.
+  It cannot execute a candidate, assert the same outcome, make a proposal or
+  release a change.
+- U24: read-only technical timeline boundary. The internal debug composition
+  derives its tenant only from an authenticated, opaque viewer capability and
+  reads U07 activity through safe statuses and accessible summaries. It is not
+  yet a browser, HTTP, SSO or streaming-control-plane implementation.
 
 ## Delivery discipline
 
