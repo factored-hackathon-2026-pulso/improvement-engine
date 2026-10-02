@@ -801,6 +801,22 @@ fn late_event_creates_a_new_as_of_projection_without_rewriting_the_old_one() {
             1_759_320_002_000,
         )
         .unwrap();
+    let same_data_later_cutoff = repository
+        .window_projection(
+            "tenant-a",
+            1_759_320_000_000,
+            1_759_406_400_000,
+            1_759_320_002_001,
+        )
+        .unwrap();
+    assert_eq!(before.events(), same_data_later_cutoff.events());
+    assert_eq!(before.coverages(), same_data_later_cutoff.coverages());
+    assert_eq!(before.received_as_of_ms(), 1_759_320_002_000);
+    assert_eq!(
+        same_data_later_cutoff.received_as_of_ms(),
+        1_759_320_002_001
+    );
+    assert_ne!(before.digest(), same_data_later_cutoff.digest());
 
     let late = ObservationEvent::new(
         "event-2",
