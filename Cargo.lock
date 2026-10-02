@@ -657,6 +657,7 @@ name = "improvement-engine-core"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "csv",
  "hmac 0.12.1",
  "postgres",
  "rusqlite",

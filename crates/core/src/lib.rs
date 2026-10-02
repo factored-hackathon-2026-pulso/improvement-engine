@@ -2,6 +2,8 @@
 //!
 //! This crate deliberately does not execute Agent Core primitives or call model providers.
 
+pub mod original_contact_projection;
+
 use std::collections::BTreeMap;
 
 use postgres::Client;

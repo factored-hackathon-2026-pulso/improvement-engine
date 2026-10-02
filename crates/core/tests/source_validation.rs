@@ -30,6 +30,13 @@ fn loads_canonical_json_contracts_in_deterministic_filename_order() {
 
 #[test]
 fn accepts_a_golden_synthetic_source_and_preserves_snapshot_provenance() {
+    assert_eq!(
+        snapshot()
+            .source_file_seal("call_center_interactions")
+            .unwrap()
+            .partition_inventory_digest(),
+        None
+    );
     let report = validate_source_file(&contract(), &snapshot(), SOURCE)
         .expect("fixture has a matching source entry");
 
@@ -38,6 +45,38 @@ fn accepts_a_golden_synthetic_source_and_preserves_snapshot_provenance() {
     assert_eq!(report.provenance.source_namespace, "bank_history");
     assert_eq!(report.provenance.world_ref, "supplied-synthetic-v1");
     assert_eq!(report.provenance.observed_cutoff, "2026-09-01T00:00:00Z");
+}
+
+#[test]
+fn optional_partition_inventory_seal_is_distinct_from_original_file_digest() {
+    let mut snapshot_json = serde_json::from_str::<serde_json::Value>(SNAPSHOT).unwrap();
+    let source_file_digest = snapshot_json["sources"][0]["file_digest"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    snapshot_json["sources"][0]["partition_inventory_digest"] =
+        serde_json::Value::String(format!("sha256:{}", "a".repeat(64)));
+    let snapshot = SourceSnapshot::from_json(&snapshot_json.to_string()).unwrap();
+    let seal = snapshot
+        .source_file_seal("call_center_interactions")
+        .unwrap();
+    assert_eq!(seal.file_digest(), source_file_digest);
+    assert_eq!(
+        seal.partition_inventory_digest(),
+        Some(format!("sha256:{}", "a".repeat(64))).as_deref()
+    );
+}
+
+#[test]
+fn rejects_invalid_optional_partition_inventory_digest() {
+    for digest in [
+        serde_json::Value::String("not-a-digest".into()),
+        serde_json::Value::Null,
+    ] {
+        let mut snapshot_json = serde_json::from_str::<serde_json::Value>(SNAPSHOT).unwrap();
+        snapshot_json["sources"][0]["partition_inventory_digest"] = digest;
+        assert!(SourceSnapshot::from_json(&snapshot_json.to_string()).is_err());
+    }
 }
 
 #[test]
