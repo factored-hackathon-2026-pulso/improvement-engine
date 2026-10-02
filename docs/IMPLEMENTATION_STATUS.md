@@ -28,7 +28,8 @@ green unit test as proof that a broader product flow is complete.
   composition of the U12-E immutable signal and matching U09/U10 receipts can
   form the opaque capability. It revalidates full scope, U04 raw binding,
   profile/cutoff/source commitments and E0 query receipts; it persists typed,
-  canonical E0 provenance through the existing U13-A batch so U14 receives
+  canonical E0 provenance —incluyendo tabla y commitment de campos— through
+  the existing U13-A batch so U14 receives
   only `VerifiedScoutCandidate`. It does not use public `QueryResult` or the
   generic Scout authority, and it has no recorder beyond U13-A, registry,
   promotion, release, runtime or Agent Core execution effect.

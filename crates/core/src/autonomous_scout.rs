@@ -103,10 +103,12 @@ pub struct E0ScoutCandidateProvenance {
     source_snapshot_ref: crate::ArtifactReference,
     source_snapshot_binding: String,
     availability_profile_digest: String,
+    table: String,
     cutoff_unix_seconds: u64,
     source_contract_digest: String,
     source_digest: String,
     transform_digest: String,
+    field_commitment: String,
     replay_projection_digest: String,
     source_evidence_digest: String,
     query_receipt_digests: Vec<String>,
@@ -140,10 +142,12 @@ impl E0ScoutCandidateProvenance {
             source_snapshot_ref: binding.source_snapshot_ref.clone(),
             source_snapshot_binding: binding.source_snapshot_binding.clone(),
             availability_profile_digest: binding.availability_profile_digest.clone(),
+            table: binding.table.clone(),
             cutoff_unix_seconds: binding.cutoff_unix_seconds,
             source_contract_digest: binding.source_contract_digest.clone(),
             source_digest: binding.source_digest.clone(),
             transform_digest: binding.transform_digest.clone(),
+            field_commitment: binding.field_commitment.clone(),
             replay_projection_digest: binding.replay_projection_digest.clone(),
             source_evidence_digest: binding.source_evidence_digest.clone(),
             query_receipt_digests: binding.query_receipt_digests.clone(),
@@ -173,10 +177,12 @@ impl E0ScoutCandidateProvenance {
             && self.source_snapshot_ref == binding.source_snapshot_ref
             && self.source_snapshot_binding == binding.source_snapshot_binding
             && self.availability_profile_digest == binding.availability_profile_digest
+            && self.table == binding.table
             && self.cutoff_unix_seconds == binding.cutoff_unix_seconds
             && self.source_contract_digest == binding.source_contract_digest
             && self.source_digest == binding.source_digest
             && self.transform_digest == binding.transform_digest
+            && self.field_commitment == binding.field_commitment
             && self.replay_projection_digest == binding.replay_projection_digest
             && self.source_evidence_digest == binding.source_evidence_digest
             && self.query_receipt_digests == binding.query_receipt_digests
@@ -482,6 +488,17 @@ impl ScoutCandidateRepository for InMemoryScoutCandidateRepository {
 #[derive(Clone, Default)]
 pub(crate) struct SharedScoutCandidateRepository {
     inner: Arc<Mutex<InMemoryScoutCandidateRepository>>,
+    outcomes: Arc<Mutex<Vec<ScoutCandidateRecordOutcome>>>,
+}
+
+#[cfg(test)]
+impl SharedScoutCandidateRepository {
+    fn recorded_outcomes(&self) -> Vec<ScoutCandidateRecordOutcome> {
+        self.outcomes
+            .lock()
+            .expect("test repository is unlocked")
+            .clone()
+    }
 }
 
 #[cfg(test)]
@@ -490,10 +507,16 @@ impl ScoutCandidateRepository for SharedScoutCandidateRepository {
         &mut self,
         batch: ScoutCandidateBatch,
     ) -> Result<ScoutCandidateRecordOutcome, ScoutCandidateRepositoryError> {
-        self.inner
+        let outcome = self
+            .inner
             .lock()
             .map_err(|_| ScoutCandidateRepositoryError::Storage)?
-            .record_batch_if_absent(batch)
+            .record_batch_if_absent(batch)?;
+        self.outcomes
+            .lock()
+            .map_err(|_| ScoutCandidateRepositoryError::Storage)?
+            .push(outcome);
+        Ok(outcome)
     }
 
     fn lookup(
@@ -913,8 +936,10 @@ pub fn sealed_expectation_for_test(
 /// Opaque U13-E capability. It proves that an immutable U12-E diagnostic was
 /// bound to the exact U09/U10 receipts and full task scope; it is not a
 /// candidate, a proposal, an authority to record, or an execution permit.
+#[derive(Clone)]
 pub struct AuthenticatedE0ScoutSignal {
     binding: E0ScoutSignalBinding,
+    binding_commitment: String,
     core_binding_digest: String,
     core_attempt_id: String,
     core_run_id: Option<String>,
@@ -974,6 +999,7 @@ impl TrustedE0ScoutComposer {
             return Err(ScoutError::EvidenceDenied);
         }
         Ok(AuthenticatedE0ScoutSignal {
+            binding_commitment: digest(&binding),
             binding,
             core_binding_digest: core.binding_digest().to_owned(),
             core_attempt_id: core.attempt_id().to_owned(),
@@ -1004,6 +1030,7 @@ impl AutonomousScout {
     ) -> Result<ScoutResult, ScoutError> {
         let b = &evidence.binding;
         if b.tenant_id != scope.tenant_id()
+            || evidence.binding_commitment != digest(b)
             || b.grant_id != scope.grant_id()
             || b.authority_ref != scope.authority_ref()
             || b.source_snapshot_ref.tenant_id != scope.tenant_id()
@@ -1257,6 +1284,8 @@ fn has_valid_candidate_digest(draft: &ScoutCandidateDraft) -> bool {
                 && e0.grant_id == draft.grant_id
                 && e0.authority_ref == draft.authority_ref
                 && !e0.run_id.is_empty()
+                && !e0.table.is_empty()
+                && !e0.field_commitment.is_empty()
                 && e0.signal_commitment == draft.signal_commitment
                 && e0.source_snapshot_ref == draft.source_snapshot_ref
                 && e0.cutoff_unix_seconds == draft.cutoff_unix_seconds
@@ -1373,7 +1402,18 @@ mod candidate_admission_tests {
     }
 
     #[cfg(feature = "test-support")]
-    fn e0_core(input: &str, attempt: &str) -> CoreTaskReceipt {
+    fn e0_scope(signal: &E0DiagnosticSignal) -> CoreTaskScope {
+        let binding = signal.scout_binding();
+        CoreTaskScope::new(
+            binding.tenant_id,
+            "job_e0",
+            binding.grant_id,
+            binding.authority_ref,
+        )
+        .unwrap()
+    }
+
+    fn e0_core(scope: CoreTaskScope, input: &str, attempt: &str) -> CoreTaskReceipt {
         let binding = CoreTaskBinding::new(
             "scout",
             "rel_scout_1",
@@ -1384,12 +1424,12 @@ mod candidate_admission_tests {
         let mut port =
             CoreTaskSimulator::new(CoreTaskBindingRegistry::new(vec![binding.clone()]).unwrap());
         port.script_success("core_e0", d('6')).unwrap();
-        port.invoke(CoreTaskInvocation::new(scope(), binding, attempt, input).unwrap())
+        port.invoke(CoreTaskInvocation::new(scope, binding, attempt, input).unwrap())
             .unwrap()
     }
 
     #[cfg(feature = "test-support")]
-    fn e0_model(attempt: &str) -> ModelReceipt {
+    fn e0_model(scope: CoreTaskScope, attempt: &str) -> ModelReceipt {
         let capability = ModelCapability::new(
             ModelProvider::OpenRouter,
             "https://openrouter.ai/api/v1",
@@ -1411,10 +1451,10 @@ mod candidate_admission_tests {
         let mut broker =
             HmacProjectionBroker::new_for_test(b"test-only-projection-authority-key-32b").unwrap();
         let projection = broker
-            .authorize_projection(&scope(), &policy, "safe".into())
+            .authorize_projection(&scope, &policy, "safe".into())
             .unwrap();
         let invocation =
-            ModelInvocation::from_verified(scope(), policy, attempt, projection).unwrap();
+            ModelInvocation::from_verified(scope, policy, attempt, projection).unwrap();
         let mut port = ModelProviderSimulator::new(invocation.policy().clone());
         port.script_success("ok", "request_e0");
         port.invoke(invocation).unwrap()
@@ -1477,18 +1517,19 @@ mod candidate_admission_tests {
     #[cfg(feature = "test-support")]
     #[test]
     fn authenticated_e0_signal_records_then_admits_only_through_u13a_boundary() {
-        let signal = crate::e0_deterministic_sensor::signal_for_scout_test();
-        let core = e0_core(&signal.scout_binding().signal_digest, "attempt_e0");
-        let model = e0_model("attempt_model_e0");
-        let evidence = TrustedE0ScoutComposer::seal(&scope(), &signal, &core, &model).unwrap();
-        let (result, mut authority) = record_e0_scout_discovery(
-            InMemoryScoutCandidateRepository::default(),
-            &scope(),
-            &evidence,
-            &core,
-            &model,
-        )
-        .unwrap();
+        let signal = crate::e0_deterministic_sensor::real_signal_for_scout_test();
+        let e0_scope = e0_scope(&signal);
+        let core = e0_core(
+            e0_scope.clone(),
+            &signal.scout_binding().signal_digest,
+            "attempt_e0",
+        );
+        let model = e0_model(e0_scope.clone(), "attempt_model_e0");
+        let evidence = TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model).unwrap();
+        let repository = SharedScoutCandidateRepository::default();
+        let (result, mut authority) =
+            record_e0_scout_discovery(repository.clone(), &e0_scope, &evidence, &core, &model)
+                .unwrap();
         let ScoutResult::Candidates(candidates) = result else {
             panic!("expected drafts")
         };
@@ -1498,35 +1539,103 @@ mod candidate_admission_tests {
                 .iter()
                 .all(|candidate| candidate.e0_provenance.is_some())
         );
-        let verified = authority.admit(&scope(), &candidates[0]).unwrap();
+        let verified = authority.admit(&e0_scope, &candidates[0]).unwrap();
         assert_eq!(verified.candidate_digest(), candidates[0].digest);
         let mut tampered = candidates[0].clone();
         tampered.e0_provenance.as_mut().unwrap().commitment = d('0');
         tampered.digest = candidate_digest(&tampered);
         assert!(matches!(
-            authority.admit(&scope(), &tampered),
+            authority.admit(&e0_scope, &tampered),
             Err(ScoutCandidateAdmissionError::InvalidCandidateDigest)
         ));
+
+        let (replayed, _) =
+            record_e0_scout_discovery(repository.clone(), &e0_scope, &evidence, &core, &model)
+                .unwrap();
+        assert_eq!(replayed, ScoutResult::Candidates(candidates));
+        assert_eq!(
+            repository.recorded_outcomes(),
+            vec![
+                ScoutCandidateRecordOutcome::Recorded,
+                ScoutCandidateRecordOutcome::AlreadyRecorded,
+            ]
+        );
     }
 
     #[cfg(feature = "test-support")]
     #[test]
     fn e0_scope_or_receipt_drift_is_denied_without_recording() {
-        let signal = crate::e0_deterministic_sensor::signal_for_scout_test();
-        let core = e0_core(&signal.scout_binding().signal_digest, "attempt_e0");
-        let model = e0_model("attempt_model_e0");
-        let evidence = TrustedE0ScoutComposer::seal(&scope(), &signal, &core, &model).unwrap();
-        let changed_core = e0_core(&signal.scout_binding().signal_digest, "attempt_other");
+        let signal = crate::e0_deterministic_sensor::real_signal_for_scout_test();
+        let e0_scope = e0_scope(&signal);
+        let core = e0_core(
+            e0_scope.clone(),
+            &signal.scout_binding().signal_digest,
+            "attempt_e0",
+        );
+        let model = e0_model(e0_scope.clone(), "attempt_model_e0");
+        let evidence = TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model).unwrap();
+        let changed_core = e0_core(
+            e0_scope.clone(),
+            &signal.scout_binding().signal_digest,
+            "attempt_other",
+        );
         assert_eq!(
-            AutonomousScout::discover_e0(&scope(), &evidence, &changed_core, &model),
+            AutonomousScout::discover_e0(&e0_scope, &evidence, &changed_core, &model),
             Err(ScoutError::EvidenceDenied)
         );
         let wrong_scope =
-            CoreTaskScope::new("tenant_b", "job_a", "grant_a", "authority_a").unwrap();
+            CoreTaskScope::new("tenant_b", "job_e0", "grant_e0", "authority_e0").unwrap();
         assert_eq!(
             AutonomousScout::discover_e0(&wrong_scope, &evidence, &core, &model),
             Err(ScoutError::EvidenceDenied)
         );
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn e0_binding_drift_matrix_fails_closed_before_any_recording() {
+        let signal = crate::e0_deterministic_sensor::real_signal_for_scout_test();
+        let e0_scope = e0_scope(&signal);
+        let core = e0_core(
+            e0_scope.clone(),
+            &signal.scout_binding().signal_digest,
+            "attempt_e0",
+        );
+        let model = e0_model(e0_scope.clone(), "attempt_model_e0");
+        let evidence = TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model).unwrap();
+
+        macro_rules! assert_drift_denied {
+            ($field:ident, $value:expr) => {{
+                let mut drifted = evidence.clone();
+                drifted.binding.$field = $value;
+                let repository = SharedScoutCandidateRepository::default();
+                assert!(matches!(
+                    record_e0_scout_discovery(
+                        repository.clone(),
+                        &e0_scope,
+                        &drifted,
+                        &core,
+                        &model,
+                    ),
+                    Err(ScoutCandidateAdmissionError::Discovery(
+                        ScoutError::EvidenceDenied
+                    ))
+                ));
+                assert!(repository.recorded_outcomes().is_empty());
+            }};
+        }
+
+        // Every value is covered by the capability's canonical binding
+        // commitment. No altered raw U04/source/profile/cutoff/query evidence
+        // can cross into the U13-A recorder.
+        assert_drift_denied!(source_snapshot_binding, d('0'));
+        assert_drift_denied!(availability_profile_digest, d('1'));
+        assert_drift_denied!(cutoff_unix_seconds, 99);
+        assert_drift_denied!(source_digest, d('2'));
+        assert_drift_denied!(transform_digest, d('3'));
+        assert_drift_denied!(replay_projection_digest, d('4'));
+        assert_drift_denied!(source_evidence_digest, d('5'));
+        assert_drift_denied!(query_receipt_digests, vec![d('6')]);
     }
 
     #[test]

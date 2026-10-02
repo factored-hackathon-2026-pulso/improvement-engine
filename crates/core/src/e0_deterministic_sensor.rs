@@ -170,7 +170,7 @@ pub struct E0DiagnosticSignal {
 
 /// Crate-private projection for the U13-E trusted composition. It contains
 /// only immutable commitments and descriptive aggregates, never query rows.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct E0ScoutSignalBinding {
     pub(crate) signal_digest: String,
     pub(crate) metric_id: String,
@@ -191,9 +191,11 @@ pub(crate) struct E0ScoutSignalBinding {
     pub(crate) source_snapshot_ref: ArtifactReference,
     pub(crate) source_snapshot_binding: String,
     pub(crate) availability_profile_digest: String,
+    pub(crate) table: String,
     pub(crate) source_contract_digest: String,
     pub(crate) source_digest: String,
     pub(crate) transform_digest: String,
+    pub(crate) field_commitment: String,
     pub(crate) replay_projection_digest: String,
     pub(crate) source_evidence_digest: String,
     pub(crate) query_receipt_digests: Vec<String>,
@@ -222,9 +224,11 @@ impl E0DiagnosticSignal {
             source_snapshot_ref: self.source_snapshot_ref.clone(),
             source_snapshot_binding: self.source_snapshot_binding.clone(),
             availability_profile_digest: self.availability_profile_digest.clone(),
+            table: self.table.clone(),
             source_contract_digest: self.source_contract_digest.clone(),
             source_digest: self.source_digest.clone(),
             transform_digest: self.transform_digest.clone(),
+            field_commitment: self.field_commitment.clone(),
             replay_projection_digest: self.replay_projection_digest.clone(),
             source_evidence_digest: self.source_evidence_digest.clone(),
             query_receipt_digests: self.query_receipt_digests.clone(),
@@ -478,44 +482,17 @@ fn digest_of<T: Serialize>(value: &T) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
+/// Test-only U02 → U04-B V2 → U08 ledger → U12-E path. U13-E regression
+/// tests use this instead of minting an `E0DiagnosticSignal` fixture.
 #[cfg(all(test, feature = "test-support"))]
-pub(crate) fn signal_for_scout_test() -> E0DiagnosticSignal {
-    let mut signal = E0DiagnosticSignal {
-        metric_id: "e0_technical_error_rate".to_owned(),
-        metric_policy_id: "e0_diagnostic_allowlist".to_owned(),
-        metric_policy_version: 1,
-        metric_semantics: "observed_technical_error_flag".to_owned(),
-        metric_spec_commitment: format!("sha256:{}", "a".repeat(64)),
-        numerator: 1,
-        denominator: 2,
-        missing: 1,
-        coverage_basis_points: 6_666,
-        window: E0DiagnosticWindow::new(100, 100).unwrap(),
-        cutoff_unix_seconds: 100,
-        tenant_id: "tenant_a".to_owned(),
-        grant_id: "grant_a".to_owned(),
-        authority_ref: "authority_a".to_owned(),
-        run_id: "run_a".to_owned(),
-        source_snapshot_ref: ArtifactReference {
-            tenant_id: "tenant_a".to_owned(),
-            id: "018f50a1-7f00-7000-8000-000000000001".to_owned(),
-            revision: 1,
-            digest: format!("sha256:{}", "b".repeat(64)),
-        },
-        source_snapshot_binding: format!("sha256:{}", "c".repeat(64)),
-        availability_profile_digest: format!("sha256:{}", "d".repeat(64)),
-        table: "contacts".to_owned(),
-        source_contract_digest: format!("sha256:{}", "e".repeat(64)),
-        source_digest: format!("sha256:{}", "f".repeat(64)),
-        transform_digest: format!("sha256:{}", "1".repeat(64)),
-        field_commitment: format!("sha256:{}", "2".repeat(64)),
-        replay_projection_digest: format!("sha256:{}", "3".repeat(64)),
-        source_evidence_digest: format!("sha256:{}", "4".repeat(64)),
-        query_receipt_digests: vec![format!("sha256:{}", "5".repeat(64))],
-        digest: String::new(),
-    };
-    signal.digest = digest_of(&signal);
-    signal
+pub(crate) fn real_signal_for_scout_test() -> E0DiagnosticSignal {
+    let evidence = tests::authenticated_result('a', vec!["event_time", "technical_error"]);
+    E0DiagnosticSensor::measure(
+        &DiagnosticMetricSpec::from_policy(DiagnosticMetricPolicy::TechnicalErrorRateV1),
+        E0DiagnosticWindow::new(100, 100).expect("fixed test window"),
+        &[evidence],
+    )
+    .expect("real E0 chain is valid")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -605,7 +582,7 @@ mod tests {
         ])
     }
 
-    fn authenticated_result(
+    pub(super) fn authenticated_result(
         projection_seed: char,
         selected_columns: Vec<&str>,
     ) -> VerifiedE0QueryResult {

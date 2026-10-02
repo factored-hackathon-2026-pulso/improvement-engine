@@ -18,8 +18,9 @@ ligados a la capability y al signal commitment exacto.
 `AutonomousScout::discover_e0` produce únicamente los tres borradores
 descriptivos (`Signal`, `Claim`, `Opportunity`). Cada uno persiste una
 `E0ScoutCandidateProvenance` tipada y canónica: scope completo, run E0,
-métrica/policy/semántica, agregados y ventana, snapshot/binding/profile,
-cutoff, fuente/transform/proyección/evidencia y receipts. El digest del
+métrica/policy/semántica, agregados y ventana, tabla y commitment de campos,
+snapshot/binding/profile, cutoff, fuente/transform/proyección/evidencia y
+receipts. El digest del
 borrador cubre esa proveniencia; la rehidratación la vuelve a validar antes de
 aceptar el registro.
 
@@ -33,8 +34,10 @@ saltar la admisión.
 - La ruta no acepta `QueryResult`, `DeterministicSignal` ni strings de scope
   aportados por el caller. Tampoco invoca `ScoutInvocationAuthority` ni
   `AutonomousScout::discover` genérico.
-- Drift de scope, receipt, snapshot, binding, cutoff, profile, fuente o
-  commitment E0 falla cerrado antes de persistir.
+- Drift de scope, receipt, raw binding U04, profile, cutoff, fuente,
+  transform, proyección, evidencia fuente o receipt E0 falla cerrado antes de
+  persistir. Un commitment canónico del binding detecta cambios de cualquier
+  dimensión de la capability entre composición y consumo.
 - El signal E0 y la proveniencia contienen sólo agregados y commitments; no
   filas, PII, SQL ni receipts mutables.
 - La persistencia es el boundary U13-A existente: batch completo, canónico,
@@ -51,7 +54,10 @@ no exposición intencional. El GREEN verifica el rechazo con `matches!` sin
 ampliar la superficie pública. Las regresiones cubren la cadena real
 U12-E → capability opaca → receipts U09/U10 → batch U13-A → capability
 verificada U14, drift de scope/receipt y adulteración de proveniencia E0
-rehashada.
+rehashada. La cadena E2E no usa una señal fixture: atraviesa U02 raw JSON →
+U04-B V2 → U08 ledger/candidate → U12-E `measure` → U13-E. La misma discovery
+se reintenta sobre el repositorio compartido y prueba `Recorded` seguido de
+`AlreadyRecorded`; cada variante de drift verifica cero escrituras.
 
 ## Validación ejecutada
 
