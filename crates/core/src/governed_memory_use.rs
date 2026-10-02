@@ -5,7 +5,7 @@
 //! provenance: it never returns wiki pages or a cache handle.
 
 use crate::ArtifactRepository;
-use crate::memory_store::{MemoryError, MemoryPublisher, MemoryScope, MemoryUseReceipt};
+use crate::memory_store::{AtomicMemoryUseCommitPort, MemoryError, MemoryScope, MemoryUseReceipt};
 use crate::wiki_scratch::{WikiAccess, WikiAuthorizationPort};
 
 /// Caller-supplied context which U33 must validate before a memory use is
@@ -129,14 +129,18 @@ pub struct MemoryUseAdmission {
 
 impl MemoryUseAdmission {
     #[allow(dead_code)] // Invoked by the future trusted service composition root.
-    pub(crate) fn admit<R: ArtifactRepository, P: MemoryPublisher, A: WikiAuthorizationPort>(
+    pub(crate) fn admit<
+        R: ArtifactRepository,
+        P: AtomicMemoryUseCommitPort,
+        A: WikiAuthorizationPort,
+    >(
         publisher: &mut P,
         artifacts: &mut R,
         authority: &A,
         request: MemoryUseRequest,
     ) -> Result<VerifiedMemoryUse, MemoryUseAdmissionError> {
         let receipt = publisher
-            .record_allowed_use(
+            .commit_allowed_use(
                 artifacts,
                 authority,
                 request.scope.clone(),
@@ -145,10 +149,10 @@ impl MemoryUseAdmission {
                 request.access.snapshot_ref.clone(),
             )
             .map_err(MemoryUseAdmissionError::Denied)?;
-        // `record_allowed_use` is the U33 conditional-commit port: a durable
-        // adapter must check head/liveness/authority and insert the exact
-        // receipt in one transaction. Re-reading and attesting afterwards
-        // would create a revocation/head race after a visible allowed receipt.
+        // `commit_allowed_use` is the U33 conditional-commit port: a durable
+        // adapter checks head/liveness/authority and inserts the exact receipt
+        // in one transaction. Re-reading and attesting afterwards would create
+        // a revocation/head race after a visible allowed receipt.
         if !receipt_matches_request(&receipt, &request) {
             return Err(MemoryUseAdmissionError::ReceiptMismatch);
         }
@@ -172,8 +176,9 @@ fn receipt_matches_request(receipt: &MemoryUseReceipt, request: &MemoryUseReques
 mod tests {
     use super::{MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest};
     use crate::memory_store::{
-        InMemoryMemoryRegistry, MemoryError, MemoryHead, MemoryPublishRequest, MemoryPublisher,
-        MemoryScope, MemoryUseReceipt, MemoryUseReceiptAttestationPort, PublishedMemory,
+        AtomicMemoryUseCommitPort, InMemoryMemoryRegistry, MemoryError, MemoryHead,
+        MemoryPublishRequest, MemoryPublisher, MemoryScope, MemoryUseReceipt,
+        MemoryUseReceiptAttestationPort, PublishedMemory,
     };
     use crate::wiki_scratch::{
         InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
@@ -386,6 +391,30 @@ mod tests {
         }
     }
 
+    impl AtomicMemoryUseCommitPort for LyingPublisher {
+        fn commit_allowed_use<
+            R: ArtifactRepository,
+            A: crate::wiki_scratch::WikiAuthorizationPort,
+        >(
+            &mut self,
+            artifacts: &mut R,
+            authority: &A,
+            scope: MemoryScope,
+            access: WikiAccess,
+            temporal_commitment: Option<String>,
+            snapshot_ref: crate::ArtifactReference,
+        ) -> Result<MemoryUseReceipt, MemoryError> {
+            self.record_allowed_use(
+                artifacts,
+                authority,
+                scope,
+                access,
+                temporal_commitment,
+                snapshot_ref,
+            )
+        }
+    }
+
     impl MemoryUseReceiptAttestationPort for LyingPublisher {
         fn attest_allowed_use<
             R: ArtifactRepository,
@@ -460,6 +489,35 @@ mod tests {
         }
     }
 
+    impl AtomicMemoryUseCommitPort for RevokingAfterRecord {
+        fn commit_allowed_use<
+            R: ArtifactRepository,
+            A: crate::wiki_scratch::WikiAuthorizationPort,
+        >(
+            &mut self,
+            artifacts: &mut R,
+            authority: &A,
+            scope: MemoryScope,
+            access: WikiAccess,
+            temporal_commitment: Option<String>,
+            snapshot_ref: crate::ArtifactReference,
+        ) -> Result<MemoryUseReceipt, MemoryError> {
+            // A revocation observed before the conditional mutation must make
+            // the mutation fail without materializing a receipt. This is the
+            // deterministic analogue of a revocation winning the DB fence.
+            self.inner
+                .revoke(snapshot_ref.clone(), "deterministic_interleaving")?;
+            self.inner.commit_allowed_use(
+                artifacts,
+                authority,
+                scope,
+                access,
+                temporal_commitment,
+                snapshot_ref,
+            )
+        }
+    }
+
     impl MemoryUseReceiptAttestationPort for RevokingAfterRecord {
         fn attest_allowed_use<
             R: ArtifactRepository,
@@ -499,7 +557,10 @@ mod tests {
             Err(other) => panic!("expected post-record revocation denial, got {other:?}"),
             Ok(_) => panic!("post-record revocation must not emit a capability"),
         }
-        assert_eq!(publisher.inner.receipts().len(), 1);
+        assert!(
+            publisher.inner.receipts().is_empty(),
+            "a failed conditional admission must not leave a receipt behind"
+        );
     }
 
     #[test]

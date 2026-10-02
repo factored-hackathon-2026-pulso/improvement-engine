@@ -524,6 +524,47 @@ pub struct EnrichedHistoryAdapter {
     files: BTreeMap<String, PackageFile>,
 }
 
+/// Opaque, crate-private proof that a replay package remains bound to the
+/// exact U04-B source snapshot from which it was opened.  It exposes only the
+/// temporal/scope commitments needed by a later trusted composition; it never
+/// exposes source rows or permits a caller-provided clock.
+#[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
+pub(crate) struct VerifiedReplayAvailability {
+    tenant_id: String,
+    world_ref: String,
+    cutoff_at_unix_seconds: u64,
+    source_snapshot_digest: String,
+    availability_profile_digest: String,
+}
+
+#[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
+impl VerifiedReplayAvailability {
+    #[must_use]
+    pub(crate) fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    #[must_use]
+    pub(crate) fn world_ref(&self) -> &str {
+        &self.world_ref
+    }
+
+    #[must_use]
+    pub(crate) fn cutoff_at_unix_seconds(&self) -> u64 {
+        self.cutoff_at_unix_seconds
+    }
+
+    #[must_use]
+    pub(crate) fn source_snapshot_digest(&self) -> &str {
+        &self.source_snapshot_digest
+    }
+
+    #[must_use]
+    pub(crate) fn availability_profile_digest(&self) -> &str {
+        &self.availability_profile_digest
+    }
+}
+
 impl EnrichedHistoryAdapter {
     /// Validates a manifest before any rows are considered.
     pub fn from_manifest(manifest: EnrichedHistoryManifest) -> Result<Self, EnrichedHistoryError> {
@@ -700,6 +741,46 @@ impl EnrichedHistoryAdapter {
             }
         }
         Self::from_manifest_bound(manifest, Some(&snapshot.binding_digest()))
+    }
+
+    /// Emits the only non-test temporal input accepted by U23-P.  The caller
+    /// cannot pick its tenant, world, cutoff, source digest or clock: all five
+    /// values are revalidated against the V2 U04-B replay profile and exact
+    /// parsed `SourceSnapshot` before this opaque projection is returned.
+    #[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
+    pub(crate) fn verified_replay_availability(
+        &self,
+        snapshot: &SourceSnapshot,
+    ) -> Result<VerifiedReplayAvailability, EnrichedHistoryError> {
+        if !snapshot.has_canonical_binding() {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        let Some(profile) = self.availability_profile.as_ref() else {
+            return Err(EnrichedHistoryError::MissingAvailabilityProfile);
+        };
+        if !matches!(
+            self.availability_clock,
+            AvailabilityClockMode::ReplayAtEventTime { .. }
+        ) || profile.availability_clock != self.availability_clock
+            || profile.source_tenant_id != snapshot.tenant_id()
+            || profile.source_snapshot_digest != snapshot.binding_digest()
+            || self.source_namespace != snapshot.source_namespace()
+            || self.world_ref != snapshot.world_ref()
+            || self.observed_cutoff != snapshot.observed_cutoff()
+        {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        let cutoff_at_unix_seconds = rfc3339_utc_to_unix_seconds(&self.observed_cutoff)
+            .ok_or_else(|| EnrichedHistoryError::InvalidManifestField {
+                field: "observed_cutoff".to_owned(),
+            })?;
+        Ok(VerifiedReplayAvailability {
+            tenant_id: snapshot.tenant_id().to_owned(),
+            world_ref: snapshot.world_ref().to_owned(),
+            cutoff_at_unix_seconds,
+            source_snapshot_digest: snapshot.binding_digest(),
+            availability_profile_digest: profile.profile_digest.clone(),
+        })
     }
 
     /// Returns a deterministic, discovery-safe projection for exactly one table.
@@ -1021,6 +1102,40 @@ fn is_rfc3339_utc(value: &str) -> bool {
         _ => return false,
     };
     (1..=days_in_month).contains(&day)
+}
+
+/// Converts the fixed-width, already validated UTC timestamp to epoch seconds
+/// without accepting a caller-provided replay clock. The civil-date algorithm
+/// is proleptic Gregorian and intentionally has no timezone/dependency input.
+#[allow(dead_code)] // Reached through the future trusted U04-B/U23 composition root.
+fn rfc3339_utc_to_unix_seconds(value: &str) -> Option<u64> {
+    if !is_rfc3339_utc(value) {
+        return None;
+    }
+    let number = |start: usize, end: usize| value[start..end].parse::<i64>().ok();
+    let (year, month, day, hour, minute, second) = (
+        number(0, 4)?,
+        number(5, 7)?,
+        number(8, 10)?,
+        number(11, 13)?,
+        number(14, 16)?,
+        number(17, 19)?,
+    );
+    let adjusted_year = year - i64::from(month <= 2);
+    let era = if adjusted_year >= 0 {
+        adjusted_year
+    } else {
+        adjusted_year - 399
+    } / 400;
+    let year_of_era = adjusted_year - era * 400;
+    let month_from_march = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * month_from_march + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days_since_epoch = era * 146_097 + day_of_era - 719_468;
+    let seconds = days_since_epoch
+        .checked_mul(86_400)?
+        .checked_add(hour * 3_600 + minute * 60 + second)?;
+    u64::try_from(seconds).ok()
 }
 
 fn is_sha256_digest(value: &str) -> bool {

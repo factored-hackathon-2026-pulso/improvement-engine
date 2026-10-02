@@ -5,10 +5,11 @@
 //! release a candidate. U22/U33 remain the authority for a governed receipt.
 
 use crate::ArtifactRepository;
+use crate::enriched_history::VerifiedReplayAvailability;
 use crate::governed_memory_use::{
     MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest, VerifiedMemoryUse,
 };
-use crate::memory_store::{MemoryPublisher, MemoryScope};
+use crate::memory_store::{AtomicMemoryUseCommitPort, MemoryScope};
 use crate::wiki_scratch::WikiAuthorizationPort;
 use sha2::{Digest, Sha256};
 
@@ -19,8 +20,8 @@ use sha2::{Digest, Sha256};
 /// source files or interprets outcome data.
 /// Opaque evidence emitted by the U04-B availability boundary (or its future
 /// replay-runner adapter). It binds the full governed-use context to an
-/// authority-issued nonce and is deliberately neither constructible nor
-/// inspectable by callers.
+/// exact U04-B snapshot/profile commitments and is deliberately neither
+/// constructible nor inspectable by callers.
 pub struct TemporalMemoryEvidence {
     commitment: String,
     protocol: MemoryTemporalProtocol,
@@ -38,29 +39,55 @@ pub struct TemporalMemoryEvidence {
 /// Opaque U04-B availability projection. Its only production factory is the
 /// verified U04-B adapter; it intentionally has no public constructor or raw
 /// timestamp getters.
+#[allow(dead_code)] // Invoked by the future trusted service composition root.
 pub(crate) struct VerifiedAvailabilityProjection {
-    nonce: String,
     request: MemoryUseRequest,
     cutoff_at_unix_seconds: u64,
     outcome_available_at_unix_seconds: Option<u64>,
     outcome_provenance: Option<String>,
+    source_snapshot_digest: String,
+    availability_profile_digest: String,
 }
 
 impl VerifiedAvailabilityProjection {
+    /// The production U04-B composition path. It accepts only the opaque
+    /// projection emitted after a V2 adapter revalidates the exact parsed
+    /// snapshot and availability profile. No transport caller can construct
+    /// either value or choose a separate replay clock.
+    #[allow(dead_code)] // Invoked by the future trusted service composition root.
+    pub(crate) fn from_u04b_replay(
+        replay: VerifiedReplayAvailability,
+        request: MemoryUseRequest,
+    ) -> Result<Self, TemporalProtocolError> {
+        if replay.tenant_id() != request.scope().tenant_id
+            || replay.world_ref() != request.scope().world
+        {
+            return Err(TemporalProtocolError::U04BReplayScopeMismatch);
+        }
+        Ok(Self {
+            cutoff_at_unix_seconds: replay.cutoff_at_unix_seconds(),
+            source_snapshot_digest: replay.source_snapshot_digest().to_owned(),
+            availability_profile_digest: replay.availability_profile_digest().to_owned(),
+            request,
+            outcome_available_at_unix_seconds: None,
+            outcome_provenance: None,
+        })
+    }
+
     #[cfg(test)]
     fn deterministic(
-        nonce: impl Into<String>,
         request: MemoryUseRequest,
         cutoff_at_unix_seconds: u64,
         outcome_available_at_unix_seconds: Option<u64>,
         outcome_provenance: Option<String>,
     ) -> Self {
         Self {
-            nonce: nonce.into(),
             request,
             cutoff_at_unix_seconds,
             outcome_available_at_unix_seconds,
             outcome_provenance,
+            source_snapshot_digest: "sha256:test_source_snapshot".to_owned(),
+            availability_profile_digest: "sha256:test_availability_profile".to_owned(),
         }
     }
 }
@@ -73,14 +100,16 @@ pub(crate) struct TrustedTemporalEvidenceIssuer {
 }
 
 impl TrustedTemporalEvidenceIssuer {
-    /// Composition-only factory for U04-B's verified availability projection.
-    /// It is crate-private: transport callers cannot select a nonce, clock or
-    /// outcome and therefore cannot mint temporal evidence.
-    #[allow(dead_code)]
-    pub(crate) fn from_u04b_verified_projection(
-        projection: VerifiedAvailabilityProjection,
-    ) -> Self {
-        Self { projection }
+    /// Composition-only factory for a U04-B replay projection. It is
+    /// crate-private: transport callers cannot select a snapshot/profile,
+    /// tenant/world or cutoff and therefore cannot mint temporal evidence.
+    #[allow(dead_code)] // Invoked by the future trusted service composition root.
+    pub(crate) fn from_u04b_replay(
+        replay: VerifiedReplayAvailability,
+        request: MemoryUseRequest,
+    ) -> Result<Self, TemporalProtocolError> {
+        let projection = VerifiedAvailabilityProjection::from_u04b_replay(replay, request)?;
+        Ok(Self { projection })
     }
 
     #[cfg(test)]
@@ -91,16 +120,17 @@ impl TrustedTemporalEvidenceIssuer {
     #[allow(dead_code)]
     pub(crate) fn attest(&self, protocol: MemoryTemporalProtocol) -> TemporalMemoryEvidence {
         let request = &self.projection.request;
-        let commitment = temporal_commitment(
-            &self.projection.nonce,
+        let commitment = temporal_commitment(&TemporalCommitmentInput {
             protocol,
-            request.scope(),
-            request.access(),
-            request.allowed_at_unix_seconds(),
-            self.projection.cutoff_at_unix_seconds,
-            self.projection.outcome_available_at_unix_seconds,
-            self.projection.outcome_provenance.as_deref(),
-        );
+            scope: request.scope(),
+            access: request.access(),
+            allowed_at: request.allowed_at_unix_seconds(),
+            cutoff: self.projection.cutoff_at_unix_seconds,
+            outcome_at: self.projection.outcome_available_at_unix_seconds,
+            outcome_provenance: self.projection.outcome_provenance.as_deref(),
+            source_snapshot_digest: &self.projection.source_snapshot_digest,
+            availability_profile_digest: &self.projection.availability_profile_digest,
+        });
         TemporalMemoryEvidence {
             commitment,
             protocol,
@@ -136,6 +166,7 @@ pub enum TemporalProtocolError {
     OutcomeRequired,
     OutcomeAfterMemoryUse,
     OutcomeAfterReplayCutoff,
+    U04BReplayScopeMismatch,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -166,7 +197,11 @@ pub struct MemoryTemporalAdmission {
 
 impl MemoryTemporalAdmission {
     #[allow(dead_code)] // Invoked by the future trusted service composition root.
-    pub(crate) fn admit<R: ArtifactRepository, P: MemoryPublisher, A: WikiAuthorizationPort>(
+    pub(crate) fn admit<
+        R: ArtifactRepository,
+        P: AtomicMemoryUseCommitPort,
+        A: WikiAuthorizationPort,
+    >(
         protocol: MemoryTemporalProtocol,
         evidence: TemporalMemoryEvidence,
         publisher: &mut P,
@@ -203,8 +238,9 @@ impl MemoryTemporalAdmission {
         let request = request.with_temporal_commitment(evidence.commitment.clone());
         let admitted = MemoryUseAdmission::admit(publisher, artifacts, authority, request)
             .map_err(TemporalMemoryAdmissionError::Governed)?;
-        // Re-attest after the temporal decision. U33 recomputes canonical
-        // receipt identity, liveness, authorization and this exact commitment.
+        // The atomic U33 commit recomputes canonical receipt identity,
+        // liveness, authorization and this exact commitment before exposing a
+        // receipt; this comparison is only a defensive output check.
         if admitted.receipt().temporal_commitment.as_deref() != Some(evidence.commitment.as_str()) {
             return Err(TemporalMemoryAdmissionError::Governed(
                 MemoryUseAdmissionError::ReceiptMismatch,
@@ -274,28 +310,33 @@ impl MemoryTemporalProtocol {
 }
 
 #[allow(dead_code)]
-fn temporal_commitment(
-    nonce: &str,
+struct TemporalCommitmentInput<'a> {
     protocol: MemoryTemporalProtocol,
-    scope: &MemoryScope,
-    access: &crate::wiki_scratch::WikiAccess,
+    scope: &'a MemoryScope,
+    access: &'a crate::wiki_scratch::WikiAccess,
     allowed_at: u64,
     cutoff: u64,
     outcome_at: Option<u64>,
-    outcome_provenance: Option<&str>,
-) -> String {
+    outcome_provenance: Option<&'a str>,
+    source_snapshot_digest: &'a str,
+    availability_profile_digest: &'a str,
+}
+
+#[allow(dead_code)]
+fn temporal_commitment(input: &TemporalCommitmentInput<'_>) -> String {
     let bytes = serde_json::to_vec(&(
-        nonce,
-        protocol.as_str(),
-        scope,
-        &access.snapshot_ref,
-        &access.run_id,
-        &access.grant_id,
-        &access.purpose,
-        allowed_at,
-        cutoff,
-        outcome_at,
-        outcome_provenance,
+        input.protocol.as_str(),
+        input.scope,
+        &input.access.snapshot_ref,
+        &input.access.run_id,
+        &input.access.grant_id,
+        &input.access.purpose,
+        input.allowed_at,
+        input.cutoff,
+        input.outcome_at,
+        input.outcome_provenance,
+        input.source_snapshot_digest,
+        input.availability_profile_digest,
     ))
     .expect("temporal evidence inputs serialize deterministically");
     format!("sha256:{:x}", Sha256::digest(bytes))
@@ -303,12 +344,19 @@ fn temporal_commitment(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::{
         MemoryTemporalAdmission, MemoryTemporalProtocol, TemporalMemoryAdmissionError,
         TemporalProtocolError, TrustedTemporalEvidenceIssuer, VerifiedAvailabilityProjection,
     };
+    use crate::enriched_history::{
+        AvailabilityClockMode, AvailabilityProfile, EnrichedHistoryAdapter,
+        EnrichedHistoryManifest, PackageFile, ProvenanceDigests,
+    };
     use crate::governed_memory_use::MemoryUseRequest;
     use crate::memory_store::{InMemoryMemoryRegistry, MemoryPublisher, MemoryScope};
+    use crate::source_validation::SourceSnapshot;
     use crate::wiki_scratch::{
         InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
     };
@@ -317,6 +365,66 @@ mod tests {
 
     const TENANT: &str = "tenant-a";
     const WIKI_ID: &str = "018f50a1-7f00-7000-8000-000000000023";
+
+    fn digest(byte: char) -> String {
+        format!("sha256:{}", byte.to_string().repeat(64))
+    }
+
+    fn u04b_replay_projection() -> crate::enriched_history::VerifiedReplayAvailability {
+        let snapshot = SourceSnapshot::from_json(
+            &json!({
+                "contract_version": {"major": 1, "minor": 0},
+                "tenant_id": TENANT,
+                "source_namespace": "platform_history",
+                "world_ref": "world-a",
+                "observed_cutoff": "1970-01-01T00:01:40Z",
+                "sources": [{
+                    "table": "case",
+                    "uri": "file://fixture.csv",
+                    "file_digest": digest('a'),
+                    "header_digest": digest('b'),
+                    "row_count": 1,
+                    "source_contract_ref": {"id": "case", "version": "v1", "digest": digest('c')}
+                }]
+            })
+            .to_string(),
+        )
+        .expect("fixed U04-B source snapshot");
+        let profile = AvailabilityProfile::new(
+            "e0_replay",
+            1,
+            AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
+            TENANT,
+            snapshot.binding_digest(),
+        );
+        let manifest = EnrichedHistoryManifest::new_replay(
+            "platform_history",
+            "world-a",
+            "1970-01-01T00:01:40Z",
+            profile,
+            vec![
+                PackageFile::new(
+                    "case",
+                    ProvenanceDigests::new(digest('a'), digest('b'), digest('c'), digest('d')),
+                    "1970-01-01T00:01:40Z",
+                )
+                .with_field_availability(BTreeMap::from([(
+                    "event_time".to_owned(),
+                    "1970-01-01T00:01:40Z".to_owned(),
+                )]))
+                .with_replay_projection_digest(digest('e'))
+                .with_source_file_seal(
+                    snapshot
+                        .source_file_seal("case")
+                        .expect("fixed snapshot source seal"),
+                ),
+            ],
+        );
+        EnrichedHistoryAdapter::from_snapshot(manifest, &snapshot)
+            .expect("fixed replay package bound to its snapshot")
+            .verified_replay_availability(&snapshot)
+            .expect("U04-B replay projection")
+    }
 
     fn scope(protocol: &str) -> MemoryScope {
         MemoryScope::new(
@@ -389,7 +497,6 @@ mod tests {
         let request = MemoryUseRequest::new(scope("continuous"), access);
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
             VerifiedAvailabilityProjection::deterministic(
-                "u04b",
                 request.clone(),
                 100,
                 Some(101),
@@ -422,7 +529,7 @@ mod tests {
 
         let request = MemoryUseRequest::new(scope("frozen"), access);
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
-            VerifiedAvailabilityProjection::deterministic("u04b", request.clone(), 100, None, None),
+            VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
         )
         .attest(MemoryTemporalProtocol::Frozen);
         let result = MemoryTemporalAdmission::admit(
@@ -448,7 +555,7 @@ mod tests {
 
         let request = MemoryUseRequest::new(scope("frozen"), access);
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
-            VerifiedAvailabilityProjection::deterministic("u04b", request.clone(), 100, None, None),
+            VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
         )
         .attest(MemoryTemporalProtocol::Frozen);
         let admitted = MemoryTemporalAdmission::admit(
@@ -467,15 +574,71 @@ mod tests {
     }
 
     #[test]
+    fn production_issuer_only_accepts_a_revalidated_u04b_replay_projection() {
+        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let issuer = TrustedTemporalEvidenceIssuer::from_u04b_replay(
+            u04b_replay_projection(),
+            request.clone(),
+        )
+        .expect("tenant and world were bound by the verified U04-B projection");
+        let admitted = MemoryTemporalAdmission::admit(
+            MemoryTemporalProtocol::Frozen,
+            issuer.attest(MemoryTemporalProtocol::Frozen),
+            &mut registry,
+            &mut artifacts,
+            &authority,
+            request,
+        )
+        .expect("bound replay projection can produce only the governed receipt");
+
+        assert_eq!(admitted.scope().tenant_id, TENANT);
+        assert_eq!(registry.receipts().len(), 1);
+    }
+
+    #[test]
+    fn production_issuer_rejects_u04b_projection_for_another_world_before_a_receipt() {
+        let (_artifacts, registry, _authority, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(
+            MemoryScope::new(
+                TENANT,
+                "investigation",
+                "world-b",
+                "campaign-a",
+                "frozen",
+                "train",
+            ),
+            access,
+        );
+
+        assert!(matches!(
+            TrustedTemporalEvidenceIssuer::from_u04b_replay(u04b_replay_projection(), request),
+            Err(TemporalProtocolError::U04BReplayScopeMismatch)
+        ));
+        assert!(registry.receipts().is_empty());
+    }
+
+    #[test]
     fn evidence_rejects_caller_elevation_of_allowed_at_before_u33_side_effects() {
         let (mut artifacts, mut registry, authority, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access);
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
-            VerifiedAvailabilityProjection::deterministic("u04b", request.clone(), 100, None, None),
+            VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
         )
         .attest(MemoryTemporalProtocol::Frozen);
-        let mut elevated = request;
-        elevated.access.allowed_at_unix_seconds = 101;
+        let original_access = request.access().clone();
+        let elevated = MemoryUseRequest::new(
+            scope("frozen"),
+            WikiAccess::new_scoped(
+                original_access.run_id,
+                original_access.tenant_id,
+                original_access.purpose,
+                original_access.grant_id,
+                original_access.snapshot_ref,
+                101,
+                original_access.memory_scope,
+            ),
+        );
 
         assert!(matches!(
             MemoryTemporalAdmission::admit(
@@ -498,7 +661,7 @@ mod tests {
         let (mut artifacts, mut registry, authority, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access.clone());
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
-            VerifiedAvailabilityProjection::deterministic("u04b", request.clone(), 100, None, None),
+            VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
         )
         .attest(MemoryTemporalProtocol::Frozen);
         let crossed = MemoryUseRequest::new(

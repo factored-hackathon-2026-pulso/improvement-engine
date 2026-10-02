@@ -8,12 +8,16 @@ la admisión gobernada U22/U33. No es el U23 completo: no hay runner E0,
 runtime, Scout, caché ni páginas de wiki.
 
 `TemporalMemoryEvidence` sustituye los instantes construibles por el llamador.
-La emite únicamente una `VerifiedAvailabilityProjection` opaca del composition
-root confiable de U04-B o del futuro runner:
-lleva un commitment con nonce que fija tenant, scope completo, snapshot, head,
-run, grant, propósito, instante autorizado, cutoff, protocolo y, para
-Continuous, provenance y disponibilidad del outcome. El protocolo nunca abre
-archivos de fuente ni interpreta labels/outcomes.
+Su único camino no-test es `EnrichedHistoryAdapter::verified_replay_availability`
+de U04-B V2: vuelve a comprobar el `SourceSnapshot` parseado, tenant, world,
+cutoff, digest exacto del snapshot y `AvailabilityProfile` sellado antes de que
+el composition root interno cree el issuer opaco. El commitment temporal fija
+scope completo, snapshot de memoria, run, grant, propósito, instante
+autorizado, cutoff, protocolo, digest de snapshot fuente y digest de profile;
+para Continuous también fija provenance y disponibilidad del outcome. El head
+no es un dato del issuer: U33 lo vuelve a leer dentro del commit condicional y
+lo incorpora al `receipt_id` canónico. El protocolo nunca abre archivos de
+fuente ni interpreta labels/outcomes.
 
 ## Contrato ejecutable
 
@@ -29,12 +33,15 @@ archivos de fuente ni interpreta labels/outcomes.
   futura integración autorizada decida si produce una revisión nueva.
 
 `MemoryTemporalAdmission::admit` permanece `pub(crate)`. Antes de delegar a
-U22 delega una única operación condicional U33 que valida el evidence opaco y
-escribe el receipt canónico en el mismo commit. U33
-recalcula la identidad incluyendo ese commitment además de scope, snapshot,
-head, run, grant, purpose y reloj autorizado. Un cutoff/outcome/timestamp
-fabricado, feedback futuro o protocolo cruzado falla antes de registrar un
-receipt; no se emite `VerifiedMemoryUse`.
+U22 usa exclusivamente `AtomicMemoryUseCommitPort`, también `pub(crate)`: una
+implementación durable debe verificar head actual, tombstone/linaje, autoridad
+y solicitud exacta y escribir (o devolver idempotentemente) el receipt en la
+misma transacción condicional. Un fence fallido no deja receipt. El puerto
+público `MemoryPublisher` no puede emitir la capability. U33 recalcula la
+identidad incluyendo el commitment además de scope, snapshot, head, run,
+grant, purpose y reloj autorizado. Un cutoff/outcome/timestamp fabricado,
+feedback futuro o protocolo cruzado falla antes de registrar un receipt; no se
+emite `VerifiedMemoryUse`.
 
 La capability resultante sigue siendo la opaca U22: no se añade un handle a
 wiki, páginas, cache, publicación o autoridad de aprendizaje.
@@ -54,6 +61,11 @@ con `E0432` porque el módulo no existía. Las iteraciones posteriores verifican
    el ledger sin receipts.
 5. Una admisión Frozen válida emite únicamente la provenance opaca existente
    de U22/U33, conservando el head/run sellados por el receipt.
+6. Una proyección real U04-B V2 (no el fixture test-only) debe enlazar tenant,
+   world, cutoff, snapshot y profile antes de poder emitir evidencia; un world
+   cruzado falla sin receipt.
+7. Una revocación que gana antes del commit condicional niega la admisión y no
+   deja receipt ni capability.
 
 ## Dependencias y continuación
 

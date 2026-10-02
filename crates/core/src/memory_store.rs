@@ -178,6 +178,26 @@ pub trait MemoryPublisher {
     ) -> Result<MemoryUseReceipt, MemoryError>;
 }
 
+/// Crate-private conditional commit used to turn a governed memory request
+/// into its sole receipt.  Unlike the public publication port, this boundary
+/// is intentionally unavailable to transport callers: an implementation must
+/// validate the current head, tombstone ancestry, authorization and exact
+/// request identity *in the same durable transaction* that inserts (or
+/// idempotently returns) the receipt.  It must leave no receipt on a failed
+/// fence.  The in-memory implementation below models that indivisible
+/// mutation; a durable adapter must preserve it with one conditional commit.
+pub(crate) trait AtomicMemoryUseCommitPort {
+    fn commit_allowed_use<R: ArtifactRepository, A: WikiAuthorizationPort>(
+        &mut self,
+        artifacts: &mut R,
+        authority: &A,
+        scope: MemoryScope,
+        access: WikiAccess,
+        temporal_commitment: Option<String>,
+        snapshot_ref: ArtifactReference,
+    ) -> Result<MemoryUseReceipt, MemoryError>;
+}
+
 /// Re-attests one recorded use against the current U33 head, live snapshot,
 /// authorization and canonical receipt identity. U22 consumes this narrow port
 /// rather than inferring validity from a positive head version.
@@ -477,6 +497,30 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
         }
         self.receipts.push(receipt.clone());
         Ok(receipt)
+    }
+}
+
+impl AtomicMemoryUseCommitPort for InMemoryMemoryRegistry {
+    fn commit_allowed_use<R: ArtifactRepository, A: WikiAuthorizationPort>(
+        &mut self,
+        artifacts: &mut R,
+        authority: &A,
+        scope: MemoryScope,
+        access: WikiAccess,
+        temporal_commitment: Option<String>,
+        snapshot_ref: ArtifactReference,
+    ) -> Result<MemoryUseReceipt, MemoryError> {
+        // The registry owns head, tombstone and receipt state behind this one
+        // mutable boundary. `record_allowed_use` computes every fence before
+        // inserting, so a failing fence cannot leave a receipt.
+        self.record_allowed_use(
+            artifacts,
+            authority,
+            scope,
+            access,
+            temporal_commitment,
+            snapshot_ref,
+        )
     }
 }
 
