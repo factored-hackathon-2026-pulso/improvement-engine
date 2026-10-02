@@ -31,22 +31,27 @@ E0 adapter
                                                        └── aggregate safe result
 ```
 
-1. Keep the existing discovery call restricted to Arranque; do not pass this
-   evaluator into candidate generation or discovery scoring.
-2. If core selects no recurrence candidate, do not call the attestation or
-   holdout APIs.
-3. For a selected recurrence, call
+1. The runner builds `LocalRunInput` from Arranque cases and their facts only;
+   `Reproduccion` events and queries are not passed to core discovery.
+2. Core completes signal selection, simulated candidate admission, draft, and
+   evaluation. Only after this call returns does the runner consider holdout.
+3. The runner requires an E0 source, a selected primary recurrence signal with
+   `pattern_ref`, and an admitted `opportunity` candidate. If any condition is
+   false, it persists `e0_recurrence_holdout: null` and emits no holdout event.
+4. For a selected recurrence, call
    `attest_selected_e0_recurrence_candidate(discovery_source, pattern_ref,
    minimum_arranque_support)`. The supplied discovery source must be E0 and
    have projected `copilot_query` evidence.
-4. Call `evaluate_e0_recurrence_holdout(token, holdout_source, policy)` only
+5. Call `evaluate_e0_recurrence_holdout(token, holdout_source, policy)` only
    after selection. Tenant scope must match; wrong source kind and scope are
    errors. Missing `copilot_query` in the holdout is a valid `unavailable`
    result, not a zero-support result.
-5. Persist/emit only `E0HoldoutEvaluation`. Do not serialize the candidate
+6. Persist/emit only `E0HoldoutEvaluation`. Do not serialize the candidate
    token. The result contains policy id/version/threshold, selected candidate
    ref, discovery and holdout manifest commitments, safe status, aggregate
-   counts/rate, and a fixed interpretation string.
+   counts/rate, and a fixed interpretation string. The runner appends a
+   `e0_recurrence_holdout` event after the core timeline, with only the status
+   and aggregate matching/queried counts.
 
 ## Metric and status semantics
 
@@ -88,6 +93,21 @@ not in this evaluator.
 safe serialization, absent-vs-zero distinction, support boundaries, tenant
 scope rejection, rejection of refs not backed by Arranque, and that changed
 Reproduccion signatures do not alter the Arranque-selected opaque pattern or
-its support. Integration tests should additionally prove the runner calls the
-validator only after candidate selection and never feeds its result back into
-discovery; runner integration is intentionally outside this slice.
+its support. `crates/runner/tests/cli_e2e.rs` additionally verifies that the
+runner emits holdout only when a core opportunity candidate was selected,
+places it after the discovery timeline, and changing only Reproduccion query
+signatures changes the holdout status but not Arranque signal counts, proposal
+hypothesis, or candidate count. Holdout output is never an input to core.
+
+## Current augmented-sample smoke
+
+On the local augmented E0 package, the runner selected 200 Arranque cases and
+excluded 1,800 Reproduccion cases from discovery. The discovery recurrence
+signal was 154/200 cases. Post-selection holdout had 1,539 queried Reproduccion
+cases, of which 1,433 shared the selected opaque signature (9,311 basis points,
+or 93.11%); status was `replicated` under the 20-case policy. These are
+descriptive package-specific aggregates only. They do not show causality,
+customer outcomes, resolution, automation success, or business value. The
+rate applies only to cases with a projected query, not all 1,800 holdout cases.
+It also depends on the source package's query-signature normalization; it is
+not a semantic comparison of raw requests.

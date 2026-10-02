@@ -30,6 +30,17 @@ green unit test as proof that a broader product flow is complete.
   or Agent Core. A versioned recurrence detector counts distinct Arranque
   cases sharing the leading opaque Copilot-query signature; its default
   support floor is 20, configurable from the CLI and committed in provenance.
+  After a supported recurrence becomes the primary signal and the core has
+  admitted an opportunity candidate, the runner now evaluates the selected
+  opaque signature against distinct queried Reproduccion cases. This is
+  strictly post-selection and never feeds back into discovery, candidate
+  scoring, or proposal construction. The JSON result/timeline contain only
+  policy/source commitments, aggregate counts/rate, a safe status and a
+  non-causal interpretation; no selected candidate means no holdout result.
+  A synthetic CLI regression proves that changing only Reproduccion signatures
+  changes holdout status while Arranque metrics, proposal hypothesis and
+  candidate count stay fixed. The actual augmented-sample smoke is documented
+  once in `docs/architecture/e0-recurrence-holdout.md`.
   Technical errors remain an independent metric. If both qualify, the explicit
   primary policy prefers direct observed technical failures over semantically
   opaque query recurrence; every measured metric remains visible, but only the
@@ -48,13 +59,9 @@ green unit test as proof that a broader product flow is complete.
   configured cutoff and no known PII sentinels or evaluator labels.
   This demonstrates only bounded local detection/simulation behavior, not
   native Agent Core execution, causal validation, release, or business lift.
-  Persisted output contains the exact configured cutoff and no known PII
-  sentinels or evaluator labels. This demonstrates only bounded local
-  detection/simulation behavior, not native Agent Core execution, causal
-  validation, release, or business lift. Original-bank CLI was exercised
-  against the partitioned call-center CSV source and returned
-  `unsupported_source`, no signal, zero
-  candidates, and formal `do_nothing`; this is truthful manifest preparation,
+  Original-bank CLI was exercised against the partitioned call-center CSV
+  source and returned `unsupported_source`, no signal, zero candidates, and
+  formal `do_nothing`; this is truthful manifest preparation,
   not completed discovery. A supported original-bank contact/repeat/SLA
   projection remains a follow-up slice; technical errors are not inferred from
   those tables.
@@ -211,6 +218,17 @@ green unit test as proof that a broader product flow is complete.
   admits Frozen only until U20-E/U27 supplies a sealed outcome adapter. This is not the
   full U23 E0 runner, CampaignManifest, scoring, or replay-result flow; those
   remain dependent on U09, U20-E and U27.
+
+## Still pending for the complete product flow
+
+- Native Agent Core/Jev invocation and artifact execution are not connected;
+  local Scout, proposal and holdout outputs remain simulation/adapter evidence.
+- The E0 holdout checks descriptive recurrence only. Causal/business lift,
+  customer resolution, and successful automation cannot be inferred from this
+  augmented sample and have not been measured.
+- The full stateful evaluation/release loop is not yet integrated end to end.
+  U26 is an isolated synthetic-bank sandbox contract, not proof of a complete
+  E0 candidate-vs-baseline deployment or canary flow.
 
 ## Delivery discipline
 
