@@ -44,7 +44,7 @@ jobs:
         env:
           PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test
           PULSO_ALLOW_DESTRUCTIVE_TEST_DB: "1"
-        run: cargo +1.98.1 test --locked --workspace migration_enforces_cas_immutability_and_source_snapshot_kind -- --ignored
+        run: cargo +1.98.1 test --locked --workspace migration_enforces_cas_immutability_and_memory_tombstones -- --ignored
 
   verify:
     name: verify (${{ matrix.os }})

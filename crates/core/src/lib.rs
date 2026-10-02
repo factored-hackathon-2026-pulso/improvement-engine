@@ -15,6 +15,7 @@ pub mod durable_jobs;
 pub mod enriched_history;
 pub mod jev_decision;
 pub mod local_lab;
+pub mod memory_store;
 pub mod quota_grant;
 pub mod run_config;
 pub mod sandbox;
@@ -287,6 +288,15 @@ impl PostgresArtifactRepository {
     #[must_use]
     pub fn new(client: Client) -> Self {
         Self { client }
+    }
+
+    /// Returns the connection after this adapter is no longer used.
+    ///
+    /// Composition roots use this to enter another explicit persistence boundary;
+    /// callers must not retain concurrent mutable owners of one connection.
+    #[must_use]
+    pub fn into_inner(self) -> Client {
+        self.client
     }
 }
 
