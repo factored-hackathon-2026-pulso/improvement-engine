@@ -9,7 +9,7 @@ Issues and continues without waiting here.
 
 | Gap | Owner | Blocked capability | Evidence needed | Safe fallback |
 |---|---|---|---|---|
-| Engine-local Compose/LocalStack replacement | improvement-engine | Reproducible local integration stack after infra-local cleanup | Versioned local manifest, launcher and opt-in smoke test in this repository | Ephemeral PostgreSQL CI only; do not claim local-stack readiness |
+| Local container-backend smoke | development environment owner | Executing the versioned engine-local Podman Compose stack against a usable backend | `local/compose.yaml`, launcher and contract test are now owned by this repository; a successful opt-in Podman smoke with the selected Windows backend is still required | Ephemeral PostgreSQL CI and structural Compose contract only; do not claim a live local-stack run |
 | Private debug ingress | engine + infra + security | AWS `/internal/v1/debug` console | Approved listener/auth/proxy/private-access contract and integration test | Keep debug transport unexposed in AWS |
 | Database runtime secret binding | engine + infra | ECS task connection to RDS | Environment-bound secret ARN/schema, least-privilege IAM, rotation and smoke evidence | No deployment claim; use isolated test database only |
 | Controlled external egress | infra + security + external-provider owner | Live model/provider calls from AWS runtime | Approved `egress_profile`, destination policy and redacted observability | `aws_private_endpoints_only`; dependency remains unavailable |
