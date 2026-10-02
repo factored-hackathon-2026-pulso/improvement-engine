@@ -32,6 +32,12 @@ green unit test as proof that a broader product flow is complete.
   commitments and scope, includes `do_nothing`, and caps a supported route at
   `mechanism_proxy`. U20/U35 still own the sealed outcome/oracle and final
   eligibility gates.
+- U26: stateful synthetic-bank sandbox. Each tenant/namespace evaluation arm
+  starts from one sealed fixture seed, applies only typed permitted effects
+  behind an expected-revision fence, and proves the outcome through scoped
+  readback/reset receipts. Candidate and baseline arms do not share state; it
+  has no network, filesystem, customer data, Agent Core runtime or bank
+  authority. U36 extends this adapter with protected-fixture identity checks.
 - U36: protected-fixture sandbox identity boundary. A protected arm receives
   an opaque issuer capability only through trusted composition; identities are
   nonce-registered to that arm, checked with the sandbox-owned clock, and
