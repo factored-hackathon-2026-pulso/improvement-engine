@@ -145,6 +145,7 @@ impl WorkflowBridgeInput {
         ]
         .iter()
         .any(|value| value.trim().is_empty())
+            || !crate::enriched_history::is_rfc3339_utc(&input.as_of_cutoff)
             || !is_sha256_digest(&input.eligible_population_query_digest)
             || input.support_refs.is_empty()
             || input.support_refs.len() > 32
@@ -745,6 +746,82 @@ mod tests {
             ],
         )
         .expect("test bridge input is valid")
+    }
+
+    #[test]
+    fn workflow_bridge_rejects_cutoffs_without_canonical_utc_second_precision() {
+        for cutoff in [
+            "",
+            "2026-09-30",
+            "2026-09-30T00:00:00",
+            "2026-09-30T00:00:00+00:00",
+            "2026-09-30T00:00:00.001Z",
+            "2026-02-30T00:00:00Z",
+            "2026-09-30T24:00:00Z",
+            "2026-09-30T00:60:00Z",
+            "2026-09-30T00:00:60Z",
+            "2026-09-30T00:00:00Ztrailing",
+        ] {
+            assert_eq!(
+                WorkflowBridgeInput::new(
+                    "reduce_repeat_payment_contacts",
+                    "customer_episode",
+                    format!("sha256:{}", "e".repeat(64)),
+                    "customer_id",
+                    cutoff,
+                    "flow/payment-status",
+                    "payment_status_explains_next_step",
+                    "after_contact_classification",
+                    "customer_receives_correct_payment_status",
+                    "scenario_oracle/payment_status_resolution_v1",
+                    vec![format!("sha256:{}", "a".repeat(64))],
+                ),
+                Err(WorkflowBridgeError::InvalidInput),
+                "cutoff {cutoff:?} must fail closed",
+            );
+        }
+    }
+
+    #[test]
+    fn workflow_bridge_accepts_valid_whole_second_utc_cutoffs() {
+        for cutoff in ["2024-02-29T00:00:00Z", "2026-09-30T23:59:59Z"] {
+            let mut input = input_for(VerificationStatus::Supported);
+            input.as_of_cutoff = cutoff.to_owned();
+            assert!(
+                WorkflowBridgeInput::new(
+                    input.target_outcome,
+                    input.unit_of_analysis,
+                    input.eligible_population_query_digest,
+                    input.entity_key,
+                    input.as_of_cutoff,
+                    input.candidate_route,
+                    input.mechanism,
+                    input.intervention_point,
+                    input.observable_effect,
+                    input.oracle_measure,
+                    input.support_refs,
+                )
+                .is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn cutoff_change_changes_the_sealed_workflow_bridge_commitment() {
+        let report = report_for_workflow_bridge_test(VerificationStatus::Supported);
+        let first_input = input_for(VerificationStatus::Supported);
+        let mut second_input = input_for(VerificationStatus::Supported);
+        second_input.as_of_cutoff = "2026-10-01T00:00:00Z".to_owned();
+
+        let first_evidence =
+            WorkflowBridgeValidator::validate(&report, &first_input, validation_for()).unwrap();
+        let second_evidence =
+            WorkflowBridgeValidator::validate(&report, &second_input, validation_for()).unwrap();
+        let first = WorkflowBridge::assess_verified(&report, first_input, first_evidence).unwrap();
+        let second =
+            WorkflowBridge::assess_verified(&report, second_input, second_evidence).unwrap();
+
+        assert_ne!(first.commitment(), second.commitment());
     }
 
     #[test]

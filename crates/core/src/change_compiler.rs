@@ -1003,12 +1003,24 @@ mod tests {
         let authorized = TrustedChangeAuthorizer::authorize(&readiness, &bridge, spec(&bridge))
             .expect("trusted composition authorizes matching U35/U16/spec");
         let compiled = ChangeCompiler::compile(authorized).expect("eligible readiness compiles");
+        let expected_plan_commitment = match &readiness {
+            FinalEligibilityDecision::Eligible(value) => value.plan_commitment(),
+            FinalEligibilityDecision::Ineligible(_) => panic!("fixture must be eligible"),
+        };
         assert_eq!(compiled.drafts().len(), 1);
         assert_eq!(compiled.drafts()[0].kind(), CoreEntityKind::Flow);
         assert_eq!(compiled.drafts()[0].id(), "payment_status_resolution");
         assert!(!compiled.authorizes_registry_write());
         assert!(!compiled.authorizes_execution_or_release());
         assert_eq!(compiled.authorization().scope(), bridge.scope());
+        assert_eq!(
+            compiled.authorization().workflow_bridge_commitment(),
+            bridge.commitment()
+        );
+        assert_eq!(
+            compiled.authorization().evaluation_plan_commitment(),
+            expected_plan_commitment
+        );
         assert_eq!(
             compiled.authorization().source_snapshot(),
             bridge.source_snapshot_ref()
