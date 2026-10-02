@@ -51,7 +51,15 @@ goto parse
 if not defined output exit /b 90
 if not exist "%output%" mkdir "%output%"
 mkdir "%output%\fixture-run"
-> "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","discovery_case_count":200,"excluded_replay_case_count":1800,"signals":[{"metric_id":"e0_technical_error_rate","numerator":0,"denominator":187,"missing":13},{"metric_id":"e0_recurring_copilot_query_cases","numerator":154,"denominator":200,"missing":0}],"proposal":{"status":"simulated_unverified","execution_status":"not_executed","private_text":"DO_NOT_PRINT_THIS"},"formal_route":"do_nothing","private_customer_id":"DO_NOT_PRINT_THIS"}
+if "%PULSO_E2E_TEST_JSON_MODE%"=="missing_holdout" (
+  > "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","discovery_case_count":200,"excluded_replay_case_count":1800,"signals":[],"proposal":null,"formal_route":"do_nothing"}
+  exit /b 0
+)
+if "%PULSO_E2E_TEST_JSON_MODE%"=="malformed" (
+  > "%output%\fixture-run\result.json" echo {"private_customer_id":"DO_NOT_PRINT_THIS",}
+  exit /b 0
+)
+> "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","discovery_case_count":200,"excluded_replay_case_count":1800,"signals":[{"metric_id":"e0_technical_error_rate","numerator":0,"denominator":187,"missing":13},{"metric_id":"e0_recurring_copilot_query_cases","numerator":154,"denominator":200,"missing":0}],"e0_recurrence_holdout":{"status":"replicated","queried_case_count":1539,"matching_case_count":1433,"interpretation":"descriptive_recurrence_only_no_causal_or_outcome_claim"},"proposal":{"status":"simulated_unverified","execution_status":"not_executed","private_text":"DO_NOT_PRINT_THIS"},"formal_route":"do_nothing","private_customer_id":"DO_NOT_PRINT_THIS"}
 exit /b 0
 '@
         Set-Content -LiteralPath (Join-Path $script:fakeBin 'cargo.cmd') -Value $cargoShim -Encoding Ascii
@@ -60,12 +68,14 @@ exit /b 0
         $script:argsLog = Join-Path $script:fixtureRoot 'cargo-args.txt'
         $env:PULSO_E2E_TEST_ARGS_FILE = $script:argsLog
         Remove-Item Env:PULSO_E2E_TEST_FAIL -ErrorAction SilentlyContinue
+        Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
     }
 
     AfterAll {
         $env:PATH = $script:priorPath
         Remove-Item Env:PULSO_E2E_TEST_ARGS_FILE -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_FAIL -ErrorAction SilentlyContinue
+        Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $script:fixtureRoot) {
             Remove-Item -LiteralPath $script:fixtureRoot -Recurse -Force
         }
@@ -79,6 +89,7 @@ exit /b 0
         Assert-Contains $text 'e0_technical_error_rate: 0/187; missing=13'
         Assert-Contains $text 'e0_recurring_copilot_query_cases: 154/200; missing=0'
         Assert-Contains $text 'Proposal: status=simulated_unverified; execution=not_executed'
+        Assert-Contains $text 'Holdout: status=replicated; matches=1433/1539; descriptive_only'
         Assert-Contains $text 'Formal route: do_nothing'
         Assert-DoesNotContain $text 'DO_NOT_PRINT_THIS|sentinel|fixture-run|pulso-e0-script-test'
 
@@ -94,6 +105,30 @@ exit /b 0
         if ((Get-Content -LiteralPath (Join-Path $script:inputRoot 'sentinel.txt') -Raw).Trim() -ne 'input must remain unchanged') {
             throw 'Input file was modified.'
         }
+    }
+
+    It 'prints none when holdout is missing and suppresses malformed JSON content' {
+        $env:PULSO_E2E_TEST_JSON_MODE = 'missing_holdout'
+        $missingOutput = & $scriptPath -InputPath $script:inputRoot -OutputPath (Join-Path $script:fixtureRoot 'missing-output') -ObservedCutoff '2026-10-02T18:00:00Z'
+        $missingText = $missingOutput -join [Environment]::NewLine
+        Assert-Contains $missingText 'Holdout: none'
+        Assert-DoesNotContain $missingText 'DO_NOT_PRINT_THIS|private_customer_id'
+
+        $env:PULSO_E2E_TEST_JSON_MODE = 'malformed'
+        $malformedRejected = $false
+        $malformedMessage = ''
+        try {
+            $null = & $scriptPath -InputPath $script:inputRoot -OutputPath (Join-Path $script:fixtureRoot 'malformed-output') -ObservedCutoff '2026-10-02T18:00:00Z'
+        }
+        catch {
+            $malformedRejected = $true
+            $malformedMessage = $_.Exception.Message
+        }
+        finally {
+            Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
+        }
+        Assert-True $malformedRejected 'Malformed result JSON was unexpectedly accepted.'
+        Assert-DoesNotContain $malformedMessage 'DO_NOT_PRINT_THIS|private_customer_id'
     }
 
     It 'refuses an existing output directory before invoking Cargo' {

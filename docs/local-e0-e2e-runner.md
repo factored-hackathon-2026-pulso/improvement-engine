@@ -40,11 +40,14 @@ during the wrapper's preflight checks.
 
 The wrapper prints only allowlisted run status, discovery/replay counts,
 allowlisted metric IDs with numerator/denominator/missing counts, proposal
-status/execution status, and formal route. It does not print source paths,
-customer/case/query identifiers, query signatures, hypotheses, or raw Cargo
-diagnostics. Unexpected result codes or metric IDs fail closed without
-printing the result. Treat generated artifacts as sensitive derived data:
-hashing is not anonymization.
+status/execution status, formal route, and (when present) a holdout status plus
+matching/queried distinct-case counts marked `descriptive_only`. A missing
+holdout field is summarized as `none`; it is not treated as zero. It does not
+print source paths, customer/case/query identifiers, query signatures,
+hypotheses, arbitrary interpretation strings, or raw Cargo/JSON diagnostics.
+Unexpected result codes, metric IDs, malformed JSON or invalid aggregates fail
+closed without printing the result. Treat generated artifacts as sensitive
+derived data: hashing is not anonymization.
 
 The wrapper selects local-simulation mode; it makes no provider or Agent
 Core request. The observed query recurrence is descriptive only. It is not

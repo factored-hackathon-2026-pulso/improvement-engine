@@ -258,6 +258,24 @@ if ($null -ne $result['proposal']) {
     $proposalSummary = "status=$proposalStatus; execution=$executionStatus"
 }
 
+$holdoutSummary = 'none'
+$holdout = $result['e0_recurrence_holdout']
+if ($null -ne $holdout) {
+    $holdoutStatus = [string] $holdout['status']
+    Assert-AllowedValue -Value $holdoutStatus -Allowed @('replicated', 'not_observed', 'insufficient_support', 'unavailable')
+    if ($holdoutStatus -eq 'unavailable') {
+        $holdoutSummary = 'status=unavailable; descriptive_only'
+    }
+    else {
+        $queried = Get-NonNegativeInteger -Object $holdout -Name 'queried_case_count'
+        $matching = Get-NonNegativeInteger -Object $holdout -Name 'matching_case_count'
+        if ($matching -gt $queried) {
+            throw 'Engine result contains an invalid holdout aggregate; raw result values are suppressed.'
+        }
+        $holdoutSummary = "status=$holdoutStatus; matches=$matching/$queried; descriptive_only"
+    }
+}
+
 Write-Output "Status: $($result['terminal_status'])"
 Write-Output "Cases: discovery=$discoveryCases; replay_excluded=$excludedReplayCases"
 Write-Output 'Metrics:'
@@ -270,4 +288,5 @@ else {
     }
 }
 Write-Output "Proposal: $proposalSummary"
+Write-Output "Holdout: $holdoutSummary"
 Write-Output "Formal route: $($result['formal_route'])"

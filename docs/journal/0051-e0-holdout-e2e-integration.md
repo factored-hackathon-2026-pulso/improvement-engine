@@ -35,6 +35,10 @@ candidate selection, or proposal construction.
 4. Focused `cli_e2e` suite passed (3 tests), followed by the complete
    `cargo test --workspace --locked --offline` suite. Workspace Clippy with
    `--all-targets -- -D warnings` and `cargo fmt --all -- --check` passed.
+5. After consolidating the reviewed Windows local-E0 wrapper branch, extended
+   its allowlisted summary for holdout status and matching/queried counts.
+   Pester first failed because the holdout was omitted (RED), then passed 9/9
+   including absent-field and malformed-JSON no-leak cases (GREEN).
 
 The local augmented E0 smoke completed: 200 Arranque discovery cases and
 1,800 excluded Reproduccion cases; the discovery recurrence measured 154/200.
@@ -50,6 +54,9 @@ these aggregates were inspected; no row values or identifiers were emitted.
 - The holdout event is appended after all core events, including proposal and
   run completion. No result from the holdout evaluator is passed back into the
   core call.
+- The PowerShell wrapper surfaces only an allowlisted status and aggregate
+  counts with a fixed descriptive-only label. Missing field reports `none`;
+  malformed JSON errors do not include parser payload or source data.
 - Full-source manifest commitments and provenance-derived refs can change
   when Reproduccion bytes change. They are provenance, not discovery scores;
   compare semantic metrics rather than requiring byte-identical run identity.
@@ -66,3 +73,11 @@ these aggregates were inspected; no row values or identifiers were emitted.
 Independent adversarial review is pending. The code is locally committed only
 after the integration feature and any agreed E2E wrapper consolidation are
 stable; no claim of review approval is made here.
+
+## Environment boundary
+
+The engine-local Compose manifest and wrapper are in this repository, but the
+Windows Podman backend smoke remains unverified because Podman returns
+`Access is denied`. Structural tests and the native E0 CLI smoke do not prove
+the Podman Compose stack is running; `deployment-boundary.md` and
+`OPEN_GAPS.md` preserve that blocker.
