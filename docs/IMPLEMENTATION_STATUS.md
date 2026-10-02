@@ -20,6 +20,17 @@ green unit test as proof that a broader product flow is complete.
 
 ## Implemented in the cumulative branch (not yet merged)
 
+- U07 durable V2 run-event persistence: new `pulso_jobs` / `pulso_run_events`
+  migration and PostgreSQL ledger atomically compare-and-sets a child job
+  status (only V2 §15 reducer edges), advances the root run sequence, and
+  appends its UUIDv7 event; run-level events may omit `job_ref`. The
+  migration enforces tenant/run references and prohibits child-owned sequence
+  state. This is a persistence boundary only: it is not wired to U06 admission
+  or lease/quota/fence gates, and it deliberately does not implement the current
+  job/timestamp `RunActivityReadModel` because that API cannot represent V2's
+  run/sequence cursor without a versioned contract change. See ADR 0004 and
+  journal 0051; the isolated PostgreSQL test requires explicit DB opt-in.
+
 - Local E2E composition/runner (new vertical): opt-in `local-sim` CLI joins
   immutable source provenance to the safe event projection and invokes local
   detection. Only positive supported signal evidence proceeds into the local
