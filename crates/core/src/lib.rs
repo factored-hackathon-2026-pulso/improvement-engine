@@ -27,6 +27,7 @@ pub mod run_config;
 pub mod sandbox;
 pub mod source_validation;
 pub mod wiki_scratch;
+pub mod workflow_bridge;
 
 /// Stable identifier used by diagnostics and future service composition.
 pub fn service_name() -> &'static str {

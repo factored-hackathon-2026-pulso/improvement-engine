@@ -195,6 +195,7 @@ pub struct VerificationReport {
     scope: CoreTaskScope,
     candidate_digest: String,
     provenance_commitment: String,
+    source_snapshot_ref: ArtifactReference,
     input_commitment: String,
     receipt: IndependentVerificationReceipt,
 }
@@ -213,6 +214,11 @@ impl VerificationReport {
     #[must_use]
     pub fn provenance_commitment(&self) -> &str {
         &self.provenance_commitment
+    }
+
+    #[must_use]
+    pub fn source_snapshot_ref(&self) -> &ArtifactReference {
+        &self.source_snapshot_ref
     }
 
     #[must_use]
@@ -264,6 +270,7 @@ impl IndependentVerifier {
             scope: input.scope,
             candidate_digest: input.candidate_digest,
             provenance_commitment: input.provenance_commitment,
+            source_snapshot_ref: input.source_snapshot_ref,
             input_commitment: input.commitment,
             receipt,
         })
@@ -344,6 +351,42 @@ fn is_identifier(value: &str) -> bool {
         && value.bytes().all(
             |byte| matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' | b'-' | b'.'),
         )
+}
+
+#[cfg(test)]
+pub(crate) fn report_for_workflow_bridge_test(status: VerificationStatus) -> VerificationReport {
+    let scope = CoreTaskScope::new("tenant_a", "job_a", "grant_a", "authority_a")
+        .expect("fixed test scope is valid");
+    let source_snapshot_ref = ArtifactReference {
+        tenant_id: "tenant_a".to_owned(),
+        id: "018f3a54-7eaf-7c83-8a04-5bf4ec1a9d26".to_owned(),
+        revision: 1,
+        digest: format!("sha256:{}", "a".repeat(64)),
+    };
+    let candidate_digest = format!("sha256:{}", "b".repeat(64));
+    let provenance_commitment = format!("sha256:{}", "c".repeat(64));
+    let input_commitment = input_commitment(
+        &scope,
+        &candidate_digest,
+        &provenance_commitment,
+        &source_snapshot_ref,
+    );
+    let receipt = IndependentVerificationReceipt::new(
+        input_commitment.clone(),
+        "independent_evidence",
+        "v1",
+        format!("sha256:{}", "d".repeat(64)),
+        status,
+    )
+    .expect("fixed test receipt is valid");
+    VerificationReport {
+        scope,
+        candidate_digest,
+        provenance_commitment,
+        source_snapshot_ref,
+        input_commitment,
+        receipt,
+    }
 }
 
 #[cfg(test)]
