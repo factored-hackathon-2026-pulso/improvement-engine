@@ -225,7 +225,7 @@ impl PostgresRunEventLedger {
         let root = transaction
             .query_opt(
                 "SELECT run_ref::text, last_event_sequence FROM pulso_jobs \
-                 WHERE tenant_id=$1 AND id=$2::uuid FOR UPDATE",
+                 WHERE tenant_id=$1 AND id=$2::text::uuid FOR UPDATE",
                 &[&event.tenant_id, &event.run_ref],
             )
             .map_err(RunEventError::Storage)?
@@ -244,7 +244,7 @@ impl PostgresRunEventLedger {
             let job = transaction
                 .query_opt(
                     "SELECT run_ref::text, status FROM pulso_jobs \
-                     WHERE tenant_id=$1 AND id=$2::uuid FOR UPDATE",
+                     WHERE tenant_id=$1 AND id=$2::text::uuid FOR UPDATE",
                     &[&event.tenant_id, &transition.job_ref],
                 )
                 .map_err(RunEventError::Storage)?
@@ -261,7 +261,7 @@ impl PostgresRunEventLedger {
             let updated = transaction
                 .execute(
                     "UPDATE pulso_jobs SET status=$3, updated_at=CURRENT_TIMESTAMP \
-                     WHERE tenant_id=$1 AND id=$2::uuid AND status=$4",
+                     WHERE tenant_id=$1 AND id=$2::text::uuid AND status=$4",
                     &[
                         &event.tenant_id,
                         &transition.job_ref,
@@ -277,7 +277,7 @@ impl PostgresRunEventLedger {
         transaction
             .execute(
                 "UPDATE pulso_jobs SET last_event_sequence=$3 \
-                 WHERE tenant_id=$1 AND id=$2::uuid",
+                 WHERE tenant_id=$1 AND id=$2::text::uuid",
                 &[&event.tenant_id, &event.run_ref, &next_sequence],
             )
             .map_err(RunEventError::Storage)?;
@@ -286,7 +286,7 @@ impl PostgresRunEventLedger {
                 "INSERT INTO pulso_run_events \
                  (id, tenant_id, run_ref, job_ref, sequence, event_at, stage, event_code, status, \
                   reason_code, artifact_ref, trace_id, details_ref) \
-                 VALUES ($1::uuid, $2, $3::uuid, $4::uuid, $5, clock_timestamp(), $6, $7, $8, \
+                 VALUES ($1::text::uuid, $2, $3::text::uuid, $4::text::uuid, $5, clock_timestamp(), $6, $7, $8, \
                          $9, $10, $11, $12) RETURNING id::text",
                 &[
                     &event.id,
