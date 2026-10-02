@@ -27,13 +27,27 @@ green unit test as proof that a broader product flow is complete.
   structural-only evaluation; zero positive support produces an explicit
   no-op with no candidate, proposal, verifier, or evaluation. It writes an
   atomic JSON result plus NDJSON timeline and never calls external providers
-  or Agent Core. Both binary E0 fixture tests pass. The actual E0 smoke used
-  200 Arranque cases and excluded
-  1,800 Reproduccion cases; it observed a descriptive technical-error
-  metric
-  over 187 supported cases (0 flagged, 13 missing) and correctly ended
-  `complete_no_opportunity`: no candidates, proposal, verifier, or evaluation
-  were emitted without positive evidence. The formal route is `do_nothing`.
+  or Agent Core. A versioned recurrence detector counts distinct Arranque
+  cases sharing the leading opaque Copilot-query signature; its default
+  support floor is 20, configurable from the CLI and committed in provenance.
+  Technical errors remain an independent metric. If both qualify, the explicit
+  primary policy prefers direct observed technical failures over semantically
+  opaque query recurrence; every measured metric remains visible, but only the
+  primary signal currently traverses the single-candidate Scout simulation.
+  If the optional `copilot_query` source table is absent, recurrence is marked
+  unavailable rather than reported as zero. The signal proposal is a
+  simulated, unverified, non-executable `unclassified_candidate`; it makes no
+  semantic, causal, lift, or real-bank claim. Only the selected supported
+  signal proceeds into the local Scout/verifier path; zero positive support
+  produces an explicit no-op. The formal route is always `do_nothing`.
+  Actual local E0 smoke (2026-10-02) used 200 Arranque cases and excluded
+  1,800 Reproduccion cases. The leading opaque query signature recurred in
+  154/200 cases (policy floor 20); technical errors remained 0/187 supported,
+  with 13 missing. The runner recorded three Scout candidates and one
+  exploratory proposal. Persisted output contains the exact
+  configured cutoff and no known PII sentinels or evaluator labels.
+  This demonstrates only bounded local detection/simulation behavior, not
+  native Agent Core execution, causal validation, release, or business lift.
   Persisted output contains the exact configured cutoff and no known PII
   sentinels or evaluator labels. This demonstrates only bounded local
   detection/simulation behavior, not native Agent Core execution, causal

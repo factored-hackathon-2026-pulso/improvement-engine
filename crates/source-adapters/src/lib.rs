@@ -203,6 +203,7 @@ pub struct AgentInputSet {
     cases: Vec<AgentCase>,
     facts: Vec<E0Fact>,
     unsupported_metrics: Vec<UnsupportedMetric>,
+    available_tables: Vec<String>,
 }
 
 impl AgentInputSet {
@@ -219,6 +220,13 @@ impl AgentInputSet {
     #[must_use]
     pub fn unsupported_metrics(&self) -> &[UnsupportedMetric] {
         &self.unsupported_metrics
+    }
+
+    #[must_use]
+    pub fn has_available_table(&self, table: &str) -> bool {
+        self.available_tables
+            .iter()
+            .any(|available| available == table)
     }
 }
 
@@ -449,6 +457,7 @@ pub fn prepare_original_bank(
             unsupported_metrics: vec![
                 UnsupportedMetric::TechnicalErrorNotPresentInOriginalBankHistory,
             ],
+            available_tables: Vec::new(),
         },
     )
 }
@@ -647,6 +656,10 @@ pub fn prepare_e0_package(
         })
         .collect();
 
+    let available_tables = manifest_entries
+        .iter()
+        .map(|entry| entry.table.clone())
+        .collect();
     let manifest = DatasetManifest::new(
         SourceKind::E0,
         &config.tenant_id,
@@ -661,6 +674,7 @@ pub fn prepare_e0_package(
             cases,
             facts,
             unsupported_metrics: Vec::new(),
+            available_tables,
         },
     )
 }

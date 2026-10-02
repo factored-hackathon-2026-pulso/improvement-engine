@@ -48,6 +48,7 @@ const DEFAULT_MIN_RECURRING_QUERY_CASES: u64 = 20;
 const MIN_RECURRING_QUERY_CASES: u64 = 5;
 const RECURRING_QUERY_POLICY: &str = "e0_recurring_copilot_query_support_v1";
 const RECURRING_QUERY_POLICY_VERSION: u16 = 1;
+const LOCAL_PRIMARY_SIGNAL_POLICY: &str = "local_primary_signal_v2";
 
 /// Minimal, treated event projection passed from a local source adapter.
 /// Identity, prompts, transcripts, customer values and evaluator labels have
@@ -107,6 +108,7 @@ pub struct LocalRunInput {
     excluded_replay_cases: u64,
     events: Vec<LocalObservedEvent>,
     queries: Vec<LocalObservedQuery>,
+    query_table_available: bool,
     minimum_recurring_query_support: u64,
 }
 
@@ -159,6 +161,7 @@ impl LocalRunInput {
             excluded_replay_cases,
             events,
             queries: Vec::new(),
+            query_table_available: false,
             minimum_recurring_query_support: DEFAULT_MIN_RECURRING_QUERY_CASES,
         }
     }
@@ -166,6 +169,13 @@ impl LocalRunInput {
     #[must_use]
     pub fn with_queries(mut self, queries: Vec<LocalObservedQuery>) -> Self {
         self.queries = queries;
+        self.query_table_available = true;
+        self
+    }
+
+    #[must_use]
+    pub fn with_query_table_available(mut self, available: bool) -> Self {
+        self.query_table_available = available;
         self
     }
 
@@ -247,6 +257,7 @@ pub struct LocalRunResult {
     pub terminal_status: String,
     pub formal_route: String,
     pub primary_signal_policy: String,
+    pub recurrence_measurement_status: String,
     pub discovery_case_count: u64,
     pub excluded_replay_case_count: u64,
     pub signal: Option<SignalSummary>,
@@ -338,7 +349,8 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             determinism: "deterministic_given_identical_run_input".into(),
             terminal_status: "unsupported_source".into(),
             formal_route: "do_nothing".into(),
-            primary_signal_policy: "local_primary_signal_v1".into(),
+            primary_signal_policy: LOCAL_PRIMARY_SIGNAL_POLICY.into(),
+            recurrence_measurement_status: "not_applicable".into(),
             discovery_case_count: 0,
             excluded_replay_case_count: 0,
             signal: None,
@@ -421,7 +433,12 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             determinism: "deterministic_given_identical_run_input".into(),
             terminal_status: "complete_no_opportunity".into(),
             formal_route: "do_nothing".into(),
-            primary_signal_policy: "local_primary_signal_v1".into(),
+            primary_signal_policy: LOCAL_PRIMARY_SIGNAL_POLICY.into(),
+            recurrence_measurement_status: if input.query_table_available {
+                "observed".into()
+            } else {
+                "source_table_unavailable".into()
+            },
             discovery_case_count: input.case_ordinals.len() as u64,
             excluded_replay_case_count: input.excluded_replay_cases,
             signal: Some(summary),
@@ -551,7 +568,12 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         determinism: "deterministic_given_identical_run_input".into(),
         terminal_status: "complete_simulated".into(),
         formal_route: "do_nothing".into(),
-        primary_signal_policy: "local_primary_signal_v1".into(),
+        primary_signal_policy: LOCAL_PRIMARY_SIGNAL_POLICY.into(),
+        recurrence_measurement_status: if input.query_table_available {
+            "observed".into()
+        } else {
+            "source_table_unavailable".into()
+        },
         discovery_case_count: input.case_ordinals.len() as u64,
         excluded_replay_case_count: input.excluded_replay_cases,
         signal: Some(summary),
@@ -637,7 +659,7 @@ fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
 
 fn measure_signals(input: &LocalRunInput) -> Result<Vec<DeterministicSignal>, LocalRunError> {
     let mut signals = vec![measure_signal(input, false)?];
-    if !input.queries.is_empty() {
+    if input.query_table_available {
         signals.push(measure_signal(input, true)?);
     }
     Ok(signals)
@@ -885,10 +907,6 @@ fn select_primary_signal_index(
             qualifies(left_signal)
                 .cmp(&qualifies(right_signal))
                 .then_with(|| {
-                    (left_signal.numerator * right_signal.denominator)
-                        .cmp(&(right_signal.numerator * left_signal.denominator))
-                })
-                .then_with(|| {
                     (left_signal.metric_id == "e0_technical_error_rate")
                         .cmp(&(right_signal.metric_id == "e0_technical_error_rate"))
                 })
@@ -1084,7 +1102,7 @@ fn build_exploratory_draft(
             "denominator": signal.denominator,
             "missing": signal.missing,
             "pattern_ref": signal.pattern_ref,
-            "primary_signal_policy": "local_primary_signal_v1",
+            "primary_signal_policy": LOCAL_PRIMARY_SIGNAL_POLICY,
             "route_code_with_most_errors": if signal.metric_id == "e0_technical_error_rate" { json!(route) } else { json!(null) },
             "actor_layer_with_most_errors": if signal.metric_id == "e0_technical_error_rate" { json!(layer) } else { json!(null) },
             "tool_code_with_most_errors": if signal.metric_id == "e0_technical_error_rate" { json!(tool) } else { json!(null) },

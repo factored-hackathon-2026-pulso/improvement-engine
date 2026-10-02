@@ -140,7 +140,8 @@ fn to_run_input(
         excluded_replay_cases,
         events,
     )
-    .with_queries(queries))
+    .with_queries(queries)
+    .with_query_table_available(prepared.agent_inputs().has_available_table("copilot_query")))
 }
 
 fn safe_code(value: &str) -> Result<String, String> {
@@ -389,7 +390,8 @@ mod tests {
             determinism: "deterministic".into(),
             terminal_status: "complete_simulated".into(),
             formal_route: "do_nothing".into(),
-            primary_signal_policy: "local_primary_signal_v1".into(),
+            primary_signal_policy: "local_primary_signal_v2".into(),
+            recurrence_measurement_status: "observed".into(),
             discovery_case_count: 0,
             excluded_replay_case_count: 0,
             signal: None,

@@ -11,11 +11,13 @@ and Parquet package but does not produce a discovery projection or load
 
 `case_close` is treated as post-contact outcome evidence: its keys and close
 clock are checked, including closure after recorded interaction events, but no
-resolution/CSAT values enter `PreparedSource`. `signal` is checked as an
-operational table, including its time window and evidence-case references, but
-is not trusted as evidence for discovery. Discovery derives candidate evidence
-from interaction history; it does not consume precomputed platform signals.
-The discovery manifest therefore excludes `case_close` and `signal` bytes.
+resolution/CSAT values enter `PreparedSource`. `signal` is checked as a
+platform-generated operational signal, including its time window and
+evidence-case references, but is excluded from discovery to prevent
+precomputed results leaking into detection. Discovery derives candidate
+evidence from interaction history; it does not consume these precomputed
+signals. The discovery manifest therefore excludes `case_close` and `signal`
+bytes.
 
 `copilot_query` remains allowlisted interaction history. Its normalized
 `query_signature` is already hashed before projection, as are table/column

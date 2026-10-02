@@ -387,6 +387,17 @@ fn binary_emits_no_opportunity_when_discovery_has_no_positive_support() {
     let timeline = fs::read_to_string(run_dir.join("events.ndjson")).expect("timeline file");
 
     assert_eq!(result["signal"]["numerator"], 0);
+    assert_eq!(
+        result["recurrence_measurement_status"],
+        "source_table_unavailable"
+    );
+    assert!(
+        result["signals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|signal| signal["metric_id"] != "e0_recurring_copilot_query_cases")
+    );
     assert_eq!(result["excluded_replay_case_count"], 1);
     assert_eq!(result["terminal_status"], "complete_no_opportunity");
     assert!(result["candidates"].as_array().unwrap().is_empty());
@@ -444,7 +455,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
 
     assert_eq!(result["terminal_status"], "complete_simulated");
     assert_eq!(result["excluded_replay_case_count"], 1);
-    assert_eq!(result["primary_signal_policy"], "local_primary_signal_v1");
+    assert_eq!(result["primary_signal_policy"], "local_primary_signal_v2");
     assert_eq!(
         result["signal"]["metric_id"],
         "e0_recurring_copilot_query_cases"
@@ -460,4 +471,66 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
     assert!(!serialized.contains("private-case-"));
     assert!(!serialized.contains("private-query-"));
     assert!(!serialized.contains("normalized-query-pattern"));
+
+    fs::write(
+        input.join("datos/signal.parquet"),
+        b"deliberately invalid bytes: discovery must never read signal.parquet",
+    )
+    .expect("add excluded platform signal file");
+    let changed_output = temp.path().join("runs-recurrence-with-signal-table");
+    let changed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&changed_output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "21",
+        ])
+        .output()
+        .expect("rerun with excluded platform signal file");
+    assert!(
+        changed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&changed.stderr)
+    );
+    let changed_dir = fs::read_dir(&changed_output)
+        .expect("changed output directory")
+        .next()
+        .expect("changed run directory")
+        .expect("read changed run directory")
+        .path();
+    let changed_result: serde_json::Value = serde_json::from_slice(
+        &fs::read(changed_dir.join("result.json")).expect("changed result file"),
+    )
+    .expect("valid changed result JSON");
+    assert_eq!(changed_result["manifest_digest"], result["manifest_digest"]);
+    assert_eq!(
+        changed_result["signal"]["metric_id"],
+        result["signal"]["metric_id"]
+    );
+    assert_eq!(
+        changed_result["signal"]["numerator"],
+        result["signal"]["numerator"]
+    );
+    assert_eq!(
+        changed_result["signal"]["denominator"],
+        result["signal"]["denominator"]
+    );
+    assert_eq!(
+        changed_result["signal"]["pattern_ref"],
+        result["signal"]["pattern_ref"]
+    );
+    assert_eq!(changed_result["candidates"].as_array().unwrap().len(), 3);
 }

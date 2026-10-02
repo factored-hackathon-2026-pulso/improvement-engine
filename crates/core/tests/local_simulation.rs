@@ -204,7 +204,7 @@ fn recurring_opaque_copilot_query_across_cases_creates_only_a_simulated_candidat
             signal.metric_id == "e0_technical_error_rate" && signal.numerator == 0
         })
     );
-    assert_eq!(result.primary_signal_policy, "local_primary_signal_v1");
+    assert_eq!(result.primary_signal_policy, "local_primary_signal_v2");
     assert_eq!(result.terminal_status, "complete_simulated");
     assert_eq!(result.formal_route, "do_nothing");
     assert!(!result.candidates.is_empty());
@@ -215,9 +215,103 @@ fn recurring_opaque_copilot_query_across_cases_creates_only_a_simulated_candidat
     assert_eq!(proposal.status, "simulated_unverified");
     assert_eq!(proposal.execution_status, "not_executed");
     assert!(proposal.hypothesis.contains("copilot query"));
+    assert_eq!(
+        proposal.proposed_artifact["observed_evidence"]["primary_signal_policy"],
+        "local_primary_signal_v2"
+    );
     let serialized = serde_json::to_string(&result).unwrap();
     assert!(!serialized.contains(&format!("sha256_{}", "a".repeat(56))));
     assert!(!serialized.contains(&format!("sha256_{}", "b".repeat(56))));
+}
+
+#[test]
+fn direct_technical_failure_is_primary_without_hiding_other_qualifying_signals() {
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-both-signals",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:abababababababababababababababababababababababababababababababab",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=21).collect(),
+        0,
+        vec![event(
+            1,
+            1,
+            Some(true),
+            Some("payments"),
+            Some("tree"),
+            Some("status_lookup"),
+        )],
+    )
+    .with_queries(
+        (1..=20)
+            .map(|case_ordinal| {
+                LocalObservedQuery::new(
+                    case_ordinal,
+                    format!("sha256_{}", "d".repeat(56)),
+                    "2026-08-01T00:00:01Z",
+                )
+            })
+            .collect(),
+    );
+
+    let result = run_local_simulation(input).expect("both metrics qualify");
+
+    assert_eq!(result.primary_signal_policy, "local_primary_signal_v2");
+    assert_eq!(
+        result.signal.as_ref().unwrap().metric_id,
+        "e0_technical_error_rate"
+    );
+    assert!(result.signals.iter().any(|signal| signal.metric_id
+        == "e0_recurring_copilot_query_cases"
+        && signal.numerator == 20));
+    assert_eq!(
+        result.proposal.as_ref().unwrap().evidence.metric_id,
+        "e0_technical_error_rate"
+    );
+}
+
+#[test]
+fn absent_query_table_is_reported_as_unavailable_not_zero_recurrence() {
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-no-query-table",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        vec![1, 2],
+        0,
+        vec![event(
+            1,
+            1,
+            Some(false),
+            Some("payments"),
+            Some("tree"),
+            Some("status_lookup"),
+        )],
+    );
+
+    let result =
+        run_local_simulation(input).expect("available technical metric remains measurable");
+
+    assert_eq!(
+        result.recurrence_measurement_status,
+        "source_table_unavailable"
+    );
+    assert!(
+        !result
+            .signals
+            .iter()
+            .any(|signal| signal.metric_id == "e0_recurring_copilot_query_cases")
+    );
 }
 
 #[test]
