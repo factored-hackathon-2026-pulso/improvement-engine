@@ -19,16 +19,12 @@ pub struct E0QueryLab {
 /// execute Agent Core, publish a candidate or release anything.
 pub struct VerifiedE0QueryResult {
     result: QueryResult,
-    /// Opaque issuer-attested commitment. It is deliberately not written into
-    /// the public, self-digesting U08 receipt: a digest is integrity evidence,
-    /// not proof that an E0 authority issued it.
-    _attestation: E0QueryAttestation,
+    /// Unconstructable marker proving this value crossed the crate-private
+    /// E0 boundary. It makes no cryptographic attestation claim.
+    _capability: E0QueryCapability,
 }
 
-struct E0QueryAttestation {
-    #[allow(dead_code)] // Read by the future internal E0 orchestration ledger.
-    commitment: String,
-}
+struct E0QueryCapability;
 
 impl VerifiedE0QueryResult {
     #[must_use]
@@ -101,20 +97,9 @@ impl E0QueryLab {
         ) {
             return Err(E0QueryLabError::ProjectionMismatch);
         }
-        let attestation = E0QueryAttestation {
-            commitment: format!(
-                "{}:{}:{}:{}:{}:{}",
-                receipt.digest,
-                projection.source_snapshot_digest(),
-                projection.availability_profile_digest(),
-                projection.field_commitment(),
-                projection.replay_projection_digest(),
-                projection.source_evidence_digest(),
-            ),
-        };
         Ok(VerifiedE0QueryResult {
             result: QueryResult::untrusted(rows, receipt),
-            _attestation: attestation,
+            _capability: E0QueryCapability,
         })
     }
 }
@@ -141,7 +126,9 @@ mod tests {
         LabGrant, LabQuery, LabSource, LabSourceApprovalPort, LabSourceManifest, LabTable,
         LocalInvestigationLab,
     };
-    use crate::source_validation::SourceSnapshot;
+    use crate::source_validation::{
+        InMemorySourceSnapshotArtifactRegistry, SourceSnapshot, VerifiedSourceArtifactBinding,
+    };
     use serde_json::json;
 
     fn digest(byte: char) -> String {
@@ -177,18 +164,16 @@ mod tests {
 
     #[test]
     fn only_a_real_u04b_projection_can_bind_e0_table_field_and_replay_commitments() {
-        let snapshot = SourceSnapshot::from_json(
-            &json!({
-                "contract_version": {"major": 1, "minor": 0},
-                "tenant_id": "tenant_a", "source_namespace": "platform_history",
-                "world_ref": "world_a", "observed_cutoff": "1970-01-01T00:01:40Z",
-                "sources": [{"table":"case", "uri":"file://fixture.csv", "file_digest":digest('a'),
-                    "header_digest":digest('b'), "row_count":1,
-                    "source_contract_ref":{"id":"case", "version":"v1", "digest":digest('c')}}]
-            })
-            .to_string(),
-        )
-        .expect("fixed source snapshot");
+        let raw_snapshot = json!({
+            "contract_version": {"major": 1, "minor": 0},
+            "tenant_id": "tenant_a", "source_namespace": "platform_history",
+            "world_ref": "world_a", "observed_cutoff": "1970-01-01T00:01:40Z",
+            "sources": [{"table":"case", "uri":"file://fixture.csv", "file_digest":digest('a'),
+                "header_digest":digest('b'), "row_count":1,
+                "source_contract_ref":{"id":"case", "version":"v1", "digest":digest('c')}}]
+        })
+        .to_string();
+        let snapshot = SourceSnapshot::from_json(&raw_snapshot).expect("fixed source snapshot");
         let row = json!({"event_time":"1970-01-01T00:01:40Z", "status":"completed"});
         let availability = vec![ReplayRowAvailability::new(BTreeMap::from([
             ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
@@ -287,7 +272,47 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        let approved = projection.bind_approved_lab_source(approved);
+        let mut registry = InMemorySourceSnapshotArtifactRegistry::default();
+        registry.persist(artifact.clone(), raw_snapshot).unwrap();
+        let artifact_b = ArtifactReference {
+            tenant_id: "tenant_a".to_owned(),
+            id: "018f50a1-7f00-7000-8000-000000000009".to_owned(),
+            revision: 1,
+            digest: digest('b'),
+        };
+        let approved_b = InMemoryLabSourceAuthority
+            .approve(
+                LabSource::new(
+                    LabSourceManifest {
+                        tenant_id: "tenant_a".to_owned(),
+                        snapshot_ref: artifact_b,
+                        source_contract_digest: digest('b'),
+                        source_digest: digest('a'),
+                        transform_digest: digest('c'),
+                        cutoff_unix_seconds: 100,
+                        classification: crate::local_lab::LabDataClassification::Treated,
+                        safe_for_discovery: true,
+                    },
+                    vec![LabTable::new(
+                        "case",
+                        vec!["event_time", "status"],
+                        vec![BTreeMap::from([
+                            ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                            ("status".to_owned(), "completed".to_owned()),
+                        ])],
+                    )],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        assert!(
+            projection
+                .bind_approved_lab_source(approved_b, registry.resolve(&artifact).unwrap())
+                .is_err()
+        );
+        let approved = projection
+            .bind_approved_lab_source(approved, registry.resolve(&artifact).unwrap())
+            .unwrap();
         let access = LabAccess::new(
             "real_u04",
             "tenant_a",
@@ -365,8 +390,13 @@ mod tests {
         let approved = InMemoryLabSourceAuthority
             .approve(source)
             .expect("fixed source approval");
-        let approved =
-            projection_for_snapshot(tenant, u04_binding_byte).bind_approved_lab_source(approved);
+        let binding = VerifiedSourceArtifactBinding::deterministic_for_test(
+            snapshot.clone(),
+            digest(u04_binding_byte),
+        );
+        let approved = projection_for_snapshot(tenant, u04_binding_byte)
+            .bind_approved_lab_source(approved, binding)
+            .unwrap();
         (approved, snapshot)
     }
 

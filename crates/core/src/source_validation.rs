@@ -5,6 +5,8 @@
 //! authenticated source connection and passes only an approved snapshot into this
 //! deterministic verifier.
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -258,6 +260,100 @@ pub struct SourceFileSeal {
     source_contract_id: String,
     source_contract_version: String,
     source_contract_digest: String,
+}
+
+/// Opaque mapping emitted only by the immutable source-artifact registry after
+/// it reparses the stored snapshot bytes. It deliberately carries both digest
+/// domains, rather than pretending they are interchangeable.
+pub(crate) struct VerifiedSourceArtifactBinding {
+    artifact_ref: crate::ArtifactReference,
+    snapshot_binding_digest: String,
+}
+
+impl VerifiedSourceArtifactBinding {
+    pub(crate) fn artifact_ref(&self) -> &crate::ArtifactReference {
+        &self.artifact_ref
+    }
+
+    pub(crate) fn snapshot_binding_digest(&self) -> &str {
+        &self.snapshot_binding_digest
+    }
+
+    #[cfg(test)]
+    pub(crate) fn deterministic_for_test(
+        artifact_ref: crate::ArtifactReference,
+        snapshot_binding_digest: String,
+    ) -> Self {
+        Self {
+            artifact_ref,
+            snapshot_binding_digest,
+        }
+    }
+}
+
+/// Minimal immutable source-artifact registry seam. Production storage can
+/// replace this port, but cannot emit a mapping without proving the exact raw
+/// snapshot bytes still parse to the stored binding.
+#[allow(dead_code)] // Concrete local registry for the future source adapter.
+#[derive(Default)]
+pub(crate) struct InMemorySourceSnapshotArtifactRegistry {
+    raw_by_artifact: BTreeMap<(String, String, u64, String), String>,
+}
+
+impl InMemorySourceSnapshotArtifactRegistry {
+    #[allow(dead_code)]
+    pub(crate) fn persist(
+        &mut self,
+        artifact_ref: crate::ArtifactReference,
+        raw_snapshot: String,
+    ) -> Result<(), SourceDefinitionError> {
+        let snapshot = SourceSnapshot::from_json(&raw_snapshot)?;
+        if artifact_ref.tenant_id != snapshot.tenant_id() {
+            return Err(SourceDefinitionError::Invalid(
+                "artifact tenant differs from snapshot",
+            ));
+        }
+        let key = (
+            artifact_ref.tenant_id.clone(),
+            artifact_ref.id.clone(),
+            artifact_ref.revision,
+            artifact_ref.digest.clone(),
+        );
+        if self
+            .raw_by_artifact
+            .get(&key)
+            .is_some_and(|existing| existing != &raw_snapshot)
+        {
+            return Err(SourceDefinitionError::Invalid(
+                "source artifact revision is immutable",
+            ));
+        }
+        self.raw_by_artifact.insert(key, raw_snapshot);
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn resolve(
+        &self,
+        artifact_ref: &crate::ArtifactReference,
+    ) -> Result<VerifiedSourceArtifactBinding, SourceDefinitionError> {
+        let raw = self
+            .raw_by_artifact
+            .get(&(
+                artifact_ref.tenant_id.clone(),
+                artifact_ref.id.clone(),
+                artifact_ref.revision,
+                artifact_ref.digest.clone(),
+            ))
+            .ok_or(SourceDefinitionError::Invalid(
+                "source artifact is not persisted",
+            ))?;
+        let snapshot = SourceSnapshot::from_json(raw)?;
+        Ok(VerifiedSourceArtifactBinding {
+            artifact_ref: artifact_ref.clone(),
+            snapshot_binding_digest: snapshot.binding_digest(),
+        })
+    }
 }
 
 impl SourceFileSeal {

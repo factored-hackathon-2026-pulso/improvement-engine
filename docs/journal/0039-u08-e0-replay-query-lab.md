@@ -20,11 +20,14 @@ commitment canónico de disponibilidad de campos y digest de proyección replay.
 candidate opaco recuperado por U08 desde su ledger efímero, aún autorizado, con
 el receipt y las filas exactas que U08 almacenó. Un digest canónico de
 `QueryReceipt` sólo detecta alteración; **no autentica un emisor** y no puede
-crear una capability E0. La capability de éxito conserva una atestación interna
-opaca, separada del receipt público y de las filas.
+crear una capability E0. La capability de éxito es un marcador opaco no
+constructible, separado del receipt público y de las filas; no afirma ser una
+firma ni una atestación criptográfica.
 
 Antes de emitirla, compara el `SourceSnapshot.binding_digest` sellado por U04
-con un mapeo explícito y privado almacenado en la capability aprobada del lab,
+con un mapeo explícito y privado emitido por el registro de snapshots
+inmutables tras volver a parsear los bytes crudos del snapshot, y almacenado
+en la capability aprobada del lab,
 los tres digests, cutoff, tabla y la tabla fuente
 exacta (schema y filas) contra la evidencia `TableInput` validada por U04. La
 lista de campos permitidos se deriva de las columnas presentes en ese

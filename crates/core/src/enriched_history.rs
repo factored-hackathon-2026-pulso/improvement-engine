@@ -14,7 +14,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::local_lab::ApprovedLabSource;
-use crate::source_validation::{SourceFileSeal, SourceSnapshot};
+use crate::source_validation::{SourceFileSeal, SourceSnapshot, VerifiedSourceArtifactBinding};
 
 const DISCOVERY_FORBIDDEN_TABLES: &[&str] = &["labels", "signal"];
 const EVENT_TIME_CLOCK: &str = "event_time";
@@ -616,8 +616,17 @@ impl VerifiedE0QueryProjection {
     /// The only U04-facing composition path for an E0 lab source. It carries
     /// the canonical snapshot binding as a separate sealed-domain value; it
     /// never substitutes `ArtifactReference.digest` for that identity.
-    pub(crate) fn bind_approved_lab_source(&self, source: ApprovedLabSource) -> ApprovedLabSource {
-        source.bind_verified_u04_snapshot(self.source_snapshot_digest.clone())
+    pub(crate) fn bind_approved_lab_source(
+        &self,
+        source: ApprovedLabSource,
+        binding: VerifiedSourceArtifactBinding,
+    ) -> Result<ApprovedLabSource, EnrichedHistoryError> {
+        if binding.snapshot_binding_digest() != self.source_snapshot_digest {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        source
+            .bind_verified_u04_snapshot(binding)
+            .map_err(|_| EnrichedHistoryError::SnapshotAvailabilityProfileMismatch)
     }
 
     #[cfg(test)]

@@ -251,10 +251,15 @@ pub struct ApprovedLabSource {
 impl ApprovedLabSource {
     /// Crate-private U04 composition hook. A public source manifest cannot
     /// manufacture this cross-domain binding.
-    #[allow(dead_code)] // Called by the future trusted U04/U08 composition root.
-    pub(crate) fn bind_verified_u04_snapshot(mut self, binding_digest: String) -> Self {
-        self.u04_source_snapshot_binding = Some(binding_digest);
-        self
+    pub(crate) fn bind_verified_u04_snapshot(
+        mut self,
+        binding: crate::source_validation::VerifiedSourceArtifactBinding,
+    ) -> Result<Self, LabError> {
+        if binding.artifact_ref() != &self.source.snapshot_ref {
+            return Err(LabError::SourceApprovalDenied);
+        }
+        self.u04_source_snapshot_binding = Some(binding.snapshot_binding_digest().to_owned());
+        Ok(self)
     }
 }
 

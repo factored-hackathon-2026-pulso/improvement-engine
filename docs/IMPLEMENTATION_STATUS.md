@@ -105,8 +105,8 @@ green unit test as proof that a broader product flow is complete.
   are intentionally not compared); it also binds exact verified source
   table/rows. Field authorization comes from the actual `TableInput`
   projection and includes filter reads. Public receipt digests are integrity
-  checks, not E0 authentication; the E0 result has a separate opaque internal
-  attestation. It blocks labels, later joins, future/cross-tenant or
+  checks, not E0 authentication; the E0 result has only an unconstructable
+  opaque capability marker, not an attestation claim. It blocks labels, later joins, future/cross-tenant or
   divergent snapshot mapping/evidence and source writes. It does not implement U12-E,
   Scout, model/Agent Core access, evaluation or release.
 - U23-P / Issue #47: the narrow Frozen/Continuous temporal protocol over
