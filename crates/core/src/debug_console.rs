@@ -244,6 +244,27 @@ pub(crate) struct DebugViewer {
 /// ```compile_fail
 /// use improvement_engine_core::debug_console::DebugConsoleApi;
 /// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::debug_console::DebugIdentityPort;
+/// struct Forged;
+/// impl DebugIdentityPort for Forged {}
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::debug_console::DebugViewer;
+/// let _ = DebugViewer { tenant: todo!() };
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::debug_console::DebugAuthenticationRequest;
+/// let _ = DebugAuthenticationRequest::new("session_a");
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::debug_console::DebugTimelineRequest;
+/// let _ = DebugTimelineRequest::new("run_a", None, 10);
+/// ```
 #[derive(Debug)]
 pub(crate) struct DebugViewerIssuer {
     _private: (),

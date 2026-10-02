@@ -26,6 +26,13 @@ con SSO/OIDC. Esta decisión evita que un consumidor externo seleccione un
 identidad como endpoint utilizable. El futuro adapter deberá aterrizar en una
 slice explícita y preservar esta capability de composición.
 
+Los doctests `compile_fail` bloquean explícitamente desde un crate consumidor
+el import/implementación de `DebugIdentityPort`, la construcción de
+`DebugViewer`, `DebugAuthenticationRequest` y `DebugTimelineRequest`, y el
+import/construcción del issuer o de `DebugConsoleApi`. No son tipos de request
+de una API externa: sólo el futuro adapter autenticado podrá traducir el
+transporte a esta composición interna.
+
 Conserva el cursor opaco de U07 y mapea los fallos a estados de transporte
 seguros. En particular, un cursor vencido o purgado es `Gone`, sin reconstruir
 una línea de tiempo ni afirmar que el run terminó; un run inexistente es
