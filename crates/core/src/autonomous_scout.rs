@@ -762,6 +762,7 @@ pub(crate) struct VerifiedFrozenE0ScoutCandidate {
 }
 
 impl VerifiedFrozenE0ScoutCandidate {
+    #[allow(dead_code)] // Consumed by the future U15-EQ composition root.
     pub(crate) fn scope(&self) -> &CoreTaskScope {
         &self.scope
     }
@@ -776,6 +777,22 @@ impl VerifiedFrozenE0ScoutCandidate {
     }
     pub(crate) fn source_snapshot_ref(&self) -> ArtifactReference {
         self.e0.source_snapshot_ref.clone()
+    }
+    #[allow(dead_code)] // Consumed by the future U15-EQ composition root.
+    pub(crate) fn cutoff_unix_seconds(&self) -> u64 {
+        self.e0.cutoff_unix_seconds
+    }
+    #[allow(dead_code)] // Consumed by the future U15-EQ composition root.
+    pub(crate) fn source_snapshot_binding(&self) -> &str {
+        &self.e0.source_snapshot_binding
+    }
+    #[allow(dead_code)] // Consumed by the future U15-EQ composition root.
+    pub(crate) fn availability_profile_digest(&self) -> &str {
+        &self.e0.availability_profile_digest
+    }
+    #[allow(dead_code)] // Consumed by the future U15-EQ composition root.
+    pub(crate) fn run_id(&self) -> &str {
+        &self.e0.run_id
     }
     pub(crate) fn metric_policy(&self) -> (&str, u16, &str) {
         (

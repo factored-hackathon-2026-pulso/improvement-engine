@@ -495,6 +495,27 @@ pub(crate) fn real_signal_for_scout_test() -> E0DiagnosticSignal {
     .expect("real E0 chain is valid")
 }
 
+/// Test-only faithful U02→U04-B replay companion for the real E0 signal.
+/// It is deliberately emitted by the same helper that creates the U08 result,
+/// rather than being a nominal `VerifiedReplayAvailability` fixture.
+#[cfg(all(test, feature = "test-support"))]
+pub(crate) fn real_signal_and_replay_for_frozen_summary_test() -> (
+    E0DiagnosticSignal,
+    crate::enriched_history::VerifiedReplayAvailability,
+) {
+    let (evidence, replay) =
+        tests::authenticated_result_with_replay('a', vec!["event_time", "technical_error"]);
+    (
+        E0DiagnosticSensor::measure(
+            &DiagnosticMetricSpec::from_policy(DiagnosticMetricPolicy::TechnicalErrorRateV1),
+            E0DiagnosticWindow::new(100, 100).expect("fixed test window"),
+            &[evidence],
+        )
+        .expect("real E0 chain is valid"),
+        replay,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn metric_spec_commitment(
     metric_id: &str,
@@ -586,6 +607,16 @@ mod tests {
         projection_seed: char,
         selected_columns: Vec<&str>,
     ) -> VerifiedE0QueryResult {
+        authenticated_result_with_replay(projection_seed, selected_columns).0
+    }
+
+    pub(super) fn authenticated_result_with_replay(
+        projection_seed: char,
+        selected_columns: Vec<&str>,
+    ) -> (
+        VerifiedE0QueryResult,
+        crate::enriched_history::VerifiedReplayAvailability,
+    ) {
         // Deliberately non-canonical: outer whitespace and nested/root key
         // order are part of the U04 source-byte binding, not the U02 artifact
         // content digest.
@@ -740,7 +771,7 @@ mod tests {
         let candidate = lab
             .governed_e0_candidate(session.session_id(), &access, &result.receipt().digest, 100)
             .unwrap();
-        E0QueryLab::admit(&projection, candidate).unwrap()
+        (E0QueryLab::admit(&projection, candidate).unwrap(), replay)
     }
 
     fn spec() -> DiagnosticMetricSpec {

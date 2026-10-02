@@ -119,6 +119,42 @@ impl FrozenE0OpportunityQualification {
     pub fn commitment(&self) -> &str {
         &self.commitment
     }
+
+    /// Crate-private follow-on boundary. A scratch preparation must recompute
+    /// this intentionally non-causal qualification from the exact candidate
+    /// and verifier report before it can touch a workspace.
+    #[allow(dead_code)] // Consumed by the future U15-EQ composition root.
+    pub(crate) fn revalidate_for_inputs(
+        &self,
+        candidate: &VerifiedScoutCandidate,
+        report: &FrozenE0VerificationReport,
+    ) -> Result<(), FrozenE0QualificationError> {
+        let expected = FrozenE0QualificationComposer::compose(candidate, report)?;
+        if self.matches(&expected) {
+            Ok(())
+        } else {
+            Err(FrozenE0QualificationError::CandidateReportMismatch)
+        }
+    }
+
+    #[allow(dead_code)] // Reached only through the pending U15-EQ composition root.
+    fn matches(&self, other: &Self) -> bool {
+        self.scope == other.scope
+            && self.candidate_digest == other.candidate_digest
+            && self.candidate_provenance_commitment == other.candidate_provenance_commitment
+            && self.e0_provenance_commitment == other.e0_provenance_commitment
+            && self.verifier_policy_commitment == other.verifier_policy_commitment
+            && self.verification_input_commitment == other.verification_input_commitment
+            && self.verification_evidence_commitment == other.verification_evidence_commitment
+            && self.verification_report_commitment == other.verification_report_commitment
+            && self.source_snapshot_ref == other.source_snapshot_ref
+            && self.provenance == other.provenance
+            && self.commercial_impact == other.commercial_impact
+            && self.operational_effort == other.operational_effort
+            && self.next_step == other.next_step
+            && self.route == other.route
+            && self.commitment == other.commitment
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

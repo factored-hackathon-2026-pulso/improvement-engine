@@ -53,6 +53,13 @@ green unit test as proof that a broader product flow is complete.
   operational effort not assessed; mechanism/evaluation still required; route
   none. It is not U16, a proposal/value/causal conclusion, evaluation or
   release authority and has no storage, LLM, Core or runtime effect.
+- U15-EQ: Frozen E0 scratch-summary preparation. A crate-private composition
+  revalidates the exact U13-A/U14-E/U14-EQ and U04-B replay chain before a
+  single static allowlisted U15 `Create` transform. Scope/access are exact
+  Frozen bindings with `allowed_at == cutoff`; output is opaque commitments
+  only, never pages, workspace/text, publication, memory use or an artifact.
+  U33-E publication and U23-E governed-memory linkage remain explicitly
+  pending.
 - U16: provisional WorkflowBridge. It accepts only a U14 verification report
   and sealed internal catalogue/source-validation facts, preserves its
   commitments and scope, includes `do_nothing`, and caps a supported route at
