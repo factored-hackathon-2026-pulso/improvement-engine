@@ -493,6 +493,7 @@ pub(crate) struct SharedScoutCandidateRepository {
 
 #[cfg(test)]
 impl SharedScoutCandidateRepository {
+    #[cfg(feature = "test-support")]
     fn recorded_outcomes(&self) -> Vec<ScoutCandidateRecordOutcome> {
         self.outcomes
             .lock()
@@ -1413,6 +1414,7 @@ mod candidate_admission_tests {
         .unwrap()
     }
 
+    #[cfg(feature = "test-support")]
     fn e0_core(scope: CoreTaskScope, input: &str, attempt: &str) -> CoreTaskReceipt {
         let binding = CoreTaskBinding::new(
             "scout",
