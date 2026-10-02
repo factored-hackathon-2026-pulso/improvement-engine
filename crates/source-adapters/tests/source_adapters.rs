@@ -504,8 +504,6 @@ fn e0_cutoff_excludes_future_cases_and_future_interaction_events_before_split() 
             event_time_unix_micros,
             ..
         } => *event_time_unix_micros <= 20_000_000,
-        improvement_engine_source_adapters::E0Fact::Signal { window_end, .. } =>
-            window_end.as_str() <= "1970-01-01T00:00:20Z",
         improvement_engine_source_adapters::E0Fact::IdentityCheck { event_time, .. }
         | improvement_engine_source_adapters::E0Fact::Turn { event_time, .. }
         | improvement_engine_source_adapters::E0Fact::RoutingStep { event_time, .. }

@@ -23,8 +23,13 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+mod e0_package_validation;
+pub use e0_package_validation::{
+    PackageValidationError, ValidatedE0OperationalPackage, validate_e0_operational_package,
+};
+
 const PREPARATION_POLICY_VERSION: &str = "pulso.source-preparation.v1";
-const E0_AGENT_TABLES: &[&str] = &[
+const E0_DISCOVERY_TABLES: &[&str] = &[
     "case",
     "identity_check",
     "turn",
@@ -32,7 +37,6 @@ const E0_AGENT_TABLES: &[&str] = &[
     "copilot_query",
     "tool_call",
     "approval",
-    "signal",
 ];
 
 /// Provenance and deterministic limits supplied by the local runner.
@@ -305,18 +309,6 @@ pub enum E0Fact {
         decision: Option<String>,
         related_tool_ordinal: Option<u32>,
     },
-    Signal {
-        event_ordinal: u32,
-        kind: String,
-        scope: String,
-        window_start: String,
-        window_end: String,
-        window_end_unix_micros: i64,
-        support_cases: u32,
-        support_analysts: u32,
-        consistency: Option<String>,
-        status: String,
-    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -470,7 +462,7 @@ pub fn prepare_e0_package(
 ) -> Result<PreparedSource, AdapterError> {
     let data_dir = root.join("datos");
     let mut manifest_entries = Vec::new();
-    for table in E0_AGENT_TABLES {
+    for table in E0_DISCOVERY_TABLES {
         let relative_path = PathBuf::from("datos").join(format!("{table}.parquet"));
         let path = root.join(&relative_path);
         if path.exists() {
@@ -505,8 +497,8 @@ pub fn prepare_e0_package(
                 .file_stem()
                 .and_then(|name| name.to_str())
                 .unwrap_or_default();
-            if !E0_AGENT_TABLES.contains(&table)
-                && !matches!(table, "labels" | "timeline" | "case_close")
+            if !E0_DISCOVERY_TABLES.contains(&table)
+                && !matches!(table, "labels" | "timeline" | "case_close" | "signal")
             {
                 return Err(AdapterError::InvalidInput(
                     "E0 package contains an unclassified Parquet table",
@@ -1173,7 +1165,6 @@ fn read_other_facts(
     read_routing_steps(data_dir, ordinal_by_case_id, &mut facts)?;
     read_copilot_queries(data_dir, ordinal_by_case_id, &mut facts)?;
     read_approvals(data_dir, ordinal_by_case_id, tool_ordinal_by_id, &mut facts)?;
-    read_signals(data_dir, &mut facts)?;
     facts.sort_by(fact_order);
     Ok(facts)
 }
@@ -1561,46 +1552,6 @@ fn read_approvals(
     Ok(())
 }
 
-fn read_signals(data_dir: &Path, output: &mut Vec<E0Fact>) -> Result<(), AdapterError> {
-    for batch in parquet_batches_if_present(data_dir, "signal")? {
-        let ids = required_strings(&batch, "signal_id")?;
-        let kinds = required_strings(&batch, "kind")?;
-        let scopes = required_strings(&batch, "scope")?;
-        let statuses = required_strings(&batch, "status")?;
-        let start_index = column_index(batch.schema(), "window_start")?;
-        let end_index = column_index(batch.schema(), "window_end")?;
-        for row in 0..batch.num_rows() {
-            let (window_end, window_end_unix_micros) =
-                timestamp_value(batch.column(end_index).as_ref(), row)?;
-            output.push(E0Fact::Signal {
-                event_ordinal: stable_event_ordinal(ids.value(row), row),
-                kind: safe_domain(
-                    kinds.value(row),
-                    &[
-                        "repeated_query",
-                        "consistent_sequence",
-                        "high_acceptance",
-                        "drift",
-                    ],
-                ),
-                scope: opaque_category(scopes.value(row)),
-                window_start: timestamp_value(batch.column(start_index).as_ref(), row)?.0,
-                window_end,
-                window_end_unix_micros,
-                support_cases: optional_u64(&batch, "support_cases", row)?.unwrap_or(0) as u32,
-                support_analysts: optional_u64(&batch, "support_analysts", row)?.unwrap_or(0)
-                    as u32,
-                consistency: optional_number_text(&batch, "consistency", row)?,
-                status: safe_domain(
-                    statuses.value(row),
-                    &["new", "accepted", "in_build", "discarded"],
-                ),
-            });
-        }
-    }
-    Ok(())
-}
-
 fn parquet_batches_if_present(
     data_dir: &Path,
     table: &str,
@@ -1935,7 +1886,6 @@ fn fact_case_ordinal(fact: &E0Fact) -> Option<u32> {
         | E0Fact::CopilotQuery { case_ordinal, .. }
         | E0Fact::ToolCall { case_ordinal, .. }
         | E0Fact::Approval { case_ordinal, .. } => Some(*case_ordinal),
-        E0Fact::Signal { .. } => None,
     }
 }
 
@@ -1969,10 +1919,6 @@ fn fact_event_unix_micros(fact: &E0Fact) -> Option<i64> {
             requested_at_unix_micros,
             ..
         } => *requested_at_unix_micros,
-        E0Fact::Signal {
-            window_end_unix_micros,
-            ..
-        } => *window_end_unix_micros,
     };
     Some(micros)
 }
@@ -2020,11 +1966,6 @@ fn fact_key(fact: &E0Fact) -> (u32, &'static str, u32, &str) {
             requested_at,
             ..
         } => (*case_ordinal, "approval", *event_ordinal, requested_at),
-        E0Fact::Signal {
-            event_ordinal,
-            window_start,
-            ..
-        } => (0, "signal", *event_ordinal, window_start),
     }
 }
 
