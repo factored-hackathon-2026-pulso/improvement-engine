@@ -352,26 +352,20 @@ impl CompilationAuthorization {
         let evaluation_plan_commitment = readiness.plan_commitment().to_owned();
         let candidate_route = bridge.input().candidate_route().to_owned();
         let mechanism = bridge.input().mechanism().to_owned();
-        let commitment = digest(&[
-            scope.tenant_id(),
-            scope.job_id(),
-            scope.grant_id(),
-            scope.authority_ref(),
-            &source_snapshot.tenant_id,
-            &source_snapshot.id,
-            &source_snapshot.revision.to_string(),
-            &source_snapshot.digest,
+        let commitment = compilation_authorization_commitment(
+            &scope,
+            &source_snapshot,
             &workflow_bridge_commitment,
             &evaluation_plan_commitment,
             &candidate_route,
             &mechanism,
-            operation.target_kind.as_str(),
-            operation_name(operation.operation),
+            operation.operation,
+            operation.target_kind,
             &entity_id,
             &entity_version,
             &content_digest,
-            precondition.commitment(),
-        ]);
+            &precondition,
+        );
         Self {
             scope,
             source_snapshot,
@@ -431,6 +425,25 @@ pub struct CompiledChange {
     commitment: String,
 }
 
+/// Verified, immutable material that may cross only into U18's crate-private
+/// registry write boundary. It is reconstructed from the compiled draft and
+/// sealed authorization immediately before the writer evaluates its predicate.
+#[allow(dead_code)] // Consumed by the crate-private U18 registry writer.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RegistryWriteMaterial {
+    pub(crate) scope: CoreTaskScope,
+    pub(crate) source_snapshot: ArtifactReference,
+    pub(crate) authorization_commitment: String,
+    pub(crate) compiled_commitment: String,
+    pub(crate) predicate: ExecutablePredicate,
+    pub(crate) kind: CoreEntityKind,
+    pub(crate) entity_id: String,
+    pub(crate) entity_version: String,
+    pub(crate) content: Value,
+    pub(crate) content_digest: String,
+    pub(crate) draft_digest: String,
+}
+
 impl CompiledChange {
     #[must_use]
     pub fn drafts(&self) -> &[EntityDraft] {
@@ -451,6 +464,68 @@ impl CompiledChange {
     #[must_use]
     pub fn authorizes_execution_or_release(&self) -> bool {
         false
+    }
+
+    #[allow(dead_code)] // Consumed by the crate-private U18 registry writer.
+    pub(crate) fn registry_write_material(&self) -> Result<RegistryWriteMaterial, CompilerError> {
+        if self.drafts.len() != 1 || self.authorization.operation != ChangeOperationKind::Add {
+            return Err(CompilerError::AuthorizationBindingMismatch);
+        }
+        let draft = &self.drafts[0];
+        let authorization = &self.authorization;
+        let expected_content_digest = digest(&[&canonical_json(&draft.content)]);
+        let expected_draft_digest = digest(&[
+            draft.kind.as_str(),
+            &draft.id,
+            &draft.version,
+            authorization.precondition.commitment(),
+            &canonical_json(&draft.content),
+        ]);
+        let expected_compiled_commitment = digest(&[authorization.commitment(), &draft.digest]);
+        let expected_authorization_commitment = compilation_authorization_commitment(
+            &authorization.scope,
+            &authorization.source_snapshot,
+            &authorization.workflow_bridge_commitment,
+            &authorization.evaluation_plan_commitment,
+            &authorization.candidate_route,
+            &authorization.mechanism,
+            authorization.operation,
+            authorization.kind,
+            &authorization.entity_id,
+            &authorization.entity_version,
+            &authorization.content_digest,
+            &authorization.precondition,
+        );
+        if draft.kind != authorization.kind
+            || draft.id != authorization.entity_id
+            || draft.version != authorization.entity_version
+            || draft.digest != expected_draft_digest
+            || authorization.content_digest != expected_content_digest
+            || authorization.commitment != expected_authorization_commitment
+            || self.commitment != expected_compiled_commitment
+            || !matches!(
+                &authorization.precondition.predicate,
+                ExecutablePredicate::EntityAbsent { kind, entity_id }
+                    if *kind == draft.kind && entity_id == &draft.id
+            )
+            || !is_minimal_core_flow(&draft.content)
+            || authorization.scope.tenant_id() != authorization.source_snapshot.tenant_id
+        {
+            return Err(CompilerError::AuthorizationBindingMismatch);
+        }
+        Ok(RegistryWriteMaterial {
+            scope: authorization.scope.clone(),
+            source_snapshot: authorization.source_snapshot.clone(),
+            authorization_commitment: authorization.commitment.clone(),
+            compiled_commitment: self.commitment.clone(),
+            predicate: authorization.precondition.predicate.clone(),
+            kind: draft.kind,
+            entity_id: draft.id.clone(),
+            entity_version: draft.version.clone(),
+            content: draft.content.clone(),
+            content_digest: authorization.content_digest.clone(),
+            draft_digest: draft.digest.clone(),
+        })
     }
 }
 
@@ -509,9 +584,132 @@ impl ChangeCompiler {
     }
 }
 
+/// Trusted in-crate fixture for U18's writer regressions. It still reaches the
+/// real compiler from an opaque authorized capability; it is unavailable from
+/// non-test consumers and must never become a service composition path.
+#[cfg(test)]
+pub(crate) fn compiled_for_governed_registry_test(tenant_id: &str) -> CompiledChange {
+    let scope =
+        CoreTaskScope::new(tenant_id, "job_a", "grant_a", "authority_a").expect("fixed scope");
+    let source_snapshot = ArtifactReference {
+        tenant_id: tenant_id.to_owned(),
+        id: "018f0f4e-7bbd-7000-8000-000000000600".to_owned(),
+        revision: 1,
+        digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            .to_owned(),
+    };
+    let content = serde_json::json!({
+        "id": "payment_status_resolution",
+        "version": "1.0.0",
+        "priority": 1,
+        "nodes": [{"id":"complete","type":"end","config":{"outcome":"completed"}}]
+    });
+    let precondition = expected_precondition(CoreEntityKind::Flow, "payment_status_resolution");
+    let content_digest = digest(&[&canonical_json(&content)]);
+    let candidate_route = "flow/payment-status".to_owned();
+    let mechanism = "transaction_status_lookup".to_owned();
+    let commitment = compilation_authorization_commitment(
+        &scope,
+        &source_snapshot,
+        "sha256:bridge",
+        "sha256:plan",
+        &candidate_route,
+        &mechanism,
+        ChangeOperationKind::Add,
+        CoreEntityKind::Flow,
+        "payment_status_resolution",
+        "1.0.0",
+        &content_digest,
+        &precondition,
+    );
+    let authorization = CompilationAuthorization {
+        scope: scope.clone(),
+        source_snapshot: source_snapshot.clone(),
+        workflow_bridge_commitment: "sha256:bridge".to_owned(),
+        evaluation_plan_commitment: "sha256:plan".to_owned(),
+        candidate_route: candidate_route.clone(),
+        mechanism: mechanism.clone(),
+        operation: ChangeOperationKind::Add,
+        kind: CoreEntityKind::Flow,
+        entity_id: "payment_status_resolution".to_owned(),
+        entity_version: "1.0.0".to_owned(),
+        content_digest,
+        precondition: precondition.clone(),
+        commitment,
+    };
+    ChangeCompiler::compile(AuthorizedChangeSpec {
+        untrusted: UntrustedChangeSpec::new(
+            scope,
+            source_snapshot,
+            candidate_route,
+            mechanism,
+            vec![ChangeOperation::new(
+                ChangeOperationKind::Add,
+                CoreEntityKind::Flow,
+                content,
+                precondition.commitment(),
+            )],
+        )
+        .expect("fixed untrusted spec"),
+        authorization,
+    })
+    .expect("fixed authorized fixture compiles")
+}
+
+/// Deliberately corrupts sealed data only for U18's anti-tamper regression.
+/// Production consumers cannot access either the compiled fields or this seam.
+#[cfg(test)]
+pub(crate) fn corrupt_registry_snapshot_tenant_for_test(
+    mut compiled: CompiledChange,
+    tenant_id: &str,
+) -> CompiledChange {
+    compiled.authorization.source_snapshot.tenant_id = tenant_id.to_owned();
+    compiled
+}
+
 #[allow(dead_code)] // Reached through the deferred trusted composition.
 fn expected_precondition(kind: CoreEntityKind, entity_id: &str) -> ExecutablePrecondition {
     ExecutablePrecondition::entity_absent(kind, entity_id.to_owned())
+}
+
+/// Canonical authorization identity. U17 emits this at trusted composition;
+/// U18 recomputes it before its conditional write so a coherent-looking but
+/// altered authorization object cannot be accepted as authority.
+#[allow(clippy::too_many_arguments)] // Exact sealed fields are intentionally explicit.
+fn compilation_authorization_commitment(
+    scope: &CoreTaskScope,
+    source_snapshot: &ArtifactReference,
+    workflow_bridge_commitment: &str,
+    evaluation_plan_commitment: &str,
+    candidate_route: &str,
+    mechanism: &str,
+    operation: ChangeOperationKind,
+    kind: CoreEntityKind,
+    entity_id: &str,
+    entity_version: &str,
+    content_digest: &str,
+    precondition: &ExecutablePrecondition,
+) -> String {
+    digest(&[
+        scope.tenant_id(),
+        scope.job_id(),
+        scope.grant_id(),
+        scope.authority_ref(),
+        &source_snapshot.tenant_id,
+        &source_snapshot.id,
+        &source_snapshot.revision.to_string(),
+        &source_snapshot.digest,
+        workflow_bridge_commitment,
+        evaluation_plan_commitment,
+        candidate_route,
+        mechanism,
+        kind.as_str(),
+        operation_name(operation),
+        entity_id,
+        entity_version,
+        content_digest,
+        precondition.commitment(),
+    ])
 }
 
 #[allow(dead_code)] // Used by the trusted authorizer.

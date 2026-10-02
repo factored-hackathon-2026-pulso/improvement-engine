@@ -71,6 +71,13 @@ green unit test as proof that a broader product flow is complete.
   typed executable write predicate are rechecked; U18 remains responsible for
   atomically evaluating that predicate and writing to the registry. This slice
   neither persists, executes nor releases a candidate.
+- U18 / Issue #48: governed registry writer. A crate-private conditional-write
+  adapter accepts only U17 compiled drafts, independently reconstructs and
+  verifies their sealed authorization/material, evaluates `EntityAbsent` at
+  the final write boundary, and freezes the exact payload plus an idempotent
+  candidate receipt per tenant. The adapter is an in-memory executable
+  durability contract only: it does not call Agent Core, execute/evaluate a
+  candidate, publish/release it, or prove production transaction durability.
 - U23-P / Issue #47: the narrow Frozen/Continuous temporal protocol over
   U04-B's replay cutoff and U22/U33 governed admission. An opaque, trusted
   evidence commitment (not caller-provided timestamps) is part of the U33
