@@ -30,6 +30,23 @@ infrastructure is involved. This keeps the engine's durable adapter gate
 self-contained while sibling `infra` owns Terraform, AWS deployment and
 operational infrastructure.
 
+## Local engine dependencies
+
+The optional Windows-first local dependency stack belongs here, not in sibling
+`infra`: `local/compose.yaml` defines pinned PostgreSQL and LocalStack (S3
+only), both bound to loopback and an internal network. Copy
+`local/.env.example` to the ignored `local/.env`, or generate it once with
+`powershell -NoProfile -File scripts/init-local-env.ps1`; the initializer
+refuses replacement and never prints its generated password. Then run:
+
+```powershell
+podman compose --env-file local/.env -f local/compose.yaml up -d
+```
+
+`PULSO_RUN_CONTAINER_TESTS=1 python -m unittest tests/test_local_compose_contract.py -v`
+only verifies the Compose rendering when a real Podman backend is available.
+It does not certify PostgreSQL, S3, Agent Core, AWS or a deployed engine.
+
 Start with [AGENTS.md](AGENTS.md), [CONTEXT.md](CONTEXT.md), the [contract journal](docs/journal/0002-layer-0-contract-envelope.md), the [workspace journal](docs/journal/0003-layer-0-rust-workspace.md), the [source-validation journal](docs/journal/0004-u03-source-contract-validation.md), the [artifact-store journal](docs/journal/0004-u02-immutable-artifact-store.md), the [enriched-history journal](docs/journal/0006-u04-enriched-history.md), the [wiki-scratch journal](docs/journal/0006-u15-wiki-scratch.md) and the [published-memory journal](docs/journal/0010-u33-published-memory.md).
 
 U08/U12 add a local investigation foundation: embedded in-memory SQLite receives
