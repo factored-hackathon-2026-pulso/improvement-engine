@@ -8,10 +8,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use improvement_engine_core::local_simulation::{
     LocalObservedEvent, LocalObservedQuery, LocalRunInput, LocalRunMetadata, LocalRunResult,
-    LocalSourceKind, run_local_simulation,
+    LocalSourceKind, RunEvent, run_local_simulation,
 };
 use improvement_engine_source_adapters::{
-    CasePhase, E0Fact, PreparationConfig, PreparedSource, prepare_e0_package, prepare_original_bank,
+    CasePhase, E0Fact, E0HoldoutEvaluation, E0HoldoutPolicy, E0HoldoutStatus, PreparationConfig,
+    PreparedSource, SourceKind, attest_selected_e0_recurrence_candidate,
+    evaluate_e0_recurrence_holdout, prepare_e0_package, prepare_original_bank,
 };
 
 fn main() {
@@ -46,7 +48,24 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
         .with_minimum_recurring_query_support(options.minimum_recurring_query_support)
         .map_err(|error| format!("invalid recurrence policy: {error:?}"))?;
     let result = run_local_simulation(input).map_err(|error| format!("run failed: {error}"))?;
-    persist_result(&options.output, &result)?;
+    let holdout = evaluate_selected_recurrence_after_discovery(
+        &prepared,
+        &result,
+        options.minimum_recurring_query_support,
+    )?;
+    let holdout_event = holdout.as_ref().map(|evaluation| {
+        make_holdout_event(
+            evaluation,
+            result.events.len() as u32 + 1,
+            &result.observed_cutoff_rfc3339,
+        )
+    });
+    persist_result(
+        &options.output,
+        &result,
+        holdout.as_ref(),
+        holdout_event.as_ref(),
+    )?;
     println!("run_id={run_id}");
     println!("status={}", result.terminal_status);
     println!("mode={}", result.execution_mode);
@@ -59,6 +78,82 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
         options.output.join(&run_id).join("events.ndjson").display()
     );
     Ok(())
+}
+
+fn evaluate_selected_recurrence_after_discovery(
+    prepared: &PreparedSource,
+    result: &LocalRunResult,
+    minimum_support: u64,
+) -> Result<Option<E0HoldoutEvaluation>, String> {
+    if prepared.source_kind() != SourceKind::E0
+        || result.signal.as_ref().is_none_or(|signal| {
+            signal.metric_id != "e0_recurring_copilot_query_cases" || signal.pattern_ref.is_none()
+        })
+        || !result
+            .candidates
+            .iter()
+            .any(|candidate| candidate.kind == "opportunity")
+    {
+        return Ok(None);
+    }
+
+    // The core runner has already completed discovery and admitted its
+    // opportunity candidate. Reproduccion enters only here, after selection.
+    let selected_pattern_ref = result
+        .signal
+        .as_ref()
+        .and_then(|signal| signal.pattern_ref.as_deref())
+        .ok_or_else(|| "selected recurrence lacks a pattern reference".to_owned())?;
+    let selected_candidate =
+        attest_selected_e0_recurrence_candidate(prepared, selected_pattern_ref, minimum_support)
+            .map_err(|_| {
+                "selected core recurrence could not be attested against Arranque".to_owned()
+            })?;
+    let policy = E0HoldoutPolicy::new(minimum_support)
+        .map_err(|_| "holdout policy is outside its safe range".to_owned())?;
+    evaluate_e0_recurrence_holdout(&selected_candidate, prepared, &policy)
+        .map(Some)
+        .map_err(|_| "E0 holdout evaluation rejected its source scope".to_owned())
+}
+
+fn make_holdout_event(
+    evaluation: &E0HoldoutEvaluation,
+    sequence: u32,
+    observed_cutoff: &str,
+) -> RunEvent {
+    let status = match evaluation.status() {
+        E0HoldoutStatus::Replicated => "replicated",
+        E0HoldoutStatus::NotObserved => "not_observed",
+        E0HoldoutStatus::InsufficientSupport => "insufficient_support",
+        E0HoldoutStatus::Unavailable => "unavailable",
+    }
+    .to_owned();
+    let detail = match evaluation.status() {
+        E0HoldoutStatus::InsufficientSupport => {
+            "post-selection descriptive recurrence: insufficient support; exact counts suppressed; no causal or outcome claim".into()
+        }
+        E0HoldoutStatus::Unavailable => {
+            "post-selection descriptive recurrence unavailable; no causal or outcome claim".into()
+        }
+        E0HoldoutStatus::Replicated | E0HoldoutStatus::NotObserved => {
+            match (
+                evaluation.matching_case_count(),
+                evaluation.queried_case_count(),
+            ) {
+                (Some(matching), Some(queried)) => format!(
+                    "post-selection descriptive recurrence: {matching} of {queried} queried Reproduccion cases; no causal or outcome claim"
+                ),
+                _ => "post-selection descriptive recurrence unavailable; no causal or outcome claim".into(),
+            }
+        }
+    };
+    RunEvent {
+        sequence,
+        stage: "e0_recurrence_holdout".into(),
+        status,
+        detail,
+        observed_cutoff_rfc3339: observed_cutoff.to_owned(),
+    }
 }
 
 fn to_run_input(
@@ -156,7 +251,12 @@ fn safe_code(value: &str) -> Result<String, String> {
     Ok(value.to_owned())
 }
 
-fn persist_result(output: &PathBuf, result: &LocalRunResult) -> Result<(), String> {
+fn persist_result(
+    output: &PathBuf,
+    result: &LocalRunResult,
+    holdout: Option<&E0HoldoutEvaluation>,
+    holdout_event: Option<&RunEvent>,
+) -> Result<(), String> {
     let run_dir = output.join(&result.run_id);
     let staging_dir = output.join(format!(".{}.partial", result.run_id));
     fs::create_dir_all(output).map_err(io_message)?;
@@ -168,10 +268,30 @@ fn persist_result(output: &PathBuf, result: &LocalRunResult) -> Result<(), Strin
         }
     })?;
     let write_result = (|| {
-        let result_bytes = serde_json::to_vec_pretty(result).map_err(|error| error.to_string())?;
+        let mut result_json = serde_json::to_value(result).map_err(|error| error.to_string())?;
+        if result.source_kind == LocalSourceKind::E0 {
+            result_json["excluded_replay_case_count"] = serde_json::Value::Null;
+        }
+        result_json["e0_recurrence_holdout"] = match holdout {
+            Some(evaluation) => serde_json::to_value(evaluation),
+            None => Ok(serde_json::Value::Null),
+        }
+        .map_err(|error| error.to_string())?;
+        if let Some(event) = holdout_event {
+            result_json["events"]
+                .as_array_mut()
+                .ok_or_else(|| "local result events are not an array".to_owned())?
+                .push(serde_json::to_value(event).map_err(|error| error.to_string())?);
+        }
+        let result_bytes =
+            serde_json::to_vec_pretty(&result_json).map_err(|error| error.to_string())?;
         write_new(&staging_dir.join("result.json"), &result_bytes)?;
         let mut ndjson = Vec::new();
         for event in &result.events {
+            serde_json::to_writer(&mut ndjson, event).map_err(|error| error.to_string())?;
+            ndjson.push(b'\n');
+        }
+        if let Some(event) = holdout_event {
             serde_json::to_writer(&mut ndjson, event).map_err(|error| error.to_string())?;
             ndjson.push(b'\n');
         }
@@ -403,11 +523,11 @@ mod tests {
             events: Vec::new(),
         };
 
-        persist_result(&output, &result).unwrap();
+        persist_result(&output, &result, None, None).unwrap();
         let run_dir = output.join(&result.run_id);
         assert!(run_dir.join("result.json").is_file());
         assert!(run_dir.join("events.ndjson").is_file());
-        assert!(persist_result(&output, &result).is_err());
+        assert!(persist_result(&output, &result, None, None).is_err());
         fs::remove_dir_all(output).unwrap();
     }
 }

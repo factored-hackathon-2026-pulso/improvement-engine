@@ -871,7 +871,10 @@ mod tests {
     };
     use crate::final_eligibility::FinalEligibilityGate;
     use crate::independent_verifier::VerificationStatus;
-    use crate::workflow_bridge::report_and_bridge_for_final_eligibility_test;
+    use crate::workflow_bridge::{
+        WorkflowBridge, WorkflowBridgeInput, WorkflowBridgeValidator, WorkflowCatalogueValidation,
+        report_and_bridge_for_final_eligibility_test,
+    };
     use crate::{
         ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository,
         InMemoryArtifactRepository,
@@ -917,6 +920,12 @@ mod tests {
     }
 
     fn eligible_readiness() -> (FinalEligibilityDecision, WorkflowBridgeContract) {
+        eligible_readiness_for_cutoff("2026-09-30T00:00:00Z")
+    }
+
+    fn eligible_readiness_for_cutoff(
+        cutoff: &str,
+    ) -> (FinalEligibilityDecision, WorkflowBridgeContract) {
         let mut repo = InMemoryArtifactRepository::default();
         let snapshot = append(
             &mut repo,
@@ -925,10 +934,43 @@ mod tests {
             crate::evaluation_plan::tests::source_snapshot_payload("tenant_a"),
             None,
         );
-        let (report, bridge) = report_and_bridge_for_final_eligibility_test(
+        let (report, base_bridge) = report_and_bridge_for_final_eligibility_test(
             snapshot.clone(),
             VerificationStatus::Supported,
         );
+        let bridge_input = WorkflowBridgeInput::new(
+            base_bridge.input().target_outcome(),
+            base_bridge.input().unit_of_analysis(),
+            base_bridge.input().eligible_population_query_digest(),
+            base_bridge.input().entity_key(),
+            cutoff,
+            base_bridge.input().candidate_route(),
+            base_bridge.input().mechanism(),
+            base_bridge.input().intervention_point(),
+            base_bridge.input().observable_effect(),
+            base_bridge.input().oracle_measure(),
+            base_bridge.input().support_refs().to_vec(),
+        )
+        .expect("fixed cutoff and verified support refs form bridge input");
+        let catalogue_validation = WorkflowCatalogueValidation::new(
+            format!("sha256:{}", "1".repeat(64)),
+            format!("sha256:{}", "2".repeat(64)),
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+        )
+        .expect("fixed catalogue facts are valid");
+        let link_evidence =
+            WorkflowBridgeValidator::validate(&report, &bridge_input, catalogue_validation)
+                .expect("catalogue validation is bound to exact bridge input");
+        let bridge = WorkflowBridge::assess_verified(&report, bridge_input, link_evidence)
+            .expect("verified report and sealed facts produce the bridge")
+            .contract()
+            .clone();
         let baseline = evaluation_input(
             &mut repo,
             "018f0f4e-7bbd-7000-8000-000000000601",
@@ -1003,6 +1045,10 @@ mod tests {
         let authorized = TrustedChangeAuthorizer::authorize(&readiness, &bridge, spec(&bridge))
             .expect("trusted composition authorizes matching U35/U16/spec");
         let compiled = ChangeCompiler::compile(authorized).expect("eligible readiness compiles");
+        let expected_plan_commitment = match &readiness {
+            FinalEligibilityDecision::Eligible(value) => value.plan_commitment(),
+            FinalEligibilityDecision::Ineligible(_) => panic!("fixture must be eligible"),
+        };
         assert_eq!(compiled.drafts().len(), 1);
         assert_eq!(compiled.drafts()[0].kind(), CoreEntityKind::Flow);
         assert_eq!(compiled.drafts()[0].id(), "payment_status_resolution");
@@ -1010,9 +1056,39 @@ mod tests {
         assert!(!compiled.authorizes_execution_or_release());
         assert_eq!(compiled.authorization().scope(), bridge.scope());
         assert_eq!(
+            compiled.authorization().workflow_bridge_commitment(),
+            bridge.commitment()
+        );
+        assert_eq!(
+            compiled.authorization().evaluation_plan_commitment(),
+            expected_plan_commitment
+        );
+        assert_eq!(
             compiled.authorization().source_snapshot(),
             bridge.source_snapshot_ref()
         );
+    }
+
+    #[test]
+    fn changing_only_bridge_cutoff_changes_u17_authorization_and_compiled_commitments() {
+        let (readiness_a, bridge_a) = eligible_readiness_for_cutoff("2026-09-30T00:00:00Z");
+        let compiled_a = ChangeCompiler::compile(
+            TrustedChangeAuthorizer::authorize(&readiness_a, &bridge_a, spec(&bridge_a)).unwrap(),
+        )
+        .unwrap();
+
+        let (readiness_b, bridge_b) = eligible_readiness_for_cutoff("2026-10-01T00:00:00Z");
+        let compiled_b = ChangeCompiler::compile(
+            TrustedChangeAuthorizer::authorize(&readiness_b, &bridge_b, spec(&bridge_b)).unwrap(),
+        )
+        .unwrap();
+
+        assert_ne!(bridge_a.commitment(), bridge_b.commitment());
+        assert_ne!(
+            compiled_a.authorization().commitment(),
+            compiled_b.authorization().commitment()
+        );
+        assert_ne!(compiled_a.commitment(), compiled_b.commitment());
     }
 
     #[test]

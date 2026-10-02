@@ -23,7 +23,13 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+mod e0_holdout;
 mod e0_package_validation;
+pub use e0_holdout::{
+    E0HoldoutError, E0HoldoutEvaluation, E0HoldoutPolicy, E0HoldoutStatus,
+    SelectedE0RecurrenceCandidate, attest_selected_e0_recurrence_candidate,
+    evaluate_e0_recurrence_holdout,
+};
 pub use e0_package_validation::{
     PackageValidationError, ValidatedE0OperationalPackage, validate_e0_operational_package,
 };
@@ -117,6 +123,7 @@ pub struct PreparedSourcePayload {
     source_kind: SourceKind,
     manifest_digest: String,
     snapshot_ref: ArtifactReference,
+    copilot_query_table_present: bool,
     cutoff_unix_seconds: u64,
     observed_cutoff: String,
     agent_inputs: AgentInputSet,
@@ -159,6 +166,12 @@ impl PreparedSource {
     #[must_use]
     pub fn agent_inputs(&self) -> &AgentInputSet {
         self.payload().agent_inputs()
+    }
+
+    /// Whether the committed source snapshot contained the named table.
+    #[must_use]
+    pub fn has_copilot_query_table(&self) -> bool {
+        self.payload().copilot_query_table_present
     }
 
     fn payload(&self) -> &PreparedSourcePayload {
@@ -860,6 +873,10 @@ fn prepared_source(
         source_kind,
         manifest_digest,
         snapshot_ref,
+        copilot_query_table_present: manifest
+            .entries
+            .iter()
+            .any(|entry| entry.table == "copilot_query"),
         cutoff_unix_seconds: config.cutoff_unix_seconds,
         observed_cutoff: config.observed_cutoff.clone(),
         agent_inputs,

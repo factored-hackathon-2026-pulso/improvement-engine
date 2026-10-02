@@ -87,3 +87,19 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*_contract.py" -v
       - name: Validate contract fixtures
         run: python contracts/validate_fixtures.py
+      - name: Verify Windows local E0 runner with pinned Pester
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $requiredPester = [version] '3.4.0'
+          $availablePester = Get-Module -ListAvailable -Name Pester |
+            Where-Object { $_.Version -eq $requiredPester } |
+            Select-Object -First 1
+          if ($null -eq $availablePester) {
+            throw "Pester $requiredPester must be preinstalled on windows-latest; CI will not install or upgrade it."
+          }
+          Import-Module Pester -RequiredVersion $requiredPester -Force
+          if ((Get-Module Pester).Version -ne $requiredPester) {
+            throw "Loaded Pester version does not match required version $requiredPester."
+          }
+          Invoke-Pester -Path tests/run-local-e0-e2e.Tests.ps1 -EnableExit
