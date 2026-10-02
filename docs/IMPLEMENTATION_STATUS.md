@@ -13,12 +13,13 @@ green unit test as proof that a broader product flow is complete.
 - U33: scoped immutable published-memory revisions, head CAS and idempotent use
   receipts. Its present in-memory adapter is not production-durability proof;
   the U33 corrective slice covers an overflow atomicity regression.
-- U13-A / Issue #43 (in the cumulative branch): opaque, verified Scout-candidate admission. Candidate
+
+## Implemented in the cumulative branch (not yet merged)
+
+- U13-A / Issue #43: opaque, verified Scout-candidate admission. Candidate
   batches are canonical and atomic; durable reload validates member and batch
   commitments; downstream code receives a read-only capability rather than a
   forgeable draft.
-
-## In progress in the cumulative branch
 
 - U30 / Issue #41: deterministic platform sensor. It consumes the U29 safe
   projection and emits only sealed, mapping-resolution-bound signals; it never
@@ -26,10 +27,11 @@ green unit test as proof that a broader product flow is complete.
 - U14: independent verifier. It accepts only the U13-A opaque capability and
   emits a provenance-bound supported/refuted/uncertain report; persistent
   reports and U11 Jev-adapter wiring remain later dependent work.
-- U16: provisional WorkflowBridge. It accepts only a U14 verification report,
-  derives no grade from an LLM, includes `do_nothing`, and caps a supported
-  route at `mechanism_proxy`. U20/U35 still own the sealed outcome/oracle and
-  final eligibility gates.
+- U16: provisional WorkflowBridge. It accepts only a U14 verification report
+  and sealed internal catalogue/source-validation facts, preserves its
+  commitments and scope, includes `do_nothing`, and caps a supported route at
+  `mechanism_proxy`. U20/U35 still own the sealed outcome/oracle and final
+  eligibility gates.
 
 ## Delivery discipline
 
