@@ -316,6 +316,14 @@ fn e0_cli_surfaces_retry_case_rate_with_known_denominator_and_missing_cases() {
         result["proposal"]["proposed_artifact"]["observed_evidence"]["retry_cases_missing"],
         1
     );
+    let overlap =
+        &result["proposal"]["proposed_artifact"]["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["policy_id"], "e0_retry_error_overlap_k_v2");
+    assert_eq!(overlap["status"], "insufficient_retry_status_coverage");
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
     assert!(
         result
             .to_string()
