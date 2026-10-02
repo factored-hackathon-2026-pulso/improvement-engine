@@ -6,7 +6,7 @@
 //! publication capability, not a memory-use, proposal, route or release
 //! capability.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 use serde_json::json;
@@ -14,6 +14,9 @@ use sha2::{Digest, Sha256};
 
 use crate::ArtifactRepository;
 use crate::autonomous_scout::VerifiedScoutCandidate;
+use crate::e0_frozen_memory_cycle::{
+    FrozenE0MemoryUseCommitPort, FrozenE0MemoryUseCommitRequest, FrozenE0MemoryUseReceipt,
+};
 use crate::e0_frozen_summary::{FrozenE0SummaryPreparationError, PreparedFrozenE0MemorySummary};
 use crate::e0_frozen_verifier::FrozenE0VerificationReport;
 use crate::e0_opportunity_qualification::FrozenE0OpportunityQualification;
@@ -65,6 +68,13 @@ pub enum FrozenE0SummaryPublicationError {
     SnapshotInvalid,
     PublicationConflict,
     DependencyUnavailable,
+    MemoryUsePublicationMismatch,
+    MemoryUseScopeMismatch,
+    MemoryUseSnapshotMismatch,
+    MemoryUseHeadConflict,
+    MemoryUseRevoked,
+    MemoryUseAccessDenied,
+    MemoryUseReceiptConflict,
     Repository(RepositoryError),
 }
 
@@ -163,6 +173,8 @@ impl FrozenE0SummaryPublicationPort for DurableFrozenE0SummaryPublicationUnavail
 pub(crate) struct InMemoryFrozenE0SummaryPublicationPort {
     heads: BTreeMap<MemoryScope, MemoryHead>,
     publications: BTreeMap<String, FrozenE0PublicationRecord>,
+    revoked_snapshots: BTreeSet<(String, String, u64)>,
+    memory_use_receipts: BTreeMap<String, FrozenE0MemoryUseReceipt>,
 }
 
 #[allow(dead_code)] // Fixture is selected only by test composition.
@@ -248,6 +260,17 @@ impl InMemoryFrozenE0SummaryPublicationPort {
     #[cfg(all(test, feature = "test-support"))]
     pub(crate) fn publication_count_for_test(&self) -> usize {
         self.publications.len()
+    }
+
+    #[cfg(all(test, feature = "test-support"))]
+    pub(crate) fn revoke_snapshot_for_test(&mut self, reference: ArtifactReference) {
+        self.revoked_snapshots
+            .insert((reference.tenant_id, reference.id, reference.revision));
+    }
+
+    #[cfg(all(test, feature = "test-support"))]
+    pub(crate) fn has_use_receipt_for_test(&self, receipt_id: &str) -> bool {
+        self.memory_use_receipts.contains_key(receipt_id)
     }
 
     #[cfg(all(test, feature = "test-support"))]
@@ -354,6 +377,134 @@ impl FrozenE0SummaryPublicationPort for InMemoryFrozenE0SummaryPublicationPort {
             },
         );
         Ok(published)
+    }
+}
+
+impl FrozenE0MemoryUseCommitPort for InMemoryFrozenE0SummaryPublicationPort {
+    fn commit_frozen_e0_memory_use<R, A>(
+        &mut self,
+        artifacts: &mut R,
+        authority: &A,
+        request: FrozenE0MemoryUseCommitRequest<'_>,
+    ) -> Result<FrozenE0MemoryUseReceipt, FrozenE0SummaryPublicationError>
+    where
+        R: ArtifactRepository,
+        A: WikiAuthorizationPort,
+    {
+        let FrozenE0MemoryUseCommitRequest {
+            published,
+            replay,
+            scope,
+            access,
+            temporal_commitment,
+        } = request;
+        let record = self
+            .publications
+            .get(published.publication_commitment())
+            .ok_or(FrozenE0SummaryPublicationError::MemoryUsePublicationMismatch)?;
+        if record.schema_version != SUMMARY_SCHEMA_VERSION
+            || record.published.publication_commitment != published.publication_commitment
+            || record.published.memory_snapshot_ref != *published.memory_snapshot_ref()
+            || record.published.memory_head_version != published.memory_head_version()
+        {
+            return Err(FrozenE0SummaryPublicationError::MemoryUsePublicationMismatch);
+        }
+        if record.scope != *scope
+            || scope.tenant_id != replay.tenant_id()
+            || scope.world != replay.world_ref()
+            || access.tenant_id != scope.tenant_id
+            || access.purpose != scope.purpose
+            || access.memory_scope.world != scope.world
+            || access.memory_scope.campaign != scope.campaign
+            || access.memory_scope.protocol != scope.protocol
+            || access.memory_scope.partition != scope.partition
+        {
+            return Err(FrozenE0SummaryPublicationError::MemoryUseScopeMismatch);
+        }
+        if access.run_id == record.access.run_id
+            || access.snapshot_ref != *published.memory_snapshot_ref()
+            || access.allowed_at_unix_seconds < record.access.allowed_at_unix_seconds
+            || replay.cutoff_at_unix_seconds() < record.access.allowed_at_unix_seconds
+        {
+            return Err(FrozenE0SummaryPublicationError::MemoryUseSnapshotMismatch);
+        }
+        let current_head = self
+            .heads
+            .get(scope)
+            .ok_or(FrozenE0SummaryPublicationError::HeadMissing)?;
+        if current_head.snapshot_ref != *published.memory_snapshot_ref()
+            || current_head.head_version != published.memory_head_version()
+        {
+            return Err(FrozenE0SummaryPublicationError::MemoryUseHeadConflict);
+        }
+        if self
+            .revoked_snapshots
+            .iter()
+            .any(|(tenant_id, id, revision)| {
+                tenant_id == &published.memory_snapshot_ref().tenant_id
+                    && id == &published.memory_snapshot_ref().id
+                    && revision <= &published.memory_snapshot_ref().revision
+            })
+        {
+            return Err(FrozenE0SummaryPublicationError::MemoryUseRevoked);
+        }
+        if !authority.authorize(access, published.memory_snapshot_ref()) {
+            return Err(FrozenE0SummaryPublicationError::MemoryUseAccessDenied);
+        }
+        let snapshot = artifacts
+            .get(
+                &published.memory_snapshot_ref().tenant_id,
+                &published.memory_snapshot_ref().id,
+                published.memory_snapshot_ref().revision,
+            )?
+            .ok_or(FrozenE0SummaryPublicationError::SnapshotInvalid)?;
+        if snapshot.reference() != *published.memory_snapshot_ref()
+            || snapshot.kind != ArtifactKind::MemoryWiki
+            || snapshot.tenant_id != scope.tenant_id
+        {
+            return Err(FrozenE0SummaryPublicationError::MemoryUseSnapshotMismatch);
+        }
+        // One semantic use is admitted per publication/scope/run. Grant/time
+        // are committed in the receipt body; they must not widen the key and
+        // allow another valid grant or clock value to mint a second use.
+        let receipt_id = digest(&(
+            "u23e_frozen_use_v1",
+            published.publication_commitment(),
+            scope,
+            &access.run_id,
+        ));
+        let receipt = FrozenE0MemoryUseReceipt {
+            receipt_id: receipt_id.clone(),
+            scope: scope.clone(),
+            snapshot_ref: published.memory_snapshot_ref().clone(),
+            head_version: published.memory_head_version(),
+            run_id: access.run_id.clone(),
+            temporal_commitment: temporal_commitment.to_owned(),
+        };
+        if let Some(existing) = self.memory_use_receipts.get(&receipt_id) {
+            return if existing == &receipt {
+                Ok(existing.clone())
+            } else {
+                Err(FrozenE0SummaryPublicationError::MemoryUseReceiptConflict)
+            };
+        }
+        self.memory_use_receipts.insert(receipt_id, receipt.clone());
+        Ok(receipt)
+    }
+}
+
+impl FrozenE0MemoryUseCommitPort for DurableFrozenE0SummaryPublicationUnavailable {
+    fn commit_frozen_e0_memory_use<R, A>(
+        &mut self,
+        _: &mut R,
+        _: &A,
+        _: FrozenE0MemoryUseCommitRequest<'_>,
+    ) -> Result<FrozenE0MemoryUseReceipt, FrozenE0SummaryPublicationError>
+    where
+        R: ArtifactRepository,
+        A: WikiAuthorizationPort,
+    {
+        Err(FrozenE0SummaryPublicationError::DependencyUnavailable)
     }
 }
 
@@ -549,6 +700,87 @@ mod tests {
         )
     }
 
+    fn published_seeded() -> (
+        InMemoryArtifactRepository,
+        InMemoryWikiGrantAuthority,
+        MemoryScope,
+        InMemoryFrozenE0SummaryPublicationPort,
+        PublishedFrozenE0MemorySummary,
+        VerifiedReplayAvailability,
+    ) {
+        let (
+            mut repository,
+            mut authority,
+            access,
+            scope,
+            candidate,
+            report,
+            qualification,
+            replay,
+        ) = seeded();
+        let prepared = FrozenE0SummaryComposer::prepare(
+            &qualification,
+            &candidate,
+            &report,
+            &replay,
+            &scope,
+            &access,
+            &mut authority,
+            &mut repository,
+        )
+        .unwrap();
+        let mut port = InMemoryFrozenE0SummaryPublicationPort::default();
+        let head = port
+            .seed_head(&mut repository, scope.clone(), access.snapshot_ref.clone())
+            .unwrap();
+        let published = FrozenE0SummaryPublisher::publish(
+            &prepared,
+            &qualification,
+            &candidate,
+            &report,
+            &replay,
+            &scope,
+            &access,
+            &head,
+            &authority,
+            &mut port,
+            &mut repository,
+        )
+        .unwrap();
+        (repository, authority, scope, port, published, replay)
+    }
+
+    fn next_access(
+        scope: &MemoryScope,
+        published: &PublishedFrozenE0MemorySummary,
+        replay: &VerifiedReplayAvailability,
+    ) -> (InMemoryWikiGrantAuthority, WikiAccess) {
+        let authority = InMemoryWikiGrantAuthority::default();
+        let access = WikiAccess::new_scoped(
+            "run_e0_next",
+            scope.tenant_id.clone(),
+            scope.purpose.clone(),
+            "grant_e0_next",
+            published.memory_snapshot_ref().clone(),
+            replay.cutoff_at_unix_seconds(),
+            MemoryScopeBinding::new(
+                scope.world.clone(),
+                scope.campaign.clone(),
+                scope.protocol.clone(),
+                scope.partition.clone(),
+            ),
+        );
+        authority.issue(WikiGrant::new_scoped(
+            "grant_e0_next",
+            "run_e0_next",
+            scope.tenant_id.clone(),
+            scope.purpose.clone(),
+            published.memory_snapshot_ref().clone(),
+            access.memory_scope.clone(),
+        ));
+        (authority, access)
+    }
+
     #[test]
     fn real_frozen_e0_chain_can_publish_only_an_opaque_summary_capability() {
         let (
@@ -594,6 +826,369 @@ mod tests {
         assert_eq!(published.memory_head_version(), 2);
         assert!(!published.authorizes_memory_use_or_promotion());
         assert_ne!(published.memory_snapshot_ref(), &access.snapshot_ref);
+    }
+
+    #[test]
+    fn u23e_admits_the_exact_published_revision_for_a_later_frozen_run() {
+        let (mut repository, _initial_authority, scope, mut port, published, replay) =
+            published_seeded();
+        let (authority, next_access) = next_access(&scope, &published, &replay);
+
+        let admitted = crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+            &published,
+            &replay,
+            &scope,
+            &next_access,
+            &authority,
+            &mut port,
+            &mut repository,
+        )
+        .unwrap();
+
+        assert_eq!(admitted.snapshot_ref(), published.memory_snapshot_ref());
+        assert_eq!(admitted.run_id(), "run_e0_next");
+        assert_eq!(admitted.scope(), &scope);
+        assert!(port.has_use_receipt_for_test(admitted.receipt_id()));
+    }
+
+    #[test]
+    fn u23e_rejects_use_after_replay_cutoff_without_a_receipt() {
+        let (mut repository, _authority, scope, mut port, published, replay) = published_seeded();
+        let (authority, mut access) = next_access(&scope, &published, &replay);
+        access.allowed_at_unix_seconds = replay.cutoff_at_unix_seconds() + 1;
+        assert!(matches!(
+            crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                &published,
+                &replay,
+                &scope,
+                &access,
+                &authority,
+                &mut port,
+                &mut repository,
+            ),
+            Err(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Temporal(
+                    crate::memory_temporal_protocol::TemporalProtocolError::MemoryAfterReplayCutoff
+                )
+            )
+        ));
+        assert!(port.memory_use_receipts.is_empty());
+    }
+
+    #[test]
+    fn u23e_rejects_wrong_tenant_or_world_before_commit() {
+        for wrong_tenant in [true, false] {
+            let (mut repository, _authority, scope, mut port, published, replay) =
+                published_seeded();
+            let (authority, mut access) = next_access(&scope, &published, &replay);
+            let mut wrong_scope = scope.clone();
+            if wrong_tenant {
+                wrong_scope.tenant_id = "tenant_other".to_owned();
+                access.tenant_id = "tenant_other".to_owned();
+            } else {
+                wrong_scope.world = "world_other".to_owned();
+                access.memory_scope.world = "world_other".to_owned();
+            }
+            assert!(matches!(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                    &published,
+                    &replay,
+                    &wrong_scope,
+                    &access,
+                    &authority,
+                    &mut port,
+                    &mut repository,
+                ),
+                Err(crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Temporal(
+                    crate::memory_temporal_protocol::TemporalProtocolError::U04BReplayScopeMismatch
+                ))
+            ));
+            assert!(port.memory_use_receipts.is_empty());
+        }
+    }
+
+    #[test]
+    fn u23e_rejects_wrong_purpose_campaign_protocol_or_partition() {
+        for mismatch in ["purpose", "campaign", "protocol", "partition"] {
+            let (mut repository, _authority, scope, mut port, published, replay) =
+                published_seeded();
+            let (authority, mut access) = next_access(&scope, &published, &replay);
+            let mut wrong_scope = scope.clone();
+            match mismatch {
+                "purpose" => {
+                    wrong_scope.purpose = "other_purpose".to_owned();
+                    access.purpose = "other_purpose".to_owned();
+                }
+                "campaign" => {
+                    wrong_scope.campaign = "other_campaign".to_owned();
+                    access.memory_scope.campaign = "other_campaign".to_owned();
+                }
+                "protocol" => {
+                    wrong_scope.protocol = "continuous".to_owned();
+                    access.memory_scope.protocol = "continuous".to_owned();
+                }
+                "partition" => {
+                    wrong_scope.partition = "other_partition".to_owned();
+                    access.memory_scope.partition = "other_partition".to_owned();
+                }
+                _ => unreachable!(),
+            }
+            assert!(matches!(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                    &published,
+                    &replay,
+                    &wrong_scope,
+                    &access,
+                    &authority,
+                    &mut port,
+                    &mut repository,
+                ),
+                Err(crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Temporal(
+                    crate::memory_temporal_protocol::TemporalProtocolError::U04BReplayScopeMismatch
+                )) | Err(crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Publication(
+                    FrozenE0SummaryPublicationError::MemoryUseScopeMismatch
+                )) | Err(crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Temporal(
+                    crate::memory_temporal_protocol::TemporalProtocolError::ProtocolMismatch { .. }
+                ))
+            ));
+            assert!(port.memory_use_receipts.is_empty());
+        }
+    }
+
+    #[test]
+    fn u23e_rejects_a_different_revision_and_revoked_snapshot() {
+        let (mut repository, _authority, scope, mut port, published, replay) = published_seeded();
+        let (authority, access) = next_access(&scope, &published, &replay);
+        let mut wrong_revision_ref = published.memory_snapshot_ref().clone();
+        wrong_revision_ref.revision += 1;
+        let wrong_revision = PublishedFrozenE0MemorySummary {
+            publication_commitment: published.publication_commitment().to_owned(),
+            memory_snapshot_ref: wrong_revision_ref,
+            memory_head_version: published.memory_head_version(),
+        };
+        assert!(matches!(
+            crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                &wrong_revision,
+                &replay,
+                &scope,
+                &access,
+                &authority,
+                &mut port,
+                &mut repository,
+            ),
+            Err(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Publication(
+                    FrozenE0SummaryPublicationError::MemoryUsePublicationMismatch
+                )
+            )
+        ));
+
+        port.revoke_snapshot_for_test(published.memory_snapshot_ref().clone());
+        assert!(matches!(
+            crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                &published,
+                &replay,
+                &scope,
+                &access,
+                &authority,
+                &mut port,
+                &mut repository,
+            ),
+            Err(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Publication(
+                    FrozenE0SummaryPublicationError::MemoryUseRevoked
+                )
+            )
+        ));
+        assert!(port.memory_use_receipts.is_empty());
+    }
+
+    #[test]
+    fn u23e_rejects_a_head_advanced_after_publication() {
+        let (mut repository, _authority, scope, mut port, published, replay) = published_seeded();
+        let (authority, access) = next_access(&scope, &published, &replay);
+        port.advance_head_for_test(&mut repository, &scope).unwrap();
+        assert!(matches!(
+            crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                &published,
+                &replay,
+                &scope,
+                &access,
+                &authority,
+                &mut port,
+                &mut repository,
+            ),
+            Err(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Publication(
+                    FrozenE0SummaryPublicationError::MemoryUseHeadConflict
+                )
+            )
+        ));
+        assert!(port.memory_use_receipts.is_empty());
+    }
+
+    #[test]
+    fn u23e_rejects_a_revoked_grant_revision() {
+        let (mut repository, _authority, scope, mut port, published, replay) = published_seeded();
+        let (authority, access) = next_access(&scope, &published, &replay);
+        assert!(authority.revoke("grant_e0_next"));
+        assert!(matches!(
+            crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                &published,
+                &replay,
+                &scope,
+                &access,
+                &authority,
+                &mut port,
+                &mut repository,
+            ),
+            Err(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Publication(
+                    FrozenE0SummaryPublicationError::MemoryUseAccessDenied
+                )
+            )
+        ));
+        assert!(port.memory_use_receipts.is_empty());
+    }
+
+    #[test]
+    fn u23e_admission_retry_is_idempotent_for_the_exact_grant_and_cutoff() {
+        let (mut repository, _authority, scope, mut port, published, replay) = published_seeded();
+        let (authority, access) = next_access(&scope, &published, &replay);
+        let first = crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+            &published,
+            &replay,
+            &scope,
+            &access,
+            &authority,
+            &mut port,
+            &mut repository,
+        )
+        .unwrap();
+        let retry = crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+            &published,
+            &replay,
+            &scope,
+            &access,
+            &authority,
+            &mut port,
+            &mut repository,
+        )
+        .unwrap();
+        assert_eq!(first.receipt_id(), retry.receipt_id());
+        assert_eq!(port.memory_use_receipts.len(), 1);
+    }
+
+    #[test]
+    fn u23e_same_run_with_a_different_valid_grant_conflicts_without_an_extra_receipt() {
+        let (mut repository, _authority, scope, mut port, published, replay) = published_seeded();
+        let (authority, access) = next_access(&scope, &published, &replay);
+        crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+            &published,
+            &replay,
+            &scope,
+            &access,
+            &authority,
+            &mut port,
+            &mut repository,
+        )
+        .unwrap();
+
+        let mut changed_grant_access = access.clone();
+        changed_grant_access.grant_id = "grant_e0_next_alt".to_owned();
+        authority.issue(WikiGrant::new_scoped(
+            "grant_e0_next_alt",
+            "run_e0_next",
+            scope.tenant_id.clone(),
+            scope.purpose.clone(),
+            published.memory_snapshot_ref().clone(),
+            access.memory_scope.clone(),
+        ));
+        assert!(matches!(
+            crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                &published,
+                &replay,
+                &scope,
+                &changed_grant_access,
+                &authority,
+                &mut port,
+                &mut repository,
+            ),
+            Err(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Publication(
+                    FrozenE0SummaryPublicationError::MemoryUseReceiptConflict
+                )
+            )
+        ));
+        assert_eq!(port.memory_use_receipts.len(), 1);
+    }
+
+    #[test]
+    fn u23e_same_run_with_a_different_valid_access_time_conflicts_without_an_extra_receipt() {
+        let (mut repository, _authority, scope, mut port, published, replay) = published_seeded();
+        let (authority, access) = next_access(&scope, &published, &replay);
+        crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+            &published,
+            &replay,
+            &scope,
+            &access,
+            &authority,
+            &mut port,
+            &mut repository,
+        )
+        .unwrap();
+
+        let later_replay = crate::enriched_history::verified_replay_availability_fixture(
+            replay.tenant_id(),
+            replay.world_ref(),
+            replay.cutoff_at_unix_seconds() + 1,
+            replay.source_snapshot_digest(),
+            replay.availability_profile_digest(),
+        );
+        let mut changed_time_access = access;
+        changed_time_access.allowed_at_unix_seconds += 1;
+        assert!(matches!(
+            crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                &published,
+                &later_replay,
+                &scope,
+                &changed_time_access,
+                &authority,
+                &mut port,
+                &mut repository,
+            ),
+            Err(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Publication(
+                    FrozenE0SummaryPublicationError::MemoryUseReceiptConflict
+                )
+            )
+        ));
+        assert_eq!(port.memory_use_receipts.len(), 1);
+    }
+
+    #[test]
+    fn u23e_same_run_with_a_different_access_snapshot_is_rejected_without_a_receipt() {
+        let (mut repository, _authority, scope, mut port, published, replay) = published_seeded();
+        let (authority, access) = next_access(&scope, &published, &replay);
+        let mut wrong_access = access.clone();
+        wrong_access.snapshot_ref.revision += 1;
+        assert!(matches!(
+            crate::e0_frozen_memory_cycle::FrozenE0MemoryCycle::admit_reuse(
+                &published,
+                &replay,
+                &scope,
+                &wrong_access,
+                &authority,
+                &mut port,
+                &mut repository,
+            ),
+            Err(
+                crate::e0_frozen_memory_cycle::FrozenE0MemoryCycleError::Publication(
+                    FrozenE0SummaryPublicationError::MemoryUseSnapshotMismatch
+                )
+            )
+        ));
+        assert!(port.memory_use_receipts.is_empty());
     }
 
     #[test]
