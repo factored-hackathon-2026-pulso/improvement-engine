@@ -21,15 +21,29 @@ green unit test as proof that a broader product flow is complete.
 ## Implemented in the cumulative branch (not yet merged)
 
 - Local E2E composition/runner (new vertical): opt-in `local-sim` CLI joins
-  immutable source provenance to the safe event projection, invokes the local
-  detection/Scout/verifier path, emits a non-executable simulated draft and
-  structural-only evaluation, and writes an atomic JSON result plus NDJSON
-  timeline. It never calls external providers or Agent Core. Binary E0 fixture
-  test passes. Original-bank CLI was exercised against the partitioned
-  call-center CSV source and returned `unsupported_source`, no signal, zero
+  immutable source provenance to the safe event projection and invokes local
+  detection. Only positive supported signal evidence proceeds into the local
+  Scout/verifier path and may emit a non-executable simulated draft and
+  structural-only evaluation; zero positive support produces an explicit
+  no-op with no candidate, proposal, verifier, or evaluation. It writes an
+  atomic JSON result plus NDJSON timeline and never calls external providers
+  or Agent Core. Both binary E0 fixture tests pass. The actual E0 smoke used
+  200 Arranque cases and excluded
+  1,800 Reproduccion cases; it observed a descriptive technical-error
+  metric
+  over 187 supported cases (0 flagged, 13 missing) and correctly ended
+  `complete_no_opportunity`: no candidates, proposal, verifier, or evaluation
+  were emitted without positive evidence. The formal route is `do_nothing`.
+  Persisted output contains the exact configured cutoff and no known PII
+  sentinels or evaluator labels. This demonstrates only bounded local
+  detection/simulation behavior, not native Agent Core execution, causal
+  validation, release, or business lift. Original-bank CLI was exercised
+  against the partitioned call-center CSV source and returned
+  `unsupported_source`, no signal, zero
   candidates, and formal `do_nothing`; this is truthful manifest preparation,
-  not completed discovery. Real E0 package execution remains pending the
-  adapter's schema/cutoff/allowlist correction.
+  not completed discovery. A supported original-bank contact/repeat/SLA
+  projection remains a follow-up slice; technical errors are not inferred from
+  those tables.
 - U13-A / Issue #43: opaque, verified Scout-candidate admission. Candidate
   batches are canonical and atomic; durable reload validates member and batch
   commitments; downstream code receives a read-only capability rather than a

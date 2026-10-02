@@ -80,7 +80,9 @@ pub struct LocalRunInput {
     manifest_digest: String,
     snapshot_ref: ArtifactReference,
     cutoff_unix_seconds: u64,
+    observed_cutoff_rfc3339: String,
     case_ordinals: Vec<u32>,
+    excluded_replay_cases: u64,
     events: Vec<LocalObservedEvent>,
 }
 
@@ -93,7 +95,9 @@ impl LocalRunInput {
         manifest_digest: impl Into<String>,
         snapshot_ref: ArtifactReference,
         cutoff_unix_seconds: u64,
+        observed_cutoff_rfc3339: impl Into<String>,
         case_ordinals: Vec<u32>,
+        excluded_replay_cases: u64,
         events: Vec<LocalObservedEvent>,
     ) -> Self {
         Self {
@@ -103,7 +107,9 @@ impl LocalRunInput {
             manifest_digest: manifest_digest.into(),
             snapshot_ref,
             cutoff_unix_seconds,
+            observed_cutoff_rfc3339: observed_cutoff_rfc3339.into(),
             case_ordinals,
+            excluded_replay_cases,
             events,
         }
     }
@@ -115,6 +121,7 @@ pub struct RunEvent {
     pub stage: String,
     pub status: String,
     pub detail: String,
+    pub observed_cutoff_rfc3339: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -162,12 +169,15 @@ pub struct LocalRunResult {
     pub source_kind: LocalSourceKind,
     pub manifest_digest: String,
     pub snapshot_ref: ArtifactReference,
+    pub observed_cutoff_rfc3339: String,
     pub execution_mode: String,
     pub simulation_version: String,
     pub simulation_seed: String,
     pub determinism: String,
     pub terminal_status: String,
     pub formal_route: String,
+    pub discovery_case_count: u64,
+    pub excluded_replay_case_count: u64,
     pub signal: Option<SignalSummary>,
     pub candidates: Vec<CandidateSummary>,
     pub verification_status: Option<String>,
@@ -222,7 +232,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         &mut events,
         "source_loaded",
         "complete",
-        "treated source manifest and snapshot committed",
+        "complete allowlisted discovery-source manifest and snapshot committed",
     );
 
     if input.source_kind == LocalSourceKind::OriginalBank {
@@ -238,6 +248,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             "complete",
             "no signal was fabricated",
         );
+        bind_observed_cutoff(&mut events, &input.observed_cutoff_rfc3339);
         let simulation_seed =
             derive_digest(&format!("{SIMULATION_VERSION}:{}", input.manifest_digest));
         return Ok(LocalRunResult {
@@ -246,12 +257,15 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             source_kind: input.source_kind,
             manifest_digest: input.manifest_digest,
             snapshot_ref: input.snapshot_ref,
+            observed_cutoff_rfc3339: input.observed_cutoff_rfc3339,
             execution_mode: "local_simulation".into(),
             simulation_version: SIMULATION_VERSION.into(),
             simulation_seed,
             determinism: "deterministic_given_identical_run_input".into(),
             terminal_status: "unsupported_source".into(),
             formal_route: "do_nothing".into(),
+            discovery_case_count: 0,
+            excluded_replay_case_count: 0,
             signal: None,
             candidates: Vec::new(),
             verification_status: None,
@@ -281,6 +295,48 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             signal.denominator
         ),
     );
+
+    if signal.numerator == 0 || signal.denominator == 0 {
+        record_event(
+            &mut events,
+            "scout",
+            "no_opportunity",
+            "no positive observed technical-error evidence; no candidate or proposal was generated",
+        );
+        record_event(
+            &mut events,
+            "run_completed",
+            "complete_no_opportunity",
+            "descriptive metric had no positive support; formal route remains do_nothing",
+        );
+        bind_observed_cutoff(&mut events, &input.observed_cutoff_rfc3339);
+        let simulation_seed = derive_digest(&format!(
+            "{SIMULATION_VERSION}:{}:{}:{}",
+            input.manifest_digest, input.run_id, signal.digest
+        ));
+        return Ok(LocalRunResult {
+            run_id: input.run_id,
+            tenant_id: input.tenant_id,
+            source_kind: input.source_kind,
+            manifest_digest: input.manifest_digest,
+            snapshot_ref: input.snapshot_ref,
+            observed_cutoff_rfc3339: input.observed_cutoff_rfc3339,
+            execution_mode: "local_simulation".into(),
+            simulation_version: SIMULATION_VERSION.into(),
+            simulation_seed,
+            determinism: "deterministic_given_identical_run_input".into(),
+            terminal_status: "complete_no_opportunity".into(),
+            formal_route: "do_nothing".into(),
+            discovery_case_count: input.case_ordinals.len() as u64,
+            excluded_replay_case_count: input.excluded_replay_cases,
+            signal: Some(summary),
+            candidates: Vec::new(),
+            verification_status: None,
+            proposal: None,
+            evaluation: None,
+            events,
+        });
+    }
 
     let (scope, core_receipt, model_receipt) = simulate_agent_core_and_model(&input, &signal)?;
     record_event(
@@ -380,6 +436,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         "complete_simulated",
         "formal route is do_nothing until independent evidence and native gates exist",
     );
+    bind_observed_cutoff(&mut events, &input.observed_cutoff_rfc3339);
 
     let simulation_seed = derive_digest(&format!(
         "{SIMULATION_VERSION}:{}:{}:{}",
@@ -391,12 +448,15 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         source_kind: input.source_kind,
         manifest_digest: input.manifest_digest,
         snapshot_ref: input.snapshot_ref,
+        observed_cutoff_rfc3339: input.observed_cutoff_rfc3339,
         execution_mode: "local_simulation".into(),
         simulation_version: SIMULATION_VERSION.into(),
         simulation_seed,
         determinism: "deterministic_given_identical_run_input".into(),
         terminal_status: "complete_simulated".into(),
         formal_route: "do_nothing".into(),
+        discovery_case_count: input.case_ordinals.len() as u64,
+        excluded_replay_case_count: input.excluded_replay_cases,
         signal: Some(summary),
         candidates: candidate_summaries,
         verification_status: Some(verification_status),
@@ -837,7 +897,14 @@ fn record_event(events: &mut Vec<RunEvent>, stage: &str, status: &str, detail: &
         stage: stage.to_owned(),
         status: status.to_owned(),
         detail: detail.to_owned(),
+        observed_cutoff_rfc3339: String::new(),
     });
+}
+
+fn bind_observed_cutoff(events: &mut [RunEvent], cutoff: &str) {
+    for event in events {
+        event.observed_cutoff_rfc3339 = cutoff.to_owned();
+    }
 }
 
 fn valid_code(value: &str) -> bool {

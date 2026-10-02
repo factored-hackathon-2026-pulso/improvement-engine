@@ -1,6 +1,6 @@
 /target/
-/target-source-adapters/
-/target-e2e/
+/target-*/
+/.nexus/
 .env
 .env.*
 !.env.example

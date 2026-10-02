@@ -44,7 +44,9 @@ fn local_simulation_runs_detection_to_proposal_without_claiming_native_execution
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         snapshot(),
         1_785_542_403,
+        "2026-08-01T00:00:03Z",
         vec![1, 2, 3, 4, 5],
+        0,
         vec![
             event(
                 1,
@@ -77,6 +79,13 @@ fn local_simulation_runs_detection_to_proposal_without_claiming_native_execution
     let result = run_local_simulation(input).expect("local run completes");
 
     assert_eq!(result.execution_mode, "local_simulation");
+    assert_eq!(result.observed_cutoff_rfc3339, "2026-08-01T00:00:03Z");
+    assert!(
+        result
+            .events
+            .iter()
+            .all(|event| event.observed_cutoff_rfc3339 == result.observed_cutoff_rfc3339)
+    );
     assert_eq!(result.signal.as_ref().unwrap().numerator, 2);
     assert_eq!(result.signal.as_ref().unwrap().denominator, 3);
     assert_eq!(result.signal.as_ref().unwrap().missing, 2);
@@ -121,6 +130,60 @@ fn local_simulation_runs_detection_to_proposal_without_claiming_native_execution
 }
 
 #[test]
+fn zero_positive_support_does_not_create_a_candidate_or_proposal() {
+    let input = LocalRunInput::new(
+        "run-local-no-opportunity",
+        "pulso_local",
+        LocalSourceKind::E0,
+        "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        snapshot(),
+        1_785_542_403,
+        "2026-08-01T00:00:03Z",
+        vec![1, 2],
+        1,
+        vec![
+            event(
+                1,
+                1,
+                Some(false),
+                Some("payments"),
+                Some("tree"),
+                Some("status_lookup"),
+            ),
+            event(
+                2,
+                1,
+                Some(false),
+                Some("cards"),
+                Some("tree"),
+                Some("status_lookup"),
+            ),
+        ],
+    );
+
+    let result = run_local_simulation(input).expect("detector reports no opportunity");
+
+    assert_eq!(result.terminal_status, "complete_no_opportunity");
+    assert_eq!(result.formal_route, "do_nothing");
+    assert_eq!(result.signal.as_ref().unwrap().numerator, 0);
+    assert!(result.candidates.is_empty());
+    assert!(result.proposal.is_none());
+    assert!(result.evaluation.is_none());
+    assert!(
+        result
+            .events
+            .iter()
+            .any(|event| { event.stage == "scout" && event.status == "no_opportunity" })
+    );
+    assert!(
+        !result
+            .events
+            .iter()
+            .any(|event| event.stage == "improvement_draft")
+    );
+}
+
+#[test]
 fn source_without_an_allowlisted_signal_is_reported_not_fabricated() {
     let input = LocalRunInput::new(
         "run-local-02",
@@ -129,7 +192,9 @@ fn source_without_an_allowlisted_signal_is_reported_not_fabricated() {
         "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         snapshot(),
         1_785_542_401,
+        "2026-08-01T00:00:01Z",
         vec![1, 2],
+        0,
         vec![
             event(1, 1, None, Some("cards"), Some("tree"), None),
             event(2, 1, None, Some("cards"), Some("tree"), None),

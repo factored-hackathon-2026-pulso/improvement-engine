@@ -13,8 +13,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use arrow_array::{
-    Array, Int32Array, Int64Array, RecordBatch, StringArray, TimestampMicrosecondArray,
-    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
+    Array, Int32Array, Int64Array, LargeStringArray, RecordBatch, StringArray,
+    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+    TimestampSecondArray,
 };
 use arrow_schema::{DataType, SchemaRef};
 use improvement_engine_core::ArtifactReference;
@@ -84,6 +85,11 @@ impl PreparationConfig {
     pub fn cutoff_unix_seconds(&self) -> u64 {
         self.cutoff_unix_seconds
     }
+
+    #[must_use]
+    pub fn observed_cutoff(&self) -> &str {
+        &self.observed_cutoff
+    }
 }
 
 /// Source identity is deliberately independent of the local path where data
@@ -108,6 +114,7 @@ pub struct PreparedSourcePayload {
     manifest_digest: String,
     snapshot_ref: ArtifactReference,
     cutoff_unix_seconds: u64,
+    observed_cutoff: String,
     agent_inputs: AgentInputSet,
 }
 
@@ -141,6 +148,11 @@ impl PreparedSource {
     }
 
     #[must_use]
+    pub fn observed_cutoff(&self) -> &str {
+        self.payload().observed_cutoff()
+    }
+
+    #[must_use]
     pub fn agent_inputs(&self) -> &AgentInputSet {
         self.payload().agent_inputs()
     }
@@ -168,6 +180,10 @@ impl PreparedSourcePayload {
     #[must_use]
     pub fn cutoff_unix_seconds(&self) -> u64 {
         self.cutoff_unix_seconds
+    }
+    #[must_use]
+    pub fn observed_cutoff(&self) -> &str {
+        &self.observed_cutoff
     }
     #[must_use]
     pub fn agent_inputs(&self) -> &AgentInputSet {
@@ -225,7 +241,7 @@ pub enum E0Fact {
         event_time_unix_micros: i64,
         actor_role: String,
         result: String,
-        correct: Option<bool>,
+        correct: Option<u64>,
         attempt: Option<u32>,
         trigger: Option<String>,
         policy_rule_id: Option<String>,
@@ -607,7 +623,7 @@ pub fn prepare_e0_package(
             ..
         } = fact
         {
-            if decided_at_unix_micros.is_some_and(|time| time > cutoff_micros) {
+            if decided_at_unix_micros.is_none_or(|time| time > cutoff_micros) {
                 *decided_at_unix_micros = None;
                 *decided_at = None;
                 *decision = None;
@@ -663,7 +679,8 @@ pub mod evaluator {
     use std::fs::File;
     use std::path::Path;
 
-    use arrow_array::{BooleanArray, StringArray};
+    use super::required_strings;
+    use arrow_array::BooleanArray;
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use serde::Serialize;
 
@@ -715,9 +732,9 @@ pub mod evaluator {
         let mut rows = Vec::new();
         while let Some(batch) = reader.next() {
             let batch = batch.map_err(|error| AdapterError::Parquet(error.to_string()))?;
-            let case_ids = require_column::<StringArray>(&batch, "case_id")?;
-            let splits = require_column::<StringArray>(&batch, "split")?;
-            let final_statuses = require_column::<StringArray>(&batch, "final_status")?;
+            let case_ids = required_strings(&batch, "case_id")?;
+            let splits = required_strings(&batch, "split")?;
+            let final_statuses = required_strings(&batch, "final_status")?;
             let sla = require_column::<BooleanArray>(&batch, "final_sla_breached")?;
             for row in 0..batch.num_rows() {
                 let rank = optional_u64(&batch, "rank", row)?
@@ -838,6 +855,7 @@ fn prepared_source(
         manifest_digest,
         snapshot_ref,
         cutoff_unix_seconds: config.cutoff_unix_seconds,
+        observed_cutoff: config.observed_cutoff.clone(),
         agent_inputs,
     };
     Ok(match source_kind {
@@ -1068,11 +1086,11 @@ fn read_cases(path: &Path) -> Result<Vec<RawCase>, AdapterError> {
     let mut cases = Vec::new();
     while let Some(batch) = reader.next() {
         let batch = batch.map_err(|error| AdapterError::Parquet(error.to_string()))?;
-        let ids = require_column::<StringArray>(&batch, "case_id")?;
-        let channel = require_column::<StringArray>(&batch, "channel")?;
-        let language = require_column::<StringArray>(&batch, "language")?;
-        let topic = require_column::<StringArray>(&batch, "topic")?;
-        let priority = require_column::<StringArray>(&batch, "priority")?;
+        let ids = required_strings(&batch, "case_id")?;
+        let channel = required_strings(&batch, "channel")?;
+        let language = required_strings(&batch, "language")?;
+        let topic = required_strings(&batch, "topic")?;
+        let priority = required_strings(&batch, "priority")?;
         let time_index = column_index(batch.schema(), "opened_at")?;
         let times = batch.column(time_index);
         for row in 0..batch.num_rows() {
@@ -1107,12 +1125,12 @@ fn read_tool_calls(path: &Path) -> Result<Vec<RawToolCall>, AdapterError> {
     let mut calls = Vec::new();
     while let Some(batch) = reader.next() {
         let batch = batch.map_err(|error| AdapterError::Parquet(error.to_string()))?;
-        let ids = require_column::<StringArray>(&batch, "case_id")?;
-        let call_ids = require_column::<StringArray>(&batch, "call_id")?;
-        let status = require_column::<StringArray>(&batch, "status")?;
-        let actor_roles = require_column::<StringArray>(&batch, "actor_role")?;
-        let tools = require_column::<StringArray>(&batch, "tool_id")?;
-        let permissions = require_column::<StringArray>(&batch, "permission_level")?;
+        let ids = required_strings(&batch, "case_id")?;
+        let call_ids = required_strings(&batch, "call_id")?;
+        let status = required_strings(&batch, "status")?;
+        let actor_roles = required_strings(&batch, "actor_role")?;
+        let tools = required_strings(&batch, "tool_id")?;
+        let permissions = required_strings(&batch, "permission_level")?;
         let time_index = column_index(batch.schema(), "event_time")?;
         let times = batch.column(time_index);
         for row in 0..batch.num_rows() {
@@ -1177,6 +1195,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
             tool,
             technical_error,
             approval,
+            parent_source_ordinal,
         ) = match fact {
             E0Fact::IdentityCheck {
                 case_ordinal: c,
@@ -1196,6 +1215,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 None,
                 None,
                 None,
+                None,
             ),
             E0Fact::Turn {
                 case_ordinal: c,
@@ -1211,6 +1231,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 Some(*event_time_unix_micros),
                 None,
                 Some(author_role.as_str()),
+                None,
                 None,
                 None,
                 None,
@@ -1233,6 +1254,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 Some(outcome.as_str()),
                 None,
                 None,
+                None,
             ),
             E0Fact::CopilotQuery {
                 case_ordinal: c,
@@ -1248,6 +1270,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 Some(*event_time_unix_micros),
                 None,
                 Some(answered_by.as_str()),
+                None,
                 None,
                 None,
                 None,
@@ -1270,6 +1293,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 Some(actor_role.as_str()),
                 Some(tool_id.as_str()),
                 Some(*technical_error),
+                None,
                 None,
             ),
             E0Fact::Approval {
@@ -1294,6 +1318,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 decision
                     .as_deref()
                     .map(|d| d.eq_ignore_ascii_case("approved")),
+                *related_tool_ordinal,
             ),
             _ => continue,
         };
@@ -1308,16 +1333,36 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
             tool.map(str::to_owned),
             technical_error,
             approval,
+            parent_source_ordinal,
         ));
     }
     candidates.sort_by_key(|entry| (entry.3, entry.1, entry.2));
+    let ordinal_by_source: BTreeMap<(&str, u32), u32> = candidates
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| ((entry.1, entry.2), index as u32 + 1))
+        .collect();
+    let approval_by_tool_source: BTreeMap<u32, u32> = candidates
+        .iter()
+        .filter(|entry| entry.1 == "approval")
+        .filter_map(|entry| entry.9.map(|tool_source| (tool_source, entry.2)))
+        .collect();
     Ok(candidates
         .into_iter()
         .enumerate()
         .map(|(index, entry)| SafeEvent {
             case_ordinal,
             event_ordinal: index as u32 + 1,
-            parent_event_ordinal: None,
+            // An approval authorizes the linked tool call, so represent the
+            // causal edge on the later tool event (child -> prior approval).
+            parent_event_ordinal: (entry.1 == "tool_call")
+                .then(|| approval_by_tool_source.get(&entry.2).copied())
+                .flatten()
+                .and_then(|approval_source| {
+                    ordinal_by_source
+                        .get(&("approval", approval_source))
+                        .copied()
+                }),
             event_time: format_unix_micros(entry.3),
             event_time_unix_micros: entry.3,
             event_kind: entry.1.to_owned(),
@@ -1353,7 +1398,7 @@ fn read_identity_checks(
                 event_time_unix_micros,
                 actor_role: safe_domain(roles.value(row), &["analyst", "ai_agent"]),
                 result: safe_domain(results.value(row), &["verified", "failed"]),
-                correct: optional_bool(&batch, "correct", row)?,
+                correct: optional_u64(&batch, "correct", row)?,
                 attempt: optional_u64(&batch, "attempt", row)?.map(|v| v as u32),
                 trigger: optional_string(&batch, "trigger", row)?
                     .map(|v| safe_domain(&v, &["abono", "cambio_de_datos", "canal_sin_identidad"])),
@@ -1581,11 +1626,57 @@ fn parquet_batches_if_present(
         .collect()
 }
 
+enum StringColumn<'a> {
+    Utf8(&'a StringArray),
+    LargeUtf8(&'a LargeStringArray),
+}
+
+impl StringColumn<'_> {
+    fn value(&self, index: usize) -> &str {
+        match self {
+            Self::Utf8(values) => values.value(index),
+            Self::LargeUtf8(values) => values.value(index),
+        }
+    }
+
+    fn is_null(&self, index: usize) -> bool {
+        match self {
+            Self::Utf8(values) => values.is_null(index),
+            Self::LargeUtf8(values) => values.is_null(index),
+        }
+    }
+
+    fn null_count(&self) -> usize {
+        match self {
+            Self::Utf8(values) => values.null_count(),
+            Self::LargeUtf8(values) => values.null_count(),
+        }
+    }
+}
+
+fn string_column<'a>(
+    batch: &'a RecordBatch,
+    column: &str,
+) -> Result<StringColumn<'a>, AdapterError> {
+    let index = column_index(batch.schema(), column)?;
+    let array = batch.column(index);
+    if let Some(values) = array.as_any().downcast_ref::<StringArray>() {
+        Ok(StringColumn::Utf8(values))
+    } else if let Some(values) = array.as_any().downcast_ref::<LargeStringArray>() {
+        Ok(StringColumn::LargeUtf8(values))
+    } else {
+        Err(AdapterError::UnsupportedSchema(format!(
+            "column {column} must be Utf8 or LargeUtf8 text, found {:?}",
+            array.data_type()
+        )))
+    }
+}
+
 fn required_strings<'a>(
     batch: &'a RecordBatch,
     column: &str,
-) -> Result<&'a StringArray, AdapterError> {
-    let values = require_column::<StringArray>(batch, column)?;
+) -> Result<StringColumn<'a>, AdapterError> {
+    let values = string_column(batch, column)?;
     if values.null_count() != 0 {
         return Err(AdapterError::InvalidInput(
             "required E0 text column contains nulls",
@@ -1603,12 +1694,10 @@ fn optional_string(
         Ok(index) => index,
         Err(_) => return Ok(None),
     };
-    let array = batch.column(index);
-    let Some(values) = array.as_any().downcast_ref::<StringArray>() else {
-        return Err(AdapterError::UnsupportedSchema(format!(
-            "optional column {column} must be text"
-        )));
-    };
+    if batch.column(index).data_type() == &DataType::Null {
+        return Ok(None);
+    }
+    let values = string_column(batch, column)?;
     Ok((!values.is_null(row)).then(|| values.value(row).to_owned()))
 }
 
@@ -1622,6 +1711,9 @@ fn optional_bool(
         Err(_) => return Ok(None),
     };
     let array = batch.column(index);
+    if array.data_type() == &DataType::Null {
+        return Ok(None);
+    }
     let Some(values) = array.as_any().downcast_ref::<arrow_array::BooleanArray>() else {
         return Err(AdapterError::UnsupportedSchema(format!(
             "optional column {column} must be boolean"
@@ -1639,7 +1731,11 @@ fn optional_presence(
         Ok(index) => index,
         Err(_) => return Ok(None),
     };
-    Ok(Some(!batch.column(index).is_null(row)))
+    let array = batch.column(index);
+    if array.data_type() == &DataType::Null {
+        return Ok(None);
+    }
+    Ok(Some(!array.is_null(row)))
 }
 
 fn optional_u64(
@@ -1652,6 +1748,9 @@ fn optional_u64(
         Err(_) => return Ok(None),
     };
     let array = batch.column(index);
+    if array.data_type() == &DataType::Null {
+        return Ok(None);
+    }
     if array.is_null(row) {
         return Ok(None);
     }
@@ -1684,6 +1783,9 @@ fn optional_number_text(
         Err(_) => return Ok(None),
     };
     let array = batch.column(index);
+    if array.data_type() == &DataType::Null {
+        return Ok(None);
+    }
     if array.is_null(row) {
         return Ok(None);
     }
@@ -1708,11 +1810,9 @@ fn optional_number_text(
                 .value(row)
                 .to_string(),
         )),
-        DataType::Utf8 => Ok(Some(
-            require_column::<StringArray>(batch, column)?
-                .value(row)
-                .to_owned(),
-        )),
+        DataType::Utf8 | DataType::LargeUtf8 => {
+            Ok(Some(string_column(batch, column)?.value(row).to_owned()))
+        }
         other => Err(AdapterError::UnsupportedSchema(format!(
             "optional metric column {column} has unsupported type {other:?}"
         ))),
@@ -1729,27 +1829,52 @@ fn optional_string_list(
         Err(_) => return Ok(Vec::new()),
     };
     let array = batch.column(index);
+    if array.data_type() == &DataType::Null {
+        return Ok(Vec::new());
+    }
     if array.is_null(row) {
         return Ok(Vec::new());
     }
-    let list = array
-        .as_any()
-        .downcast_ref::<arrow_array::ListArray>()
-        .ok_or_else(|| {
+    if matches!(array.data_type(), DataType::Utf8 | DataType::LargeUtf8) {
+        let encoded_column = string_column(batch, column)?;
+        let encoded = encoded_column.value(row);
+        if encoded.len() > 16_384 {
+            return Err(AdapterError::UnsupportedSchema(format!(
+                "optional column {column} JSON array exceeds size limit"
+            )));
+        }
+        let items = serde_json::from_str::<Vec<String>>(encoded).map_err(|_| {
             AdapterError::UnsupportedSchema(format!(
-                "optional column {column} must be a list of strings"
+                "optional column {column} must contain a JSON array of strings"
             ))
         })?;
-    let values = list.value(row);
-    let strings = values
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .ok_or_else(|| {
-            AdapterError::UnsupportedSchema(format!(
-                "optional column {column} must contain strings"
-            ))
-        })?;
-    Ok((0..strings.len())
+        if items.len() > 128 || items.iter().any(|item| item.len() > 256) {
+            return Err(AdapterError::UnsupportedSchema(format!(
+                "optional column {column} JSON array exceeds item limits"
+            )));
+        }
+        return Ok(items);
+    }
+    let values = if let Some(list) = array.as_any().downcast_ref::<arrow_array::ListArray>() {
+        list.value(row)
+    } else if let Some(list) = array.as_any().downcast_ref::<arrow_array::LargeListArray>() {
+        list.value(row)
+    } else {
+        return Err(AdapterError::UnsupportedSchema(format!(
+            "optional column {column} must be a list of strings, found {:?}",
+            array.data_type()
+        )));
+    };
+    let strings = if let Some(strings) = values.as_any().downcast_ref::<StringArray>() {
+        StringColumn::Utf8(strings)
+    } else if let Some(strings) = values.as_any().downcast_ref::<LargeStringArray>() {
+        StringColumn::LargeUtf8(strings)
+    } else {
+        return Err(AdapterError::UnsupportedSchema(format!(
+            "optional column {column} must contain Utf8 or LargeUtf8 values"
+        )));
+    };
+    Ok((0..values.len())
         .filter(|index| !strings.is_null(*index))
         .map(|index| strings.value(index).to_owned())
         .collect())
@@ -1791,7 +1916,8 @@ fn safe_optional_domain(value: &str, allowed: &[&str]) -> Option<String> {
 fn opaque_category(value: &str) -> String {
     // Stable pseudonymous category for open vocabularies. Do not expose the
     // source token itself in serialized discovery facts.
-    digest(value.as_bytes())
+    let digest = digest(value.as_bytes());
+    format!("sha256_{}", &digest[7..63])
 }
 
 fn stable_event_ordinal(_id: &str, row: usize) -> u32 {

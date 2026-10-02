@@ -179,6 +179,130 @@ fn e0_fixture(root: &Path) {
         ],
     );
 
+    let identity_checks = Schema::new(vec![
+        Field::new("check_id", DataType::Utf8, false),
+        Field::new("case_id", DataType::Utf8, false),
+        Field::new(
+            "started_at",
+            DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            false,
+        ),
+        Field::new("actor_role", DataType::Utf8, false),
+        Field::new("result", DataType::Utf8, false),
+        Field::new("correct", DataType::Int32, true),
+    ]);
+    write_parquet(
+        &data.join("identity_check.parquet"),
+        identity_checks,
+        vec![
+            Arc::new(StringArray::from(vec![
+                "identity-row-1",
+                "identity-row-2",
+                "identity-row-3",
+            ])),
+            Arc::new(StringArray::from(vec!["case-b", "case-c", "case-a"])),
+            Arc::new(
+                TimestampMicrosecondArray::from(vec![10_500_000_i64, 10_600_000, 12_500_000])
+                    .with_timezone("UTC"),
+            ),
+            Arc::new(StringArray::from(vec!["analyst", "analyst", "analyst"])),
+            Arc::new(StringArray::from(vec!["verified", "verified", "failed"])),
+            Arc::new(arrow_array::Int32Array::from(vec![
+                Some(2_i32),
+                None,
+                Some(1),
+            ])),
+        ],
+    );
+
+    let copilot_queries = Schema::new(vec![
+        Field::new("query_id", DataType::Utf8, false),
+        Field::new("case_id", DataType::Utf8, false),
+        Field::new(
+            "event_time",
+            DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            false,
+        ),
+        Field::new("query_signature", DataType::Utf8, false),
+        Field::new("answered_by", DataType::Utf8, false),
+        Field::new("tables_read", DataType::LargeUtf8, true),
+        Field::new("columns_read", DataType::LargeUtf8, true),
+        Field::new("sent_to_chat", DataType::Boolean, true),
+    ]);
+    write_parquet(
+        &data.join("copilot_query.parquet"),
+        copilot_queries,
+        vec![
+            Arc::new(StringArray::from(vec!["query-1"])),
+            Arc::new(StringArray::from(vec!["case-a"])),
+            Arc::new(TimestampMicrosecondArray::from(vec![12_800_000_i64]).with_timezone("UTC")),
+            Arc::new(StringArray::from(vec!["safe-signature"])),
+            Arc::new(StringArray::from(vec!["tool:lookup"])),
+            Arc::new(arrow_array::LargeStringArray::from(vec![Some(
+                "[\"customers\",\"transactions\"]",
+            )])),
+            Arc::new(arrow_array::LargeStringArray::from(vec![Some(
+                "[\"account_status\"]",
+            )])),
+            Arc::new(BooleanArray::from(vec![Some(false)])),
+        ],
+    );
+
+    let approvals = Schema::new(vec![
+        Field::new("approval_id", DataType::Utf8, false),
+        Field::new("case_id", DataType::Utf8, false),
+        Field::new(
+            "requested_at",
+            DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            false,
+        ),
+        Field::new("requested_by_role", DataType::Utf8, false),
+        Field::new("tool_id", DataType::Utf8, false),
+        Field::new("executed_call_id", DataType::Utf8, true),
+        Field::new("reason_code", DataType::Null, true),
+        Field::new("policy_rule_id", DataType::Null, true),
+        Field::new(
+            "decided_at",
+            DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            true,
+        ),
+        Field::new("decision", DataType::Utf8, true),
+    ]);
+    write_parquet(
+        &data.join("approval.parquet"),
+        approvals,
+        vec![
+            Arc::new(StringArray::from(vec![
+                "approval-missing",
+                "approval-before",
+                "approval-after",
+            ])),
+            Arc::new(StringArray::from(vec!["case-a", "case-a", "case-a"])),
+            Arc::new(
+                TimestampMicrosecondArray::from(vec![10_700_000_i64, 10_800_000, 10_900_000])
+                    .with_timezone("UTC"),
+            ),
+            Arc::new(StringArray::from(vec!["analyst", "analyst", "analyst"])),
+            Arc::new(StringArray::from(vec!["mutate_a", "mutate_b", "mutate_c"])),
+            Arc::new(StringArray::from(vec![
+                Some("call-2"),
+                Some("call-3"),
+                None,
+            ])),
+            Arc::new(arrow_array::NullArray::new(3)),
+            Arc::new(arrow_array::NullArray::new(3)),
+            Arc::new(
+                TimestampMicrosecondArray::from(vec![None, Some(19_000_000), Some(21_000_000)])
+                    .with_timezone("UTC"),
+            ),
+            Arc::new(StringArray::from(vec![
+                Some("approved"),
+                Some("approved"),
+                Some("approved"),
+            ])),
+        ],
+    );
+
     let labels = Schema::new(vec![
         Field::new("case_id", DataType::Utf8, false),
         Field::new("rank", DataType::Int64, false),
@@ -266,16 +390,57 @@ fn e0_agent_projection_is_chronological_safe_and_excludes_evaluator_labels() {
     assert_eq!(cases[0].ordinal(), 1);
     assert_eq!(cases[0].phase(), CasePhase::Arranque);
     assert_eq!(cases[0].opened_at(), "1970-01-01T00:00:10Z");
-    assert_eq!(cases[0].events().len(), 3);
-    assert_eq!(cases[0].events()[0].technical_error(), Some(false));
-    assert_eq!(cases[0].events()[1].technical_error(), Some(true));
-    assert_eq!(cases[0].events()[0].event_kind(), "tool_call");
-    assert_eq!(cases[0].events()[0].actor_role(), Some("tree"));
+    assert_eq!(cases[0].events().len(), 8);
+    let tool_events = cases[0]
+        .events()
+        .iter()
+        .filter(|event| event.event_kind() == "tool_call")
+        .collect::<Vec<_>>();
+    assert_eq!(tool_events.len(), 2);
+    assert_eq!(tool_events[0].technical_error(), Some(false));
+    assert_eq!(tool_events[1].technical_error(), Some(true));
+    assert_eq!(tool_events[0].actor_role(), Some("tree"));
     assert!(
-        cases[0].events()[0]
+        tool_events[0]
             .tool_code()
-            .is_some_and(|code| code.starts_with("sha256:"))
+            .is_some_and(|code| code.starts_with("sha256_") && code.len() <= 64)
     );
+    let approval_event = cases[0]
+        .events()
+        .iter()
+        .find(|event| event.event_kind() == "approval")
+        .expect("approval should appear in safe event timeline");
+    assert_eq!(approval_event.parent_event_ordinal(), None);
+    let linked_tool_event = tool_events[1];
+    assert_eq!(linked_tool_event.event_kind(), "tool_call");
+    assert_eq!(linked_tool_event.parent_event_ordinal(), Some(2));
+    assert!(
+        cases[0]
+            .events()
+            .iter()
+            .any(|event| event.event_kind() == "identity_check")
+    );
+    assert!(e0.agent_inputs().facts().iter().any(|fact| matches!(
+        fact,
+        improvement_engine_source_adapters::E0Fact::IdentityCheck {
+            case_ordinal: 1,
+            correct: Some(1),
+            ..
+        }
+    )));
+    assert!(e0.agent_inputs().facts().iter().any(|fact| matches!(
+        fact,
+        improvement_engine_source_adapters::E0Fact::CopilotQuery {
+            tables_read,
+            columns_read,
+            answered_by,
+            ..
+        } if tables_read.len() == 2
+            && columns_read.len() == 1
+            && tables_read.iter().all(|value| value.starts_with("sha256_") && value.len() <= 64)
+            && columns_read[0].starts_with("sha256_")
+            && answered_by == "tool"
+    )));
     assert_eq!(cases[2].phase(), CasePhase::Reproduccion);
     assert_eq!(cases[2].ordinal(), 3);
 
@@ -339,9 +504,40 @@ fn e0_cutoff_excludes_future_cases_and_future_interaction_events_before_split() 
             requested_at.as_str() <= "1970-01-01T00:00:20Z",
     }));
     assert!(
-        inputs.cases()[1].events().is_empty(),
-        "case B tool call at 20.5 seconds is after cutoff second 20"
+        inputs.cases()[1]
+            .events()
+            .iter()
+            .all(|event| event.event_time_unix_micros() <= 20_000_000)
     );
+    let approvals = inputs
+        .facts()
+        .iter()
+        .filter_map(|fact| match fact {
+            improvement_engine_source_adapters::E0Fact::Approval {
+                requested_at_unix_micros,
+                decided_at_unix_micros,
+                decision,
+                ..
+            } => Some((
+                *requested_at_unix_micros,
+                *decided_at_unix_micros,
+                decision.as_deref(),
+            )),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(approvals.len(), 3);
+    assert_eq!(
+        approvals
+            .iter()
+            .filter(|(_, decided, decision)| decided.is_none() && decision.is_none())
+            .count(),
+        2,
+        "missing timestamps and post-cutoff decisions must both be redacted"
+    );
+    assert!(approvals.iter().any(
+        |(_, decided, decision)| *decided == Some(19_000_000) && *decision == Some("approved")
+    ));
 }
 
 #[test]

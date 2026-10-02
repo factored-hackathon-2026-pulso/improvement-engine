@@ -9,7 +9,7 @@ use improvement_engine_core::local_simulation::{
     LocalObservedEvent, LocalRunInput, LocalRunResult, LocalSourceKind, run_local_simulation,
 };
 use improvement_engine_source_adapters::{
-    PreparationConfig, PreparedSource, prepare_e0_package, prepare_original_bank,
+    CasePhase, PreparationConfig, PreparedSource, prepare_e0_package, prepare_original_bank,
 };
 
 fn main() {
@@ -72,12 +72,20 @@ fn to_run_input(
         .agent_inputs()
         .cases()
         .iter()
+        .filter(|case| case.phase() == CasePhase::Arranque)
         .map(|case| case.ordinal())
         .collect();
+    let excluded_replay_cases = prepared
+        .agent_inputs()
+        .cases()
+        .iter()
+        .filter(|case| case.phase() == CasePhase::Reproduccion)
+        .count() as u64;
     let events = prepared
         .agent_inputs()
         .cases()
         .iter()
+        .filter(|case| case.phase() == CasePhase::Arranque)
         .flat_map(|case| case.events())
         .map(|event| {
             Ok(LocalObservedEvent {
@@ -102,7 +110,9 @@ fn to_run_input(
         prepared.manifest_digest(),
         prepared.snapshot_ref().clone(),
         prepared.cutoff_unix_seconds(),
+        prepared.observed_cutoff(),
         case_ordinals,
+        excluded_replay_cases,
         events,
     ))
 }
@@ -307,12 +317,15 @@ mod tests {
                 revision: 1,
                 digest: "sha256:test".into(),
             },
+            observed_cutoff_rfc3339: "2025-07-01T00:00:00Z".into(),
             execution_mode: "local_simulation".into(),
             simulation_version: "test".into(),
             simulation_seed: "test".into(),
             determinism: "deterministic".into(),
             terminal_status: "complete_simulated".into(),
             formal_route: "do_nothing".into(),
+            discovery_case_count: 0,
+            excluded_replay_case_count: 0,
             signal: None,
             candidates: Vec::new(),
             verification_status: None,
