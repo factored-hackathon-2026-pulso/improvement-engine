@@ -51,12 +51,11 @@ fn start_protected(
     improvement_engine_core::sandbox::SandboxArmRef,
     improvement_engine_core::sandbox::SandboxIdentityIssuer,
 ) {
-    let fixture = fixture();
-    let issuer = fixture.identity_issuer().unwrap();
-    (
-        sandbox.start_arm("evaluation-1", arm_id, fixture).unwrap(),
-        issuer,
-    )
+    let arm = sandbox
+        .start_arm("evaluation-1", arm_id, fixture())
+        .unwrap();
+    let issuer = sandbox.identity_issuer(&arm).unwrap();
+    (arm, issuer)
 }
 
 #[test]
@@ -127,6 +126,10 @@ fn proof_from_another_arm_is_forged_and_denied_before_action_read_or_reset() {
     let candidate_proof = sandbox
         .issue_identity(&candidate_issuer, &candidate, "customer-1")
         .unwrap();
+    assert!(matches!(
+        sandbox.issue_identity(&candidate_issuer, &baseline, "customer-1"),
+        Err(SandboxError::IdentityEvidenceMismatch)
+    ));
     assert_eq!(
         sandbox
             .execute(

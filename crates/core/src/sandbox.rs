@@ -19,7 +19,6 @@ pub struct SandboxFixture {
     initial_state: BTreeMap<String, String>,
     allowed_actions: BTreeSet<String>,
     identity_policy: Option<SandboxIdentityPolicy>,
-    identity_issuer: Option<SandboxIdentityIssuer>,
 }
 
 impl SandboxFixture {
@@ -38,7 +37,6 @@ impl SandboxFixture {
             initial_state,
             allowed_actions,
             identity_policy: None,
-            identity_issuer: None,
         }
     }
 
@@ -57,9 +55,6 @@ impl SandboxFixture {
         let tenant_id = tenant_id.into();
         let namespace = namespace.into();
         let fixture_id = fixture_id.into();
-        let identity_issuer = SandboxIdentityIssuer {
-            issuer_id: fixture_issuer_id(&tenant_id, &namespace, &fixture_id, &identity_policy),
-        };
         Self {
             tenant_id,
             namespace,
@@ -67,15 +62,7 @@ impl SandboxFixture {
             initial_state,
             allowed_actions,
             identity_policy: Some(identity_policy),
-            identity_issuer: Some(identity_issuer),
         }
-    }
-
-    /// Returns the opaque issuer capability installed with this fixture.
-    /// Only trusted fixture setup should retain this capability.
-    #[must_use]
-    pub fn identity_issuer(&self) -> Option<SandboxIdentityIssuer> {
-        self.identity_issuer.clone()
     }
 }
 
@@ -455,6 +442,7 @@ struct ArmState {
     revoked_identity_bindings: BTreeSet<String>,
     issued_identity_evidence: BTreeMap<String, IdentityEvidence>,
     next_identity_nonce: u64,
+    identity_issuer: Option<SandboxIdentityIssuer>,
 }
 
 /// A deterministic fixture simulator. It is deliberately in-memory: no
@@ -463,15 +451,31 @@ pub struct StatefulSandbox {
     arms: BTreeMap<SandboxArmRef, ArmState>,
     evaluation_fixtures: BTreeMap<String, SandboxFixture>,
     clock: Box<dyn SandboxClock>,
+    next_issuer_nonce: u64,
 }
 
 impl StatefulSandbox {
+    /// Returns the opaque issuer capability registered for this exact arm.
+    /// A capability from another arm cannot mint evidence here.
+    pub fn identity_issuer(
+        &self,
+        arm: &SandboxArmRef,
+    ) -> Result<SandboxIdentityIssuer, SandboxError> {
+        self.arms
+            .get(arm)
+            .ok_or(SandboxError::ArmUnknown)?
+            .identity_issuer
+            .clone()
+            .ok_or(SandboxError::IdentityEvidenceMismatch)
+    }
+
     #[must_use]
     pub fn with_clock(clock: impl SandboxClock + 'static) -> Self {
         Self {
             arms: BTreeMap::new(),
             evaluation_fixtures: BTreeMap::new(),
             clock: Box::new(clock),
+            next_issuer_nonce: 0,
         }
     }
 }
@@ -500,6 +504,17 @@ impl SandboxPort for StatefulSandbox {
         if self.arms.contains_key(&arm) {
             return Err(SandboxError::ArmAlreadyExists);
         }
+        let identity_issuer = if fixture.identity_policy.is_some() {
+            self.next_issuer_nonce = self
+                .next_issuer_nonce
+                .checked_add(1)
+                .ok_or(SandboxError::FixtureInvalid)?;
+            Some(SandboxIdentityIssuer {
+                issuer_id: issuer_nonce(&arm, self.next_issuer_nonce),
+            })
+        } else {
+            None
+        };
 
         self.arms.insert(
             arm.clone(),
@@ -511,6 +526,7 @@ impl SandboxPort for StatefulSandbox {
                 revoked_identity_bindings: BTreeSet::new(),
                 issued_identity_evidence: BTreeMap::new(),
                 next_identity_nonce: 0,
+                identity_issuer,
             },
         );
         self.evaluation_fixtures
@@ -532,6 +548,7 @@ impl SandboxPort for StatefulSandbox {
             request.identity.as_ref(),
             now,
             &state.issued_identity_evidence,
+            state.identity_issuer.as_ref(),
             &state.revoked_identity_bindings,
         )?;
         let action = request.action;
@@ -592,6 +609,7 @@ impl SandboxPort for StatefulSandbox {
             request.identity.as_ref(),
             now,
             &state.issued_identity_evidence,
+            state.identity_issuer.as_ref(),
             &state.revoked_identity_bindings,
         )?;
         let value =
@@ -624,6 +642,7 @@ impl SandboxPort for StatefulSandbox {
             scope.identity.as_ref(),
             now,
             &state.issued_identity_evidence,
+            state.identity_issuer.as_ref(),
             &state.revoked_identity_bindings,
         )?;
         let before_revision = state.revision;
@@ -659,7 +678,7 @@ impl StatefulSandbox {
             .as_ref()
             .ok_or(SandboxError::IdentityEvidenceMismatch)?
             .clone();
-        if state.fixture.identity_issuer.as_ref() != Some(issuer) {
+        if state.identity_issuer.as_ref() != Some(issuer) {
             return Err(SandboxError::IdentityEvidenceMismatch);
         }
         let principal_id = principal_id.into();
@@ -726,7 +745,6 @@ fn fixture_is_valid(fixture: &SandboxFixture) -> bool {
             .identity_policy
             .as_ref()
             .is_none_or(identity_policy_is_valid)
-        && (fixture.identity_policy.is_some() == fixture.identity_issuer.is_some())
 }
 
 fn identity_policy_is_valid(policy: &SandboxIdentityPolicy) -> bool {
@@ -747,6 +765,7 @@ fn validate_identity(
     identity: Option<&IdentityEvidence>,
     observed_at: u64,
     issued_identity_evidence: &BTreeMap<String, IdentityEvidence>,
+    identity_issuer: Option<&SandboxIdentityIssuer>,
     revoked_identity_bindings: &BTreeSet<String>,
 ) -> Result<(), SandboxError> {
     let Some(policy) = &fixture.identity_policy else {
@@ -756,11 +775,7 @@ fn validate_identity(
     if issued_identity_evidence.get(&identity.nonce) != Some(identity) {
         return Err(SandboxError::IdentityEvidenceMismatch);
     }
-    if fixture
-        .identity_issuer
-        .as_ref()
-        .is_none_or(|issuer| issuer.issuer_id != identity.issuer_id)
-    {
+    if identity_issuer.is_none_or(|issuer| issuer.issuer_id != identity.issuer_id) {
         return Err(SandboxError::IdentityEvidenceMismatch);
     }
     if identity.valid_until <= observed_at || policy.valid_until <= observed_at {
@@ -785,26 +800,13 @@ fn identity_nonce(arm: &SandboxArmRef, sequence: u64) -> String {
     format!("sandbox-identity:sha256:{:x}", digest.finalize())
 }
 
-fn fixture_issuer_id(
-    tenant_id: &str,
-    namespace: &str,
-    fixture_id: &str,
-    policy: &SandboxIdentityPolicy,
-) -> String {
+fn issuer_nonce(arm: &SandboxArmRef, sequence: u64) -> String {
     let mut digest = Sha256::new();
-    for part in [
-        tenant_id,
-        namespace,
-        fixture_id,
-        &policy.case_id,
-        &policy.channel,
-        &policy.policy_digest,
-        &policy.questions_digest,
-    ] {
+    for part in [&arm.evaluation_id, &arm.arm_id] {
         digest.update(part.len().to_be_bytes());
         digest.update(part.as_bytes());
     }
-    digest.update(policy.valid_until.to_be_bytes());
+    digest.update(sequence.to_be_bytes());
     format!("sandbox-issuer:sha256:{:x}", digest.finalize())
 }
 
