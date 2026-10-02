@@ -242,6 +242,20 @@ impl LabSource {
 pub struct ApprovedLabSource {
     approval_id: String,
     source: LabSource,
+    // ArtifactReference.digest identifies source content in the U08 artifact
+    // domain. This optional value is instead the canonical U04
+    // SourceSnapshot binding digest and is never inferred from that artifact.
+    u04_source_snapshot_binding: Option<String>,
+}
+
+impl ApprovedLabSource {
+    /// Crate-private U04 composition hook. A public source manifest cannot
+    /// manufacture this cross-domain binding.
+    #[allow(dead_code)] // Called by the future trusted U04/U08 composition root.
+    pub(crate) fn bind_verified_u04_snapshot(mut self, binding_digest: String) -> Self {
+        self.u04_source_snapshot_binding = Some(binding_digest);
+        self
+    }
 }
 
 /// Separate authorization seam so U03/U04 adapters can replace the local
@@ -275,6 +289,7 @@ impl LabSourceApprovalPort for InMemoryLabSourceAuthority {
         Ok(ApprovedLabSource {
             approval_id,
             source,
+            u04_source_snapshot_binding: None,
         })
     }
 }
@@ -452,11 +467,17 @@ pub(crate) struct GovernedE0QueryCandidate {
     rows: QueryRows,
     receipt: QueryReceipt,
     source_table: LabTable,
+    u04_source_snapshot_binding: String,
 }
 
 impl GovernedE0QueryCandidate {
-    pub(crate) fn into_parts(self) -> (QueryRows, QueryReceipt, LabTable) {
-        (self.rows, self.receipt, self.source_table)
+    pub(crate) fn into_parts(self) -> (QueryRows, QueryReceipt, LabTable, String) {
+        (
+            self.rows,
+            self.receipt,
+            self.source_table,
+            self.u04_source_snapshot_binding,
+        )
     }
 }
 
@@ -498,6 +519,7 @@ pub enum LabError {
     ExternalIoDenied,
     DependencyDenied,
     QueryFailed,
+    E0BindingUnavailable,
 }
 
 struct StoredSession {
@@ -505,6 +527,7 @@ struct StoredSession {
     lab_instance_nonce: u64,
     source: LabSource,
     approval_id: String,
+    u04_source_snapshot_binding: Option<String>,
     connection: Connection,
     receipts: Vec<QueryReceipt>,
     results: BTreeMap<String, QueryRows>,
@@ -560,6 +583,7 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
                 lab_instance_nonce: self.lab_instance_nonce,
                 source: approved_source.source,
                 approval_id: approved_source.approval_id,
+                u04_source_snapshot_binding: approved_source.u04_source_snapshot_binding,
                 connection,
                 receipts: Vec::new(),
                 results: BTreeMap::new(),
@@ -665,6 +689,10 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             .find(|table| table.name == receipt.queried_table)
             .cloned()
             .ok_or(LabError::QueryFailed)?;
+        let u04_source_snapshot_binding = session
+            .u04_source_snapshot_binding
+            .clone()
+            .ok_or(LabError::E0BindingUnavailable)?;
         if !receipt.has_valid_digest()
             || !receipt.binds_rows(&rows)
             || receipt.row_count != rows.len()
@@ -675,6 +703,7 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             rows,
             receipt,
             source_table,
+            u04_source_snapshot_binding,
         })
     }
 

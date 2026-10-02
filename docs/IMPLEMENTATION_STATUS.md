@@ -100,12 +100,14 @@ green unit test as proof that a broader product flow is complete.
   `dependency_unavailable` rather than a simulated native result.
 - U08-E / Issue #50: E0 read-only query receipt adapter. It accepts only an
   opaque candidate reloaded from U08's live governed ledger plus a U04-B V2
-  projection. It binds the sealed SourceSnapshot identity and exact verified
-  source table/rows; field authorization comes from the actual `TableInput`
+  projection. An explicit private mapping binds the U08 artifact-content
+  reference to the sealed U04 SourceSnapshot identity (their digest domains
+  are intentionally not compared); it also binds exact verified source
+  table/rows. Field authorization comes from the actual `TableInput`
   projection and includes filter reads. Public receipt digests are integrity
   checks, not E0 authentication; the E0 result has a separate opaque internal
   attestation. It blocks labels, later joins, future/cross-tenant or
-  cross-snapshot reuse, divergent evidence and source writes. It does not implement U12-E,
+  divergent snapshot mapping/evidence and source writes. It does not implement U12-E,
   Scout, model/Agent Core access, evaluation or release.
 - U23-P / Issue #47: the narrow Frozen/Continuous temporal protocol over
   U04-B's replay cutoff and U22/U33 governed admission. An opaque, trusted

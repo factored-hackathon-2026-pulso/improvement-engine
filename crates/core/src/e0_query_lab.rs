@@ -61,7 +61,7 @@ impl E0QueryLab {
         projection: &VerifiedE0QueryProjection,
         candidate: GovernedE0QueryCandidate,
     ) -> Result<VerifiedE0QueryResult, E0QueryLabError> {
-        let (rows, receipt, source_table) = candidate.into_parts();
+        let (rows, receipt, source_table, u04_source_snapshot_binding) = candidate.into_parts();
         if !receipt.has_valid_digest()
             || !receipt.binds_rows(&rows)
             || receipt.row_count != rows.len()
@@ -94,7 +94,7 @@ impl E0QueryLab {
             return Err(E0QueryLabError::LabelOrUnknownFieldDenied);
         }
         if !projection.matches_lab_source(
-            &receipt.source_snapshot_ref.digest,
+            &u04_source_snapshot_binding,
             &source_table.name,
             &source_table.columns,
             &source_table.rows,
@@ -149,10 +149,14 @@ mod tests {
     }
 
     fn projection(tenant: &str) -> VerifiedE0QueryProjection {
+        projection_for_snapshot(tenant, 'e')
+    }
+
+    fn projection_for_snapshot(tenant: &str, snapshot: char) -> VerifiedE0QueryProjection {
         VerifiedE0QueryProjection::deterministic_for_e0_query_test(
             tenant,
             100,
-            digest('e'),
+            digest(snapshot),
             digest('f'),
             "case",
             digest('b'),
@@ -240,6 +244,77 @@ mod tests {
         assert!(projection.allows_field("status"));
         assert!(!projection.allows_field("label"));
         assert_eq!(projection.cutoff_at_unix_seconds(), 100);
+
+        // The U08 artifact digest names the content (`a`), whereas the U04
+        // snapshot binding commits the entire persisted snapshot and therefore
+        // differs. The explicit approved-source mapping bridges those domains.
+        let artifact = ArtifactReference {
+            tenant_id: "tenant_a".to_owned(),
+            id: "018f50a1-7f00-7000-8000-000000000008".to_owned(),
+            revision: 1,
+            digest: digest('a'),
+        };
+        assert_ne!(artifact.digest, snapshot.binding_digest());
+        let lab_rows = vec![BTreeMap::from([
+            ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+            ("status".to_owned(), "completed".to_owned()),
+        ])];
+        assert!(projection.matches_lab_source(
+            &snapshot.binding_digest(),
+            "case",
+            &["event_time".to_owned(), "status".to_owned()],
+            &lab_rows,
+        ));
+        let approved = InMemoryLabSourceAuthority
+            .approve(
+                LabSource::new(
+                    LabSourceManifest {
+                        tenant_id: "tenant_a".to_owned(),
+                        snapshot_ref: artifact.clone(),
+                        source_contract_digest: digest('b'),
+                        source_digest: digest('a'),
+                        transform_digest: digest('c'),
+                        cutoff_unix_seconds: 100,
+                        classification: crate::local_lab::LabDataClassification::Treated,
+                        safe_for_discovery: true,
+                    },
+                    vec![LabTable::new(
+                        "case",
+                        vec!["event_time", "status"],
+                        lab_rows,
+                    )],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let approved = projection.bind_approved_lab_source(approved);
+        let access = LabAccess::new(
+            "real_u04",
+            "tenant_a",
+            "investigation",
+            "grant",
+            "authority",
+            artifact,
+            1_000,
+        );
+        let mut authority = InMemoryLabGrantAuthority::default();
+        authority.issue(LabGrant::from_access(&access));
+        let mut lab = LocalInvestigationLab::new(authority);
+        let session = lab.open(access.clone(), approved, 100).unwrap();
+        let result = lab
+            .query(
+                session.session_id(),
+                &access,
+                LabQuery::select("case", vec!["event_time", "status"], None),
+                100,
+            )
+            .unwrap();
+        let candidate = lab
+            .governed_e0_candidate(session.session_id(), &access, &result.receipt().digest, 100)
+            .unwrap();
+        if let Err(error) = E0QueryLab::admit(&projection, candidate) {
+            panic!("{error:?}");
+        }
     }
 
     fn source(
@@ -254,15 +329,14 @@ mod tests {
         tenant: &str,
         cutoff: u64,
         label_column: bool,
-        snapshot_byte: char,
+        u04_binding_byte: char,
     ) -> (ApprovedLabSource, ArtifactReference) {
         let snapshot = ArtifactReference {
             tenant_id: tenant.to_owned(),
             id: "018f50a1-7f00-7000-8000-000000000008".to_owned(),
             revision: 1,
-            // U08's ArtifactReference is explicitly bound to the same sealed
-            // U04 SourceSnapshot identity, not merely a same-tenant handle.
-            digest: digest(snapshot_byte),
+            // Intentionally distinct from the U04 SourceSnapshot binding.
+            digest: digest('a'),
         };
         let mut row = BTreeMap::from([
             ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
@@ -291,6 +365,8 @@ mod tests {
         let approved = InMemoryLabSourceAuthority
             .approve(source)
             .expect("fixed source approval");
+        let approved =
+            projection_for_snapshot(tenant, u04_binding_byte).bind_approved_lab_source(approved);
         (approved, snapshot)
     }
 

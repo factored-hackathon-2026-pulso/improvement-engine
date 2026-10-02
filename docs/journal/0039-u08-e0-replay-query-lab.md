@@ -24,13 +24,16 @@ crear una capability E0. La capability de éxito conserva una atestación intern
 opaca, separada del receipt público y de las filas.
 
 Antes de emitirla, compara el `SourceSnapshot.binding_digest` sellado por U04
-con el snapshot del lab, los tres digests, cutoff, tabla y la tabla fuente
+con un mapeo explícito y privado almacenado en la capability aprobada del lab,
+los tres digests, cutoff, tabla y la tabla fuente
 exacta (schema y filas) contra la evidencia `TableInput` validada por U04. La
 lista de campos permitidos se deriva de las columnas presentes en ese
 `TableInput`, no del schema más amplio del manifest. Todas las columnas leídas,
 incluida la columna de `Equals`, deben pertenecer a esa lista. Labels, señales,
-campos futuros/desconocidos, joins dependientes, reuso cross-tenant, snapshot
-distinto o evidencia divergente fallan antes de capability. Nada añade
+campos futuros/desconocidos, joins dependientes, reuso cross-tenant, mapeo de
+snapshot distinto o evidencia divergente fallan antes de capability. El
+`ArtifactReference.digest` de U08 nombra contenido y no se compara con el
+binding digest de U04: ambos dominios pueden diferir. Nada añade
 escritura, ejecución o release.
 
 ## RED → GREEN
@@ -43,7 +46,7 @@ receipt con pruebas para:
 1. una proyección real U04-B V2 que preserva tabla, campo, replay y cutoff;
 2. un receipt emitido y recuperado desde el ledger U08, ligado al snapshot y a
    las filas selladas U04, obtiene una capability E0 opaca;
-3. cutoff futuro, labels/campo no permitido (incluido filtro), tenant/snapshot
+3. cutoff futuro, labels/campo no permitido (incluido filtro), tenant/mapeo de snapshot
    cruzado, evidencia divergente y join dependiente son bloqueados antes de
    crear capability;
 4. `SourceWrite` denegado por U08 sin receipt E0.

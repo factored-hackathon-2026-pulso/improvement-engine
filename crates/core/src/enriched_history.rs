@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::local_lab::ApprovedLabSource;
 use crate::source_validation::{SourceFileSeal, SourceSnapshot};
 
 const DISCOVERY_FORBIDDEN_TABLES: &[&str] = &["labels", "signal"];
@@ -610,6 +611,13 @@ impl VerifiedE0QueryProjection {
             && self.table == table
             && self.source_columns == columns
             && self.source_rows == rows
+    }
+
+    /// The only U04-facing composition path for an E0 lab source. It carries
+    /// the canonical snapshot binding as a separate sealed-domain value; it
+    /// never substitutes `ArtifactReference.digest` for that identity.
+    pub(crate) fn bind_approved_lab_source(&self, source: ApprovedLabSource) -> ApprovedLabSource {
+        source.bind_verified_u04_snapshot(self.source_snapshot_digest.clone())
     }
 
     #[cfg(test)]
