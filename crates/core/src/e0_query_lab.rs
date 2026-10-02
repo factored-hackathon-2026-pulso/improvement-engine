@@ -115,7 +115,6 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
-    use crate::ArtifactReference;
     use crate::enriched_history::{
         AvailabilityClockMode, AvailabilityProfile, EnrichedHistoryAdapter,
         EnrichedHistoryManifest, PackageFile, ProvenanceDigests, ReplayRowAvailability, TableInput,
@@ -127,7 +126,11 @@ mod tests {
         LocalInvestigationLab,
     };
     use crate::source_validation::{
-        InMemorySourceSnapshotArtifactRegistry, SourceSnapshot, VerifiedSourceArtifactBinding,
+        SourceSnapshot, VerifiedSourceArtifactBinding, resolve_source_snapshot_artifact,
+    };
+    use crate::{
+        ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository,
+        InMemoryArtifactRepository,
     };
     use serde_json::json;
 
@@ -233,12 +236,21 @@ mod tests {
         // The U08 artifact digest names the content (`a`), whereas the U04
         // snapshot binding commits the entire persisted snapshot and therefore
         // differs. The explicit approved-source mapping bridges those domains.
-        let artifact = ArtifactReference {
-            tenant_id: "tenant_a".to_owned(),
-            id: "018f50a1-7f00-7000-8000-000000000008".to_owned(),
-            revision: 1,
-            digest: digest('a'),
-        };
+        let mut source_repository = InMemoryArtifactRepository::default();
+        let artifact = source_repository
+            .append(
+                None,
+                ArtifactDraft::new(
+                    "tenant_a",
+                    "018f50a1-7f00-7000-8000-000000000008",
+                    1,
+                    ArtifactKind::SourceSnapshot,
+                    serde_json::from_str(&raw_snapshot).unwrap(),
+                    None,
+                ),
+            )
+            .unwrap()
+            .reference();
         assert_ne!(artifact.digest, snapshot.binding_digest());
         let lab_rows = vec![BTreeMap::from([
             ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
@@ -272,8 +284,6 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        let mut registry = InMemorySourceSnapshotArtifactRegistry::default();
-        registry.persist(artifact.clone(), raw_snapshot).unwrap();
         let artifact_b = ArtifactReference {
             tenant_id: "tenant_a".to_owned(),
             id: "018f50a1-7f00-7000-8000-000000000009".to_owned(),
@@ -307,11 +317,17 @@ mod tests {
             .unwrap();
         assert!(
             projection
-                .bind_approved_lab_source(approved_b, registry.resolve(&artifact).unwrap())
+                .bind_approved_lab_source(
+                    approved_b,
+                    resolve_source_snapshot_artifact(&mut source_repository, &artifact).unwrap()
+                )
                 .is_err()
         );
         let approved = projection
-            .bind_approved_lab_source(approved, registry.resolve(&artifact).unwrap())
+            .bind_approved_lab_source(
+                approved,
+                resolve_source_snapshot_artifact(&mut source_repository, &artifact).unwrap(),
+            )
             .unwrap();
         let access = LabAccess::new(
             "real_u04",

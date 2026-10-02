@@ -5,8 +5,6 @@
 //! authenticated source connection and passes only an approved snapshot into this
 //! deterministic verifier.
 
-use std::collections::BTreeMap;
-
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -291,69 +289,37 @@ impl VerifiedSourceArtifactBinding {
     }
 }
 
-/// Minimal immutable source-artifact registry seam. Production storage can
-/// replace this port, but cannot emit a mapping without proving the exact raw
-/// snapshot bytes still parse to the stored binding.
-#[allow(dead_code)] // Concrete local registry for the future source adapter.
-#[derive(Default)]
-pub(crate) struct InMemorySourceSnapshotArtifactRegistry {
-    raw_by_artifact: BTreeMap<(String, String, u64, String), String>,
-}
-
-impl InMemorySourceSnapshotArtifactRegistry {
-    #[allow(dead_code)]
-    pub(crate) fn persist(
-        &mut self,
-        artifact_ref: crate::ArtifactReference,
-        raw_snapshot: String,
-    ) -> Result<(), SourceDefinitionError> {
-        let snapshot = SourceSnapshot::from_json(&raw_snapshot)?;
-        if artifact_ref.tenant_id != snapshot.tenant_id() {
-            return Err(SourceDefinitionError::Invalid(
-                "artifact tenant differs from snapshot",
-            ));
-        }
-        let key = (
-            artifact_ref.tenant_id.clone(),
-            artifact_ref.id.clone(),
-            artifact_ref.revision,
-            artifact_ref.digest.clone(),
-        );
-        if self
-            .raw_by_artifact
-            .get(&key)
-            .is_some_and(|existing| existing != &raw_snapshot)
-        {
-            return Err(SourceDefinitionError::Invalid(
-                "source artifact revision is immutable",
-            ));
-        }
-        self.raw_by_artifact.insert(key, raw_snapshot);
-        Ok(())
+/// Resolves a U04 mapping only from U02's immutable revision port. The exact
+/// reference, kind and stored content digest are rechecked before the stored
+/// canonical payload is parsed again as a SourceSnapshot.
+#[allow(dead_code)] // Called by the future U04/U08 composition root.
+pub(crate) fn resolve_source_snapshot_artifact<R: crate::ArtifactRepository>(
+    repository: &mut R,
+    reference: &crate::ArtifactReference,
+) -> Result<VerifiedSourceArtifactBinding, SourceDefinitionError> {
+    let draft = repository
+        .get(&reference.tenant_id, &reference.id, reference.revision)
+        .map_err(|_| SourceDefinitionError::Invalid("source artifact lookup failed"))?
+        .ok_or(SourceDefinitionError::Invalid(
+            "source artifact is not persisted",
+        ))?;
+    if draft.kind != crate::ArtifactKind::SourceSnapshot || draft.reference() != *reference {
+        return Err(SourceDefinitionError::Invalid(
+            "source artifact reference or kind mismatch",
+        ));
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn resolve(
-        &self,
-        artifact_ref: &crate::ArtifactReference,
-    ) -> Result<VerifiedSourceArtifactBinding, SourceDefinitionError> {
-        let raw = self
-            .raw_by_artifact
-            .get(&(
-                artifact_ref.tenant_id.clone(),
-                artifact_ref.id.clone(),
-                artifact_ref.revision,
-                artifact_ref.digest.clone(),
-            ))
-            .ok_or(SourceDefinitionError::Invalid(
-                "source artifact is not persisted",
-            ))?;
-        let snapshot = SourceSnapshot::from_json(raw)?;
-        Ok(VerifiedSourceArtifactBinding {
-            artifact_ref: artifact_ref.clone(),
-            snapshot_binding_digest: snapshot.binding_digest(),
-        })
+    let raw = serde_json::to_string(&draft.payload)
+        .map_err(|_| SourceDefinitionError::Invalid("source artifact payload is not canonical"))?;
+    let snapshot = SourceSnapshot::from_json(&raw)?;
+    if snapshot.tenant_id() != reference.tenant_id {
+        return Err(SourceDefinitionError::Invalid(
+            "artifact tenant differs from snapshot",
+        ));
     }
+    Ok(VerifiedSourceArtifactBinding {
+        artifact_ref: reference.clone(),
+        snapshot_binding_digest: snapshot.binding_digest(),
+    })
 }
 
 impl SourceFileSeal {
