@@ -5,7 +5,9 @@
 //! provenance: it never returns wiki pages or a cache handle.
 
 use crate::ArtifactRepository;
-use crate::memory_store::{MemoryError, MemoryPublisher, MemoryScope, MemoryUseReceipt};
+use crate::memory_store::{
+    MemoryError, MemoryPublisher, MemoryScope, MemoryUseReceipt, MemoryUseReceiptAttestationPort,
+};
 use crate::wiki_scratch::{WikiAccess, WikiAuthorizationPort};
 
 /// Caller-supplied context which U33 must validate before a memory use is
@@ -33,6 +35,11 @@ impl MemoryUseRequest {
 /// ```compile_fail
 /// use improvement_engine_core::governed_memory_use::MemoryUseAdmission;
 /// let _ = MemoryUseAdmission::admit;
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::governed_memory_use::MemoryUseAdmission;
+/// let _ = MemoryUseAdmission { _private: true };
 /// ```
 pub struct VerifiedMemoryUse {
     receipt: MemoryUseReceipt,
@@ -91,7 +98,11 @@ pub struct MemoryUseAdmission {
 
 impl MemoryUseAdmission {
     #[allow(dead_code)] // Invoked by the future trusted service composition root.
-    pub(crate) fn admit<R: ArtifactRepository, P: MemoryPublisher, A: WikiAuthorizationPort>(
+    pub(crate) fn admit<
+        R: ArtifactRepository,
+        P: MemoryPublisher + MemoryUseReceiptAttestationPort,
+        A: WikiAuthorizationPort,
+    >(
         publisher: &mut P,
         artifacts: &mut R,
         authority: &A,
@@ -104,6 +115,15 @@ impl MemoryUseAdmission {
                 request.scope.clone(),
                 request.access.clone(),
                 request.access.snapshot_ref.clone(),
+            )
+            .map_err(MemoryUseAdmissionError::Denied)?;
+        publisher
+            .attest_allowed_use(
+                artifacts,
+                authority,
+                &request.scope,
+                &request.access,
+                &receipt,
             )
             .map_err(MemoryUseAdmissionError::Denied)?;
         if !receipt_matches_request(&receipt, &request) {
@@ -129,7 +149,7 @@ mod tests {
     use super::{MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest};
     use crate::memory_store::{
         InMemoryMemoryRegistry, MemoryError, MemoryHead, MemoryPublishRequest, MemoryPublisher,
-        MemoryScope, MemoryUseReceipt, PublishedMemory,
+        MemoryScope, MemoryUseReceipt, MemoryUseReceiptAttestationPort, PublishedMemory,
     };
     use crate::wiki_scratch::{
         InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
@@ -340,6 +360,22 @@ mod tests {
         }
     }
 
+    impl MemoryUseReceiptAttestationPort for LyingPublisher {
+        fn attest_allowed_use<
+            R: ArtifactRepository,
+            A: crate::wiki_scratch::WikiAuthorizationPort,
+        >(
+            &mut self,
+            _: &mut R,
+            _: &A,
+            _: &MemoryScope,
+            _: &WikiAccess,
+            _: &MemoryUseReceipt,
+        ) -> Result<(), MemoryError> {
+            Ok(())
+        }
+    }
+
     #[test]
     fn a_mismatched_receipt_never_becomes_a_capability_even_inside_trusted_composition() {
         let (mut artifacts, _, authority, access) = seeded();
@@ -355,5 +391,31 @@ mod tests {
             Err(other) => panic!("expected receipt mismatch, got {other:?}"),
             Ok(_) => panic!("mismatched receipt must not mint a capability"),
         }
+    }
+
+    #[test]
+    fn u33_attestation_rejects_a_forged_receipt_id_or_positive_wrong_head() {
+        let (mut artifacts, mut registry, authority, access) = seeded();
+        let receipt = registry
+            .record_allowed_use(
+                &mut artifacts,
+                &authority,
+                scope(),
+                access.clone(),
+                access.snapshot_ref.clone(),
+            )
+            .expect("fixed U33 receipt");
+        let mut wrong_id = receipt.clone();
+        wrong_id.receipt_id = "forged-receipt-id".to_owned();
+        assert_eq!(
+            registry.attest_allowed_use(&mut artifacts, &authority, &scope(), &access, &wrong_id),
+            Err(MemoryError::ReceiptConflict)
+        );
+        let mut wrong_head = receipt;
+        wrong_head.head_version = 2;
+        assert_eq!(
+            registry.attest_allowed_use(&mut artifacts, &authority, &scope(), &access, &wrong_head),
+            Err(MemoryError::ReceiptConflict)
+        );
     }
 }

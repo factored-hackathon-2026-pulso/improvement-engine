@@ -11,16 +11,19 @@ repositorio.
 
 U33 sigue siendo dueño del estado mutable: head, tombstones, autorización
 exacta, lectura de revisión viva e idempotencia del receipt. La admisión U22
-llama `MemoryPublisher::record_allowed_use` y comprueba nuevamente que el
-receipt devuelto coincide íntegramente con el request: scope, snapshot, run,
-grant, propósito, instantáneo permitido y head version positiva. Un adapter
-defectuoso no puede convertir un receipt para otra corrida en capability U22.
+llama `MemoryPublisher::record_allowed_use` y luego el puerto U33
+`MemoryUseReceiptAttestationPort`: recalcula la identidad canónica del receipt
+contra el head vigente, exige que exista exactamente en el ledger y revalida
+snapshot vivo y autorización. U22 además liga el receipt al request completo
+(scope, snapshot, run, grant, propósito e instante permitido). Un id de receipt
+fabricado o un head positivo pero distinto fallan cerrados; un adapter no puede
+convertir un receipt para otra corrida en capability U22.
 
 `MemoryUseAdmission::admit` es `pub(crate)`. Por ello un consumidor externo no
-puede sustituir un `MemoryPublisher` permisivo, ni construir una
-`VerifiedMemoryUse` por literal. El composition root futuro conectará ahí el
-adapter durable U33 y la autoridad U05. No se expone una vía temporal de test
-ni un endpoint de control-api.
+puede sustituir un `MemoryPublisher`/attestation port permisivo, ni construir
+una `VerifiedMemoryUse` o el carrier `MemoryUseAdmission` por literal. El
+composition root futuro conectará ahí el adapter durable U33 y la autoridad
+U05. No se expone una vía temporal de test ni un endpoint de control-api.
 
 ## RED → GREEN
 
@@ -35,10 +38,12 @@ Cobertura ejecutable:
    exacto conserva un único receipt idempotente U33.
 2. Una revisión revocada, un scope distinto o un acceso de otro tenant no emite
    capability.
-3. Incluso desde composición confiable, un `MemoryPublisher` de prueba que
+3. U33 rechaza por atestación un id de receipt fabricado y un head positivo
+   incorrecto; incluso desde composición confiable, un publisher de prueba que
    devuelve un receipt con otro run produce `ReceiptMismatch`.
-4. Dos doctests `compile_fail` bloquean construction literal de
-   `VerifiedMemoryUse` y la invocación externa de `MemoryUseAdmission::admit`.
+4. Tres doctests `compile_fail` bloquean construction literal de
+   `VerifiedMemoryUse` y `MemoryUseAdmission`, además de la invocación externa
+   de `MemoryUseAdmission::admit`.
 
 Validación local:
 

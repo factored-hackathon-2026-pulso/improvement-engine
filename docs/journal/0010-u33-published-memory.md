@@ -30,6 +30,12 @@ no intenta reimplementar RFC8785/JCS. Por eso el digest/páginas sólo cruzan la
 frontera SQL dentro del receipt registrado por el boundary privilegiado, nunca
 como input ejecutable del runtime genérico.
 
+`MemoryUseReceiptAttestationPort` revalida un receipt ya emitido sin inferir
+validez de un `head_version` positivo: reconstruye el receipt canónico para el
+head actual, consulta la revisión viva y la autoridad, y exige que el valor
+exacto esté en el ledger. U22 lo consume antes de entregar provenance a una
+segunda corrida; un id o versión de head alterados no se admiten.
+
 ## Estado durable
 
 `0002_pulso_memory_control.sql` agrega solamente tablas Pulso propias:

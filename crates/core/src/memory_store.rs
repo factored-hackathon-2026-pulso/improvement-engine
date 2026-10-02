@@ -174,6 +174,20 @@ pub trait MemoryPublisher {
     ) -> Result<MemoryUseReceipt, MemoryError>;
 }
 
+/// Re-attests one recorded use against the current U33 head, live snapshot,
+/// authorization and canonical receipt identity. U22 consumes this narrow port
+/// rather than inferring validity from a positive head version.
+pub trait MemoryUseReceiptAttestationPort {
+    fn attest_allowed_use<R: ArtifactRepository, A: WikiAuthorizationPort>(
+        &mut self,
+        artifacts: &mut R,
+        authority: &A,
+        scope: &MemoryScope,
+        access: &WikiAccess,
+        receipt: &MemoryUseReceipt,
+    ) -> Result<(), MemoryError>;
+}
+
 /// Deterministic local implementation. The later PostgreSQL adapter must retain these semantics.
 #[derive(Clone, Debug, Default)]
 pub struct InMemoryMemoryRegistry {
@@ -231,6 +245,45 @@ impl InMemoryMemoryRegistry {
             };
             cursor = parent.clone();
         }
+    }
+
+    fn expected_allowed_use_receipt<R: ArtifactRepository, A: WikiAuthorizationPort>(
+        &self,
+        artifacts: &mut R,
+        authority: &A,
+        scope: &MemoryScope,
+        access: &WikiAccess,
+    ) -> Result<MemoryUseReceipt, MemoryError> {
+        let head = self
+            .heads
+            .get(scope)
+            .cloned()
+            .ok_or(MemoryError::HeadMissing)?;
+        if head.snapshot_ref != access.snapshot_ref {
+            return Err(MemoryError::SnapshotMismatch);
+        }
+        if !scope.matches_binding(access) {
+            return Err(MemoryError::AccessDenied);
+        }
+        if !authority.authorize(access, &head.snapshot_ref) {
+            return Err(MemoryError::AccessDenied);
+        }
+        self.verify_live_snapshot(
+            artifacts,
+            scope,
+            &head.snapshot_ref,
+            access.allowed_at_unix_seconds,
+        )?;
+        Ok(MemoryUseReceipt {
+            receipt_id: receipt_id(scope, access, &head.snapshot_ref, head.head_version),
+            scope: scope.clone(),
+            snapshot_ref: head.snapshot_ref,
+            head_version: head.head_version,
+            run_id: access.run_id.clone(),
+            grant_id: access.grant_id.clone(),
+            purpose: access.purpose.clone(),
+            allowed_at_unix_seconds: access.allowed_at_unix_seconds,
+        })
     }
 }
 
@@ -387,33 +440,10 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
         access: WikiAccess,
         snapshot_ref: ArtifactReference,
     ) -> Result<MemoryUseReceipt, MemoryError> {
-        let head = self
-            .heads
-            .get(&scope)
-            .cloned()
-            .ok_or(MemoryError::HeadMissing)?;
-        if head.snapshot_ref != snapshot_ref || access.snapshot_ref != snapshot_ref {
+        if access.snapshot_ref != snapshot_ref {
             return Err(MemoryError::SnapshotMismatch);
         }
-        if !scope.matches_binding(&access) || !authority.authorize(&access, &snapshot_ref) {
-            return Err(MemoryError::AccessDenied);
-        }
-        self.verify_live_snapshot(
-            artifacts,
-            &scope,
-            &snapshot_ref,
-            access.allowed_at_unix_seconds,
-        )?;
-        let receipt = MemoryUseReceipt {
-            receipt_id: receipt_id(&scope, &access, &snapshot_ref, head.head_version),
-            scope,
-            snapshot_ref,
-            head_version: head.head_version,
-            run_id: access.run_id,
-            grant_id: access.grant_id,
-            purpose: access.purpose,
-            allowed_at_unix_seconds: access.allowed_at_unix_seconds,
-        };
+        let receipt = self.expected_allowed_use_receipt(artifacts, authority, &scope, &access)?;
         if let Some(existing) = self
             .receipts
             .iter()
@@ -427,6 +457,23 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
         }
         self.receipts.push(receipt.clone());
         Ok(receipt)
+    }
+}
+
+impl MemoryUseReceiptAttestationPort for InMemoryMemoryRegistry {
+    fn attest_allowed_use<R: ArtifactRepository, A: WikiAuthorizationPort>(
+        &mut self,
+        artifacts: &mut R,
+        authority: &A,
+        scope: &MemoryScope,
+        access: &WikiAccess,
+        receipt: &MemoryUseReceipt,
+    ) -> Result<(), MemoryError> {
+        let expected = self.expected_allowed_use_receipt(artifacts, authority, scope, access)?;
+        if &expected != receipt || !self.receipts.iter().any(|recorded| recorded == receipt) {
+            return Err(MemoryError::ReceiptConflict);
+        }
+        Ok(())
     }
 }
 
