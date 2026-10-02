@@ -919,6 +919,71 @@ fn candidate_digest(draft: &ScoutCandidateDraft) -> String {
     digest(&content)
 }
 
+/// Narrow test-only fixture for U14's capability-only boundary. It is kept
+/// inside this module because a sibling cannot construct `VerifiedScoutCandidate`.
+/// Production composition must obtain the capability through the durable U13-A
+/// admission authority instead.
+#[cfg(test)]
+pub(crate) fn verified_candidate_for_independent_verifier_test() -> VerifiedScoutCandidate {
+    let scope = CoreTaskScope::new("tenant_a", "job_a", "grant_a", "authority_a")
+        .expect("fixed test scope is valid");
+    let mut draft = ScoutCandidateDraft {
+        kind: CandidateKind::Claim,
+        candidate_id: "candidate_u14_test".into(),
+        metric_id: "contact_rate".into(),
+        source_snapshot_ref: crate::ArtifactReference {
+            tenant_id: "tenant_a".into(),
+            id: "018f3a54-7eaf-7c83-8a04-5bf4ec1a9d26".into(),
+            revision: 1,
+            digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                .into(),
+        },
+        tenant_id: "tenant_a".into(),
+        job_id: "job_a".into(),
+        grant_id: "grant_a".into(),
+        authority_ref: "authority_a".into(),
+        source_data_digest:
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+        source_contract_digest:
+            "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".into(),
+        transform_digest: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            .into(),
+        cutoff_unix_seconds: 100,
+        query_receipt_digests: vec![
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".into(),
+        ],
+        signal_commitment:
+            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".into(),
+        core_input_commitment:
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111".into(),
+        model_input_commitment:
+            "sha256:2222222222222222222222222222222222222222222222222222222222222222".into(),
+        model_capability_digest:
+            "sha256:3333333333333333333333333333333333333333333333333333333333333333".into(),
+        core_binding_digest:
+            "sha256:4444444444444444444444444444444444444444444444444444444444444444".into(),
+        core_attempt_id: "attempt_a".into(),
+        core_run_id: Some("run_a".into()),
+        core_output_digest: Some(
+            "sha256:5555555555555555555555555555555555555555555555555555555555555555".into(),
+        ),
+        model_policy_digest:
+            "sha256:6666666666666666666666666666666666666666666666666666666666666666".into(),
+        model_attempt_id: "attempt_model_a".into(),
+        model_receipt_evidence:
+            "sha256:7777777777777777777777777777777777777777777777777777777777777777".into(),
+        model_output_digest: Some(
+            "sha256:8888888888888888888888888888888888888888888888888888888888888888".into(),
+        ),
+        provenance_commitment:
+            "sha256:9999999999999999999999999999999999999999999999999999999999999999".into(),
+        digest: String::new(),
+    };
+    draft.digest = candidate_digest(&draft);
+    let record = ScoutCandidateRecord::rehydrate(scope, draft).expect("test draft is canonical");
+    VerifiedScoutCandidate { record }
+}
+
 #[cfg(test)]
 mod candidate_admission_tests {
     use super::*;
