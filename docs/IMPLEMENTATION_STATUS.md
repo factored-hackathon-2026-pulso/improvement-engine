@@ -37,6 +37,10 @@ green unit test as proof that a broader product flow is complete.
   nonce-registered to that arm, checked with the sandbox-owned clock, and
   rejected on revocation, expiry, forging, or cross-arm use. This is fixture
   protection, not a production identity-provider implementation.
+- U04-B: E0 replay availability clock. A V2 replay binds its complete,
+  tenant-scoped immutable source snapshot and a sealed file manifest before
+  access; V1 snapshots cannot be replayed because they cannot prove that
+  binding. Serialization loses non-serializable file seals and fails closed.
 
 ## Delivery discipline
 
