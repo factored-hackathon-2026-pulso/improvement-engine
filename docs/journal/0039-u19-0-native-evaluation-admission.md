@@ -17,6 +17,11 @@ HTTP: exige un `eval_id` observado y propuesta/candidata/base/suite exactos.
 Por ello HTTP 200 nunca se interpreta como pass. El readback posterior sólo se
 acepta si coincide con el intento/commitment completo y el registro vuelve a
 atestar el mismo receipt vivo; revocación, expiración o cambio se rechazan.
+`NativeEvaluationReadback` permanece una frontera opaca e interna: no es una
+respuesta HTTP ni un resultado de evaluación, y sólo se valida contra una
+observación viva del registro. Cuando Agent Core Unit 6 ofrezca transporte, esa
+integración deberá introducir un issuer/repositorio sellado de
+`NativeEvaluationReadbackPort`; U19-0 no anticipa ni simula ese puerto.
 
 ## Límites y dependencias
 

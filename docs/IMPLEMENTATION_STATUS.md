@@ -93,9 +93,11 @@ green unit test as proof that a broader product flow is complete.
 - U19-0 / Issue #51: sealed native-evaluation admission boundary. It admits an
   opaque request only from a fresh, revocable and expiring Agent Core registry
   readback that binds the full U09/U20/Core candidate/suite/evaluator identity.
-  Readback rechecks the same registry evidence before attribution. It has no
-  dispatch, runtime, verdict or `EvalRun`; missing U18-E/Agent Core Unit 6
-  remains `dependency_unavailable` rather than a simulated native result.
+  Its opaque internal readback rechecks the same registry evidence before
+  attribution; a future Unit 6 transport must supply a sealed readback issuer/
+  repository rather than treating HTTP as evidence. It has no dispatch,
+  runtime, verdict or `EvalRun`; missing U18-E/Agent Core Unit 6 remains
+  `dependency_unavailable` rather than a simulated native result.
 - U23-P / Issue #47: the narrow Frozen/Continuous temporal protocol over
   U04-B's replay cutoff and U22/U33 governed admission. An opaque, trusted
   evidence commitment (not caller-provided timestamps) is part of the U33
