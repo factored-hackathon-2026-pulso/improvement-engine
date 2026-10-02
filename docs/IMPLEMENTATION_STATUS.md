@@ -90,6 +90,11 @@ green unit test as proof that a broader product flow is complete.
   candidate receipt per tenant. The adapter is an in-memory executable
   durability contract only: it does not call Agent Core, execute/evaluate a
   candidate, publish/release it, or prove production transaction durability.
+- U19-0 / Issue #51: sealed native-evaluation admission boundary. It can only
+  assemble an opaque request from a registered Agent Core candidate, exact U20
+  development-suite plan and pinned evaluator capability. It has no dispatch,
+  runtime, verdict or `EvalRun`; missing U18-E/Agent Core Unit 6 remains
+  `dependency_unavailable` rather than a simulated native result.
 - U23-P / Issue #47: the narrow Frozen/Continuous temporal protocol over
   U04-B's replay cutoff and U22/U33 governed admission. An opaque, trusted
   evidence commitment (not caller-provided timestamps) is part of the U33

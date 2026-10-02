@@ -311,6 +311,17 @@ pub(crate) fn e0_safety_plan_fixture_with_oracle_revision(
     plan
 }
 
+/// Crate-private projection for the native-evaluation admission boundary.
+/// It intentionally excludes the final suite and oracle: neither may cross
+/// into the public/native evaluator request.
+#[allow(dead_code)] // Consumed by the next trusted U19 composition.
+#[derive(Clone)]
+pub(crate) struct NativeEvaluationPlanMaterial {
+    pub(crate) plan_commitment: String,
+    pub(crate) source_snapshot: ArtifactReference,
+    pub(crate) development_suite: ArtifactReference,
+}
+
 /// Opaque policy-bound composition. A caller may use an instance handed to it
 /// by trusted service wiring, but cannot construct one or substitute an
 /// allow-all authority implementation.
@@ -487,6 +498,15 @@ impl EvaluationPlan {
         }
     }
 
+    #[allow(dead_code)] // Consumed by the next trusted U19 composition.
+    pub(crate) fn native_evaluation_material(&self) -> NativeEvaluationPlanMaterial {
+        NativeEvaluationPlanMaterial {
+            plan_commitment: self.commitment.clone(),
+            source_snapshot: self.source_snapshot_ref.clone(),
+            development_suite: self.development_suite_ref.clone(),
+        }
+    }
+
     /// Internal linkage check for U35. It does not grant any outcome or
     /// release claim; it merely prevents a plan sealed for one bridge from
     /// being reused with another bridge.
@@ -528,6 +548,30 @@ fn verified_source_snapshot_binding<R: ArtifactRepository>(
         return Err(EvaluationPlanError::CrossTenantReference);
     }
     Ok(snapshot.binding_digest())
+}
+
+#[cfg(test)]
+pub(crate) fn plan_for_native_evaluation_test(
+    source_snapshot: ArtifactReference,
+    development_suite: ArtifactReference,
+) -> EvaluationPlan {
+    let source_snapshot_binding_digest = source_snapshot.digest.clone();
+    EvaluationPlan {
+        bridge_commitment: "sha256:bridge".to_owned(),
+        source_snapshot_ref: source_snapshot.clone(),
+        source_snapshot_binding_digest,
+        baseline_ref: source_snapshot.clone(),
+        oracle_ref: source_snapshot.clone(),
+        development_suite_ref: development_suite.clone(),
+        final_suite_ref: source_snapshot,
+        semantic: EvaluationSemanticContract {
+            target_outcome: "resolved".to_owned(),
+            unit_of_analysis: "case".to_owned(),
+            oracle_measure: "resolution".to_owned(),
+        },
+        commitment: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            .to_owned(),
+    }
 }
 
 struct VerifiedInput {
