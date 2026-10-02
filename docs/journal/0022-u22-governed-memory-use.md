@@ -41,7 +41,10 @@ Cobertura ejecutable:
 3. U33 rechaza por atestación un id de receipt fabricado y un head positivo
    incorrecto; incluso desde composición confiable, un publisher de prueba que
    devuelve un receipt con otro run produce `ReceiptMismatch`.
-4. Tres doctests `compile_fail` bloquean construction literal de
+4. Un wrapper determinista revoca la revisión exactamente entre
+   `record_allowed_use` y `attest_allowed_use`: puede quedar el receipt
+   histórico, pero no se emite `VerifiedMemoryUse`.
+5. Tres doctests `compile_fail` bloquean construction literal de
    `VerifiedMemoryUse` y `MemoryUseAdmission`, además de la invocación externa
    de `MemoryUseAdmission::admit`.
 

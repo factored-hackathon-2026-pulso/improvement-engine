@@ -376,6 +376,92 @@ mod tests {
         }
     }
 
+    struct RevokingAfterRecord {
+        inner: InMemoryMemoryRegistry,
+    }
+
+    impl MemoryPublisher for RevokingAfterRecord {
+        fn seed_head<R: ArtifactRepository>(
+            &mut self,
+            artifacts: &mut R,
+            scope: MemoryScope,
+            snapshot_ref: crate::ArtifactReference,
+        ) -> Result<MemoryHead, MemoryError> {
+            self.inner.seed_head(artifacts, scope, snapshot_ref)
+        }
+
+        fn publish<R: ArtifactRepository, A: crate::wiki_scratch::WikiAuthorizationPort>(
+            &mut self,
+            artifacts: &mut R,
+            authority: &A,
+            request: MemoryPublishRequest,
+        ) -> Result<PublishedMemory, MemoryError> {
+            self.inner.publish(artifacts, authority, request)
+        }
+
+        fn revoke(
+            &mut self,
+            snapshot_ref: crate::ArtifactReference,
+            reason: &str,
+        ) -> Result<(), MemoryError> {
+            self.inner.revoke(snapshot_ref, reason)
+        }
+
+        fn record_allowed_use<
+            R: ArtifactRepository,
+            A: crate::wiki_scratch::WikiAuthorizationPort,
+        >(
+            &mut self,
+            artifacts: &mut R,
+            authority: &A,
+            scope: MemoryScope,
+            access: WikiAccess,
+            snapshot_ref: crate::ArtifactReference,
+        ) -> Result<MemoryUseReceipt, MemoryError> {
+            let receipt =
+                self.inner
+                    .record_allowed_use(artifacts, authority, scope, access, snapshot_ref)?;
+            self.inner
+                .revoke(receipt.snapshot_ref.clone(), "deterministic_interleaving")?;
+            Ok(receipt)
+        }
+    }
+
+    impl MemoryUseReceiptAttestationPort for RevokingAfterRecord {
+        fn attest_allowed_use<
+            R: ArtifactRepository,
+            A: crate::wiki_scratch::WikiAuthorizationPort,
+        >(
+            &mut self,
+            artifacts: &mut R,
+            authority: &A,
+            scope: &MemoryScope,
+            access: &WikiAccess,
+            receipt: &MemoryUseReceipt,
+        ) -> Result<(), MemoryError> {
+            self.inner
+                .attest_allowed_use(artifacts, authority, scope, access, receipt)
+        }
+    }
+
+    #[test]
+    fn revocation_between_u33_record_and_attestation_emits_no_capability() {
+        let (mut artifacts, registry, authority, access) = seeded();
+        let mut publisher = RevokingAfterRecord { inner: registry };
+
+        match MemoryUseAdmission::admit(
+            &mut publisher,
+            &mut artifacts,
+            &authority,
+            MemoryUseRequest::new(scope(), access),
+        ) {
+            Err(MemoryUseAdmissionError::Denied(MemoryError::SnapshotRevoked)) => {}
+            Err(other) => panic!("expected post-record revocation denial, got {other:?}"),
+            Ok(_) => panic!("post-record revocation must not emit a capability"),
+        }
+        assert_eq!(publisher.inner.receipts().len(), 1);
+    }
+
     #[test]
     fn a_mismatched_receipt_never_becomes_a_capability_even_inside_trusted_composition() {
         let (mut artifacts, _, authority, access) = seeded();
