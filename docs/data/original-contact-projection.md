@@ -14,8 +14,10 @@ operational SLA calculator, or a technical-error detector.
 
 Grouping labels are closed enums. Recognized Spanish/English spellings map to
 stable lower-case labels; any unrecognized, null, or PII-like category maps to
-`unclassified`. Channel values map through a closed list; unrecognized values
-map to `other`. Raw values are never stored in result types or error details.
+`unclassified`. Channel values map through a closed list; an absent/blank
+channel rejects that row and increments `rejected_rows` rather than mapping it
+to `other`. Only non-empty unrecognized channel values map to `other`. Raw
+values are never stored in result types or error details.
 `subcategory`, `contact_reason` free text when `reason_category` exists,
 descriptions, IDs, product/customer/agent attributes, claims, compensation,
 and transcripts are not read into the projection.
@@ -30,7 +32,16 @@ source dictionary before interpreting its magnitude. First response time is
 elapsed calendar days between `creation_date` and `first_response_date`, only
 when both dates are valid and ordered; it is not a business-hours or legally
 defined SLA calculation. Means use only rows with valid values, with no
-imputation.
+imputation. Every numeric and boolean metric carries `valid_count` and
+`missing_count` per visible aggregate cell; their sum is that cell's row
+denominator. Boolean metrics also expose positive count, and numeric means use
+only valid values. Missing values never silently become false or zero.
+
+Cells below the versioned `minimum_cell_count` policy are suppressed (default
+k=5 for local smoke); `suppressed_count` reports omitted cells without
+revealing their contents or counts. This is a technical disclosure-control
+heuristic, not a formal anonymity or legal guarantee. The policy version and
+threshold are included in the projection manifest digest.
 
 ## Availability and interpretation
 
@@ -39,8 +50,27 @@ lacks a required grouping/date field, no partition is provided, or no tracked
 metric field is present in every partition. `available_metrics` is the
 intersection of fields present across all partitions; `missing_metrics` names
 fields absent in at least one partition. A metric denominator remains its
-explicit known count; nulls do not become false/zero. An empty/unknown category
-is not evidence of a new business reason.
+explicit denominator; nulls do not become false/zero. Metric columns are
+optional; when absent, their per-cell metric is fully missing rather than
+causing fabricated values. An empty/unknown category is not evidence of a new
+business reason.
+
+## Provenance, cutoff, and coverage
+
+Each projection requires the existing immutable `ArtifactReference` to the
+source snapshot plus that snapshot's canonical byte binding, a cutoff, and an
+exact inventory of opaque partition IDs with SHA-256 digests. The projector
+fails closed on missing/extra/duplicate IDs, digest mismatch, duplicate
+headers, malformed/truncated records, or invalid manifest. Rows after the
+cutoff are excluded. Source date columns are day-granular; no event-time
+precision is inferred.
+
+`coverage=complete` is valid only when the caller enumerates every partition in
+the selected source snapshot. Bounded smoke/tests use explicit sample
+inventories and `coverage=partial` (the established smoke selects the first
+25 stable-sorted partitions per table). Partial aggregates are not full-history
+prevalence estimates. The existing source snapshot reference is reused; this
+projection does not introduce another snapshot entity.
 
 `was_resolved`, `requires_followup`, `was_escalated`, durations, `sla_breached`,
 first-response time, resolution days and satisfaction describe separate

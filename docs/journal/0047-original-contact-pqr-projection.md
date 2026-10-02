@@ -2,26 +2,32 @@
 
 ## Decision and behavior
 
-Added a read-only streaming Rust projection over original contact and complaint
-CSV partitions. It groups only by month, closed normalized category, and closed
-normalized channel, and emits aggregate counts/means plus known denominators,
-including elapsed calendar days from PQR creation to first response when valid.
-IDs and narrative/free-text fields are not queried into result objects. Unknown
-category/channel values collapse to safe enum values. Incomplete required
-partition schemas yield `Unsupported` with no aggregates; metric coverage is
-reported across all partitions. This is descriptive evidence, not causal
-attribution or a technical-error signal.
+Adversarial hardening binds both contact and complaint projections to the
+existing immutable source `ArtifactReference`, canonical snapshot digest,
+cutoff, coverage marker, versioned suppression policy, and exact opaque
+partition-ID/SHA-256 inventory. Missing, extra, duplicate or content-mismatched
+partitions fail closed. Future event dates are excluded. CSV headers/row
+widths are strict; duplicate headers and truncated rows fail closed. Blank
+channels are rejected, not folded into `other`. Category/channel values remain
+closed enums and narrative/IDs are never emitted.
+
+Every per-cell boolean/numeric metric carries valid and missing counts against
+the cell denominator; numeric means use valid values only. Configurable
+`minimum_cell_count` defaults to k=5 for smoke, is versioned in the manifest,
+and small cells are suppressed with a count of suppressed cells. This is a
+technical disclosure-control heuristic, not a formal anonymity guarantee.
+PQR first-response time is elapsed calendar days, not business/legal SLA.
 
 ## Verification
 
-Synthetic tests cover aggregate values, unknown/PII-like category containment,
-omitted identifiers and narrative, missing dimensions/SLA support, and metric
-availability across partitions. A gated local smoke test reads 25 stable-sorted
-partitions per table and asserts support/non-empty aggregate output; it prints
-only record/rejection/aggregate-cell totals. No source data is checked in or
-printed. This is a projector only: it is not yet wired to a sensor, opportunity,
-proposal, or end-to-end run, and its bounded sample must not be used to infer
-full-history prevalence.
+Synthetic tests cover quoted/escaped and multiline CSV, duplicate headers,
+truncated rows, cutoff, exact partition/digest validation, blank channel,
+denominators, k suppression, and PQR elapsed-time metrics. The gated local
+smoke remains a 25-partition `partial` sample and prints aggregate diagnostics
+only; it must not be used to infer full-history prevalence. No source data is
+checked in or printed. This remains a projection, not a sensor/opportunity/
+proposal integration; it does not infer causal relationships or technical
+errors.
 
 ## Trade-offs and limits
 
