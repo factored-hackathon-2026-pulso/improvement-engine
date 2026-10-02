@@ -530,7 +530,36 @@ fn entity_identity(content: &Value) -> Option<(String, String)> {
 }
 
 fn canonical_json(value: &Value) -> String {
-    serde_json::to_string(value).expect("JSON value serializes")
+    match value {
+        Value::Null => "null".to_owned(),
+        Value::Bool(boolean) => boolean.to_string(),
+        Value::Number(number) => number.to_string(),
+        Value::String(string) => serde_json::to_string(string).expect("JSON string serializes"),
+        Value::Array(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(canonical_json)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        Value::Object(values) => {
+            let mut entries = values.iter().collect::<Vec<_>>();
+            entries.sort_unstable_by_key(|(key, _)| *key);
+            format!(
+                "{{{}}}",
+                entries
+                    .into_iter()
+                    .map(|(key, nested)| format!(
+                        "{}:{}",
+                        serde_json::to_string(key).expect("JSON object key serializes"),
+                        canonical_json(nested)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
+    }
 }
 
 fn digest(pieces: &[&str]) -> String {
@@ -922,6 +951,24 @@ mod tests {
         assert_eq!(
             ChangeCompiler::compile(corrupted),
             Err(CompilerError::AuthorizationBindingMismatch)
+        );
+    }
+
+    #[test]
+    fn canonical_flow_body_digest_is_invariant_to_object_key_order_at_every_depth() {
+        let first: Value = serde_json::from_str(
+            r#"{"version":"1.0.0","nodes":[{"type":"end","config":{"outcome":"completed"},"id":"complete"}],"id":"payment_status_resolution","priority":1}"#,
+        )
+        .unwrap();
+        let second: Value = serde_json::from_str(
+            r#"{"priority":1,"id":"payment_status_resolution","nodes":[{"id":"complete","config":{"outcome":"completed"},"type":"end"}],"version":"1.0.0"}"#,
+        )
+        .unwrap();
+
+        assert_eq!(canonical_json(&first), canonical_json(&second));
+        assert_eq!(
+            digest(&[&canonical_json(&first)]),
+            digest(&[&canonical_json(&second)])
         );
     }
 }

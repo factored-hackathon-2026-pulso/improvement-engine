@@ -20,6 +20,12 @@ antes de materializar el draft; por tanto ni un cambio posterior a la
 autorización ni un commitment público leído por un consumidor equivalen a
 autoridad.
 
+El digest de cuerpo no depende de la configuración incidental de
+`serde_json::Map`: U17 serializa explícitamente `Value` de forma canónica,
+ordenando recursivamente las llaves de cada objeto y preservando el orden de
+arrays. Una regresión cubre dos Flows semánticamente iguales escritos con
+orden de llaves distinto; deben generar el mismo cuerpo canónico y digest.
+
 El RED inicial fue `crates/core/tests/change_compiler.rs`: el import de
 `change_compiler` no resolvía porque el módulo no existía. Las regresiones
 cubren tenant, scope, snapshot, ruta, mecanismo, tipo, operación, identidad,
