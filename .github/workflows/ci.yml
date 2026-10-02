@@ -50,6 +50,11 @@ jobs:
           PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test
           PULSO_ALLOW_DESTRUCTIVE_TEST_DB: "1"
         run: cargo +1.98.1 test --locked --workspace --features test-support migration_persists_model_attempt_cas_and_unknown_across_postgres_restart -- --ignored
+      - name: Run isolated platform observation RLS and retention test
+        env:
+          PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test
+          PULSO_ALLOW_DESTRUCTIVE_TEST_DB: "1"
+        run: cargo +1.98.1 test --locked -p improvement-engine-core --test postgres_platform_observations treated_batch_survives_reconnect_without_cross_tenant_read_or_double_insert -- --ignored
 
   verify:
     name: verify (${{ matrix.os }})
