@@ -251,18 +251,15 @@ fn digest<T: Serialize>(value: &T) -> String {
 /// ```
 const _QUALIFICATION_CANNOT_BE_FORGED_OR_CONVERTED_TO_U16: () = ();
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test-support"))]
 mod tests {
     use super::*;
-    #[cfg(feature = "test-support")]
     use crate::autonomous_scout::verified_real_e0_candidate_for_frozen_verifier_test;
-    #[cfg(feature = "test-support")]
     use crate::e0_frozen_verifier::{
         FrozenE0IndependentVerifier, FrozenE0ReportBindingField,
         corrupt_frozen_e0_report_for_qualification_test,
     };
 
-    #[cfg(feature = "test-support")]
     #[test]
     fn real_e0_chain_qualifies_only_as_unassessed_future_work() {
         let candidate = verified_real_e0_candidate_for_frozen_verifier_test();
@@ -289,7 +286,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test-support")]
     #[test]
     fn every_report_binding_drift_is_rejected_without_a_qualification() {
         let candidate = verified_real_e0_candidate_for_frozen_verifier_test();
