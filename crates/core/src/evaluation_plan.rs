@@ -9,6 +9,8 @@ use crate::workflow_bridge::{LinkGrade, WorkflowBridgeContract};
 use crate::{ArtifactKind, ArtifactReference, ArtifactRepository};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+#[cfg(test)]
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EvaluationArtifactType {
@@ -101,6 +103,105 @@ impl EvaluationInputs {
     }
 }
 
+/// Independent authority boundary for evaluation inputs. A coherent payload is
+/// insufficient: the exact artifact revision must be attested under the U14/U16
+/// grant and capability scope.
+pub trait EvaluationArtifactAuthorityPort {
+    fn verify_artifact(
+        &mut self,
+        scope: &crate::core_task::CoreTaskScope,
+        reference: &ArtifactReference,
+    ) -> Result<(), EvaluationAuthorityError>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EvaluationAuthorityError {
+    MissingAttestation,
+    ScopeMismatch,
+    RevisionMismatch,
+    Revoked,
+    DependencyUnavailable,
+}
+
+/// A policy-issued capability for one immutable evaluation artifact revision.
+/// Real deployments resolve it through a policy adapter; the in-memory type is
+/// a deterministic contract double for unit tests and local composition.
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EvaluationArtifactGrant {
+    scope: crate::core_task::CoreTaskScope,
+    reference: ArtifactReference,
+}
+
+#[cfg(test)]
+impl EvaluationArtifactGrant {
+    #[must_use]
+    pub fn for_scope(scope: crate::core_task::CoreTaskScope, reference: ArtifactReference) -> Self {
+        Self { scope, reference }
+    }
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub struct InMemoryEvaluationArtifactAuthority {
+    grants: BTreeMap<String, EvaluationArtifactGrant>,
+    revoked: BTreeSet<String>,
+}
+
+#[cfg(test)]
+impl InMemoryEvaluationArtifactAuthority {
+    pub fn issue(&mut self, grant: EvaluationArtifactGrant) {
+        self.grants
+            .insert(authority_key(&grant.scope, &grant.reference), grant);
+    }
+    pub fn revoke(
+        &mut self,
+        scope: &crate::core_task::CoreTaskScope,
+        reference: &ArtifactReference,
+    ) {
+        self.revoked.insert(authority_key(scope, reference));
+    }
+}
+
+#[cfg(test)]
+impl EvaluationArtifactAuthorityPort for InMemoryEvaluationArtifactAuthority {
+    fn verify_artifact(
+        &mut self,
+        scope: &crate::core_task::CoreTaskScope,
+        reference: &ArtifactReference,
+    ) -> Result<(), EvaluationAuthorityError> {
+        let key = authority_key(scope, reference);
+        if self.revoked.contains(&key) {
+            return Err(EvaluationAuthorityError::Revoked);
+        }
+        let grant = self
+            .grants
+            .get(&key)
+            .ok_or(EvaluationAuthorityError::MissingAttestation)?;
+        if grant.scope != *scope {
+            return Err(EvaluationAuthorityError::ScopeMismatch);
+        }
+        if grant.reference != *reference {
+            return Err(EvaluationAuthorityError::RevisionMismatch);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+fn authority_key(scope: &crate::core_task::CoreTaskScope, reference: &ArtifactReference) -> String {
+    digest(&[
+        scope.tenant_id(),
+        scope.job_id(),
+        scope.grant_id(),
+        scope.authority_ref(),
+        &reference.tenant_id,
+        &reference.id,
+        &reference.revision.to_string(),
+        &reference.digest,
+    ])
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct EvaluationSemanticContract {
     target_outcome: String,
@@ -123,10 +224,11 @@ pub struct EvaluationPlan {
 impl EvaluationPlan {
     /// Re-reads every immutable evaluation input, validates its sealed shared
     /// contract, and freezes only a comparison semantically identical to U16.
-    pub fn seal_from_bridge<R: ArtifactRepository>(
+    pub fn seal_from_bridge<R: ArtifactRepository, A: EvaluationArtifactAuthorityPort>(
         bridge: &WorkflowBridgeContract,
         inputs: EvaluationInputs,
         artifacts: &mut R,
+        authority: &mut A,
     ) -> Result<Self, EvaluationPlanError> {
         if bridge.link_grade() != LinkGrade::MechanismProxy
             || !bridge.alternatives().includes_candidate_route()
@@ -135,11 +237,17 @@ impl EvaluationPlan {
         }
         let scope = bridge.scope();
         let snapshot = bridge.source_snapshot_ref();
-        let baseline = verified_input(artifacts, scope, snapshot, &inputs.baseline)?;
-        let oracle = verified_input(artifacts, scope, snapshot, &inputs.oracle)?;
-        let development_suite =
-            verified_input(artifacts, scope, snapshot, &inputs.development_suite)?;
-        let final_suite = verified_input(artifacts, scope, snapshot, &inputs.final_suite)?;
+        let baseline = verified_input(artifacts, authority, scope, snapshot, &inputs.baseline)?;
+        let oracle = verified_input(artifacts, authority, scope, snapshot, &inputs.oracle)?;
+        let development_suite = verified_input(
+            artifacts,
+            authority,
+            scope,
+            snapshot,
+            &inputs.development_suite,
+        )?;
+        let final_suite =
+            verified_input(artifacts, authority, scope, snapshot, &inputs.final_suite)?;
         let references = [
             &baseline.reference,
             &oracle.reference,
@@ -226,8 +334,9 @@ struct VerifiedInput {
     semantic: EvaluationSemanticContract,
 }
 
-fn verified_input<R: ArtifactRepository>(
+fn verified_input<R: ArtifactRepository, A: EvaluationArtifactAuthorityPort>(
     artifacts: &mut R,
+    authority: &mut A,
     scope: &crate::core_task::CoreTaskScope,
     snapshot: &ArtifactReference,
     typed_reference: &EvaluationArtifactRef,
@@ -236,6 +345,9 @@ fn verified_input<R: ArtifactRepository>(
     if reference.tenant_id != scope.tenant_id() {
         return Err(EvaluationPlanError::CrossTenantReference);
     }
+    authority
+        .verify_artifact(scope, reference)
+        .map_err(EvaluationPlanError::AuthorityDenied)?;
     let artifact = artifacts
         .get(&reference.tenant_id, &reference.id, reference.revision)
         .map_err(|_| EvaluationPlanError::ReferenceUnavailable)?
@@ -311,5 +423,166 @@ pub enum EvaluationPlanError {
     ScopeMismatch,
     SemanticMismatch,
     DuplicateInputReference,
+    AuthorityDenied(EvaluationAuthorityError),
     InvalidInput,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        EvaluationArtifactGrant, EvaluationArtifactRef, EvaluationInputs, EvaluationPlan,
+        EvaluationPlanError, InMemoryEvaluationArtifactAuthority,
+    };
+    use crate::independent_verifier::VerificationStatus;
+    use crate::workflow_bridge::bridge_for_evaluation_plan_test;
+    use crate::{
+        ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository,
+        InMemoryArtifactRepository,
+    };
+    use serde_json::json;
+
+    fn artifact(
+        repo: &mut InMemoryArtifactRepository,
+        id: &str,
+        artifact_type: &str,
+        partition: &str,
+        snapshot: ArtifactReference,
+    ) -> ArtifactReference {
+        repo.append(None, ArtifactDraft::new(
+            "tenant_a", id, 1, ArtifactKind::ScenarioSet,
+            json!({"evaluation_contract": {
+                "artifact_type": artifact_type, "partition": partition,
+                "target_outcome": "reduce_repeat_payment_contacts",
+                "unit_of_analysis": "customer_episode",
+                "oracle_measure": "scenario_oracle/payment_status_resolution_v1",
+                "scope": {"tenant_id":"tenant_a","job_id":"job_a","grant_id":"grant_a","authority_ref":"authority_a"}
+            }}), Some(snapshot),
+        )).unwrap().reference()
+    }
+
+    fn inputs(
+        repo: &mut InMemoryArtifactRepository,
+        snapshot: ArtifactReference,
+    ) -> EvaluationInputs {
+        EvaluationInputs::new(
+            EvaluationArtifactRef::baseline(artifact(
+                repo,
+                "018f0f4e-7bbd-7000-8000-000000000401",
+                "baseline",
+                "shared",
+                snapshot.clone(),
+            )),
+            EvaluationArtifactRef::oracle(artifact(
+                repo,
+                "018f0f4e-7bbd-7000-8000-000000000402",
+                "oracle",
+                "shared",
+                snapshot.clone(),
+            )),
+            EvaluationArtifactRef::development_suite(artifact(
+                repo,
+                "018f0f4e-7bbd-7000-8000-000000000403",
+                "development_suite",
+                "development",
+                snapshot.clone(),
+            )),
+            EvaluationArtifactRef::final_suite(artifact(
+                repo,
+                "018f0f4e-7bbd-7000-8000-000000000404",
+                "final_suite",
+                "final",
+                snapshot,
+            )),
+        )
+    }
+
+    fn attest_all(
+        authority: &mut InMemoryEvaluationArtifactAuthority,
+        bridge: &crate::workflow_bridge::WorkflowBridgeContract,
+        inputs: &EvaluationInputs,
+    ) {
+        for reference in [
+            &inputs.baseline.reference,
+            &inputs.oracle.reference,
+            &inputs.development_suite.reference,
+            &inputs.final_suite.reference,
+        ] {
+            authority.issue(EvaluationArtifactGrant::for_scope(
+                bridge.scope().clone(),
+                reference.clone(),
+            ));
+        }
+    }
+
+    #[test]
+    fn four_coherent_self_authored_scenario_sets_cannot_seal_without_authority_attestations() {
+        let mut repo = InMemoryArtifactRepository::default();
+        let snapshot = repo
+            .append(
+                None,
+                ArtifactDraft::new(
+                    "tenant_a",
+                    "018f0f4e-7bbd-7000-8000-000000000400",
+                    1,
+                    ArtifactKind::SourceSnapshot,
+                    json!({}),
+                    None,
+                ),
+            )
+            .unwrap()
+            .reference();
+        let bridge =
+            bridge_for_evaluation_plan_test(snapshot.clone(), VerificationStatus::Supported);
+        let inputs = inputs(&mut repo, snapshot);
+        let mut authority = InMemoryEvaluationArtifactAuthority::default();
+        assert_eq!(
+            EvaluationPlan::seal_from_bridge(&bridge, inputs.clone(), &mut repo, &mut authority),
+            Err(EvaluationPlanError::AuthorityDenied(
+                super::EvaluationAuthorityError::MissingAttestation
+            ))
+        );
+        attest_all(&mut authority, &bridge, &inputs);
+        let plan =
+            EvaluationPlan::seal_from_bridge(&bridge, inputs.clone(), &mut repo, &mut authority)
+                .unwrap();
+        assert!(!plan.allows_same_outcome_claim());
+        assert!(!plan.eligible_for_proposal());
+        authority.revoke(bridge.scope(), &inputs.oracle.reference);
+        assert_eq!(
+            EvaluationPlan::seal_from_bridge(&bridge, inputs, &mut repo, &mut authority),
+            Err(EvaluationPlanError::AuthorityDenied(
+                super::EvaluationAuthorityError::Revoked
+            ))
+        );
+    }
+
+    #[test]
+    fn non_proxy_bridge_is_rejected_before_artifact_authority_is_read() {
+        let mut repo = InMemoryArtifactRepository::default();
+        let snapshot = repo
+            .append(
+                None,
+                ArtifactDraft::new(
+                    "tenant_a",
+                    "018f0f4e-7bbd-7000-8000-000000000410",
+                    1,
+                    ArtifactKind::SourceSnapshot,
+                    json!({}),
+                    None,
+                ),
+            )
+            .unwrap()
+            .reference();
+        let bridge =
+            bridge_for_evaluation_plan_test(snapshot.clone(), VerificationStatus::Uncertain);
+        assert_eq!(
+            EvaluationPlan::seal_from_bridge(
+                &bridge,
+                inputs(&mut repo, snapshot),
+                &mut repo,
+                &mut InMemoryEvaluationArtifactAuthority::default()
+            ),
+            Err(EvaluationPlanError::BridgeNotEvaluable)
+        );
+    }
 }

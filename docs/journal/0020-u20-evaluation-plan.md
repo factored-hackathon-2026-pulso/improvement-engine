@@ -30,6 +30,11 @@ que ese tipo genérico debilite el contrato, U20 re-lee cada revisión desde el
   outcome y a la unidad, y rechaza mismo snapshot/scope con semántica distinta.
 - Ninguna referencia puede reutilizarse entre slots, incluyendo las suites de
   desarrollo/final.
+- Antes de leer el payload de cada slot, `EvaluationArtifactAuthorityPort`
+  debe atestar la revisión exacta bajo el scope U14/U16. El grant/capability
+  vive fuera del `ScenarioSet`; por tanto cuatro payloads coherentes auto
+  publicados no crean autoridad. El doble local soporta revocación y el puerto
+  real queda como dependencia de política/capabilities.
 
 Después de verificar todo, el commitment cubre bridge, snapshot, identidad y
 digest de cada revisión, y los tres campos semánticos. Cambiar una revisión
@@ -39,26 +44,34 @@ o releases.
 
 ## TDD y pruebas
 
-La prueba pública `crates/core/tests/evaluation_plan.rs` se escribió primero y
-falló por ausencia de los refs tipados, el contrato compartido y el fixture
-U14/U16. Se habilita exclusivamente bajo `test-support`: ese fixture ensambla
-la composición real U14/U16 con recibos sintéticos y no existe en el build por
-defecto.
+Las pruebas unitarias privadas se escribieron primero y fallaron por ausencia
+de los refs tipados, el contrato compartido, la atestación de autoridad y el
+fixture U14/U16. El fixture permanece `cfg(test)` y `pub(crate)`: no existe
+una superficie pública ni siquiera bajo `test-support` que permita a un
+consumidor fabricar un bridge `MechanismProxy`. Un doctest `compile_fail`
+vigila ese límite de compilación.
 
-La cobertura pública verifica:
+La cobertura del módulo verifica:
 
 1. sellado correcto con inputs re-leídos, sin append (adaptador read-only), y
    ambos predicados de outcome/release en falso;
 2. gate `MechanismProxy` antes de tocar inputs;
 3. rechazo de outcome, unidad, medida y partición development/final erróneos;
 4. commitment distinto al cambiar la identidad sellada de los inputs.
+5. cuatro `ScenarioSet` semánticamente coherentes pero sin atestaciones no
+   sellan; tras atestar las cuatro revisiones el plan es válido, y revocar una
+   vuelve a bloquearlo.
+
+`crates/core/tests/evaluation_plan.rs` conserva cobertura de superficie pública
+para los refs tipados y el puerto de autoridad independiente. No fabrica un
+bridge: el doctest anterior verifica que dicha fábrica no es importable.
 
 Validación ejecutada al cierre:
 
 ```powershell
 cargo +1.98.1 fmt --all --check
-cargo +1.98.1 clippy --workspace --all-targets --features test-support -- -D warnings
-cargo +1.98.1 test --workspace --features test-support
+cargo +1.98.1 clippy --workspace --all-targets -- -D warnings
+cargo +1.98.1 test --workspace
 git diff --check
 ```
 
