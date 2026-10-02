@@ -101,17 +101,68 @@ impl UntrustedChangeSpec {
     }
 }
 
-/// A typed, executable fence bound to the exact bridge, identity and operation
-/// that the trusted composition has authorized.
+/// The atomic registry condition that U18 must evaluate at the same write
+/// boundary as the enclosing [`CompilationAuthorization`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExecutablePredicate {
+    /// An `add` may proceed only if the exact Core entity identity has no head.
+    EntityAbsent {
+        kind: CoreEntityKind,
+        entity_id: String,
+    },
+    /// A future replacement must compare the exact known entity revision/body.
+    RevisionEquals {
+        kind: CoreEntityKind,
+        entity_id: String,
+        entity_version: String,
+        content_digest: String,
+    },
+}
+
+impl ExecutablePredicate {
+    fn canonical_form(&self) -> String {
+        match self {
+            Self::EntityAbsent { kind, entity_id } => {
+                format!("entity_absent|{}|{entity_id}", kind.as_str())
+            }
+            Self::RevisionEquals {
+                kind,
+                entity_id,
+                entity_version,
+                content_digest,
+            } => format!(
+                "revision_equals|{}|{entity_id}|{entity_version}|{content_digest}",
+                kind.as_str()
+            ),
+        }
+    }
+}
+
+/// A typed executable fence plus its canonical digest. The digest is evidence
+/// of the predicate bytes; it is never itself the condition U18 will execute.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExecutablePrecondition {
-    digest: String,
+    predicate: ExecutablePredicate,
+    commitment: String,
 }
 
 impl ExecutablePrecondition {
+    fn entity_absent(kind: CoreEntityKind, entity_id: String) -> Self {
+        let predicate = ExecutablePredicate::EntityAbsent { kind, entity_id };
+        let commitment = digest(&[&predicate.canonical_form()]);
+        Self {
+            predicate,
+            commitment,
+        }
+    }
+
     #[must_use]
-    pub fn digest(&self) -> &str {
-        &self.digest
+    pub fn predicate(&self) -> &ExecutablePredicate {
+        &self.predicate
+    }
+    #[must_use]
+    pub fn commitment(&self) -> &str {
+        &self.commitment
     }
 }
 
@@ -129,6 +180,7 @@ pub struct CompilationAuthorization {
     kind: CoreEntityKind,
     entity_id: String,
     entity_version: String,
+    content_digest: String,
     precondition: ExecutablePrecondition,
     commitment: String,
 }
@@ -175,6 +227,10 @@ impl CompilationAuthorization {
         &self.entity_version
     }
     #[must_use]
+    pub fn content_digest(&self) -> &str {
+        &self.content_digest
+    }
+    #[must_use]
     pub fn precondition(&self) -> &ExecutablePrecondition {
         &self.precondition
     }
@@ -196,6 +252,11 @@ pub struct AuthorizedChangeSpec {
 /// ```compile_fail
 /// use improvement_engine_core::change_compiler::AuthorizedChangeSpec;
 /// let _ = AuthorizedChangeSpec::new();
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::change_compiler::AuthorizedChangeSpec;
+/// let _ = AuthorizedChangeSpec { untrusted: todo!(), authorization: todo!() };
 /// ```
 ///
 /// ```compile_fail
@@ -253,22 +314,18 @@ impl TrustedChangeAuthorizer {
         if !is_minimal_core_flow(&operation.content) {
             return Err(CompilerError::InvalidEntityIdentity);
         }
-        let expected = expected_precondition(
-            bridge,
-            operation.target_kind,
-            operation.operation,
-            &entity_id,
-            &entity_version,
-        );
-        if operation.precondition_digest != expected.digest {
+        let expected = expected_precondition(operation.target_kind, &entity_id);
+        if operation.precondition_digest != expected.commitment() {
             return Err(CompilerError::PreconditionMismatch);
         }
+        let content_digest = digest(&[&canonical_json(&operation.content)]);
         let authorization = CompilationAuthorization::new(
             bridge,
             readiness,
             operation,
             entity_id,
             entity_version,
+            content_digest,
             expected,
         );
         Ok(AuthorizedChangeSpec {
@@ -286,6 +343,7 @@ impl CompilationAuthorization {
         operation: &ChangeOperation,
         entity_id: String,
         entity_version: String,
+        content_digest: String,
         precondition: ExecutablePrecondition,
     ) -> Self {
         let scope = bridge.scope().clone();
@@ -311,7 +369,8 @@ impl CompilationAuthorization {
             operation_name(operation.operation),
             &entity_id,
             &entity_version,
-            precondition.digest(),
+            &content_digest,
+            precondition.commitment(),
         ]);
         Self {
             scope,
@@ -324,6 +383,7 @@ impl CompilationAuthorization {
             kind: operation.target_kind,
             entity_id,
             entity_version,
+            content_digest,
             precondition,
             commitment,
         }
@@ -420,7 +480,8 @@ impl ChangeCompiler {
             || operation.target_kind != spec.authorization.kind
             || id != spec.authorization.entity_id
             || version != spec.authorization.entity_version
-            || operation.precondition_digest != spec.authorization.precondition.digest
+            || operation.precondition_digest != spec.authorization.precondition.commitment
+            || digest(&[&canonical_json(&operation.content)]) != spec.authorization.content_digest
             || !is_minimal_core_flow(&operation.content)
         {
             return Err(CompilerError::AuthorizationBindingMismatch);
@@ -449,32 +510,8 @@ impl ChangeCompiler {
 }
 
 #[allow(dead_code)] // Reached through the deferred trusted composition.
-fn expected_precondition(
-    bridge: &WorkflowBridgeContract,
-    kind: CoreEntityKind,
-    operation: ChangeOperationKind,
-    entity_id: &str,
-    entity_version: &str,
-) -> ExecutablePrecondition {
-    ExecutablePrecondition {
-        digest: digest(&[
-            bridge.commitment(),
-            bridge.scope().tenant_id(),
-            bridge.scope().job_id(),
-            bridge.scope().grant_id(),
-            bridge.scope().authority_ref(),
-            &bridge.source_snapshot_ref().tenant_id,
-            &bridge.source_snapshot_ref().id,
-            &bridge.source_snapshot_ref().revision.to_string(),
-            &bridge.source_snapshot_ref().digest,
-            bridge.input().candidate_route(),
-            bridge.input().mechanism(),
-            kind.as_str(),
-            operation_name(operation),
-            entity_id,
-            entity_version,
-        ]),
-    }
+fn expected_precondition(kind: CoreEntityKind, entity_id: &str) -> ExecutablePrecondition {
+    ExecutablePrecondition::entity_absent(kind, entity_id.to_owned())
 }
 
 #[allow(dead_code)] // Used by the trusted authorizer.
@@ -717,13 +754,7 @@ mod tests {
 
     fn spec(bridge: &WorkflowBridgeContract) -> UntrustedChangeSpec {
         let content = json!({"id":"payment_status_resolution","version":"1.0.0","priority":1,"nodes":[{"id":"complete","type":"end","config":{"outcome":"completed"}}]});
-        let precondition = expected_precondition(
-            bridge,
-            CoreEntityKind::Flow,
-            ChangeOperationKind::Add,
-            "payment_status_resolution",
-            "1.0.0",
-        );
+        let precondition = expected_precondition(CoreEntityKind::Flow, "payment_status_resolution");
         UntrustedChangeSpec::new(
             bridge.scope().clone(),
             bridge.source_snapshot_ref().clone(),
@@ -733,7 +764,7 @@ mod tests {
                 ChangeOperationKind::Add,
                 CoreEntityKind::Flow,
                 content,
-                precondition.digest(),
+                precondition.commitment(),
             )],
         )
         .expect("fixed spec is valid")
@@ -815,18 +846,12 @@ mod tests {
     }
 
     #[test]
-    fn entity_version_or_precondition_drift_cannot_authorise_a_change_spec() {
+    fn entity_identity_or_precondition_drift_cannot_authorise_a_change_spec() {
         let (readiness, bridge) = eligible_readiness();
         let mut wrong_id = spec(&bridge);
         wrong_id.operations[0].content["id"] = json!("other_flow");
         assert_eq!(
             TrustedChangeAuthorizer::authorize(&readiness, &bridge, wrong_id),
-            Err(CompilerError::PreconditionMismatch)
-        );
-        let mut wrong_version = spec(&bridge);
-        wrong_version.operations[0].content["version"] = json!("1.0.1");
-        assert_eq!(
-            TrustedChangeAuthorizer::authorize(&readiness, &bridge, wrong_version),
             Err(CompilerError::PreconditionMismatch)
         );
         let mut wrong_precondition = spec(&bridge);
@@ -874,6 +899,28 @@ mod tests {
         authorized.untrusted.operations[0].content["version"] = json!("1.0.1");
         assert_eq!(
             ChangeCompiler::compile(authorized),
+            Err(CompilerError::AuthorizationBindingMismatch)
+        );
+    }
+
+    #[test]
+    fn authorization_preserves_a_typed_entity_absent_fence_and_seals_full_flow_content() {
+        let (readiness, bridge) = eligible_readiness();
+        let authorized =
+            TrustedChangeAuthorizer::authorize(&readiness, &bridge, spec(&bridge)).unwrap();
+        assert_eq!(
+            authorized.authorization.precondition().predicate(),
+            &ExecutablePredicate::EntityAbsent {
+                kind: CoreEntityKind::Flow,
+                entity_id: "payment_status_resolution".to_owned(),
+            }
+        );
+
+        let mut corrupted = authorized;
+        // The same id/version and a valid Flow schema must still not reuse the seal.
+        corrupted.untrusted.operations[0].content["priority"] = json!(99);
+        assert_eq!(
+            ChangeCompiler::compile(corrupted),
             Err(CompilerError::AuthorizationBindingMismatch)
         );
     }
