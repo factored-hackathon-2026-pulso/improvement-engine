@@ -1,0 +1,49 @@
+# U24 — consola técnica read-only: primer corte vertical
+
+## Comportamiento entregado
+
+`improvement_engine_core::debug_console` aporta la frontera de lectura que
+usará el `control-api` interno y una UI técnica posterior. `DebugConsole`
+consume exclusivamente el contrato U07 (`RunActivityReadModel` y
+`RunActivityHandler`) y devuelve un `ConsoleTimeline` acotado. Cada evento
+incluye sólo el identificador validado, clase, instante y digest de evidencia,
+además de un resumen textual accesible. No devuelve payload de evidencia,
+fuente, SQL, prompts, artefactos ni datos de clientes.
+
+`DebugConsoleApi` es un adaptador de aplicación sin framework HTTP: recibe el
+`ListRunActivityRequest` que ya requiere `AuthenticatedTenant`, conserva el
+cursor opaco de U07 y mapea los fallos a estados de transporte seguros. En
+particular, un cursor vencido o purgado es `Gone`, sin reconstruir una línea de
+tiempo ni afirmar que el run terminó; un run inexistente es `NotFound`, sin
+proyección adjunta.
+
+La frontera no expone operaciones para proyectar eventos, mutar runs, ejecutar
+herramientas, leer PG/S3 directamente ni crear exportaciones. Emitir un cursor
+es el único estado local y efímero, propiedad de U07; una lectura no cambia la
+revisión de la proyección.
+
+## RED → GREEN ejecutado
+
+1. El primer test importó `debug_console::DebugConsole` inexistente y falló con
+   `E0432`.
+2. La implementación mínima añadió la proyección segura de una timeline
+   tenant-bound y el test pasó.
+3. Se añadieron regresiones para reanudación por cursor opaco/cross-tenant,
+   gap al cambiar la revisión y respuesta `NotFound` sin mutar la proyección.
+
+Comando ejecutado en Windows:
+
+```powershell
+cargo +1.98.1 test -p improvement-engine-core --test debug_console
+```
+
+Resultado actual: 4 pruebas verdes.
+
+## Límites y trabajo posterior
+
+Este corte no reclama una UI browser, HTTP/SSO reales, SSE persistente,
+proyección PG, grafo de jobs, OpenTelemetry, consultas/model calls, evaluación,
+memoria, exportaciones ni comandos de operador. Esos detalles exigen los
+contratos/productores correspondientes y no se inventan a partir de la
+actividad U07. El browser futuro consumirá este adaptador desde `control-api`;
+nunca obtendrá acceso directo al dataset, PG/S3 o SQL arbitrario.
