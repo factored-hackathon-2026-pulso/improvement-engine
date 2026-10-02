@@ -728,6 +728,11 @@ impl VerifiedScoutCandidate {
             || e0.cutoff_unix_seconds != record.candidate.cutoff_unix_seconds
             || e0.query_receipt_digests != record.candidate.query_receipt_digests
             || e0.signal_commitment != record.candidate.signal_commitment
+            || e0.metric_spec_commitment
+                != crate::e0_deterministic_sensor::DiagnosticMetricSpec::from_policy(
+                    crate::e0_deterministic_sensor::DiagnosticMetricPolicy::TechnicalErrorRateV1,
+                )
+                .commitment()
         {
             return Err(FrozenE0ScoutCandidateError::ProvenanceMismatch);
         }
@@ -779,12 +784,23 @@ impl VerifiedFrozenE0ScoutCandidate {
             &self.e0.metric_semantics,
         )
     }
+    pub(crate) fn metric_spec_commitment(&self) -> &str {
+        &self.e0.metric_spec_commitment
+    }
     pub(crate) fn frozen_bounds_are_consistent(&self) -> bool {
+        let Some(total) = self.e0.denominator.checked_add(self.e0.missing) else {
+            return false;
+        };
+        let coverage_basis_points = self
+            .e0
+            .denominator
+            .checked_mul(10_000)
+            .and_then(|scaled| scaled.checked_div(total))
+            .unwrap_or(0) as u16;
         self.e0.window_start_unix_seconds <= self.e0.window_end_unix_seconds
             && self.e0.window_end_unix_seconds <= self.e0.cutoff_unix_seconds
             && self.e0.numerator <= self.e0.denominator
-            && self.e0.missing <= self.e0.denominator
-            && self.e0.coverage_basis_points <= 10_000
+            && self.e0.coverage_basis_points == coverage_basis_points
             && !self.e0.run_id.is_empty()
             && !self.e0.table.is_empty()
             && !self.e0.field_commitment.is_empty()
@@ -794,6 +810,52 @@ impl VerifiedFrozenE0ScoutCandidate {
             && !self.e0.source_evidence_digest.is_empty()
             && !self.e0.query_receipt_digests.is_empty()
     }
+}
+
+#[cfg(all(test, feature = "test-support"))]
+impl VerifiedFrozenE0ScoutCandidate {
+    pub(crate) fn all_missing_for_frozen_verifier_test(mut self) -> Self {
+        self.e0.numerator = 0;
+        self.e0.denominator = 0;
+        self.e0.missing = 1;
+        self.e0.coverage_basis_points = 0;
+        self
+    }
+
+    pub(crate) fn inconsistent_coverage_for_frozen_verifier_test(mut self) -> Self {
+        self.e0.coverage_basis_points = self.e0.coverage_basis_points.saturating_add(1);
+        self
+    }
+
+    pub(crate) fn invalid_policy_for_frozen_verifier_test(mut self) -> Self {
+        self.e0.metric_policy_id = "other_policy".into();
+        self
+    }
+
+    pub(crate) fn invalid_semantics_for_frozen_verifier_test(mut self) -> Self {
+        self.e0.metric_semantics = "other_semantics".into();
+        self
+    }
+
+    pub(crate) fn invalid_bounds_for_frozen_verifier_test(mut self) -> Self {
+        self.e0.numerator = self.e0.denominator.saturating_add(1);
+        self
+    }
+}
+
+#[cfg(all(test, feature = "test-support"))]
+pub(crate) fn corrupt_e0_metric_spec_for_frozen_verifier_test(
+    candidate: &mut VerifiedScoutCandidate,
+) {
+    let e0 = candidate
+        .record
+        .candidate
+        .e0_provenance
+        .as_mut()
+        .expect("real E0 test candidate");
+    e0.metric_spec_commitment = format!("sha256:{}", "0".repeat(64));
+    e0.commitment = e0_provenance_digest(e0);
+    candidate.record.candidate.digest = candidate_digest(&candidate.record.candidate);
 }
 
 /// Error at the single boundary from a public Scout draft to an opaque,

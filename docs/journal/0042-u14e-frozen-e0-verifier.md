@@ -33,6 +33,12 @@ La prueba E2E usa la cadena real U02 raw JSON → U04-B V2 → U08 governed ledg
 verificación sólo devuelve commitments idénticos (no hay escritura) y que el
 status no es causal. Un candidato U13 genérico sin proveniencia E0 se rechaza;
 los doctests compile-fail cubren construcción de report y receipt/port caller.
+La cobertura sigue exactamente la fórmula U12:
+`floor(denominator * 10_000 / (denominator + missing))`, con total seguro y
+`0` cuando todo es missing. No impone erróneamente `missing <= denominator`.
+Las regresiones rechazan policy, semántica, bounds o cobertura inconsistentes,
+y un registro E0 alterado pero rehasheado con `metric_spec_commitment` distinto
+del spec autorizado falla durante la rehidratación antes de emitir reporte.
 
 ## Fuera de alcance
 

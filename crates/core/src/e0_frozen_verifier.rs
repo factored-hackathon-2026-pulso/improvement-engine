@@ -11,6 +11,7 @@ use crate::autonomous_scout::{
     FrozenE0ScoutCandidateError, VerifiedFrozenE0ScoutCandidate, VerifiedScoutCandidate,
 };
 use crate::core_task::CoreTaskScope;
+use crate::e0_deterministic_sensor::{DiagnosticMetricPolicy, DiagnosticMetricSpec};
 
 /// Versioned, sealed verifier policy. There is intentionally no dynamic
 /// policy input or port: accepting one would allow a caller to self-attest a
@@ -142,14 +143,17 @@ impl FrozenE0IndependentVerifier {
         Self::verify_rehydrated(&frozen)
     }
 
-    fn verify_rehydrated(
+    pub(crate) fn verify_rehydrated(
         frozen: &VerifiedFrozenE0ScoutCandidate,
     ) -> Result<FrozenE0VerificationReport, FrozenE0VerificationError> {
         let policy = FrozenE0VerifierPolicy::ProvenanceConsistencyV1;
         let (policy_id, policy_version, semantics) = frozen.metric_policy();
+        let expected_metric_spec =
+            DiagnosticMetricSpec::from_policy(DiagnosticMetricPolicy::TechnicalErrorRateV1);
         if policy_id != "e0_diagnostic_allowlist"
             || policy_version != 1
             || semantics != "observed_technical_error_flag"
+            || frozen.metric_spec_commitment() != expected_metric_spec.commitment()
             || !frozen.frozen_bounds_are_consistent()
         {
             return Err(FrozenE0VerificationError::FrozenConsistencyFailed);
@@ -234,10 +238,11 @@ const _FROZEN_E0_REPORT_AND_PORT_ARE_NOT_CALLER_CONSTRUCTIBLE: () = ();
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::autonomous_scout::{
-        verified_candidate_for_independent_verifier_test,
-        verified_real_e0_candidate_for_frozen_verifier_test,
-    };
+    #[cfg(feature = "test-support")]
+    use crate::autonomous_scout::corrupt_e0_metric_spec_for_frozen_verifier_test;
+    use crate::autonomous_scout::verified_candidate_for_independent_verifier_test;
+    #[cfg(feature = "test-support")]
+    use crate::autonomous_scout::verified_real_e0_candidate_for_frozen_verifier_test;
 
     #[cfg(feature = "test-support")]
     #[test]
@@ -264,6 +269,72 @@ mod tests {
         assert!(matches!(
             FrozenE0IndependentVerifier::verify(&candidate),
             Err(FrozenE0VerificationError::NotE0Candidate)
+        ));
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn all_missing_e0_observation_is_consistent_when_coverage_is_zero() {
+        let candidate = verified_real_e0_candidate_for_frozen_verifier_test();
+        let frozen = candidate
+            .rehydrate_frozen_e0()
+            .unwrap()
+            .all_missing_for_frozen_verifier_test();
+        assert_eq!(
+            FrozenE0IndependentVerifier::verify_rehydrated(&frozen)
+                .unwrap()
+                .status(),
+            FrozenE0ConsistencyStatus::Consistent
+        );
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn inconsistent_coverage_is_rejected_without_a_report() {
+        let candidate = verified_real_e0_candidate_for_frozen_verifier_test();
+        let frozen = candidate
+            .rehydrate_frozen_e0()
+            .unwrap()
+            .inconsistent_coverage_for_frozen_verifier_test();
+        assert!(matches!(
+            FrozenE0IndependentVerifier::verify_rehydrated(&frozen),
+            Err(FrozenE0VerificationError::FrozenConsistencyFailed)
+        ));
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn invalid_policy_semantics_or_bounds_are_rejected_without_a_report() {
+        let candidate = verified_real_e0_candidate_for_frozen_verifier_test();
+        for frozen in [
+            candidate
+                .rehydrate_frozen_e0()
+                .unwrap()
+                .invalid_policy_for_frozen_verifier_test(),
+            candidate
+                .rehydrate_frozen_e0()
+                .unwrap()
+                .invalid_semantics_for_frozen_verifier_test(),
+            candidate
+                .rehydrate_frozen_e0()
+                .unwrap()
+                .invalid_bounds_for_frozen_verifier_test(),
+        ] {
+            assert!(matches!(
+                FrozenE0IndependentVerifier::verify_rehydrated(&frozen),
+                Err(FrozenE0VerificationError::FrozenConsistencyFailed)
+            ));
+        }
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn altered_but_rehashed_e0_canonical_record_is_rejected_during_rehydration() {
+        let mut candidate = verified_real_e0_candidate_for_frozen_verifier_test();
+        corrupt_e0_metric_spec_for_frozen_verifier_test(&mut candidate);
+        assert!(matches!(
+            FrozenE0IndependentVerifier::verify(&candidate),
+            Err(FrozenE0VerificationError::ProvenanceMismatch)
         ));
     }
 }
