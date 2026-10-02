@@ -97,7 +97,4 @@ jobs:
           if ((Get-Module Pester).Version -ne $requiredPester) {
             throw "Loaded Pester version does not match required version $requiredPester."
           }
-          Invoke-Pester -Path tests/run-local-e0-e2e.Tests.ps1
-          # The suite intentionally exercises a fake Cargo exit code of 7.
-          # Do not let that child-process status masquerade as Pester's result.
-          $global:LASTEXITCODE = 0
+          Invoke-Pester -Path tests/run-local-e0-e2e.Tests.ps1 -EnableExit
