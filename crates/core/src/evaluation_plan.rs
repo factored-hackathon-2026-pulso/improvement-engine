@@ -5,6 +5,7 @@
 //! every selected revision must carry the shared `evaluation_contract` and is
 //! re-read from the immutable repository before a plan can be frozen.
 
+use crate::source_validation::SourceSnapshot;
 use crate::workflow_bridge::{LinkGrade, WorkflowBridgeContract};
 use crate::{ArtifactKind, ArtifactReference, ArtifactRepository};
 use serde_json::Value;
@@ -204,6 +205,9 @@ struct EvaluationSemanticContract {
 pub struct EvaluationPlan {
     bridge_commitment: String,
     source_snapshot_ref: ArtifactReference,
+    /// U04-B's exact parsed-source identity. This is intentionally distinct
+    /// from the repository artifact-content digest in `source_snapshot_ref`.
+    source_snapshot_binding_digest: String,
     baseline_ref: ArtifactReference,
     oracle_ref: ArtifactReference,
     development_suite_ref: ArtifactReference,
@@ -218,6 +222,7 @@ pub struct EvaluationPlan {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct EvaluationPlanBinding {
     source_snapshot_ref: ArtifactReference,
+    source_snapshot_binding_digest: String,
     baseline_ref: ArtifactReference,
     oracle_ref: ArtifactReference,
     development_suite_ref: ArtifactReference,
@@ -230,6 +235,10 @@ impl EvaluationPlanBinding {
     #[must_use]
     pub(crate) fn source_snapshot_ref(&self) -> &ArtifactReference {
         &self.source_snapshot_ref
+    }
+    #[must_use]
+    pub(crate) fn source_snapshot_binding_digest(&self) -> &str {
+        &self.source_snapshot_binding_digest
     }
     #[must_use]
     pub(crate) fn baseline_ref(&self) -> &ArtifactReference {
@@ -265,6 +274,7 @@ pub(crate) fn e0_safety_plan_fixture(
         digest: format!("sha256:{}", marker.to_string().repeat(64)),
     };
     let binding = EvaluationPlanBinding {
+        source_snapshot_binding_digest: source_snapshot_ref.digest.clone(),
         source_snapshot_ref,
         baseline_ref: reference("018f0f4e-7bbd-7000-8000-000000000701", 1, 'b'),
         oracle_ref: reference("018f0f4e-7bbd-7000-8000-000000000702", 2, 'c'),
@@ -276,6 +286,7 @@ pub(crate) fn e0_safety_plan_fixture(
     EvaluationPlan {
         bridge_commitment: "sha256:bridge".to_owned(),
         source_snapshot_ref: binding.source_snapshot_ref,
+        source_snapshot_binding_digest: binding.source_snapshot_binding_digest,
         baseline_ref: binding.baseline_ref,
         oracle_ref: binding.oracle_ref,
         development_suite_ref: binding.development_suite_ref,
@@ -365,6 +376,7 @@ impl EvaluationPlan {
         }
         let scope = bridge.scope();
         let snapshot = bridge.source_snapshot_ref();
+        let source_snapshot_binding_digest = verified_source_snapshot_binding(artifacts, snapshot)?;
         let baseline = verified_input(artifacts, authority, scope, snapshot, &inputs.baseline)?;
         let oracle = verified_input(artifacts, authority, scope, snapshot, &inputs.oracle)?;
         let development_suite = verified_input(
@@ -412,6 +424,7 @@ impl EvaluationPlan {
             &snapshot.id,
             &snapshot.revision.to_string(),
             &snapshot.digest,
+            &source_snapshot_binding_digest,
             &baseline.reference.tenant_id,
             &baseline.reference.id,
             &baseline.reference.revision.to_string(),
@@ -435,6 +448,7 @@ impl EvaluationPlan {
         Ok(Self {
             bridge_commitment: bridge.commitment().to_owned(),
             source_snapshot_ref: snapshot.clone(),
+            source_snapshot_binding_digest,
             baseline_ref: baseline.reference,
             oracle_ref: oracle.reference,
             development_suite_ref: development_suite.reference,
@@ -464,6 +478,7 @@ impl EvaluationPlan {
     pub(crate) fn e0_safety_binding(&self) -> EvaluationPlanBinding {
         EvaluationPlanBinding {
             source_snapshot_ref: self.source_snapshot_ref.clone(),
+            source_snapshot_binding_digest: self.source_snapshot_binding_digest.clone(),
             baseline_ref: self.baseline_ref.clone(),
             oracle_ref: self.oracle_ref.clone(),
             development_suite_ref: self.development_suite_ref.clone(),
@@ -483,6 +498,36 @@ impl EvaluationPlan {
             && self.development_suite_ref.tenant_id == bridge.scope().tenant_id()
             && self.final_suite_ref.tenant_id == bridge.scope().tenant_id()
     }
+}
+
+/// Resolves the U16 source-snapshot artifact into the exact U04-B parsed
+/// source identity. Repository artifact content and a `SourceSnapshot` byte
+/// seal are different domains: a plan keeps both and never compares them as
+/// though they were interchangeable.
+fn verified_source_snapshot_binding<R: ArtifactRepository>(
+    artifacts: &mut R,
+    reference: &ArtifactReference,
+) -> Result<String, EvaluationPlanError> {
+    let artifact = artifacts
+        .get(&reference.tenant_id, &reference.id, reference.revision)
+        .map_err(|_| EvaluationPlanError::ReferenceUnavailable)?
+        .ok_or(EvaluationPlanError::ReferenceUnavailable)?;
+    if artifact.reference() != *reference
+        || artifact.kind != ArtifactKind::SourceSnapshot
+        || artifact.source_snapshot_ref.is_some()
+    {
+        return Err(EvaluationPlanError::ReferenceMismatch);
+    }
+    let raw = artifact
+        .payload
+        .get("source_snapshot_json")
+        .and_then(Value::as_str)
+        .ok_or(EvaluationPlanError::InvalidInput)?;
+    let snapshot = SourceSnapshot::from_json(raw).map_err(|_| EvaluationPlanError::InvalidInput)?;
+    if snapshot.tenant_id() != reference.tenant_id {
+        return Err(EvaluationPlanError::CrossTenantReference);
+    }
+    Ok(snapshot.binding_digest())
 }
 
 struct VerifiedInput {
@@ -584,18 +629,42 @@ pub enum EvaluationPlanError {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{
-        EvaluationArtifactGrant, EvaluationArtifactRef, EvaluationInputs, EvaluationPlanError,
-        InMemoryEvaluationArtifactAuthority, TrustedEvaluationComposer,
+        EvaluationArtifactGrant, EvaluationArtifactRef, EvaluationInputs, EvaluationPlan,
+        EvaluationPlanError, InMemoryEvaluationArtifactAuthority, TrustedEvaluationComposer,
     };
     use crate::independent_verifier::VerificationStatus;
+    use crate::source_validation::SourceSnapshot;
     use crate::workflow_bridge::bridge_for_evaluation_plan_test;
     use crate::{
         ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository,
         InMemoryArtifactRepository,
     };
     use serde_json::json;
+
+    pub(crate) fn source_snapshot_payload(tenant_id: &str) -> serde_json::Value {
+        let raw = json!({
+            "contract_version": {"major": 1, "minor": 0},
+            "tenant_id": tenant_id,
+            "source_namespace": "platform_history",
+            "world_ref": "world_a",
+            "observed_cutoff": "1970-01-01T00:01:40Z",
+            "sources": [{
+                "table": "case",
+                "uri": "file://fixture.csv",
+                "file_digest": format!("sha256:{}", "a".repeat(64)),
+                "header_digest": format!("sha256:{}", "b".repeat(64)),
+                "row_count": 1,
+                "source_contract_ref": {
+                    "id": "case", "version": "v1",
+                    "digest": format!("sha256:{}", "c".repeat(64))
+                }
+            }]
+        })
+        .to_string();
+        json!({"source_snapshot_json": raw})
+    }
 
     fn artifact(
         repo: &mut InMemoryArtifactRepository,
@@ -670,6 +739,41 @@ mod tests {
         }
     }
 
+    /// Cross-slice fixture: a real U20 plan backed by a persisted source
+    /// snapshot whose raw bytes can also feed U04-B. Test-only callers cannot
+    /// manufacture the production composer or its authority.
+    pub(crate) fn real_e0_plan_and_snapshot() -> (EvaluationPlan, SourceSnapshot) {
+        let raw = source_snapshot_payload("tenant_a")["source_snapshot_json"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let parsed = SourceSnapshot::from_json(&raw).unwrap();
+        let mut repo = InMemoryArtifactRepository::default();
+        let snapshot = repo
+            .append(
+                None,
+                ArtifactDraft::new(
+                    "tenant_a",
+                    "018f0f4e-7bbd-7000-8000-000000000420",
+                    1,
+                    ArtifactKind::SourceSnapshot,
+                    json!({"source_snapshot_json": raw}),
+                    None,
+                ),
+            )
+            .unwrap()
+            .reference();
+        let bridge =
+            bridge_for_evaluation_plan_test(snapshot.clone(), VerificationStatus::Supported);
+        let inputs = inputs(&mut repo, snapshot);
+        let mut authority = InMemoryEvaluationArtifactAuthority::default();
+        attest_all(&mut authority, &bridge, &inputs);
+        let plan = TrustedEvaluationComposer::from_policy(authority)
+            .seal_from_bridge(&bridge, inputs, &mut repo)
+            .unwrap();
+        (plan, parsed)
+    }
+
     #[test]
     fn four_coherent_self_authored_scenario_sets_cannot_seal_without_authority_attestations() {
         let mut repo = InMemoryArtifactRepository::default();
@@ -681,7 +785,7 @@ mod tests {
                     "018f0f4e-7bbd-7000-8000-000000000400",
                     1,
                     ArtifactKind::SourceSnapshot,
-                    json!({}),
+                    source_snapshot_payload("tenant_a"),
                     None,
                 ),
             )
@@ -689,7 +793,7 @@ mod tests {
             .reference();
         let bridge =
             bridge_for_evaluation_plan_test(snapshot.clone(), VerificationStatus::Supported);
-        let inputs = inputs(&mut repo, snapshot);
+        let inputs = inputs(&mut repo, snapshot.clone());
         let authority = InMemoryEvaluationArtifactAuthority::default();
         assert_eq!(
             TrustedEvaluationComposer::from_policy(authority).seal_from_bridge(
@@ -705,6 +809,23 @@ mod tests {
         let plan = composer
             .seal_from_bridge(&bridge, inputs.clone(), &mut repo)
             .unwrap();
+        let snapshot_artifact = repo
+            .get(&snapshot.tenant_id, &snapshot.id, snapshot.revision)
+            .unwrap()
+            .unwrap();
+        let raw = snapshot_artifact.payload["source_snapshot_json"]
+            .as_str()
+            .unwrap();
+        let parsed = SourceSnapshot::from_json(raw).unwrap();
+        assert_eq!(
+            plan.e0_safety_binding().source_snapshot_binding_digest(),
+            parsed.binding_digest()
+        );
+        assert_ne!(
+            plan.e0_safety_binding().source_snapshot_ref().digest,
+            parsed.binding_digest(),
+            "artifact content and source-byte sealing remain distinct digest domains"
+        );
         assert!(!plan.allows_same_outcome_claim());
         assert!(!plan.eligible_for_proposal());
         let mut authority = InMemoryEvaluationArtifactAuthority::default();
@@ -728,7 +849,7 @@ mod tests {
                     "018f0f4e-7bbd-7000-8000-000000000410",
                     1,
                     ArtifactKind::SourceSnapshot,
-                    json!({}),
+                    source_snapshot_payload("tenant_a"),
                     None,
                 ),
             )

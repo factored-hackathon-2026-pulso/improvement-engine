@@ -157,7 +157,7 @@ mod tests {
                 id,
                 1,
                 ArtifactKind::SourceSnapshot,
-                json!({}),
+                crate::evaluation_plan::tests::source_snapshot_payload("tenant_a"),
                 None,
             ),
         )

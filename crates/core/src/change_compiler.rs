@@ -922,7 +922,7 @@ mod tests {
             &mut repo,
             "018f0f4e-7bbd-7000-8000-000000000600",
             ArtifactKind::SourceSnapshot,
-            json!({}),
+            crate::evaluation_plan::tests::source_snapshot_payload("tenant_a"),
             None,
         );
         let (report, bridge) = report_and_bridge_for_final_eligibility_test(

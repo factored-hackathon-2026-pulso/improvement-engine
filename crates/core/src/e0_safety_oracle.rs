@@ -187,7 +187,7 @@ fn validate_bindings(
     {
         return Err(E0SafetyOracleError::TenantMismatch);
     }
-    if plan.source_snapshot_ref().digest != replay.source_snapshot_digest() {
+    if plan.source_snapshot_binding_digest() != replay.source_snapshot_digest() {
         return Err(E0SafetyOracleError::SnapshotMismatch);
     }
     if plan.commitment().is_empty()
@@ -236,6 +236,7 @@ fn commitment(
         fixture.questions_digest(),
         valid_until.as_str(),
         plan.commitment(),
+        plan.source_snapshot_binding_digest(),
     ] {
         hasher.update(part.len().to_be_bytes());
         hasher.update(part.as_bytes());
@@ -267,7 +268,12 @@ mod tests {
 
     use super::*;
     use crate::ArtifactReference;
-    use crate::enriched_history::verified_replay_availability_fixture;
+    use crate::enriched_history::{
+        AvailabilityClockMode, AvailabilityProfile, EnrichedHistoryAdapter,
+        EnrichedHistoryManifest, PackageFile, ProvenanceDigests, ReplayRowAvailability,
+        replay_projection_digest, verified_replay_availability_fixture,
+    };
+    use crate::evaluation_plan::tests::real_e0_plan_and_snapshot;
     use crate::evaluation_plan::{
         e0_safety_plan_fixture, e0_safety_plan_fixture_with_oracle_revision,
     };
@@ -280,6 +286,10 @@ mod tests {
             revision: 1,
             digest: format!("sha256:{}", digest_marker.to_string().repeat(64)),
         }
+    }
+
+    fn digest(marker: char) -> String {
+        format!("sha256:{}", marker.to_string().repeat(64))
     }
 
     fn replay(tenant_id: &str, snapshot_digest: &str, cutoff: u64) -> VerifiedReplayAvailability {
@@ -449,5 +459,69 @@ mod tests {
             oracle.classify_identity_check(ExpectedIdentityCheck::Unavailable),
             SafetyDisposition::Unknown
         );
+    }
+
+    #[test]
+    fn u20_binding_carries_a_distinct_u04_source_snapshot_seal() {
+        let source = source_ref("tenant_a", 'a');
+        let plan = plan("tenant_a", source);
+        assert_eq!(
+            plan.e0_safety_binding().source_snapshot_binding_digest(),
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+    }
+
+    #[test]
+    fn real_u04b_replay_and_real_u20_plan_bind_the_same_source_byte_seal() {
+        let (plan, snapshot) = real_e0_plan_and_snapshot();
+        let row = serde_json::json!({
+            "event_time": "1970-01-01T00:01:40Z",
+            "status": "completed"
+        });
+        let availability = vec![ReplayRowAvailability::new(BTreeMap::from([
+            ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+            ("status".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+        ]))];
+        let profile = AvailabilityProfile::new(
+            "e0_replay",
+            1,
+            AvailabilityClockMode::replay_at_event_time("e0_zero_lag"),
+            "tenant_a",
+            snapshot.binding_digest(),
+        );
+        let manifest = EnrichedHistoryManifest::new_replay(
+            "platform_history",
+            "world_a",
+            "1970-01-01T00:01:40Z",
+            profile,
+            vec![
+                PackageFile::new(
+                    "case",
+                    ProvenanceDigests::new(digest('a'), digest('b'), digest('c'), digest('d')),
+                    "1970-01-01T00:01:40Z",
+                )
+                .with_field_availability(BTreeMap::from([
+                    ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                    ("status".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                ]))
+                .with_replay_projection_digest(replay_projection_digest(
+                    std::slice::from_ref(&row),
+                    &availability,
+                ))
+                .with_source_file_seal(snapshot.source_file_seal("case").unwrap()),
+            ],
+        );
+        let adapter = EnrichedHistoryAdapter::from_snapshot(manifest, &snapshot).unwrap();
+        let replay = adapter.verified_replay_availability(&snapshot).unwrap();
+        assert_ne!(
+            plan.e0_safety_binding().source_snapshot_ref().digest,
+            replay.source_snapshot_digest()
+        );
+        assert_eq!(
+            plan.e0_safety_binding().source_snapshot_binding_digest(),
+            replay.source_snapshot_digest()
+        );
+        let fixture = fixture("tenant_a", "policy-v1", "questions-v1", 101);
+        assert!(TrustedE0SafetyOracleComposer::seal(&replay, &plan, &fixture).is_ok());
     }
 }
