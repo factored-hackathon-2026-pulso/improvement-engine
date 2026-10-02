@@ -406,10 +406,12 @@ pub struct QueryReceipt {
     pub sequence: u64,
     pub digest: String,
     pub query_digest: String,
-    /// Retained alongside the query digest so E0 can prove a receipt did not
-    /// originate from labels or a hidden join. Both remain digest-bound.
+    /// Retained alongside the query digest so a trusted downstream boundary
+    /// can account for every source field read by the query, including filter
+    /// operands. This is integrity evidence, not an issuer signature.
     pub queried_table: String,
     pub queried_columns: Vec<String>,
+    pub accessed_columns: Vec<String>,
     pub depends_on: Option<String>,
     pub source_snapshot_ref: ArtifactReference,
     pub source_contract_digest: String,
@@ -419,24 +421,11 @@ pub struct QueryReceipt {
     pub cutoff_unix_seconds: u64,
     pub row_count: usize,
     pub rows_digest: String,
-    /// Present only after U08-E has revalidated this governed U08 result
-    /// against a sealed U04-B replay projection.
-    pub e0_replay: Option<E0ReplayReceiptBinding>,
-}
-
-/// Commitments added by the crate-private U08-E adapter. No source rows,
-/// labels, paths or source handles cross into this receipt.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct E0ReplayReceiptBinding {
-    pub source_snapshot_digest: String,
-    pub availability_profile_digest: String,
-    pub field_commitment: String,
-    pub replay_projection_digest: String,
 }
 
 impl QueryReceipt {
-    /// Verifies the receipt's self-contained canonical digest before another
-    /// boundary relies on it.
+    /// Checks canonical integrity only. A matching digest proves neither who
+    /// issued this public value nor that it came from a governed lab.
     #[must_use]
     pub fn has_valid_digest(&self) -> bool {
         let mut unsigned = self.clone();
@@ -448,19 +437,27 @@ impl QueryReceipt {
     pub fn binds_rows(&self, rows: &[BTreeMap<String, String>]) -> bool {
         self.rows_digest == digest_of(&rows)
     }
-
-    pub(crate) fn bind_e0_replay(mut self, binding: E0ReplayReceiptBinding) -> Self {
-        self.e0_replay = Some(binding);
-        self.digest.clear();
-        self.digest = digest_of(&self);
-        self
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueryResult {
     rows: QueryRows,
     receipt: QueryReceipt,
+}
+
+/// Opaque, in-process evidence that the exact completed result was retrieved
+/// from a still-authorized U08 session. It cannot be made from `QueryResult`
+/// or caller-provided manifests; only the lab ledger can mint it.
+pub(crate) struct GovernedE0QueryCandidate {
+    rows: QueryRows,
+    receipt: QueryReceipt,
+    source_table: LabTable,
+}
+
+impl GovernedE0QueryCandidate {
+    pub(crate) fn into_parts(self) -> (QueryRows, QueryReceipt, LabTable) {
+        (self.rows, self.receipt, self.source_table)
+    }
 }
 
 impl QueryResult {
@@ -596,6 +593,7 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             filter.clone(),
         ));
         let (rows, dependency) = execute_select(session, &table, &columns, filter.as_ref())?;
+        let accessed_columns = accessed_columns(&columns, filter.as_ref());
         let sequence = session.receipts.len() as u64 + 1;
         let mut receipt = QueryReceipt {
             session_id: session_id.to_owned(),
@@ -608,6 +606,7 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             query_digest,
             queried_table: table,
             queried_columns: columns,
+            accessed_columns,
             depends_on: dependency,
             source_snapshot_ref: session.source.snapshot_ref.clone(),
             source_contract_digest: session.source.source_contract_digest.clone(),
@@ -617,7 +616,6 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             cutoff_unix_seconds: session.source.cutoff_unix_seconds,
             row_count: rows.len(),
             rows_digest: digest_of(&rows),
-            e0_replay: None,
         };
         receipt.digest = digest_of(&receipt);
         session.results.insert(receipt.digest.clone(), rows.clone());
@@ -626,6 +624,58 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
         }
         session.receipts.push(receipt.clone());
         Ok(QueryResult { rows, receipt })
+    }
+
+    /// Retrieves a completed receipt from the lab's own ephemeral ledger for
+    /// the crate-private E0 composition. The public `QueryResult::untrusted`
+    /// constructor cannot cross this boundary.
+    #[allow(dead_code)] // Called by the future crate-private E0 composition root.
+    pub(crate) fn governed_e0_candidate(
+        &self,
+        session_id: &str,
+        access: &LabAccess,
+        receipt_digest: &str,
+        now_unix_seconds: u64,
+    ) -> Result<GovernedE0QueryCandidate, LabError> {
+        let session = self
+            .sessions
+            .get(session_id)
+            .ok_or(LabError::SessionNotFound)?;
+        if !self.authority.authorize(access) || session.access != *access {
+            return Err(LabError::AccessDenied);
+        }
+        if now_unix_seconds >= session.access.expires_at_unix_seconds {
+            return Err(LabError::SessionExpired);
+        }
+        let receipt = session
+            .receipts
+            .iter()
+            .find(|receipt| receipt.digest == receipt_digest)
+            .cloned()
+            .ok_or(LabError::QueryFailed)?;
+        let rows = session
+            .results
+            .get(receipt_digest)
+            .cloned()
+            .ok_or(LabError::QueryFailed)?;
+        let source_table = session
+            .source
+            .tables
+            .iter()
+            .find(|table| table.name == receipt.queried_table)
+            .cloned()
+            .ok_or(LabError::QueryFailed)?;
+        if !receipt.has_valid_digest()
+            || !receipt.binds_rows(&rows)
+            || receipt.row_count != rows.len()
+        {
+            return Err(LabError::QueryFailed);
+        }
+        Ok(GovernedE0QueryCandidate {
+            rows,
+            receipt,
+            source_table,
+        })
     }
 
     pub fn receipts(
@@ -736,6 +786,28 @@ fn load_source(source: &LabSource) -> Result<Connection, LabError> {
         .execute_batch("PRAGMA query_only = ON;")
         .map_err(|_| LabError::QueryFailed)?;
     Ok(connection)
+}
+
+fn accessed_columns(columns: &[String], filter: Option<&QueryFilter>) -> Vec<String> {
+    let mut fields = BTreeSet::from_iter(columns.iter().cloned());
+    match filter {
+        Some(QueryFilter::Equals { column, .. }) => {
+            fields.insert(column.clone());
+        }
+        Some(QueryFilter::PriorResult {
+            source_column,
+            prior_column,
+            ..
+        }) => {
+            fields.insert(source_column.clone());
+            // `prior_column` is read from another receipt, not this source;
+            // it remains digest-bound in the query and the E0 boundary denies
+            // all dependent queries before a result can be admitted.
+            let _ = prior_column;
+        }
+        None => {}
+    }
+    fields.into_iter().collect()
 }
 
 fn execute_select(

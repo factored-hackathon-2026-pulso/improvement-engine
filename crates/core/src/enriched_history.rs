@@ -6,7 +6,7 @@
 //! That separation makes the access boundary explicit while still making the
 //! temporal and provenance controls executable in local tests.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -552,6 +552,11 @@ pub(crate) struct VerifiedE0QueryProjection {
     transform_digest: String,
     field_commitment: String,
     replay_projection_digest: String,
+    /// The complete, sealed replay projection commits the exact rows and their
+    /// per-field availability, rather than a caller-supplied lab manifest.
+    source_evidence_digest: String,
+    source_columns: Vec<String>,
+    source_rows: Vec<BTreeMap<String, String>>,
     allowed_fields: BTreeMap<String, String>,
 }
 
@@ -587,8 +592,24 @@ impl VerifiedE0QueryProjection {
     pub(crate) fn replay_projection_digest(&self) -> &str {
         &self.replay_projection_digest
     }
+    pub(crate) fn source_evidence_digest(&self) -> &str {
+        &self.source_evidence_digest
+    }
     pub(crate) fn allows_field(&self, field: &str) -> bool {
         self.allowed_fields.contains_key(field)
+    }
+
+    pub(crate) fn matches_lab_source(
+        &self,
+        snapshot_digest: &str,
+        table: &str,
+        columns: &[String],
+        rows: &[BTreeMap<String, String>],
+    ) -> bool {
+        self.source_snapshot_digest == snapshot_digest
+            && self.table == table
+            && self.source_columns == columns
+            && self.source_rows == rows
     }
 
     #[cfg(test)]
@@ -605,6 +626,7 @@ impl VerifiedE0QueryProjection {
         field_commitment: String,
         replay_projection_digest: String,
         allowed_fields: BTreeMap<String, String>,
+        source_rows: Vec<BTreeMap<String, String>>,
     ) -> Self {
         Self {
             tenant_id: tenant_id.into(),
@@ -616,6 +638,9 @@ impl VerifiedE0QueryProjection {
             source_digest,
             transform_digest,
             field_commitment,
+            source_evidence_digest: replay_projection_digest.clone(),
+            source_columns: allowed_fields.keys().cloned().collect(),
+            source_rows,
             replay_projection_digest,
             allowed_fields,
         }
@@ -918,7 +943,50 @@ impl EnrichedHistoryAdapter {
                     table: table.to_owned(),
                 }
             })?;
-        let field_bytes = serde_json::to_vec(&sealed.field_availability)
+        // A manifest may declare a broader schema than this TableInput. E0
+        // may read only fields actually present in this exact verified input.
+        let actual_fields = discovery
+            .rows
+            .iter()
+            .flat_map(|row| row.as_object().into_iter().flat_map(|object| object.keys()))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let allowed_fields = sealed
+            .field_availability
+            .iter()
+            .filter(|(field, _)| actual_fields.contains(*field) && !is_forbidden_field(field))
+            .map(|(field, available_at)| (field.clone(), available_at.clone()))
+            .collect::<BTreeMap<_, _>>();
+        if actual_fields.len() != allowed_fields.len() {
+            return Err(EnrichedHistoryError::UnavailableField {
+                table: table.to_owned(),
+                field: "unavailable_or_forbidden_input_field".to_owned(),
+            });
+        }
+        let mut source_rows = discovery
+            .rows
+            .iter()
+            .map(|row| {
+                row.as_object()
+                    .ok_or_else(|| EnrichedHistoryError::RowIsNotObject {
+                        table: table.to_owned(),
+                    })?
+                    .iter()
+                    .map(|(field, value)| {
+                        value
+                            .as_str()
+                            .map(|value| (field.clone(), value.to_owned()))
+                            .ok_or_else(|| EnrichedHistoryError::InvalidManifestField {
+                                field: format!("files.{table}.non_string_lab_value"),
+                            })
+                    })
+                    .collect::<Result<BTreeMap<_, _>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        source_rows.sort_by_key(|row| {
+            serde_json::to_vec(row).expect("BTreeMap source rows serialize deterministically")
+        });
+        let field_bytes = serde_json::to_vec(&allowed_fields)
             .expect("BTreeMap field availability serializes deterministically");
         let field_commitment = format!("sha256:{:x}", Sha256::digest(field_bytes));
         if discovery.provenance.digests != sealed.digests {
@@ -937,8 +1005,11 @@ impl EnrichedHistoryAdapter {
             source_digest: sealed.digests.file_digest.clone(),
             transform_digest: sealed.digests.transform_digest.clone(),
             field_commitment,
+            source_evidence_digest: replay_projection_digest.clone(),
+            source_columns: allowed_fields.keys().cloned().collect(),
+            source_rows,
             replay_projection_digest,
-            allowed_fields: sealed.field_availability.clone(),
+            allowed_fields,
         })
     }
 

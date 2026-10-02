@@ -5,7 +5,7 @@
 //! U04-B owns replay availability; U08 owns the governed local-lab receipt.
 
 use crate::enriched_history::VerifiedE0QueryProjection;
-use crate::local_lab::{E0ReplayReceiptBinding, QueryResult};
+use crate::local_lab::{GovernedE0QueryCandidate, QueryResult};
 
 /// Public marker for the E0 receipt-verification boundary. Construction and
 /// admission remain crate-private, so a transport caller cannot manufacture an
@@ -19,6 +19,15 @@ pub struct E0QueryLab {
 /// execute Agent Core, publish a candidate or release anything.
 pub struct VerifiedE0QueryResult {
     result: QueryResult,
+    /// Opaque issuer-attested commitment. It is deliberately not written into
+    /// the public, self-digesting U08 receipt: a digest is integrity evidence,
+    /// not proof that an E0 authority issued it.
+    _attestation: E0QueryAttestation,
+}
+
+struct E0QueryAttestation {
+    #[allow(dead_code)] // Read by the future internal E0 orchestration ledger.
+    commitment: String,
 }
 
 impl VerifiedE0QueryResult {
@@ -41,27 +50,23 @@ pub enum E0QueryLabError {
     LabelOrUnknownFieldDenied,
     FutureOrCutoffDenied,
     LaterJoinDenied,
-    AlreadyBoundDenied,
 }
 
 impl E0QueryLab {
-    /// Trusted composition takes a completed U08 query and binds it to an
-    /// opaque U04-B E0 projection. Every check happens before re-signing the
-    /// receipt, so a rejected result has no E0 receipt/capability.
+    /// Trusted composition takes an opaque receipt retrieved from U08's own
+    /// live ledger and binds it to an opaque U04-B projection. A public
+    /// `QueryResult` or a self-consistent digest cannot enter this boundary.
     #[allow(dead_code)] // Invoked by the future E0 run composition root.
     pub(crate) fn admit(
         projection: &VerifiedE0QueryProjection,
-        result: QueryResult,
+        candidate: GovernedE0QueryCandidate,
     ) -> Result<VerifiedE0QueryResult, E0QueryLabError> {
-        let (rows, receipt) = result.into_parts();
+        let (rows, receipt, source_table) = candidate.into_parts();
         if !receipt.has_valid_digest()
             || !receipt.binds_rows(&rows)
             || receipt.row_count != rows.len()
         {
             return Err(E0QueryLabError::ReceiptInvalid);
-        }
-        if receipt.e0_replay.is_some() {
-            return Err(E0QueryLabError::AlreadyBoundDenied);
         }
         if receipt.tenant_id != projection.tenant_id()
             || receipt.source_snapshot_ref.tenant_id != projection.tenant_id()
@@ -82,20 +87,34 @@ impl E0QueryLab {
             return Err(E0QueryLabError::LaterJoinDenied);
         }
         if receipt
-            .queried_columns
+            .accessed_columns
             .iter()
             .any(|field| !projection.allows_field(field))
         {
             return Err(E0QueryLabError::LabelOrUnknownFieldDenied);
         }
-        let receipt = receipt.bind_e0_replay(E0ReplayReceiptBinding {
-            source_snapshot_digest: projection.source_snapshot_digest().to_owned(),
-            availability_profile_digest: projection.availability_profile_digest().to_owned(),
-            field_commitment: projection.field_commitment().to_owned(),
-            replay_projection_digest: projection.replay_projection_digest().to_owned(),
-        });
+        if !projection.matches_lab_source(
+            &receipt.source_snapshot_ref.digest,
+            &source_table.name,
+            &source_table.columns,
+            &source_table.rows,
+        ) {
+            return Err(E0QueryLabError::ProjectionMismatch);
+        }
+        let attestation = E0QueryAttestation {
+            commitment: format!(
+                "{}:{}:{}:{}:{}:{}",
+                receipt.digest,
+                projection.source_snapshot_digest(),
+                projection.availability_profile_digest(),
+                projection.field_commitment(),
+                projection.replay_projection_digest(),
+                projection.source_evidence_digest(),
+            ),
+        };
         Ok(VerifiedE0QueryResult {
             result: QueryResult::untrusted(rows, receipt),
+            _attestation: attestation,
         })
     }
 }
@@ -145,6 +164,10 @@ mod tests {
                 ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
                 ("status".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
             ]),
+            vec![BTreeMap::from([
+                ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                ("status".to_owned(), "completed".to_owned()),
+            ])],
         )
     }
 
@@ -215,6 +238,7 @@ mod tests {
             .expect("verified E0 query projection");
         assert_eq!(projection.table(), "case");
         assert!(projection.allows_field("status"));
+        assert!(!projection.allows_field("label"));
         assert_eq!(projection.cutoff_at_unix_seconds(), 100);
     }
 
@@ -223,11 +247,22 @@ mod tests {
         cutoff: u64,
         label_column: bool,
     ) -> (ApprovedLabSource, ArtifactReference) {
+        source_with_snapshot(tenant, cutoff, label_column, 'e')
+    }
+
+    fn source_with_snapshot(
+        tenant: &str,
+        cutoff: u64,
+        label_column: bool,
+        snapshot_byte: char,
+    ) -> (ApprovedLabSource, ArtifactReference) {
         let snapshot = ArtifactReference {
             tenant_id: tenant.to_owned(),
             id: "018f50a1-7f00-7000-8000-000000000008".to_owned(),
             revision: 1,
-            digest: digest('a'),
+            // U08's ArtifactReference is explicitly bound to the same sealed
+            // U04 SourceSnapshot identity, not merely a same-tenant handle.
+            digest: digest(snapshot_byte),
         };
         let mut row = BTreeMap::from([
             ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
@@ -287,6 +322,28 @@ mod tests {
         (lab, access, session)
     }
 
+    fn lab_for_other_snapshot() -> (
+        LocalInvestigationLab,
+        LabAccess,
+        crate::local_lab::LabSession,
+    ) {
+        let (approved, snapshot) = source_with_snapshot("tenant_a", 100, false, 'f');
+        let access = LabAccess::new(
+            "run",
+            "tenant_a",
+            "investigation",
+            "grant",
+            "authority",
+            snapshot,
+            1_000,
+        );
+        let mut authority = InMemoryLabGrantAuthority::default();
+        authority.issue(LabGrant::from_access(&access));
+        let mut lab = LocalInvestigationLab::new(authority);
+        let session = lab.open(access.clone(), approved, 100).unwrap();
+        (lab, access, session)
+    }
+
     #[test]
     fn binds_a_completed_u08_read_only_receipt_to_exact_e0_commitments() {
         let (mut lab, access, session) = lab_for("tenant_a", 100, false);
@@ -298,16 +355,11 @@ mod tests {
                 100,
             )
             .expect("governed U08 read");
-        let verified = E0QueryLab::admit(&projection("tenant_a"), result).expect("bound E0 result");
-        let binding = verified
-            .result()
-            .receipt()
-            .e0_replay
-            .as_ref()
-            .expect("E0 binding");
-        assert_eq!(binding.source_snapshot_digest, digest('e'));
-        assert_eq!(binding.field_commitment, digest('a'));
-        assert_eq!(binding.replay_projection_digest, digest('b'));
+        let candidate = lab
+            .governed_e0_candidate(session.session_id(), &access, &result.receipt().digest, 100)
+            .expect("ledger-attested U08 result");
+        let verified =
+            E0QueryLab::admit(&projection("tenant_a"), candidate).expect("bound E0 result");
         assert!(verified.result().receipt().has_valid_digest());
         assert!(!verified.authorizes_source_write_or_release());
     }
@@ -315,24 +367,6 @@ mod tests {
     #[test]
     fn tampered_rows_cross_tenant_future_cutoff_labels_and_later_joins_fail_closed() {
         let (mut lab, access, session) = lab_for("tenant_a", 100, false);
-        let result = lab
-            .query(
-                session.session_id(),
-                &access,
-                LabQuery::select("case", vec!["event_time", "status"], None),
-                100,
-            )
-            .unwrap();
-        let (mut rows, receipt) = result.into_parts();
-        rows[0].insert("status".to_owned(), "tampered".to_owned());
-        assert!(matches!(
-            E0QueryLab::admit(
-                &projection("tenant_a"),
-                QueryResult::untrusted(rows, receipt)
-            ),
-            Err(E0QueryLabError::ReceiptInvalid)
-        ));
-
         let (mut future_lab, future_access, future_session) = lab_for("tenant_a", 101, false);
         let future = future_lab
             .query(
@@ -342,8 +376,16 @@ mod tests {
                 101,
             )
             .unwrap();
+        let future_candidate = future_lab
+            .governed_e0_candidate(
+                future_session.session_id(),
+                &future_access,
+                &future.receipt().digest,
+                101,
+            )
+            .unwrap();
         assert!(matches!(
-            E0QueryLab::admit(&projection("tenant_a"), future),
+            E0QueryLab::admit(&projection("tenant_a"), future_candidate),
             Err(E0QueryLabError::FutureOrCutoffDenied)
         ));
 
@@ -356,9 +398,66 @@ mod tests {
                 100,
             )
             .unwrap();
+        let label_candidate = label_lab
+            .governed_e0_candidate(
+                label_session.session_id(),
+                &label_access,
+                &label.receipt().digest,
+                100,
+            )
+            .unwrap();
         assert!(matches!(
-            E0QueryLab::admit(&projection("tenant_a"), label),
+            E0QueryLab::admit(&projection("tenant_a"), label_candidate),
             Err(E0QueryLabError::LabelOrUnknownFieldDenied)
+        ));
+
+        let label_filter = label_lab
+            .query(
+                label_session.session_id(),
+                &label_access,
+                LabQuery::select(
+                    "case",
+                    vec!["event_time"],
+                    Some(crate::local_lab::QueryFilter::equals(
+                        "label",
+                        "future_answer",
+                    )),
+                ),
+                100,
+            )
+            .unwrap();
+        let label_filter_candidate = label_lab
+            .governed_e0_candidate(
+                label_session.session_id(),
+                &label_access,
+                &label_filter.receipt().digest,
+                100,
+            )
+            .unwrap();
+        assert!(matches!(
+            E0QueryLab::admit(&projection("tenant_a"), label_filter_candidate),
+            Err(E0QueryLabError::LabelOrUnknownFieldDenied)
+        ));
+
+        let divergent_source_read = label_lab
+            .query(
+                label_session.session_id(),
+                &label_access,
+                LabQuery::select("case", vec!["event_time"], None),
+                100,
+            )
+            .unwrap();
+        let divergent_candidate = label_lab
+            .governed_e0_candidate(
+                label_session.session_id(),
+                &label_access,
+                &divergent_source_read.receipt().digest,
+                100,
+            )
+            .unwrap();
+        assert!(matches!(
+            E0QueryLab::admit(&projection("tenant_a"), divergent_candidate),
+            Err(E0QueryLabError::ProjectionMismatch)
         ));
 
         let (mut other_lab, other_access, other_session) = lab_for("tenant_b", 100, false);
@@ -370,9 +469,39 @@ mod tests {
                 100,
             )
             .unwrap();
+        let other_candidate = other_lab
+            .governed_e0_candidate(
+                other_session.session_id(),
+                &other_access,
+                &other.receipt().digest,
+                100,
+            )
+            .unwrap();
         assert!(matches!(
-            E0QueryLab::admit(&projection("tenant_a"), other),
+            E0QueryLab::admit(&projection("tenant_a"), other_candidate),
             Err(E0QueryLabError::CrossTenantDenied)
+        ));
+
+        let (mut snapshot_lab, snapshot_access, snapshot_session) = lab_for_other_snapshot();
+        let snapshot_result = snapshot_lab
+            .query(
+                snapshot_session.session_id(),
+                &snapshot_access,
+                LabQuery::select("case", vec!["event_time"], None),
+                100,
+            )
+            .unwrap();
+        let snapshot_candidate = snapshot_lab
+            .governed_e0_candidate(
+                snapshot_session.session_id(),
+                &snapshot_access,
+                &snapshot_result.receipt().digest,
+                100,
+            )
+            .unwrap();
+        assert!(matches!(
+            E0QueryLab::admit(&projection("tenant_a"), snapshot_candidate),
+            Err(E0QueryLabError::ProjectionMismatch)
         ));
 
         let first = lab
@@ -397,8 +526,11 @@ mod tests {
                 100,
             )
             .unwrap();
+        let joined_candidate = lab
+            .governed_e0_candidate(session.session_id(), &access, &joined.receipt().digest, 100)
+            .unwrap();
         assert!(matches!(
-            E0QueryLab::admit(&projection("tenant_a"), joined),
+            E0QueryLab::admit(&projection("tenant_a"), joined_candidate),
             Err(E0QueryLabError::LaterJoinDenied)
         ));
         assert_eq!(

@@ -16,13 +16,22 @@ campos futuros y anotaciones de disponibilidad/proyección alteradas fallan en
 U04-B. El resultado opaco conserva tabla, digests de contrato/fuente/transform,
 commitment canónico de disponibilidad de campos y digest de proyección replay.
 
-`E0QueryLab::admit` recibe únicamente un `QueryResult` ya terminado por U08.
-Antes de crear la capability vuelve a verificar digest, filas, conteo, tenant,
-snapshot tenant, cutoff, tabla, columnas, tres digests de fuente y ausencia de
-dependencia. Por ello una consulta a labels/campo no permitido, un join posterior,
-reuso cross-tenant, un cutoff futuro o filas/receipt alterados no emite un
-resultado E0. Al éxito vuelve a firmar el `QueryReceipt` con los cuatro
-commitments E0; no cambia las filas ni añade capacidad de escritura o release.
+`E0QueryLab::admit` no acepta un `QueryResult` público: acepta únicamente un
+candidate opaco recuperado por U08 desde su ledger efímero, aún autorizado, con
+el receipt y las filas exactas que U08 almacenó. Un digest canónico de
+`QueryReceipt` sólo detecta alteración; **no autentica un emisor** y no puede
+crear una capability E0. La capability de éxito conserva una atestación interna
+opaca, separada del receipt público y de las filas.
+
+Antes de emitirla, compara el `SourceSnapshot.binding_digest` sellado por U04
+con el snapshot del lab, los tres digests, cutoff, tabla y la tabla fuente
+exacta (schema y filas) contra la evidencia `TableInput` validada por U04. La
+lista de campos permitidos se deriva de las columnas presentes en ese
+`TableInput`, no del schema más amplio del manifest. Todas las columnas leídas,
+incluida la columna de `Equals`, deben pertenecer a esa lista. Labels, señales,
+campos futuros/desconocidos, joins dependientes, reuso cross-tenant, snapshot
+distinto o evidencia divergente fallan antes de capability. Nada añade
+escritura, ejecución o release.
 
 ## RED → GREEN
 
@@ -32,9 +41,11 @@ Los ciclos siguientes añadieron el projection verifier y la revalidación del
 receipt con pruebas para:
 
 1. una proyección real U04-B V2 que preserva tabla, campo, replay y cutoff;
-2. receipt U08 válido que recibe commitments E0 y continúa validando su digest;
-3. filas alteradas, cutoff futuro, labels/campo no permitido, tenant cruzado y
-   join dependiente bloqueados antes de crear capability;
+2. un receipt emitido y recuperado desde el ledger U08, ligado al snapshot y a
+   las filas selladas U04, obtiene una capability E0 opaca;
+3. cutoff futuro, labels/campo no permitido (incluido filtro), tenant/snapshot
+   cruzado, evidencia divergente y join dependiente son bloqueados antes de
+   crear capability;
 4. `SourceWrite` denegado por U08 sin receipt E0.
 
 ## Fuera de alcance
