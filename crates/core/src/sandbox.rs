@@ -73,8 +73,37 @@ impl SandboxFixture {
 /// use improvement_engine_core::sandbox::SandboxIdentityIssuer;
 /// let _ = SandboxIdentityIssuer::new();
 /// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::sandbox::SandboxIdentityIssuer;
+/// fn requires_debug<T: std::fmt::Debug>() {}
+/// requires_debug::<SandboxIdentityIssuer>();
+/// ```
+///
+/// An arm reference is not an issuer capability. Only trusted fixture
+/// composition receives an issuer from `start_protected_arm`; an untrusted
+/// caller holding an arm cannot derive one or mint evidence.
+///
+/// ```compile_fail
+/// use improvement_engine_core::sandbox::{SandboxArmRef, StatefulSandbox};
+/// fn untrusted_arm_holder(sandbox: &mut StatefulSandbox, arm: &SandboxArmRef) {
+///     let _ = sandbox.issue_identity(arm, "customer-1");
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::sandbox::{SandboxArmRef, SandboxIdentityIssuer, StatefulSandbox};
+/// fn candidate_issuer_cannot_reissue_to_baseline(
+///     sandbox: &mut StatefulSandbox,
+///     candidate_issuer: &SandboxIdentityIssuer,
+///     baseline: &SandboxArmRef,
+/// ) {
+///     let _ = sandbox.issue_identity(candidate_issuer, baseline, "customer-1");
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq)]
 pub struct SandboxIdentityIssuer {
+    arm: SandboxArmRef,
     issuer_id: String,
 }
 
@@ -455,18 +484,26 @@ pub struct StatefulSandbox {
 }
 
 impl StatefulSandbox {
-    /// Returns the opaque issuer capability registered for this exact arm.
-    /// A capability from another arm cannot mint evidence here.
-    pub fn identity_issuer(
-        &self,
-        arm: &SandboxArmRef,
-    ) -> Result<SandboxIdentityIssuer, SandboxError> {
-        self.arms
-            .get(arm)
-            .ok_or(SandboxError::ArmUnknown)?
-            .identity_issuer
-            .clone()
-            .ok_or(SandboxError::IdentityEvidenceMismatch)
+    /// Starts an identity-protected fixture through the trusted composition
+    /// boundary. The returned opaque issuer is a separate capability from the
+    /// public arm reference; callers with only `SandboxArmRef` cannot obtain
+    /// or mint identity evidence.
+    pub fn start_protected_arm(
+        &mut self,
+        evaluation_id: &str,
+        arm_id: &str,
+        fixture: SandboxFixture,
+    ) -> Result<(SandboxArmRef, SandboxIdentityIssuer), SandboxError> {
+        if fixture.identity_policy.is_none() {
+            return Err(SandboxError::FixtureInvalid);
+        }
+        let arm = self.start_arm(evaluation_id, arm_id, fixture)?;
+        let issuer = self
+            .arms
+            .get(&arm)
+            .and_then(|state| state.identity_issuer.clone())
+            .ok_or(SandboxError::IdentityEvidenceMismatch)?;
+        Ok((arm, issuer))
     }
 
     #[must_use]
@@ -510,6 +547,7 @@ impl SandboxPort for StatefulSandbox {
                 .checked_add(1)
                 .ok_or(SandboxError::FixtureInvalid)?;
             Some(SandboxIdentityIssuer {
+                arm: arm.clone(),
                 issuer_id: issuer_nonce(&arm, self.next_issuer_nonce),
             })
         } else {
@@ -668,9 +706,9 @@ impl StatefulSandbox {
     pub fn issue_identity(
         &mut self,
         issuer: &SandboxIdentityIssuer,
-        arm: &SandboxArmRef,
         principal_id: impl Into<String>,
     ) -> Result<IdentityEvidence, SandboxError> {
+        let arm = &issuer.arm;
         let state = self.arms.get_mut(arm).ok_or(SandboxError::ArmUnknown)?;
         let policy = state
             .fixture

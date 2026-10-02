@@ -51,11 +51,27 @@ fn start_protected(
     improvement_engine_core::sandbox::SandboxArmRef,
     improvement_engine_core::sandbox::SandboxIdentityIssuer,
 ) {
+    sandbox
+        .start_protected_arm("evaluation-1", arm_id, fixture())
+        .unwrap()
+}
+
+#[test]
+fn untrusted_arm_handle_cannot_bypass_the_identity_authority_boundary() {
+    let (mut sandbox, _) = sandbox_at(NOW);
     let arm = sandbox
-        .start_arm("evaluation-1", arm_id, fixture())
+        .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();
-    let issuer = sandbox.identity_issuer(&arm).unwrap();
-    (arm, issuer)
+
+    assert_eq!(
+        sandbox
+            .execute(
+                &arm,
+                ActionRequest::new("tenant-a", "evaluation", action("a1", 0, "resolved")),
+            )
+            .unwrap_err(),
+        SandboxError::IdentityEvidenceMissing
+    );
 }
 
 #[test]
@@ -72,10 +88,10 @@ fn registered_fixture_issuer_mints_the_only_valid_proof_for_action_readback_and_
         SandboxError::IdentityEvidenceMissing
     );
     assert!(matches!(
-        sandbox.issue_identity(&issuer, &arm, "customer-2"),
+        sandbox.issue_identity(&issuer, "customer-2"),
         Err(SandboxError::IdentityEvidenceMismatch)
     ));
-    let proof = sandbox.issue_identity(&issuer, &arm, "customer-1").unwrap();
+    let proof = sandbox.issue_identity(&issuer, "customer-1").unwrap();
     let receipt = sandbox
         .execute(
             &arm,
@@ -121,15 +137,11 @@ fn registered_fixture_issuer_mints_the_only_valid_proof_for_action_readback_and_
 #[test]
 fn proof_from_another_arm_is_forged_and_denied_before_action_read_or_reset() {
     let (mut sandbox, _) = sandbox_at(NOW);
-    let (candidate, candidate_issuer) = start_protected(&mut sandbox, "candidate");
+    let (_candidate, candidate_issuer) = start_protected(&mut sandbox, "candidate");
     let (baseline, baseline_issuer) = start_protected(&mut sandbox, "baseline");
     let candidate_proof = sandbox
-        .issue_identity(&candidate_issuer, &candidate, "customer-1")
+        .issue_identity(&candidate_issuer, "customer-1")
         .unwrap();
-    assert!(matches!(
-        sandbox.issue_identity(&candidate_issuer, &baseline, "customer-1"),
-        Err(SandboxError::IdentityEvidenceMismatch)
-    ));
     assert_eq!(
         sandbox
             .execute(
@@ -168,7 +180,7 @@ fn proof_from_another_arm_is_forged_and_denied_before_action_read_or_reset() {
         SandboxError::IdentityEvidenceMismatch
     );
     let baseline_proof = sandbox
-        .issue_identity(&baseline_issuer, &baseline, "customer-1")
+        .issue_identity(&baseline_issuer, "customer-1")
         .unwrap();
     assert_eq!(
         sandbox
@@ -191,7 +203,7 @@ fn proof_from_another_arm_is_forged_and_denied_before_action_read_or_reset() {
 fn sealed_clock_controls_expiry_at_every_sensitive_boundary() {
     let (mut sandbox, clock) = sandbox_at(NOW - 1);
     let (arm, issuer) = start_protected(&mut sandbox, "candidate");
-    let proof = sandbox.issue_identity(&issuer, &arm, "customer-1").unwrap();
+    let proof = sandbox.issue_identity(&issuer, "customer-1").unwrap();
     sandbox
         .execute(
             &arm,
@@ -244,10 +256,10 @@ fn revocation_is_arm_local_and_invalid_revocation_does_not_mutate_the_arm() {
     let (candidate, candidate_issuer) = start_protected(&mut sandbox, "candidate");
     let (baseline, baseline_issuer) = start_protected(&mut sandbox, "baseline");
     let candidate_proof = sandbox
-        .issue_identity(&candidate_issuer, &candidate, "customer-1")
+        .issue_identity(&candidate_issuer, "customer-1")
         .unwrap();
     let baseline_proof = sandbox
-        .issue_identity(&baseline_issuer, &baseline, "customer-1")
+        .issue_identity(&baseline_issuer, "customer-1")
         .unwrap();
     assert_eq!(
         sandbox
@@ -316,7 +328,7 @@ fn revocation_is_arm_local_and_invalid_revocation_does_not_mutate_the_arm() {
 fn local_clock_is_explicit_not_a_default_runtime_choice() {
     let mut sandbox = StatefulSandbox::with_clock(FixedSandboxClock::new(NOW));
     let (arm, issuer) = start_protected(&mut sandbox, "candidate");
-    let proof = sandbox.issue_identity(&issuer, &arm, "customer-1").unwrap();
+    let proof = sandbox.issue_identity(&issuer, "customer-1").unwrap();
     assert_eq!(
         sandbox
             .execute(

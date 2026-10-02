@@ -12,9 +12,11 @@ mutar el estado del brazo.
 `IdentityEvidence` contiene únicamente IDs y compromisos (`*_digest`): no hay
 campo para respuestas de preguntas, texto de reto, tokens de cliente ni output
 de modelo, y deliberadamente no implementa `Debug`. No tiene constructor
-público: `SandboxIdentityIssuer` es una capability opaca emitida **al iniciar
-cada brazo** con un nonce privado del `StatefulSandbox`, y requerida por
-`StatefulSandbox::issue_identity`; éste crea otro nonce opaco y conserva el
+público: la composición confiable usa `start_protected_arm` para recibir el
+`SandboxIdentityIssuer` opaco, ligado al brazo con un nonce privado del
+`StatefulSandbox`. Un `SandboxArmRef` público por sí solo no puede derivar ese
+issuer ni llamar a `issue_identity`; el issuer determina internamente el único
+brazo para el cual puede emitir. El sandbox crea otro nonce opaco y conserva el
 proof canónico en estado privado del brazo. Un issuer de `candidate` no puede
 emitir para `baseline`. La frontera rechaza proof no registrado, alterado o
 emitido para otro brazo, aunque el caller conozca todos los IDs y digests de la
@@ -62,12 +64,14 @@ mínima y en Windows/Rust 1.98.1 pasaron:
 cargo +1.98.1 fmt --all -- --check
 cargo +1.98.1 test -p improvement-engine-core --test sandbox_identity
 cargo +1.98.1 test -p improvement-engine-core --test sandbox
-cargo +1.98.1 clippy -p improvement-engine-core --test sandbox_identity -- -D warnings
+cargo +1.98.1 test -p improvement-engine-core --doc sandbox
+cargo +1.98.1 clippy --workspace --all-targets -- -D warnings
 ```
 
 Las pruebas nuevas cubren ausencia de evidencia, cada componente de binding
-equivocado, reemisión con issuer cruzado, proof cruzado de brazo para
-action/read/reset,
+equivocado, que un `SandboxArmRef` sin capability no puede cruzar la frontera,
+reemisión con issuer cruzado (imposible también por firma), proof cruzado de
+brazo para action/read/reset,
 vencimiento de evidencia, acción y readback válidos, reloj interno para
 action/read/reset, revocación en vuelo y aislamiento candidate/baseline. Un
 doctest `compile_fail` comprueba que el proof no puede construirse ni
