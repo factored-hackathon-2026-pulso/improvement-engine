@@ -211,6 +211,7 @@ pub enum E0Fact {
     Case {
         case_ordinal: u32,
         opened_at: String,
+        opened_at_unix_micros: i64,
         channel: String,
         language: String,
         origin: Option<String>,
@@ -221,6 +222,7 @@ pub enum E0Fact {
         case_ordinal: u32,
         event_ordinal: u32,
         event_time: String,
+        event_time_unix_micros: i64,
         actor_role: String,
         result: String,
         correct: Option<bool>,
@@ -232,6 +234,7 @@ pub enum E0Fact {
         case_ordinal: u32,
         event_ordinal: u32,
         event_time: String,
+        event_time_unix_micros: i64,
         author_role: String,
         language: String,
     },
@@ -239,6 +242,7 @@ pub enum E0Fact {
         case_ordinal: u32,
         event_ordinal: u32,
         event_time: String,
+        event_time_unix_micros: i64,
         tier: String,
         outcome: String,
         reason_code: Option<String>,
@@ -249,6 +253,7 @@ pub enum E0Fact {
         case_ordinal: u32,
         event_ordinal: u32,
         event_time: String,
+        event_time_unix_micros: i64,
         query_signature: String,
         tables_read: Vec<String>,
         columns_read: Vec<String>,
@@ -274,11 +279,13 @@ pub enum E0Fact {
         case_ordinal: u32,
         event_ordinal: u32,
         requested_at: String,
+        requested_at_unix_micros: i64,
         requested_by_role: String,
         tool_id: String,
         reason_code: Option<String>,
         policy_rule_id: Option<String>,
         decided_at: Option<String>,
+        decided_at_unix_micros: Option<i64>,
         decision: Option<String>,
         related_tool_ordinal: Option<u32>,
     },
@@ -288,6 +295,7 @@ pub enum E0Fact {
         scope: String,
         window_start: String,
         window_end: String,
+        window_end_unix_micros: i64,
         support_cases: u32,
         support_analysts: u32,
         consistency: Option<String>,
@@ -492,19 +500,25 @@ pub fn prepare_e0_package(
     }
     manifest_entries.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
 
-    let raw_cases = read_cases(&data_dir.join("case.parquet"))?;
-    if raw_cases.len() < config.arranque_cases {
-        return Err(AdapterError::InvalidInput(
-            "E0 package has fewer cases than arranque_cases",
-        ));
-    }
-    let calls = read_tool_calls(&data_dir.join("tool_call.parquet"))?;
-    let mut sorted = raw_cases;
-    sorted.sort_by(|left, right| {
+    let mut raw_cases = read_cases(&data_dir.join("case.parquet"))?;
+    raw_cases.sort_by(|left, right| {
         left.opened_at_unix_micros
             .cmp(&right.opened_at_unix_micros)
             .then_with(|| left.internal_case_id.cmp(&right.internal_case_id))
     });
+    let cutoff_micros = (config.cutoff_unix_seconds as i64).saturating_mul(1_000_000);
+    let included_case_count =
+        raw_cases.partition_point(|case| case.opened_at_unix_micros <= cutoff_micros);
+    if included_case_count < config.arranque_cases {
+        return Err(AdapterError::InvalidInput(
+            "E0 package has fewer pre-cutoff cases than arranque_cases",
+        ));
+    }
+    // Keep the complete chronological id map only while resolving source
+    // references. Future case ordinals form a suffix, then all future data is
+    // removed before the discovery projection is built.
+    let sorted = raw_cases;
+    let calls = read_tool_calls(&data_dir.join("tool_call.parquet"))?;
     let ordinal_by_id: BTreeMap<String, u32> = sorted
         .iter()
         .enumerate()
@@ -515,11 +529,32 @@ pub fn prepare_e0_package(
         facts.push(E0Fact::Case {
             case_ordinal: (index + 1) as u32,
             opened_at: case.opened_at.clone(),
-            channel: case.channel.clone(),
-            language: case.language.clone(),
-            origin: case.origin.clone(),
-            topic: case.topic.clone(),
-            priority: case.priority.clone(),
+            opened_at_unix_micros: case.opened_at_unix_micros,
+            channel: safe_domain(
+                &case.channel,
+                &[
+                    "app_chat", "web_chat", "whatsapp", "phone", "email", "video",
+                ],
+            ),
+            language: safe_domain(&case.language, &["es", "pt"]),
+            origin: case.origin.as_deref().and_then(|value| {
+                safe_optional_domain(value, &["customer", "regulator", "branch"])
+            }),
+            topic: safe_domain(
+                &case.topic,
+                &[
+                    "consultar_movimientos",
+                    "consultar_cargo",
+                    "disputar_cargo",
+                    "cobro_duplicado",
+                    "estado_disputa",
+                    "fraude_urgente",
+                    "hablar_con_humano",
+                    "fuera_de_alcance",
+                    "problema_app",
+                ],
+            ),
+            priority: safe_domain(&case.priority, &["low", "medium", "high"]),
         });
     }
     let mut tool_ordinal_by_id = BTreeMap::new();
@@ -564,11 +599,29 @@ pub fn prepare_e0_package(
         &ordinal_by_id,
         &tool_ordinal_by_id,
     )?);
-    let events_by_ordinal: BTreeMap<u32, Vec<SafeEvent>> = (1..=sorted.len() as u32)
+    facts.retain_mut(|fact| {
+        if let E0Fact::Approval {
+            decided_at_unix_micros,
+            decided_at,
+            decision,
+            ..
+        } = fact
+        {
+            if decided_at_unix_micros.is_some_and(|time| time > cutoff_micros) {
+                *decided_at_unix_micros = None;
+                *decided_at = None;
+                *decision = None;
+            }
+        }
+        fact_case_ordinal(fact).is_none_or(|ordinal| ordinal <= included_case_count as u32)
+            && fact_event_unix_micros(fact).is_none_or(|time| time <= cutoff_micros)
+    });
+    let events_by_ordinal: BTreeMap<u32, Vec<SafeEvent>> = (1..=included_case_count as u32)
         .map(|case_ordinal| Ok((case_ordinal, events_for_case(case_ordinal, &facts)?)))
         .collect::<Result<_, AdapterError>>()?;
     let cases = sorted
         .into_iter()
+        .take(included_case_count)
         .enumerate()
         .map(|(index, case)| {
             let ordinal = (index + 1) as u32;
@@ -1075,12 +1128,18 @@ fn read_tool_calls(path: &Path) -> Result<Vec<RawToolCall>, AdapterError> {
                 internal_call_id: call_ids.value(row).to_owned(),
                 event_time,
                 event_time_unix_micros,
-                actor_role: actor_roles.value(row).to_owned(),
-                tool_id: tools.value(row).to_owned(),
-                permission_level: permissions.value(row).to_owned(),
+                actor_role: safe_domain(
+                    actor_roles.value(row),
+                    &["tree", "judge", "ai_agent", "analyst"],
+                ),
+                tool_id: opaque_category(tools.value(row)),
+                permission_level: safe_domain(
+                    permissions.value(row),
+                    &["read", "confirm", "human_only"],
+                ),
                 status: status.to_owned(),
                 verified: optional_bool(&batch, "verified", row)?,
-                state_change: optional_bool(&batch, "state_change", row)?,
+                state_change: optional_presence(&batch, "state_change", row)?,
                 retry_count: optional_u64(&batch, "retry_count", row)?.map(|v| v as u32),
                 latency_ms: optional_u64(&batch, "latency_ms", row)?,
             });
@@ -1123,6 +1182,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 case_ordinal: c,
                 event_ordinal,
                 event_time,
+                event_time_unix_micros,
                 actor_role,
                 result,
                 ..
@@ -1130,7 +1190,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 "identity_check",
                 *event_ordinal,
                 event_time.as_str(),
-                None,
+                Some(*event_time_unix_micros),
                 Some(result.as_str()),
                 Some(actor_role.as_str()),
                 None,
@@ -1141,13 +1201,14 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 case_ordinal: c,
                 event_ordinal,
                 event_time,
+                event_time_unix_micros,
                 author_role,
                 ..
             } if *c == case_ordinal => (
                 "turn",
                 *event_ordinal,
                 event_time.as_str(),
-                None,
+                Some(*event_time_unix_micros),
                 None,
                 Some(author_role.as_str()),
                 None,
@@ -1158,6 +1219,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 case_ordinal: c,
                 event_ordinal,
                 event_time,
+                event_time_unix_micros,
                 tier,
                 outcome,
                 ..
@@ -1165,7 +1227,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 "routing_step",
                 *event_ordinal,
                 event_time.as_str(),
-                None,
+                Some(*event_time_unix_micros),
                 Some(tier.as_str()),
                 None,
                 Some(outcome.as_str()),
@@ -1176,13 +1238,14 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 case_ordinal: c,
                 event_ordinal,
                 event_time,
+                event_time_unix_micros,
                 answered_by,
                 ..
             } if *c == case_ordinal => (
                 "copilot_query",
                 *event_ordinal,
                 event_time.as_str(),
-                None,
+                Some(*event_time_unix_micros),
                 None,
                 Some(answered_by.as_str()),
                 None,
@@ -1213,6 +1276,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 case_ordinal: c,
                 event_ordinal,
                 requested_at,
+                requested_at_unix_micros,
                 requested_by_role,
                 tool_id,
                 decision,
@@ -1222,7 +1286,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 "approval",
                 *event_ordinal,
                 requested_at.as_str(),
-                None,
+                Some(*requested_at_unix_micros),
                 None,
                 Some(requested_by_role.as_str()),
                 Some(tool_id.as_str()),
@@ -1280,16 +1344,21 @@ fn read_identity_checks(
         let time_index = column_index(batch.schema(), "started_at")?;
         for row in 0..batch.num_rows() {
             let case_ordinal = case_ordinal(ordinals, case_ids.value(row))?;
+            let (event_time, event_time_unix_micros) =
+                timestamp_value(batch.column(time_index).as_ref(), row)?;
             output.push(E0Fact::IdentityCheck {
                 case_ordinal,
                 event_ordinal: stable_event_ordinal(checks.value(row), row),
-                event_time: timestamp_value(batch.column(time_index).as_ref(), row)?.0,
-                actor_role: roles.value(row).to_owned(),
-                result: results.value(row).to_owned(),
+                event_time,
+                event_time_unix_micros,
+                actor_role: safe_domain(roles.value(row), &["analyst", "ai_agent"]),
+                result: safe_domain(results.value(row), &["verified", "failed"]),
                 correct: optional_bool(&batch, "correct", row)?,
                 attempt: optional_u64(&batch, "attempt", row)?.map(|v| v as u32),
-                trigger: optional_string(&batch, "trigger", row)?,
-                policy_rule_id: optional_string(&batch, "policy_rule_id", row)?,
+                trigger: optional_string(&batch, "trigger", row)?
+                    .map(|v| safe_domain(&v, &["abono", "cambio_de_datos", "canal_sin_identidad"])),
+                policy_rule_id: optional_string(&batch, "policy_rule_id", row)?
+                    .map(|v| safe_domain(&v, &["R1"])),
             });
         }
     }
@@ -1308,12 +1377,15 @@ fn read_turns(
         let languages = required_strings(&batch, "language")?;
         let time_index = column_index(batch.schema(), "event_time")?;
         for row in 0..batch.num_rows() {
+            let (event_time, event_time_unix_micros) =
+                timestamp_value(batch.column(time_index).as_ref(), row)?;
             output.push(E0Fact::Turn {
                 case_ordinal: case_ordinal(ordinals, case_ids.value(row))?,
                 event_ordinal: stable_event_ordinal(ids.value(row), row),
-                event_time: timestamp_value(batch.column(time_index).as_ref(), row)?.0,
-                author_role: roles.value(row).to_owned(),
-                language: languages.value(row).to_owned(),
+                event_time,
+                event_time_unix_micros,
+                author_role: safe_domain(roles.value(row), &["customer", "analyst", "ai_agent"]),
+                language: safe_domain(languages.value(row), &["es", "pt"]),
             });
         }
     }
@@ -1332,13 +1404,23 @@ fn read_routing_steps(
         let outcomes = required_strings(&batch, "outcome")?;
         let time_index = column_index(batch.schema(), "event_time")?;
         for row in 0..batch.num_rows() {
+            let (event_time, event_time_unix_micros) =
+                timestamp_value(batch.column(time_index).as_ref(), row)?;
             output.push(E0Fact::RoutingStep {
                 case_ordinal: case_ordinal(ordinals, case_ids.value(row))?,
                 event_ordinal: stable_event_ordinal(ids.value(row), row),
-                event_time: timestamp_value(batch.column(time_index).as_ref(), row)?.0,
-                tier: tiers.value(row).to_owned(),
-                outcome: outcomes.value(row).to_owned(),
-                reason_code: optional_string(&batch, "reason_code", row)?,
+                event_time,
+                event_time_unix_micros,
+                tier: safe_domain(
+                    tiers.value(row),
+                    &["tree", "judge", "ai_agent", "human", "supervisor"],
+                ),
+                outcome: safe_domain(
+                    outcomes.value(row),
+                    &["resolved", "mitigated", "handed_off", "abstained"],
+                ),
+                reason_code: optional_string(&batch, "reason_code", row)?
+                    .map(|v| opaque_category(&v)),
                 confidence: optional_number_text(&batch, "confidence", row)?,
                 handoff: optional_bool(&batch, "handoff", row)?,
             });
@@ -1359,14 +1441,27 @@ fn read_copilot_queries(
         let answers = required_strings(&batch, "answered_by")?;
         let time_index = column_index(batch.schema(), "event_time")?;
         for row in 0..batch.num_rows() {
+            let (event_time, event_time_unix_micros) =
+                timestamp_value(batch.column(time_index).as_ref(), row)?;
             output.push(E0Fact::CopilotQuery {
                 case_ordinal: case_ordinal(ordinals, case_ids.value(row))?,
                 event_ordinal: stable_event_ordinal(ids.value(row), row),
-                event_time: timestamp_value(batch.column(time_index).as_ref(), row)?.0,
-                query_signature: signatures.value(row).to_owned(),
-                tables_read: optional_string_list(&batch, "tables_read", row)?,
-                columns_read: optional_string_list(&batch, "columns_read", row)?,
-                answered_by: answers.value(row).to_owned(),
+                event_time,
+                event_time_unix_micros,
+                query_signature: opaque_category(signatures.value(row)),
+                tables_read: optional_string_list(&batch, "tables_read", row)?
+                    .iter()
+                    .map(|v| opaque_category(v))
+                    .collect(),
+                columns_read: optional_string_list(&batch, "columns_read", row)?
+                    .iter()
+                    .map(|v| opaque_category(v))
+                    .collect(),
+                answered_by: match answers.value(row) {
+                    "freeform" => "freeform".to_owned(),
+                    value if value.starts_with("tool:") => "tool".to_owned(),
+                    _ => "unknown".to_owned(),
+                },
                 sent_to_chat: optional_bool(&batch, "sent_to_chat", row)?.unwrap_or(false),
             });
         }
@@ -1387,18 +1482,34 @@ fn read_approvals(
         let tools = required_strings(&batch, "tool_id")?;
         let time_index = column_index(batch.schema(), "requested_at")?;
         for row in 0..batch.num_rows() {
+            let (requested_at, requested_at_unix_micros) =
+                timestamp_value(batch.column(time_index).as_ref(), row)?;
             let executed_call = optional_string(&batch, "executed_call_id", row)?;
             let case_ordinal = case_ordinal(ordinals, case_ids.value(row))?;
+            let decided_at = optional_timestamp_with_micros(&batch, "decided_at", row)?;
             output.push(E0Fact::Approval {
                 case_ordinal,
                 event_ordinal: stable_event_ordinal(ids.value(row), row),
-                requested_at: timestamp_value(batch.column(time_index).as_ref(), row)?.0,
-                requested_by_role: roles.value(row).to_owned(),
-                tool_id: tools.value(row).to_owned(),
-                reason_code: optional_string(&batch, "reason_code", row)?,
-                policy_rule_id: optional_string(&batch, "policy_rule_id", row)?,
-                decided_at: optional_timestamp(&batch, "decided_at", row)?,
-                decision: optional_string(&batch, "decision", row)?,
+                requested_at,
+                requested_at_unix_micros,
+                requested_by_role: safe_domain(roles.value(row), &["analyst", "ai_agent"]),
+                tool_id: opaque_category(tools.value(row)),
+                reason_code: optional_string(&batch, "reason_code", row)?.map(|v| {
+                    safe_domain(
+                        &v,
+                        &[
+                            "over_role_limit",
+                            "outside_policy_window",
+                            "regulator_complaint",
+                        ],
+                    )
+                }),
+                policy_rule_id: optional_string(&batch, "policy_rule_id", row)?
+                    .map(|v| opaque_category(&v)),
+                decided_at: decided_at.as_ref().map(|value| value.0.clone()),
+                decided_at_unix_micros: decided_at.map(|value| value.1),
+                decision: optional_string(&batch, "decision", row)?
+                    .map(|v| safe_domain(&v, &["approved", "rejected", "expired"])),
                 related_tool_ordinal: executed_call
                     .and_then(|call| calls.get(&call))
                     .filter(|(call_case, _)| *call_case == case_ordinal)
@@ -1418,17 +1529,31 @@ fn read_signals(data_dir: &Path, output: &mut Vec<E0Fact>) -> Result<(), Adapter
         let start_index = column_index(batch.schema(), "window_start")?;
         let end_index = column_index(batch.schema(), "window_end")?;
         for row in 0..batch.num_rows() {
+            let (window_end, window_end_unix_micros) =
+                timestamp_value(batch.column(end_index).as_ref(), row)?;
             output.push(E0Fact::Signal {
                 event_ordinal: stable_event_ordinal(ids.value(row), row),
-                kind: kinds.value(row).to_owned(),
-                scope: scopes.value(row).to_owned(),
+                kind: safe_domain(
+                    kinds.value(row),
+                    &[
+                        "repeated_query",
+                        "consistent_sequence",
+                        "high_acceptance",
+                        "drift",
+                    ],
+                ),
+                scope: opaque_category(scopes.value(row)),
                 window_start: timestamp_value(batch.column(start_index).as_ref(), row)?.0,
-                window_end: timestamp_value(batch.column(end_index).as_ref(), row)?.0,
+                window_end,
+                window_end_unix_micros,
                 support_cases: optional_u64(&batch, "support_cases", row)?.unwrap_or(0) as u32,
                 support_analysts: optional_u64(&batch, "support_analysts", row)?.unwrap_or(0)
                     as u32,
                 consistency: optional_number_text(&batch, "consistency", row)?,
-                status: statuses.value(row).to_owned(),
+                status: safe_domain(
+                    statuses.value(row),
+                    &["new", "accepted", "in_build", "discarded"],
+                ),
             });
         }
     }
@@ -1503,6 +1628,18 @@ fn optional_bool(
         )));
     };
     Ok((!values.is_null(row)).then(|| values.value(row)))
+}
+
+fn optional_presence(
+    batch: &RecordBatch,
+    column: &str,
+    row: usize,
+) -> Result<Option<bool>, AdapterError> {
+    let index = match batch.schema().index_of(column) {
+        Ok(index) => index,
+        Err(_) => return Ok(None),
+    };
+    Ok(Some(!batch.column(index).is_null(row)))
 }
 
 fn optional_u64(
@@ -1618,11 +1755,11 @@ fn optional_string_list(
         .collect())
 }
 
-fn optional_timestamp(
+fn optional_timestamp_with_micros(
     batch: &RecordBatch,
     column: &str,
     row: usize,
-) -> Result<Option<String>, AdapterError> {
+) -> Result<Option<(String, i64)>, AdapterError> {
     let index = match batch.schema().index_of(column) {
         Ok(index) => index,
         Err(_) => return Ok(None),
@@ -1630,13 +1767,31 @@ fn optional_timestamp(
     if batch.column(index).is_null(row) {
         return Ok(None);
     }
-    Ok(Some(timestamp_value(batch.column(index).as_ref(), row)?.0))
+    Ok(Some(timestamp_value(batch.column(index).as_ref(), row)?))
 }
 
 fn case_ordinal(ordinals: &BTreeMap<String, u32>, id: &str) -> Result<u32, AdapterError> {
     ordinals.get(id).copied().ok_or(AdapterError::InvalidInput(
         "E0 history row references unknown case",
     ))
+}
+
+fn safe_domain(value: &str, allowed: &[&str]) -> String {
+    if allowed.contains(&value) {
+        value.to_owned()
+    } else {
+        "unknown".to_owned()
+    }
+}
+
+fn safe_optional_domain(value: &str, allowed: &[&str]) -> Option<String> {
+    allowed.contains(&value).then(|| value.to_owned())
+}
+
+fn opaque_category(value: &str) -> String {
+    // Stable pseudonymous category for open vocabularies. Do not expose the
+    // source token itself in serialized discovery facts.
+    digest(value.as_bytes())
 }
 
 fn stable_event_ordinal(_id: &str, row: usize) -> u32 {
@@ -1647,6 +1802,57 @@ fn stable_event_ordinal(_id: &str, row: usize) -> u32 {
 
 fn fact_order(left: &E0Fact, right: &E0Fact) -> std::cmp::Ordering {
     fact_key(left).cmp(&fact_key(right))
+}
+
+fn fact_case_ordinal(fact: &E0Fact) -> Option<u32> {
+    match fact {
+        E0Fact::Case { case_ordinal, .. }
+        | E0Fact::IdentityCheck { case_ordinal, .. }
+        | E0Fact::Turn { case_ordinal, .. }
+        | E0Fact::RoutingStep { case_ordinal, .. }
+        | E0Fact::CopilotQuery { case_ordinal, .. }
+        | E0Fact::ToolCall { case_ordinal, .. }
+        | E0Fact::Approval { case_ordinal, .. } => Some(*case_ordinal),
+        E0Fact::Signal { .. } => None,
+    }
+}
+
+fn fact_event_unix_micros(fact: &E0Fact) -> Option<i64> {
+    let micros = match fact {
+        E0Fact::Case {
+            opened_at_unix_micros,
+            ..
+        } => *opened_at_unix_micros,
+        E0Fact::IdentityCheck {
+            event_time_unix_micros,
+            ..
+        }
+        | E0Fact::Turn {
+            event_time_unix_micros,
+            ..
+        }
+        | E0Fact::RoutingStep {
+            event_time_unix_micros,
+            ..
+        }
+        | E0Fact::CopilotQuery {
+            event_time_unix_micros,
+            ..
+        }
+        | E0Fact::ToolCall {
+            event_time_unix_micros,
+            ..
+        } => *event_time_unix_micros,
+        E0Fact::Approval {
+            requested_at_unix_micros,
+            ..
+        } => *requested_at_unix_micros,
+        E0Fact::Signal {
+            window_end_unix_micros,
+            ..
+        } => *window_end_unix_micros,
+    };
+    Some(micros)
 }
 
 fn fact_key(fact: &E0Fact) -> (u32, &'static str, u32, &str) {

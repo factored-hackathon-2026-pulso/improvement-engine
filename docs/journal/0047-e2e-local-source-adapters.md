@@ -14,9 +14,16 @@ E0 evaluator labels from entering discovery inputs.
   delimiters/newlines), counted and hashed byte-for-byte. No original row
   values are copied into the prepared agent input.
 - E0 Parquet is read in Rust through Apache Arrow/Parquet. Only the allowlisted
-  interaction tables and fields are projected; free text, identifiers, params,
-  `timeline`, `case_close`, and `labels` are excluded from the discovery
-  projection.
+  interaction tables and fields are projected; categories with a declared
+  domain are allowlisted, unknown values become `unknown`, and open-vocabulary
+  identifiers are projected as stable SHA-256 category fingerprints. Free text,
+  source identifiers, params, `timeline`, `case_close`, and `labels` are excluded
+  from the discovery projection.
+- The observed cutoff is applied to case-open time before chronological split,
+  then to every event at microsecond precision. Future approvals are omitted;
+  future decisions on otherwise observable approvals are redacted.
+- `tool_call.state_change` is JSON in the E0 contract, so the adapter exposes
+  only whether a JSON value was present, never its contents.
 - Evaluator labels require a separate explicit `evaluator::load_labels` call
   and return an `EvaluatorOnlyLabels` type that is not part of `PreparedSource`.
 - Each prepared source contains a manifest digest and a content-addressed
@@ -36,15 +43,16 @@ marked unsupported instead of imputed as zero.
 ## Verification
 
 Synthetic CSV and Parquet fixtures exercise quoted CSV records, source hash
-changes, chronological E0 case ordering, safe fact projection, and the
-evaluator-only label boundary.
+changes, chronological E0 case ordering, injected PII-like category masking,
+same-second post-cutoff event exclusion, safe JSON state-change projection, and
+the evaluator-only label boundary.
 
 ```text
 cargo +1.98.1 fmt --all
-cargo +1.98.1 test -p improvement-engine-source-adapters --test source_adapters --offline --target-dir target-source-adapters
+cargo +1.98.1 test --locked --offline -p improvement-engine-source-adapters --test source_adapters --target-dir target-source-adapters
 ```
 
-Result: 5 passed, 0 failed. The private target directory is ignored through
+Result: 6 passed, 0 failed. The private target directory is ignored through
 `.gitignore`; no source package data is committed.
 
 ## Follow-up

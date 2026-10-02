@@ -16,6 +16,10 @@ fn config(arranque_cases: usize) -> PreparationConfig {
         .expect("valid config")
 }
 
+fn config_with_cutoff(arranque_cases: usize, cutoff: &str) -> PreparationConfig {
+    PreparationConfig::new("demo-tenant", cutoff, arranque_cases).expect("valid config")
+}
+
 fn write_parquet(path: &Path, schema: Schema, columns: Vec<ArrayRef>) {
     let schema = Arc::new(schema);
     let batch = RecordBatch::try_new(schema.clone(), columns).expect("valid synthetic batch");
@@ -64,7 +68,11 @@ fn e0_fixture(root: &Path) {
             ])),
             Arc::new(StringArray::from(vec!["chat", "phone", "web"])),
             Arc::new(StringArray::from(vec!["es", "es", "es"])),
-            Arc::new(StringArray::from(vec!["payments", "service", "account"])),
+            Arc::new(StringArray::from(vec![
+                "payments",
+                "person@example.test",
+                "account",
+            ])),
             Arc::new(StringArray::from(vec!["normal", "high", "normal"])),
         ],
     );
@@ -82,7 +90,7 @@ fn e0_fixture(root: &Path) {
         Field::new("permission_level", DataType::Utf8, false),
         Field::new("status", DataType::Utf8, false),
         Field::new("verified", DataType::Boolean, true),
-        Field::new("state_change", DataType::Boolean, true),
+        Field::new("state_change", DataType::Utf8, true),
         Field::new("retry_count", DataType::Int32, true),
         Field::new("latency_ms", DataType::Int64, true),
         Field::new("params", DataType::Utf8, true),
@@ -96,7 +104,7 @@ fn e0_fixture(root: &Path) {
             ])),
             Arc::new(
                 TimestampMicrosecondArray::from(vec![
-                    21_000_000_i64,
+                    20_500_000_i64,
                     11_000_000,
                     12_000_000,
                     31_000_000,
@@ -123,7 +131,12 @@ fn e0_fixture(root: &Path) {
             ])),
             Arc::new(StringArray::from(vec!["timeout", "ok", "error", "denied"])),
             Arc::new(BooleanArray::from(vec![true, true, true, false])),
-            Arc::new(BooleanArray::from(vec![false, false, true, false])),
+            Arc::new(arrow_array::StringArray::from(vec![
+                None,
+                None,
+                Some("{\"status\":\"updated\"}"),
+                None,
+            ])),
             Arc::new(arrow_array::Int32Array::from(vec![0_i32, 0, 1, 0])),
             Arc::new(arrow_array::Int64Array::from(vec![100_i64, 20, 200, 0])),
             Arc::new(StringArray::from(vec![
@@ -258,7 +271,11 @@ fn e0_agent_projection_is_chronological_safe_and_excludes_evaluator_labels() {
     assert_eq!(cases[0].events()[1].technical_error(), Some(true));
     assert_eq!(cases[0].events()[0].event_kind(), "tool_call");
     assert_eq!(cases[0].events()[0].actor_role(), Some("tree"));
-    assert_eq!(cases[0].events()[0].tool_code(), Some("read_txn"));
+    assert!(
+        cases[0].events()[0]
+            .tool_code()
+            .is_some_and(|code| code.starts_with("sha256:"))
+    );
     assert_eq!(cases[2].phase(), CasePhase::Reproduccion);
     assert_eq!(cases[2].ordinal(), 3);
 
@@ -272,8 +289,59 @@ fn e0_agent_projection_is_chronological_safe_and_excludes_evaluator_labels() {
     assert!(!serialized.contains("{MONTO}"));
     assert!(e0.agent_inputs().facts().iter().any(|fact| matches!(
         fact,
+        improvement_engine_source_adapters::E0Fact::ToolCall {
+            case_ordinal: 1,
+            state_change: Some(true),
+            ..
+        }
+    )));
+    assert!(e0.agent_inputs().facts().iter().any(|fact| matches!(
+        fact,
         improvement_engine_source_adapters::E0Fact::Turn { .. }
     )));
+    assert!(e0.agent_inputs().facts().iter().any(|fact| matches!(
+        fact,
+        improvement_engine_source_adapters::E0Fact::Case {
+            case_ordinal: 1,
+            topic,
+            ..
+        } if topic == "unknown"
+    )));
+    assert!(!serialized.contains("person@example.test"));
+}
+
+#[test]
+fn e0_cutoff_excludes_future_cases_and_future_interaction_events_before_split() {
+    let temp = TempDir::new().expect("temp dir");
+    e0_fixture(temp.path());
+
+    let prepared = prepare_e0_package(temp.path(), &config_with_cutoff(1, "1970-01-01T00:00:20Z"))
+        .expect("prepare cutoff-limited source");
+    let inputs = prepared.agent_inputs();
+    assert_eq!(inputs.cases().len(), 2);
+    assert_eq!(inputs.cases()[0].phase(), CasePhase::Arranque);
+    assert_eq!(inputs.cases()[1].phase(), CasePhase::Reproduccion);
+    assert!(inputs.facts().iter().all(|fact| match fact {
+        improvement_engine_source_adapters::E0Fact::Case { opened_at, .. } =>
+            opened_at.as_str() <= "1970-01-01T00:00:20Z",
+        improvement_engine_source_adapters::E0Fact::ToolCall {
+            event_time_unix_micros,
+            ..
+        } => *event_time_unix_micros <= 20_000_000,
+        improvement_engine_source_adapters::E0Fact::Signal { window_end, .. } =>
+            window_end.as_str() <= "1970-01-01T00:00:20Z",
+        improvement_engine_source_adapters::E0Fact::IdentityCheck { event_time, .. }
+        | improvement_engine_source_adapters::E0Fact::Turn { event_time, .. }
+        | improvement_engine_source_adapters::E0Fact::RoutingStep { event_time, .. }
+        | improvement_engine_source_adapters::E0Fact::CopilotQuery { event_time, .. } =>
+            event_time.as_str() <= "1970-01-01T00:00:20Z",
+        improvement_engine_source_adapters::E0Fact::Approval { requested_at, .. } =>
+            requested_at.as_str() <= "1970-01-01T00:00:20Z",
+    }));
+    assert!(
+        inputs.cases()[1].events().is_empty(),
+        "case B tool call at 20.5 seconds is after cutoff second 20"
+    );
 }
 
 #[test]
