@@ -55,6 +55,10 @@ green unit test as proof that a broader product flow is complete.
   derives its tenant only from an authenticated, opaque viewer capability and
   reads U07 activity through safe statuses and accessible summaries. It is not
   yet a browser, HTTP, SSO or streaming-control-plane implementation.
+- U35: final eligibility gate. It is a deterministic, side-effect-free check
+  over a supported U14 report, a mechanism-proxy U16 bridge and its U20 plan;
+  it can only mark a proposal eligible and never asserts an outcome or causes
+  execution, registry mutation, release or customer exposure.
 
 ## Delivery discipline
 
