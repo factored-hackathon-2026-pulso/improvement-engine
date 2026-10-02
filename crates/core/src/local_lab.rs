@@ -406,6 +406,10 @@ pub struct QueryReceipt {
     pub sequence: u64,
     pub digest: String,
     pub query_digest: String,
+    /// Retained alongside the query digest so E0 can prove a receipt did not
+    /// originate from labels or a hidden join. Both remain digest-bound.
+    pub queried_table: String,
+    pub queried_columns: Vec<String>,
     pub depends_on: Option<String>,
     pub source_snapshot_ref: ArtifactReference,
     pub source_contract_digest: String,
@@ -415,6 +419,19 @@ pub struct QueryReceipt {
     pub cutoff_unix_seconds: u64,
     pub row_count: usize,
     pub rows_digest: String,
+    /// Present only after U08-E has revalidated this governed U08 result
+    /// against a sealed U04-B replay projection.
+    pub e0_replay: Option<E0ReplayReceiptBinding>,
+}
+
+/// Commitments added by the crate-private U08-E adapter. No source rows,
+/// labels, paths or source handles cross into this receipt.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct E0ReplayReceiptBinding {
+    pub source_snapshot_digest: String,
+    pub availability_profile_digest: String,
+    pub field_commitment: String,
+    pub replay_projection_digest: String,
 }
 
 impl QueryReceipt {
@@ -430,6 +447,13 @@ impl QueryReceipt {
     #[must_use]
     pub fn binds_rows(&self, rows: &[BTreeMap<String, String>]) -> bool {
         self.rows_digest == digest_of(&rows)
+    }
+
+    pub(crate) fn bind_e0_replay(mut self, binding: E0ReplayReceiptBinding) -> Self {
+        self.e0_replay = Some(binding);
+        self.digest.clear();
+        self.digest = digest_of(&self);
+        self
     }
 }
 
@@ -582,6 +606,8 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             sequence,
             digest: String::new(),
             query_digest,
+            queried_table: table,
+            queried_columns: columns,
             depends_on: dependency,
             source_snapshot_ref: session.source.snapshot_ref.clone(),
             source_contract_digest: session.source.source_contract_digest.clone(),
@@ -591,6 +617,7 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             cutoff_unix_seconds: session.source.cutoff_unix_seconds,
             row_count: rows.len(),
             rows_digest: digest_of(&rows),
+            e0_replay: None,
         };
         receipt.digest = digest_of(&receipt);
         session.results.insert(receipt.digest.clone(), rows.clone());

@@ -537,6 +537,91 @@ pub(crate) struct VerifiedReplayAvailability {
     availability_profile_digest: String,
 }
 
+/// Opaque U04-B proof for one discovery-safe table at the exact replay cutoff.
+/// U08-E can consume its commitments but cannot reopen package files, choose a
+/// different clock or add labels/future fields after this boundary.
+#[allow(dead_code)]
+pub(crate) struct VerifiedE0QueryProjection {
+    tenant_id: String,
+    cutoff_at_unix_seconds: u64,
+    source_snapshot_digest: String,
+    availability_profile_digest: String,
+    table: String,
+    source_contract_digest: String,
+    source_digest: String,
+    transform_digest: String,
+    field_commitment: String,
+    replay_projection_digest: String,
+    allowed_fields: BTreeMap<String, String>,
+}
+
+#[allow(dead_code)]
+impl VerifiedE0QueryProjection {
+    pub(crate) fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+    pub(crate) fn cutoff_at_unix_seconds(&self) -> u64 {
+        self.cutoff_at_unix_seconds
+    }
+    pub(crate) fn source_snapshot_digest(&self) -> &str {
+        &self.source_snapshot_digest
+    }
+    pub(crate) fn availability_profile_digest(&self) -> &str {
+        &self.availability_profile_digest
+    }
+    pub(crate) fn table(&self) -> &str {
+        &self.table
+    }
+    pub(crate) fn source_contract_digest(&self) -> &str {
+        &self.source_contract_digest
+    }
+    pub(crate) fn source_digest(&self) -> &str {
+        &self.source_digest
+    }
+    pub(crate) fn transform_digest(&self) -> &str {
+        &self.transform_digest
+    }
+    pub(crate) fn field_commitment(&self) -> &str {
+        &self.field_commitment
+    }
+    pub(crate) fn replay_projection_digest(&self) -> &str {
+        &self.replay_projection_digest
+    }
+    pub(crate) fn allows_field(&self, field: &str) -> bool {
+        self.allowed_fields.contains_key(field)
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)] // Test fixture mirrors the sealed projection fields.
+    pub(crate) fn deterministic_for_e0_query_test(
+        tenant_id: impl Into<String>,
+        cutoff_at_unix_seconds: u64,
+        source_snapshot_digest: String,
+        availability_profile_digest: String,
+        table: impl Into<String>,
+        source_contract_digest: String,
+        source_digest: String,
+        transform_digest: String,
+        field_commitment: String,
+        replay_projection_digest: String,
+        allowed_fields: BTreeMap<String, String>,
+    ) -> Self {
+        Self {
+            tenant_id: tenant_id.into(),
+            cutoff_at_unix_seconds,
+            source_snapshot_digest,
+            availability_profile_digest,
+            table: table.into(),
+            source_contract_digest,
+            source_digest,
+            transform_digest,
+            field_commitment,
+            replay_projection_digest,
+            allowed_fields,
+        }
+    }
+}
+
 #[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
 impl VerifiedReplayAvailability {
     #[must_use]
@@ -797,6 +882,63 @@ impl EnrichedHistoryAdapter {
             cutoff_at_unix_seconds,
             source_snapshot_digest: snapshot.binding_digest(),
             availability_profile_digest: profile.profile_digest.clone(),
+        })
+    }
+
+    /// Validates one E0 input through the existing discovery and replay
+    /// validators, then returns only the table/field/projection commitments
+    /// that a later U08-E receipt must preserve.
+    #[allow(dead_code)]
+    pub(crate) fn verified_e0_query_projection(
+        &self,
+        snapshot: &SourceSnapshot,
+        replay: &VerifiedReplayAvailability,
+        table: &str,
+        input: TableInput,
+    ) -> Result<VerifiedE0QueryProjection, EnrichedHistoryError> {
+        let expected = self.verified_replay_availability(snapshot)?;
+        if expected.tenant_id != replay.tenant_id
+            || expected.world_ref != replay.world_ref
+            || expected.cutoff_at_unix_seconds != replay.cutoff_at_unix_seconds
+            || expected.source_snapshot_digest != replay.source_snapshot_digest
+            || expected.availability_profile_digest != replay.availability_profile_digest
+        {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        let discovery = self.discovery_table(table, input)?;
+        let sealed = self
+            .files
+            .get(table)
+            .ok_or_else(|| EnrichedHistoryError::UnknownTable {
+                table: table.to_owned(),
+            })?;
+        let replay_projection_digest =
+            sealed.replay_projection_digest.clone().ok_or_else(|| {
+                EnrichedHistoryError::MissingReplayProjectionDigest {
+                    table: table.to_owned(),
+                }
+            })?;
+        let field_bytes = serde_json::to_vec(&sealed.field_availability)
+            .expect("BTreeMap field availability serializes deterministically");
+        let field_commitment = format!("sha256:{:x}", Sha256::digest(field_bytes));
+        if discovery.provenance.digests != sealed.digests {
+            return Err(EnrichedHistoryError::QualityBlocked {
+                table: table.to_owned(),
+                findings: Vec::new(),
+            });
+        }
+        Ok(VerifiedE0QueryProjection {
+            tenant_id: expected.tenant_id,
+            cutoff_at_unix_seconds: expected.cutoff_at_unix_seconds,
+            source_snapshot_digest: expected.source_snapshot_digest,
+            availability_profile_digest: expected.availability_profile_digest,
+            table: table.to_owned(),
+            source_contract_digest: sealed.digests.schema_digest.clone(),
+            source_digest: sealed.digests.file_digest.clone(),
+            transform_digest: sealed.digests.transform_digest.clone(),
+            field_commitment,
+            replay_projection_digest,
+            allowed_fields: sealed.field_availability.clone(),
         })
     }
 

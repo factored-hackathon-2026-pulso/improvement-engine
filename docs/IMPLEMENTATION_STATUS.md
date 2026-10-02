@@ -98,6 +98,11 @@ green unit test as proof that a broader product flow is complete.
   repository rather than treating HTTP as evidence. It has no dispatch,
   runtime, verdict or `EvalRun`; missing U18-E/Agent Core Unit 6 remains
   `dependency_unavailable` rather than a simulated native result.
+- U08-E / Issue #50: E0 read-only query receipt adapter. It accepts only a
+  U04-B V2 projection and completed U08 governed receipt, revalidates tenant,
+  cutoff, source/table/field/replay commitments and blocks labels, later joins,
+  future/cross-tenant reuse and source writes. It does not implement U12-E,
+  Scout, model/Agent Core access, evaluation or release.
 - U23-P / Issue #47: the narrow Frozen/Continuous temporal protocol over
   U04-B's replay cutoff and U22/U33 governed admission. An opaque, trusted
   evidence commitment (not caller-provided timestamps) is part of the U33
