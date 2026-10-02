@@ -20,15 +20,16 @@ signature choice over Arranque facts only and rejects a mismatched core ref.
 ```text
 E0 adapter
     │
-    ├── Arranque AgentInputSet ──> core discovery/simulation
-    │                                   │
-    │                                   └── selected SignalSummary.pattern_ref
-    │                                                  │
-    │                           attest against Arranque only
-    │                                                  │
-    └── separate Reproduccion package ─────────> holdout evaluator
-                                                       │
-                                                       └── aggregate safe result
+    └── one PreparedSource (same immutable package; phase-tagged cases/facts)
+            ├── Arranque projection ──> core discovery/simulation
+            │                              │
+            │                              └── selected SignalSummary.pattern_ref
+            │                                             │
+            │                           attest using Arranque facts only
+            │                                             │
+            └── Reproduccion projection ──> post-selection holdout evaluator
+                                                          │
+                                                          └── aggregate safe result
 ```
 
 1. The runner builds `LocalRunInput` from Arranque cases and their facts only;
@@ -42,16 +43,18 @@ E0 adapter
    `attest_selected_e0_recurrence_candidate(discovery_source, pattern_ref,
    minimum_arranque_support)`. The supplied discovery source must be E0 and
    have projected `copilot_query` evidence.
-5. Call `evaluate_e0_recurrence_holdout(token, holdout_source, policy)` only
-   after selection. Tenant scope must match; wrong source kind and scope are
-   errors. Missing `copilot_query` in the holdout is a valid `unavailable`
-   result, not a zero-support result.
+5. Call `evaluate_e0_recurrence_holdout(token, prepared_source, policy)` only
+   after selection. It reads only Reproduccion facts from that same prepared
+   source; tenant scope must match, and wrong source kind/scope are errors.
+   Missing `copilot_query` in the Reproduccion projection is a valid
+   `unavailable` result, not a zero-support result.
 6. Persist/emit only `E0HoldoutEvaluation`. Do not serialize the candidate
    token. The result contains policy id/version/threshold, selected candidate
    ref, discovery and holdout manifest commitments, safe status, aggregate
    counts/rate, and a fixed interpretation string. The runner appends a
-   `e0_recurrence_holdout` event after the core timeline, with only the status
-   and aggregate matching/queried counts.
+   `e0_recurrence_holdout` event after the core timeline, with the status and
+   aggregate matching/queried counts only when the policy support floor is
+   met; insufficient-support events carry no exact counts.
 
 ## Metric and status semantics
 
@@ -67,13 +70,20 @@ E0 adapter
   versioned minimum.
 - `not_observed`: denominator meets the minimum and no queried case matches.
 - `insufficient_support`: the queried denominator is below minimum, or a
-  positive matching support is below minimum.
+  positive matching support is below minimum. All exact counts and the rate
+  are absent in this state; the top-level excluded-replay count is never
+  exported for E0, including when evaluation is absent or unavailable, so it
+  cannot reconstruct the hidden population. `insufficient_support` is not a
+  license to expose small-cell values.
 - `unavailable`: the holdout has no projected `copilot_query` table. Counts and
   rate remain absent, so absence is not misreported as a measured zero.
 
-The present policy is `e0_recurrence_holdout` version 1, with a configurable
-minimum distinct-case support in the safe range 1–5,000. Changes in semantics
-must increment its version.
+The present policy is `e0_recurrence_holdout` version 2, with configurable
+minimum distinct-case support in the safe aggregate range 5–5,000. The CLI
+accepts the same lower bound and defaults to 20; the Windows wrapper also
+defaults to 20. Below the configured floor the evaluator suppresses all exact
+holdout counts and rates, including the total Reproduccion count. Changes to
+the policy's threshold contract or semantics must increment its version.
 
 ## Evidence limitations
 

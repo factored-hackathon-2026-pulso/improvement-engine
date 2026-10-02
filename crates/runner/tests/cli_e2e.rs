@@ -92,7 +92,14 @@ fn e0_fixture(root: &Path, discovery_status: &str, replay_status: &str) {
     );
 }
 
-fn e0_recurrence_fixture(root: &Path, replay_signature: &str) {
+fn e0_recurrence_fixture(
+    root: &Path,
+    replay_signature: &str,
+    replay_query_cases: usize,
+    matching_replay_cases: usize,
+) {
+    assert!(matching_replay_cases <= replay_query_cases);
+    assert!(replay_query_cases <= 21);
     e0_fixture(root, "ok", "ok");
     let data = root.join("datos");
     let case_ids = (1..=42)
@@ -177,11 +184,19 @@ fn e0_recurrence_fixture(root: &Path, replay_signature: &str) {
         .map(|ordinal| format!("private-case-{ordinal}"))
         .collect::<Vec<_>>();
     query_case_ids.extend(["private-case-1".into(), "private-case-21".into()]);
-    query_case_ids.extend((22..=42).map(|ordinal| format!("private-case-{ordinal}")));
+    query_case_ids.extend(
+        (22..=42)
+            .take(replay_query_cases)
+            .map(|ordinal| format!("private-case-{ordinal}")),
+    );
     let mut signatures = vec!["normalized-query-pattern"; 20];
     signatures.extend(["normalized-query-pattern", "unique-pattern"]);
-    signatures.extend(vec![replay_signature; 21]);
-    let query_ids = (1..=43)
+    signatures.extend(vec!["normalized-query-pattern"; matching_replay_cases]);
+    signatures.extend(vec![
+        replay_signature;
+        replay_query_cases - matching_replay_cases
+    ]);
+    let query_ids = (1..=query_case_ids.len())
         .map(|ordinal| format!("private-query-{ordinal}"))
         .collect::<Vec<_>>();
     write_parquet(
@@ -202,16 +217,54 @@ fn e0_recurrence_fixture(root: &Path, replay_signature: &str) {
             large_strings(query_case_ids.iter().map(String::as_str).collect()),
             Arc::new(
                 TimestampMicrosecondArray::from(
-                    (0..43)
-                        .map(|offset| at + offset * 1_000_000 + 20)
+                    (0..query_ids.len())
+                        .map(|offset| at + offset as i64 * 1_000_000 + 20)
                         .collect::<Vec<_>>(),
                 )
                 .with_timezone("UTC"),
             ),
             large_strings(signatures),
-            large_strings(vec!["tool:status_lookup"; 43]),
+            large_strings(vec!["tool:status_lookup"; query_ids.len()]),
         ],
     );
+}
+
+fn run_e0_cli(input: &Path, output: &Path) -> serde_json::Value {
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(input)
+        .args(["--output"])
+        .arg(output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "21",
+        ])
+        .output()
+        .expect("run E0 fixture through CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+        .expect("valid result JSON")
 }
 
 #[test]
@@ -267,7 +320,7 @@ fn binary_persists_simulated_result_and_timeline_without_source_identifiers() {
     assert_eq!(result["proposal"]["status"], "simulated_unverified");
     assert_eq!(result["formal_route"], "do_nothing");
     assert_eq!(result["discovery_case_count"], 1);
-    assert_eq!(result["excluded_replay_case_count"], 1);
+    assert!(result["excluded_replay_case_count"].is_null());
     assert_eq!(result["signal"]["numerator"], 1);
     assert_eq!(result["signal"]["denominator"], 1);
     assert!(timeline.contains("2025-07-01T00:00:00Z"));
@@ -392,7 +445,7 @@ fn binary_emits_no_opportunity_when_discovery_has_no_positive_support() {
             .iter()
             .all(|signal| signal["metric_id"] != "e0_recurring_copilot_query_cases")
     );
-    assert_eq!(result["excluded_replay_case_count"], 1);
+    assert!(result["excluded_replay_case_count"].is_null());
     assert_eq!(result["terminal_status"], "complete_no_opportunity");
     assert!(result["candidates"].as_array().unwrap().is_empty());
     assert!(result["proposal"].is_null());
@@ -408,7 +461,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("e0-recurrence");
     let output = temp.path().join("runs-recurrence");
-    e0_recurrence_fixture(&input, "normalized-query-pattern");
+    e0_recurrence_fixture(&input, "normalized-query-pattern", 21, 21);
 
     let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
         .args([
@@ -454,7 +507,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
         .collect();
 
     assert_eq!(result["terminal_status"], "complete_simulated");
-    assert_eq!(result["excluded_replay_case_count"], 21);
+    assert!(result["excluded_replay_case_count"].is_null());
     assert_eq!(result["primary_signal_policy"], "local_primary_signal_v2");
     assert_eq!(
         result["signal"]["metric_id"],
@@ -496,7 +549,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
 
     let changed_holdout_input = temp.path().join("e0-recurrence-changed-holdout");
     let changed_holdout_output = temp.path().join("runs-recurrence-changed-holdout");
-    e0_recurrence_fixture(&changed_holdout_input, "different-replay-pattern");
+    e0_recurrence_fixture(&changed_holdout_input, "different-replay-pattern", 21, 0);
     let changed_holdout = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
         .args([
             "local-sim",
@@ -623,4 +676,49 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
         result["signal"]["pattern_ref"]
     );
     assert_eq!(changed_result["candidates"].as_array().unwrap().len(), 3);
+}
+
+#[test]
+fn binary_suppresses_holdout_counts_for_one_through_four_matching_cases() {
+    for matching_cases in 1..=4 {
+        let temp = TempDir::new().expect("temp directory");
+        let input = temp.path().join("e0-low-support");
+        let output = temp.path().join("runs-low-support");
+        e0_recurrence_fixture(&input, "different-replay-pattern", 21, matching_cases);
+
+        let result = run_e0_cli(&input, &output);
+        assert_eq!(
+            result["e0_recurrence_holdout"]["status"],
+            "insufficient_support"
+        );
+        assert!(result["excluded_replay_case_count"].is_null());
+        assert!(result["e0_recurrence_holdout"]["reproduction_case_count"].is_null());
+        assert!(result["e0_recurrence_holdout"]["queried_case_count"].is_null());
+        assert!(result["e0_recurrence_holdout"]["matching_case_count"].is_null());
+        assert!(result["e0_recurrence_holdout"]["recurrence_rate_basis_points"].is_null());
+        let event = result["events"].as_array().unwrap().last().unwrap();
+        assert_eq!(event["status"], "insufficient_support");
+        assert!(
+            event["detail"]
+                .as_str()
+                .unwrap()
+                .contains("exact counts suppressed")
+        );
+    }
+}
+
+#[test]
+fn binary_suppresses_replay_count_when_holdout_denominator_is_below_floor() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0-low-denominator");
+    let output = temp.path().join("runs-low-denominator");
+    e0_recurrence_fixture(&input, "different-replay-pattern", 4, 0);
+
+    let result = run_e0_cli(&input, &output);
+    assert_eq!(
+        result["e0_recurrence_holdout"]["status"],
+        "insufficient_support"
+    );
+    assert!(result["e0_recurrence_holdout"]["queried_case_count"].is_null());
+    assert!(result["excluded_replay_case_count"].is_null());
 }

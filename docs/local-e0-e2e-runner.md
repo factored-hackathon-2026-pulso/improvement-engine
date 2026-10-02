@@ -38,10 +38,15 @@ during the wrapper's preflight checks.
 
 ## Output and safety
 
-The wrapper prints only allowlisted run status, discovery/replay counts,
+The wrapper prints only allowlisted run status, discovery counts, and a
+suppressed replay total for E0,
 allowlisted metric IDs with numerator/denominator/missing counts, proposal
-status/execution status, formal route, and (when present) a holdout status plus
-matching/queried distinct-case counts marked `descriptive_only`. A missing
+status/execution status, formal route, and (when present) a holdout status.
+Holdout matching/queried distinct-case counts are shown only when support meets
+the configured floor; `insufficient_support` prints `counts=suppressed`, and
+the engine always serializes the E0 top-level excluded-replay total as null,
+even when holdout evaluation is absent or unavailable. It must serialize all
+holdout count/rate fields as null below the floor. A missing
 holdout field is summarized as `none`; it is not treated as zero. It does not
 print source paths, customer/case/query identifiers, query signatures,
 hypotheses, arbitrary interpretation strings, or raw Cargo/JSON diagnostics.

@@ -71,8 +71,12 @@ green unit test as proof that a broader product flow is complete.
   observed existing reparse-point components fail closed before Cargo runs.
   Mapped-drive/UNC alias equivalence and concurrent path mutation are outside
   this guarantee. It prints only allowlisted aggregate summaries, including
-  post-selection holdout status and matching/queried counts marked
-  descriptive-only; missing holdout is `none`. Pester tests use a temporary
+  post-selection holdout status and, only when support meets the privacy floor,
+  matching/queried counts marked descriptive-only; below the floor all exact
+  holdout counts/rate are null. The E0 top-level excluded-replay total is
+  always null (including absent/unavailable holdout), and the wrapper prints
+  `counts=suppressed` / `replay_excluded=suppressed` as applicable.
+  Missing holdout is `none`. Pester tests use a temporary
   Cargo shim and do not substitute for a real package run. Usage and safety
   boundaries are in docs/local-e0-e2e-runner.md.
 - U13-A / Issue #43: opaque, verified Scout-candidate admission. Candidate

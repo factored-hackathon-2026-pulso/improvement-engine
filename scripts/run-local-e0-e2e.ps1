@@ -235,7 +235,18 @@ $allowedRunStatuses = @('complete_simulated', 'complete_no_opportunity', 'unsupp
 Assert-AllowedValue -Value ([string] $result['terminal_status']) -Allowed $allowedRunStatuses
 Assert-AllowedValue -Value ([string] $result['formal_route']) -Allowed @('do_nothing')
 $discoveryCases = Get-NonNegativeInteger -Object $result -Name 'discovery_case_count'
-$excludedReplayCases = Get-NonNegativeInteger -Object $result -Name 'excluded_replay_case_count'
+$holdout = $result['e0_recurrence_holdout']
+$holdoutStatus = if ($null -ne $holdout) { [string] $holdout['status'] } else { '' }
+if ([string] $result['source_kind'] -eq 'e0') {
+    if (($result.Keys -notcontains 'excluded_replay_case_count') -or ($null -ne $result['excluded_replay_case_count'])) {
+        throw 'Engine result contains an unsafe E0 replay count; raw result values are suppressed.'
+    }
+    $excludedReplayCases = 'suppressed'
+}
+else {
+    Assert-AllowedValue -Value ([string] $result['source_kind']) -Allowed @('original_bank')
+    $excludedReplayCases = Get-NonNegativeInteger -Object $result -Name 'excluded_replay_case_count'
+}
 
 $metricLines = [System.Collections.Generic.List[string]]::new()
 if ($null -ne $result['signals']) {
@@ -259,12 +270,18 @@ if ($null -ne $result['proposal']) {
 }
 
 $holdoutSummary = 'none'
-$holdout = $result['e0_recurrence_holdout']
 if ($null -ne $holdout) {
-    $holdoutStatus = [string] $holdout['status']
     Assert-AllowedValue -Value $holdoutStatus -Allowed @('replicated', 'not_observed', 'insufficient_support', 'unavailable')
     if ($holdoutStatus -eq 'unavailable') {
         $holdoutSummary = 'status=unavailable; descriptive_only'
+    }
+    elseif ($holdoutStatus -eq 'insufficient_support') {
+        foreach ($field in @('reproduction_case_count', 'queried_case_count', 'matching_case_count', 'recurrence_rate_basis_points')) {
+            if (($holdout.Keys -notcontains $field) -or ($null -ne $holdout[$field])) {
+                throw 'Engine result contains an unsafe low-support holdout aggregate; raw result values are suppressed.'
+            }
+        }
+        $holdoutSummary = 'status=insufficient_support; counts=suppressed; descriptive_only'
     }
     else {
         $queried = Get-NonNegativeInteger -Object $holdout -Name 'queried_case_count'

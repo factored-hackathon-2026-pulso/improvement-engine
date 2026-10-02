@@ -70,9 +70,38 @@ these aggregates were inspected; no row values or identifiers were emitted.
 
 ## Review status
 
-Independent adversarial review is pending. The code is locally committed only
-after the integration feature and any agreed E2E wrapper consolidation are
-stable; no claim of review approval is made here.
+An independent adversarial review returned GO with two contract clarifications:
+the runner uses one phase-tagged `PreparedSource` rather than separate package
+objects, and the holdout library policy accepted a threshold of one despite the
+CLI's floor of five. The architecture diagram and API description now state the
+single-source phase boundary; the aggregate policy floor is five and its
+version advanced to 2. A regression test was added first and confirmed RED
+because threshold four was accepted, then passed after the policy change.
+
+The reviewer reran focused source-adapter holdout tests (5/5), CLI E2E tests
+(3/3), and Windows Pester tests (9/9). Root reran the real local wrapper after
+the PR #54/#56 merges using a new output directory; it returned
+`complete_simulated`, 200 Arranque discovery cases, 1,800 excluded
+Reproduccion cases, 154/200 recurring-query support, and a descriptive-only
+holdout of 1,433/1,539 queried cases. The proposal remained
+`simulated_unverified` / `not_executed`, and the formal route remained
+`do_nothing`. Only these allowlisted aggregates were inspected. Podman remains
+unverified; this run used the native local E0 runner, not the Compose stack.
+
+A second adversarial pass found that the threshold alone did not prevent
+disclosure: the insufficient-support result still carried exact queried and
+matching counts, and the PowerShell summary printed them. The fix suppressed
+those fields, but a further independent privacy pass found another route:
+`excluded_replay_case_count` exposed the total replay population and could
+reconstruct the hidden holdout size. The first fix suppressed it only when
+holdout status was insufficient; a third adversarial pass found this still
+leaked when holdout evaluation was absent or unavailable. The current policy
+does not export that total for any E0 run, independent of evaluation status.
+The wrapper validates `source_kind`, requires a null E0 replay total, and
+prints only `replay_excluded=suppressed`. Rust adapter tests pass (6/6); runner
+CLI and wrapper regressions cover support 1–4, denominator below floor, and
+E0 with no holdout evaluation. Final full tests and independent re-review are
+pending. No final GO is claimed yet.
 
 ## Environment boundary
 

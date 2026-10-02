@@ -128,14 +128,24 @@ fn make_holdout_event(
         E0HoldoutStatus::Unavailable => "unavailable",
     }
     .to_owned();
-    let detail = match (
-        evaluation.matching_case_count(),
-        evaluation.queried_case_count(),
-    ) {
-        (Some(matching), Some(queried)) => format!(
-            "post-selection descriptive recurrence: {matching} of {queried} queried Reproduccion cases; no causal or outcome claim"
-        ),
-        _ => "post-selection descriptive recurrence unavailable; no causal or outcome claim".into(),
+    let detail = match evaluation.status() {
+        E0HoldoutStatus::InsufficientSupport => {
+            "post-selection descriptive recurrence: insufficient support; exact counts suppressed; no causal or outcome claim".into()
+        }
+        E0HoldoutStatus::Unavailable => {
+            "post-selection descriptive recurrence unavailable; no causal or outcome claim".into()
+        }
+        E0HoldoutStatus::Replicated | E0HoldoutStatus::NotObserved => {
+            match (
+                evaluation.matching_case_count(),
+                evaluation.queried_case_count(),
+            ) {
+                (Some(matching), Some(queried)) => format!(
+                    "post-selection descriptive recurrence: {matching} of {queried} queried Reproduccion cases; no causal or outcome claim"
+                ),
+                _ => "post-selection descriptive recurrence unavailable; no causal or outcome claim".into(),
+            }
+        }
     };
     RunEvent {
         sequence,
@@ -259,6 +269,9 @@ fn persist_result(
     })?;
     let write_result = (|| {
         let mut result_json = serde_json::to_value(result).map_err(|error| error.to_string())?;
+        if result.source_kind == LocalSourceKind::E0 {
+            result_json["excluded_replay_case_count"] = serde_json::Value::Null;
+        }
         result_json["e0_recurrence_holdout"] = match holdout {
             Some(evaluation) => serde_json::to_value(evaluation),
             None => Ok(serde_json::Value::Null),

@@ -14,7 +14,8 @@ use sha2::{Digest, Sha256};
 use crate::{CasePhase, E0Fact, PreparedSource, SourceKind};
 
 const HOLDOUT_POLICY_ID: &str = "e0_recurrence_holdout";
-const HOLDOUT_POLICY_VERSION: u16 = 1;
+const HOLDOUT_POLICY_VERSION: u16 = 2;
+const MIN_POLICY_SUPPORT: u64 = 5;
 const MAX_POLICY_SUPPORT: u64 = 5_000;
 
 /// Versioned, deterministic threshold for interpreting a holdout recurrence.
@@ -25,7 +26,7 @@ pub struct E0HoldoutPolicy {
 
 impl E0HoldoutPolicy {
     pub fn new(minimum_distinct_case_support: u64) -> Result<Self, E0HoldoutError> {
-        if !(1..=MAX_POLICY_SUPPORT).contains(&minimum_distinct_case_support) {
+        if !(MIN_POLICY_SUPPORT..=MAX_POLICY_SUPPORT).contains(&minimum_distinct_case_support) {
             return Err(E0HoldoutError::InvalidPolicy);
         }
         Ok(Self {
@@ -271,20 +272,22 @@ pub fn evaluate_e0_recurrence_holdout(
     }
     let denominator = queried_cases.len() as u64;
     let numerator = matching_cases.len() as u64;
-    evaluation.reproduction_case_count = Some(reproduction_cases.len() as u64);
-    evaluation.queried_case_count = Some(denominator);
-    evaluation.matching_case_count = Some(numerator);
-    evaluation.recurrence_rate_basis_points = (denominator > 0)
-        .then(|| ((u128::from(numerator) * 10_000) / u128::from(denominator)) as u16);
-    evaluation.status = if denominator < policy.minimum_distinct_case_support
+    if denominator < policy.minimum_distinct_case_support
         || (numerator > 0 && numerator < policy.minimum_distinct_case_support)
     {
-        E0HoldoutStatus::InsufficientSupport
-    } else if numerator == 0 {
-        E0HoldoutStatus::NotObserved
+        evaluation.status = E0HoldoutStatus::InsufficientSupport;
     } else {
-        E0HoldoutStatus::Replicated
-    };
+        evaluation.reproduction_case_count = Some(reproduction_cases.len() as u64);
+        evaluation.queried_case_count = Some(denominator);
+        evaluation.matching_case_count = Some(numerator);
+        evaluation.recurrence_rate_basis_points = (denominator > 0)
+            .then(|| ((u128::from(numerator) * 10_000) / u128::from(denominator)) as u16);
+        evaluation.status = if numerator == 0 {
+            E0HoldoutStatus::NotObserved
+        } else {
+            E0HoldoutStatus::Replicated
+        };
+    }
     Ok(evaluation)
 }
 
@@ -303,7 +306,7 @@ pub enum E0HoldoutError {
 impl std::fmt::Display for E0HoldoutError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
-            Self::InvalidPolicy => "holdout policy is outside its safe range",
+            Self::InvalidPolicy => "holdout policy is outside its safe aggregate range",
             Self::InvalidCandidate => "selected recurrence candidate is invalid",
             Self::NoDiscoveryEvidence => "Arranque contains no eligible recurrence evidence",
             Self::InsufficientDiscoverySupport => "Arranque recurrence support is below policy",

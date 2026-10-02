@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 const DISCOVERY_SUPPORT: u64 = 3;
-const HOLDOUT_SUPPORT: u64 = 2;
+const HOLDOUT_SUPPORT: u64 = 5;
 
 fn write_parquet(path: &Path, schema: Schema, arrays: Vec<ArrayRef>) {
     let schema = Arc::new(schema);
@@ -110,7 +110,7 @@ fn fixture(replay_signatures: &[&str], include_query_table: bool) -> TempDir {
         ];
         let mut signatures = vec!["normalized-pattern-alpha"; 3];
         signatures.push("other-arranque-pattern");
-        let replay_case_numbers = [5, 5, 6, 7, 8];
+        let replay_case_numbers = [4, 5, 6, 7, 8, 8];
         for (index, signature) in replay_signatures.iter().enumerate() {
             let case_number = replay_case_numbers[index.min(replay_case_numbers.len() - 1)];
             query_case_ids.push(format!("test-case-{case_number}"));
@@ -216,9 +216,18 @@ fn policy(minimum_distinct_cases: u64) -> E0HoldoutPolicy {
 }
 
 #[test]
+fn holdout_policy_rejects_aggregates_below_the_five_case_privacy_floor() {
+    assert_eq!(
+        E0HoldoutPolicy::new(4),
+        Err(improvement_engine_source_adapters::E0HoldoutError::InvalidPolicy)
+    );
+    assert_eq!(policy(5).minimum_distinct_case_support(), 5);
+}
+
+#[test]
 fn holdout_counts_distinct_reproduction_cases_and_reports_safe_rate() {
-    let temp = fixture(&["normalized-pattern-alpha"; 4], true);
-    let source = prepare(&temp, 4);
+    let temp = fixture(&["normalized-pattern-alpha"; 6], true);
+    let source = prepare(&temp, 3);
     let candidate = attest_selected_e0_recurrence_candidate(
         &source,
         &core_pattern_ref(&source),
@@ -229,9 +238,9 @@ fn holdout_counts_distinct_reproduction_cases_and_reports_safe_rate() {
     let result =
         evaluate_e0_recurrence_holdout(&candidate, &source, &policy(HOLDOUT_SUPPORT)).unwrap();
     assert_eq!(result.status(), E0HoldoutStatus::Replicated);
-    assert_eq!(result.reproduction_case_count(), Some(4));
-    assert_eq!(result.queried_case_count(), Some(3));
-    assert_eq!(result.matching_case_count(), Some(3));
+    assert_eq!(result.reproduction_case_count(), Some(5));
+    assert_eq!(result.queried_case_count(), Some(5));
+    assert_eq!(result.matching_case_count(), Some(5));
     assert_eq!(result.recurrence_rate_basis_points(), Some(10_000));
     let serialized = serde_json::to_string(&result).unwrap();
     assert!(!serialized.contains("normalized-pattern-alpha"));
@@ -242,8 +251,8 @@ fn holdout_counts_distinct_reproduction_cases_and_reports_safe_rate() {
 fn replay_pattern_changes_cannot_change_attested_arranque_candidate() {
     let replay_a = fixture(&["normalized-pattern-alpha"; 5], true);
     let replay_b = fixture(&["entirely-different-replay-pattern"; 5], true);
-    let source_a = prepare(&replay_a, 4);
-    let source_b = prepare(&replay_b, 4);
+    let source_a = prepare(&replay_a, 3);
+    let source_b = prepare(&replay_b, 3);
     let candidate_a = attest_selected_e0_recurrence_candidate(
         &source_a,
         &core_pattern_ref(&source_a),
@@ -261,8 +270,8 @@ fn replay_pattern_changes_cannot_change_attested_arranque_candidate() {
         candidate_b.arranque_support_cases()
     );
 
-    let holdout = fixture(&["normalized-pattern-alpha"; 4], true);
-    let holdout = prepare(&holdout, 4);
+    let holdout = fixture(&["normalized-pattern-alpha"; 6], true);
+    let holdout = prepare(&holdout, 3);
     let result_a =
         evaluate_e0_recurrence_holdout(&candidate_a, &holdout, &policy(HOLDOUT_SUPPORT)).unwrap();
     let result_b =
@@ -277,7 +286,7 @@ fn replay_pattern_changes_cannot_change_attested_arranque_candidate() {
 #[test]
 fn holdout_statuses_distinguish_absent_support_from_no_observation() {
     let discovery = fixture(&[], true);
-    let discovery = prepare(&discovery, 4);
+    let discovery = prepare(&discovery, 3);
     let candidate = attest_selected_e0_recurrence_candidate(
         &discovery,
         &core_pattern_ref(&discovery),
@@ -286,15 +295,15 @@ fn holdout_statuses_distinguish_absent_support_from_no_observation() {
     .unwrap();
 
     let absent = fixture(&[], false);
-    let absent = prepare(&absent, 4);
+    let absent = prepare(&absent, 3);
     let unavailable =
         evaluate_e0_recurrence_holdout(&candidate, &absent, &policy(HOLDOUT_SUPPORT)).unwrap();
     assert_eq!(unavailable.status(), E0HoldoutStatus::Unavailable);
     assert_eq!(unavailable.queried_case_count(), None);
     assert_eq!(unavailable.matching_case_count(), None);
 
-    let no_match = fixture(&["other"; 4], true);
-    let no_match = prepare(&no_match, 4);
+    let no_match = fixture(&["other"; 6], true);
+    let no_match = prepare(&no_match, 3);
     let not_observed =
         evaluate_e0_recurrence_holdout(&candidate, &no_match, &policy(HOLDOUT_SUPPORT)).unwrap();
     assert_eq!(not_observed.status(), E0HoldoutStatus::NotObserved);
@@ -304,17 +313,38 @@ fn holdout_statuses_distinguish_absent_support_from_no_observation() {
         &["normalized-pattern-alpha", "other", "other", "other"],
         true,
     );
-    let weak = prepare(&weak, 4);
+    let weak = prepare(&weak, 3);
     let insufficient =
         evaluate_e0_recurrence_holdout(&candidate, &weak, &policy(HOLDOUT_SUPPORT)).unwrap();
     assert_eq!(insufficient.status(), E0HoldoutStatus::InsufficientSupport);
-    assert_eq!(insufficient.matching_case_count(), Some(1));
+    assert_eq!(insufficient.reproduction_case_count(), None);
+    assert_eq!(insufficient.queried_case_count(), None);
+    assert_eq!(insufficient.matching_case_count(), None);
+    assert_eq!(insufficient.recurrence_rate_basis_points(), None);
+
+    for matching_support in 1..HOLDOUT_SUPPORT {
+        let mut signatures = vec!["other"; 6];
+        signatures[..matching_support as usize].fill("normalized-pattern-alpha");
+        let sparse_match = fixture(&signatures, true);
+        let sparse_match = prepare(&sparse_match, 3);
+        let insufficient_match =
+            evaluate_e0_recurrence_holdout(&candidate, &sparse_match, &policy(HOLDOUT_SUPPORT))
+                .unwrap();
+        assert_eq!(
+            insufficient_match.status(),
+            E0HoldoutStatus::InsufficientSupport
+        );
+        assert_eq!(insufficient_match.reproduction_case_count(), None);
+        assert_eq!(insufficient_match.queried_case_count(), None);
+        assert_eq!(insufficient_match.matching_case_count(), None);
+        assert_eq!(insufficient_match.recurrence_rate_basis_points(), None);
+    }
 }
 
 #[test]
 fn selected_candidate_must_be_supported_by_arranque_and_holdout_is_bound_to_policy_and_sources() {
     let discovery = fixture(&["normalized-pattern-alpha"; 4], true);
-    let discovery = prepare(&discovery, 4);
+    let discovery = prepare(&discovery, 3);
     let valid_ref = core_pattern_ref(&discovery);
     let invalid_ref = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     assert!(
@@ -328,18 +358,18 @@ fn selected_candidate_must_be_supported_by_arranque_and_holdout_is_bound_to_poli
         &["normalized-pattern-alpha", "other", "other", "other"],
         true,
     );
-    let holdout = prepare(&holdout, 4);
+    let holdout = prepare(&holdout, 3);
     let result =
         evaluate_e0_recurrence_holdout(&candidate, &holdout, &policy(HOLDOUT_SUPPORT)).unwrap();
     assert!(result.discovery_source_commitment().starts_with("sha256:"));
     assert!(result.holdout_source_commitment().starts_with("sha256:"));
-    assert_eq!(result.policy_version(), 1);
+    assert_eq!(result.policy_version(), 2);
 }
 
 #[test]
 fn support_threshold_is_inclusive_and_tenant_scope_must_match() {
     let discovery = fixture(&["normalized-pattern-alpha"; 4], true);
-    let discovery = prepare(&discovery, 4);
+    let discovery = prepare(&discovery, 3);
     let candidate = attest_selected_e0_recurrence_candidate(
         &discovery,
         &core_pattern_ref(&discovery),
@@ -347,17 +377,17 @@ fn support_threshold_is_inclusive_and_tenant_scope_must_match() {
     )
     .unwrap();
 
-    let exact = fixture(&["normalized-pattern-alpha"; 3], true);
-    let exact = prepare(&exact, 4);
-    let at_threshold = evaluate_e0_recurrence_holdout(&candidate, &exact, &policy(2)).unwrap();
-    assert_eq!(at_threshold.queried_case_count(), Some(2));
-    assert_eq!(at_threshold.matching_case_count(), Some(2));
+    let exact = fixture(&["normalized-pattern-alpha"; 6], true);
+    let exact = prepare(&exact, 3);
+    let at_threshold = evaluate_e0_recurrence_holdout(&candidate, &exact, &policy(5)).unwrap();
+    assert_eq!(at_threshold.queried_case_count(), Some(5));
+    assert_eq!(at_threshold.matching_case_count(), Some(5));
     assert_eq!(at_threshold.status(), E0HoldoutStatus::Replicated);
 
-    let wrong_scope = fixture(&["normalized-pattern-alpha"; 3], true);
-    let wrong_scope = prepare_for_tenant(&wrong_scope, 4, "other-tenant");
+    let wrong_scope = fixture(&["normalized-pattern-alpha"; 6], true);
+    let wrong_scope = prepare_for_tenant(&wrong_scope, 3, "other-tenant");
     assert_eq!(
-        evaluate_e0_recurrence_holdout(&candidate, &wrong_scope, &policy(2)),
+        evaluate_e0_recurrence_holdout(&candidate, &wrong_scope, &policy(5)),
         Err(improvement_engine_source_adapters::E0HoldoutError::SourceScopeMismatch)
     );
 }

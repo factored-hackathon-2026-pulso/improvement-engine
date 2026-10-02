@@ -52,14 +52,26 @@ if not defined output exit /b 90
 if not exist "%output%" mkdir "%output%"
 mkdir "%output%\fixture-run"
 if "%PULSO_E2E_TEST_JSON_MODE%"=="missing_holdout" (
-  > "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","discovery_case_count":200,"excluded_replay_case_count":1800,"signals":[],"proposal":null,"formal_route":"do_nothing"}
+  > "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","source_kind":"e0","discovery_case_count":200,"excluded_replay_case_count":null,"signals":[],"proposal":null,"formal_route":"do_nothing"}
+  exit /b 0
+)
+if "%PULSO_E2E_TEST_JSON_MODE%"=="unsafe_missing_holdout" (
+  > "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","source_kind":"e0","discovery_case_count":200,"excluded_replay_case_count":4,"signals":[],"proposal":null,"formal_route":"do_nothing"}
+  exit /b 0
+)
+if "%PULSO_E2E_TEST_JSON_MODE%"=="insufficient_holdout" (
+  > "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","source_kind":"e0","discovery_case_count":200,"excluded_replay_case_count":null,"signals":[],"e0_recurrence_holdout":{"status":"insufficient_support","reproduction_case_count":null,"queried_case_count":null,"matching_case_count":null,"recurrence_rate_basis_points":null},"proposal":null,"formal_route":"do_nothing"}
+  exit /b 0
+)
+if "%PULSO_E2E_TEST_JSON_MODE%"=="unsafe_insufficient_holdout" (
+  > "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","source_kind":"e0","discovery_case_count":200,"excluded_replay_case_count":1800,"signals":[],"e0_recurrence_holdout":{"status":"insufficient_support","reproduction_case_count":5,"queried_case_count":5,"matching_case_count":1,"recurrence_rate_basis_points":2000},"proposal":null,"formal_route":"do_nothing"}
   exit /b 0
 )
 if "%PULSO_E2E_TEST_JSON_MODE%"=="malformed" (
   > "%output%\fixture-run\result.json" echo {"private_customer_id":"DO_NOT_PRINT_THIS",}
   exit /b 0
 )
-> "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","discovery_case_count":200,"excluded_replay_case_count":1800,"signals":[{"metric_id":"e0_technical_error_rate","numerator":0,"denominator":187,"missing":13},{"metric_id":"e0_recurring_copilot_query_cases","numerator":154,"denominator":200,"missing":0}],"e0_recurrence_holdout":{"status":"replicated","queried_case_count":1539,"matching_case_count":1433,"interpretation":"descriptive_recurrence_only_no_causal_or_outcome_claim"},"proposal":{"status":"simulated_unverified","execution_status":"not_executed","private_text":"DO_NOT_PRINT_THIS"},"formal_route":"do_nothing","private_customer_id":"DO_NOT_PRINT_THIS"}
+> "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","source_kind":"e0","discovery_case_count":200,"excluded_replay_case_count":null,"signals":[{"metric_id":"e0_technical_error_rate","numerator":0,"denominator":187,"missing":13},{"metric_id":"e0_recurring_copilot_query_cases","numerator":154,"denominator":200,"missing":0}],"e0_recurrence_holdout":{"status":"replicated","queried_case_count":1539,"matching_case_count":1433,"interpretation":"descriptive_recurrence_only_no_causal_or_outcome_claim"},"proposal":{"status":"simulated_unverified","execution_status":"not_executed","private_text":"DO_NOT_PRINT_THIS"},"formal_route":"do_nothing","private_customer_id":"DO_NOT_PRINT_THIS"}
 exit /b 0
 '@
         Set-Content -LiteralPath (Join-Path $script:fakeBin 'cargo.cmd') -Value $cargoShim -Encoding Ascii
@@ -85,7 +97,7 @@ exit /b 0
         $output = & $scriptPath -InputPath $script:inputRoot -OutputPath $script:outputRoot -ObservedCutoff '2026-10-02T18:00:00Z'
         $text = $output -join [Environment]::NewLine
         Assert-Contains $text 'Status: complete_simulated'
-        Assert-Contains $text 'Cases: discovery=200; replay_excluded=1800'
+        Assert-Contains $text 'Cases: discovery=200; replay_excluded=suppressed'
         Assert-Contains $text 'e0_technical_error_rate: 0/187; missing=13'
         Assert-Contains $text 'e0_recurring_copilot_query_cases: 154/200; missing=0'
         Assert-Contains $text 'Proposal: status=simulated_unverified; execution=not_executed'
@@ -111,8 +123,22 @@ exit /b 0
         $env:PULSO_E2E_TEST_JSON_MODE = 'missing_holdout'
         $missingOutput = & $scriptPath -InputPath $script:inputRoot -OutputPath (Join-Path $script:fixtureRoot 'missing-output') -ObservedCutoff '2026-10-02T18:00:00Z'
         $missingText = $missingOutput -join [Environment]::NewLine
+        Assert-Contains $missingText 'Cases: discovery=200; replay_excluded=suppressed'
         Assert-Contains $missingText 'Holdout: none'
         Assert-DoesNotContain $missingText 'DO_NOT_PRINT_THIS|private_customer_id'
+
+        $env:PULSO_E2E_TEST_JSON_MODE = 'unsafe_missing_holdout'
+        $unsafeMissingRejected = $false
+        $unsafeMissingMessage = ''
+        try {
+            $null = & $scriptPath -InputPath $script:inputRoot -OutputPath (Join-Path $script:fixtureRoot 'unsafe-missing-output') -ObservedCutoff '2026-10-02T18:00:00Z'
+        }
+        catch {
+            $unsafeMissingRejected = $true
+            $unsafeMissingMessage = $_.Exception.Message
+        }
+        Assert-True $unsafeMissingRejected 'Wrapper accepted an E0 replay count when holdout evaluation was absent.'
+        Assert-DoesNotContain $unsafeMissingMessage '4|replay_excluded'
 
         $env:PULSO_E2E_TEST_JSON_MODE = 'malformed'
         $malformedRejected = $false
@@ -129,6 +155,34 @@ exit /b 0
         }
         Assert-True $malformedRejected 'Malformed result JSON was unexpectedly accepted.'
         Assert-DoesNotContain $malformedMessage 'DO_NOT_PRINT_THIS|private_customer_id'
+    }
+
+    It 'suppresses all insufficient-support aggregates and rejects leaked small cells' {
+        try {
+            $env:PULSO_E2E_TEST_JSON_MODE = 'insufficient_holdout'
+            $suppressedOutput = & $scriptPath -InputPath $script:inputRoot -OutputPath (Join-Path $script:fixtureRoot 'suppressed-output') -ObservedCutoff '2026-10-02T18:00:00Z'
+            $suppressedText = $suppressedOutput -join [Environment]::NewLine
+            Assert-Contains $suppressedText 'Holdout: status=insufficient_support; counts=suppressed; descriptive_only'
+            Assert-Contains $suppressedText 'Cases: discovery=200; replay_excluded=suppressed'
+            Assert-DoesNotContain $suppressedText 'replay_excluded=1800'
+            Assert-DoesNotContain $suppressedText '\b(?:1|2|3|4)/5\b'
+
+            $env:PULSO_E2E_TEST_JSON_MODE = 'unsafe_insufficient_holdout'
+            $leakRejected = $false
+            $leakMessage = ''
+            try {
+                $null = & $scriptPath -InputPath $script:inputRoot -OutputPath (Join-Path $script:fixtureRoot 'unsafe-output') -ObservedCutoff '2026-10-02T18:00:00Z'
+            }
+            catch {
+                $leakRejected = $true
+                $leakMessage = $_.Exception.Message
+            }
+            Assert-True $leakRejected 'Wrapper accepted exact small-cell counts for insufficient support.'
+            Assert-DoesNotContain $leakMessage '1/5|2000|private'
+        }
+        finally {
+            Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
+        }
     }
 
     It 'refuses an existing output directory before invoking Cargo' {
