@@ -10,12 +10,21 @@ incluye sólo el identificador validado, clase, instante y digest de evidencia,
 además de un resumen textual accesible. No devuelve payload de evidencia,
 fuente, SQL, prompts, artefactos ni datos de clientes.
 
-`DebugConsoleApi` es un adaptador de aplicación sin framework HTTP: recibe el
-`ListRunActivityRequest` que ya requiere `AuthenticatedTenant`, conserva el
-cursor opaco de U07 y mapea los fallos a estados de transporte seguros. En
-particular, un cursor vencido o purgado es `Gone`, sin reconstruir una línea de
-tiempo ni afirmar que el run terminó; un run inexistente es `NotFound`, sin
-proyección adjunta.
+`DebugConsoleApi` es un adaptador de aplicación sin framework HTTP. No acepta
+un `ListRunActivityRequest` ni un tenant del caller: recibe una request de
+sesión y una request de timeline sin tenant, y pide a `DebugIdentityPort` una
+principal autenticada. El puerto recibe por llamada un `DebugViewerIssuer`
+opaco que sólo crea la API; sin esa capability no se puede fabricar un
+`DebugViewer`. El adaptador deriva entonces el `AuthenticatedTenant` U07
+internamente. Así se conserva U07 para otros transportes, pero la frontera de
+debug no permite inyectar `tenant_b` en una request.
+
+Conserva el cursor opaco de U07 y mapea los fallos a estados de transporte
+seguros. En particular, un cursor vencido o purgado es `Gone`, sin reconstruir
+una línea de tiempo ni afirmar que el run terminó; un run inexistente es
+`NotFound`, sin proyección adjunta. `accessible_status_summary()` ofrece texto
+estable para éxito (count/continuation), `Gone`, `NotFound` y `BadRequest`,
+sin serializar errores crudos, tenant, run o evidencia.
 
 La frontera no expone operaciones para proyectar eventos, mutar runs, ejecutar
 herramientas, leer PG/S3 directamente ni crear exportaciones. Emitir un cursor
@@ -30,6 +39,11 @@ revisión de la proyección.
    tenant-bound y el test pasó.
 3. Se añadieron regresiones para reanudación por cursor opaco/cross-tenant,
    gap al cambiar la revisión y respuesta `NotFound` sin mutar la proyección.
+4. Una revisión adversarial detectó que el primer adaptador aceptaba un DTO U07
+   con constructor público. El RED siguiente exigió autenticación mediante
+   principal/capability y resúmenes accesibles; la regresión ahora prueba que
+   no existe un parámetro para inyectar tenant, que un cursor cross-tenant se
+   bloquea y que los mensajes de estado no revelan el error interno.
 
 Comando ejecutado en Windows:
 
@@ -37,7 +51,7 @@ Comando ejecutado en Windows:
 cargo +1.98.1 test -p improvement-engine-core --test debug_console
 ```
 
-Resultado actual: 4 pruebas verdes.
+Resultado actual: 6 pruebas verdes.
 
 ## Límites y trabajo posterior
 
