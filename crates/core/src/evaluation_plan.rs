@@ -1,9 +1,112 @@
-//! U20 seals repository-attested evaluation inputs before any execution.
+//! U20 seals typed, repository-attested evaluation inputs before execution.
+//!
+//! `ScenarioSet` remains the durable storage kind until the artifact schema
+//! grows dedicated rows. This module does not trust that generic kind alone:
+//! every selected revision must carry the shared `evaluation_contract` and is
+//! re-read from the immutable repository before a plan can be frozen.
 
 use crate::workflow_bridge::{LinkGrade, WorkflowBridgeContract};
 use crate::{ArtifactKind, ArtifactReference, ArtifactRepository};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EvaluationArtifactType {
+    Baseline,
+    Oracle,
+    DevelopmentSuite,
+    FinalSuite,
+}
+
+impl EvaluationArtifactType {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Baseline => "baseline",
+            Self::Oracle => "oracle",
+            Self::DevelopmentSuite => "development_suite",
+            Self::FinalSuite => "final_suite",
+        }
+    }
+    fn expected_partition(self) -> &'static str {
+        match self {
+            Self::Baseline | Self::Oracle => "shared",
+            Self::DevelopmentSuite => "development",
+            Self::FinalSuite => "final",
+        }
+    }
+}
+
+/// Typed selection of an immutable revision. Its type is independently
+/// re-verified from the immutable artifact payload before use.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EvaluationArtifactRef {
+    reference: ArtifactReference,
+    artifact_type: EvaluationArtifactType,
+}
+
+impl EvaluationArtifactRef {
+    #[must_use]
+    pub fn baseline(reference: ArtifactReference) -> Self {
+        Self {
+            reference,
+            artifact_type: EvaluationArtifactType::Baseline,
+        }
+    }
+    #[must_use]
+    pub fn oracle(reference: ArtifactReference) -> Self {
+        Self {
+            reference,
+            artifact_type: EvaluationArtifactType::Oracle,
+        }
+    }
+    #[must_use]
+    pub fn development_suite(reference: ArtifactReference) -> Self {
+        Self {
+            reference,
+            artifact_type: EvaluationArtifactType::DevelopmentSuite,
+        }
+    }
+    #[must_use]
+    pub fn final_suite(reference: ArtifactReference) -> Self {
+        Self {
+            reference,
+            artifact_type: EvaluationArtifactType::FinalSuite,
+        }
+    }
+}
+
+/// The four sealed inputs of one comparison. Development and final suites are
+/// separate typed slots: final evidence cannot become iterative development input.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EvaluationInputs {
+    baseline: EvaluationArtifactRef,
+    oracle: EvaluationArtifactRef,
+    development_suite: EvaluationArtifactRef,
+    final_suite: EvaluationArtifactRef,
+}
+impl EvaluationInputs {
+    #[must_use]
+    pub fn new(
+        baseline: EvaluationArtifactRef,
+        oracle: EvaluationArtifactRef,
+        development_suite: EvaluationArtifactRef,
+        final_suite: EvaluationArtifactRef,
+    ) -> Self {
+        Self {
+            baseline,
+            oracle,
+            development_suite,
+            final_suite,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct EvaluationSemanticContract {
+    target_outcome: String,
+    unit_of_analysis: String,
+    oracle_measure: String,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvaluationPlan {
@@ -11,21 +114,18 @@ pub struct EvaluationPlan {
     source_snapshot_ref: ArtifactReference,
     baseline_ref: ArtifactReference,
     oracle_ref: ArtifactReference,
-    suite_ref: ArtifactReference,
-    target_outcome: String,
-    unit_of_analysis: String,
-    oracle_measure: String,
+    development_suite_ref: ArtifactReference,
+    final_suite_ref: ArtifactReference,
+    semantic: EvaluationSemanticContract,
     commitment: String,
 }
 
 impl EvaluationPlan {
-    /// Verifies exact immutable artifact revisions before freezing a plan. A
-    /// content hash alone is never accepted as identity or authority.
+    /// Re-reads every immutable evaluation input, validates its sealed shared
+    /// contract, and freezes only a comparison semantically identical to U16.
     pub fn seal_from_bridge<R: ArtifactRepository>(
         bridge: &WorkflowBridgeContract,
-        baseline_ref: ArtifactReference,
-        oracle_ref: ArtifactReference,
-        suite_ref: ArtifactReference,
+        inputs: EvaluationInputs,
         artifacts: &mut R,
     ) -> Result<Self, EvaluationPlanError> {
         if bridge.link_grade() != LinkGrade::MechanismProxy
@@ -35,51 +135,75 @@ impl EvaluationPlan {
         }
         let scope = bridge.scope();
         let snapshot = bridge.source_snapshot_ref();
-        let _baseline =
-            verified_input(artifacts, scope, snapshot, &baseline_ref, "baseline", false)?;
-        let oracle = verified_input(artifacts, scope, snapshot, &oracle_ref, "oracle", true)?;
-        let _suite = verified_input(artifacts, scope, snapshot, &suite_ref, "suite", false)?;
-        if baseline_ref == oracle_ref || baseline_ref == suite_ref || oracle_ref == suite_ref {
+        let baseline = verified_input(artifacts, scope, snapshot, &inputs.baseline)?;
+        let oracle = verified_input(artifacts, scope, snapshot, &inputs.oracle)?;
+        let development_suite =
+            verified_input(artifacts, scope, snapshot, &inputs.development_suite)?;
+        let final_suite = verified_input(artifacts, scope, snapshot, &inputs.final_suite)?;
+        let references = [
+            &baseline.reference,
+            &oracle.reference,
+            &development_suite.reference,
+            &final_suite.reference,
+        ];
+        if references.iter().enumerate().any(|(index, reference)| {
+            references
+                .iter()
+                .skip(index + 1)
+                .any(|other| *reference == *other)
+        }) {
             return Err(EvaluationPlanError::DuplicateInputReference);
         }
-        let outcome = field(&oracle, "target_outcome")?;
-        let unit = field(&oracle, "unit_of_analysis")?;
-        let measure = field(&oracle, "oracle_measure")?;
-        if outcome != bridge.input().target_outcome() || unit != bridge.input().unit_of_analysis() {
-            return Err(EvaluationPlanError::OracleSemanticMismatch);
+        let expected = EvaluationSemanticContract {
+            target_outcome: bridge.input().target_outcome().to_owned(),
+            unit_of_analysis: bridge.input().unit_of_analysis().to_owned(),
+            oracle_measure: bridge.input().oracle_measure().to_owned(),
+        };
+        if [
+            &baseline.semantic,
+            &oracle.semantic,
+            &development_suite.semantic,
+            &final_suite.semantic,
+        ]
+        .iter()
+        .any(|semantic| **semantic != expected)
+        {
+            return Err(EvaluationPlanError::SemanticMismatch);
         }
-        let values = [
+        let commitment = digest(&[
             bridge.commitment(),
             &snapshot.tenant_id,
             &snapshot.id,
             &snapshot.revision.to_string(),
             &snapshot.digest,
-            &baseline_ref.tenant_id,
-            &baseline_ref.id,
-            &baseline_ref.revision.to_string(),
-            &baseline_ref.digest,
-            &oracle_ref.tenant_id,
-            &oracle_ref.id,
-            &oracle_ref.revision.to_string(),
-            &oracle_ref.digest,
-            &suite_ref.tenant_id,
-            &suite_ref.id,
-            &suite_ref.revision.to_string(),
-            &suite_ref.digest,
-            &outcome,
-            &unit,
-            &measure,
-        ];
-        let commitment = digest(&values);
+            &baseline.reference.tenant_id,
+            &baseline.reference.id,
+            &baseline.reference.revision.to_string(),
+            &baseline.reference.digest,
+            &oracle.reference.tenant_id,
+            &oracle.reference.id,
+            &oracle.reference.revision.to_string(),
+            &oracle.reference.digest,
+            &development_suite.reference.tenant_id,
+            &development_suite.reference.id,
+            &development_suite.reference.revision.to_string(),
+            &development_suite.reference.digest,
+            &final_suite.reference.tenant_id,
+            &final_suite.reference.id,
+            &final_suite.reference.revision.to_string(),
+            &final_suite.reference.digest,
+            &expected.target_outcome,
+            &expected.unit_of_analysis,
+            &expected.oracle_measure,
+        ]);
         Ok(Self {
             bridge_commitment: bridge.commitment().to_owned(),
             source_snapshot_ref: snapshot.clone(),
-            baseline_ref,
-            oracle_ref,
-            suite_ref,
-            target_outcome: outcome,
-            unit_of_analysis: unit,
-            oracle_measure: measure,
+            baseline_ref: baseline.reference,
+            oracle_ref: oracle.reference,
+            development_suite_ref: development_suite.reference,
+            final_suite_ref: final_suite.reference,
+            semantic: expected,
             commitment,
         })
     }
@@ -97,14 +221,18 @@ impl EvaluationPlan {
     }
 }
 
+struct VerifiedInput {
+    reference: ArtifactReference,
+    semantic: EvaluationSemanticContract,
+}
+
 fn verified_input<R: ArtifactRepository>(
     artifacts: &mut R,
     scope: &crate::core_task::CoreTaskScope,
     snapshot: &ArtifactReference,
-    reference: &ArtifactReference,
-    role: &str,
-    oracle_authority: bool,
-) -> Result<Value, EvaluationPlanError> {
+    typed_reference: &EvaluationArtifactRef,
+) -> Result<VerifiedInput, EvaluationPlanError> {
+    let reference = &typed_reference.reference;
     if reference.tenant_id != scope.tenant_id() {
         return Err(EvaluationPlanError::CrossTenantReference);
     }
@@ -118,11 +246,19 @@ fn verified_input<R: ArtifactRepository>(
     {
         return Err(EvaluationPlanError::ReferenceMismatch);
     }
-    if field(&artifact.payload, "evaluation_role")? != role {
+    let contract = artifact
+        .payload
+        .get("evaluation_contract")
+        .and_then(Value::as_object)
+        .ok_or(EvaluationPlanError::InvalidInput)?;
+    if contract.get("artifact_type").and_then(Value::as_str)
+        != Some(typed_reference.artifact_type.as_str())
+        || contract.get("partition").and_then(Value::as_str)
+            != Some(typed_reference.artifact_type.expected_partition())
+    {
         return Err(EvaluationPlanError::ReferenceMismatch);
     }
-    let scoped = artifact
-        .payload
+    let scoped = contract
         .get("scope")
         .and_then(Value::as_object)
         .ok_or(EvaluationPlanError::ScopeMismatch)?;
@@ -136,30 +272,32 @@ fn verified_input<R: ArtifactRepository>(
             return Err(EvaluationPlanError::ScopeMismatch);
         }
     }
-    if oracle_authority
-        && artifact
-            .payload
-            .get("oracle_authority")
-            .and_then(Value::as_str)
-            != Some(scope.authority_ref())
-    {
-        return Err(EvaluationPlanError::OracleAuthorityMismatch);
-    }
-    Ok(artifact.payload)
+    Ok(VerifiedInput {
+        reference: reference.clone(),
+        semantic: EvaluationSemanticContract {
+            target_outcome: contract_field(contract, "target_outcome")?,
+            unit_of_analysis: contract_field(contract, "unit_of_analysis")?,
+            oracle_measure: contract_field(contract, "oracle_measure")?,
+        },
+    })
 }
-fn field(value: &Value, name: &str) -> Result<String, EvaluationPlanError> {
-    value
+
+fn contract_field(
+    contract: &serde_json::Map<String, Value>,
+    name: &str,
+) -> Result<String, EvaluationPlanError> {
+    contract
         .get(name)
         .and_then(Value::as_str)
-        .filter(|v| !v.is_empty())
+        .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .ok_or(EvaluationPlanError::InvalidInput)
 }
 fn digest(values: &[&str]) -> String {
     let mut h = Sha256::new();
-    for v in values {
-        h.update(v.len().to_be_bytes());
-        h.update(v.as_bytes());
+    for value in values {
+        h.update(value.len().to_be_bytes());
+        h.update(value.as_bytes());
     }
     format!("sha256:{:x}", h.finalize())
 }
@@ -171,86 +309,7 @@ pub enum EvaluationPlanError {
     ReferenceUnavailable,
     ReferenceMismatch,
     ScopeMismatch,
-    OracleAuthorityMismatch,
-    OracleSemanticMismatch,
+    SemanticMismatch,
     DuplicateInputReference,
     InvalidInput,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{EvaluationPlanError, verified_input};
-    use crate::core_task::CoreTaskScope;
-    use crate::{ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository};
-    use serde_json::json;
-
-    fn scoped_payload(role: &str) -> serde_json::Value {
-        json!({"evaluation_role":role,"scope":{"tenant_id":"tenant_a","job_id":"job_a","grant_id":"grant_a","authority_ref":"authority_a"},"oracle_authority":"authority_a","target_outcome":"payment_resolution","unit_of_analysis":"customer_goal","oracle_measure":"resolved"})
-    }
-
-    #[test]
-    fn rejects_cross_tenant_and_wrong_snapshot_references_before_any_plan_can_be_sealed() {
-        let mut repo = InMemoryArtifactRepository::default();
-        let snapshot = repo
-            .append(
-                None,
-                ArtifactDraft::new(
-                    "tenant_a",
-                    "018f0f4e-7bbd-7000-8000-000000000101",
-                    1,
-                    ArtifactKind::SourceSnapshot,
-                    json!({}),
-                    None,
-                ),
-            )
-            .unwrap()
-            .reference();
-        let scenario = repo
-            .append(
-                None,
-                ArtifactDraft::new(
-                    "tenant_a",
-                    "018f0f4e-7bbd-7000-8000-000000000102",
-                    1,
-                    ArtifactKind::ScenarioSet,
-                    scoped_payload("oracle"),
-                    Some(snapshot.clone()),
-                ),
-            )
-            .unwrap()
-            .reference();
-        let scope = CoreTaskScope::new("tenant_a", "job_a", "grant_a", "authority_a").unwrap();
-        assert!(verified_input(&mut repo, &scope, &snapshot, &scenario, "oracle", true).is_ok());
-        let mut cross = scenario.clone();
-        cross.tenant_id = "tenant_b".to_owned();
-        assert_eq!(
-            verified_input(&mut repo, &scope, &snapshot, &cross, "oracle", true),
-            Err(EvaluationPlanError::CrossTenantReference)
-        );
-        let other_snapshot = repo
-            .append(
-                Some(1),
-                ArtifactDraft::new(
-                    "tenant_a",
-                    "018f0f4e-7bbd-7000-8000-000000000101",
-                    2,
-                    ArtifactKind::SourceSnapshot,
-                    json!({"other":true}),
-                    None,
-                ),
-            )
-            .unwrap()
-            .reference();
-        assert_eq!(
-            verified_input(
-                &mut repo,
-                &scope,
-                &other_snapshot,
-                &scenario,
-                "oracle",
-                true
-            ),
-            Err(EvaluationPlanError::ReferenceMismatch)
-        );
-    }
 }

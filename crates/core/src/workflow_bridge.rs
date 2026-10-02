@@ -516,6 +516,76 @@ impl WorkflowBridgeValidator {
     }
 }
 
+/// Test-only public fixtures exercise the same U14/U16 composition that
+/// production uses, while keeping synthetic receipt construction unavailable
+/// from a default build. They never select a same-outcome or release path.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub mod test_support {
+    use super::{
+        WorkflowBridge, WorkflowBridgeContract, WorkflowBridgeInput, WorkflowBridgeValidator,
+        WorkflowCatalogueValidation,
+    };
+    use crate::ArtifactReference;
+    use crate::independent_verifier::{
+        VerificationStatus, report_for_workflow_bridge_with_snapshot_test,
+    };
+
+    fn bridge(
+        source_snapshot_ref: ArtifactReference,
+        status: VerificationStatus,
+    ) -> WorkflowBridgeContract {
+        let report = report_for_workflow_bridge_with_snapshot_test(status, source_snapshot_ref);
+        let input = WorkflowBridgeInput::new(
+            "reduce_repeat_payment_contacts",
+            "customer_episode",
+            format!("sha256:{}", "e".repeat(64)),
+            "customer_id",
+            "2026-09-30T00:00:00Z",
+            "flow/payment-status",
+            "payment_status_explains_next_step",
+            "after_contact_classification",
+            "customer_receives_correct_payment_status",
+            "scenario_oracle/payment_status_resolution_v1",
+            vec![
+                report.receipt().evidence_commitment().to_owned(),
+                report.receipt().digest().to_owned(),
+                report.source_snapshot_ref().digest.clone(),
+            ],
+        )
+        .expect("fixed test bridge input is valid");
+        let validation = WorkflowCatalogueValidation::new(
+            format!("sha256:{}", "1".repeat(64)),
+            format!("sha256:{}", "2".repeat(64)),
+            true,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+        )
+        .expect("fixed test validation is valid");
+        let evidence = WorkflowBridgeValidator::validate(&report, &input, validation)
+            .expect("fixed test validation binds");
+        WorkflowBridge::assess_verified(&report, input, evidence)
+            .expect("fixed test bridge assesses")
+            .contract
+    }
+
+    #[must_use]
+    pub fn mechanism_proxy_bridge(
+        source_snapshot_ref: ArtifactReference,
+    ) -> WorkflowBridgeContract {
+        bridge(source_snapshot_ref, VerificationStatus::Supported)
+    }
+
+    #[must_use]
+    pub fn non_evaluable_bridge(source_snapshot_ref: ArtifactReference) -> WorkflowBridgeContract {
+        bridge(source_snapshot_ref, VerificationStatus::Uncertain)
+    }
+}
+
 fn derive_grade(
     evidence: LinkEvidence,
     verification_status: VerificationStatus,

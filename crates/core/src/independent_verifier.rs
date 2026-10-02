@@ -355,14 +355,27 @@ fn is_identifier(value: &str) -> bool {
 
 #[cfg(test)]
 pub(crate) fn report_for_workflow_bridge_test(status: VerificationStatus) -> VerificationReport {
+    report_for_workflow_bridge_with_snapshot_test(
+        status,
+        ArtifactReference {
+            tenant_id: "tenant_a".to_owned(),
+            id: "018f3a54-7eaf-7c83-8a04-5bf4ec1a9d26".to_owned(),
+            revision: 1,
+            digest: format!("sha256:{}", "a".repeat(64)),
+        },
+    )
+}
+
+/// Synthetic U14 receipt construction is available only to integration tests
+/// compiled with the explicit test-support feature. Production callers cannot
+/// manufacture a verification report through this helper.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn report_for_workflow_bridge_with_snapshot_test(
+    status: VerificationStatus,
+    source_snapshot_ref: ArtifactReference,
+) -> VerificationReport {
     let scope = CoreTaskScope::new("tenant_a", "job_a", "grant_a", "authority_a")
         .expect("fixed test scope is valid");
-    let source_snapshot_ref = ArtifactReference {
-        tenant_id: "tenant_a".to_owned(),
-        id: "018f3a54-7eaf-7c83-8a04-5bf4ec1a9d26".to_owned(),
-        revision: 1,
-        digest: format!("sha256:{}", "a".repeat(64)),
-    };
     let candidate_digest = format!("sha256:{}", "b".repeat(64));
     let provenance_commitment = format!("sha256:{}", "c".repeat(64));
     let input_commitment = input_commitment(
