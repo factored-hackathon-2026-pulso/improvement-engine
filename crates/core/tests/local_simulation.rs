@@ -440,3 +440,63 @@ fn source_without_an_allowlisted_signal_is_reported_not_fabricated() {
     assert!(result.proposal.is_none());
     assert_eq!(result.events.last().unwrap().stage, "run_completed");
 }
+
+#[test]
+fn original_snapshot_contact_projection_is_reported_without_claiming_a_signal() {
+    use improvement_engine_core::local_simulation::{
+        LocalContactVolumeCell, LocalContactVolumeProjection,
+    };
+
+    let projection = LocalContactVolumeProjection::new(
+        1,
+        5,
+        5,
+        1,
+        1,
+        vec![LocalContactVolumeCell::new("complaint", "phone", 5)],
+    )
+    .unwrap();
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-contact-snapshot",
+            "pulso_local",
+            LocalSourceKind::OriginalBank,
+            "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            snapshot(),
+            1_785_542_401,
+            "2026-08-01T00:00:01Z",
+        ),
+        Vec::new(),
+        0,
+        Vec::new(),
+    )
+    .with_contact_volume_projection(projection);
+
+    let result = run_local_simulation(input).unwrap();
+
+    assert_eq!(result.terminal_status, "snapshot_projection_complete");
+    assert!(result.signal.is_none());
+    assert!(result.candidates.is_empty());
+    assert!(result.proposal.is_none());
+    let reported = result.contact_volume_projection.as_ref().unwrap();
+    assert_eq!(reported.semantics(), "snapshot_extract_counts");
+    assert_eq!(reported.included_record_count(), 5);
+    assert_eq!(reported.cells()[0].reason_category(), "complaint");
+    assert_eq!(reported.cells()[0].channel(), "phone");
+    assert!(
+        !serde_json::to_string(&result)
+            .unwrap()
+            .contains("customer_id")
+    );
+}
+
+#[test]
+fn contact_projection_enforces_versioned_k_bounds_at_the_core_boundary() {
+    use improvement_engine_core::local_simulation::LocalContactVolumeProjection;
+
+    for minimum_cell_count in [1, 4, 10_001] {
+        assert!(
+            LocalContactVolumeProjection::new(1, minimum_cell_count, 0, 0, 0, Vec::new(),).is_err()
+        );
+    }
+}

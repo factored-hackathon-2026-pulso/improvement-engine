@@ -35,6 +35,8 @@ pub use e0_package_validation::{
 };
 
 const PREPARATION_POLICY_VERSION: &str = "pulso.source-preparation.v1";
+const CONTACT_PROJECTION_POLICY_VERSION: u32 = 1;
+const CONTACT_PROJECTION_MINIMUM_CELL_COUNT: u64 = 5;
 const E0_DISCOVERY_TABLES: &[&str] = &[
     "case",
     "identity_check",
@@ -52,6 +54,7 @@ pub struct PreparationConfig {
     observed_cutoff: String,
     cutoff_unix_seconds: u64,
     arranque_cases: usize,
+    minimum_contact_cell_count: u64,
 }
 
 impl PreparationConfig {
@@ -83,7 +86,21 @@ impl PreparationConfig {
             observed_cutoff,
             cutoff_unix_seconds,
             arranque_cases,
+            minimum_contact_cell_count: CONTACT_PROJECTION_MINIMUM_CELL_COUNT,
         })
+    }
+
+    pub fn with_minimum_contact_cell_count(
+        mut self,
+        minimum_contact_cell_count: u64,
+    ) -> Result<Self, AdapterError> {
+        if !(5..=10_000).contains(&minimum_contact_cell_count) {
+            return Err(AdapterError::InvalidConfig(
+                "minimum_contact_cell_count must be between 5 and 10000",
+            ));
+        }
+        self.minimum_contact_cell_count = minimum_contact_cell_count;
+        Ok(self)
     }
 
     #[must_use]
@@ -215,6 +232,8 @@ impl PreparedSourcePayload {
 pub struct AgentInputSet {
     cases: Vec<AgentCase>,
     facts: Vec<E0Fact>,
+    contact_volumes: Vec<SnapshotContactVolume>,
+    contact_projection: Option<ContactProjectionSummary>,
     unsupported_metrics: Vec<UnsupportedMetric>,
     available_tables: Vec<String>,
 }
@@ -231,6 +250,16 @@ impl AgentInputSet {
     }
 
     #[must_use]
+    pub fn contact_volumes(&self) -> &[SnapshotContactVolume] {
+        &self.contact_volumes
+    }
+
+    #[must_use]
+    pub fn contact_projection(&self) -> Option<&ContactProjectionSummary> {
+        self.contact_projection.as_ref()
+    }
+
+    #[must_use]
     pub fn unsupported_metrics(&self) -> &[UnsupportedMetric] {
         &self.unsupported_metrics
     }
@@ -241,6 +270,107 @@ impl AgentInputSet {
             .iter()
             .any(|available| available == table)
     }
+}
+
+/// Snapshot-extract totals only: no customer/case identity or event-time
+/// cohorting is represented by this projection.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContactReasonCategory {
+    Complaint,
+    Transactional,
+    Technical,
+    GeneralInquiry,
+    Product,
+    Account,
+    Card,
+    Loan,
+    Other,
+    Unclassified,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContactChannel {
+    Phone,
+    Web,
+    Chat,
+    Email,
+    Branch,
+    MobileApp,
+    Other,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SnapshotContactVolume {
+    reason: ContactReasonCategory,
+    channel: ContactChannel,
+    record_count: u64,
+}
+
+impl SnapshotContactVolume {
+    #[must_use]
+    pub fn reason(&self) -> &'static str {
+        contact_reason_label(self.reason)
+    }
+
+    #[must_use]
+    pub fn channel(&self) -> &'static str {
+        contact_channel_label(self.channel)
+    }
+
+    #[must_use]
+    pub fn record_count(&self) -> u64 {
+        self.record_count
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct ContactProjectionSummary {
+    semantics: ContactProjectionSemantics,
+    policy_version: u32,
+    minimum_cell_count: u64,
+    included_record_count: u64,
+    rejected_rows: u64,
+    suppressed_cells: u64,
+}
+
+impl ContactProjectionSummary {
+    #[must_use]
+    pub fn semantics(&self) -> ContactProjectionSemantics {
+        self.semantics
+    }
+
+    #[must_use]
+    pub fn included_record_count(&self) -> u64 {
+        self.included_record_count
+    }
+
+    #[must_use]
+    pub fn rejected_rows(&self) -> u64 {
+        self.rejected_rows
+    }
+
+    #[must_use]
+    pub fn suppressed_cells(&self) -> u64 {
+        self.suppressed_cells
+    }
+
+    #[must_use]
+    pub fn policy_version(&self) -> u32 {
+        self.policy_version
+    }
+
+    #[must_use]
+    pub fn minimum_cell_count(&self) -> u64 {
+        self.minimum_cell_count
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContactProjectionSemantics {
+    SnapshotExtractCounts,
 }
 
 /// Typed, allowlisted E0 history facts. Identifiers are replaced by case and
@@ -454,12 +584,19 @@ pub fn prepare_original_bank(
     if files.is_empty() {
         return Err(AdapterError::MissingInput("no CSV files found"));
     }
-    let manifest = DatasetManifest::new(
+    let (contact_volumes, contact_projection) =
+        project_contact_snapshot(root, &files, config.minimum_contact_cell_count)?;
+    let available_tables = files.iter().map(|entry| entry.table.clone()).collect();
+    let mut manifest = DatasetManifest::new(
         SourceKind::OriginalBank,
         &config.tenant_id,
         &config.observed_cutoff,
         files,
     );
+    if contact_projection.is_some() {
+        manifest.contact_projection_policy_version = Some(CONTACT_PROJECTION_POLICY_VERSION);
+        manifest.contact_projection_minimum_cell_count = Some(config.minimum_contact_cell_count);
+    }
     prepared_source(
         SourceKind::OriginalBank,
         config,
@@ -467,10 +604,12 @@ pub fn prepare_original_bank(
         AgentInputSet {
             cases: Vec::new(),
             facts: Vec::new(),
+            contact_volumes,
+            contact_projection,
             unsupported_metrics: vec![
                 UnsupportedMetric::TechnicalErrorNotPresentInOriginalBankHistory,
             ],
-            available_tables: Vec::new(),
+            available_tables,
         },
     )
 }
@@ -686,6 +825,8 @@ pub fn prepare_e0_package(
         AgentInputSet {
             cases,
             facts,
+            contact_volumes: Vec::new(),
+            contact_projection: None,
             unsupported_metrics: Vec::new(),
             available_tables,
         },
@@ -824,6 +965,8 @@ struct DatasetManifest<'a> {
     source_kind: SourceKind,
     tenant_id: &'a str,
     observed_cutoff: &'a str,
+    contact_projection_policy_version: Option<u32>,
+    contact_projection_minimum_cell_count: Option<u64>,
     entries: Vec<ManifestEntry>,
 }
 
@@ -840,6 +983,8 @@ impl<'a> DatasetManifest<'a> {
             source_kind,
             tenant_id,
             observed_cutoff,
+            contact_projection_policy_version: None,
+            contact_projection_minimum_cell_count: None,
             entries,
         }
     }
@@ -906,6 +1051,238 @@ fn scan_csv_tree(root: &Path) -> Result<Vec<ManifestEntry>, AdapterError> {
         .collect()
 }
 
+#[cfg(test)]
+mod contact_snapshot_tests {
+    use super::{ManifestEntry, project_contact_snapshot};
+
+    #[test]
+    fn unsupported_contact_schema_still_verifies_source_digest() {
+        let root =
+            std::env::temp_dir().join(format!("pulso-contact-schema-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("call_center_interactions")).unwrap();
+        let relative_path = "call_center_interactions/part.csv";
+        std::fs::write(
+            root.join(relative_path),
+            "interaction_id,channel\nid-1,Phone\n",
+        )
+        .unwrap();
+        let entry = ManifestEntry {
+            relative_path: relative_path.to_owned(),
+            table: "call_center_interactions".to_owned(),
+            file_digest: "sha256:wrong".to_owned(),
+            header_digest: "sha256:unused".to_owned(),
+            row_count: 1,
+        };
+
+        let result = project_contact_snapshot(&root, &[entry], 5);
+
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(result.is_err());
+    }
+}
+
+fn project_contact_snapshot(
+    root: &Path,
+    entries: &[ManifestEntry],
+    minimum_cell_count: u64,
+) -> Result<(Vec<SnapshotContactVolume>, Option<ContactProjectionSummary>), AdapterError> {
+    let mut grouped = BTreeMap::<(ContactReasonCategory, ContactChannel), u64>::new();
+    let mut rejected_rows = 0_u64;
+    let mut saw_contacts_table = false;
+    let mut unsupported_schema = false;
+    for entry in entries
+        .iter()
+        .filter(|entry| entry.table == "call_center_interactions")
+    {
+        saw_contacts_table = true;
+        let path = root.join(&entry.relative_path);
+        let file = File::open(&path).map_err(|source| AdapterError::ReadFile {
+            path: entry.relative_path.clone(),
+            source,
+        })?;
+        let hashing_reader = SourceHashingReader::new(BufReader::new(file));
+        let mut csv = csv::ReaderBuilder::new()
+            .flexible(false)
+            .from_reader(hashing_reader);
+        let headers = csv
+            .headers()
+            .map_err(|_| AdapterError::InvalidInput("contact CSV header is malformed"))?
+            .clone();
+        let mut positions = BTreeMap::new();
+        for (index, header) in headers.iter().enumerate() {
+            if positions
+                .insert(header.trim().to_ascii_lowercase(), index)
+                .is_some()
+            {
+                return Err(AdapterError::InvalidInput(
+                    "contact CSV contains duplicate column names",
+                ));
+            }
+        }
+        let reason_category_index = positions.get("reason_category").copied();
+        let contact_reason_index = positions.get("contact_reason").copied();
+        let channel_index = positions.get("channel").copied();
+        let supported_schema = (reason_category_index.is_some() || contact_reason_index.is_some())
+            && channel_index.is_some();
+        unsupported_schema |= !supported_schema;
+        for record in csv.records() {
+            let record = record
+                .map_err(|_| AdapterError::InvalidInput("contact CSV contains a malformed row"))?;
+            if !supported_schema {
+                continue;
+            }
+            let channel_value = record
+                .get(channel_index.expect("supported schema has channel"))
+                .map(str::trim)
+                .unwrap_or("");
+            let Some(channel) = normalize_contact_channel(channel_value) else {
+                rejected_rows = rejected_rows
+                    .checked_add(1)
+                    .ok_or(AdapterError::InvalidInput(
+                        "contact projection count overflow",
+                    ))?;
+                continue;
+            };
+            let primary_reason = reason_category_index
+                .and_then(|index| record.get(index))
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            let reason_value = primary_reason
+                .or_else(|| {
+                    contact_reason_index
+                        .and_then(|index| record.get(index))
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                })
+                .unwrap_or("");
+            let reason = normalize_contact_reason(reason_value);
+            let count = grouped.entry((reason, channel)).or_default();
+            *count = count.checked_add(1).ok_or(AdapterError::InvalidInput(
+                "contact projection count overflow",
+            ))?;
+        }
+        let hashing_reader = csv.into_inner();
+        let actual_digest = format!("sha256:{:x}", hashing_reader.hash.finalize());
+        if actual_digest != entry.file_digest {
+            return Err(AdapterError::InvalidInput(
+                "contact CSV changed after source manifest sealing",
+            ));
+        }
+    }
+    if unsupported_schema {
+        return Ok((Vec::new(), None));
+    }
+    let suppressed_cells = grouped
+        .values()
+        .filter(|count| **count < minimum_cell_count)
+        .count() as u64;
+    let contact_volumes = grouped
+        .into_iter()
+        .filter(|(_, count)| *count >= minimum_cell_count)
+        .map(|((reason, channel), count)| SnapshotContactVolume {
+            reason,
+            channel,
+            record_count: count,
+        })
+        .collect::<Vec<_>>();
+    let included_record_count = contact_volumes
+        .iter()
+        .try_fold(0_u64, |sum, cell| sum.checked_add(cell.record_count))
+        .ok_or(AdapterError::InvalidInput(
+            "contact projection count overflow",
+        ))?;
+    let summary = saw_contacts_table.then_some(ContactProjectionSummary {
+        semantics: ContactProjectionSemantics::SnapshotExtractCounts,
+        policy_version: CONTACT_PROJECTION_POLICY_VERSION,
+        minimum_cell_count,
+        included_record_count,
+        rejected_rows,
+        suppressed_cells,
+    });
+    Ok((contact_volumes, summary))
+}
+
+fn normalize_contact_channel(value: &str) -> Option<ContactChannel> {
+    if value.is_empty() {
+        return None;
+    }
+    Some(match value.to_ascii_lowercase().as_str() {
+        "phone" | "telefono" | "teléfono" | "call" => ContactChannel::Phone,
+        "web" | "website" => ContactChannel::Web,
+        "chat" | "live chat" => ContactChannel::Chat,
+        "email" | "correo" => ContactChannel::Email,
+        "branch" | "sucursal" | "in-person" => ContactChannel::Branch,
+        "mobile app" | "mobile_app" | "app" => ContactChannel::MobileApp,
+        _ => ContactChannel::Other,
+    })
+}
+
+fn normalize_contact_reason(value: &str) -> ContactReasonCategory {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "queja" | "reclamo" | "complaint" => ContactReasonCategory::Complaint,
+        "transaccional" | "transactional" | "transaction" => ContactReasonCategory::Transactional,
+        "tecnico" | "técnico" | "technical" => ContactReasonCategory::Technical,
+        "consulta general" | "consulta_general" | "general inquiry" | "general_inquiry" => {
+            ContactReasonCategory::GeneralInquiry
+        }
+        "producto" | "product" => ContactReasonCategory::Product,
+        "cuenta" | "account" => ContactReasonCategory::Account,
+        "tarjeta" | "card" => ContactReasonCategory::Card,
+        "prestamo" | "préstamo" | "loan" | "credit" => ContactReasonCategory::Loan,
+        "otro" | "other" => ContactReasonCategory::Other,
+        _ => ContactReasonCategory::Unclassified,
+    }
+}
+
+fn contact_reason_label(reason: ContactReasonCategory) -> &'static str {
+    match reason {
+        ContactReasonCategory::Complaint => "complaint",
+        ContactReasonCategory::Transactional => "transactional",
+        ContactReasonCategory::Technical => "technical",
+        ContactReasonCategory::GeneralInquiry => "general_inquiry",
+        ContactReasonCategory::Product => "product",
+        ContactReasonCategory::Account => "account",
+        ContactReasonCategory::Card => "card",
+        ContactReasonCategory::Loan => "loan",
+        ContactReasonCategory::Other => "other",
+        ContactReasonCategory::Unclassified => "unclassified",
+    }
+}
+
+fn contact_channel_label(channel: ContactChannel) -> &'static str {
+    match channel {
+        ContactChannel::Phone => "phone",
+        ContactChannel::Web => "web",
+        ContactChannel::Chat => "chat",
+        ContactChannel::Email => "email",
+        ContactChannel::Branch => "branch",
+        ContactChannel::MobileApp => "mobile_app",
+        ContactChannel::Other => "other",
+    }
+}
+
+struct SourceHashingReader<R> {
+    inner: R,
+    hash: Sha256,
+}
+
+impl<R> SourceHashingReader<R> {
+    fn new(inner: R) -> Self {
+        Self {
+            inner,
+            hash: Sha256::new(),
+        }
+    }
+}
+
+impl<R: Read> Read for SourceHashingReader<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let count = self.inner.read(buffer)?;
+        self.hash.update(&buffer[..count]);
+        Ok(count)
+    }
+}
+
 fn collect_csv_paths(directory: &Path, output: &mut Vec<PathBuf>) -> Result<(), AdapterError> {
     let entries = fs::read_dir(directory).map_err(AdapterError::ReadDirectory)?;
     for entry in entries {
@@ -936,34 +1313,15 @@ fn manifest_for_csv(
     relative: &Path,
     table: &str,
 ) -> Result<ManifestEntry, AdapterError> {
-    let mut hasher = Sha256::new();
-    let mut source = File::open(path).map_err(|source| AdapterError::ReadFile {
+    let source = File::open(path).map_err(|source| AdapterError::ReadFile {
         path: relative.display().to_string(),
         source,
     })?;
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let count = source
-            .read(&mut buffer)
-            .map_err(|source| AdapterError::ReadFile {
-                path: relative.display().to_string(),
-                source,
-            })?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
+    let hashing_source = SourceHashingReader::new(BufReader::new(source));
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .flexible(false)
-        .from_path(path)
-        .map_err(|error| {
-            AdapterError::InvalidInputOwned(format!(
-                "cannot parse CSV {}: {error}",
-                relative.display()
-            ))
-        })?;
+        .from_reader(hashing_source);
     let headers = reader
         .byte_headers()
         .map_err(|error| {
@@ -980,8 +1338,7 @@ fn manifest_for_csv(
     }
     let canonical_header = serde_json::to_vec(&headers).map_err(AdapterError::Serialization)?;
     let mut row_count = 0_u64;
-    let records = reader.into_byte_records();
-    for record in records {
+    for record in reader.byte_records() {
         record.map_err(|error| {
             AdapterError::InvalidInputOwned(format!(
                 "cannot parse CSV record {}: {error}",
@@ -990,6 +1347,7 @@ fn manifest_for_csv(
         })?;
         row_count = row_count.saturating_add(1);
     }
+    let file_digest = format!("sha256:{:x}", reader.into_inner().hash.finalize());
     let relative_path = path
         .strip_prefix(root)
         .unwrap_or(relative)
@@ -998,7 +1356,7 @@ fn manifest_for_csv(
     Ok(ManifestEntry {
         relative_path,
         table: table.to_owned(),
-        file_digest: format!("sha256:{:x}", hasher.finalize()),
+        file_digest,
         header_digest: digest(&canonical_header),
         row_count,
     })

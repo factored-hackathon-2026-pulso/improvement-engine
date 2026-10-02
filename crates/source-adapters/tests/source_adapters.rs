@@ -31,6 +31,126 @@ fn cutoff_rejects_fractional_seconds_instead_of_silently_truncating_them() {
     );
 }
 
+#[test]
+fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories() {
+    let temp = TempDir::new().unwrap();
+    let table = temp.path().join("call_center_interactions");
+    fs::create_dir_all(&table).unwrap();
+    fs::write(
+        table.join("part-000.csv"),
+        concat!(
+            "interaction_id,customer_id,interaction_date,contact_reason,channel,was_resolved,requires_followup,agent_id,duration_seconds,wait_time_seconds\n",
+            "id-1,c-1,2025-01-01T10:00:00,Queja,Phone,true,false,a-1,30,5\n",
+            "id-2,c-2,2025-01-02T10:00:00,Queja,Phone,true,false,a-2,40,6\n",
+            "id-3,c-3,2025-01-03T10:00:00,Queja,Phone,false,true,a-3,50,7\n",
+            "id-4,c-4,2025-01-04T10:00:00,Queja,Phone,true,false,a-4,60,8\n",
+            "id-5,c-5,2025-01-05T10:00:00,Queja,Phone,true,false,a-5,70,9\n",
+            "id-6,c-6,2099-01-06T10:00:00,person@example.test,Phone,true,false,a-6,80,10\n",
+            "id-7,c-7,2025-01-07T10:00:00,Queja,,true,false,a-7,80,10\n",
+        ),
+    )
+    .unwrap();
+
+    let prepared = prepare_original_bank(temp.path(), &config(10)).unwrap();
+    let volumes = prepared.agent_inputs().contact_volumes();
+
+    assert_eq!(volumes.len(), 1);
+    assert_eq!(volumes[0].reason(), "complaint");
+    assert_eq!(volumes[0].channel(), "phone");
+    assert_eq!(volumes[0].record_count(), 5);
+    let summary = prepared.agent_inputs().contact_projection().unwrap();
+    assert_eq!(
+        summary.semantics(),
+        improvement_engine_source_adapters::ContactProjectionSemantics::SnapshotExtractCounts
+    );
+    assert_eq!(summary.included_record_count(), 5);
+    assert_eq!(summary.rejected_rows(), 1);
+    assert_eq!(summary.suppressed_cells(), 1);
+    let serialized = serde_json::to_string(&prepared).unwrap();
+    for forbidden in ["id-1", "c-1", "a-1", "person@example.test", "2025-01-01"] {
+        assert!(!serialized.contains(forbidden));
+    }
+    assert!(!serialized.contains("true"));
+}
+
+#[test]
+fn original_contact_projection_fails_closed_on_truncated_or_duplicate_headers() {
+    for contents in [
+        "interaction_id,contact_reason,channel\nid-1,Complaint\n",
+        "interaction_id,contact_reason,channel,channel\nid-1,Complaint,Phone,Web\n",
+    ] {
+        let temp = TempDir::new().unwrap();
+        let table = temp.path().join("call_center_interactions");
+        fs::create_dir_all(&table).unwrap();
+        fs::write(table.join("part-000.csv"), contents).unwrap();
+
+        assert!(prepare_original_bank(temp.path(), &config(10)).is_err());
+    }
+}
+
+#[test]
+fn snapshot_contact_suppression_floor_is_configurable_and_recorded() {
+    let temp = TempDir::new().unwrap();
+    let table = temp.path().join("call_center_interactions");
+    fs::create_dir_all(&table).unwrap();
+    fs::write(
+        table.join("part-000.csv"),
+        concat!(
+            "interaction_id,contact_reason,channel\n",
+            "id-1,Complaint,Phone\n",
+            "id-2,Complaint,Phone\n",
+            "id-3,Complaint,Phone\n",
+            "id-4,Complaint,Phone\n",
+            "id-5,Complaint,Phone\n",
+        ),
+    )
+    .unwrap();
+    let baseline = prepare_original_bank(temp.path(), &config(10)).unwrap();
+    let config = config(10).with_minimum_contact_cell_count(6).unwrap();
+
+    let prepared = prepare_original_bank(temp.path(), &config).unwrap();
+
+    assert_ne!(baseline.manifest_digest(), prepared.manifest_digest());
+    assert!(prepared.agent_inputs().contact_volumes().is_empty());
+    let summary = prepared.agent_inputs().contact_projection().unwrap();
+    assert_eq!(summary.minimum_cell_count(), 6);
+    assert_eq!(summary.suppressed_cells(), 1);
+    assert_eq!(summary.included_record_count(), 0);
+}
+
+#[test]
+fn original_contact_counts_are_explicit_record_counts_and_blank_primary_reason_falls_back() {
+    let temp = TempDir::new().unwrap();
+    let table = temp.path().join("call_center_interactions");
+    fs::create_dir_all(&table).unwrap();
+    fs::write(
+        table.join("part-000.csv"),
+        concat!(
+            "interaction_id,reason_category,contact_reason,channel\n",
+            "same-id,,Complaint,Phone\n",
+            "same-id,,Complaint,Phone\n",
+            "same-id,,Complaint,Phone\n",
+            "same-id,,Complaint,Phone\n",
+            "same-id,,Complaint,Phone\n",
+        ),
+    )
+    .unwrap();
+
+    let prepared = prepare_original_bank(temp.path(), &config(10)).unwrap();
+    let volume = &prepared.agent_inputs().contact_volumes()[0];
+
+    assert_eq!(volume.reason(), "complaint");
+    assert_eq!(volume.record_count(), 5);
+    assert_eq!(
+        prepared
+            .agent_inputs()
+            .contact_projection()
+            .unwrap()
+            .included_record_count(),
+        5
+    );
+}
+
 fn write_parquet(path: &Path, schema: Schema, columns: Vec<ArrayRef>) {
     let schema = Arc::new(schema);
     let batch = RecordBatch::try_new(schema.clone(), columns).expect("valid synthetic batch");
