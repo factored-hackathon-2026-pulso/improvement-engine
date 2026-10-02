@@ -1,7 +1,7 @@
 //! U13 autonomous Scout: turns sealed, treated evidence into *candidate*
 //! drafts. It cannot publish a detector, proposal, tool, or platform effect.
 
-#[cfg(test)]
+#[cfg(any(test, feature = "local-simulation"))]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 #[cfg(test)]
@@ -430,7 +430,7 @@ pub(crate) trait ScoutCandidateRepository {
 
 /// Reference adapter only. It establishes the repository semantics but is not
 /// restart-durable and must not be selected by production composition.
-#[cfg(test)]
+#[cfg(any(test, feature = "local-simulation"))]
 #[derive(Default)]
 pub(crate) struct InMemoryScoutCandidateRepository {
     records: BTreeMap<ScoutCandidateRecordKey, ScoutCandidateRecord>,
@@ -438,7 +438,7 @@ pub(crate) struct InMemoryScoutCandidateRepository {
     batches: BTreeMap<String, ScoutCandidateBatch>,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "local-simulation"))]
 impl ScoutCandidateRepository for InMemoryScoutCandidateRepository {
     fn record_batch_if_absent(
         &mut self,
@@ -632,7 +632,7 @@ fn deserialize_batch(encoded: &str) -> Result<ScoutCandidateBatch, ScoutCandidat
     Ok(batch)
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "local-simulation"))]
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ScoutCandidateIdentity {
     tenant_id: String,
@@ -642,7 +642,7 @@ struct ScoutCandidateIdentity {
     candidate_id: String,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "local-simulation"))]
 impl ScoutCandidateIdentity {
     fn from_record(record: &ScoutCandidateRecord) -> Self {
         Self {
@@ -1065,10 +1065,10 @@ pub trait ScoutInvocationAuthority {
 
 /// Explicitly non-production composition used only by the local test harness.
 /// Production must provide the control-plane authority through the port above.
-#[cfg(feature = "test-support")]
+#[cfg(any(feature = "test-support", feature = "local-simulation"))]
 pub struct NonProductionScoutInvocationAuthority;
 
-#[cfg(feature = "test-support")]
+#[cfg(any(feature = "test-support", feature = "local-simulation"))]
 impl ScoutInvocationAuthority for NonProductionScoutInvocationAuthority {
     fn seal(
         &mut self,

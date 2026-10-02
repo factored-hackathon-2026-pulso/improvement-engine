@@ -20,6 +20,44 @@ green unit test as proof that a broader product flow is complete.
 
 ## Implemented in the cumulative branch (not yet merged)
 
+- Local E2E composition/runner (new vertical): opt-in `local-sim` CLI joins
+  immutable source provenance to the safe event projection and invokes local
+  detection. Only positive supported signal evidence proceeds into the local
+  Scout/verifier path and may emit a non-executable simulated draft and
+  structural-only evaluation; zero positive support produces an explicit
+  no-op with no candidate, proposal, verifier, or evaluation. It writes an
+  atomic JSON result plus NDJSON timeline and never calls external providers
+  or Agent Core. A versioned recurrence detector counts distinct Arranque
+  cases sharing the leading opaque Copilot-query signature; its default
+  support floor is 20, configurable from the CLI and committed in provenance.
+  Technical errors remain an independent metric. If both qualify, the explicit
+  primary policy prefers direct observed technical failures over semantically
+  opaque query recurrence; every measured metric remains visible, but only the
+  primary signal currently traverses the single-candidate Scout simulation.
+  If the optional `copilot_query` source table is absent, recurrence is marked
+  unavailable rather than reported as zero. The signal proposal is a
+  simulated, unverified, non-executable `unclassified_candidate`; it makes no
+  semantic, causal, lift, or real-bank claim. Only the selected supported
+  signal proceeds into the local Scout/verifier path; zero positive support
+  produces an explicit no-op. The formal route is always `do_nothing`.
+  Actual local E0 smoke (2026-10-02) used 200 Arranque cases and excluded
+  1,800 Reproduccion cases. The leading opaque query signature recurred in
+  154/200 cases (policy floor 20); technical errors remained 0/187 supported,
+  with 13 missing. The runner recorded three Scout candidates and one
+  exploratory proposal. Persisted output contains the exact
+  configured cutoff and no known PII sentinels or evaluator labels.
+  This demonstrates only bounded local detection/simulation behavior, not
+  native Agent Core execution, causal validation, release, or business lift.
+  Persisted output contains the exact configured cutoff and no known PII
+  sentinels or evaluator labels. This demonstrates only bounded local
+  detection/simulation behavior, not native Agent Core execution, causal
+  validation, release, or business lift. Original-bank CLI was exercised
+  against the partitioned call-center CSV source and returned
+  `unsupported_source`, no signal, zero
+  candidates, and formal `do_nothing`; this is truthful manifest preparation,
+  not completed discovery. A supported original-bank contact/repeat/SLA
+  projection remains a follow-up slice; technical errors are not inferred from
+  those tables.
 - U13-A / Issue #43: opaque, verified Scout-candidate admission. Candidate
   batches are canonical and atomic; durable reload validates member and batch
   commitments; downstream code receives a read-only capability rather than a

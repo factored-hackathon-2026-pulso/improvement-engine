@@ -1,4 +1,6 @@
 /target/
+/target-*/
+/.nexus/
 .env
 .env.*
 !.env.example

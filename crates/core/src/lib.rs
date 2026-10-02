@@ -30,6 +30,8 @@ pub mod governed_registry;
 pub mod independent_verifier;
 pub mod jev_decision;
 pub mod local_lab;
+#[cfg(feature = "local-simulation")]
+pub mod local_simulation;
 pub mod memory_store;
 pub mod memory_temporal_protocol;
 pub mod model_provider;
