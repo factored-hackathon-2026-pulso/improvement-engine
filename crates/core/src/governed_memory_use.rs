@@ -1,0 +1,359 @@
+//! U22 admission boundary for a second run using published memory.
+//!
+//! U33 remains the owner of the mutable head, tombstones, exact authorization
+//! and idempotent use receipt. U22 narrows its successful result to opaque
+//! provenance: it never returns wiki pages or a cache handle.
+
+use crate::ArtifactRepository;
+use crate::memory_store::{MemoryError, MemoryPublisher, MemoryScope, MemoryUseReceipt};
+use crate::wiki_scratch::{WikiAccess, WikiAuthorizationPort};
+
+/// Caller-supplied context which U33 must validate before a memory use is
+/// admitted. It contains no wiki payload or cache handle.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryUseRequest {
+    scope: MemoryScope,
+    access: WikiAccess,
+}
+
+impl MemoryUseRequest {
+    #[must_use]
+    pub fn new(scope: MemoryScope, access: WikiAccess) -> Self {
+        Self { scope, access }
+    }
+}
+
+/// Opaque provenance capability for one already-authorized use in a later run.
+///
+/// ```compile_fail
+/// use improvement_engine_core::governed_memory_use::VerifiedMemoryUse;
+/// let _ = VerifiedMemoryUse { receipt: todo!() };
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::governed_memory_use::MemoryUseAdmission;
+/// let _ = MemoryUseAdmission::admit;
+/// ```
+pub struct VerifiedMemoryUse {
+    receipt: MemoryUseReceipt,
+}
+
+impl VerifiedMemoryUse {
+    #[must_use]
+    pub fn receipt_id(&self) -> &str {
+        &self.receipt.receipt_id
+    }
+
+    #[must_use]
+    pub fn scope(&self) -> &MemoryScope {
+        &self.receipt.scope
+    }
+
+    #[must_use]
+    pub fn snapshot_ref(&self) -> &crate::ArtifactReference {
+        &self.receipt.snapshot_ref
+    }
+
+    #[must_use]
+    pub fn head_version(&self) -> u64 {
+        self.receipt.head_version
+    }
+
+    #[must_use]
+    pub fn run_id(&self) -> &str {
+        &self.receipt.run_id
+    }
+
+    #[must_use]
+    pub fn grant_id(&self) -> &str {
+        &self.receipt.grant_id
+    }
+
+    #[must_use]
+    pub fn purpose(&self) -> &str {
+        &self.receipt.purpose
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MemoryUseAdmissionError {
+    Denied(MemoryError),
+    ReceiptMismatch,
+}
+
+/// Trusted composition entry point. It is crate-private so an external caller
+/// cannot substitute a permissive `MemoryPublisher` implementation and mint a
+/// use capability. A future service composition root supplies U33's durable
+/// adapter and U05 authorization boundary here.
+pub struct MemoryUseAdmission {
+    _private: bool,
+}
+
+impl MemoryUseAdmission {
+    #[allow(dead_code)] // Invoked by the future trusted service composition root.
+    pub(crate) fn admit<R: ArtifactRepository, P: MemoryPublisher, A: WikiAuthorizationPort>(
+        publisher: &mut P,
+        artifacts: &mut R,
+        authority: &A,
+        request: MemoryUseRequest,
+    ) -> Result<VerifiedMemoryUse, MemoryUseAdmissionError> {
+        let receipt = publisher
+            .record_allowed_use(
+                artifacts,
+                authority,
+                request.scope.clone(),
+                request.access.clone(),
+                request.access.snapshot_ref.clone(),
+            )
+            .map_err(MemoryUseAdmissionError::Denied)?;
+        if !receipt_matches_request(&receipt, &request) {
+            return Err(MemoryUseAdmissionError::ReceiptMismatch);
+        }
+        Ok(VerifiedMemoryUse { receipt })
+    }
+}
+
+#[allow(dead_code)] // Used together with the crate-private composition method above.
+fn receipt_matches_request(receipt: &MemoryUseReceipt, request: &MemoryUseRequest) -> bool {
+    receipt.head_version > 0
+        && receipt.scope == request.scope
+        && receipt.snapshot_ref == request.access.snapshot_ref
+        && receipt.run_id == request.access.run_id
+        && receipt.grant_id == request.access.grant_id
+        && receipt.purpose == request.access.purpose
+        && receipt.allowed_at_unix_seconds == request.access.allowed_at_unix_seconds
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest};
+    use crate::memory_store::{
+        InMemoryMemoryRegistry, MemoryError, MemoryHead, MemoryPublishRequest, MemoryPublisher,
+        MemoryScope, MemoryUseReceipt, PublishedMemory,
+    };
+    use crate::wiki_scratch::{
+        InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
+    };
+    use crate::{ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository};
+    use serde_json::json;
+
+    const TENANT: &str = "tenant-a";
+    const WIKI_ID: &str = "018f50a1-7f00-7000-8000-000000000022";
+
+    fn scope() -> MemoryScope {
+        MemoryScope::new(
+            TENANT,
+            "investigation",
+            "world-a",
+            "campaign-a",
+            "continuous",
+            "train",
+        )
+    }
+
+    fn seeded() -> (
+        InMemoryArtifactRepository,
+        InMemoryMemoryRegistry,
+        InMemoryWikiGrantAuthority,
+        WikiAccess,
+    ) {
+        let mut artifacts = InMemoryArtifactRepository::default();
+        let snapshot = artifacts
+            .append(
+                None,
+                ArtifactDraft::new(
+                    TENANT,
+                    WIKI_ID,
+                    1,
+                    ArtifactKind::MemoryWiki,
+                    json!({
+                        "available_at_unix_seconds": 100,
+                        "purpose": "investigation",
+                        "pages": {"index.md": "published"}
+                    }),
+                    None,
+                ),
+            )
+            .expect("fixed published memory")
+            .reference();
+        let access = WikiAccess::new_scoped(
+            "run-2",
+            TENANT,
+            "investigation",
+            "grant-2",
+            snapshot.clone(),
+            100,
+            MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train"),
+        );
+        let mut authority = InMemoryWikiGrantAuthority::default();
+        authority.issue(WikiGrant::new_scoped(
+            "grant-2",
+            "run-2",
+            TENANT,
+            "investigation",
+            snapshot.clone(),
+            MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train"),
+        ));
+        let mut registry = InMemoryMemoryRegistry::default();
+        registry
+            .seed_head(&mut artifacts, scope(), snapshot)
+            .expect("fixed memory head");
+        (artifacts, registry, authority, access)
+    }
+
+    #[test]
+    fn admits_a_second_run_only_through_u33_and_replays_the_same_receipt() {
+        let (mut artifacts, mut registry, authority, access) = seeded();
+        let request = MemoryUseRequest::new(scope(), access.clone());
+
+        let admitted =
+            MemoryUseAdmission::admit(&mut registry, &mut artifacts, &authority, request)
+                .expect("U33-authorized second-run use");
+        let replay = MemoryUseAdmission::admit(
+            &mut registry,
+            &mut artifacts,
+            &authority,
+            MemoryUseRequest::new(scope(), access),
+        )
+        .expect("same U33 receipt on replay");
+
+        assert_eq!(admitted.run_id(), "run-2");
+        assert_eq!(admitted.grant_id(), "grant-2");
+        assert_eq!(admitted.purpose(), "investigation");
+        assert_eq!(admitted.head_version(), 1);
+        assert_eq!(admitted.receipt_id(), replay.receipt_id());
+        assert_eq!(registry.receipts().len(), 1);
+    }
+
+    #[test]
+    fn revoked_or_cross_scope_memory_never_mints_a_second_run_capability() {
+        let (mut artifacts, mut registry, authority, access) = seeded();
+        let snapshot = access.snapshot_ref.clone();
+        registry
+            .revoke(snapshot, "permission_revoked")
+            .expect("fixed revocation");
+        match MemoryUseAdmission::admit(
+            &mut registry,
+            &mut artifacts,
+            &authority,
+            MemoryUseRequest::new(scope(), access),
+        ) {
+            Err(error) => assert_eq!(
+                error,
+                MemoryUseAdmissionError::Denied(MemoryError::SnapshotRevoked)
+            ),
+            Ok(_) => panic!("revoked memory must not mint a capability"),
+        }
+
+        let (mut artifacts, mut registry, authority, access) = seeded();
+        let other_scope = MemoryScope::new(
+            TENANT,
+            "investigation",
+            "world-b",
+            "campaign-a",
+            "continuous",
+            "train",
+        );
+        match MemoryUseAdmission::admit(
+            &mut registry,
+            &mut artifacts,
+            &authority,
+            MemoryUseRequest::new(other_scope, access),
+        ) {
+            Err(error) => assert_eq!(
+                error,
+                MemoryUseAdmissionError::Denied(MemoryError::HeadMissing)
+            ),
+            Ok(_) => panic!("cross-scope memory must not mint a capability"),
+        }
+
+        let (mut artifacts, mut registry, authority, access) = seeded();
+        let cross_tenant_access = WikiAccess::new_scoped(
+            "run-2",
+            "tenant-b",
+            "investigation",
+            "grant-2",
+            access.snapshot_ref,
+            100,
+            MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train"),
+        );
+        match MemoryUseAdmission::admit(
+            &mut registry,
+            &mut artifacts,
+            &authority,
+            MemoryUseRequest::new(scope(), cross_tenant_access),
+        ) {
+            Err(error) => assert_eq!(
+                error,
+                MemoryUseAdmissionError::Denied(MemoryError::AccessDenied)
+            ),
+            Ok(_) => panic!("cross-tenant memory must not mint a capability"),
+        }
+    }
+
+    struct LyingPublisher;
+
+    impl MemoryPublisher for LyingPublisher {
+        fn seed_head<R: ArtifactRepository>(
+            &mut self,
+            _: &mut R,
+            _: MemoryScope,
+            _: crate::ArtifactReference,
+        ) -> Result<MemoryHead, MemoryError> {
+            unreachable!("not part of this admission regression")
+        }
+
+        fn publish<R: ArtifactRepository, A: crate::wiki_scratch::WikiAuthorizationPort>(
+            &mut self,
+            _: &mut R,
+            _: &A,
+            _: MemoryPublishRequest,
+        ) -> Result<PublishedMemory, MemoryError> {
+            unreachable!("not part of this admission regression")
+        }
+
+        fn revoke(&mut self, _: crate::ArtifactReference, _: &str) -> Result<(), MemoryError> {
+            unreachable!("not part of this admission regression")
+        }
+
+        fn record_allowed_use<
+            R: ArtifactRepository,
+            A: crate::wiki_scratch::WikiAuthorizationPort,
+        >(
+            &mut self,
+            _: &mut R,
+            _: &A,
+            scope: MemoryScope,
+            access: WikiAccess,
+            snapshot_ref: crate::ArtifactReference,
+        ) -> Result<MemoryUseReceipt, MemoryError> {
+            Ok(MemoryUseReceipt {
+                receipt_id: "forged-receipt".to_owned(),
+                scope,
+                snapshot_ref,
+                head_version: 1,
+                run_id: "another-run".to_owned(),
+                grant_id: access.grant_id,
+                purpose: access.purpose,
+                allowed_at_unix_seconds: access.allowed_at_unix_seconds,
+            })
+        }
+    }
+
+    #[test]
+    fn a_mismatched_receipt_never_becomes_a_capability_even_inside_trusted_composition() {
+        let (mut artifacts, _, authority, access) = seeded();
+        let mut publisher = LyingPublisher;
+
+        match MemoryUseAdmission::admit(
+            &mut publisher,
+            &mut artifacts,
+            &authority,
+            MemoryUseRequest::new(scope(), access),
+        ) {
+            Err(MemoryUseAdmissionError::ReceiptMismatch) => {}
+            Err(other) => panic!("expected receipt mismatch, got {other:?}"),
+            Ok(_) => panic!("mismatched receipt must not mint a capability"),
+        }
+    }
+}

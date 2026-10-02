@@ -17,6 +17,7 @@ pub mod durable_jobs;
 pub mod enriched_history;
 pub mod evaluation_plan;
 pub mod final_eligibility;
+pub mod governed_memory_use;
 pub mod independent_verifier;
 pub mod jev_decision;
 pub mod local_lab;
