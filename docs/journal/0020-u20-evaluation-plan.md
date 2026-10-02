@@ -15,6 +15,15 @@ de elegibilidad final pertenece a U35.
 
 ## Gates fail-closed
 
+**Corrección de revisión adversarial:** baseline, oracle y suite ya no son
+strings/digests aportados por caller. Son `ArtifactReference` completos
+(`tenant_id`, `id`, revisión y digest) que U20 re-lee del `ArtifactRepository`.
+Cada artifact debe ser `ScenarioSet`, referenciar exactamente el mismo
+`SourceSnapshot` completo del bridge y declarar el scope U14/U16 exacto. El
+oracle además declara la autoridad del scope y enlaza outcome/unidad/métrica
+(`oracle_measure`) semánticamente. Un hash de contenido igual con otra
+identidad, tenant, snapshot o scope no es aceptado.
+
 - Sólo acepta `LinkGrade::MechanismProxy` y una alternativa de ruta existente;
   `Unlinked` y `NotEvaluable` no se convierten en plan.
 - Oracle debe tener el tenant, outcome y digest de snapshot exactos del bridge.
