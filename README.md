@@ -14,6 +14,15 @@ python contracts/validate_fixtures.py
 
 The GitHub Actions workflow additionally checks formatting, Clippy, Rust unit/integration harnesses, contract unit tests and the complete contract-fixture validator on Windows and Linux. U02 adds tenant-scoped immutable artifact repositories and a PostgreSQL migration/adapter; U03 adds synthetic sealed-source validation. U04 adds an in-memory, discovery-safe projection for adapter-supplied E0 enriched-history rows: it seals namespace/world/cutoff plus file/schema/transform/policy digests and availability per field/group, blocks labels/precomputed signals/final outcomes, and blocks exposure entirely when provenance drifts. U15 mounts an exactly-authorized immutable `memory_wiki` revision into an in-process, ephemeral scratch workspace; it can read and apply typed atomic transformations there, but cannot publish, alter the immutable source, open a host path or use the network. U33 publishes a verified U15 result as the next immutable revision behind an exact world/campaign/protocol/partition head, records permitted use, and applies append-only revocation tombstones before future use. It does not implement detection, an Agent Core runtime, a model gateway, authenticated real-data ingestion, or any external call. Infrastructure lives in sibling `infra`.
 
+U07 adds a framework-neutral, tenant-scoped run-activity read boundary. Its
+projection deduplicates immutable job events and orders them by
+`(occurred_at_unix_seconds, event_id)`; the handler exposes bounded pages and
+server-side opaque cursors, bound to an authenticated tenant DTO. A changed
+snapshot returns explicit expiry, retention physically removes events and
+returns explicit purge, and a transport-neutral resumable stream-batch port
+is available for a later SSE runtime. Activity reads never mutate the
+projection or durable jobs.
+
 `rust-ci` owns its ephemeral PostgreSQL service and runs U02's ignored
 destructive migration test against it. The test URL and consent only exist in
 that isolated CI job; no GitHub secret, external reusable workflow or deployed
@@ -29,3 +38,7 @@ raw SQL. Sessions bind run, tenant, grant, snapshot and TTL; source writes and
 egress are denied. Sealed receipts feed a reproducible descriptive rate with an
 explicit denominator and missingness. It neither imports bank data nor opens
 filesystem/network; see the [investigation journal](docs/journal/0008-u08-u12-investigation-foundation.md).
+
+U07 adds a framework-neutral, tenant-scoped run-activity API/read-model: bounded
+indexed reads, authenticated tenant DTOs, server-side opaque cursors and a
+resumable stream-batch port. See the [run-activity journal](docs/journal/0008-u07-run-activity.md).
