@@ -64,6 +64,83 @@ impl SandboxFixture {
             identity_policy: Some(identity_policy),
         }
     }
+
+    /// Produces the internal, commitment-only policy view that U20-E may bind
+    /// to a safety oracle. It deliberately omits permitted principals, proof
+    /// nonces and every identity answer; the sandbox remains the only place
+    /// that can evaluate a concrete identity proof.
+    #[allow(dead_code)] // Called by the crate-private U20-E safety composition.
+    pub(crate) fn protected_identity_binding(
+        &self,
+    ) -> Result<ProtectedFixtureIdentityBinding, SandboxError> {
+        if !fixture_is_valid(self) {
+            return Err(SandboxError::FixtureInvalid);
+        }
+        let policy = self
+            .identity_policy
+            .as_ref()
+            .ok_or(SandboxError::IdentityEvidenceMissing)?;
+        Ok(ProtectedFixtureIdentityBinding {
+            tenant_id: self.tenant_id.clone(),
+            namespace: self.namespace.clone(),
+            fixture_id: self.fixture_id.clone(),
+            case_id: policy.case_id.clone(),
+            channel: policy.channel.clone(),
+            policy_digest: policy.policy_digest.clone(),
+            questions_digest: policy.questions_digest.clone(),
+            valid_until: policy.valid_until,
+        })
+    }
+}
+
+/// Private, commitment-only U36 fixture identity contract for U20-E. It is
+/// not identity evidence and cannot authorize an action/read/reset.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ProtectedFixtureIdentityBinding {
+    tenant_id: String,
+    namespace: String,
+    fixture_id: String,
+    case_id: String,
+    channel: String,
+    policy_digest: String,
+    questions_digest: String,
+    valid_until: u64,
+}
+
+#[allow(dead_code)] // Consumed by the crate-private U20-E safety composition.
+impl ProtectedFixtureIdentityBinding {
+    #[must_use]
+    pub(crate) fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+    #[must_use]
+    pub(crate) fn namespace(&self) -> &str {
+        &self.namespace
+    }
+    #[must_use]
+    pub(crate) fn fixture_id(&self) -> &str {
+        &self.fixture_id
+    }
+    #[must_use]
+    pub(crate) fn case_id(&self) -> &str {
+        &self.case_id
+    }
+    #[must_use]
+    pub(crate) fn channel(&self) -> &str {
+        &self.channel
+    }
+    #[must_use]
+    pub(crate) fn policy_digest(&self) -> &str {
+        &self.policy_digest
+    }
+    #[must_use]
+    pub(crate) fn questions_digest(&self) -> &str {
+        &self.questions_digest
+    }
+    #[must_use]
+    pub(crate) fn valid_until(&self) -> u64 {
+        self.valid_until
+    }
 }
 
 /// Opaque fixture capability allowed to mint identity evidence. It has no

@@ -565,6 +565,23 @@ impl VerifiedReplayAvailability {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn verified_replay_availability_fixture(
+    tenant_id: &str,
+    world_ref: &str,
+    cutoff_at_unix_seconds: u64,
+    source_snapshot_digest: &str,
+    availability_profile_digest: &str,
+) -> VerifiedReplayAvailability {
+    VerifiedReplayAvailability {
+        tenant_id: tenant_id.to_owned(),
+        world_ref: world_ref.to_owned(),
+        cutoff_at_unix_seconds,
+        source_snapshot_digest: source_snapshot_digest.to_owned(),
+        availability_profile_digest: availability_profile_digest.to_owned(),
+    }
+}
+
 impl EnrichedHistoryAdapter {
     /// Validates a manifest before any rows are considered.
     pub fn from_manifest(manifest: EnrichedHistoryManifest) -> Result<Self, EnrichedHistoryError> {

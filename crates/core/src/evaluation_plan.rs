@@ -212,6 +212,94 @@ pub struct EvaluationPlan {
     commitment: String,
 }
 
+/// Crate-private exact U20 plan material required by the E0 safety-oracle
+/// composition. It is a read-only binding, not an evaluation result or a
+/// capability to run/release a candidate.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct EvaluationPlanBinding {
+    source_snapshot_ref: ArtifactReference,
+    baseline_ref: ArtifactReference,
+    oracle_ref: ArtifactReference,
+    development_suite_ref: ArtifactReference,
+    final_suite_ref: ArtifactReference,
+    commitment: String,
+}
+
+#[allow(dead_code)] // Consumed by the crate-private U20-E safety composition.
+impl EvaluationPlanBinding {
+    #[must_use]
+    pub(crate) fn source_snapshot_ref(&self) -> &ArtifactReference {
+        &self.source_snapshot_ref
+    }
+    #[must_use]
+    pub(crate) fn baseline_ref(&self) -> &ArtifactReference {
+        &self.baseline_ref
+    }
+    #[must_use]
+    pub(crate) fn oracle_ref(&self) -> &ArtifactReference {
+        &self.oracle_ref
+    }
+    #[must_use]
+    pub(crate) fn development_suite_ref(&self) -> &ArtifactReference {
+        &self.development_suite_ref
+    }
+    #[must_use]
+    pub(crate) fn final_suite_ref(&self) -> &ArtifactReference {
+        &self.final_suite_ref
+    }
+    #[must_use]
+    pub(crate) fn commitment(&self) -> &str {
+        &self.commitment
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn e0_safety_plan_fixture(
+    tenant_id: &str,
+    source_snapshot_ref: ArtifactReference,
+) -> EvaluationPlan {
+    let reference = |id: &str, revision: u64, marker: char| ArtifactReference {
+        tenant_id: tenant_id.to_owned(),
+        id: id.to_owned(),
+        revision,
+        digest: format!("sha256:{}", marker.to_string().repeat(64)),
+    };
+    let binding = EvaluationPlanBinding {
+        source_snapshot_ref,
+        baseline_ref: reference("018f0f4e-7bbd-7000-8000-000000000701", 1, 'b'),
+        oracle_ref: reference("018f0f4e-7bbd-7000-8000-000000000702", 2, 'c'),
+        development_suite_ref: reference("018f0f4e-7bbd-7000-8000-000000000703", 3, 'd'),
+        final_suite_ref: reference("018f0f4e-7bbd-7000-8000-000000000704", 4, 'e'),
+        commitment: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            .to_owned(),
+    };
+    EvaluationPlan {
+        bridge_commitment: "sha256:bridge".to_owned(),
+        source_snapshot_ref: binding.source_snapshot_ref,
+        baseline_ref: binding.baseline_ref,
+        oracle_ref: binding.oracle_ref,
+        development_suite_ref: binding.development_suite_ref,
+        final_suite_ref: binding.final_suite_ref,
+        semantic: EvaluationSemanticContract {
+            target_outcome: "identity_check".to_owned(),
+            unit_of_analysis: "interaction".to_owned(),
+            oracle_measure: "safety_pass_rate".to_owned(),
+        },
+        commitment: binding.commitment,
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn e0_safety_plan_fixture_with_oracle_revision(
+    tenant_id: &str,
+    source_snapshot_ref: ArtifactReference,
+    oracle_revision: u64,
+) -> EvaluationPlan {
+    let mut plan = e0_safety_plan_fixture(tenant_id, source_snapshot_ref);
+    plan.oracle_ref.revision = oracle_revision;
+    plan
+}
+
 /// Opaque policy-bound composition. A caller may use an instance handed to it
 /// by trusted service wiring, but cannot construct one or substitute an
 /// allow-all authority implementation.
@@ -366,6 +454,22 @@ impl EvaluationPlan {
     #[must_use]
     pub fn eligible_for_proposal(&self) -> bool {
         false
+    }
+
+    /// Exposes exact, already-sealed U20 input references only to another
+    /// trusted in-crate composition. Public callers still cannot construct a
+    /// plan, alter these references, or treat them as execution authority.
+    #[must_use]
+    #[allow(dead_code)] // Called by the crate-private U20-E safety composition.
+    pub(crate) fn e0_safety_binding(&self) -> EvaluationPlanBinding {
+        EvaluationPlanBinding {
+            source_snapshot_ref: self.source_snapshot_ref.clone(),
+            baseline_ref: self.baseline_ref.clone(),
+            oracle_ref: self.oracle_ref.clone(),
+            development_suite_ref: self.development_suite_ref.clone(),
+            final_suite_ref: self.final_suite_ref.clone(),
+            commitment: self.commitment.clone(),
+        }
     }
 
     /// Internal linkage check for U35. It does not grant any outcome or

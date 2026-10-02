@@ -57,6 +57,12 @@ green unit test as proof that a broader product flow is complete.
   seals their scope, snapshot and evaluation semantics for a mechanism proxy.
   It cannot execute a candidate, assert the same outcome, make a proposal or
   release a change.
+- U20-E / Issue #49: sealed E0 safety-oracle composition. It binds U04-B's
+  replay tenant/world/cutoff/snapshot/profile, the exact U20 four inputs, and
+  U36's protected-fixture case/channel/policy/questions commitments before a
+  later evaluator may consume the context. The capability has no public
+  constructor, exposes no identity answers/proofs/principals, fails closed on
+  unsafe or unknown identity observations, and neither executes nor releases.
 - U24: read-only technical timeline boundary. The internal debug composition
   derives its tenant only from an authenticated, opaque viewer capability and
   reads U07 activity through safe statuses and accessible summaries. It is not
