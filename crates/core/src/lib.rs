@@ -10,6 +10,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 pub mod autonomous_scout;
+pub mod change_compiler;
 pub mod core_task;
 pub mod debug_console;
 pub mod deterministic_sensor;
