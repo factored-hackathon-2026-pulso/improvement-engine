@@ -655,6 +655,9 @@ impl EnrichedHistoryAdapter {
         manifest: EnrichedHistoryManifest,
         snapshot: &SourceSnapshot,
     ) -> Result<Self, EnrichedHistoryError> {
+        if !snapshot.has_canonical_binding() {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
         if manifest.manifest_version == LEGACY_MANIFEST_VERSION {
             return Err(EnrichedHistoryError::SnapshotBindingUnavailable {
                 manifest_version: manifest.manifest_version,

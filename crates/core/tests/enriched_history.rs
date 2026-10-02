@@ -745,6 +745,65 @@ fn v2_manifest_rejects_a_snapshot_from_another_tenant_even_when_every_file_match
 }
 
 #[test]
+fn v2_snapshot_binding_rejects_a_directly_deserialized_snapshot_without_canonical_bytes() {
+    let directly_deserialized: SourceSnapshot = serde_json::from_value(json!({
+      "contract_version":{"major":1,"minor":0},
+      "tenant_id":"tenant-a",
+      "source_namespace":"platform_history",
+      "world_ref":"e0-disputes-2025",
+      "observed_cutoff":"2025-06-30T23:59:59Z",
+      "sources":[{
+        "table":"case","uri":"file://fixture.csv",
+        "file_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "header_digest": digest('b'),
+        "row_count":1,
+        "source_contract_ref":{"id":"case","version":"v1","digest": digest('c')}
+      }]
+    }))
+    .unwrap();
+    let rows = vec![json!({
+        "case_id": "case-1",
+        "event_time": "2025-06-01T10:00:00Z",
+        "topic": "disputar_cargo"
+    })];
+    let manifest = replay_manifest(&rows, &directly_deserialized);
+
+    assert!(!directly_deserialized.has_canonical_binding());
+    assert_eq!(
+        EnrichedHistoryAdapter::from_snapshot(manifest, &directly_deserialized).unwrap_err(),
+        EnrichedHistoryError::SnapshotAvailabilityProfileMismatch
+    );
+}
+
+#[test]
+fn package_file_json_cannot_carry_a_source_seal_and_round_trip_fails_snapshot_binding_closed() {
+    let snapshot = replay_snapshot();
+    let rows = vec![json!({
+        "case_id": "case-1",
+        "event_time": "2025-06-01T10:00:00Z",
+        "topic": "disputar_cargo"
+    })];
+    let mut manifest = replay_manifest(&rows, &snapshot);
+    let mut package_json = serde_json::to_value(&manifest.files[0]).unwrap();
+    assert!(package_json.get("source_file_seal").is_none());
+    let round_tripped: PackageFile = serde_json::from_value(package_json.clone()).unwrap();
+    manifest.files[0] = round_tripped;
+
+    assert_eq!(
+        EnrichedHistoryAdapter::from_snapshot(manifest, &snapshot).unwrap_err(),
+        EnrichedHistoryError::MissingSourceFileSeal {
+            table: "case".to_owned(),
+        }
+    );
+
+    package_json
+        .as_object_mut()
+        .unwrap()
+        .insert("source_file_seal".to_owned(), json!({"forged": true}));
+    assert!(serde_json::from_value::<PackageFile>(package_json).is_err());
+}
+
+#[test]
 fn sealed_manifest_preserves_namespace_world_cutoff_and_every_provenance_digest() {
     let adapter = EnrichedHistoryAdapter::from_manifest(manifest()).unwrap();
     let report = adapter

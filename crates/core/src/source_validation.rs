@@ -298,6 +298,18 @@ impl SourceSnapshot {
         format!("sha256:{}", self.raw_digest)
     }
 
+    /// Whether this value was parsed through `from_json` and therefore has an
+    /// exact, canonical byte binding. A direct serde deserialization has no
+    /// trustworthy raw-byte digest and cannot bind downstream artifacts.
+    #[must_use]
+    pub fn has_canonical_binding(&self) -> bool {
+        self.raw_digest.len() == 64
+            && self
+                .raw_digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    }
+
     #[must_use]
     pub fn tenant_id(&self) -> &str {
         &self.tenant_id

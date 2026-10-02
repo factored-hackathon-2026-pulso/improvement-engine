@@ -98,6 +98,14 @@ contacto entre retrospectivamente al contexto de esa decisión.
    `from_snapshot` compara explícitamente ese valor además del digest de bytes.
    Un manifest V2 de tenant A contra un JSON idéntico de tenant B falla cerrado
    antes de que se abra cualquier proyección.
+9. Dos regresiones menores cerraron los seams de serialización: un
+   `SourceSnapshot` obtenido por deserialización directa no tiene digest de
+   bytes canónico y `from_snapshot` lo rechaza antes de evaluar el manifest;
+   y `source_file_seal` se omite de JSON, por lo que un `PackageFile`
+   round-trip queda sin capability y devuelve `MissingSourceFileSeal`. Un
+   intento de inyectar ese campo en JSON es desconocido bajo
+   `deny_unknown_fields` y falla al deserializar, nunca se interpreta como un
+   seal válido.
 
 Comandos verdes:
 
