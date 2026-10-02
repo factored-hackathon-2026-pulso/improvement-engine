@@ -134,7 +134,9 @@ mod tests {
         InMemoryEvaluationArtifactAuthority, TrustedEvaluationComposer,
     };
     use crate::independent_verifier::{
-        VerificationStatus, report_for_workflow_bridge_with_snapshot_and_scope_test,
+        VerificationReportBindingField, VerificationStatus,
+        corrupt_report_binding_for_final_eligibility_test,
+        report_for_workflow_bridge_with_snapshot_and_scope_test,
     };
     use crate::workflow_bridge::report_and_bridge_for_final_eligibility_test;
     use crate::{
@@ -343,5 +345,46 @@ mod tests {
         let decision = FinalEligibilityGate::decide(&report_a, &bridge_a, &plan_b);
         let reasons = decision.reasons();
         assert_eq!(reasons, [FinalEligibilityReason::PlanBridgeMismatch]);
+    }
+
+    fn assert_u14_u16_binding_corruption_is_ineligible(field: VerificationReportBindingField) {
+        let mut repo = InMemoryArtifactRepository::default();
+        let (mut report, bridge, plan, _) = supported_triplet(&mut repo);
+        corrupt_report_binding_for_final_eligibility_test(&mut report, field);
+
+        let decision = FinalEligibilityGate::decide(&report, &bridge, &plan);
+        assert!(!decision.eligible_for_proposal());
+        assert_eq!(
+            decision.reasons(),
+            [FinalEligibilityReason::VerificationBridgeMismatch]
+        );
+    }
+
+    #[test]
+    fn final_gate_rejects_a_changed_u14_candidate_digest() {
+        assert_u14_u16_binding_corruption_is_ineligible(
+            VerificationReportBindingField::CandidateDigest,
+        );
+    }
+
+    #[test]
+    fn final_gate_rejects_a_changed_u14_provenance_commitment() {
+        assert_u14_u16_binding_corruption_is_ineligible(
+            VerificationReportBindingField::ProvenanceCommitment,
+        );
+    }
+
+    #[test]
+    fn final_gate_rejects_a_changed_u14_input_commitment() {
+        assert_u14_u16_binding_corruption_is_ineligible(
+            VerificationReportBindingField::InputCommitment,
+        );
+    }
+
+    #[test]
+    fn final_gate_rejects_a_changed_u14_receipt_digest() {
+        assert_u14_u16_binding_corruption_is_ineligible(
+            VerificationReportBindingField::ReceiptDigest,
+        );
     }
 }

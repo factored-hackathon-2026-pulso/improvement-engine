@@ -20,3 +20,9 @@ público. La cobertura comprueba el caso compatible, determinismo sin efectos,
 U14 `refuted`/`uncertain`, tenant/scope cruzado, snapshot cruzado y un plan U20
 sellado para otro bridge U16. Todas esas incompatibilidades bloquean antes de
 que un builder posterior pueda consumir el plan.
+
+La auditoría final añadió cuatro regresiones independientes: alterar sólo
+`candidate_digest`, `provenance_commitment`, `input_commitment` o el digest del
+receipt U14 produce exclusivamente `verification_bridge_mismatch` e
+inelegibilidad. La corrupción se modela con un helper interno `cfg(test)`;
+ningún constructor ni capability de producción fue agregado.

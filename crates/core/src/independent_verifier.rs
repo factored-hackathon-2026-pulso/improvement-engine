@@ -413,6 +413,42 @@ pub(crate) fn report_for_workflow_bridge_with_snapshot_and_scope_test(
     }
 }
 
+/// Narrow test-only corruption selector for downstream fail-closed checks.
+/// It never appears in the production API surface.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum VerificationReportBindingField {
+    CandidateDigest,
+    ProvenanceCommitment,
+    InputCommitment,
+    ReceiptDigest,
+}
+
+/// Simulates storage/transit corruption of exactly one U14/U16 binding field.
+/// The fixture intentionally bypasses production constructors so a consumer
+/// cannot use it to manufacture an authoritative report.
+#[cfg(test)]
+pub(crate) fn corrupt_report_binding_for_final_eligibility_test(
+    report: &mut VerificationReport,
+    field: VerificationReportBindingField,
+) {
+    let replacement = format!("sha256:{}", "f".repeat(64));
+    match field {
+        VerificationReportBindingField::CandidateDigest => {
+            report.candidate_digest = replacement;
+        }
+        VerificationReportBindingField::ProvenanceCommitment => {
+            report.provenance_commitment = replacement;
+        }
+        VerificationReportBindingField::InputCommitment => {
+            report.input_commitment = replacement;
+        }
+        VerificationReportBindingField::ReceiptDigest => {
+            report.receipt.digest = replacement;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
