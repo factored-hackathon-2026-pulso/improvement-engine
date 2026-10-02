@@ -666,6 +666,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "improvement-engine-runner"
+version = "0.1.0"
+dependencies = [
+ "arrow-array",
+ "arrow-schema",
+ "improvement-engine-core",
+ "improvement-engine-source-adapters",
+ "parquet",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "improvement-engine-source-adapters"
 version = "0.1.0"
 dependencies = [

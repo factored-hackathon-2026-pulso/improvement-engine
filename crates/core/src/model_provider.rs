@@ -545,6 +545,18 @@ impl HmacProjectionBroker {
         }
         Ok(Self { key })
     }
+
+    /// Constructor for the opt-in local simulation binary. The provided key
+    /// is an ephemeral fixture only; it must never authorize real provider
+    /// egress or be configured as production projection authority.
+    #[cfg(feature = "local-simulation")]
+    pub fn new_for_local_simulation(key: impl AsRef<[u8]>) -> Result<Self, ModelProviderError> {
+        let key = key.as_ref().to_vec();
+        if key.len() < 32 {
+            return Err(ModelProviderError::InvalidProjectionAuthorization);
+        }
+        Ok(Self { key })
+    }
 }
 
 impl ProjectionBrokerPort for HmacProjectionBroker {

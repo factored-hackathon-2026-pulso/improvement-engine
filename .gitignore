@@ -1,5 +1,6 @@
 /target/
 /target-source-adapters/
+/target-e2e/
 .env
 .env.*
 !.env.example

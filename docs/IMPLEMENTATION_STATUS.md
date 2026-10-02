@@ -20,6 +20,16 @@ green unit test as proof that a broader product flow is complete.
 
 ## Implemented in the cumulative branch (not yet merged)
 
+- Local E2E composition/runner (new vertical): opt-in `local-sim` CLI joins
+  immutable source provenance to the safe event projection, invokes the local
+  detection/Scout/verifier path, emits a non-executable simulated draft and
+  structural-only evaluation, and writes an atomic JSON result plus NDJSON
+  timeline. It never calls external providers or Agent Core. Binary E0 fixture
+  test passes. Original-bank CLI was exercised against the partitioned
+  call-center CSV source and returned `unsupported_source`, no signal, zero
+  candidates, and formal `do_nothing`; this is truthful manifest preparation,
+  not completed discovery. Real E0 package execution remains pending the
+  adapter's schema/cutoff/allowlist correction.
 - U13-A / Issue #43: opaque, verified Scout-candidate admission. Candidate
   batches are canonical and atomic; durable reload validates member and batch
   commitments; downstream code receives a read-only capability rather than a
