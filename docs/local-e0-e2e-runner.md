@@ -54,6 +54,15 @@ Unexpected result codes, metric IDs, malformed JSON or invalid aggregates fail
 closed without printing the result. Treat generated artifacts as sensitive
 derived data: hashing is not anonymization.
 
+When the E0 projection includes tool-call retry counts, the engine reports
+`e0_tool_retry_case_rate`: numerator is distinct Arranque cases with at least
+one known `retry_count > 0`; denominator is distinct cases with at least one
+known retry count (including zero); missing is every discovery case without a
+known retry count. No tool event or a null retry count is not treated as zero.
+Retries are operational observations only: they do not establish failure
+cause, customer harm, preventable cost, or savings. They may inform a simulated,
+unverified review draft, never an executed Agent Core artifact.
+
 The wrapper selects local-simulation mode; it makes no provider or Agent
 Core request. The observed query recurrence is descriptive only. It is not
 evidence of customer friction, causality, holdout efficacy, business lift, or

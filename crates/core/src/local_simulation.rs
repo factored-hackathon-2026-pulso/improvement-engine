@@ -48,7 +48,8 @@ const DEFAULT_MIN_RECURRING_QUERY_CASES: u64 = 20;
 const MIN_RECURRING_QUERY_CASES: u64 = 5;
 const RECURRING_QUERY_POLICY: &str = "e0_recurring_copilot_query_support_v1";
 const RECURRING_QUERY_POLICY_VERSION: u16 = 1;
-const LOCAL_PRIMARY_SIGNAL_POLICY: &str = "local_primary_signal_v2";
+const TOOL_RETRY_POLICY: &str = "e0_tool_retry_case_rate_v1";
+const LOCAL_PRIMARY_SIGNAL_POLICY: &str = "local_primary_signal_v3";
 
 /// Minimal, treated event projection passed from a local source adapter.
 /// Identity, prompts, transcripts, customer values and evaluator labels have
@@ -64,6 +65,8 @@ pub struct LocalObservedEvent {
     pub actor_layer: Option<String>,
     pub tool_code: Option<String>,
     pub technical_error: Option<bool>,
+    /// Adapter-provided retry count. `None` means unknown, not zero.
+    pub retry_count: Option<u32>,
     pub approval: Option<String>,
     pub signal_code: Option<String>,
 }
@@ -543,6 +546,11 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
                 "the leading opaque copilot query signature appears in {} of {} discovery cases",
                 signal.numerator, signal.denominator
             )
+        } else if signal.metric_id == "e0_tool_retry_case_rate" {
+            format!(
+                "{} observed cases with retries across {} cases with known retry count",
+                signal.numerator, signal.denominator
+            )
         } else {
             format!(
                 "{} observed cases with {} technical errors across {} measured cases",
@@ -821,16 +829,24 @@ fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
 }
 
 fn measure_signals(input: &LocalRunInput) -> Result<Vec<DeterministicSignal>, LocalRunError> {
-    let mut signals = vec![measure_signal(input, false)?];
+    let mut signals = vec![measure_signal(input, MetricKind::TechnicalError)?];
+    signals.push(measure_signal(input, MetricKind::ToolRetry)?);
     if input.query_table_available {
-        signals.push(measure_signal(input, true)?);
+        signals.push(measure_signal(input, MetricKind::RecurringQuery)?);
     }
     Ok(signals)
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum MetricKind {
+    TechnicalError,
+    ToolRetry,
+    RecurringQuery,
+}
+
 fn measure_signal(
     input: &LocalRunInput,
-    recurrence_metric: bool,
+    metric_kind: MetricKind,
 ) -> Result<DeterministicSignal, LocalRunError> {
     let mut cases = input
         .case_ordinals
@@ -886,19 +902,33 @@ fn measure_signal(
             } else {
                 "false"
             };
-            let metric_field = if recurrence_metric {
-                "recurring_query_case"
-            } else {
-                "technical_error"
+            let metric_field = match metric_kind {
+                MetricKind::TechnicalError => "technical_error",
+                MetricKind::ToolRetry => "retry_case",
+                MetricKind::RecurringQuery => "recurring_query_case",
             };
-            let metric_value = if recurrence_metric {
-                if top_supporting_cases.contains(_case_ordinal) {
-                    "true"
-                } else {
-                    "false"
+            let metric_value = match metric_kind {
+                MetricKind::TechnicalError => technical_error,
+                MetricKind::ToolRetry => {
+                    let known = events
+                        .iter()
+                        .filter_map(|event| event.retry_count)
+                        .collect::<Vec<_>>();
+                    if known.iter().any(|count| *count > 0) {
+                        "true"
+                    } else if known.is_empty() {
+                        ""
+                    } else {
+                        "false"
+                    }
                 }
-            } else {
-                technical_error
+                MetricKind::RecurringQuery => {
+                    if top_supporting_cases.contains(_case_ordinal) {
+                        "true"
+                    } else {
+                        "false"
+                    }
+                }
             };
             BTreeMap::from([
                 (
@@ -928,7 +958,8 @@ fn measure_signal(
             source_contract_digest: derive_digest("pulso-safe-agent-input-v1"),
             source_digest: input.metadata.manifest_digest.clone(),
             transform_digest: derive_digest(&format!(
-                "local_multi_signal_v1:{}:{}:{}",
+                "local_multi_signal_v2:{}:{}:{}:{}",
+                TOOL_RETRY_POLICY,
                 RECURRING_QUERY_POLICY_VERSION,
                 input.minimum_recurring_query_support,
                 recurrence_pattern_ref(input).unwrap_or_else(|| "no_recurrent_pattern".into())
@@ -941,10 +972,10 @@ fn measure_signal(
             "case_facts",
             vec![
                 "case_bucket",
-                if recurrence_metric {
-                    "recurring_query_case"
-                } else {
-                    "technical_error"
+                match metric_kind {
+                    MetricKind::TechnicalError => "technical_error",
+                    MetricKind::ToolRetry => "retry_case",
+                    MetricKind::RecurringQuery => "recurring_query_case",
                 },
             ],
             rows,
@@ -970,10 +1001,10 @@ fn measure_signal(
                 &access,
                 LabQuery::select(
                     "case_facts",
-                    vec![if recurrence_metric {
-                        "recurring_query_case"
-                    } else {
-                        "technical_error"
+                    vec![match metric_kind {
+                        MetricKind::TechnicalError => "technical_error",
+                        MetricKind::ToolRetry => "retry_case",
+                        MetricKind::RecurringQuery => "recurring_query_case",
                     }],
                     Some(QueryFilter::equals("case_bucket", bucket)),
                 ),
@@ -982,16 +1013,13 @@ fn measure_signal(
             .map_err(|error| LocalRunError::Lab(format!("read-only query failed: {error:?}")))?,
         );
     }
-    let metric = if recurrence_metric {
-        BooleanRateSpec::new(
-            "e0_recurring_copilot_query_cases",
-            "recurring_query_case",
-            "true",
-        )
-    } else {
-        BooleanRateSpec::new("e0_technical_error_rate", "technical_error", "true")
-    }
-    .map_err(|_| LocalRunError::InvalidInput)?;
+    let (metric_id, metric_field) = match metric_kind {
+        MetricKind::TechnicalError => ("e0_technical_error_rate", "technical_error"),
+        MetricKind::ToolRetry => ("e0_tool_retry_case_rate", "retry_case"),
+        MetricKind::RecurringQuery => ("e0_recurring_copilot_query_cases", "recurring_query_case"),
+    };
+    let metric = BooleanRateSpec::new(metric_id, metric_field, "true")
+        .map_err(|_| LocalRunError::InvalidInput)?;
     let signal = DeterministicSensor::measure(&metric, &results)
         .map_err(|error| LocalRunError::Lab(format!("sensor rejected evidence: {error:?}")))?;
     lab.close(session.session_id(), &access)
@@ -1024,10 +1052,13 @@ fn recurrence_pattern_ref(input: &LocalRunInput) -> Option<String> {
 
 fn summarize_signal(input: &LocalRunInput, signal: &DeterministicSignal) -> SignalSummary {
     let recurrence = signal.metric_id == "e0_recurring_copilot_query_cases";
+    let retry = signal.metric_id == "e0_tool_retry_case_rate";
     SignalSummary {
         metric_id: signal.metric_id.clone(),
         detector_policy_id: if recurrence {
             RECURRING_QUERY_POLICY.to_owned()
+        } else if retry {
+            TOOL_RETRY_POLICY.to_owned()
         } else {
             "e0_technical_error_rate_v1".to_owned()
         },
@@ -1065,14 +1096,17 @@ fn select_primary_signal_index(
                     signal.numerator > 0 && signal.denominator > 0
                 }
             };
+            let priority = |signal: &DeterministicSignal| match signal.metric_id.as_str() {
+                "e0_technical_error_rate" => 3,
+                "e0_tool_retry_case_rate" => 2,
+                "e0_recurring_copilot_query_cases" => 1,
+                _ => 0,
+            };
             let left_signal = left.1;
             let right_signal = right.1;
             qualifies(left_signal)
                 .cmp(&qualifies(right_signal))
-                .then_with(|| {
-                    (left_signal.metric_id == "e0_technical_error_rate")
-                        .cmp(&(right_signal.metric_id == "e0_technical_error_rate"))
-                })
+                .then_with(|| priority(left_signal).cmp(&priority(right_signal)))
         })
         .map(|(index, _)| index)
 }
@@ -1206,6 +1240,8 @@ fn build_exploratory_draft(
         .iter()
         .filter(|event| event.parent_event_ordinal.is_some())
         .count();
+    let mut retry_known_cases = BTreeSet::new();
+    let mut retry_cases = BTreeSet::new();
     for event in &input.events {
         *event_kind_counts
             .entry(event.event_kind.clone())
@@ -1215,6 +1251,12 @@ fn build_exploratory_draft(
         }
         if let Some(signal_code) = &event.signal_code {
             *signal_counts.entry(signal_code.clone()).or_default() += 1;
+        }
+        if let Some(retry_count) = event.retry_count {
+            retry_known_cases.insert(event.case_ordinal);
+            if retry_count > 0 {
+                retry_cases.insert(event.case_ordinal);
+            }
         }
     }
     for event in input
@@ -1238,6 +1280,11 @@ fn build_exploratory_draft(
     let hypothesis = if signal.metric_id == "e0_recurring_copilot_query_cases" {
         format!(
             "An opaque copilot query pattern recurs across {} of {} discovery cases; investigate whether a reusable Agent Core artifact could handle it. This recurrence is descriptive and does not prove friction, causality, or business lift.",
+            signal.numerator, signal.denominator
+        )
+    } else if signal.metric_id == "e0_tool_retry_case_rate" {
+        format!(
+            "Observed retries in {} of {} cases with a known retry count; inspect the affected flow, but this observation does not establish cause or savings.",
             signal.numerator, signal.denominator
         )
     } else {
@@ -1264,6 +1311,9 @@ fn build_exploratory_draft(
             "numerator": signal.numerator,
             "denominator": signal.denominator,
             "missing": signal.missing,
+            "retry_cases": retry_cases.len(),
+            "retry_denominator_known_cases": retry_known_cases.len(),
+            "retry_cases_missing": input.case_ordinals.len().saturating_sub(retry_known_cases.len()),
             "pattern_ref": signal.pattern_ref,
             "primary_signal_policy": LOCAL_PRIMARY_SIGNAL_POLICY,
             "route_code_with_most_errors": if signal.metric_id == "e0_technical_error_rate" { json!(route) } else { json!(null) },

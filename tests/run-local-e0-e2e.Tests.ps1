@@ -71,7 +71,7 @@ if "%PULSO_E2E_TEST_JSON_MODE%"=="malformed" (
   > "%output%\fixture-run\result.json" echo {"private_customer_id":"DO_NOT_PRINT_THIS",}
   exit /b 0
 )
-> "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","source_kind":"e0","discovery_case_count":200,"excluded_replay_case_count":null,"signals":[{"metric_id":"e0_technical_error_rate","numerator":0,"denominator":187,"missing":13},{"metric_id":"e0_recurring_copilot_query_cases","numerator":154,"denominator":200,"missing":0}],"e0_recurrence_holdout":{"status":"replicated","queried_case_count":1539,"matching_case_count":1433,"interpretation":"descriptive_recurrence_only_no_causal_or_outcome_claim"},"proposal":{"status":"simulated_unverified","execution_status":"not_executed","private_text":"DO_NOT_PRINT_THIS"},"formal_route":"do_nothing","private_customer_id":"DO_NOT_PRINT_THIS"}
+> "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","source_kind":"e0","discovery_case_count":200,"excluded_replay_case_count":null,"signals":[{"metric_id":"e0_technical_error_rate","numerator":0,"denominator":187,"missing":13},{"metric_id":"e0_tool_retry_case_rate","numerator":10,"denominator":150,"missing":50},{"metric_id":"e0_recurring_copilot_query_cases","numerator":154,"denominator":200,"missing":0}],"e0_recurrence_holdout":{"status":"replicated","queried_case_count":1539,"matching_case_count":1433,"interpretation":"descriptive_recurrence_only_no_causal_or_outcome_claim"},"proposal":{"status":"simulated_unverified","execution_status":"not_executed","private_text":"DO_NOT_PRINT_THIS"},"formal_route":"do_nothing","private_customer_id":"DO_NOT_PRINT_THIS"}
 exit /b 0
 '@
         Set-Content -LiteralPath (Join-Path $script:fakeBin 'cargo.cmd') -Value $cargoShim -Encoding Ascii
@@ -99,6 +99,7 @@ exit /b 0
         Assert-Contains $text 'Status: complete_simulated'
         Assert-Contains $text 'Cases: discovery=200; replay_excluded=suppressed'
         Assert-Contains $text 'e0_technical_error_rate: 0/187; missing=13'
+        Assert-Contains $text 'e0_tool_retry_case_rate: 10/150; missing=50'
         Assert-Contains $text 'e0_recurring_copilot_query_cases: 154/200; missing=0'
         Assert-Contains $text 'Proposal: status=simulated_unverified; execution=not_executed'
         Assert-Contains $text 'Holdout: status=replicated; matches=1433/1539; descriptive_only'

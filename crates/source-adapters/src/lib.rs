@@ -511,6 +511,7 @@ pub struct SafeEvent {
     actor_role: Option<String>,
     tool_code: Option<String>,
     technical_error: Option<bool>,
+    retry_count: Option<u32>,
     approval: Option<bool>,
     signal_code: Option<String>,
 }
@@ -555,6 +556,10 @@ impl SafeEvent {
     #[must_use]
     pub fn technical_error(&self) -> Option<bool> {
         self.technical_error
+    }
+    #[must_use]
+    pub fn retry_count(&self) -> Option<u32> {
+        self.retry_count
     }
     #[must_use]
     pub fn approval(&self) -> Option<bool> {
@@ -1535,7 +1540,15 @@ fn read_tool_calls(path: &Path) -> Result<Vec<RawToolCall>, AdapterError> {
                 status: status.to_owned(),
                 verified: optional_bool(&batch, "verified", row)?,
                 state_change: optional_presence(&batch, "state_change", row)?,
-                retry_count: optional_u64(&batch, "retry_count", row)?.map(|v| v as u32),
+                retry_count: optional_u64(&batch, "retry_count", row)?
+                    .map(|value| {
+                        u32::try_from(value).map_err(|_| {
+                            AdapterError::InvalidInput(
+                                "optional E0 retry count exceeds supported range",
+                            )
+                        })
+                    })
+                    .transpose()?,
                 latency_ms: optional_u64(&batch, "latency_ms", row)?,
             });
         }
@@ -1572,6 +1585,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
             technical_error,
             approval,
             parent_source_ordinal,
+            retry_count,
         ) = match fact {
             E0Fact::IdentityCheck {
                 case_ordinal: c,
@@ -1592,6 +1606,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 None,
                 None,
                 None,
+                None,
             ),
             E0Fact::Turn {
                 case_ordinal: c,
@@ -1607,6 +1622,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 Some(*event_time_unix_micros),
                 None,
                 Some(author_role.as_str()),
+                None,
                 None,
                 None,
                 None,
@@ -1631,6 +1647,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 None,
                 None,
                 None,
+                None,
             ),
             E0Fact::CopilotQuery {
                 case_ordinal: c,
@@ -1650,6 +1667,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 None,
                 None,
                 None,
+                None,
             ),
             E0Fact::ToolCall {
                 case_ordinal: c,
@@ -1659,6 +1677,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 actor_role,
                 tool_id,
                 technical_error,
+                retry_count,
                 ..
             } if *c == case_ordinal => (
                 "tool_call",
@@ -1671,6 +1690,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 Some(*technical_error),
                 None,
                 None,
+                *retry_count,
             ),
             E0Fact::Approval {
                 case_ordinal: c,
@@ -1695,6 +1715,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                     .as_deref()
                     .map(|d| d.eq_ignore_ascii_case("approved")),
                 *related_tool_ordinal,
+                None,
             ),
             _ => continue,
         };
@@ -1710,6 +1731,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
             technical_error,
             approval,
             parent_source_ordinal,
+            retry_count,
         ));
     }
     candidates.sort_by_key(|entry| (entry.3, entry.1, entry.2));
@@ -1747,6 +1769,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
             tool_code: entry.6,
             technical_error: entry.7,
             approval: entry.8,
+            retry_count: entry.10,
             signal_code: None,
         })
         .collect())

@@ -31,9 +31,106 @@ fn event(
         actor_layer: actor_layer.map(str::to_owned),
         tool_code: tool_code.map(str::to_owned),
         technical_error,
+        retry_count: None,
         approval: None,
         signal_code: None,
     }
+}
+
+#[test]
+fn retry_metric_counts_cases_with_known_counts_and_keeps_missing_explicit() {
+    let mut retried = event(
+        1,
+        1,
+        Some(false),
+        Some("payments"),
+        Some("tree"),
+        Some("status_lookup"),
+    );
+    retried.retry_count = Some(2);
+    let mut additional_zero_retry_call = event(
+        1,
+        2,
+        Some(false),
+        Some("payments"),
+        Some("tree"),
+        Some("status_lookup"),
+    );
+    additional_zero_retry_call.retry_count = Some(0);
+    let mut known_zero = event(
+        2,
+        1,
+        Some(false),
+        Some("payments"),
+        Some("tree"),
+        Some("status_lookup"),
+    );
+    known_zero.retry_count = Some(0);
+    let unknown = event(
+        3,
+        1,
+        Some(false),
+        Some("payments"),
+        Some("tree"),
+        Some("status_lookup"),
+    );
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-known-missing",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:abababababababababababababababababababababababababababababababab",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        vec![1, 2, 3, 4],
+        0,
+        vec![retried, additional_zero_retry_call, known_zero, unknown],
+    ))
+    .expect("retry observations are measured");
+
+    let detection_detail = &result
+        .events
+        .iter()
+        .find(|event| event.stage == "detection")
+        .expect("detection timeline event")
+        .detail;
+    assert!(detection_detail.contains("retries"));
+    assert!(!detection_detail.contains("technical errors"));
+
+    let retry = result
+        .signals
+        .iter()
+        .find(|signal| signal.metric_id == "e0_tool_retry_case_rate")
+        .expect("retry metric is visible");
+    assert_eq!(
+        (retry.numerator, retry.denominator, retry.missing),
+        (1, 2, 2)
+    );
+    assert_eq!(retry.minimum_support, 1);
+    let proposal = result
+        .proposal
+        .expect("positive retry signal yields a review draft");
+    assert_eq!(proposal.evidence.metric_id, "e0_tool_retry_case_rate");
+    assert!(proposal.hypothesis.contains("retry"));
+    assert!(
+        proposal
+            .hypothesis
+            .contains("does not establish cause or savings")
+    );
+    assert_eq!(
+        proposal.proposed_artifact["observed_evidence"]["retry_cases"],
+        1
+    );
+    assert_eq!(
+        proposal.proposed_artifact["observed_evidence"]["retry_denominator_known_cases"],
+        2
+    );
+    assert_eq!(
+        proposal.proposed_artifact["observed_evidence"]["retry_cases_missing"],
+        2
+    );
 }
 
 #[test]
@@ -198,13 +295,23 @@ fn recurring_opaque_copilot_query_across_cases_creates_only_a_simulated_candidat
     );
     assert_eq!(signal.detector_policy_version, 1);
     assert!(signal.pattern_ref.is_some());
-    assert_eq!(result.signals.len(), 2, "both detectors remain visible");
+    assert_eq!(
+        result.signals.len(),
+        3,
+        "all available detectors remain visible"
+    );
+    assert!(
+        result
+            .signals
+            .iter()
+            .any(|signal| signal.metric_id == "e0_tool_retry_case_rate")
+    );
     assert!(
         result.signals.iter().any(|signal| {
             signal.metric_id == "e0_technical_error_rate" && signal.numerator == 0
         })
     );
-    assert_eq!(result.primary_signal_policy, "local_primary_signal_v2");
+    assert_eq!(result.primary_signal_policy, "local_primary_signal_v3");
     assert_eq!(result.terminal_status, "complete_simulated");
     assert_eq!(result.formal_route, "do_nothing");
     assert!(!result.candidates.is_empty());
@@ -217,7 +324,7 @@ fn recurring_opaque_copilot_query_across_cases_creates_only_a_simulated_candidat
     assert!(proposal.hypothesis.contains("copilot query"));
     assert_eq!(
         proposal.proposed_artifact["observed_evidence"]["primary_signal_policy"],
-        "local_primary_signal_v2"
+        "local_primary_signal_v3"
     );
     let serialized = serde_json::to_string(&result).unwrap();
     assert!(!serialized.contains(&format!("sha256_{}", "a".repeat(56))));
@@ -261,7 +368,7 @@ fn direct_technical_failure_is_primary_without_hiding_other_qualifying_signals()
 
     let result = run_local_simulation(input).expect("both metrics qualify");
 
-    assert_eq!(result.primary_signal_policy, "local_primary_signal_v2");
+    assert_eq!(result.primary_signal_policy, "local_primary_signal_v3");
     assert_eq!(
         result.signal.as_ref().unwrap().metric_id,
         "e0_technical_error_rate"

@@ -56,6 +56,15 @@ green unit test as proof that a broader product flow is complete.
   primary policy prefers direct observed technical failures over semantically
   opaque query recurrence; every measured metric remains visible, but only the
   primary signal currently traverses the single-candidate Scout simulation.
+  E0 tool-call retry counts are now carried through the safe event projection
+  as a separate descriptive metric (`e0_tool_retry_case_rate`), between direct
+  technical errors and opaque recurrence in primary-signal priority. Its rate
+  counts distinct cases with a known retry count in the denominator; absent or
+  null counts remain explicitly missing. Retries do not establish cause or
+  savings. This signal is aggregate-only and may produce only the existing
+  simulated, unverified, non-executable review draft.
+  The primary-signal policy is versioned as `local_primary_signal_v3` because
+  adding retries changes candidate-selection priority; v2 remains historical.
   If the optional `copilot_query` source table is absent, recurrence is marked
   unavailable rather than reported as zero. The signal proposal is a
   simulated, unverified, non-executable `unclassified_candidate`; it makes no
