@@ -25,9 +25,10 @@ if ($IncludePostgres) {
         throw 'PostgresTestUrl must be an absolute PostgreSQL URL for the local pulso_test database.'
     }
     $localHosts = @('localhost', '127.0.0.1', '::1')
+    $hostName = $parsedUrl.Host.TrimStart('[').TrimEnd(']')
     $databaseName = $parsedUrl.AbsolutePath.Trim('/')
     if ($parsedUrl.Scheme -notin @('postgres', 'postgresql') -or
-        $parsedUrl.Host -notin $localHosts -or
+        $hostName -notin $localHosts -or
         $databaseName -ne 'pulso_test' -or
         $parsedUrl.Query -or $parsedUrl.Fragment) {
         throw 'Refusing destructive PostgreSQL tests unless the URL targets local database pulso_test (without query or fragment).'
