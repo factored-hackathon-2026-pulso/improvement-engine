@@ -59,6 +59,10 @@ green unit test as proof that a broader product flow is complete.
   over a supported U14 report, a mechanism-proxy U16 bridge and its U20 plan;
   it can only mark a proposal eligible and never asserts an outcome or causes
   execution, registry mutation, release or customer exposure.
+- U22: governed published-memory admission. A second run receives only an
+  opaque provenance capability after U33 records and then canonically attests
+  the exact receipt against the current, live memory state. No raw pages,
+  cache, publication, Scout, runtime or release capability is exposed.
 
 ## Delivery discipline
 
