@@ -404,6 +404,57 @@ pub trait WikiScratchPort {
     ) -> Result<WikiTransformResult, WikiError>;
 }
 
+/// Recomputes an already-issued scratch transform from its sealed source
+/// snapshot without exposing its pages to a new caller. Composition-only
+/// consumers use it before a governed boundary redeems a result; matching
+/// receipt strings alone are not sufficient evidence that the result came
+/// from the claimed canonical transform.
+pub(crate) fn verify_transform_result_against_snapshot<R: ArtifactRepository>(
+    repository: &mut R,
+    access: &WikiAccess,
+    transform: &WikiTransform,
+    result: &WikiTransformResult,
+) -> Result<bool, WikiError> {
+    let snapshot = repository
+        .get(
+            &access.snapshot_ref.tenant_id,
+            &access.snapshot_ref.id,
+            access.snapshot_ref.revision,
+        )
+        .map_err(|_| WikiError::SnapshotNotFound)?
+        .ok_or(WikiError::SnapshotNotFound)?;
+    if snapshot.reference() != access.snapshot_ref {
+        return Err(WikiError::SnapshotReferenceMismatch);
+    }
+    if snapshot.kind != ArtifactKind::MemoryWiki {
+        return Err(WikiError::SnapshotKindMismatch);
+    }
+    let decoded = decode_snapshot(&snapshot.payload)?;
+    if decoded.available_at_unix_seconds > access.allowed_at_unix_seconds {
+        return Err(WikiError::FutureSnapshot {
+            available_at_unix_seconds: decoded.available_at_unix_seconds,
+            allowed_at_unix_seconds: access.allowed_at_unix_seconds,
+        });
+    }
+    if decoded.purpose != access.purpose {
+        return Err(WikiError::AuthorizationDenied);
+    }
+    let mut expected_pages = decoded.pages;
+    for operation in &transform.operations {
+        apply_operation(&mut expected_pages, operation)?;
+    }
+    Ok(result.receipt.snapshot_ref == access.snapshot_ref
+        && result.receipt.run_id == access.run_id
+        && result.receipt.tenant_id == access.tenant_id
+        && result.receipt.purpose == access.purpose
+        && result.receipt.grant_id == access.grant_id
+        && result.receipt.memory_scope == access.memory_scope
+        && result.receipt.transform_digest == digest(transform)
+        && result.receipt.result_digest == digest(&expected_pages)
+        && result.result_digest == digest(&expected_pages)
+        && result.pages == expected_pages)
+}
+
 impl WikiScratchPort for InMemoryWikiGrantAuthority {
     fn mount<R: ArtifactRepository>(
         &mut self,

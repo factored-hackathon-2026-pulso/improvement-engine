@@ -60,6 +60,15 @@ green unit test as proof that a broader product flow is complete.
   only, never pages, workspace/text, publication, memory use or an artifact.
   U33-E publication and U23-E governed-memory linkage remain explicitly
   pending.
+- U33-E: Frozen E0 summary publication boundary. A crate-private composer
+  redeems only the opaque U15-EQ preparation after recomputing the exact
+  U13-A/U14-E/U14-EQ/U04-B and canonical U15 transform chain. It emits an
+  opaque publication capability, not MemoryUse, proposal, route or release
+  authority. The local adapter models head-CAS/idempotent provenance-sidecar
+  writes; the durable adapter is intentionally `DependencyUnavailable` until
+  a U05 grant revision/liveness fence can be evaluated in the same durable
+  transaction. U23-E remains pending and is the sole future consumer allowed
+  to attest governed use of this publication.
 - U16: provisional WorkflowBridge. It accepts only a U14 verification report
   and sealed internal catalogue/source-validation facts, preserves its
   commitments and scope, includes `do_nothing`, and caps a supported route at

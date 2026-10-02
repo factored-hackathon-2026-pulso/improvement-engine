@@ -19,7 +19,7 @@ use crate::enriched_history::VerifiedReplayAvailability;
 use crate::memory_store::MemoryScope;
 use crate::wiki_scratch::{
     MemoryScopeBinding, WikiAccess, WikiError, WikiScratchPort, WikiTransform,
-    WikiTransformOperation,
+    WikiTransformOperation, WikiTransformResult,
 };
 
 #[allow(dead_code)] // Used by the crate-private composition root, not a public API.
@@ -57,6 +57,15 @@ pub struct PreparedFrozenE0MemorySummary {
     result_commitment: String,
     preparation_commitment: String,
     status: PreparedFrozenE0MemorySummaryStatus,
+    // Kept exclusively for the next crate-private U33-E boundary.  This is
+    // deliberately not reconstructible from the public digests above: a hash
+    // is evidence of bytes, not authority to publish bytes.
+    #[allow(dead_code)]
+    scratch_result: WikiTransformResult,
+    #[allow(dead_code)]
+    scope: MemoryScope,
+    #[allow(dead_code)]
+    access: WikiAccess,
 }
 
 impl PreparedFrozenE0MemorySummary {
@@ -99,6 +108,128 @@ impl PreparedFrozenE0MemorySummary {
     #[must_use]
     pub fn authorizes_publication_or_memory_use(&self) -> bool {
         false
+    }
+
+    /// Replays the U15-EQ validation at the U33-E boundary before the private
+    /// scratch result is redeemed.  It intentionally accepts only sealed
+    /// upstream objects, never report-like JSON or caller-supplied digests.
+    #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code)]
+    pub(crate) fn revalidate_for_publication<R: ArtifactRepository>(
+        &self,
+        qualification: &FrozenE0OpportunityQualification,
+        candidate: &VerifiedScoutCandidate,
+        report: &FrozenE0VerificationReport,
+        replay: &VerifiedReplayAvailability,
+        scope: &MemoryScope,
+        access: &WikiAccess,
+        repository: &mut R,
+    ) -> Result<(), FrozenE0SummaryPreparationError> {
+        let frozen = candidate.rehydrate_frozen_e0()?;
+        report.revalidate_for_candidate(candidate)?;
+        qualification.revalidate_for_inputs(candidate, report)?;
+        if report.scope() != candidate.scope()
+            || qualification.scope() != candidate.scope()
+            || report.source_snapshot_ref() != candidate.source_snapshot_ref()
+            || qualification.source_snapshot_ref() != candidate.source_snapshot_ref()
+            || replay.tenant_id() != candidate.scope().tenant_id()
+            || replay.cutoff_at_unix_seconds() != frozen.cutoff_unix_seconds()
+            || replay.source_snapshot_digest() != frozen.source_snapshot_binding()
+            || replay.availability_profile_digest() != frozen.availability_profile_digest()
+        {
+            return Err(FrozenE0SummaryPreparationError::ReplayMismatch);
+        }
+        let expected_binding =
+            MemoryScopeBinding::new(replay.world_ref(), CAMPAIGN, PROTOCOL, PARTITION);
+        if scope.tenant_id != candidate.scope().tenant_id()
+            || scope.purpose != PURPOSE
+            || scope.world != replay.world_ref()
+            || scope.campaign != CAMPAIGN
+            || scope.protocol != PROTOCOL
+            || scope.partition != PARTITION
+            || access.tenant_id != scope.tenant_id
+            || access.purpose != scope.purpose
+            || access.memory_scope != expected_binding
+        {
+            return Err(FrozenE0SummaryPreparationError::ScopeMismatch);
+        }
+        if access.allowed_at_unix_seconds != replay.cutoff_at_unix_seconds()
+            || access.run_id != frozen.run_id()
+            || access.grant_id != candidate.scope().grant_id()
+            || access.snapshot_ref.tenant_id != candidate.scope().tenant_id()
+        {
+            return Err(FrozenE0SummaryPreparationError::AccessMismatch);
+        }
+        let replay_commitment = digest(&ReplayCommitment {
+            tenant_id: replay.tenant_id(),
+            world_ref: replay.world_ref(),
+            cutoff_at_unix_seconds: replay.cutoff_at_unix_seconds(),
+            source_snapshot_digest: replay.source_snapshot_digest(),
+            availability_profile_digest: replay.availability_profile_digest(),
+        });
+        let access_commitment = digest(&AccessCommitment {
+            tenant_id: &access.tenant_id,
+            run_id: &access.run_id,
+            grant_id: &access.grant_id,
+            grant_revision: access.grant_revision,
+            purpose: &access.purpose,
+            snapshot_ref: &access.snapshot_ref,
+            allowed_at_unix_seconds: access.allowed_at_unix_seconds,
+            scope,
+        });
+        if self.scope != *scope
+            || self.access != *access
+            || self.candidate_digest != candidate.candidate_digest()
+            || self.qualification_commitment != qualification.commitment()
+            || self.verification_report_commitment != report.report_commitment()
+            || self.replay_commitment != replay_commitment
+            || self.access_commitment != access_commitment
+            || self.status != PreparedFrozenE0MemorySummaryStatus::PreparedScratchOnly
+            || self.scratch_result.receipt.snapshot_ref != access.snapshot_ref
+            || self.scratch_result.receipt.run_id != access.run_id
+            || self.scratch_result.receipt.tenant_id != access.tenant_id
+            || self.scratch_result.receipt.purpose != access.purpose
+            || self.scratch_result.receipt.grant_id != access.grant_id
+            || self.scratch_result.receipt.memory_scope != access.memory_scope
+            || self.scratch_result.receipt.transform_digest != self.transform_commitment
+            || self.scratch_result.receipt.result_digest != self.result_commitment
+            || self.scratch_result.result_digest != self.result_commitment
+            || self
+                .scratch_result
+                .pages
+                .get(SUMMARY_PATH)
+                .map(String::as_str)
+                != Some(SUMMARY_CONTENT)
+        {
+            return Err(FrozenE0SummaryPreparationError::TransformReceiptMismatch);
+        }
+        if !crate::wiki_scratch::verify_transform_result_against_snapshot(
+            repository,
+            access,
+            &canonical_transform(),
+            &self.scratch_result,
+        )? {
+            return Err(FrozenE0SummaryPreparationError::TransformReceiptMismatch);
+        }
+        let expected_preparation = digest(&PreparationCommitment {
+            candidate_digest: candidate.candidate_digest(),
+            qualification_commitment: qualification.commitment(),
+            verification_report_commitment: report.report_commitment(),
+            replay_commitment: &replay_commitment,
+            access_commitment: &access_commitment,
+            transform_commitment: &self.transform_commitment,
+            result_commitment: &self.result_commitment,
+            status: PreparedFrozenE0MemorySummaryStatus::PreparedScratchOnly,
+        });
+        if self.preparation_commitment != expected_preparation {
+            return Err(FrozenE0SummaryPreparationError::TransformReceiptMismatch);
+        }
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn scratch_result(&self) -> &WikiTransformResult {
+        &self.scratch_result
     }
 }
 
@@ -240,10 +371,13 @@ impl FrozenE0SummaryComposer {
             verification_report_commitment: report.report_commitment().to_owned(),
             replay_commitment,
             access_commitment,
-            transform_commitment: result.receipt.transform_digest,
-            result_commitment: result.receipt.result_digest,
+            transform_commitment: result.receipt.transform_digest.clone(),
+            result_commitment: result.receipt.result_digest.clone(),
             preparation_commitment,
             status: PreparedFrozenE0MemorySummaryStatus::PreparedScratchOnly,
+            scratch_result: result,
+            scope: scope.clone(),
+            access: access.clone(),
         })
     }
 }
