@@ -72,6 +72,14 @@ fn replay_snapshot() -> SourceSnapshot {
 }
 
 fn replay_snapshot_with(header_digest: &str, contract_digest: &str) -> SourceSnapshot {
+    replay_snapshot_with_uri(header_digest, contract_digest, "file://fixture.csv")
+}
+
+fn replay_snapshot_with_uri(
+    header_digest: &str,
+    contract_digest: &str,
+    uri: &str,
+) -> SourceSnapshot {
     SourceSnapshot::from_json(
         &json!({
           "contract_version":{"major":1,"minor":0},
@@ -80,12 +88,42 @@ fn replay_snapshot_with(header_digest: &str, contract_digest: &str) -> SourceSna
           "world_ref":"e0-disputes-2025",
           "observed_cutoff":"2025-06-30T23:59:59Z",
           "sources":[{
-            "table":"case","uri":"file://fixture.csv",
+            "table":"case","uri":uri,
             "file_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "header_digest": header_digest,
             "row_count":1,
             "source_contract_ref":{"id":"case","version":"v1","digest": contract_digest}
           }]
+        })
+        .to_string(),
+    )
+    .unwrap()
+}
+
+fn replay_snapshot_with_second_table() -> SourceSnapshot {
+    SourceSnapshot::from_json(
+        &json!({
+          "contract_version":{"major":1,"minor":0},
+          "tenant_id":"tenant-a",
+          "source_namespace":"platform_history",
+          "world_ref":"e0-disputes-2025",
+          "observed_cutoff":"2025-06-30T23:59:59Z",
+          "sources":[
+            {
+              "table":"case","uri":"file://fixture.csv",
+              "file_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "header_digest": digest('b'),
+              "row_count":1,
+              "source_contract_ref":{"id":"case","version":"v1","digest": digest('c')}
+            },
+            {
+              "table":"contact","uri":"file://contact.csv",
+              "file_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "header_digest": digest('d'),
+              "row_count":1,
+              "source_contract_ref":{"id":"contact","version":"v1","digest": digest('e')}
+            }
+          ]
         })
         .to_string(),
     )
@@ -565,6 +603,51 @@ fn snapshot_binding_compares_header_and_source_contract_seals_not_just_file_dige
 }
 
 #[test]
+fn snapshot_binding_rejects_a_seal_from_a_different_uri() {
+    let canonical_snapshot = replay_snapshot();
+    let snapshot_with_same_file_at_other_uri =
+        replay_snapshot_with_uri(&digest('b'), &digest('c'), "file://moved-fixture.csv");
+    let rows = vec![json!({
+        "case_id": "case-1",
+        "event_time": "2025-06-01T10:00:00Z",
+        "topic": "disputar_cargo"
+    })];
+    let mut manifest = replay_manifest(&rows, &snapshot_with_same_file_at_other_uri);
+    manifest.files[0] = manifest.files[0]
+        .clone()
+        .with_source_file_seal(canonical_snapshot.source_file_seal("case").unwrap());
+
+    assert_eq!(
+        EnrichedHistoryAdapter::from_snapshot(manifest, &snapshot_with_same_file_at_other_uri)
+            .unwrap_err(),
+        EnrichedHistoryError::SourceFileSealMismatch {
+            table: "case".to_owned(),
+        }
+    );
+}
+
+#[test]
+fn snapshot_binding_rejects_a_seal_for_a_different_table() {
+    let snapshot = replay_snapshot_with_second_table();
+    let rows = vec![json!({
+        "case_id": "case-1",
+        "event_time": "2025-06-01T10:00:00Z",
+        "topic": "disputar_cargo"
+    })];
+    let mut manifest = replay_manifest(&rows, &snapshot);
+    manifest.files[0] = manifest.files[0]
+        .clone()
+        .with_source_file_seal(snapshot.source_file_seal("contact").unwrap());
+
+    assert_eq!(
+        EnrichedHistoryAdapter::from_snapshot(manifest, &snapshot).unwrap_err(),
+        EnrichedHistoryError::SourceFileSealMismatch {
+            table: "case".to_owned(),
+        }
+    );
+}
+
+#[test]
 fn v1_manifest_remains_observed_only_while_replay_requires_v2_profile() {
     assert!(EnrichedHistoryAdapter::from_manifest(manifest()).is_ok());
     let replay_v1 = EnrichedHistoryManifest::new(
@@ -588,6 +671,40 @@ fn v1_manifest_remains_observed_only_while_replay_requires_v2_profile() {
     assert_eq!(
         EnrichedHistoryAdapter::from_manifest(replay_v1).unwrap_err(),
         EnrichedHistoryError::UnsupportedManifestVersion {
+            manifest_version: 1,
+        }
+    );
+}
+
+#[test]
+fn v1_manifest_cannot_bind_to_an_indistinguishable_snapshot_from_another_tenant() {
+    let tenant_a = replay_snapshot();
+    let tenant_b = SourceSnapshot::from_json(
+        &json!({
+          "contract_version":{"major":1,"minor":0},
+          "tenant_id":"tenant-b",
+          "source_namespace":"platform_history",
+          "world_ref":"e0-disputes-2025",
+          "observed_cutoff":"2025-06-30T23:59:59Z",
+          "sources":[{
+            "table":"case","uri":"file://fixture.csv",
+            "file_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "header_digest": digest('b'),
+            "row_count":1,
+            "source_contract_ref":{"id":"case","version":"v1","digest": digest('c')}
+          }]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut legacy = manifest();
+    legacy.files[0] = legacy.files[0]
+        .clone()
+        .with_source_file_seal(tenant_a.source_file_seal("case").unwrap());
+
+    assert_eq!(
+        EnrichedHistoryAdapter::from_snapshot(legacy, &tenant_b).unwrap_err(),
+        EnrichedHistoryError::SnapshotBindingUnavailable {
             manifest_version: 1,
         }
     );
@@ -879,19 +996,34 @@ fn enriched_manifest_cannot_substitute_world_or_cutoff_of_the_existing_source_sn
         }"#,
     )
     .unwrap();
-    let mut bound_manifest = manifest();
-    bound_manifest.files[0] = bound_manifest.files[0]
+    let mut files = manifest().files;
+    files[0] = files[0]
         .clone()
         .with_source_file_seal(snapshot.source_file_seal("case").unwrap());
+    let observed_profile = || {
+        AvailabilityProfile::new(
+            "observed_snapshot_clock",
+            1,
+            AvailabilityClockMode::observed_ingested_at(),
+            snapshot.binding_digest(),
+        )
+    };
+    let bound_manifest = EnrichedHistoryManifest::new_replay(
+        "platform_history",
+        "e0-disputes-2025",
+        CUTOFF,
+        observed_profile(),
+        files.clone(),
+    );
     assert!(EnrichedHistoryAdapter::from_snapshot(bound_manifest, &snapshot).is_ok());
     assert_eq!(
         EnrichedHistoryAdapter::from_snapshot(
-            EnrichedHistoryManifest::new(
+            EnrichedHistoryManifest::new_replay(
                 "platform_history",
                 "different-world",
                 CUTOFF,
-                AvailabilityClockMode::observed_ingested_at(),
-                manifest().files,
+                observed_profile(),
+                files.clone(),
             ),
             &snapshot,
         )
@@ -900,12 +1032,12 @@ fn enriched_manifest_cannot_substitute_world_or_cutoff_of_the_existing_source_sn
     );
     assert_eq!(
         EnrichedHistoryAdapter::from_snapshot(
-            EnrichedHistoryManifest::new(
+            EnrichedHistoryManifest::new_replay(
                 "another_namespace",
                 "e0-disputes-2025",
                 CUTOFF,
-                AvailabilityClockMode::observed_ingested_at(),
-                manifest().files,
+                observed_profile(),
+                files,
             ),
             &snapshot,
         )

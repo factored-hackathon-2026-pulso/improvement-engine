@@ -31,8 +31,14 @@ se usó.
 
 La migración es deliberadamente estrecha: manifest unversioned/N-1 se trata
 como V1 `observed_ingested_at`, para no romper el histórico que sí trae ese
-reloj. V1 no puede expresar replay; `replay_at_event_time` requiere manifest
-V2 y `AvailabilityProfile` válido. No hay fallback de E0 a V1.
+reloj cuando se abre vía `from_manifest`. V1 no puede expresar replay ni
+lleva un compromiso con el byte-stream de `SourceSnapshot`; por ello
+`from_snapshot` lo rechaza cerrado. Sin ese compromiso no puede demostrar que
+un snapshot con igual namespace, mundo, corte y archivos pertenece al mismo
+tenant. Todo adapter unido a snapshot requiere V2 y un `AvailabilityProfile`
+válido; su `source_snapshot_digest` cubre los bytes del snapshot, incluido
+`tenant_id`. No hay fallback de E0 a V1 ni una migración implícita de V1 al
+camino snapshot-bound.
 
 ## Controles que permanecen intactos
 
@@ -76,6 +82,14 @@ contacto entre retrospectivamente al contexto de esa decisión.
    `from_snapshot` exige un seal idéntico para **cada** `PackageFile`, además
    de igualdad del `file_digest` de la proyección. Tabla no listada, seal
    ausente y cualquier divergencia fallan cerrados antes de abrir filas.
+7. Una nueva auditoría señaló que V1 aún podía unirse a dos snapshots de
+   tenants distintos si sus demás metadatos y archivos coincidían. Se eligió
+   compatibilidad fail-closed: V1 sigue disponible sólo por `from_manifest`;
+   `from_snapshot` devuelve `SnapshotBindingUnavailable`. Las regresiones
+   incluyen tenants A/B indistinguibles fuera de `tenant_id`, URI distinto con
+   los mismos digests y un seal de otra tabla. El perfil V2 ya fija el digest
+   de bytes completos del snapshot, por lo que su enlace incorpora tenant y
+   los seals siguen fijando tabla/URI/contrato por archivo.
 
 Comandos verdes:
 

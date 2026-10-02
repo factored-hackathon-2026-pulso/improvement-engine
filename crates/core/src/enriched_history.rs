@@ -408,6 +408,12 @@ pub enum EnrichedHistoryError {
     MissingAvailabilityProfile,
     InvalidAvailabilityProfile,
     SnapshotAvailabilityProfileMismatch,
+    /// Legacy manifests have no immutable snapshot digest, so binding one to a
+    /// snapshot would leave its tenant unsealed. They remain readable through
+    /// `from_manifest`, but must not enter a snapshot-bound adapter.
+    SnapshotBindingUnavailable {
+        manifest_version: u16,
+    },
     ReplaySnapshotBindingRequired,
     SnapshotSourceNotListed {
         table: String,
@@ -638,6 +644,11 @@ impl EnrichedHistoryAdapter {
         manifest: EnrichedHistoryManifest,
         snapshot: &SourceSnapshot,
     ) -> Result<Self, EnrichedHistoryError> {
+        if manifest.manifest_version == LEGACY_MANIFEST_VERSION {
+            return Err(EnrichedHistoryError::SnapshotBindingUnavailable {
+                manifest_version: manifest.manifest_version,
+            });
+        }
         let source = snapshot.provenance();
         if manifest.source_namespace != source.source_namespace
             || manifest.world_ref != source.world_ref
