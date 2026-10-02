@@ -17,6 +17,7 @@ pub mod jev_decision;
 pub mod local_lab;
 pub mod memory_store;
 pub mod model_provider;
+pub mod platform_observations;
 pub mod quota_grant;
 pub mod run_activity;
 pub mod run_config;
