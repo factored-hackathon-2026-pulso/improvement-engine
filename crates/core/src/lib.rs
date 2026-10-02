@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use postgres::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -68,7 +68,7 @@ impl ArtifactKind {
 }
 
 /// Stable, tenant-scoped pointer to one immutable artifact revision.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ArtifactReference {
     pub tenant_id: String,
     pub id: String,
