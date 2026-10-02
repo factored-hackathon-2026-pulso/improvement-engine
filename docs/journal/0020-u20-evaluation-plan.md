@@ -65,8 +65,9 @@ La cobertura del módulo verifica:
 
 `crates/core/tests/evaluation_plan.rs` conserva cobertura de superficie pública
 para los refs tipados y el compositor opaco. No fabrica un bridge ni inyecta
-una autoridad: los doctests verifican que ninguna de ambas superficies está
-disponible a consumidores.
+una autoridad. Los doctests verifican separadamente que un consumidor no puede
+importar/implementar el port, construir el compositor por literal ni invocar
+`from_policy`; el compositor sólo puede provenir del wiring confiable interno.
 
 Validación ejecutada al cierre:
 

@@ -246,8 +246,19 @@ impl TrustedEvaluationComposer {
 /// impl EvaluationArtifactAuthorityPort for AllowAll {}
 /// ```
 ///
+/// ```compile_fail
+/// use improvement_engine_core::evaluation_plan::TrustedEvaluationComposer;
+/// let _ = TrustedEvaluationComposer { authority: todo!() };
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::evaluation_plan::TrustedEvaluationComposer;
+/// let _ = TrustedEvaluationComposer::from_policy(());
+/// ```
+///
 /// The authority port is deliberately private. An arbitrary consumer cannot
-/// implement an allow-all policy or construct [`TrustedEvaluationComposer`].
+/// implement an allow-all policy, construct [`TrustedEvaluationComposer`], or
+/// invoke its trusted-composition constructor.
 const _NO_PUBLIC_AUTHORITY_INJECTION: () = ();
 
 impl EvaluationPlan {
