@@ -145,6 +145,33 @@ exit /b 0
         }
     }
 
+    It 'refuses an input path that traverses a junction alias' {
+        $junction = Join-Path ([System.IO.Path]::GetTempPath()) ('pulso-e0-input-junction-' + [guid]::NewGuid().ToString('N'))
+        $junctionCreated = $false
+        try {
+            New-Item -ItemType Junction -Path $junction -Target $script:inputRoot -ErrorAction Stop | Out-Null
+            $junctionCreated = $true
+        }
+        catch {
+            throw 'Could not create a temporary Windows junction; the input reparse-point regression cannot be exercised.'
+        }
+
+        try {
+            Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
+            $inputAliasOutput = Join-Path $script:fixtureRoot 'input-alias-output'
+            $thrown = $false
+            try { & $scriptPath -InputPath $junction -OutputPath $inputAliasOutput -ObservedCutoff '2026-10-02T18:00:00Z' | Out-Null } catch { $thrown = $true }
+            Assert-True $thrown 'Input through a junction was not rejected.'
+            Assert-True (-not (Test-Path -LiteralPath $script:argsLog)) 'Cargo ran before the input reparse point was rejected.'
+            Assert-True (-not (Test-Path -LiteralPath $inputAliasOutput)) 'Output was created from a junction-backed input.'
+        }
+        finally {
+            if ($junctionCreated -and (Test-Path -LiteralPath $junction)) {
+                [System.IO.Directory]::Delete($junction, $false)
+            }
+        }
+    }
+
     It 'allows a new output sibling whose name shares an input prefix' {
         $prefixSibling = Join-Path $script:fixtureRoot 'input-runs'
         $output = & $scriptPath -InputPath $script:inputRoot -OutputPath $prefixSibling -ObservedCutoff '2026-10-02T18:00:00Z'

@@ -68,7 +68,9 @@ green unit test as proof that a broader product flow is complete.
 - Windows local E0 convenience wrapper: scripts/run-local-e0-e2e.ps1 invokes
   the opt-in local simulation with locked/offline Cargo, required UTC cutoff,
   default Arranque/support settings and a fresh non-overlapping output path;
-  existing reparse-point components fail closed before Cargo runs. It prints
+  observed existing reparse-point components fail closed before Cargo runs.
+  Mapped-drive/UNC alias equivalence and concurrent path mutation are outside
+  this guarantee. It prints
   only allowlisted aggregate summaries; Pester tests use a temporary Cargo shim
   and do not substitute for a real package run. Usage and safety boundaries are
   in docs/local-e0-e2e-runner.md.

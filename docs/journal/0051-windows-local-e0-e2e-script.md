@@ -30,8 +30,8 @@ their inputs.
   output path that resolved below the input tree and fake Cargo wrote there.
 - GREEN: Invoke-Pester -Path tests/run-local-e0-e2e.Tests.ps1; initial runner
   slice had 5 passed, 0 failed. After the reparse-point hardening, the suite
-  has 7 passed, 0 failed. A real temporary junction into the input tree is
-  rejected before fake Cargo is invoked; a legal prefix-sharing sibling output
+  has 8 passed, 0 failed. Real temporary junctions on both input and output
+  paths are rejected before fake Cargo is invoked; a legal prefix-sharing sibling output
   succeeds. The temporary fake Cargo verifies locked/offline arguments,
   local-simulation E0 arguments, default settings, summary allowlisting,
   explicit cutoff, path overlap, no-overwrite and failure-output suppression.
@@ -49,6 +49,16 @@ their inputs.
 - git diff --check passed. The local E0 package was read by the local runner;
   no source rows, identifiers or labels were printed, and no provider calls or
   dataset uploads were made.
+
+## CI and path-guarantee follow-up
+
+- Windows CI invokes the Pester suite only when the exact Pester 3.4.0 module is
+  already available on `windows-latest`; it does not install or upgrade a test
+  dependency. A missing or different version fails explicitly.
+- The isolation claim is limited to reparse-point path components observed by
+  preflight. Mapped-drive/UNC aliases are not resolved to a shared canonical
+  identity, and concurrent mutation of paths by another process is outside the
+  guarantee.
 
 ## Trade-offs and limits
 

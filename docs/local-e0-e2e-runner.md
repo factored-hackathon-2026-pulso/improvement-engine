@@ -25,10 +25,16 @@ be UTC with whole-second precision. Defaults are 200 Arranque cases and a
     pwsh -NoProfile -File .\scripts\run-local-e0-e2e.ps1 -InputPath 'D:\data\e0-package' -OutputPath '.\output\e0-run-custom' -ObservedCutoff '2026-10-02T18:00:00Z' -ArranqueCases 200 -MinimumRecurringQueryCases 20
 
 The output path must not exist, must not overlap the input tree, and neither
-path may traverse an existing junction, symlink, or other reparse point. Choose
-a new output path for each run. The wrapper never deletes or overwrites data.
-The engine writes its immutable run result and event timeline below that output
-directory.
+path may traverse an existing junction, symlink, or other reparse point in the
+path components inspected by the wrapper. Choose a new output path for each
+run. The wrapper never deletes or overwrites data. The engine writes its
+immutable run result and event timeline below that output directory.
+
+This is not a defense against every filesystem alias or race: mapped-drive and
+UNC aliases are not canonicalized against one another, and another process
+must not mutate/repoint path components concurrently with validation or the
+run. The guarantee is limited to rejecting reparse-point components observed
+during the wrapper's preflight checks.
 
 ## Output and safety
 
@@ -47,11 +53,14 @@ production behavior.
 
 ## Test
 
-With Pester installed:
+Run with Pester 3.4.0 installed:
 
     Invoke-Pester -Path .\tests\run-local-e0-e2e.Tests.ps1
 
-The tests use a temporary local cargo shim to verify argument construction,
-safe summary filtering, mandatory cutoff, output/input isolation, no-overwrite,
-and sanitized failure behavior. They do not build Rust or prove the E0 package
-is valid. For a real run, use the command above against the local package.
+The Windows CI job requires the exact Pester 3.4.0 module to already be
+available and does not install or upgrade it. The tests use a temporary local
+cargo shim to verify argument construction, safe summary filtering, mandatory
+cutoff, output/input isolation (including input and output junction paths),
+no-overwrite, and sanitized failure behavior. They do not build Rust or prove
+the E0 package is valid. For a real run, use the command above against the
+local package.
