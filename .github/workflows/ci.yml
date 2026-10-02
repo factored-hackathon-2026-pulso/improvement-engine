@@ -60,6 +60,11 @@ jobs:
           PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test
           PULSO_ALLOW_DESTRUCTIVE_TEST_DB: "1"
         run: cargo +1.98.1 test --locked -p improvement-engine-core --test postgres_run_events -- --ignored
+      - name: Run isolated P4 temporal memory receipt test
+        env:
+          PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test
+          PULSO_ALLOW_DESTRUCTIVE_TEST_DB: "1"
+        run: cargo +1.98.1 test --locked -p improvement-engine-core --test postgres_memory_temporal_receipts -- --ignored --exact temporal_use_receipt_is_bound_to_event_scope_cutoff_and_current_head
 
   verify:
     name: verify (${{ matrix.os }})

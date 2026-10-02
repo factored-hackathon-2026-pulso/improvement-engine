@@ -246,6 +246,14 @@ green unit test as proof that a broader product flow is complete.
   admits Frozen only until U20-E/U27 supplies a sealed outcome adapter. This is not the
   full U23 E0 runner, CampaignManifest, scoring, or replay-result flow; those
   remain dependent on U09, U20-E and U27.
+- P4 U33 temporal receipt persistence: migration `0004` binds the opaque U23
+  commitment and one event reference to a live scoped head under a replay
+  cutoff, with exact retry idempotency and fail-closed revocation/scope checks.
+  The gated PostgreSQL 18 integration test passed against real U02/U33 tables,
+  including concurrent exact retries. A Rust
+  adapter/composition that invokes this only after U22/U23 and U05 admission,
+  plus event→successor-run wiring, remains pending; this slice does not claim
+  autonomous iteration.
 
 ## Still pending for the complete product flow
 
