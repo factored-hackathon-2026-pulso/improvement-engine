@@ -167,15 +167,17 @@ mod tests {
 
     #[test]
     fn only_a_real_u04b_projection_can_bind_e0_table_field_and_replay_commitments() {
-        let raw_snapshot = json!({
-            "contract_version": {"major": 1, "minor": 0},
-            "tenant_id": "tenant_a", "source_namespace": "platform_history",
-            "world_ref": "world_a", "observed_cutoff": "1970-01-01T00:01:40Z",
-            "sources": [{"table":"case", "uri":"file://fixture.csv", "file_digest":digest('a'),
-                "header_digest":digest('b'), "row_count":1,
-                "source_contract_ref":{"id":"case", "version":"v1", "digest":digest('c')}}]
-        })
-        .to_string();
+        let raw_snapshot = format!(
+            "\n  {}  \n",
+            json!({
+                "contract_version": {"major": 1, "minor": 0},
+                "tenant_id": "tenant_a", "source_namespace": "platform_history",
+                "world_ref": "world_a", "observed_cutoff": "1970-01-01T00:01:40Z",
+                "sources": [{"table":"case", "uri":"file://fixture.csv", "file_digest":digest('a'),
+                    "header_digest":digest('b'), "row_count":1,
+                    "source_contract_ref":{"id":"case", "version":"v1", "digest":digest('c')}}]
+            })
+        );
         let snapshot = SourceSnapshot::from_json(&raw_snapshot).expect("fixed source snapshot");
         let row = json!({"event_time":"1970-01-01T00:01:40Z", "status":"completed"});
         let availability = vec![ReplayRowAvailability::new(BTreeMap::from([
@@ -245,13 +247,19 @@ mod tests {
                     "018f50a1-7f00-7000-8000-000000000008",
                     1,
                     ArtifactKind::SourceSnapshot,
-                    serde_json::from_str(&raw_snapshot).unwrap(),
+                    json!({"raw_source_snapshot_json": raw_snapshot}),
                     None,
                 ),
             )
             .unwrap()
             .reference();
         assert_ne!(artifact.digest, snapshot.binding_digest());
+        assert_eq!(
+            resolve_source_snapshot_artifact(&mut source_repository, &artifact)
+                .unwrap()
+                .snapshot_binding_digest(),
+            snapshot.binding_digest()
+        );
         let lab_rows = vec![BTreeMap::from([
             ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
             ("status".to_owned(), "completed".to_owned()),

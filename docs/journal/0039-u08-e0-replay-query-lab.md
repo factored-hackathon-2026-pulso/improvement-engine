@@ -27,7 +27,7 @@ firma ni una atestación criptográfica.
 Antes de emitirla, compara el `SourceSnapshot.binding_digest` sellado por U04
 con un mapeo explícito y privado emitido al resolver la revisión inmutable U02
 exacta (tenant/id/revision/digest), comprobar `SourceSnapshot` y volver a
-parsear su payload canónico, y almacenado
+parsear el string JSON crudo preservado por U02 (sin reserializar un `Value`), y almacenado
 en la capability aprobada del lab,
 los tres digests, cutoff, tabla y la tabla fuente
 exacta (schema y filas) contra la evidencia `TableInput` validada por U04. La

@@ -290,8 +290,8 @@ impl VerifiedSourceArtifactBinding {
 }
 
 /// Resolves a U04 mapping only from U02's immutable revision port. The exact
-/// reference, kind and stored content digest are rechecked before the stored
-/// canonical payload is parsed again as a SourceSnapshot.
+/// reference, kind and stored content digest are rechecked before the exact
+/// raw snapshot JSON bytes retained in the immutable artifact are parsed again.
 #[allow(dead_code)] // Called by the future U04/U08 composition root.
 pub(crate) fn resolve_source_snapshot_artifact<R: crate::ArtifactRepository>(
     repository: &mut R,
@@ -308,9 +308,14 @@ pub(crate) fn resolve_source_snapshot_artifact<R: crate::ArtifactRepository>(
             "source artifact reference or kind mismatch",
         ));
     }
-    let raw = serde_json::to_string(&draft.payload)
-        .map_err(|_| SourceDefinitionError::Invalid("source artifact payload is not canonical"))?;
-    let snapshot = SourceSnapshot::from_json(&raw)?;
+    let raw = draft
+        .payload
+        .get("raw_source_snapshot_json")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(SourceDefinitionError::Invalid(
+            "source artifact omits exact raw snapshot bytes",
+        ))?;
+    let snapshot = SourceSnapshot::from_json(raw)?;
     if snapshot.tenant_id() != reference.tenant_id {
         return Err(SourceDefinitionError::Invalid(
             "artifact tenant differs from snapshot",
