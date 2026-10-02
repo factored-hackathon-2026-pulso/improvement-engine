@@ -63,6 +63,7 @@ impl TrustedTemporalEvidenceIssuer {
             &self.nonce,
             protocol,
             request.scope(),
+            request.access(),
             request.allowed_at_unix_seconds(),
             cutoff_at_unix_seconds,
             outcome_available_at_unix_seconds,
@@ -249,6 +250,7 @@ fn temporal_commitment(
     nonce: &str,
     protocol: MemoryTemporalProtocol,
     scope: &MemoryScope,
+    access: &crate::wiki_scratch::WikiAccess,
     allowed_at: u64,
     cutoff: u64,
     outcome_at: Option<u64>,
@@ -258,6 +260,10 @@ fn temporal_commitment(
         nonce,
         protocol.as_str(),
         scope,
+        &access.snapshot_ref,
+        &access.run_id,
+        &access.grant_id,
+        &access.purpose,
         allowed_at,
         cutoff,
         outcome_at,
@@ -433,5 +439,73 @@ mod tests {
         assert_eq!(admitted.head_version(), 1);
         assert_eq!(admitted.run_id(), "run-2");
         assert_eq!(registry.receipts().len(), 1);
+    }
+
+    #[test]
+    fn evidence_rejects_caller_elevation_of_allowed_at_before_u33_side_effects() {
+        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
+            MemoryTemporalProtocol::Frozen,
+            &request,
+            100,
+            None,
+            None,
+        );
+        let mut elevated = request;
+        elevated.access.allowed_at_unix_seconds = 101;
+
+        assert!(matches!(
+            MemoryTemporalAdmission::admit(
+                MemoryTemporalProtocol::Frozen,
+                evidence,
+                &mut registry,
+                &mut artifacts,
+                &authority,
+                elevated,
+            ),
+            Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::AccessTimeMismatch
+            ))
+        ));
+        assert!(registry.receipts().is_empty());
+    }
+
+    #[test]
+    fn evidence_cannot_cross_a_memory_scope_before_u33_side_effects() {
+        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access.clone());
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
+            MemoryTemporalProtocol::Frozen,
+            &request,
+            100,
+            None,
+            None,
+        );
+        let crossed = MemoryUseRequest::new(
+            MemoryScope::new(
+                TENANT,
+                "investigation",
+                "world-b",
+                "campaign-a",
+                "frozen",
+                "train",
+            ),
+            access,
+        );
+        assert!(matches!(
+            MemoryTemporalAdmission::admit(
+                MemoryTemporalProtocol::Frozen,
+                evidence,
+                &mut registry,
+                &mut artifacts,
+                &authority,
+                crossed,
+            ),
+            Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::AccessTimeMismatch
+            ))
+        ));
+        assert!(registry.receipts().is_empty());
     }
 }
