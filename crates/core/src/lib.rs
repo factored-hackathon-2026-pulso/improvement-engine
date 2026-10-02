@@ -17,6 +17,7 @@ pub mod core_task;
 pub mod debug_console;
 pub mod deterministic_sensor;
 pub mod durable_jobs;
+pub mod durable_run_events;
 pub mod e0_deterministic_sensor;
 pub mod e0_frozen_memory_publication;
 pub mod e0_frozen_summary;
