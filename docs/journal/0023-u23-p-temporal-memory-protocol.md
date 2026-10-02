@@ -8,7 +8,8 @@ la admisión gobernada U22/U33. No es el U23 completo: no hay runner E0,
 runtime, Scout, caché ni páginas de wiki.
 
 `TemporalMemoryEvidence` sustituye los instantes construibles por el llamador.
-La emite únicamente el composition root confiable de U04-B o del futuro runner:
+La emite únicamente una `VerifiedAvailabilityProjection` opaca del composition
+root confiable de U04-B o del futuro runner:
 lleva un commitment con nonce que fija tenant, scope completo, snapshot, head,
 run, grant, propósito, instante autorizado, cutoff, protocolo y, para
 Continuous, provenance y disponibilidad del outcome. El protocolo nunca abre
@@ -28,7 +29,8 @@ archivos de fuente ni interpreta labels/outcomes.
   futura integración autorizada decida si produce una revisión nueva.
 
 `MemoryTemporalAdmission::admit` permanece `pub(crate)`. Antes de delegar a
-U22, valida el evidence opaco y lo incorpora al receipt canónico U33. U33
+U22 delega una única operación condicional U33 que valida el evidence opaco y
+escribe el receipt canónico en el mismo commit. U33
 recalcula la identidad incluyendo ese commitment además de scope, snapshot,
 head, run, grant, purpose y reloj autorizado. Un cutoff/outcome/timestamp
 fabricado, feedback futuro o protocolo cruzado falla antes de registrar un

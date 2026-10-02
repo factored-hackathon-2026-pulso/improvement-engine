@@ -5,9 +5,7 @@
 //! provenance: it never returns wiki pages or a cache handle.
 
 use crate::ArtifactRepository;
-use crate::memory_store::{
-    MemoryError, MemoryPublisher, MemoryScope, MemoryUseReceipt, MemoryUseReceiptAttestationPort,
-};
+use crate::memory_store::{MemoryError, MemoryPublisher, MemoryScope, MemoryUseReceipt};
 use crate::wiki_scratch::{WikiAccess, WikiAuthorizationPort};
 
 /// Caller-supplied context which U33 must validate before a memory use is
@@ -131,11 +129,7 @@ pub struct MemoryUseAdmission {
 
 impl MemoryUseAdmission {
     #[allow(dead_code)] // Invoked by the future trusted service composition root.
-    pub(crate) fn admit<
-        R: ArtifactRepository,
-        P: MemoryPublisher + MemoryUseReceiptAttestationPort,
-        A: WikiAuthorizationPort,
-    >(
+    pub(crate) fn admit<R: ArtifactRepository, P: MemoryPublisher, A: WikiAuthorizationPort>(
         publisher: &mut P,
         artifacts: &mut R,
         authority: &A,
@@ -151,16 +145,10 @@ impl MemoryUseAdmission {
                 request.access.snapshot_ref.clone(),
             )
             .map_err(MemoryUseAdmissionError::Denied)?;
-        publisher
-            .attest_allowed_use(
-                artifacts,
-                authority,
-                &request.scope,
-                &request.access,
-                request.temporal_commitment(),
-                &receipt,
-            )
-            .map_err(MemoryUseAdmissionError::Denied)?;
+        // `record_allowed_use` is the U33 conditional-commit port: a durable
+        // adapter must check head/liveness/authority and insert the exact
+        // receipt in one transaction. Re-reading and attesting afterwards
+        // would create a revocation/head race after a visible allowed receipt.
         if !receipt_matches_request(&receipt, &request) {
             return Err(MemoryUseAdmissionError::ReceiptMismatch);
         }

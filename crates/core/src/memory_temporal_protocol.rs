@@ -8,7 +8,7 @@ use crate::ArtifactRepository;
 use crate::governed_memory_use::{
     MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest, VerifiedMemoryUse,
 };
-use crate::memory_store::{MemoryPublisher, MemoryScope, MemoryUseReceiptAttestationPort};
+use crate::memory_store::{MemoryPublisher, MemoryScope};
 use crate::wiki_scratch::WikiAuthorizationPort;
 use sha2::{Digest, Sha256};
 
@@ -35,11 +35,41 @@ pub struct TemporalMemoryEvidence {
     purpose: String,
 }
 
+/// Opaque U04-B availability projection. Its only production factory is the
+/// verified U04-B adapter; it intentionally has no public constructor or raw
+/// timestamp getters.
+pub(crate) struct VerifiedAvailabilityProjection {
+    nonce: String,
+    request: MemoryUseRequest,
+    cutoff_at_unix_seconds: u64,
+    outcome_available_at_unix_seconds: Option<u64>,
+    outcome_provenance: Option<String>,
+}
+
+impl VerifiedAvailabilityProjection {
+    #[cfg(test)]
+    fn deterministic(
+        nonce: impl Into<String>,
+        request: MemoryUseRequest,
+        cutoff_at_unix_seconds: u64,
+        outcome_available_at_unix_seconds: Option<u64>,
+        outcome_provenance: Option<String>,
+    ) -> Self {
+        Self {
+            nonce: nonce.into(),
+            request,
+            cutoff_at_unix_seconds,
+            outcome_available_at_unix_seconds,
+            outcome_provenance,
+        }
+    }
+}
+
 /// Crate-private stand-in for the U04-B/future runner issuer. The service
 /// composition owns it; consumers only receive opaque evidence.
 #[allow(dead_code)] // Called by the future U04-B/replay composition root.
 pub(crate) struct TrustedTemporalEvidenceIssuer {
-    nonce: String,
+    projection: VerifiedAvailabilityProjection,
 }
 
 impl TrustedTemporalEvidenceIssuer {
@@ -47,45 +77,37 @@ impl TrustedTemporalEvidenceIssuer {
     /// It is crate-private: transport callers cannot select a nonce, clock or
     /// outcome and therefore cannot mint temporal evidence.
     #[allow(dead_code)]
-    pub(crate) fn from_u04b_verified_projection(authority_nonce: String) -> Self {
-        Self {
-            nonce: authority_nonce,
-        }
+    pub(crate) fn from_u04b_verified_projection(
+        projection: VerifiedAvailabilityProjection,
+    ) -> Self {
+        Self { projection }
     }
 
     #[cfg(test)]
-    fn deterministic(nonce: impl Into<String>) -> Self {
-        Self {
-            nonce: nonce.into(),
-        }
+    fn deterministic(projection: VerifiedAvailabilityProjection) -> Self {
+        Self { projection }
     }
 
     #[allow(dead_code)]
-    pub(crate) fn attest(
-        &self,
-        protocol: MemoryTemporalProtocol,
-        request: &MemoryUseRequest,
-        cutoff_at_unix_seconds: u64,
-        outcome_available_at_unix_seconds: Option<u64>,
-        outcome_provenance: Option<String>,
-    ) -> TemporalMemoryEvidence {
+    pub(crate) fn attest(&self, protocol: MemoryTemporalProtocol) -> TemporalMemoryEvidence {
+        let request = &self.projection.request;
         let commitment = temporal_commitment(
-            &self.nonce,
+            &self.projection.nonce,
             protocol,
             request.scope(),
             request.access(),
             request.allowed_at_unix_seconds(),
-            cutoff_at_unix_seconds,
-            outcome_available_at_unix_seconds,
-            outcome_provenance.as_deref(),
+            self.projection.cutoff_at_unix_seconds,
+            self.projection.outcome_available_at_unix_seconds,
+            self.projection.outcome_provenance.as_deref(),
         );
         TemporalMemoryEvidence {
             commitment,
             protocol,
-            cutoff_at_unix_seconds,
+            cutoff_at_unix_seconds: self.projection.cutoff_at_unix_seconds,
             memory_use_at_unix_seconds: request.allowed_at_unix_seconds(),
-            outcome_available_at_unix_seconds,
-            outcome_provenance,
+            outcome_available_at_unix_seconds: self.projection.outcome_available_at_unix_seconds,
+            outcome_provenance: self.projection.outcome_provenance.clone(),
             scope: request.scope().clone(),
             snapshot_ref: request.access().snapshot_ref.clone(),
             run_id: request.access().run_id.clone(),
@@ -144,11 +166,7 @@ pub struct MemoryTemporalAdmission {
 
 impl MemoryTemporalAdmission {
     #[allow(dead_code)] // Invoked by the future trusted service composition root.
-    pub(crate) fn admit<
-        R: ArtifactRepository,
-        P: MemoryPublisher + MemoryUseReceiptAttestationPort,
-        A: WikiAuthorizationPort,
-    >(
+    pub(crate) fn admit<R: ArtifactRepository, P: MemoryPublisher, A: WikiAuthorizationPort>(
         protocol: MemoryTemporalProtocol,
         evidence: TemporalMemoryEvidence,
         publisher: &mut P,
@@ -287,7 +305,7 @@ fn temporal_commitment(
 mod tests {
     use super::{
         MemoryTemporalAdmission, MemoryTemporalProtocol, TemporalMemoryAdmissionError,
-        TemporalProtocolError, TrustedTemporalEvidenceIssuer,
+        TemporalProtocolError, TrustedTemporalEvidenceIssuer, VerifiedAvailabilityProjection,
     };
     use crate::governed_memory_use::MemoryUseRequest;
     use crate::memory_store::{InMemoryMemoryRegistry, MemoryPublisher, MemoryScope};
@@ -369,13 +387,16 @@ mod tests {
         let (mut artifacts, mut registry, authority, access) = seeded("continuous");
 
         let request = MemoryUseRequest::new(scope("continuous"), access);
-        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
-            MemoryTemporalProtocol::Continuous,
-            &request,
-            100,
-            Some(101),
-            Some("outcome:1".into()),
-        );
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(
+                "u04b",
+                request.clone(),
+                100,
+                Some(101),
+                Some("outcome:1".into()),
+            ),
+        )
+        .attest(MemoryTemporalProtocol::Continuous);
         let result = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Continuous,
             evidence,
@@ -400,13 +421,10 @@ mod tests {
         let (mut artifacts, mut registry, authority, access) = seeded("frozen");
 
         let request = MemoryUseRequest::new(scope("frozen"), access);
-        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
-            MemoryTemporalProtocol::Frozen,
-            &request,
-            100,
-            None,
-            None,
-        );
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic("u04b", request.clone(), 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
         let result = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Frozen,
             evidence,
@@ -429,13 +447,10 @@ mod tests {
         let (mut artifacts, mut registry, authority, access) = seeded("frozen");
 
         let request = MemoryUseRequest::new(scope("frozen"), access);
-        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
-            MemoryTemporalProtocol::Frozen,
-            &request,
-            100,
-            None,
-            None,
-        );
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic("u04b", request.clone(), 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
         let admitted = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Frozen,
             evidence,
@@ -455,13 +470,10 @@ mod tests {
     fn evidence_rejects_caller_elevation_of_allowed_at_before_u33_side_effects() {
         let (mut artifacts, mut registry, authority, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access);
-        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
-            MemoryTemporalProtocol::Frozen,
-            &request,
-            100,
-            None,
-            None,
-        );
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic("u04b", request.clone(), 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
         let mut elevated = request;
         elevated.access.allowed_at_unix_seconds = 101;
 
@@ -485,13 +497,10 @@ mod tests {
     fn evidence_cannot_cross_a_memory_scope_before_u33_side_effects() {
         let (mut artifacts, mut registry, authority, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access.clone());
-        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
-            MemoryTemporalProtocol::Frozen,
-            &request,
-            100,
-            None,
-            None,
-        );
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic("u04b", request.clone(), 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
         let crossed = MemoryUseRequest::new(
             MemoryScope::new(
                 TENANT,
