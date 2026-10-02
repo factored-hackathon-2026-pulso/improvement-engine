@@ -7,7 +7,10 @@ existing opt-in local simulation. It requires explicit input, output and
 whole-second UTC cutoff values; defaults Arranque to 200 and recurrence
 support to 20. It invokes Cargo with --locked --offline and a branch-local
 target-local-e2e directory. The output directory must be new and must not
-overlap the input tree; the wrapper does not delete or overwrite either.
+overlap the input tree; the wrapper does not delete or overwrite either. Before
+Cargo runs, each existing path component is checked for the Windows
+reparse-point attribute; paths traversing junctions, symlinks or other
+reparse points fail closed.
 
 The console is a strict summary projection: run status, discovery/replay
 counts, allowlisted metric IDs with numerator/denominator/missing counts,
@@ -22,9 +25,14 @@ their inputs.
 - RED: before the wrapper existed, Pester's happy-path and Cargo-failure cases
   failed because the public script path was unavailable; safety-precondition
   cases also failed under the host's legacy Pester assertion syntax. Updated
-  assertions to framework-independent throwing checks.
-- GREEN: Invoke-Pester -Path tests/run-local-e0-e2e.Tests.ps1; 5 passed,
-  0 failed. The temporary fake Cargo verifies locked/offline arguments,
+  assertions to framework-independent throwing checks. In the hardening loop,
+  a real junction test reproduced the isolation bug: the script accepted an
+  output path that resolved below the input tree and fake Cargo wrote there.
+- GREEN: Invoke-Pester -Path tests/run-local-e0-e2e.Tests.ps1; initial runner
+  slice had 5 passed, 0 failed. After the reparse-point hardening, the suite
+  has 7 passed, 0 failed. A real temporary junction into the input tree is
+  rejected before fake Cargo is invoked; a legal prefix-sharing sibling output
+  succeeds. The temporary fake Cargo verifies locked/offline arguments,
   local-simulation E0 arguments, default settings, summary allowlisting,
   explicit cutoff, path overlap, no-overwrite and failure-output suppression.
 - Actual local smoke:

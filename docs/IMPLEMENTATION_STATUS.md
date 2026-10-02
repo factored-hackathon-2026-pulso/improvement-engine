@@ -67,10 +67,11 @@ green unit test as proof that a broader product flow is complete.
   those tables.
 - Windows local E0 convenience wrapper: scripts/run-local-e0-e2e.ps1 invokes
   the opt-in local simulation with locked/offline Cargo, required UTC cutoff,
-  default Arranque/support settings and a fresh non-overlapping output path.
-  It prints only allowlisted aggregate summaries; Pester tests use a temporary
-  Cargo shim and do not substitute for a real package run. Usage and safety
-  boundaries are in docs/local-e0-e2e-runner.md.
+  default Arranque/support settings and a fresh non-overlapping output path;
+  existing reparse-point components fail closed before Cargo runs. It prints
+  only allowlisted aggregate summaries; Pester tests use a temporary Cargo shim
+  and do not substitute for a real package run. Usage and safety boundaries are
+  in docs/local-e0-e2e-runner.md.
 - U13-A / Issue #43: opaque, verified Scout-candidate admission. Candidate
   batches are canonical and atomic; durable reload validates member and batch
   commitments; downstream code receives a read-only capability rather than a

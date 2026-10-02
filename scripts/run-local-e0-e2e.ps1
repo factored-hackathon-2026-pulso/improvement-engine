@@ -46,6 +46,41 @@ function Test-PathsOverlap {
     return $same -or $leftContainsRight -or $rightContainsLeft
 }
 
+function Assert-NoReparsePointComponents {
+    param(
+        [Parameter(Mandatory = $true)][string] $Path,
+        [Parameter(Mandatory = $true)][string] $Label
+    )
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $root = [System.IO.Path]::GetPathRoot($fullPath)
+    if ([string]::IsNullOrWhiteSpace($root)) {
+        throw "$Label must be a filesystem path."
+    }
+
+    $current = $root
+    $components = $fullPath.Substring($root.Length).Split(
+        [char[]] @([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar),
+        [System.StringSplitOptions]::RemoveEmptyEntries
+    )
+    foreach ($component in $components) {
+        $current = Join-Path $current $component
+        try {
+            $attributes = [System.IO.File]::GetAttributes($current)
+        }
+        catch [System.IO.FileNotFoundException] {
+            continue
+        }
+        catch [System.IO.DirectoryNotFoundException] {
+            continue
+        }
+
+        if (($attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Label traverses a reparse point; use a direct filesystem path."
+        }
+    }
+}
+
 function Get-NonNegativeInteger {
     param(
         [Parameter(Mandatory = $true)][System.Collections.IDictionary] $Object,
@@ -100,6 +135,8 @@ if ($resolvedInput.Provider.Name -ne 'FileSystem' -or -not (Test-Path -LiteralPa
 $inputFullPath = Get-FullDirectoryPath -Path $resolvedInput.Path
 $outputFullPath = Get-FullDirectoryPath -Path $OutputPath
 
+Assert-NoReparsePointComponents -Path $inputFullPath -Label 'InputPath'
+Assert-NoReparsePointComponents -Path $outputFullPath -Label 'OutputPath'
 if (Test-PathsOverlap -Left $inputFullPath -Right $outputFullPath) {
     throw 'InputPath and OutputPath must not overlap.'
 }

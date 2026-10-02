@@ -118,7 +118,42 @@ exit /b 0
         Assert-True (-not (Test-Path -LiteralPath $nestedOutput)) 'Nested output path was created.'
     }
 
+    It 'refuses an output path through a junction that aliases the input tree' {
+        $junction = Join-Path ([System.IO.Path]::GetTempPath()) ('pulso-e0-junction-' + [guid]::NewGuid().ToString('N'))
+        $junctionCreated = $false
+        try {
+            New-Item -ItemType Junction -Path $junction -Target $script:inputRoot -ErrorAction Stop | Out-Null
+            $junctionCreated = $true
+        }
+        catch {
+            throw 'Could not create a temporary Windows junction; the reparse-point isolation regression cannot be exercised.'
+        }
+
+        try {
+            Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
+            $junctionOutput = Join-Path $junction 'runs'
+            $thrown = $false
+            try { & $scriptPath -InputPath $script:inputRoot -OutputPath $junctionOutput -ObservedCutoff '2026-10-02T18:00:00Z' | Out-Null } catch { $thrown = $true }
+            Assert-True $thrown 'Output through an input-alias junction was not rejected.'
+            Assert-True (-not (Test-Path -LiteralPath $script:argsLog)) 'Cargo ran before the reparse point was rejected.'
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $script:inputRoot 'runs'))) 'Junction output contaminated the input tree.'
+        }
+        finally {
+            if ($junctionCreated -and (Test-Path -LiteralPath $junction)) {
+                [System.IO.Directory]::Delete($junction, $false)
+            }
+        }
+    }
+
+    It 'allows a new output sibling whose name shares an input prefix' {
+        $prefixSibling = Join-Path $script:fixtureRoot 'input-runs'
+        $output = & $scriptPath -InputPath $script:inputRoot -OutputPath $prefixSibling -ObservedCutoff '2026-10-02T18:00:00Z'
+        Assert-Contains ($output -join [Environment]::NewLine) 'Status: complete_simulated'
+        Assert-True (Test-Path -LiteralPath (Join-Path $prefixSibling 'fixture-run\result.json')) 'Sibling output was not written.'
+    }
+
     It 'requires an explicit observed cutoff' {
+        Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
         $thrown = $false
         try { & $scriptPath -InputPath $script:inputRoot -OutputPath $script:outputRoot | Out-Null } catch { $thrown = $true }
         Assert-True $thrown 'Missing cutoff was not rejected.'

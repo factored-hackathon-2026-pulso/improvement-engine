@@ -24,9 +24,10 @@ be UTC with whole-second precision. Defaults are 200 Arranque cases and a
 
     pwsh -NoProfile -File .\scripts\run-local-e0-e2e.ps1 -InputPath 'D:\data\e0-package' -OutputPath '.\output\e0-run-custom' -ObservedCutoff '2026-10-02T18:00:00Z' -ArranqueCases 200 -MinimumRecurringQueryCases 20
 
-The output path must not exist and must not overlap the input tree. Choose a
-new output path for each run. The wrapper never deletes or overwrites data. The
-engine writes its immutable run result and event timeline below that output
+The output path must not exist, must not overlap the input tree, and neither
+path may traverse an existing junction, symlink, or other reparse point. Choose
+a new output path for each run. The wrapper never deletes or overwrites data.
+The engine writes its immutable run result and event timeline below that output
 directory.
 
 ## Output and safety
