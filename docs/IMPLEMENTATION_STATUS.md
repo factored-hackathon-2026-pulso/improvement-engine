@@ -10,10 +10,10 @@ green unit test as proof that a broader product flow is complete.
   provenance, truthful coverage and PostgreSQL RLS contract.
 - U34: durable, fenced and truthful operator run-control receipts.
 - U13: autonomous Scout drafts with bounded U08/U12/Core/model provenance.
-  Its current DeterministicSensor route is public/test-oriented, not evidence
-  authenticated for E0 improvement. U12-E remains the only planned
-  authenticated E0 route; until it is integrated U13 must not treat a public
-  `QueryResult` as improvement evidence.
+  Its generic `DeterministicSensor` route remains public/test-oriented and is
+  never evidence authenticated for E0 improvement. U13-E adds a separate,
+  opaque U12-E composition and U13-A durable-admission route; U13 must still
+  never treat a public `QueryResult` as improvement evidence.
 - U33: scoped immutable published-memory revisions, head CAS and idempotent use
   receipts. Its present in-memory adapter is not production-durability proof;
   the U33 corrective slice covers an overflow atomicity regression.
@@ -24,6 +24,14 @@ green unit test as proof that a broader product flow is complete.
   batches are canonical and atomic; durable reload validates member and batch
   commitments; downstream code receives a read-only capability rather than a
   forgeable draft.
+- U13-E / Issue #53: authenticated E0 Scout admission. Only a crate-private
+  composition of the U12-E immutable signal and matching U09/U10 receipts can
+  form the opaque capability. It revalidates full scope, U04 raw binding,
+  profile/cutoff/source commitments and E0 query receipts; it persists typed,
+  canonical E0 provenance through the existing U13-A batch so U14 receives
+  only `VerifiedScoutCandidate`. It does not use public `QueryResult` or the
+  generic Scout authority, and it has no recorder beyond U13-A, registry,
+  promotion, release, runtime or Agent Core execution effect.
 
 - U30 / Issue #41: deterministic platform sensor. It consumes the U29 safe
   projection and emits only sealed, mapping-resolution-bound signals; it never

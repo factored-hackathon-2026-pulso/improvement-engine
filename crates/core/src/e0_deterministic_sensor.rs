@@ -151,6 +151,9 @@ pub struct E0DiagnosticSignal {
     window: E0DiagnosticWindow,
     cutoff_unix_seconds: u64,
     tenant_id: String,
+    grant_id: String,
+    authority_ref: String,
+    run_id: String,
     source_snapshot_ref: ArtifactReference,
     source_snapshot_binding: String,
     availability_profile_digest: String,
@@ -165,7 +168,68 @@ pub struct E0DiagnosticSignal {
     digest: String,
 }
 
+/// Crate-private projection for the U13-E trusted composition. It contains
+/// only immutable commitments and descriptive aggregates, never query rows.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct E0ScoutSignalBinding {
+    pub(crate) signal_digest: String,
+    pub(crate) metric_id: String,
+    pub(crate) metric_spec_commitment: String,
+    pub(crate) metric_policy_id: String,
+    pub(crate) metric_policy_version: u16,
+    pub(crate) metric_semantics: String,
+    pub(crate) numerator: u64,
+    pub(crate) denominator: u64,
+    pub(crate) missing: u64,
+    pub(crate) coverage_basis_points: u16,
+    pub(crate) window: E0DiagnosticWindow,
+    pub(crate) cutoff_unix_seconds: u64,
+    pub(crate) tenant_id: String,
+    pub(crate) grant_id: String,
+    pub(crate) authority_ref: String,
+    pub(crate) run_id: String,
+    pub(crate) source_snapshot_ref: ArtifactReference,
+    pub(crate) source_snapshot_binding: String,
+    pub(crate) availability_profile_digest: String,
+    pub(crate) source_contract_digest: String,
+    pub(crate) source_digest: String,
+    pub(crate) transform_digest: String,
+    pub(crate) replay_projection_digest: String,
+    pub(crate) source_evidence_digest: String,
+    pub(crate) query_receipt_digests: Vec<String>,
+}
+
 impl E0DiagnosticSignal {
+    #[allow(dead_code)] // Consumed by U13-E trusted composition.
+    pub(crate) fn scout_binding(&self) -> E0ScoutSignalBinding {
+        E0ScoutSignalBinding {
+            signal_digest: self.digest.clone(),
+            metric_id: self.metric_id.clone(),
+            metric_spec_commitment: self.metric_spec_commitment.clone(),
+            metric_policy_id: self.metric_policy_id.clone(),
+            metric_policy_version: self.metric_policy_version,
+            metric_semantics: self.metric_semantics.clone(),
+            numerator: self.numerator,
+            denominator: self.denominator,
+            missing: self.missing,
+            coverage_basis_points: self.coverage_basis_points,
+            window: self.window,
+            cutoff_unix_seconds: self.cutoff_unix_seconds,
+            tenant_id: self.tenant_id.clone(),
+            grant_id: self.grant_id.clone(),
+            authority_ref: self.authority_ref.clone(),
+            run_id: self.run_id.clone(),
+            source_snapshot_ref: self.source_snapshot_ref.clone(),
+            source_snapshot_binding: self.source_snapshot_binding.clone(),
+            availability_profile_digest: self.availability_profile_digest.clone(),
+            source_contract_digest: self.source_contract_digest.clone(),
+            source_digest: self.source_digest.clone(),
+            transform_digest: self.transform_digest.clone(),
+            replay_projection_digest: self.replay_projection_digest.clone(),
+            source_evidence_digest: self.source_evidence_digest.clone(),
+            query_receipt_digests: self.query_receipt_digests.clone(),
+        }
+    }
     #[must_use]
     pub fn metric_id(&self) -> &str {
         &self.metric_id
@@ -371,6 +435,9 @@ impl E0DiagnosticSensor {
             window,
             cutoff_unix_seconds: baseline.cutoff_unix_seconds(),
             tenant_id: baseline.tenant_id().to_owned(),
+            grant_id: first_receipt.grant_id.clone(),
+            authority_ref: first_receipt.authority_ref.clone(),
+            run_id: first_receipt.run_id.clone(),
             source_snapshot_ref: first_receipt.source_snapshot_ref.clone(),
             source_snapshot_binding: baseline.source_snapshot_binding().to_owned(),
             availability_profile_digest: baseline.availability_profile_digest().to_owned(),
@@ -409,6 +476,46 @@ fn same_commitments(
 fn digest_of<T: Serialize>(value: &T) -> String {
     let bytes = serde_json::to_vec(value).expect("sensor evidence is serializable");
     format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+#[cfg(all(test, feature = "test-support"))]
+pub(crate) fn signal_for_scout_test() -> E0DiagnosticSignal {
+    let mut signal = E0DiagnosticSignal {
+        metric_id: "e0_technical_error_rate".to_owned(),
+        metric_policy_id: "e0_diagnostic_allowlist".to_owned(),
+        metric_policy_version: 1,
+        metric_semantics: "observed_technical_error_flag".to_owned(),
+        metric_spec_commitment: format!("sha256:{}", "a".repeat(64)),
+        numerator: 1,
+        denominator: 2,
+        missing: 1,
+        coverage_basis_points: 6_666,
+        window: E0DiagnosticWindow::new(100, 100).unwrap(),
+        cutoff_unix_seconds: 100,
+        tenant_id: "tenant_a".to_owned(),
+        grant_id: "grant_a".to_owned(),
+        authority_ref: "authority_a".to_owned(),
+        run_id: "run_a".to_owned(),
+        source_snapshot_ref: ArtifactReference {
+            tenant_id: "tenant_a".to_owned(),
+            id: "018f50a1-7f00-7000-8000-000000000001".to_owned(),
+            revision: 1,
+            digest: format!("sha256:{}", "b".repeat(64)),
+        },
+        source_snapshot_binding: format!("sha256:{}", "c".repeat(64)),
+        availability_profile_digest: format!("sha256:{}", "d".repeat(64)),
+        table: "contacts".to_owned(),
+        source_contract_digest: format!("sha256:{}", "e".repeat(64)),
+        source_digest: format!("sha256:{}", "f".repeat(64)),
+        transform_digest: format!("sha256:{}", "1".repeat(64)),
+        field_commitment: format!("sha256:{}", "2".repeat(64)),
+        replay_projection_digest: format!("sha256:{}", "3".repeat(64)),
+        source_evidence_digest: format!("sha256:{}", "4".repeat(64)),
+        query_receipt_digests: vec![format!("sha256:{}", "5".repeat(64))],
+        digest: String::new(),
+    };
+    signal.digest = digest_of(&signal);
+    signal
 }
 
 #[allow(clippy::too_many_arguments)]

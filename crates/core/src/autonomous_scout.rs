@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 
 use crate::core_task::{CoreTaskOutcome, CoreTaskReceipt, CoreTaskScope};
 use crate::deterministic_sensor::DeterministicSignal;
+use crate::e0_deterministic_sensor::{E0DiagnosticSignal, E0ScoutSignalBinding};
 use crate::model_provider::{ModelOutcome, ModelReceipt};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -40,6 +41,8 @@ pub struct ScoutCandidateDraft {
     pub cutoff_unix_seconds: u64,
     pub query_receipt_digests: Vec<String>,
     pub signal_commitment: String,
+    /// Present only when the draft crossed the authenticated U12-E boundary.
+    pub e0_provenance: Option<E0ScoutCandidateProvenance>,
     pub core_input_commitment: String,
     pub model_input_commitment: String,
     pub model_capability_digest: String,
@@ -63,6 +66,133 @@ struct CandidateProvenance<'a> {
     grant_id: &'a str,
     authority_ref: &'a str,
     signal: &'a DeterministicSignal,
+    e0_provenance_commitment: Option<&'a str>,
+    core_binding_digest: &'a str,
+    core_attempt_id: &'a str,
+    core_run_id: Option<&'a str>,
+    core_output_digest: Option<&'a str>,
+    model_policy_digest: &'a str,
+    model_capability_digest: &'a str,
+    model_input_commitment: &'a str,
+    model_attempt_id: &'a str,
+    model_evidence: &'a str,
+    model_output_digest: Option<&'a str>,
+}
+
+/// Canonical, typed E0 provenance persisted with an E0-derived Scout draft.
+/// It is descriptive provenance, not an outcome, release or authorization.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct E0ScoutCandidateProvenance {
+    tenant_id: String,
+    job_id: String,
+    grant_id: String,
+    authority_ref: String,
+    /// U08-E execution identity. It is distinct from the U13 job ID.
+    run_id: String,
+    signal_commitment: String,
+    metric_spec_commitment: String,
+    metric_policy_id: String,
+    metric_policy_version: u16,
+    metric_semantics: String,
+    numerator: u64,
+    denominator: u64,
+    missing: u64,
+    coverage_basis_points: u16,
+    window_start_unix_seconds: u64,
+    window_end_unix_seconds: u64,
+    source_snapshot_ref: crate::ArtifactReference,
+    source_snapshot_binding: String,
+    availability_profile_digest: String,
+    cutoff_unix_seconds: u64,
+    source_contract_digest: String,
+    source_digest: String,
+    transform_digest: String,
+    replay_projection_digest: String,
+    source_evidence_digest: String,
+    query_receipt_digests: Vec<String>,
+    commitment: String,
+}
+
+impl E0ScoutCandidateProvenance {
+    #[must_use]
+    pub fn commitment(&self) -> &str {
+        &self.commitment
+    }
+
+    fn from_binding(scope: &CoreTaskScope, binding: &E0ScoutSignalBinding) -> Self {
+        let mut value = Self {
+            tenant_id: scope.tenant_id().to_owned(),
+            job_id: scope.job_id().to_owned(),
+            grant_id: scope.grant_id().to_owned(),
+            authority_ref: scope.authority_ref().to_owned(),
+            run_id: binding.run_id.clone(),
+            signal_commitment: binding.signal_digest.clone(),
+            metric_spec_commitment: binding.metric_spec_commitment.clone(),
+            metric_policy_id: binding.metric_policy_id.clone(),
+            metric_policy_version: binding.metric_policy_version,
+            metric_semantics: binding.metric_semantics.clone(),
+            numerator: binding.numerator,
+            denominator: binding.denominator,
+            missing: binding.missing,
+            coverage_basis_points: binding.coverage_basis_points,
+            window_start_unix_seconds: binding.window.start_unix_seconds(),
+            window_end_unix_seconds: binding.window.end_unix_seconds(),
+            source_snapshot_ref: binding.source_snapshot_ref.clone(),
+            source_snapshot_binding: binding.source_snapshot_binding.clone(),
+            availability_profile_digest: binding.availability_profile_digest.clone(),
+            cutoff_unix_seconds: binding.cutoff_unix_seconds,
+            source_contract_digest: binding.source_contract_digest.clone(),
+            source_digest: binding.source_digest.clone(),
+            transform_digest: binding.transform_digest.clone(),
+            replay_projection_digest: binding.replay_projection_digest.clone(),
+            source_evidence_digest: binding.source_evidence_digest.clone(),
+            query_receipt_digests: binding.query_receipt_digests.clone(),
+            commitment: String::new(),
+        };
+        value.commitment = e0_provenance_digest(&value);
+        value
+    }
+
+    fn is_valid_for(&self, scope: &CoreTaskScope, binding: &E0ScoutSignalBinding) -> bool {
+        self.tenant_id == scope.tenant_id()
+            && self.job_id == scope.job_id()
+            && self.grant_id == scope.grant_id()
+            && self.authority_ref == scope.authority_ref()
+            && self.run_id == binding.run_id
+            && self.signal_commitment == binding.signal_digest
+            && self.metric_spec_commitment == binding.metric_spec_commitment
+            && self.metric_policy_id == binding.metric_policy_id
+            && self.metric_policy_version == binding.metric_policy_version
+            && self.metric_semantics == binding.metric_semantics
+            && self.numerator == binding.numerator
+            && self.denominator == binding.denominator
+            && self.missing == binding.missing
+            && self.coverage_basis_points == binding.coverage_basis_points
+            && self.window_start_unix_seconds == binding.window.start_unix_seconds()
+            && self.window_end_unix_seconds == binding.window.end_unix_seconds()
+            && self.source_snapshot_ref == binding.source_snapshot_ref
+            && self.source_snapshot_binding == binding.source_snapshot_binding
+            && self.availability_profile_digest == binding.availability_profile_digest
+            && self.cutoff_unix_seconds == binding.cutoff_unix_seconds
+            && self.source_contract_digest == binding.source_contract_digest
+            && self.source_digest == binding.source_digest
+            && self.transform_digest == binding.transform_digest
+            && self.replay_projection_digest == binding.replay_projection_digest
+            && self.source_evidence_digest == binding.source_evidence_digest
+            && self.query_receipt_digests == binding.query_receipt_digests
+            && self.commitment == e0_provenance_digest(self)
+    }
+}
+
+fn e0_provenance_digest(value: &E0ScoutCandidateProvenance) -> String {
+    let mut unsigned = value.clone();
+    unsigned.commitment.clear();
+    digest(&unsigned)
+}
+
+#[derive(Serialize)]
+struct E0CandidateInvocationProvenance<'a> {
+    e0: &'a E0ScoutCandidateProvenance,
     core_binding_digest: &'a str,
     core_attempt_id: &'a str,
     core_run_id: Option<&'a str>,
@@ -602,6 +732,25 @@ impl<R: ScoutCandidateRepository> ScoutCandidateRecorder<R> {
         Ok(result)
     }
 
+    pub(crate) fn record_e0_discovery(
+        &mut self,
+        scope: &CoreTaskScope,
+        evidence: &AuthenticatedE0ScoutSignal,
+        core: &CoreTaskReceipt,
+        model: &ModelReceipt,
+    ) -> Result<ScoutResult, ScoutCandidateAdmissionError> {
+        let result = AutonomousScout::discover_e0(scope, evidence, core, model)
+            .map_err(ScoutCandidateAdmissionError::Discovery)?;
+        if let ScoutResult::Candidates(candidates) = &result {
+            let batch = ScoutCandidateBatch::rehydrate(scope.clone(), candidates.clone())
+                .map_err(|_| ScoutCandidateAdmissionError::Repository)?;
+            self.repository
+                .record_batch_if_absent(batch)
+                .map_err(|_| ScoutCandidateAdmissionError::Repository)?;
+        }
+        Ok(result)
+    }
+
     pub(crate) fn into_admission_authority(self) -> TrustedScoutCandidateAdmissionAuthority<R> {
         TrustedScoutCandidateAdmissionAuthority {
             repository: self.repository,
@@ -625,6 +774,22 @@ pub(crate) fn record_scout_discovery<R: ScoutCandidateRepository>(
 {
     let mut recorder = ScoutCandidateRecorder::new(repository);
     let result = recorder.record_discovery(scope, expectation, signal, core, model)?;
+    Ok((result, recorder.into_admission_authority()))
+}
+
+/// U13-E's only persistence path. It shares U13-A's canonical batch/lookup
+/// boundary, so downstream U14 still receives only `VerifiedScoutCandidate`.
+#[allow(dead_code)]
+pub(crate) fn record_e0_scout_discovery<R: ScoutCandidateRepository>(
+    repository: R,
+    scope: &CoreTaskScope,
+    evidence: &AuthenticatedE0ScoutSignal,
+    core: &CoreTaskReceipt,
+    model: &ModelReceipt,
+) -> Result<(ScoutResult, TrustedScoutCandidateAdmissionAuthority<R>), ScoutCandidateAdmissionError>
+{
+    let mut recorder = ScoutCandidateRecorder::new(repository);
+    let result = recorder.record_e0_discovery(scope, evidence, core, model)?;
     Ok((result, recorder.into_admission_authority()))
 }
 
@@ -745,11 +910,194 @@ pub fn sealed_expectation_for_test(
         .expect("test fixture is valid")
 }
 
+/// Opaque U13-E capability. It proves that an immutable U12-E diagnostic was
+/// bound to the exact U09/U10 receipts and full task scope; it is not a
+/// candidate, a proposal, an authority to record, or an execution permit.
+pub struct AuthenticatedE0ScoutSignal {
+    binding: E0ScoutSignalBinding,
+    core_binding_digest: String,
+    core_attempt_id: String,
+    core_run_id: Option<String>,
+    core_output_digest: Option<String>,
+    model_policy_digest: String,
+    model_capability_digest: String,
+    model_input_commitment: String,
+    model_attempt_id: String,
+    model_evidence: String,
+    model_output_digest: Option<String>,
+}
+
+/// Trusted composition for U12-E → U13-E. It is crate-private so neither a
+/// public `QueryResult` nor a caller-created descriptive signal can enter.
+pub(crate) struct TrustedE0ScoutComposer;
+
+/// ```compile_fail
+/// use improvement_engine_core::autonomous_scout::{AuthenticatedE0ScoutSignal, TrustedE0ScoutComposer};
+/// let _ = AuthenticatedE0ScoutSignal {};
+/// let _ = TrustedE0ScoutComposer;
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::autonomous_scout::AutonomousScout;
+/// use improvement_engine_core::e0_deterministic_sensor::E0DiagnosticSignal;
+/// # let scope = todo!(); let core = todo!(); let model = todo!();
+/// # let signal: E0DiagnosticSignal = todo!();
+/// let _ = AutonomousScout::discover_e0(&scope, &signal, &core, &model);
+/// ```
+const _E0_SCOUT_CAPABILITY_IS_NOT_PUBLICLY_CONSTRUCTIBLE: () = ();
+
+impl TrustedE0ScoutComposer {
+    #[allow(dead_code)]
+    pub(crate) fn seal(
+        scope: &CoreTaskScope,
+        signal: &E0DiagnosticSignal,
+        core: &CoreTaskReceipt,
+        model: &ModelReceipt,
+    ) -> Result<AuthenticatedE0ScoutSignal, ScoutError> {
+        let binding = signal.scout_binding();
+        if !signal.has_valid_digest()
+            || binding.query_receipt_digests.is_empty()
+            || binding.tenant_id != scope.tenant_id()
+            || binding.grant_id != scope.grant_id()
+            || binding.authority_ref != scope.authority_ref()
+            || binding.source_snapshot_ref.tenant_id != scope.tenant_id()
+            || binding.source_snapshot_binding.is_empty()
+            || binding.availability_profile_digest.is_empty()
+            || binding.replay_projection_digest.is_empty()
+            || binding.source_evidence_digest.is_empty()
+            || core.scope() != scope
+            || model.scope() != scope
+            || core.input_digest() != binding.signal_digest
+            || model.input_commitment().is_empty()
+            || model.evidence().is_empty()
+        {
+            return Err(ScoutError::EvidenceDenied);
+        }
+        Ok(AuthenticatedE0ScoutSignal {
+            binding,
+            core_binding_digest: core.binding_digest().to_owned(),
+            core_attempt_id: core.attempt_id().to_owned(),
+            core_run_id: core.core_run_id().map(str::to_owned),
+            core_output_digest: core.output_digest().map(str::to_owned),
+            model_policy_digest: model.policy_digest().to_owned(),
+            model_capability_digest: model.capability_digest().to_owned(),
+            model_input_commitment: model.input_commitment().to_owned(),
+            model_attempt_id: model.attempt_id().to_owned(),
+            model_evidence: model.evidence().to_owned(),
+            model_output_digest: model.output_digest().map(str::to_owned),
+        })
+    }
+}
+
 /// Pure, deterministic publication gate. U09/U10 receipts are supplied by
 /// their owners; model output is never copied into a candidate or treated as
 /// evidence of causality.
 pub struct AutonomousScout;
 impl AutonomousScout {
+    /// Emits descriptive candidate drafts from only a U12-E-authenticated
+    /// capability. This method neither records them nor promotes/releases one.
+    pub fn discover_e0(
+        scope: &CoreTaskScope,
+        evidence: &AuthenticatedE0ScoutSignal,
+        core: &CoreTaskReceipt,
+        model: &ModelReceipt,
+    ) -> Result<ScoutResult, ScoutError> {
+        let b = &evidence.binding;
+        if b.tenant_id != scope.tenant_id()
+            || b.grant_id != scope.grant_id()
+            || b.authority_ref != scope.authority_ref()
+            || b.source_snapshot_ref.tenant_id != scope.tenant_id()
+            || b.query_receipt_digests.is_empty()
+            || core.scope() != scope
+            || model.scope() != scope
+            || core.input_digest() != b.signal_digest
+            || core.binding_digest() != evidence.core_binding_digest
+            || core.attempt_id() != evidence.core_attempt_id
+            || core.core_run_id() != evidence.core_run_id.as_deref()
+            || core.output_digest() != evidence.core_output_digest.as_deref()
+            || model.policy_digest() != evidence.model_policy_digest
+            || model.capability_digest() != evidence.model_capability_digest
+            || model.input_commitment() != evidence.model_input_commitment
+            || model.attempt_id() != evidence.model_attempt_id
+            || model.evidence() != evidence.model_evidence
+            || model.output_digest() != evidence.model_output_digest.as_deref()
+        {
+            return Err(ScoutError::EvidenceDenied);
+        }
+        if core.outcome() != &CoreTaskOutcome::Succeeded {
+            return Ok(ScoutResult::DependencyBlocked {
+                reason: "core_task_unknown",
+            });
+        }
+        if model.outcome() != &ModelOutcome::Succeeded {
+            return Ok(ScoutResult::DependencyBlocked {
+                reason: "model_dependency_unavailable",
+            });
+        }
+        let e0_provenance = E0ScoutCandidateProvenance::from_binding(scope, b);
+        if !e0_provenance.is_valid_for(scope, b) {
+            return Err(ScoutError::EvidenceDenied);
+        }
+        let provenance_commitment = digest(&E0CandidateInvocationProvenance {
+            e0: &e0_provenance,
+            core_binding_digest: core.binding_digest(),
+            core_attempt_id: core.attempt_id(),
+            core_run_id: core.core_run_id(),
+            core_output_digest: core.output_digest(),
+            model_policy_digest: model.policy_digest(),
+            model_capability_digest: model.capability_digest(),
+            model_input_commitment: model.input_commitment(),
+            model_attempt_id: model.attempt_id(),
+            model_evidence: model.evidence(),
+            model_output_digest: model.output_digest(),
+        });
+        let mut candidates = Vec::new();
+        for kind in [
+            CandidateKind::Signal,
+            CandidateKind::Claim,
+            CandidateKind::Opportunity,
+        ] {
+            let mut draft = ScoutCandidateDraft {
+                kind,
+                candidate_id: format!(
+                    "candidate_{}_{}_{}",
+                    b.metric_id,
+                    candidate_name(kind),
+                    provenance_commitment
+                ),
+                metric_id: b.metric_id.clone(),
+                source_snapshot_ref: b.source_snapshot_ref.clone(),
+                tenant_id: scope.tenant_id().to_owned(),
+                job_id: scope.job_id().to_owned(),
+                grant_id: scope.grant_id().to_owned(),
+                authority_ref: scope.authority_ref().to_owned(),
+                source_data_digest: b.source_digest.clone(),
+                source_contract_digest: b.source_contract_digest.clone(),
+                transform_digest: b.transform_digest.clone(),
+                cutoff_unix_seconds: b.cutoff_unix_seconds,
+                query_receipt_digests: b.query_receipt_digests.clone(),
+                signal_commitment: b.signal_digest.clone(),
+                e0_provenance: Some(e0_provenance.clone()),
+                core_input_commitment: core.input_digest().to_owned(),
+                model_input_commitment: model.input_commitment().to_owned(),
+                model_capability_digest: model.capability_digest().to_owned(),
+                core_binding_digest: core.binding_digest().to_owned(),
+                core_attempt_id: core.attempt_id().to_owned(),
+                core_run_id: core.core_run_id().map(str::to_owned),
+                core_output_digest: core.output_digest().map(str::to_owned),
+                model_policy_digest: model.policy_digest().to_owned(),
+                model_attempt_id: model.attempt_id().to_owned(),
+                model_receipt_evidence: model.evidence().to_owned(),
+                model_output_digest: model.output_digest().map(str::to_owned),
+                provenance_commitment: provenance_commitment.clone(),
+                digest: String::new(),
+            };
+            draft.digest = candidate_digest(&draft);
+            candidates.push(draft);
+        }
+        Ok(ScoutResult::Candidates(candidates))
+    }
+
     pub fn discover(
         scope: &CoreTaskScope,
         expectation: &ScoutInvocationExpectation,
@@ -819,6 +1167,7 @@ impl AutonomousScout {
             grant_id: scope.grant_id(),
             authority_ref: scope.authority_ref(),
             signal,
+            e0_provenance_commitment: None,
             core_binding_digest: core.binding_digest(),
             core_attempt_id: core.attempt_id(),
             core_run_id: core.core_run_id(),
@@ -856,6 +1205,7 @@ impl AutonomousScout {
                 cutoff_unix_seconds: signal.cutoff_unix_seconds,
                 query_receipt_digests: receipts.clone(),
                 signal_commitment: signal.digest.clone(),
+                e0_provenance: None,
                 core_input_commitment: core.input_digest().to_owned(),
                 model_input_commitment: model.input_commitment().to_owned(),
                 model_capability_digest: model.capability_digest().to_owned(),
@@ -900,6 +1250,21 @@ fn draft_matches_scope(scope: &CoreTaskScope, draft: &ScoutCandidateDraft) -> bo
 
 fn has_valid_candidate_digest(draft: &ScoutCandidateDraft) -> bool {
     draft.digest == candidate_digest(draft)
+        && draft.e0_provenance.as_ref().is_none_or(|e0| {
+            e0.commitment == e0_provenance_digest(e0)
+                && e0.tenant_id == draft.tenant_id
+                && e0.job_id == draft.job_id
+                && e0.grant_id == draft.grant_id
+                && e0.authority_ref == draft.authority_ref
+                && !e0.run_id.is_empty()
+                && e0.signal_commitment == draft.signal_commitment
+                && e0.source_snapshot_ref == draft.source_snapshot_ref
+                && e0.cutoff_unix_seconds == draft.cutoff_unix_seconds
+                && e0.source_contract_digest == draft.source_contract_digest
+                && e0.source_digest == draft.source_data_digest
+                && e0.transform_digest == draft.transform_digest
+                && e0.query_receipt_digests == draft.query_receipt_digests
+        })
 }
 
 fn is_sha256_digest(value: &str) -> bool {
@@ -954,6 +1319,7 @@ pub(crate) fn verified_candidate_for_independent_verifier_test() -> VerifiedScou
         ],
         signal_commitment:
             "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".into(),
+        e0_provenance: None,
         core_input_commitment:
             "sha256:1111111111111111111111111111111111111111111111111111111111111111".into(),
         model_input_commitment:
@@ -987,6 +1353,16 @@ pub(crate) fn verified_candidate_for_independent_verifier_test() -> VerifiedScou
 #[cfg(test)]
 mod candidate_admission_tests {
     use super::*;
+    #[cfg(feature = "test-support")]
+    use crate::core_task::{
+        CoreTaskBinding, CoreTaskBindingRegistry, CoreTaskInvocation, CoreTaskPort,
+        CoreTaskSimulator,
+    };
+    #[cfg(feature = "test-support")]
+    use crate::model_provider::{
+        HmacProjectionBroker, ModelBudgetLimits, ModelCapability, ModelInvocation, ModelPolicy,
+        ModelPort, ModelProvider, ModelProviderSimulator, ProjectionBrokerPort, RedactionPolicy,
+    };
 
     fn d(character: char) -> String {
         format!("sha256:{}", character.to_string().repeat(64))
@@ -994,6 +1370,54 @@ mod candidate_admission_tests {
 
     fn scope() -> CoreTaskScope {
         CoreTaskScope::new("tenant_a", "job_a", "grant_a", "authority_a").unwrap()
+    }
+
+    #[cfg(feature = "test-support")]
+    fn e0_core(input: &str, attempt: &str) -> CoreTaskReceipt {
+        let binding = CoreTaskBinding::new(
+            "scout",
+            "rel_scout_1",
+            "0.5.0",
+            "53e729d624c8284e906249df84c1a1df84cc8d40",
+        )
+        .unwrap();
+        let mut port =
+            CoreTaskSimulator::new(CoreTaskBindingRegistry::new(vec![binding.clone()]).unwrap());
+        port.script_success("core_e0", d('6')).unwrap();
+        port.invoke(CoreTaskInvocation::new(scope(), binding, attempt, input).unwrap())
+            .unwrap()
+    }
+
+    #[cfg(feature = "test-support")]
+    fn e0_model(attempt: &str) -> ModelReceipt {
+        let capability = ModelCapability::new(
+            ModelProvider::OpenRouter,
+            "https://openrouter.ai/api/v1",
+            "openai/gpt-4.1-mini",
+            "secret://pulso/key",
+            "rev_a",
+        )
+        .unwrap();
+        let policy = ModelPolicy::with_budget(
+            "policy_a",
+            capability,
+            "investigate",
+            RedactionPolicy::TokenizeKnownMarkers,
+            1,
+            100,
+            ModelBudgetLimits::new(10, 10, 100).unwrap(),
+        )
+        .unwrap();
+        let mut broker =
+            HmacProjectionBroker::new_for_test(b"test-only-projection-authority-key-32b").unwrap();
+        let projection = broker
+            .authorize_projection(&scope(), &policy, "safe".into())
+            .unwrap();
+        let invocation =
+            ModelInvocation::from_verified(scope(), policy, attempt, projection).unwrap();
+        let mut port = ModelProviderSimulator::new(invocation.policy().clone());
+        port.script_success("ok", "request_e0");
+        port.invoke(invocation).unwrap()
     }
 
     fn candidate(candidate_id: &str) -> ScoutCandidateDraft {
@@ -1018,6 +1442,7 @@ mod candidate_admission_tests {
             cutoff_unix_seconds: 100,
             query_receipt_digests: vec![d('e')],
             signal_commitment: d('f'),
+            e0_provenance: None,
             core_input_commitment: d('f'),
             model_input_commitment: "projection:commitment".into(),
             model_capability_digest: "model-capability:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
@@ -1047,6 +1472,61 @@ mod candidate_admission_tests {
             ScoutCandidateRecordOutcome::Recorded
         );
         recorder.into_admission_authority()
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn authenticated_e0_signal_records_then_admits_only_through_u13a_boundary() {
+        let signal = crate::e0_deterministic_sensor::signal_for_scout_test();
+        let core = e0_core(&signal.scout_binding().signal_digest, "attempt_e0");
+        let model = e0_model("attempt_model_e0");
+        let evidence = TrustedE0ScoutComposer::seal(&scope(), &signal, &core, &model).unwrap();
+        let (result, mut authority) = record_e0_scout_discovery(
+            InMemoryScoutCandidateRepository::default(),
+            &scope(),
+            &evidence,
+            &core,
+            &model,
+        )
+        .unwrap();
+        let ScoutResult::Candidates(candidates) = result else {
+            panic!("expected drafts")
+        };
+        assert_eq!(candidates.len(), 3);
+        assert!(
+            candidates
+                .iter()
+                .all(|candidate| candidate.e0_provenance.is_some())
+        );
+        let verified = authority.admit(&scope(), &candidates[0]).unwrap();
+        assert_eq!(verified.candidate_digest(), candidates[0].digest);
+        let mut tampered = candidates[0].clone();
+        tampered.e0_provenance.as_mut().unwrap().commitment = d('0');
+        tampered.digest = candidate_digest(&tampered);
+        assert!(matches!(
+            authority.admit(&scope(), &tampered),
+            Err(ScoutCandidateAdmissionError::InvalidCandidateDigest)
+        ));
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn e0_scope_or_receipt_drift_is_denied_without_recording() {
+        let signal = crate::e0_deterministic_sensor::signal_for_scout_test();
+        let core = e0_core(&signal.scout_binding().signal_digest, "attempt_e0");
+        let model = e0_model("attempt_model_e0");
+        let evidence = TrustedE0ScoutComposer::seal(&scope(), &signal, &core, &model).unwrap();
+        let changed_core = e0_core(&signal.scout_binding().signal_digest, "attempt_other");
+        assert_eq!(
+            AutonomousScout::discover_e0(&scope(), &evidence, &changed_core, &model),
+            Err(ScoutError::EvidenceDenied)
+        );
+        let wrong_scope =
+            CoreTaskScope::new("tenant_b", "job_a", "grant_a", "authority_a").unwrap();
+        assert_eq!(
+            AutonomousScout::discover_e0(&wrong_scope, &evidence, &core, &model),
+            Err(ScoutError::EvidenceDenied)
+        );
     }
 
     #[test]
