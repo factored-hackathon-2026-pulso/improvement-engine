@@ -98,6 +98,7 @@ pub struct DurableJobStore {
     jobs: BTreeMap<String, StoredJob>,
     idempotency: BTreeMap<(String, String), IdempotentAdmission>,
     trusted_reconciliation_authorities: BTreeSet<(String, String)>,
+    control_commands: BTreeMap<(String, String, String), (String, JobControlReceipt)>,
 }
 
 /// Persistence seam for the U06 reducer. Production adapters must make
@@ -149,6 +150,11 @@ pub trait DurableJobRepository {
         job_id: &str,
         evidence: ReconciliationEvidence,
     ) -> Result<(), DurableJobError>;
+    fn control_job_atomically(
+        &mut self,
+        command: JobControlCommand,
+        recorded_at_unix_seconds: u64,
+    ) -> Result<JobControlReceipt, DurableJobError>;
 }
 
 #[derive(Debug, Clone)]
@@ -161,6 +167,7 @@ struct StoredJob {
     status: JobStatus,
     dispatch_fence_token: Option<u64>,
     reconciliation_evidence: Option<ReconciliationEvidence>,
+    control_version: u64,
 }
 #[derive(Debug, Clone)]
 struct IdempotentAdmission {
@@ -169,6 +176,82 @@ struct IdempotentAdmission {
 }
 
 impl DurableJobStore {
+    pub fn control_job(
+        &mut self,
+        command: JobControlCommand,
+        recorded_at_unix_seconds: u64,
+    ) -> Result<JobControlReceipt, DurableJobError> {
+        let fingerprint = command.fingerprint();
+        let key = (
+            command.tenant_id.clone(),
+            command.job_id.clone(),
+            command.idempotency_key.clone(),
+        );
+        if let Some((existing, receipt)) = self.control_commands.get(&key) {
+            return if existing == &fingerprint {
+                Ok(receipt.clone())
+            } else {
+                Err(DurableJobError::ControlIdempotencyConflict)
+            };
+        }
+        let job = match self.job_mut(&command.tenant_id, &command.job_id) {
+            // A control-plane caller must not learn that another tenant owns
+            // an otherwise valid job identifier.
+            Err(DurableJobError::TenantAccessDenied) => return Err(DurableJobError::JobNotFound),
+            result => result?,
+        };
+        if job.control_version != command.expected_version
+            || job.active_lease.as_ref().map(JobLease::fence_token) != command.expected_fence
+        {
+            return Err(DurableJobError::ControlVersionConflict);
+        }
+        let observed_status = job.status.clone();
+        let observed_effect = job.effect_state.clone();
+        let outcome = match (&command.kind, &job.status, &job.effect_state) {
+            (_, _, JobEffectState::UnknownPendingReconciliation)
+            | (_, JobStatus::UnknownPendingReconciliation, _)
+            | (_, JobStatus::Leased { .. }, _) => JobControlOutcome::ReconciliationRequired,
+            (JobControlKind::Pause, JobStatus::Queued, JobEffectState::NoEffect) => {
+                job.status = JobStatus::Paused;
+                JobControlOutcome::Paused
+            }
+            (
+                JobControlKind::Cancel,
+                JobStatus::Queued | JobStatus::Paused,
+                JobEffectState::NoEffect,
+            ) => {
+                job.status = JobStatus::CancelledBeforeEffect;
+                JobControlOutcome::CancelledBeforeEffect
+            }
+            _ => JobControlOutcome::AlreadyTerminal,
+        };
+        if matches!(
+            outcome,
+            JobControlOutcome::Paused | JobControlOutcome::CancelledBeforeEffect
+        ) {
+            advance_control_version(job)?;
+        }
+        let receipt = JobControlReceipt {
+            tenant_id: command.tenant_id.clone(),
+            job_id: command.job_id.clone(),
+            operator_id: command.operator_id.clone(),
+            idempotency_key: command.idempotency_key.clone(),
+            expected_fence: command.expected_fence,
+            requested: command.kind.clone(),
+            observed_status,
+            observed_effect,
+            confirmed_status: job.status.clone(),
+            confirmed_effect: job.effect_state.clone(),
+            target_version: command.expected_version,
+            confirmed_version: job.control_version,
+            recorded_at_unix_seconds,
+            fingerprint: fingerprint.clone(),
+            outcome,
+        };
+        self.control_commands
+            .insert(key, (fingerprint, receipt.clone()));
+        Ok(receipt)
+    }
     pub fn new() -> Self {
         Self::default()
     }
@@ -238,6 +321,7 @@ impl DurableJobStore {
                 status: JobStatus::Queued,
                 dispatch_fence_token: None,
                 reconciliation_evidence: None,
+                control_version: 1,
             },
         );
         self.idempotency.insert(
@@ -331,6 +415,7 @@ impl DurableJobStore {
             fence_token: lease.fence_token,
             expires_at_unix_seconds: lease.expires_at_unix_seconds,
         };
+        advance_control_version(job)?;
         Ok(lease)
     }
 
@@ -353,6 +438,7 @@ impl DurableJobStore {
         job.effect_state = JobEffectState::UnknownPendingReconciliation;
         job.status = JobStatus::UnknownPendingReconciliation;
         job.dispatch_fence_token = Some(fence_token);
+        advance_control_version(job)?;
         Ok(())
     }
 
@@ -377,6 +463,7 @@ impl DurableJobStore {
         job.effect_state = JobEffectState::AppliedAcknowledged { effect_receipt };
         job.active_lease = None;
         job.status = JobStatus::AppliedAcknowledged;
+        advance_control_version(job)?;
         Ok(())
     }
 
@@ -390,6 +477,25 @@ impl DurableJobStore {
 
     pub fn status(&self, tenant_id: &str, job_id: &str) -> Result<JobStatus, DurableJobError> {
         Ok(self.job(tenant_id, job_id)?.status.clone())
+    }
+
+    /// Monotonic version of lifecycle/effect facts. A caller reads it before
+    /// issuing a control command; the repository checks it in the same atomic
+    /// transition as the command.
+    pub fn control_version(&self, tenant_id: &str, job_id: &str) -> Result<u64, DurableJobError> {
+        Ok(self.job(tenant_id, job_id)?.control_version)
+    }
+
+    pub fn active_fence(
+        &self,
+        tenant_id: &str,
+        job_id: &str,
+    ) -> Result<Option<u64>, DurableJobError> {
+        Ok(self
+            .job(tenant_id, job_id)?
+            .active_lease
+            .as_ref()
+            .map(JobLease::fence_token))
     }
 
     /// Applies a durable reconciler observation to an unknown dispatch. This
@@ -431,6 +537,7 @@ impl DurableJobStore {
         }
         job.active_lease = None;
         job.reconciliation_evidence = Some(evidence);
+        advance_control_version(job)?;
         Ok(())
     }
 
@@ -454,13 +561,21 @@ impl DurableJobStore {
         let job = self.job_mut(tenant_id, job_id)?;
         if matches!(
             job.status,
-            JobStatus::CompletedNoEffect | JobStatus::AppliedAcknowledged
+            JobStatus::CompletedNoEffect
+                | JobStatus::AppliedAcknowledged
+                | JobStatus::Paused
+                | JobStatus::CancelledBeforeEffect
         ) {
             return Ok(RecoveryDisposition::Terminal);
         }
         if job.effect_state == JobEffectState::UnknownPendingReconciliation {
+            let changed =
+                job.active_lease.is_some() || job.status != JobStatus::UnknownPendingReconciliation;
             job.active_lease = None;
             job.status = JobStatus::UnknownPendingReconciliation;
+            if changed {
+                advance_control_version(job)?;
+            }
             return Ok(RecoveryDisposition::ReconciliationRequired);
         }
         if job.effect_state != JobEffectState::NoEffect {
@@ -471,8 +586,12 @@ impl DurableJobStore {
                 Ok(RecoveryDisposition::LeaseStillActive)
             }
             _ => {
+                let changed = job.active_lease.is_some() || job.status != JobStatus::Queued;
                 job.active_lease = None;
                 job.status = JobStatus::Queued;
+                if changed {
+                    advance_control_version(job)?;
+                }
                 Ok(RecoveryDisposition::ReadyForLease)
             }
         }
@@ -578,6 +697,13 @@ impl DurableJobRepository for DurableJobStore {
     ) -> Result<(), DurableJobError> {
         self.reconcile_unknown(tenant_id, job_id, evidence)
     }
+    fn control_job_atomically(
+        &mut self,
+        command: JobControlCommand,
+        recorded_at_unix_seconds: u64,
+    ) -> Result<JobControlReceipt, DurableJobError> {
+        self.control_job(command, recorded_at_unix_seconds)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -618,6 +744,148 @@ pub enum JobStatus {
     UnknownPendingReconciliation,
     CompletedNoEffect,
     AppliedAcknowledged,
+    Paused,
+    CancelledBeforeEffect,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JobControlKind {
+    Pause,
+    Cancel,
+}
+#[derive(Debug, Clone)]
+pub struct JobControlCommand {
+    tenant_id: String,
+    job_id: String,
+    operator_id: String,
+    idempotency_key: String,
+    expected_version: u64,
+    expected_fence: Option<u64>,
+    kind: JobControlKind,
+}
+impl JobControlCommand {
+    pub fn new(
+        tenant_id: impl Into<String>,
+        job_id: impl Into<String>,
+        operator_id: impl Into<String>,
+        idempotency_key: impl Into<String>,
+        expected_version: u64,
+        expected_fence: Option<u64>,
+        kind: JobControlKind,
+    ) -> Result<Self, DurableJobError> {
+        let tenant_id = tenant_id.into();
+        let job_id = job_id.into();
+        let operator_id = operator_id.into();
+        let idempotency_key = idempotency_key.into();
+        if validate_identifier(&tenant_id, "tenant_id").is_err()
+            || !is_job_id(&job_id)
+            || validate_identifier(&operator_id, "operator_id").is_err()
+            || validate_identifier(&idempotency_key, "idempotency_key").is_err()
+            || expected_version == 0
+            || expected_fence.is_some_and(|fence| fence == 0)
+        {
+            return Err(DurableJobError::InvalidControlCommand);
+        }
+        Ok(Self {
+            tenant_id,
+            job_id,
+            operator_id,
+            idempotency_key,
+            expected_version,
+            expected_fence,
+            kind,
+        })
+    }
+    fn fingerprint(&self) -> String {
+        format!(
+            "sha256:{:x}",
+            Sha256::digest(
+                format!(
+                    "{}\n{}\n{}\n{}\n{}\n{:?}\n{:?}",
+                    self.tenant_id,
+                    self.job_id,
+                    self.operator_id,
+                    self.idempotency_key,
+                    self.expected_version,
+                    self.expected_fence,
+                    self.kind
+                )
+                .as_bytes()
+            )
+        )
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JobControlOutcome {
+    Paused,
+    CancelledBeforeEffect,
+    ReconciliationRequired,
+    AlreadyTerminal,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobControlReceipt {
+    tenant_id: String,
+    job_id: String,
+    operator_id: String,
+    idempotency_key: String,
+    expected_fence: Option<u64>,
+    requested: JobControlKind,
+    observed_status: JobStatus,
+    observed_effect: JobEffectState,
+    confirmed_status: JobStatus,
+    confirmed_effect: JobEffectState,
+    target_version: u64,
+    confirmed_version: u64,
+    recorded_at_unix_seconds: u64,
+    fingerprint: String,
+    outcome: JobControlOutcome,
+}
+impl JobControlReceipt {
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+    pub fn job_id(&self) -> &str {
+        &self.job_id
+    }
+    pub fn operator_id(&self) -> &str {
+        &self.operator_id
+    }
+    pub fn idempotency_key(&self) -> &str {
+        &self.idempotency_key
+    }
+    pub fn expected_fence(&self) -> Option<u64> {
+        self.expected_fence
+    }
+    pub fn outcome(&self) -> &JobControlOutcome {
+        &self.outcome
+    }
+    pub fn requested(&self) -> &JobControlKind {
+        &self.requested
+    }
+    pub fn observed_status(&self) -> &JobStatus {
+        &self.observed_status
+    }
+    pub fn observed_effect(&self) -> &JobEffectState {
+        &self.observed_effect
+    }
+    pub fn confirmed_status(&self) -> &JobStatus {
+        &self.confirmed_status
+    }
+    pub fn confirmed_effect(&self) -> &JobEffectState {
+        &self.confirmed_effect
+    }
+    pub fn target_version(&self) -> u64 {
+        self.target_version
+    }
+    pub fn confirmed_version(&self) -> u64 {
+        self.confirmed_version
+    }
+    pub fn recorded_at_unix_seconds(&self) -> u64 {
+        self.recorded_at_unix_seconds
+    }
+    pub fn fingerprint(&self) -> &str {
+        &self.fingerprint
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -727,6 +995,9 @@ pub enum DurableJobError {
     LeaseOwnerMismatch,
     ReconciliationRequired,
     InvalidTransition,
+    InvalidControlCommand,
+    ControlIdempotencyConflict,
+    ControlVersionConflict,
     IdempotencyConflict { trigger_idempotency_key: String },
     Quota(QuotaGrantError),
 }
@@ -774,6 +1045,15 @@ impl fmt::Display for DurableJobError {
                 f.write_str("job effect is unknown and requires reconciliation")
             }
             Self::InvalidTransition => f.write_str("job state transition is not allowed"),
+            Self::InvalidControlCommand => f.write_str(
+                "control command has invalid tenant, job, operator, idempotency or version fields",
+            ),
+            Self::ControlIdempotencyConflict => {
+                f.write_str("control idempotency key has a different semantic command")
+            }
+            Self::ControlVersionConflict => f.write_str(
+                "control command is stale for the job lifecycle/effect version or fence",
+            ),
             Self::IdempotencyConflict {
                 trigger_idempotency_key,
             } => write!(
@@ -793,6 +1073,13 @@ fn job_id_for(request: &JobAdmissionRequest) -> String {
         ("run_config_identity", request.run_config_identity.as_str()),
         ("trigger_idempotency_key", &request.trigger_idempotency_key),
     ])
+}
+fn advance_control_version(job: &mut StoredJob) -> Result<(), DurableJobError> {
+    job.control_version = job
+        .control_version
+        .checked_add(1)
+        .ok_or(DurableJobError::ControlVersionConflict)?;
+    Ok(())
 }
 fn admission_digest(request: &JobAdmissionRequest) -> String {
     let quota_digest = request.quota_reservation.request_digest();
