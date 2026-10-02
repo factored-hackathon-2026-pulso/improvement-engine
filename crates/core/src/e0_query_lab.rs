@@ -19,12 +19,78 @@ pub struct E0QueryLab {
 /// execute Agent Core, publish a candidate or release anything.
 pub struct VerifiedE0QueryResult {
     result: QueryResult,
+    commitments: E0QueryCommitments,
     /// Unconstructable marker proving this value crossed the crate-private
     /// E0 boundary. It makes no cryptographic attestation claim.
     _capability: E0QueryCapability,
 }
 
 struct E0QueryCapability;
+
+/// Internal U04/U08 commitments carried forward with an authenticated E0
+/// result. The values are copied only after `admit` has compared the live U08
+/// ledger candidate to the opaque U04 replay projection; they are not an
+/// independently constructible attestation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct E0QueryCommitments {
+    tenant_id: String,
+    cutoff_unix_seconds: u64,
+    source_snapshot_binding: String,
+    availability_profile_digest: String,
+    table: String,
+    source_contract_digest: String,
+    source_digest: String,
+    transform_digest: String,
+    field_commitment: String,
+    replay_projection_digest: String,
+    source_evidence_digest: String,
+}
+
+impl E0QueryCommitments {
+    pub(crate) fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    pub(crate) fn cutoff_unix_seconds(&self) -> u64 {
+        self.cutoff_unix_seconds
+    }
+
+    pub(crate) fn source_snapshot_binding(&self) -> &str {
+        &self.source_snapshot_binding
+    }
+
+    pub(crate) fn availability_profile_digest(&self) -> &str {
+        &self.availability_profile_digest
+    }
+
+    pub(crate) fn table(&self) -> &str {
+        &self.table
+    }
+
+    pub(crate) fn source_contract_digest(&self) -> &str {
+        &self.source_contract_digest
+    }
+
+    pub(crate) fn source_digest(&self) -> &str {
+        &self.source_digest
+    }
+
+    pub(crate) fn transform_digest(&self) -> &str {
+        &self.transform_digest
+    }
+
+    pub(crate) fn field_commitment(&self) -> &str {
+        &self.field_commitment
+    }
+
+    pub(crate) fn replay_projection_digest(&self) -> &str {
+        &self.replay_projection_digest
+    }
+
+    pub(crate) fn source_evidence_digest(&self) -> &str {
+        &self.source_evidence_digest
+    }
+}
 
 impl VerifiedE0QueryResult {
     #[must_use]
@@ -35,6 +101,10 @@ impl VerifiedE0QueryResult {
     #[must_use]
     pub fn authorizes_source_write_or_release(&self) -> bool {
         false
+    }
+
+    pub(crate) fn commitments(&self) -> &E0QueryCommitments {
+        &self.commitments
     }
 }
 
@@ -99,6 +169,19 @@ impl E0QueryLab {
         }
         Ok(VerifiedE0QueryResult {
             result: QueryResult::untrusted(rows, receipt),
+            commitments: E0QueryCommitments {
+                tenant_id: projection.tenant_id().to_owned(),
+                cutoff_unix_seconds: projection.cutoff_at_unix_seconds(),
+                source_snapshot_binding: projection.source_snapshot_digest().to_owned(),
+                availability_profile_digest: projection.availability_profile_digest().to_owned(),
+                table: projection.table().to_owned(),
+                source_contract_digest: projection.source_contract_digest().to_owned(),
+                source_digest: projection.source_digest().to_owned(),
+                transform_digest: projection.transform_digest().to_owned(),
+                field_commitment: projection.field_commitment().to_owned(),
+                replay_projection_digest: projection.replay_projection_digest().to_owned(),
+                source_evidence_digest: projection.source_evidence_digest().to_owned(),
+            },
             _capability: E0QueryCapability,
         })
     }
