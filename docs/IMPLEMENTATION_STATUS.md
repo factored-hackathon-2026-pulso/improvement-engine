@@ -47,6 +47,12 @@ green unit test as proof that a broader product flow is complete.
   causal corroboration, outcome evidence, eligibility or release authority;
   this slice has no pluggable receipt/port, storage, runtime or Agent Core
   side effect.
+- U14-EQ: pure Frozen E0 opportunity qualification. It accepts only the exact
+  U13-A capability plus its recomputed U14-E report and emits a nonpersistent,
+  opaque qualification: frozen provenance consistent; commercial impact and
+  operational effort not assessed; mechanism/evaluation still required; route
+  none. It is not U16, a proposal/value/causal conclusion, evaluation or
+  release authority and has no storage, LLM, Core or runtime effect.
 - U16: provisional WorkflowBridge. It accepts only a U14 verification report
   and sealed internal catalogue/source-validation facts, preserves its
   commitments and scope, includes `do_nothing`, and caps a supported route at

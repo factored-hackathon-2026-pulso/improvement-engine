@@ -111,6 +111,34 @@ impl FrozenE0VerificationReport {
     pub fn is_causal_corroboration(&self) -> bool {
         false
     }
+
+    /// Crate-private U14-EQ boundary. The report is recomputed from the exact
+    /// opaque U13-A capability, so a report for a different candidate, scope,
+    /// policy or Frozen evidence cannot be repurposed as qualification input.
+    pub(crate) fn revalidate_for_candidate(
+        &self,
+        candidate: &VerifiedScoutCandidate,
+    ) -> Result<(), FrozenE0VerificationError> {
+        let expected = FrozenE0IndependentVerifier::verify(candidate)?;
+        if self.matches(&expected) {
+            Ok(())
+        } else {
+            Err(FrozenE0VerificationError::ProvenanceMismatch)
+        }
+    }
+
+    fn matches(&self, other: &Self) -> bool {
+        self.scope == other.scope
+            && self.candidate_digest == other.candidate_digest
+            && self.candidate_provenance_commitment == other.candidate_provenance_commitment
+            && self.e0_provenance_commitment == other.e0_provenance_commitment
+            && self.policy_commitment == other.policy_commitment
+            && self.input_commitment == other.input_commitment
+            && self.evidence_commitment == other.evidence_commitment
+            && self.source_snapshot_ref == other.source_snapshot_ref
+            && self.status == other.status
+            && self.report_commitment == other.report_commitment
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -234,6 +262,35 @@ fn digest<T: Serialize>(value: &T) -> String {
 /// let _ = FrozenE0IndependentVerifier::verify("caller receipt");
 /// ```
 const _FROZEN_E0_REPORT_AND_PORT_ARE_NOT_CALLER_CONSTRUCTIBLE: () = ();
+
+#[cfg(all(test, feature = "test-support"))]
+#[derive(Clone, Copy)]
+pub(crate) enum FrozenE0ReportBindingField {
+    CandidateDigest,
+    E0Provenance,
+    Policy,
+    Input,
+    Evidence,
+    Snapshot,
+    Report,
+}
+
+#[cfg(all(test, feature = "test-support"))]
+pub(crate) fn corrupt_frozen_e0_report_for_qualification_test(
+    report: &mut FrozenE0VerificationReport,
+    field: FrozenE0ReportBindingField,
+) {
+    let replacement = format!("sha256:{}", "0".repeat(64));
+    match field {
+        FrozenE0ReportBindingField::CandidateDigest => report.candidate_digest = replacement,
+        FrozenE0ReportBindingField::E0Provenance => report.e0_provenance_commitment = replacement,
+        FrozenE0ReportBindingField::Policy => report.policy_commitment = replacement,
+        FrozenE0ReportBindingField::Input => report.input_commitment = replacement,
+        FrozenE0ReportBindingField::Evidence => report.evidence_commitment = replacement,
+        FrozenE0ReportBindingField::Snapshot => report.source_snapshot_ref.digest = replacement,
+        FrozenE0ReportBindingField::Report => report.report_commitment = replacement,
+    }
+}
 
 #[cfg(test)]
 mod tests {
