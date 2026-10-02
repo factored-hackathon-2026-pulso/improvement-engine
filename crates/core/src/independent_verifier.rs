@@ -366,9 +366,8 @@ pub(crate) fn report_for_workflow_bridge_test(status: VerificationStatus) -> Ver
     )
 }
 
-/// Synthetic U14 receipt construction is available only to integration tests
-/// compiled with the explicit test-support feature. Production callers cannot
-/// manufacture a verification report through this helper.
+/// Synthetic U14 receipt construction is crate-private and unit-test-only.
+/// Production and integration callers cannot manufacture a verification report.
 #[cfg(test)]
 pub(crate) fn report_for_workflow_bridge_with_snapshot_test(
     status: VerificationStatus,

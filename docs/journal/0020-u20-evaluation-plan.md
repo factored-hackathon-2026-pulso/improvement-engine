@@ -11,7 +11,7 @@ inputs estén presentes, U16 sigue siendo únicamente `MechanismProxy`:
 
 ## Contrato implementado
 
-`EvaluationPlan::seal_from_bridge` recibe cuatro
+`TrustedEvaluationComposer::seal_from_bridge` recibe cuatro
 `EvaluationArtifactRef` tipados: baseline, oracle, suite de desarrollo y suite
 final. Cada uno contiene un `ArtifactReference` completo; un digest de
 contenido nunca es identidad ni autoridad suficiente.
@@ -30,11 +30,12 @@ que ese tipo genérico debilite el contrato, U20 re-lee cada revisión desde el
   outcome y a la unidad, y rechaza mismo snapshot/scope con semántica distinta.
 - Ninguna referencia puede reutilizarse entre slots, incluyendo las suites de
   desarrollo/final.
-- Antes de leer el payload de cada slot, `EvaluationArtifactAuthorityPort`
-  debe atestar la revisión exacta bajo el scope U14/U16. El grant/capability
-  vive fuera del `ScenarioSet`; por tanto cuatro payloads coherentes auto
-  publicados no crean autoridad. El doble local soporta revocación y el puerto
-  real queda como dependencia de política/capabilities.
+- Antes de leer el payload de cada slot, el policy port privado del
+  `TrustedEvaluationComposer` debe atestar la revisión exacta bajo el scope
+  U14/U16. El grant/capability vive fuera del `ScenarioSet`; por tanto cuatro
+  payloads coherentes auto publicados no crean autoridad. Sólo la composición
+  confiable dentro del servicio puede instalar ese port; el doble con revocación
+  sólo existe bajo `cfg(test)`.
 
 Después de verificar todo, el commitment cubre bridge, snapshot, identidad y
 digest de cada revisión, y los tres campos semánticos. Cambiar una revisión
@@ -63,8 +64,9 @@ La cobertura del módulo verifica:
    vuelve a bloquearlo.
 
 `crates/core/tests/evaluation_plan.rs` conserva cobertura de superficie pública
-para los refs tipados y el puerto de autoridad independiente. No fabrica un
-bridge: el doctest anterior verifica que dicha fábrica no es importable.
+para los refs tipados y el compositor opaco. No fabrica un bridge ni inyecta
+una autoridad: los doctests verifican que ninguna de ambas superficies está
+disponible a consumidores.
 
 Validación ejecutada al cierre:
 

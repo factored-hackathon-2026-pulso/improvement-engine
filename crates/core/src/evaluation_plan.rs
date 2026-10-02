@@ -106,7 +106,7 @@ impl EvaluationInputs {
 /// Independent authority boundary for evaluation inputs. A coherent payload is
 /// insufficient: the exact artifact revision must be attested under the U14/U16
 /// grant and capability scope.
-pub trait EvaluationArtifactAuthorityPort {
+pub(crate) trait EvaluationArtifactAuthorityPort {
     fn verify_artifact(
         &mut self,
         scope: &crate::core_task::CoreTaskScope,
@@ -115,13 +115,7 @@ pub trait EvaluationArtifactAuthorityPort {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum EvaluationAuthorityError {
-    MissingAttestation,
-    ScopeMismatch,
-    RevisionMismatch,
-    Revoked,
-    DependencyUnavailable,
-}
+pub(crate) struct EvaluationAuthorityError;
 
 /// A policy-issued capability for one immutable evaluation artifact revision.
 /// Real deployments resolve it through a policy adapter; the in-memory type is
@@ -172,17 +166,14 @@ impl EvaluationArtifactAuthorityPort for InMemoryEvaluationArtifactAuthority {
     ) -> Result<(), EvaluationAuthorityError> {
         let key = authority_key(scope, reference);
         if self.revoked.contains(&key) {
-            return Err(EvaluationAuthorityError::Revoked);
+            return Err(EvaluationAuthorityError);
         }
-        let grant = self
-            .grants
-            .get(&key)
-            .ok_or(EvaluationAuthorityError::MissingAttestation)?;
+        let grant = self.grants.get(&key).ok_or(EvaluationAuthorityError)?;
         if grant.scope != *scope {
-            return Err(EvaluationAuthorityError::ScopeMismatch);
+            return Err(EvaluationAuthorityError);
         }
         if grant.reference != *reference {
-            return Err(EvaluationAuthorityError::RevisionMismatch);
+            return Err(EvaluationAuthorityError);
         }
         Ok(())
     }
@@ -221,10 +212,48 @@ pub struct EvaluationPlan {
     commitment: String,
 }
 
+/// Opaque policy-bound composition. A caller may use an instance handed to it
+/// by trusted service wiring, but cannot construct one or substitute an
+/// allow-all authority implementation.
+pub struct TrustedEvaluationComposer {
+    authority: Box<dyn EvaluationArtifactAuthorityPort>,
+}
+
+impl TrustedEvaluationComposer {
+    /// Only trusted service composition inside this crate can install a policy
+    /// adapter. Keeping this constructor crate-private prevents authority
+    /// injection by API consumers.
+    #[allow(dead_code)] // Called by trusted service composition once its policy adapter lands.
+    pub(crate) fn from_policy<A: EvaluationArtifactAuthorityPort + 'static>(authority: A) -> Self {
+        Self {
+            authority: Box::new(authority),
+        }
+    }
+
+    pub fn seal_from_bridge<R: ArtifactRepository>(
+        &mut self,
+        bridge: &WorkflowBridgeContract,
+        inputs: EvaluationInputs,
+        artifacts: &mut R,
+    ) -> Result<EvaluationPlan, EvaluationPlanError> {
+        EvaluationPlan::seal_from_bridge(bridge, inputs, artifacts, self.authority.as_mut())
+    }
+}
+
+/// ```compile_fail
+/// use improvement_engine_core::evaluation_plan::EvaluationArtifactAuthorityPort;
+/// struct AllowAll;
+/// impl EvaluationArtifactAuthorityPort for AllowAll {}
+/// ```
+///
+/// The authority port is deliberately private. An arbitrary consumer cannot
+/// implement an allow-all policy or construct [`TrustedEvaluationComposer`].
+const _NO_PUBLIC_AUTHORITY_INJECTION: () = ();
+
 impl EvaluationPlan {
     /// Re-reads every immutable evaluation input, validates its sealed shared
     /// contract, and freezes only a comparison semantically identical to U16.
-    pub fn seal_from_bridge<R: ArtifactRepository, A: EvaluationArtifactAuthorityPort>(
+    fn seal_from_bridge<R: ArtifactRepository, A: EvaluationArtifactAuthorityPort + ?Sized>(
         bridge: &WorkflowBridgeContract,
         inputs: EvaluationInputs,
         artifacts: &mut R,
@@ -334,7 +363,7 @@ struct VerifiedInput {
     semantic: EvaluationSemanticContract,
 }
 
-fn verified_input<R: ArtifactRepository, A: EvaluationArtifactAuthorityPort>(
+fn verified_input<R: ArtifactRepository, A: EvaluationArtifactAuthorityPort + ?Sized>(
     artifacts: &mut R,
     authority: &mut A,
     scope: &crate::core_task::CoreTaskScope,
@@ -347,7 +376,7 @@ fn verified_input<R: ArtifactRepository, A: EvaluationArtifactAuthorityPort>(
     }
     authority
         .verify_artifact(scope, reference)
-        .map_err(EvaluationPlanError::AuthorityDenied)?;
+        .map_err(|_| EvaluationPlanError::AuthorityDenied)?;
     let artifact = artifacts
         .get(&reference.tenant_id, &reference.id, reference.revision)
         .map_err(|_| EvaluationPlanError::ReferenceUnavailable)?
@@ -423,15 +452,15 @@ pub enum EvaluationPlanError {
     ScopeMismatch,
     SemanticMismatch,
     DuplicateInputReference,
-    AuthorityDenied(EvaluationAuthorityError),
+    AuthorityDenied,
     InvalidInput,
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        EvaluationArtifactGrant, EvaluationArtifactRef, EvaluationInputs, EvaluationPlan,
-        EvaluationPlanError, InMemoryEvaluationArtifactAuthority,
+        EvaluationArtifactGrant, EvaluationArtifactRef, EvaluationInputs, EvaluationPlanError,
+        InMemoryEvaluationArtifactAuthority, TrustedEvaluationComposer,
     };
     use crate::independent_verifier::VerificationStatus;
     use crate::workflow_bridge::bridge_for_evaluation_plan_test;
@@ -534,25 +563,30 @@ mod tests {
         let bridge =
             bridge_for_evaluation_plan_test(snapshot.clone(), VerificationStatus::Supported);
         let inputs = inputs(&mut repo, snapshot);
-        let mut authority = InMemoryEvaluationArtifactAuthority::default();
+        let authority = InMemoryEvaluationArtifactAuthority::default();
         assert_eq!(
-            EvaluationPlan::seal_from_bridge(&bridge, inputs.clone(), &mut repo, &mut authority),
-            Err(EvaluationPlanError::AuthorityDenied(
-                super::EvaluationAuthorityError::MissingAttestation
-            ))
+            TrustedEvaluationComposer::from_policy(authority).seal_from_bridge(
+                &bridge,
+                inputs.clone(),
+                &mut repo
+            ),
+            Err(EvaluationPlanError::AuthorityDenied)
         );
+        let mut authority = InMemoryEvaluationArtifactAuthority::default();
         attest_all(&mut authority, &bridge, &inputs);
-        let plan =
-            EvaluationPlan::seal_from_bridge(&bridge, inputs.clone(), &mut repo, &mut authority)
-                .unwrap();
+        let mut composer = TrustedEvaluationComposer::from_policy(authority);
+        let plan = composer
+            .seal_from_bridge(&bridge, inputs.clone(), &mut repo)
+            .unwrap();
         assert!(!plan.allows_same_outcome_claim());
         assert!(!plan.eligible_for_proposal());
+        let mut authority = InMemoryEvaluationArtifactAuthority::default();
+        attest_all(&mut authority, &bridge, &inputs);
         authority.revoke(bridge.scope(), &inputs.oracle.reference);
         assert_eq!(
-            EvaluationPlan::seal_from_bridge(&bridge, inputs, &mut repo, &mut authority),
-            Err(EvaluationPlanError::AuthorityDenied(
-                super::EvaluationAuthorityError::Revoked
-            ))
+            TrustedEvaluationComposer::from_policy(authority)
+                .seal_from_bridge(&bridge, inputs, &mut repo),
+            Err(EvaluationPlanError::AuthorityDenied)
         );
     }
 
@@ -576,12 +610,8 @@ mod tests {
         let bridge =
             bridge_for_evaluation_plan_test(snapshot.clone(), VerificationStatus::Uncertain);
         assert_eq!(
-            EvaluationPlan::seal_from_bridge(
-                &bridge,
-                inputs(&mut repo, snapshot),
-                &mut repo,
-                &mut InMemoryEvaluationArtifactAuthority::default()
-            ),
+            TrustedEvaluationComposer::from_policy(InMemoryEvaluationArtifactAuthority::default())
+                .seal_from_bridge(&bridge, inputs(&mut repo, snapshot), &mut repo),
             Err(EvaluationPlanError::BridgeNotEvaluable)
         );
     }
