@@ -209,6 +209,21 @@ fn scheduled_internal_changes_during_final_atomic_predicate_leave_no_effects() {
     assert_eq!(port.audit_count(TENANT), 0);
 }
 
+#[test]
+fn scheduled_final_lock_at_the_commit_predicate_leaves_no_child_receipt_or_audit() {
+    let mut port = fixture();
+    // Lifecycle read #1 captures the fence; read #2 is its final predicate.
+    port.lifecycle_mut()
+        .schedule_final_lock_on_read(2, TENANT, "run_original");
+
+    assert_eq!(
+        port.commit_conditionally(request("fork_final_lock_epoch", "reason")),
+        Err(RunForkError::FinalLocked)
+    );
+    assert_eq!(port.fork_count(TENANT), 0);
+    assert_eq!(port.audit_count(TENANT), 0);
+}
+
 fn fixture() -> InMemoryForkCommitPort {
     let mut port = InMemoryForkCommitPort::new();
     let source = append(

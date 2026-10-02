@@ -649,9 +649,15 @@ impl RunForkStore {
     }
 }
 
-/// In-memory realization of the one conditional commit port. Its dependencies
-/// are generic authority interfaces, so callers cannot accidentally rely on
-/// `InMemoryForkGrantAuthority` semantics when implementing a durable adapter.
+/// Concrete in-memory realization of the one conditional commit port. It owns
+/// artifacts, policy, grants, lifecycle and durable fork state as one mutable
+/// transaction boundary; callers cannot invoke the private `RunForkStore`
+/// directly or interleave an external authority callback during a commit.
+///
+/// ```compile_fail
+/// use improvement_engine_core::run_fork::RunForkStore;
+/// let _ = RunForkStore::new();
+/// ```
 pub struct InMemoryForkCommitPort {
     store: RunForkStore,
     artifacts: InMemoryArtifactRepository,

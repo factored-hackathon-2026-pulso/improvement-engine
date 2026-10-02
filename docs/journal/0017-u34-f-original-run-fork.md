@@ -81,6 +81,9 @@ cargo +1.98.1 test -p improvement-engine-core --test run_fork
    puerto in-memory pasó a poseer su estado y simula cambios adversariales como
    mutaciones internas programadas; un epoch de policy hace visible incluso una
    revocación que ocurre durante la comparación final de otra referencia.
+9. La revisión final P2 corrigió la documentación del puerto concreto, añadió
+   un compile-fail que prueba que `RunForkStore` no es superficie pública y
+   aisló una regresión de final-lock programado justo en el predicado final.
 
 Resultado: 6 pruebas de contrato U34 verdes. Antes de integración acumulativa, un revisor
 independiente debe comprobar el contrato contra U03/U15/U33 y que el adaptador
