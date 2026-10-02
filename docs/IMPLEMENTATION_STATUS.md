@@ -60,8 +60,9 @@ green unit test as proof that a broader product flow is complete.
   it can only mark a proposal eligible and never asserts an outcome or causes
   execution, registry mutation, release or customer exposure.
 - U22: governed published-memory admission. A second run receives only an
-  opaque provenance capability after U33 records and then canonically attests
-  the exact receipt against the current, live memory state. No raw pages,
+  opaque provenance capability after U33 atomically predicates the exact
+  request, grant revision, live head and snapshot before recording its receipt.
+  No raw pages,
   cache, publication, Scout, runtime or release capability is exposed.
 - U17: sealed change compiler. Only an opaque authorization composed from a
   U35 eligible proposal and U16 mechanism proxy can compile an untrusted Flow

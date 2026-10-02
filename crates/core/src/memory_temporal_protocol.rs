@@ -10,7 +10,7 @@ use crate::governed_memory_use::{
     MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest, VerifiedMemoryUse,
 };
 use crate::memory_store::{AtomicMemoryUseCommitPort, MemoryScope};
-use crate::wiki_scratch::WikiAuthorizationPort;
+use crate::wiki_scratch::MemoryUseCommitAuthority;
 use sha2::{Digest, Sha256};
 
 /// The replay cutoff already established by the U04-B availability boundary.
@@ -200,7 +200,7 @@ impl MemoryTemporalAdmission {
     pub(crate) fn admit<
         R: ArtifactRepository,
         P: AtomicMemoryUseCommitPort,
-        A: WikiAuthorizationPort,
+        A: MemoryUseCommitAuthority,
     >(
         protocol: MemoryTemporalProtocol,
         evidence: TemporalMemoryEvidence,
@@ -371,10 +371,18 @@ mod tests {
     }
 
     fn u04b_replay_projection() -> crate::enriched_history::VerifiedReplayAvailability {
-        let snapshot = SourceSnapshot::from_json(
-            &json!({
+        u04b_replay_projection_for(TENANT, "")
+    }
+
+    fn u04b_replay_projection_for(
+        tenant_id: &str,
+        raw_prefix: &str,
+    ) -> crate::enriched_history::VerifiedReplayAvailability {
+        let snapshot = SourceSnapshot::from_json(&format!(
+            "{raw_prefix}{}",
+            json!({
                 "contract_version": {"major": 1, "minor": 0},
-                "tenant_id": TENANT,
+                "tenant_id": tenant_id,
                 "source_namespace": "platform_history",
                 "world_ref": "world-a",
                 "observed_cutoff": "1970-01-01T00:01:40Z",
@@ -387,14 +395,13 @@ mod tests {
                     "source_contract_ref": {"id": "case", "version": "v1", "digest": digest('c')}
                 }]
             })
-            .to_string(),
-        )
+        ))
         .expect("fixed U04-B source snapshot");
         let profile = AvailabilityProfile::new(
             "e0_replay",
             1,
             AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
-            TENANT,
+            tenant_id,
             snapshot.binding_digest(),
         );
         let manifest = EnrichedHistoryManifest::new_replay(
@@ -474,7 +481,7 @@ mod tests {
             100,
             binding.clone(),
         );
-        let mut authority = InMemoryWikiGrantAuthority::default();
+        let authority = InMemoryWikiGrantAuthority::default();
         authority.issue(WikiGrant::new_scoped(
             "grant-2",
             "run-2",
@@ -616,6 +623,45 @@ mod tests {
             Err(TemporalProtocolError::U04BReplayScopeMismatch)
         ));
         assert!(registry.receipts().is_empty());
+    }
+
+    #[test]
+    fn production_issuer_rejects_u04b_projection_for_another_tenant_before_a_receipt() {
+        let (_artifacts, registry, _authority, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+
+        assert!(matches!(
+            TrustedTemporalEvidenceIssuer::from_u04b_replay(
+                u04b_replay_projection_for("tenant-b", ""),
+                request,
+            ),
+            Err(TemporalProtocolError::U04BReplayScopeMismatch)
+        ));
+        assert!(registry.receipts().is_empty());
+    }
+
+    #[test]
+    fn source_snapshot_and_profile_digest_change_the_temporal_commitment() {
+        let (_artifacts, _registry, _authority, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let first = TrustedTemporalEvidenceIssuer::from_u04b_replay(
+            u04b_replay_projection_for(TENANT, ""),
+            request.clone(),
+        )
+        .expect("first exact U04-B snapshot");
+        let same_semantics_new_snapshot = TrustedTemporalEvidenceIssuer::from_u04b_replay(
+            u04b_replay_projection_for(TENANT, "\n"),
+            request,
+        )
+        .expect("second exact U04-B snapshot");
+
+        assert_ne!(
+            first.attest(MemoryTemporalProtocol::Frozen).commitment,
+            same_semantics_new_snapshot
+                .attest(MemoryTemporalProtocol::Frozen)
+                .commitment,
+            "raw snapshot and profile seals are part of temporal identity"
+        );
     }
 
     #[test]

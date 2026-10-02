@@ -5,8 +5,10 @@
 //! provenance: it never returns wiki pages or a cache handle.
 
 use crate::ArtifactRepository;
-use crate::memory_store::{AtomicMemoryUseCommitPort, MemoryError, MemoryScope, MemoryUseReceipt};
-use crate::wiki_scratch::{WikiAccess, WikiAuthorizationPort};
+use crate::memory_store::{
+    AtomicMemoryUseCommitPort, AtomicMemoryUseRequest, MemoryError, MemoryScope, MemoryUseReceipt,
+};
+use crate::wiki_scratch::{MemoryUseCommitAuthority, WikiAccess};
 
 /// Caller-supplied context which U33 must validate before a memory use is
 /// admitted. It contains no wiki payload or cache handle.
@@ -132,21 +134,27 @@ impl MemoryUseAdmission {
     pub(crate) fn admit<
         R: ArtifactRepository,
         P: AtomicMemoryUseCommitPort,
-        A: WikiAuthorizationPort,
+        A: MemoryUseCommitAuthority,
     >(
         publisher: &mut P,
         artifacts: &mut R,
         authority: &A,
         request: MemoryUseRequest,
     ) -> Result<VerifiedMemoryUse, MemoryUseAdmissionError> {
+        let grant_fence = authority
+            .memory_use_grant_fence(&request.access)
+            .ok_or(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))?;
         let receipt = publisher
             .commit_allowed_use(
                 artifacts,
                 authority,
-                request.scope.clone(),
-                request.access.clone(),
-                request.temporal_commitment.clone(),
-                request.access.snapshot_ref.clone(),
+                AtomicMemoryUseRequest::new(
+                    request.scope.clone(),
+                    request.access.clone(),
+                    request.temporal_commitment.clone(),
+                    request.access.snapshot_ref.clone(),
+                    grant_fence,
+                ),
             )
             .map_err(MemoryUseAdmissionError::Denied)?;
         // `commit_allowed_use` is the U33 conditional-commit port: a durable
@@ -167,6 +175,7 @@ fn receipt_matches_request(receipt: &MemoryUseReceipt, request: &MemoryUseReques
         && receipt.snapshot_ref == request.access.snapshot_ref
         && receipt.run_id == request.access.run_id
         && receipt.grant_id == request.access.grant_id
+        && receipt.grant_revision == request.access.grant_revision
         && receipt.purpose == request.access.purpose
         && receipt.allowed_at_unix_seconds == request.access.allowed_at_unix_seconds
         && receipt.temporal_commitment.as_deref() == request.temporal_commitment()
@@ -176,9 +185,8 @@ fn receipt_matches_request(receipt: &MemoryUseReceipt, request: &MemoryUseReques
 mod tests {
     use super::{MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest};
     use crate::memory_store::{
-        AtomicMemoryUseCommitPort, InMemoryMemoryRegistry, MemoryError, MemoryHead,
-        MemoryPublishRequest, MemoryPublisher, MemoryScope, MemoryUseReceipt,
-        MemoryUseReceiptAttestationPort, PublishedMemory,
+        InMemoryMemoryRegistry, MemoryError, MemoryPublisher, MemoryScope,
+        MemoryUseCommitInterleaving, MemoryUseReceiptAttestationPort,
     };
     use crate::wiki_scratch::{
         InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
@@ -234,7 +242,7 @@ mod tests {
             100,
             MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train"),
         );
-        let mut authority = InMemoryWikiGrantAuthority::default();
+        let authority = InMemoryWikiGrantAuthority::default();
         authority.issue(WikiGrant::new_scoped(
             "grant-2",
             "run-2",
@@ -340,244 +348,83 @@ mod tests {
         }
     }
 
-    struct LyingPublisher;
-
-    impl MemoryPublisher for LyingPublisher {
-        fn seed_head<R: ArtifactRepository>(
-            &mut self,
-            _: &mut R,
-            _: MemoryScope,
-            _: crate::ArtifactReference,
-        ) -> Result<MemoryHead, MemoryError> {
-            unreachable!("not part of this admission regression")
-        }
-
-        fn publish<R: ArtifactRepository, A: crate::wiki_scratch::WikiAuthorizationPort>(
-            &mut self,
-            _: &mut R,
-            _: &A,
-            _: MemoryPublishRequest,
-        ) -> Result<PublishedMemory, MemoryError> {
-            unreachable!("not part of this admission regression")
-        }
-
-        fn revoke(&mut self, _: crate::ArtifactReference, _: &str) -> Result<(), MemoryError> {
-            unreachable!("not part of this admission regression")
-        }
-
-        fn record_allowed_use<
-            R: ArtifactRepository,
-            A: crate::wiki_scratch::WikiAuthorizationPort,
-        >(
-            &mut self,
-            _: &mut R,
-            _: &A,
-            scope: MemoryScope,
-            access: WikiAccess,
-            _: Option<String>,
-            snapshot_ref: crate::ArtifactReference,
-        ) -> Result<MemoryUseReceipt, MemoryError> {
-            Ok(MemoryUseReceipt {
-                receipt_id: "forged-receipt".to_owned(),
-                scope,
-                snapshot_ref,
-                head_version: 1,
-                run_id: "another-run".to_owned(),
-                grant_id: access.grant_id,
-                purpose: access.purpose,
-                allowed_at_unix_seconds: access.allowed_at_unix_seconds,
-                temporal_commitment: None,
-            })
-        }
-    }
-
-    impl AtomicMemoryUseCommitPort for LyingPublisher {
-        fn commit_allowed_use<
-            R: ArtifactRepository,
-            A: crate::wiki_scratch::WikiAuthorizationPort,
-        >(
-            &mut self,
-            artifacts: &mut R,
-            authority: &A,
-            scope: MemoryScope,
-            access: WikiAccess,
-            temporal_commitment: Option<String>,
-            snapshot_ref: crate::ArtifactReference,
-        ) -> Result<MemoryUseReceipt, MemoryError> {
-            self.record_allowed_use(
-                artifacts,
-                authority,
-                scope,
-                access,
-                temporal_commitment,
-                snapshot_ref,
-            )
-        }
-    }
-
-    impl MemoryUseReceiptAttestationPort for LyingPublisher {
-        fn attest_allowed_use<
-            R: ArtifactRepository,
-            A: crate::wiki_scratch::WikiAuthorizationPort,
-        >(
-            &mut self,
-            _: &mut R,
-            _: &A,
-            _: &MemoryScope,
-            _: &WikiAccess,
-            _: Option<&str>,
-            _: &MemoryUseReceipt,
-        ) -> Result<(), MemoryError> {
-            Ok(())
-        }
-    }
-
-    struct RevokingAfterRecord {
-        inner: InMemoryMemoryRegistry,
-    }
-
-    impl MemoryPublisher for RevokingAfterRecord {
-        fn seed_head<R: ArtifactRepository>(
-            &mut self,
-            artifacts: &mut R,
-            scope: MemoryScope,
-            snapshot_ref: crate::ArtifactReference,
-        ) -> Result<MemoryHead, MemoryError> {
-            self.inner.seed_head(artifacts, scope, snapshot_ref)
-        }
-
-        fn publish<R: ArtifactRepository, A: crate::wiki_scratch::WikiAuthorizationPort>(
-            &mut self,
-            artifacts: &mut R,
-            authority: &A,
-            request: MemoryPublishRequest,
-        ) -> Result<PublishedMemory, MemoryError> {
-            self.inner.publish(artifacts, authority, request)
-        }
-
-        fn revoke(
-            &mut self,
-            snapshot_ref: crate::ArtifactReference,
-            reason: &str,
-        ) -> Result<(), MemoryError> {
-            self.inner.revoke(snapshot_ref, reason)
-        }
-
-        fn record_allowed_use<
-            R: ArtifactRepository,
-            A: crate::wiki_scratch::WikiAuthorizationPort,
-        >(
-            &mut self,
-            artifacts: &mut R,
-            authority: &A,
-            scope: MemoryScope,
-            access: WikiAccess,
-            temporal_commitment: Option<String>,
-            snapshot_ref: crate::ArtifactReference,
-        ) -> Result<MemoryUseReceipt, MemoryError> {
-            let receipt = self.inner.record_allowed_use(
-                artifacts,
-                authority,
-                scope,
-                access,
-                temporal_commitment,
-                snapshot_ref,
-            )?;
-            self.inner
-                .revoke(receipt.snapshot_ref.clone(), "deterministic_interleaving")?;
-            Ok(receipt)
-        }
-    }
-
-    impl AtomicMemoryUseCommitPort for RevokingAfterRecord {
-        fn commit_allowed_use<
-            R: ArtifactRepository,
-            A: crate::wiki_scratch::WikiAuthorizationPort,
-        >(
-            &mut self,
-            artifacts: &mut R,
-            authority: &A,
-            scope: MemoryScope,
-            access: WikiAccess,
-            temporal_commitment: Option<String>,
-            snapshot_ref: crate::ArtifactReference,
-        ) -> Result<MemoryUseReceipt, MemoryError> {
-            // A revocation observed before the conditional mutation must make
-            // the mutation fail without materializing a receipt. This is the
-            // deterministic analogue of a revocation winning the DB fence.
-            self.inner
-                .revoke(snapshot_ref.clone(), "deterministic_interleaving")?;
-            self.inner.commit_allowed_use(
-                artifacts,
-                authority,
-                scope,
-                access,
-                temporal_commitment,
-                snapshot_ref,
-            )
-        }
-    }
-
-    impl MemoryUseReceiptAttestationPort for RevokingAfterRecord {
-        fn attest_allowed_use<
-            R: ArtifactRepository,
-            A: crate::wiki_scratch::WikiAuthorizationPort,
-        >(
-            &mut self,
-            artifacts: &mut R,
-            authority: &A,
-            scope: &MemoryScope,
-            access: &WikiAccess,
-            temporal_commitment: Option<&str>,
-            receipt: &MemoryUseReceipt,
-        ) -> Result<(), MemoryError> {
-            self.inner.attest_allowed_use(
-                artifacts,
-                authority,
-                scope,
-                access,
-                temporal_commitment,
-                receipt,
-            )
-        }
-    }
-
     #[test]
-    fn revocation_between_u33_record_and_attestation_emits_no_capability() {
-        let (mut artifacts, registry, authority, access) = seeded();
-        let mut publisher = RevokingAfterRecord { inner: registry };
+    fn revocation_that_wins_inside_the_atomic_u33_predicate_emits_no_receipt_or_capability() {
+        let (mut artifacts, mut registry, authority, access) = seeded();
+        registry.schedule_atomic_commit_interleaving(MemoryUseCommitInterleaving::RevokeSnapshot);
 
         match MemoryUseAdmission::admit(
-            &mut publisher,
+            &mut registry,
             &mut artifacts,
             &authority,
             MemoryUseRequest::new(scope(), access),
         ) {
             Err(MemoryUseAdmissionError::Denied(MemoryError::SnapshotRevoked)) => {}
-            Err(other) => panic!("expected post-record revocation denial, got {other:?}"),
-            Ok(_) => panic!("post-record revocation must not emit a capability"),
+            Err(other) => panic!("expected atomic revocation denial, got {other:?}"),
+            Ok(_) => panic!("atomic revocation must not emit a capability"),
         }
         assert!(
-            publisher.inner.receipts().is_empty(),
+            registry.receipts().is_empty(),
             "a failed conditional admission must not leave a receipt behind"
         );
     }
 
     #[test]
-    fn a_mismatched_receipt_never_becomes_a_capability_even_inside_trusted_composition() {
-        let (mut artifacts, _, authority, access) = seeded();
-        let mut publisher = LyingPublisher;
+    fn head_change_that_wins_inside_the_atomic_u33_predicate_emits_no_receipt_or_capability() {
+        let (mut artifacts, mut registry, authority, access) = seeded();
+        registry.schedule_atomic_commit_interleaving(MemoryUseCommitInterleaving::AdvanceHead);
 
         match MemoryUseAdmission::admit(
-            &mut publisher,
+            &mut registry,
             &mut artifacts,
             &authority,
             MemoryUseRequest::new(scope(), access),
         ) {
-            Err(MemoryUseAdmissionError::ReceiptMismatch) => {}
-            Err(other) => panic!("expected receipt mismatch, got {other:?}"),
-            Ok(_) => panic!("mismatched receipt must not mint a capability"),
+            Err(MemoryUseAdmissionError::Denied(MemoryError::HeadConflict { .. })) => {}
+            Err(other) => panic!("expected atomic head conflict, got {other:?}"),
+            Ok(_) => panic!("stale atomic head must not mint a capability"),
         }
+        assert!(registry.receipts().is_empty());
+    }
+
+    #[test]
+    fn replaced_or_revoked_grant_revision_cannot_pass_the_u33_fence_or_leave_a_receipt() {
+        let (mut artifacts, mut registry, authority, access) = seeded();
+        let binding = MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train");
+        authority.issue(
+            WikiGrant::new_scoped(
+                "grant-2",
+                "run-2",
+                TENANT,
+                "investigation",
+                access.snapshot_ref.clone(),
+                binding,
+            )
+            .with_revision(2),
+        );
+
+        assert!(matches!(
+            MemoryUseAdmission::admit(
+                &mut registry,
+                &mut artifacts,
+                &authority,
+                MemoryUseRequest::new(scope(), access.clone()),
+            ),
+            Err(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))
+        ));
+        assert!(registry.receipts().is_empty());
+
+        assert!(authority.revoke("grant-2"));
+        assert!(matches!(
+            MemoryUseAdmission::admit(
+                &mut registry,
+                &mut artifacts,
+                &authority,
+                MemoryUseRequest::new(scope(), access),
+            ),
+            Err(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))
+        ));
+        assert!(registry.receipts().is_empty());
     }
 
     #[test]

@@ -33,15 +33,17 @@ fuente ni interpreta labels/outcomes.
   futura integración autorizada decida si produce una revisión nueva.
 
 `MemoryTemporalAdmission::admit` permanece `pub(crate)`. Antes de delegar a
-U22 usa exclusivamente `AtomicMemoryUseCommitPort`, también `pub(crate)`: una
-implementación durable debe verificar head actual, tombstone/linaje, autoridad
-y solicitud exacta y escribir (o devolver idempotentemente) el receipt en la
-misma transacción condicional. Un fence fallido no deja receipt. El puerto
-público `MemoryPublisher` no puede emitir la capability. U33 recalcula la
-identidad incluyendo el commitment además de scope, snapshot, head, run,
-grant, purpose y reloj autorizado. Un cutoff/outcome/timestamp fabricado,
-feedback futuro o protocolo cruzado falla antes de registrar un receipt; no se
-emite `VerifiedMemoryUse`.
+U22 usa exclusivamente `AtomicMemoryUseCommitPort`, también `pub(crate)`: un
+`AtomicMemoryUseRequest` privado lleva scope, snapshot, request y commitment,
+y una authority interna aporta el fence opaco de grant/revisión. Una
+implementación durable debe verificar en la misma transacción condicional head
+identidad/versión actual, tombstone/linaje, grant/revisión viva y solicitud
+exacta antes de escribir (o devolver idempotentemente) el receipt. Un fence
+fallido no deja receipt. El puerto público `MemoryPublisher` no puede emitir la
+capability. U33 recalcula la identidad incluyendo el commitment además de
+scope, snapshot, head, run, grant, revisión, purpose y reloj autorizado. Un
+cutoff/outcome/timestamp fabricado, feedback futuro o protocolo cruzado falla
+antes de registrar un receipt; no se emite `VerifiedMemoryUse`.
 
 La capability resultante sigue siendo la opaca U22: no se añade un handle a
 wiki, páginas, cache, publicación o autoridad de aprendizaje.
@@ -64,8 +66,11 @@ con `E0432` porque el módulo no existía. Las iteraciones posteriores verifican
 6. Una proyección real U04-B V2 (no el fixture test-only) debe enlazar tenant,
    world, cutoff, snapshot y profile antes de poder emitir evidencia; un world
    cruzado falla sin receipt.
-7. Una revocación que gana antes del commit condicional niega la admisión y no
-   deja receipt ni capability.
+7. Revocación y cambio de head que ganan dentro del predicado condicional
+   niegan la admisión y no dejan receipt ni capability; una revisión de grant
+   reemplazada o revocada tampoco cruza el fence.
+8. Tenant cruzado y snapshot/profile con el mismo significado aparente pero
+   distinto digest producen evidencia distinta o fallan antes del receipt.
 
 ## Dependencias y continuación
 

@@ -52,7 +52,7 @@ fn access(reference: improvement_engine_core::ArtifactReference) -> WikiAccess {
 }
 
 fn authority(reference: improvement_engine_core::ArtifactReference) -> InMemoryWikiGrantAuthority {
-    let mut authority = InMemoryWikiGrantAuthority::default();
+    let authority = InMemoryWikiGrantAuthority::default();
     authority.issue(WikiGrant::new_scoped(
         "grant-1",
         "run-1",

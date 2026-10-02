@@ -12,7 +12,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::wiki_scratch::{
-    MemoryScopeBinding, WikiAccess, WikiAuthorizationPort, WikiTransformResult,
+    MemoryScopeBinding, MemoryUseCommitAuthority, MemoryUseGrantFence, WikiAccess,
+    WikiAuthorizationPort, WikiTransformResult,
 };
 use crate::{ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository, RepositoryError};
 
@@ -113,6 +114,7 @@ pub struct MemoryUseReceipt {
     pub head_version: u64,
     pub run_id: String,
     pub grant_id: String,
+    pub grant_revision: u64,
     pub purpose: String,
     pub allowed_at_unix_seconds: u64,
     /// Opaque commitment emitted by the U23 temporal evidence issuer. `None`
@@ -187,15 +189,43 @@ pub trait MemoryPublisher {
 /// fence.  The in-memory implementation below models that indivisible
 /// mutation; a durable adapter must preserve it with one conditional commit.
 pub(crate) trait AtomicMemoryUseCommitPort {
-    fn commit_allowed_use<R: ArtifactRepository, A: WikiAuthorizationPort>(
+    fn commit_allowed_use<R: ArtifactRepository, A: MemoryUseCommitAuthority>(
         &mut self,
         artifacts: &mut R,
         authority: &A,
+        request: AtomicMemoryUseRequest,
+    ) -> Result<MemoryUseReceipt, MemoryError>;
+}
+
+/// Exact request-side authorization fence for one U33 conditional admission.
+/// Its fields are private so only U22 can create it after a trusted authority
+/// resolves the active grant revision. The storage adapter must check every
+/// field, the current head and liveness in its one commit predicate.
+#[derive(Clone, Debug)]
+pub(crate) struct AtomicMemoryUseRequest {
+    scope: MemoryScope,
+    access: WikiAccess,
+    temporal_commitment: Option<String>,
+    snapshot_ref: ArtifactReference,
+    grant_fence: MemoryUseGrantFence,
+}
+
+impl AtomicMemoryUseRequest {
+    pub(crate) fn new(
         scope: MemoryScope,
         access: WikiAccess,
         temporal_commitment: Option<String>,
         snapshot_ref: ArtifactReference,
-    ) -> Result<MemoryUseReceipt, MemoryError>;
+        grant_fence: MemoryUseGrantFence,
+    ) -> Self {
+        Self {
+            scope,
+            access,
+            temporal_commitment,
+            snapshot_ref,
+            grant_fence,
+        }
+    }
 }
 
 /// Re-attests one recorded use against the current U33 head, live snapshot,
@@ -221,12 +251,57 @@ pub struct InMemoryMemoryRegistry {
     parents: BTreeMap<String, ArtifactReference>,
     tombstones: BTreeSet<String>,
     receipts: Vec<MemoryUseReceipt>,
+    #[cfg(test)]
+    next_atomic_commit_interleaving: Option<MemoryUseCommitInterleaving>,
+}
+
+/// Deterministic test-only schedule for a state change that wins between the
+/// first read and final predicate of an in-memory atomic admission.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MemoryUseCommitInterleaving {
+    RevokeSnapshot,
+    AdvanceHead,
 }
 
 impl InMemoryMemoryRegistry {
     #[must_use]
     pub fn receipts(&self) -> &[MemoryUseReceipt] {
         &self.receipts
+    }
+
+    #[cfg(test)]
+    pub(crate) fn schedule_atomic_commit_interleaving(
+        &mut self,
+        interleaving: MemoryUseCommitInterleaving,
+    ) {
+        self.next_atomic_commit_interleaving = Some(interleaving);
+    }
+
+    #[cfg(test)]
+    fn apply_scheduled_atomic_commit_interleaving(
+        &mut self,
+        request: &AtomicMemoryUseRequest,
+    ) -> Result<(), MemoryError> {
+        match self.next_atomic_commit_interleaving.take() {
+            None => Ok(()),
+            Some(MemoryUseCommitInterleaving::RevokeSnapshot) => {
+                self.tombstones.insert(reference_key(&request.snapshot_ref));
+                Ok(())
+            }
+            Some(MemoryUseCommitInterleaving::AdvanceHead) => {
+                let head = self
+                    .heads
+                    .get_mut(&request.scope)
+                    .ok_or(MemoryError::HeadMissing)?;
+                let expected = head.head_version;
+                head.head_version = expected.checked_add(1).ok_or(MemoryError::HeadConflict {
+                    expected,
+                    actual: expected,
+                })?;
+                Ok(())
+            }
+        }
     }
 
     fn verify_live_snapshot<R: ArtifactRepository>(
@@ -272,6 +347,56 @@ impl InMemoryMemoryRegistry {
         }
     }
 
+    fn expected_atomic_allowed_use_receipt<R: ArtifactRepository, A: MemoryUseCommitAuthority>(
+        &self,
+        artifacts: &mut R,
+        authority: &A,
+        request: &AtomicMemoryUseRequest,
+    ) -> Result<MemoryUseReceipt, MemoryError> {
+        let head = self
+            .heads
+            .get(&request.scope)
+            .cloned()
+            .ok_or(MemoryError::HeadMissing)?;
+        if head.snapshot_ref != request.access.snapshot_ref
+            || request.access.snapshot_ref != request.snapshot_ref
+        {
+            return Err(MemoryError::SnapshotMismatch);
+        }
+        if !request.scope.matches_binding(&request.access)
+            || !authority.grant_fence_is_live(&request.access, &request.grant_fence)
+        {
+            return Err(MemoryError::AccessDenied);
+        }
+        if !authority.authorize(&request.access, &head.snapshot_ref) {
+            return Err(MemoryError::AccessDenied);
+        }
+        self.verify_live_snapshot(
+            artifacts,
+            &request.scope,
+            &head.snapshot_ref,
+            request.access.allowed_at_unix_seconds,
+        )?;
+        Ok(MemoryUseReceipt {
+            receipt_id: receipt_id(
+                &request.scope,
+                &request.access,
+                &head.snapshot_ref,
+                head.head_version,
+                request.temporal_commitment.as_deref(),
+            ),
+            scope: request.scope.clone(),
+            snapshot_ref: head.snapshot_ref,
+            head_version: head.head_version,
+            run_id: request.access.run_id.clone(),
+            grant_id: request.access.grant_id.clone(),
+            grant_revision: request.access.grant_revision,
+            purpose: request.access.purpose.clone(),
+            allowed_at_unix_seconds: request.access.allowed_at_unix_seconds,
+            temporal_commitment: request.temporal_commitment.clone(),
+        })
+    }
+
     fn expected_allowed_use_receipt<R: ArtifactRepository, A: WikiAuthorizationPort>(
         &self,
         artifacts: &mut R,
@@ -288,10 +413,7 @@ impl InMemoryMemoryRegistry {
         if head.snapshot_ref != access.snapshot_ref {
             return Err(MemoryError::SnapshotMismatch);
         }
-        if !scope.matches_binding(access) {
-            return Err(MemoryError::AccessDenied);
-        }
-        if !authority.authorize(access, &head.snapshot_ref) {
+        if !scope.matches_binding(access) || !authority.authorize(access, &head.snapshot_ref) {
             return Err(MemoryError::AccessDenied);
         }
         self.verify_live_snapshot(
@@ -313,6 +435,7 @@ impl InMemoryMemoryRegistry {
             head_version: head.head_version,
             run_id: access.run_id.clone(),
             grant_id: access.grant_id.clone(),
+            grant_revision: access.grant_revision,
             purpose: access.purpose.clone(),
             allowed_at_unix_seconds: access.allowed_at_unix_seconds,
             temporal_commitment: temporal_commitment.map(str::to_owned),
@@ -501,26 +624,43 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
 }
 
 impl AtomicMemoryUseCommitPort for InMemoryMemoryRegistry {
-    fn commit_allowed_use<R: ArtifactRepository, A: WikiAuthorizationPort>(
+    fn commit_allowed_use<R: ArtifactRepository, A: MemoryUseCommitAuthority>(
         &mut self,
         artifacts: &mut R,
         authority: &A,
-        scope: MemoryScope,
-        access: WikiAccess,
-        temporal_commitment: Option<String>,
-        snapshot_ref: ArtifactReference,
+        request: AtomicMemoryUseRequest,
     ) -> Result<MemoryUseReceipt, MemoryError> {
         // The registry owns head, tombstone and receipt state behind this one
         // mutable boundary. `record_allowed_use` computes every fence before
         // inserting, so a failing fence cannot leave a receipt.
-        self.record_allowed_use(
-            artifacts,
-            authority,
-            scope,
-            access,
-            temporal_commitment,
-            snapshot_ref,
-        )
+        let receipt = self.expected_atomic_allowed_use_receipt(artifacts, authority, &request)?;
+        #[cfg(test)]
+        self.apply_scheduled_atomic_commit_interleaving(&request)?;
+        // This repeats every fence after the deterministic interleaving. A
+        // durable adapter expresses the same invariant in one SQL predicate;
+        // no receipt is inserted until the final predicate agrees with the
+        // initially observed exact head identity/version and authorization.
+        let final_receipt =
+            self.expected_atomic_allowed_use_receipt(artifacts, authority, &request)?;
+        if final_receipt != receipt {
+            return Err(MemoryError::HeadConflict {
+                expected: receipt.head_version,
+                actual: final_receipt.head_version,
+            });
+        }
+        if let Some(existing) = self
+            .receipts
+            .iter()
+            .find(|existing| existing.receipt_id == receipt.receipt_id)
+        {
+            return if existing == &receipt {
+                Ok(existing.clone())
+            } else {
+                Err(MemoryError::ReceiptConflict)
+            };
+        }
+        self.receipts.push(receipt.clone());
+        Ok(receipt)
     }
 }
 
@@ -617,6 +757,7 @@ fn receipt_id(
         &access.tenant_id,
         &access.purpose,
         &access.grant_id,
+        access.grant_revision,
         snapshot_ref,
         access.allowed_at_unix_seconds,
         head_version,

@@ -38,7 +38,7 @@ fn authority_for(
     reference: &improvement_engine_core::ArtifactReference,
     run_id: &str,
 ) -> InMemoryWikiGrantAuthority {
-    let mut authority = InMemoryWikiGrantAuthority::default();
+    let authority = InMemoryWikiGrantAuthority::default();
     authority.issue(WikiGrant::new(
         "grant-1",
         run_id,
