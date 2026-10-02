@@ -15,6 +15,14 @@ evidencia fuente y receipts. Es una descripción de evidencia observada: no
 es label, outcome, explicación causal, claim, oportunidad ni decisión de
 release.
 
+La métrica tampoco es input libre: `DiagnosticMetricPolicy::TechnicalErrorRateV1`
+es el único miembro de la allowlist inicial. Su `DiagnosticMetricSpec` fija
+campo `technical_error`, semántica `observed_technical_error_flag`, positivo
+`true`, policy `e0_diagnostic_allowlist@1` y un commitment canónico. No existe
+constructor público que acepte `resolved`, labels, outcomes ni un nombre de
+campo arbitrario; agregar una métrica requiere una revisión/versionado de la
+policy, no una configuración dinámica.
+
 ## Invariantes
 
 - La ventana virtual es inclusiva, termina en o antes del cutoff sellado y
@@ -26,6 +34,9 @@ release.
   cerrados.
 - La salida expone sólo digests de receipts, no filas ni receipts mutables, y
   nunca autoriza ejecución o release.
+- El resultado opaco E0 y sus commitments internos no se pueden construir
+  desde código consumidor; los doctests `compile_fail` cubren ambos tipos y el
+  rechazo de `QueryResult` público.
 - U12 reutiliza el parser UTC fijo de U04-B. El contrato actual de U04 admite
   únicamente `YYYY-MM-DDTHH:MM:SSZ`; timestamps con fracciones se rechazan
   antes de formar la proyección E0. U12 no introduce una semántica temporal

@@ -120,10 +120,13 @@ green unit test as proof that a broader product flow is complete.
   opaque U08-E result after its U04-B projection has been verified, then emits
   an immutable descriptive boolean-rate signal with numerator, denominator,
   missingness, virtual window/cutoff and complete source/projection/receipt
-  commitments. It fails closed on evidence or context drift and does not infer
-  labels/outcomes, access sources, execute SQL, call models/Agent Core, create
-  claims or authorize a write/release. The older generic `DeterministicSensor`
-  remains separate because its public `QueryResult` input is not E0 evidence.
+  commitments. Its only initial metric is a reviewed, versioned allowlist
+  policy for the descriptive `technical_error` flag; no caller can provide
+  `resolved`, labels, outcomes or arbitrary fields. It fails closed on evidence
+  or context drift and does not infer labels/outcomes, access sources, execute
+  SQL, call models/Agent Core, create claims or authorize a write/release. The
+  older generic `DeterministicSensor` remains separate because its public
+  `QueryResult` input is not E0 evidence.
 - U23-P / Issue #47: the narrow Frozen/Continuous temporal protocol over
   U04-B's replay cutoff and U22/U33 governed admission. An opaque, trusted
   evidence commitment (not caller-provided timestamps) is part of the U33

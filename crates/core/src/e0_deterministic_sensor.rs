@@ -13,43 +13,91 @@ use crate::ArtifactReference;
 use crate::e0_query_lab::VerifiedE0QueryResult;
 use crate::enriched_history::rfc3339_utc_to_unix_seconds;
 
-/// A declared boolean diagnostic over one E0-projected field and its event
-/// clock. It names neither a business outcome nor a causal explanation.
+/// The reviewed, versioned allowlist for descriptive E0 diagnostics. It is
+/// deliberately an enum without caller-supplied field names: adding a metric
+/// requires a source-reviewed policy revision rather than a prompt/config
+/// asking the sensor to reinterpret an outcome as a diagnostic.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub enum DiagnosticMetricPolicy {
+    TechnicalErrorRateV1,
+}
+
+/// A sealed selection from the explicit diagnostic policy allowlist. The
+/// commitment carries the policy identity, version, field and semantics into
+/// the immutable output.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct E0BooleanRateSpec {
+pub struct DiagnosticMetricSpec {
     metric_id: String,
     field: String,
     event_time_field: String,
     positive_value: String,
+    semantics: String,
+    policy_id: String,
+    policy_version: u16,
+    commitment: String,
 }
 
-impl E0BooleanRateSpec {
-    pub fn new(
-        metric_id: impl Into<String>,
-        field: impl Into<String>,
-        event_time_field: impl Into<String>,
-        positive_value: impl Into<String>,
-    ) -> Result<Self, E0DiagnosticSensorError> {
-        let spec = Self {
-            metric_id: metric_id.into(),
-            field: field.into(),
-            event_time_field: event_time_field.into(),
-            positive_value: positive_value.into(),
+impl DiagnosticMetricSpec {
+    #[must_use]
+    pub fn from_policy(policy: DiagnosticMetricPolicy) -> Self {
+        let (
+            metric_id,
+            field,
+            event_time_field,
+            positive_value,
+            semantics,
+            policy_id,
+            policy_version,
+        ) = match policy {
+            DiagnosticMetricPolicy::TechnicalErrorRateV1 => (
+                "e0_technical_error_rate",
+                "technical_error",
+                "event_time",
+                "true",
+                "observed_technical_error_flag",
+                "e0_diagnostic_allowlist",
+                1,
+            ),
         };
-        if !valid_identifier(&spec.metric_id)
-            || !valid_identifier(&spec.field)
-            || !valid_identifier(&spec.event_time_field)
-            || spec.field == spec.event_time_field
-            || !matches!(spec.positive_value.as_str(), "true" | "false")
-        {
-            return Err(E0DiagnosticSensorError::InvalidSpec);
+        let commitment = metric_spec_commitment(
+            metric_id,
+            field,
+            event_time_field,
+            positive_value,
+            semantics,
+            policy_id,
+            policy_version,
+        );
+        Self {
+            metric_id: metric_id.to_owned(),
+            field: field.to_owned(),
+            event_time_field: event_time_field.to_owned(),
+            positive_value: positive_value.to_owned(),
+            semantics: semantics.to_owned(),
+            policy_id: policy_id.to_owned(),
+            policy_version,
+            commitment,
         }
-        Ok(spec)
     }
 
     #[must_use]
     pub fn metric_id(&self) -> &str {
         &self.metric_id
+    }
+
+    #[must_use]
+    pub fn policy_id(&self) -> &str {
+        &self.policy_id
+    }
+
+    #[must_use]
+    pub fn policy_version(&self) -> u16 {
+        self.policy_version
+    }
+
+    #[must_use]
+    pub fn commitment(&self) -> &str {
+        &self.commitment
     }
 }
 
@@ -92,6 +140,10 @@ impl E0DiagnosticWindow {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct E0DiagnosticSignal {
     metric_id: String,
+    metric_policy_id: String,
+    metric_policy_version: u16,
+    metric_semantics: String,
+    metric_spec_commitment: String,
     numerator: u64,
     denominator: u64,
     missing: u64,
@@ -117,6 +169,21 @@ impl E0DiagnosticSignal {
     #[must_use]
     pub fn metric_id(&self) -> &str {
         &self.metric_id
+    }
+
+    #[must_use]
+    pub fn metric_policy_id(&self) -> &str {
+        &self.metric_policy_id
+    }
+
+    #[must_use]
+    pub fn metric_policy_version(&self) -> u16 {
+        self.metric_policy_version
+    }
+
+    #[must_use]
+    pub fn metric_spec_commitment(&self) -> &str {
+        &self.metric_spec_commitment
     }
 
     #[must_use]
@@ -179,7 +246,6 @@ impl E0DiagnosticSignal {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum E0DiagnosticSensorError {
-    InvalidSpec,
     InvalidWindow,
     NoAuthenticatedEvidence,
     WindowBeyondCutoff,
@@ -202,7 +268,7 @@ impl E0DiagnosticSensor {
     }
 
     pub fn measure(
-        spec: &E0BooleanRateSpec,
+        spec: &DiagnosticMetricSpec,
         window: E0DiagnosticWindow,
         evidence: &[VerifiedE0QueryResult],
     ) -> Result<E0DiagnosticSignal, E0DiagnosticSensorError> {
@@ -294,6 +360,10 @@ impl E0DiagnosticSensor {
             .unwrap_or(0) as u16;
         let mut signal = E0DiagnosticSignal {
             metric_id: spec.metric_id.clone(),
+            metric_policy_id: spec.policy_id.clone(),
+            metric_policy_version: spec.policy_version,
+            metric_semantics: spec.semantics.clone(),
+            metric_spec_commitment: spec.commitment.clone(),
             numerator,
             denominator,
             missing,
@@ -336,33 +406,66 @@ fn same_commitments(
         && left.source_evidence_digest() == right.source_evidence_digest()
 }
 
-fn valid_identifier(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 64
-        && value
-            .bytes()
-            .all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'_'))
-}
-
 fn digest_of<T: Serialize>(value: &T) -> String {
     let bytes = serde_json::to_vec(value).expect("sensor evidence is serializable");
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
+#[allow(clippy::too_many_arguments)]
+fn metric_spec_commitment(
+    metric_id: &str,
+    field: &str,
+    event_time_field: &str,
+    positive_value: &str,
+    semantics: &str,
+    policy_id: &str,
+    policy_version: u16,
+) -> String {
+    #[derive(Serialize)]
+    struct MetricPolicyCommitment<'a> {
+        metric_id: &'a str,
+        field: &'a str,
+        event_time_field: &'a str,
+        positive_value: &'a str,
+        semantics: &'a str,
+        policy_id: &'a str,
+        policy_version: u16,
+    }
+    digest_of(&MetricPolicyCommitment {
+        metric_id,
+        field,
+        event_time_field,
+        positive_value,
+        semantics,
+        policy_id,
+        policy_version,
+    })
+}
+
 /// ```compile_fail
 /// use improvement_engine_core::deterministic_sensor::DeterministicSensor;
 /// use improvement_engine_core::e0_deterministic_sensor::{
-///     E0BooleanRateSpec, E0DiagnosticSensor, E0DiagnosticWindow,
+///     DiagnosticMetricPolicy, DiagnosticMetricSpec, E0DiagnosticSensor, E0DiagnosticWindow,
 /// };
 /// use improvement_engine_core::local_lab::QueryResult;
 ///
-/// let spec = E0BooleanRateSpec::new("metric", "flag", "event_time", "true").unwrap();
+/// let spec = DiagnosticMetricSpec::from_policy(DiagnosticMetricPolicy::TechnicalErrorRateV1);
 /// let window = E0DiagnosticWindow::new(0, 1).unwrap();
 /// let public_result: Vec<QueryResult> = Vec::new();
 /// let _ = E0DiagnosticSensor::measure(&spec, window, &public_result);
 /// let _ = DeterministicSensor; // Generic U12 is not authenticated E0 evidence.
 /// ```
 const _E0_SENSOR_REJECTS_PUBLIC_QUERY_RESULTS: () = ();
+
+/// ```compile_fail
+/// use improvement_engine_core::e0_query_lab::{E0QueryCommitments, VerifiedE0QueryResult};
+///
+/// // The commitment is crate-private and neither it nor the opaque result can
+/// // be minted from caller-controlled rows, receipts or digest strings.
+/// let _ = E0QueryCommitments {};
+/// let _ = VerifiedE0QueryResult {};
+/// ```
+const _E0_EVIDENCE_CANNOT_BE_CONSTRUCTED_EXTERNALLY: () = ();
 
 #[cfg(test)]
 mod tests {
@@ -388,10 +491,10 @@ mod tests {
         format!("sha256:{}", seed.to_string().repeat(64))
     }
 
-    fn row(event_time: &str, resolved: &str) -> BTreeMap<String, String> {
+    fn row(event_time: &str, technical_error: &str) -> BTreeMap<String, String> {
         BTreeMap::from([
             ("event_time".to_owned(), event_time.to_owned()),
-            ("resolved".to_owned(), resolved.to_owned()),
+            ("technical_error".to_owned(), technical_error.to_owned()),
         ])
     }
 
@@ -412,15 +515,18 @@ mod tests {
         );
         let snapshot = SourceSnapshot::from_json(&raw_snapshot).unwrap();
         let rows = vec![
-            json!({"event_time":"1970-01-01T00:01:40Z", "resolved":"true"}),
-            json!({"event_time":"1970-01-01T00:01:40Z", "resolved":"false"}),
-            json!({"event_time":"1970-01-01T00:01:40Z", "resolved":""}),
+            json!({"event_time":"1970-01-01T00:01:40Z", "technical_error":"true"}),
+            json!({"event_time":"1970-01-01T00:01:40Z", "technical_error":"false"}),
+            json!({"event_time":"1970-01-01T00:01:40Z", "technical_error":""}),
         ];
         let availability = (0..rows.len())
             .map(|_| {
                 ReplayRowAvailability::new(BTreeMap::from([
                     ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
-                    ("resolved".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                    (
+                        "technical_error".to_owned(),
+                        "1970-01-01T00:01:40Z".to_owned(),
+                    ),
                 ]))
             })
             .collect::<Vec<_>>();
@@ -448,7 +554,10 @@ mod tests {
                 )
                 .with_field_availability(BTreeMap::from([
                     ("event_time".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
-                    ("resolved".to_owned(), "1970-01-01T00:01:40Z".to_owned()),
+                    (
+                        "technical_error".to_owned(),
+                        "1970-01-01T00:01:40Z".to_owned(),
+                    ),
                 ]))
                 .with_replay_projection_digest(replay_projection_digest(&rows, &availability))
                 .with_source_file_seal(snapshot.source_file_seal("contacts").unwrap()),
@@ -510,7 +619,7 @@ mod tests {
             },
             vec![LabTable::new(
                 "contacts",
-                vec!["event_time", "resolved"],
+                vec!["event_time", "technical_error"],
                 vec![
                     row("1970-01-01T00:01:40Z", ""),
                     row("1970-01-01T00:01:40Z", "false"),
@@ -550,13 +659,13 @@ mod tests {
         E0QueryLab::admit(&projection, candidate).unwrap()
     }
 
-    fn spec() -> E0BooleanRateSpec {
-        E0BooleanRateSpec::new("contact_resolution", "resolved", "event_time", "true").unwrap()
+    fn spec() -> DiagnosticMetricSpec {
+        DiagnosticMetricSpec::from_policy(DiagnosticMetricPolicy::TechnicalErrorRateV1)
     }
 
     #[test]
     fn authenticated_e0_evidence_emits_reproducible_diagnostic_with_full_commitments() {
-        let evidence = authenticated_result('a', vec!["event_time", "resolved"]);
+        let evidence = authenticated_result('a', vec!["event_time", "technical_error"]);
         let window = E0DiagnosticWindow::new(100, 100).unwrap();
         let source_artifact_digest = evidence
             .result()
@@ -573,6 +682,9 @@ mod tests {
         assert_eq!(first.numerator(), 1);
         assert_eq!(first.denominator(), 2);
         assert_eq!(first.missing(), 1);
+        assert_eq!(first.metric_policy_id(), "e0_diagnostic_allowlist");
+        assert_eq!(first.metric_policy_version(), 1);
+        assert_eq!(first.metric_spec_commitment(), spec().commitment());
         assert_eq!(first.window(), window);
         assert_eq!(first.cutoff_unix_seconds(), 100);
         assert_ne!(first.source_snapshot_binding(), source_artifact_digest);
@@ -586,7 +698,7 @@ mod tests {
 
     #[test]
     fn window_cannot_cross_cutoff_and_every_event_must_be_within_it() {
-        let evidence = authenticated_result('a', vec!["event_time", "resolved"]);
+        let evidence = authenticated_result('a', vec!["event_time", "technical_error"]);
         assert_eq!(
             E0DiagnosticSensor::measure(
                 &spec(),
@@ -596,7 +708,7 @@ mod tests {
             Err(E0DiagnosticSensorError::WindowBeyondCutoff)
         );
 
-        let evidence = authenticated_result('a', vec!["event_time", "resolved"]);
+        let evidence = authenticated_result('a', vec!["event_time", "technical_error"]);
         assert_eq!(
             E0DiagnosticSensor::measure(
                 &spec(),
@@ -609,8 +721,8 @@ mod tests {
 
     #[test]
     fn authenticated_e0_results_with_drift_or_unread_metric_field_fail_closed() {
-        let first = authenticated_result('a', vec!["event_time", "resolved"]);
-        let changed_projection = authenticated_result('b', vec!["event_time", "resolved"]);
+        let first = authenticated_result('a', vec!["event_time", "technical_error"]);
+        let changed_projection = authenticated_result('b', vec!["event_time", "technical_error"]);
         assert_eq!(
             E0DiagnosticSensor::measure(
                 &spec(),
@@ -632,17 +744,15 @@ mod tests {
     }
 
     #[test]
-    fn labels_are_not_inferred_from_e0_evidence() {
-        let evidence = authenticated_result('a', vec!["event_time", "resolved"]);
-        let label_spec =
-            E0BooleanRateSpec::new("label_rate", "label", "event_time", "true").unwrap();
-        assert_eq!(
-            E0DiagnosticSensor::measure(
-                &label_spec,
-                E0DiagnosticWindow::new(100, 100).unwrap(),
-                &[evidence]
-            ),
-            Err(E0DiagnosticSensorError::UnauthorizedField)
-        );
+    fn only_the_reviewed_descriptive_metric_policy_can_measure_e0_evidence() {
+        let evidence = authenticated_result('a', vec!["event_time", "technical_error"]);
+        let signal = E0DiagnosticSensor::measure(
+            &spec(),
+            E0DiagnosticWindow::new(100, 100).unwrap(),
+            &[evidence],
+        )
+        .unwrap();
+        assert_eq!(signal.metric_id(), "e0_technical_error_rate");
+        assert_ne!(signal.metric_id(), "resolved");
     }
 }
