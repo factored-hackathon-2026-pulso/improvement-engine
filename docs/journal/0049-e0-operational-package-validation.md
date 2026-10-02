@@ -51,14 +51,20 @@ passes validation.
 Synthetic fixture verification covers all nine tables, required fields and
 types, missing/duplicate columns, cardinality, relations, clocks, and the
 evaluator/discovery boundary. With `PULSO_E0_SAMPLE_ROOT` set to the local E0
-sample, the preflight confirms table/field/type compatibility and then rejects
-the package at the declared `turn.evidence_ids[]` relation: 845 references do
-not resolve to `copilot_query.query_id`, `tool_call.call_id`, or
-`approval.approval_id`. The error exposes only the count. This conflicts with
-the sample report's claim of zero platform-history violations; treat it as an
-unresolved data/contract discrepancy, not as evidence to weaken the relation
-check. The fixture suite is green; full real-package validation is currently
-not green for that specific reason.
+sample, aggregate-only cross-table comparison found 4,622 evidence references:
+3,777 resolve to one of the three contract-declared targets and the remaining
+845 resolve to `identity_check.check_id`. All 4,622 resolve to an ID from
+some operational table; none require whitespace, case-folding, or delimiter
+normalization. The contract's `turn.evidence_ids[]` relation explicitly names
+only `copilot_query.query_id`, `tool_call.call_id`, and
+`approval.approval_id`, so the validator correctly rejects the 845
+identity-check references under the current contract. The sample report's
+zero-violations claim therefore does not align with the published relation
+contract (or its validator does not check this relation). Do not silently add
+`identity_check` as an allowed target: the data/contract owner must either
+declare and validate that edge or change those references. The validator error
+exposes only the unresolved count. The fixture suite is green; full
+real-package validation remains blocked by this explicit contract discrepancy.
 
 Validation proves only schema and structural consistency for the supplied
 snapshot. It does not establish truth, completeness, provenance, production
