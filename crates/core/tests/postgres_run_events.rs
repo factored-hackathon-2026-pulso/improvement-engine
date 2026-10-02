@@ -46,12 +46,12 @@ fn seed_run(client: &mut postgres::Client) {
             "INSERT INTO pulso_jobs (id, tenant_id, run_ref, kind, logical_key, generation, \
              parent_job_id, status, lane, priority, due_at, attempt, lease_version, \
              input_ref, config_ref) \
-             VALUES ($1::uuid, $2, $1::uuid, 'detect', 'test-run', 0, $1::uuid, \
+             VALUES ($1::text::uuid, $2, $1::text::uuid, 'detect', 'test-run', 0, $1::text::uuid, \
              'queued', 'default', 0, now(), 0, 0, 'input:test', 'config:test'), \
-             ($3::uuid, $2, $1::uuid, 'verify', 'test-child', 0, $1::uuid, \
+             ($3::text::uuid, $2, $1::text::uuid, 'verify', 'test-child', 0, $1::text::uuid, \
              'queued', 'default', 0, now(), 0, 0, 'input:test', 'config:test'), \
-             ('00000000-0000-7000-8000-000000000006'::uuid, $2, $1::uuid, \
-             'verify', 'test-child-2', 0, $1::uuid, 'queued', 'default', 0, now(), \
+             ('00000000-0000-7000-8000-000000000006'::uuid, $2, $1::text::uuid, \
+             'verify', 'test-child-2', 0, $1::text::uuid, 'queued', 'default', 0, now(), \
              0, 0, 'input:test', 'config:test'), \
              ('00000000-0000-7000-8000-000000000008'::uuid, $2, \
              '00000000-0000-7000-8000-000000000008'::uuid, 'detect', 'other-run', 0, \
@@ -187,7 +187,7 @@ fn job_transition_and_run_event_commit_atomically_and_receive_monotonic_run_sequ
     let mut client = connect();
     let status: String = client
         .query_one(
-            "SELECT status FROM pulso_jobs WHERE tenant_id=$1 AND id=$2::uuid",
+            "SELECT status FROM pulso_jobs WHERE tenant_id=$1 AND id=$2::text::uuid",
             &[&TENANT, &CHILD_JOB],
         )
         .unwrap()
@@ -195,7 +195,7 @@ fn job_transition_and_run_event_commit_atomically_and_receive_monotonic_run_sequ
     let events = client
         .query(
             "SELECT sequence, event_code, status FROM pulso_run_events \
-             WHERE tenant_id=$1 AND run_ref=$2::uuid ORDER BY sequence",
+             WHERE tenant_id=$1 AND run_ref=$2::text::uuid ORDER BY sequence",
             &[&TENANT, &RUN],
         )
         .unwrap();
@@ -207,7 +207,7 @@ fn job_transition_and_run_event_commit_atomically_and_receive_monotonic_run_sequ
     assert_eq!(events[1].get::<_, String>(2), "completed");
     let root_sequence: i64 = client
         .query_one(
-            "SELECT last_event_sequence FROM pulso_jobs WHERE tenant_id=$1 AND id=$2::uuid",
+            "SELECT last_event_sequence FROM pulso_jobs WHERE tenant_id=$1 AND id=$2::text::uuid",
             &[&TENANT, &RUN],
         )
         .unwrap()
@@ -242,14 +242,14 @@ fn failed_event_append_rolls_back_the_job_transition() {
     let mut client = connect();
     let status: String = client
         .query_one(
-            "SELECT status FROM pulso_jobs WHERE tenant_id=$1 AND id=$2::uuid",
+            "SELECT status FROM pulso_jobs WHERE tenant_id=$1 AND id=$2::text::uuid",
             &[&TENANT, &CHILD_JOB],
         )
         .unwrap()
         .get(0);
     let count: i64 = client
         .query_one(
-            "SELECT count(*) FROM pulso_run_events WHERE tenant_id=$1 AND run_ref=$2::uuid",
+            "SELECT count(*) FROM pulso_run_events WHERE tenant_id=$1 AND run_ref=$2::text::uuid",
             &[&TENANT, &RUN],
         )
         .unwrap()
@@ -258,7 +258,7 @@ fn failed_event_append_rolls_back_the_job_transition() {
     assert_eq!(count, 0);
     let root_sequence: i64 = client
         .query_one(
-            "SELECT last_event_sequence FROM pulso_jobs WHERE tenant_id=$1 AND id=$2::uuid",
+            "SELECT last_event_sequence FROM pulso_jobs WHERE tenant_id=$1 AND id=$2::text::uuid",
             &[&TENANT, &RUN],
         )
         .unwrap()
@@ -321,14 +321,14 @@ fn run_rejects_a_child_as_root_and_rejects_a_job_from_another_run() {
     let child_as_root_insert = client.execute(
         "INSERT INTO pulso_run_events \
          (id, tenant_id, run_ref, sequence, event_at, stage, event_code, status) \
-         VALUES ($1::uuid, $2, $3::uuid, 1, now(), 'run', 'run_started', 'running')",
+         VALUES ($1::text::uuid, $2, $3::text::uuid, 1, now(), 'run', 'run_started', 'running')",
         &[&EVENT_3, &TENANT, &CHILD_JOB],
     );
     assert!(child_as_root_insert.is_err());
     let cross_run_job_insert = client.execute(
         "INSERT INTO pulso_run_events \
          (id, tenant_id, run_ref, job_ref, sequence, event_at, stage, event_code, status) \
-         VALUES ($1::uuid, $2, $3::uuid, $4::uuid, 1, now(), 'execution', \
+         VALUES ($1::text::uuid, $2, $3::text::uuid, $4::text::uuid, 1, now(), 'execution', \
                  'job_claimed', 'running')",
         &[&EVENT_3, &TENANT, &RUN, &RUN_2],
     );
@@ -336,7 +336,7 @@ fn run_rejects_a_child_as_root_and_rejects_a_job_from_another_run() {
     let sequences: Vec<i64> = client
         .query(
             "SELECT last_event_sequence FROM pulso_jobs \
-             WHERE tenant_id=$1 AND id IN ($2::uuid, $3::uuid) ORDER BY id",
+             WHERE tenant_id=$1 AND id IN ($2::text::uuid, $3::text::uuid) ORDER BY id",
             &[&TENANT, &RUN, &RUN_2],
         )
         .unwrap()
