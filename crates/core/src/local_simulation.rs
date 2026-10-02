@@ -44,6 +44,10 @@ const AGENT_CORE_CONTRACT_SHA: &str = "53e729d624c8284e906249df84c1a1df84cc8d40"
 const MAX_INPUT_EVENTS: usize = 100_000;
 const MAX_CASES: usize = 5_000;
 const QUERY_BATCH_SIZE: usize = 100;
+const DEFAULT_MIN_RECURRING_QUERY_CASES: u64 = 20;
+const MIN_RECURRING_QUERY_CASES: u64 = 5;
+const RECURRING_QUERY_POLICY: &str = "e0_recurring_copilot_query_support_v1";
+const RECURRING_QUERY_POLICY_VERSION: u16 = 1;
 
 /// Minimal, treated event projection passed from a local source adapter.
 /// Identity, prompts, transcripts, customer values and evaluator labels have
@@ -63,6 +67,30 @@ pub struct LocalObservedEvent {
     pub signal_code: Option<String>,
 }
 
+/// Opaque, already-treated signature of one Copilot query. The signature is
+/// used only in memory to group recurrence and is never serialized or logged.
+#[derive(Clone, Eq, PartialEq)]
+pub struct LocalObservedQuery {
+    case_ordinal: u32,
+    opaque_signature: String,
+    event_time: String,
+}
+
+impl LocalObservedQuery {
+    #[must_use]
+    pub fn new(
+        case_ordinal: u32,
+        opaque_signature: impl Into<String>,
+        event_time: impl Into<String>,
+    ) -> Self {
+        Self {
+            case_ordinal,
+            opaque_signature: opaque_signature.into(),
+            event_time: event_time.into(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalSourceKind {
@@ -72,8 +100,19 @@ pub enum LocalSourceKind {
 
 /// Input that is safe to use for discovery. There is deliberately no field for
 /// a holdout handle or any evaluator-only labels.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct LocalRunInput {
+    metadata: LocalRunMetadata,
+    case_ordinals: Vec<u32>,
+    excluded_replay_cases: u64,
+    events: Vec<LocalObservedEvent>,
+    queries: Vec<LocalObservedQuery>,
+    minimum_recurring_query_support: u64,
+}
+
+/// Immutable commitments and point-in-time boundary for one local run.
+#[derive(Clone, Debug)]
+pub struct LocalRunMetadata {
     run_id: String,
     tenant_id: String,
     source_kind: LocalSourceKind,
@@ -81,12 +120,9 @@ pub struct LocalRunInput {
     snapshot_ref: ArtifactReference,
     cutoff_unix_seconds: u64,
     observed_cutoff_rfc3339: String,
-    case_ordinals: Vec<u32>,
-    excluded_replay_cases: u64,
-    events: Vec<LocalObservedEvent>,
 }
 
-impl LocalRunInput {
+impl LocalRunMetadata {
     #[must_use]
     pub fn new(
         run_id: impl Into<String>,
@@ -96,9 +132,6 @@ impl LocalRunInput {
         snapshot_ref: ArtifactReference,
         cutoff_unix_seconds: u64,
         observed_cutoff_rfc3339: impl Into<String>,
-        case_ordinals: Vec<u32>,
-        excluded_replay_cases: u64,
-        events: Vec<LocalObservedEvent>,
     ) -> Self {
         Self {
             run_id: run_id.into(),
@@ -108,10 +141,43 @@ impl LocalRunInput {
             snapshot_ref,
             cutoff_unix_seconds,
             observed_cutoff_rfc3339: observed_cutoff_rfc3339.into(),
+        }
+    }
+}
+
+impl LocalRunInput {
+    #[must_use]
+    pub fn new(
+        metadata: LocalRunMetadata,
+        case_ordinals: Vec<u32>,
+        excluded_replay_cases: u64,
+        events: Vec<LocalObservedEvent>,
+    ) -> Self {
+        Self {
+            metadata,
             case_ordinals,
             excluded_replay_cases,
             events,
+            queries: Vec::new(),
+            minimum_recurring_query_support: DEFAULT_MIN_RECURRING_QUERY_CASES,
         }
+    }
+
+    #[must_use]
+    pub fn with_queries(mut self, queries: Vec<LocalObservedQuery>) -> Self {
+        self.queries = queries;
+        self
+    }
+
+    pub fn with_minimum_recurring_query_support(
+        mut self,
+        minimum_support: u64,
+    ) -> Result<Self, LocalRunError> {
+        if !(MIN_RECURRING_QUERY_CASES..=MAX_CASES as u64).contains(&minimum_support) {
+            return Err(LocalRunError::InvalidInput);
+        }
+        self.minimum_recurring_query_support = minimum_support;
+        Ok(self)
     }
 }
 
@@ -127,10 +193,14 @@ pub struct RunEvent {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct SignalSummary {
     pub metric_id: String,
+    pub detector_policy_id: String,
+    pub detector_policy_version: u16,
+    pub minimum_support: u64,
     pub numerator: u64,
     pub denominator: u64,
     pub missing: u64,
     pub coverage_basis_points: u16,
+    pub pattern_ref: Option<String>,
     pub digest: String,
 }
 
@@ -176,9 +246,11 @@ pub struct LocalRunResult {
     pub determinism: String,
     pub terminal_status: String,
     pub formal_route: String,
+    pub primary_signal_policy: String,
     pub discovery_case_count: u64,
     pub excluded_replay_case_count: u64,
     pub signal: Option<SignalSummary>,
+    pub signals: Vec<SignalSummary>,
     pub candidates: Vec<CandidateSummary>,
     pub verification_status: Option<String>,
     pub proposal: Option<ImprovementDraft>,
@@ -235,7 +307,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         "complete allowlisted discovery-source manifest and snapshot committed",
     );
 
-    if input.source_kind == LocalSourceKind::OriginalBank {
+    if input.metadata.source_kind == LocalSourceKind::OriginalBank {
         record_event(
             &mut events,
             "detection",
@@ -248,25 +320,29 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             "complete",
             "no signal was fabricated",
         );
-        bind_observed_cutoff(&mut events, &input.observed_cutoff_rfc3339);
-        let simulation_seed =
-            derive_digest(&format!("{SIMULATION_VERSION}:{}", input.manifest_digest));
+        bind_observed_cutoff(&mut events, &input.metadata.observed_cutoff_rfc3339);
+        let simulation_seed = derive_digest(&format!(
+            "{SIMULATION_VERSION}:{}",
+            input.metadata.manifest_digest
+        ));
         return Ok(LocalRunResult {
-            run_id: input.run_id,
-            tenant_id: input.tenant_id,
-            source_kind: input.source_kind,
-            manifest_digest: input.manifest_digest,
-            snapshot_ref: input.snapshot_ref,
-            observed_cutoff_rfc3339: input.observed_cutoff_rfc3339,
+            run_id: input.metadata.run_id,
+            tenant_id: input.metadata.tenant_id,
+            source_kind: input.metadata.source_kind,
+            manifest_digest: input.metadata.manifest_digest,
+            snapshot_ref: input.metadata.snapshot_ref,
+            observed_cutoff_rfc3339: input.metadata.observed_cutoff_rfc3339,
             execution_mode: "local_simulation".into(),
             simulation_version: SIMULATION_VERSION.into(),
             simulation_seed,
             determinism: "deterministic_given_identical_run_input".into(),
             terminal_status: "unsupported_source".into(),
             formal_route: "do_nothing".into(),
+            primary_signal_policy: "local_primary_signal_v1".into(),
             discovery_case_count: 0,
             excluded_replay_case_count: 0,
             signal: None,
+            signals: Vec::new(),
             candidates: Vec::new(),
             verification_status: None,
             proposal: None,
@@ -275,61 +351,81 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         });
     }
 
-    let signal = measure_signal(&input)?;
-    let summary = SignalSummary {
-        metric_id: signal.metric_id.clone(),
-        numerator: signal.numerator,
-        denominator: signal.denominator,
-        missing: signal.missing,
-        coverage_basis_points: signal.coverage_basis_points,
-        digest: signal.digest.clone(),
-    };
+    let signals = measure_signals(&input)?;
+    let primary_signal_index =
+        select_primary_signal_index(&signals, input.minimum_recurring_query_support)
+            .ok_or(LocalRunError::InvalidEventProjection)?;
+    let signal = signals[primary_signal_index].clone();
+    let summaries = signals
+        .iter()
+        .map(|signal| summarize_signal(&input, signal))
+        .collect::<Vec<_>>();
+    let summary = summaries[primary_signal_index].clone();
     record_event(
         &mut events,
         "detection",
         "complete",
-        &format!(
-            "{} observed cases with {} errors across {} measured cases",
-            signal.denominator + signal.missing,
-            signal.numerator,
-            signal.denominator
-        ),
+        &if signal.metric_id == "e0_recurring_copilot_query_cases" {
+            format!(
+                "the leading opaque copilot query signature appears in {} of {} discovery cases",
+                signal.numerator, signal.denominator
+            )
+        } else {
+            format!(
+                "{} observed cases with {} technical errors across {} measured cases",
+                signal.denominator + signal.missing,
+                signal.numerator,
+                signal.denominator
+            )
+        },
     );
 
-    if signal.numerator == 0 || signal.denominator == 0 {
+    let signal_qualifies = if signal.metric_id == "e0_recurring_copilot_query_cases" {
+        signal.numerator >= input.minimum_recurring_query_support
+    } else {
+        signal.numerator > 0
+    };
+    if !signal_qualifies || signal.denominator == 0 {
+        let no_opportunity_detail = if signal.metric_id == "e0_recurring_copilot_query_cases" {
+            "no opaque Copilot-query signature met the versioned minimum distinct-case support; no candidate or proposal was generated"
+        } else {
+            "no positive observed technical-error evidence; no candidate or proposal was generated"
+        };
         record_event(
             &mut events,
             "scout",
             "no_opportunity",
-            "no positive observed technical-error evidence; no candidate or proposal was generated",
+            no_opportunity_detail,
         );
         record_event(
             &mut events,
             "run_completed",
             "complete_no_opportunity",
-            "descriptive metric had no positive support; formal route remains do_nothing",
+            "descriptive evidence did not meet the detector's support policy; formal route remains do_nothing",
         );
-        bind_observed_cutoff(&mut events, &input.observed_cutoff_rfc3339);
+        bind_observed_cutoff(&mut events, &input.metadata.observed_cutoff_rfc3339);
         let simulation_seed = derive_digest(&format!(
             "{SIMULATION_VERSION}:{}:{}:{}",
-            input.manifest_digest, input.run_id, signal.digest
+            input.metadata.manifest_digest, input.metadata.run_id, signal.digest
         ));
         return Ok(LocalRunResult {
-            run_id: input.run_id,
-            tenant_id: input.tenant_id,
-            source_kind: input.source_kind,
-            manifest_digest: input.manifest_digest,
-            snapshot_ref: input.snapshot_ref,
-            observed_cutoff_rfc3339: input.observed_cutoff_rfc3339,
+            run_id: input.metadata.run_id,
+            tenant_id: input.metadata.tenant_id,
+            source_kind: input.metadata.source_kind,
+            manifest_digest: input.metadata.manifest_digest,
+            snapshot_ref: input.metadata.snapshot_ref,
+            observed_cutoff_rfc3339: input.metadata.observed_cutoff_rfc3339,
             execution_mode: "local_simulation".into(),
             simulation_version: SIMULATION_VERSION.into(),
             simulation_seed,
             determinism: "deterministic_given_identical_run_input".into(),
             terminal_status: "complete_no_opportunity".into(),
             formal_route: "do_nothing".into(),
+            primary_signal_policy: "local_primary_signal_v1".into(),
             discovery_case_count: input.case_ordinals.len() as u64,
             excluded_replay_case_count: input.excluded_replay_cases,
             signal: Some(summary),
+            signals: summaries,
             candidates: Vec::new(),
             verification_status: None,
             proposal: None,
@@ -436,28 +532,30 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         "complete_simulated",
         "formal route is do_nothing until independent evidence and native gates exist",
     );
-    bind_observed_cutoff(&mut events, &input.observed_cutoff_rfc3339);
+    bind_observed_cutoff(&mut events, &input.metadata.observed_cutoff_rfc3339);
 
     let simulation_seed = derive_digest(&format!(
         "{SIMULATION_VERSION}:{}:{}:{}",
-        input.manifest_digest, input.run_id, signal.digest
+        input.metadata.manifest_digest, input.metadata.run_id, signal.digest
     ));
     Ok(LocalRunResult {
-        run_id: input.run_id,
-        tenant_id: input.tenant_id,
-        source_kind: input.source_kind,
-        manifest_digest: input.manifest_digest,
-        snapshot_ref: input.snapshot_ref,
-        observed_cutoff_rfc3339: input.observed_cutoff_rfc3339,
+        run_id: input.metadata.run_id,
+        tenant_id: input.metadata.tenant_id,
+        source_kind: input.metadata.source_kind,
+        manifest_digest: input.metadata.manifest_digest,
+        snapshot_ref: input.metadata.snapshot_ref,
+        observed_cutoff_rfc3339: input.metadata.observed_cutoff_rfc3339,
         execution_mode: "local_simulation".into(),
         simulation_version: SIMULATION_VERSION.into(),
         simulation_seed,
         determinism: "deterministic_given_identical_run_input".into(),
         terminal_status: "complete_simulated".into(),
         formal_route: "do_nothing".into(),
+        primary_signal_policy: "local_primary_signal_v1".into(),
         discovery_case_count: input.case_ordinals.len() as u64,
         excluded_replay_case_count: input.excluded_replay_cases,
         signal: Some(summary),
+        signals: summaries,
         candidates: candidate_summaries,
         verification_status: Some(verification_status),
         proposal: Some(improvement_draft),
@@ -467,13 +565,13 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
 }
 
 fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
-    if !is_identifier(&input.run_id)
-        || !is_identifier(&input.tenant_id)
-        || input.snapshot_ref.tenant_id != input.tenant_id
-        || input.snapshot_ref.revision == 0
-        || !is_digest(&input.snapshot_ref.digest)
-        || !is_digest(&input.manifest_digest)
-        || input.cutoff_unix_seconds == 0
+    if !is_identifier(&input.metadata.run_id)
+        || !is_identifier(&input.metadata.tenant_id)
+        || input.metadata.snapshot_ref.tenant_id != input.metadata.tenant_id
+        || input.metadata.snapshot_ref.revision == 0
+        || !is_digest(&input.metadata.snapshot_ref.digest)
+        || !is_digest(&input.metadata.manifest_digest)
+        || input.metadata.cutoff_unix_seconds == 0
     {
         return Err(LocalRunError::InvalidInput);
     }
@@ -483,7 +581,7 @@ fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
     if input.case_ordinals.len() > MAX_CASES {
         return Err(LocalRunError::TooManyCases);
     }
-    if input.case_ordinals.iter().any(|ordinal| *ordinal == 0)
+    if input.case_ordinals.contains(&0)
         || input.case_ordinals.iter().collect::<BTreeSet<_>>().len() != input.case_ordinals.len()
     {
         return Err(LocalRunError::InvalidEventProjection);
@@ -503,7 +601,7 @@ fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
                 .chain(event.signal_code.iter())
                 .any(|value| !valid_code(value))
             || parse_utc_seconds(&event.event_time)
-                .is_none_or(|event_time| event_time > input.cutoff_unix_seconds)
+                .is_none_or(|event_time| event_time > input.metadata.cutoff_unix_seconds)
             || !seen.insert((event.case_ordinal, event.event_ordinal))
         {
             return Err(LocalRunError::InvalidEventProjection);
@@ -523,10 +621,32 @@ fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
             return Err(LocalRunError::InvalidEventProjection);
         }
     }
+    if input.queries.len() > MAX_INPUT_EVENTS
+        || input.queries.iter().any(|query| {
+            query.case_ordinal == 0
+                || !input.case_ordinals.contains(&query.case_ordinal)
+                || !is_opaque_query_signature(&query.opaque_signature)
+                || parse_utc_seconds(&query.event_time)
+                    .is_none_or(|time| time > input.metadata.cutoff_unix_seconds)
+        })
+    {
+        return Err(LocalRunError::InvalidEventProjection);
+    }
     Ok(())
 }
 
-fn measure_signal(input: &LocalRunInput) -> Result<DeterministicSignal, LocalRunError> {
+fn measure_signals(input: &LocalRunInput) -> Result<Vec<DeterministicSignal>, LocalRunError> {
+    let mut signals = vec![measure_signal(input, false)?];
+    if !input.queries.is_empty() {
+        signals.push(measure_signal(input, true)?);
+    }
+    Ok(signals)
+}
+
+fn measure_signal(
+    input: &LocalRunInput,
+    recurrence_metric: bool,
+) -> Result<DeterministicSignal, LocalRunError> {
     let mut cases = input
         .case_ordinals
         .iter()
@@ -545,7 +665,27 @@ fn measure_signal(input: &LocalRunInput) -> Result<DeterministicSignal, LocalRun
         return Err(LocalRunError::TooManyCases);
     }
 
-    let snapshot = input.snapshot_ref.clone();
+    let mut support_by_signature = BTreeMap::<String, BTreeSet<u32>>::new();
+    for query in &input.queries {
+        support_by_signature
+            .entry(query.opaque_signature.clone())
+            .or_default()
+            .insert(query.case_ordinal);
+    }
+    let top_signature = support_by_signature
+        .iter()
+        .max_by(|left, right| {
+            left.1
+                .len()
+                .cmp(&right.1.len())
+                .then_with(|| right.0.cmp(left.0))
+        })
+        .map(|(signature, _)| signature);
+    let top_supporting_cases = top_signature
+        .and_then(|signature| support_by_signature.get(signature))
+        .cloned()
+        .unwrap_or_default();
+    let snapshot = input.metadata.snapshot_ref.clone();
     let rows = cases
         .iter()
         .enumerate()
@@ -561,41 +701,67 @@ fn measure_signal(input: &LocalRunInput) -> Result<DeterministicSignal, LocalRun
             } else {
                 "false"
             };
+            let metric_field = if recurrence_metric {
+                "recurring_query_case"
+            } else {
+                "technical_error"
+            };
+            let metric_value = if recurrence_metric {
+                if top_supporting_cases.contains(_case_ordinal) {
+                    "true"
+                } else {
+                    "false"
+                }
+            } else {
+                technical_error
+            };
             BTreeMap::from([
                 (
                     "case_bucket".to_owned(),
                     format!("b{:04}", index / QUERY_BATCH_SIZE),
                 ),
-                ("technical_error".to_owned(), technical_error.to_owned()),
+                (metric_field.to_owned(), metric_value.to_owned()),
             ])
         })
         .collect::<Vec<_>>();
     let access = LabAccess::new(
-        input.run_id.clone(),
-        input.tenant_id.clone(),
+        input.metadata.run_id.clone(),
+        input.metadata.tenant_id.clone(),
         "local_discovery",
         "local_grant",
         "local_adapter",
         snapshot.clone(),
-        input.cutoff_unix_seconds.saturating_add(3_600),
+        input.metadata.cutoff_unix_seconds.saturating_add(3_600),
     );
     let mut grants = InMemoryLabGrantAuthority::default();
     grants.issue(LabGrant::from_access(&access));
     let mut lab = LocalInvestigationLab::new(grants);
     let source = LabSource::new(
         LabSourceManifest {
-            tenant_id: input.tenant_id.clone(),
+            tenant_id: input.metadata.tenant_id.clone(),
             snapshot_ref: snapshot.clone(),
             source_contract_digest: derive_digest("pulso-safe-agent-input-v1"),
-            source_digest: input.manifest_digest.clone(),
-            transform_digest: derive_digest("case-level-technical-error-v1"),
-            cutoff_unix_seconds: input.cutoff_unix_seconds,
+            source_digest: input.metadata.manifest_digest.clone(),
+            transform_digest: derive_digest(&format!(
+                "local_multi_signal_v1:{}:{}:{}",
+                RECURRING_QUERY_POLICY_VERSION,
+                input.minimum_recurring_query_support,
+                recurrence_pattern_ref(input).unwrap_or_else(|| "no_recurrent_pattern".into())
+            )),
+            cutoff_unix_seconds: input.metadata.cutoff_unix_seconds,
             classification: LabDataClassification::Treated,
             safe_for_discovery: true,
         },
         vec![LabTable::new(
             "case_facts",
-            vec!["case_bucket", "technical_error"],
+            vec![
+                "case_bucket",
+                if recurrence_metric {
+                    "recurring_query_case"
+                } else {
+                    "technical_error"
+                },
+            ],
             rows,
         )],
     )
@@ -604,7 +770,7 @@ fn measure_signal(input: &LocalRunInput) -> Result<DeterministicSignal, LocalRun
     let approved = approval
         .approve(source)
         .map_err(|error| LocalRunError::Lab(format!("approval rejected: {error:?}")))?;
-    let now = input.cutoff_unix_seconds.saturating_add(1);
+    let now = input.metadata.cutoff_unix_seconds.saturating_add(1);
     let session = lab
         .open(access.clone(), approved, now)
         .map_err(|error| LocalRunError::Lab(format!("session denied: {error:?}")))?;
@@ -619,7 +785,11 @@ fn measure_signal(input: &LocalRunInput) -> Result<DeterministicSignal, LocalRun
                 &access,
                 LabQuery::select(
                     "case_facts",
-                    vec!["technical_error"],
+                    vec![if recurrence_metric {
+                        "recurring_query_case"
+                    } else {
+                        "technical_error"
+                    }],
                     Some(QueryFilter::equals("case_bucket", bucket)),
                 ),
                 now + 1,
@@ -627,13 +797,103 @@ fn measure_signal(input: &LocalRunInput) -> Result<DeterministicSignal, LocalRun
             .map_err(|error| LocalRunError::Lab(format!("read-only query failed: {error:?}")))?,
         );
     }
-    let metric = BooleanRateSpec::new("e0_technical_error_rate", "technical_error", "true")
-        .map_err(|_| LocalRunError::InvalidInput)?;
+    let metric = if recurrence_metric {
+        BooleanRateSpec::new(
+            "e0_recurring_copilot_query_cases",
+            "recurring_query_case",
+            "true",
+        )
+    } else {
+        BooleanRateSpec::new("e0_technical_error_rate", "technical_error", "true")
+    }
+    .map_err(|_| LocalRunError::InvalidInput)?;
     let signal = DeterministicSensor::measure(&metric, &results)
         .map_err(|error| LocalRunError::Lab(format!("sensor rejected evidence: {error:?}")))?;
     lab.close(session.session_id(), &access)
         .map_err(|error| LocalRunError::Lab(format!("ephemeral lab close failed: {error:?}")))?;
     Ok(signal)
+}
+
+fn recurrence_pattern_ref(input: &LocalRunInput) -> Option<String> {
+    let mut support_by_signature = BTreeMap::<&str, BTreeSet<u32>>::new();
+    for query in &input.queries {
+        support_by_signature
+            .entry(&query.opaque_signature)
+            .or_default()
+            .insert(query.case_ordinal);
+    }
+    let (signature, _) = support_by_signature.iter().max_by(|left, right| {
+        left.1
+            .len()
+            .cmp(&right.1.len())
+            .then_with(|| right.0.cmp(left.0))
+    })?;
+    Some(derive_digest(&format!(
+        "pattern-v1:{}:{}:{}:{}",
+        input.metadata.tenant_id,
+        input.metadata.manifest_digest,
+        input.metadata.snapshot_ref.digest,
+        signature
+    )))
+}
+
+fn summarize_signal(input: &LocalRunInput, signal: &DeterministicSignal) -> SignalSummary {
+    let recurrence = signal.metric_id == "e0_recurring_copilot_query_cases";
+    SignalSummary {
+        metric_id: signal.metric_id.clone(),
+        detector_policy_id: if recurrence {
+            RECURRING_QUERY_POLICY.to_owned()
+        } else {
+            "e0_technical_error_rate_v1".to_owned()
+        },
+        detector_policy_version: if recurrence {
+            RECURRING_QUERY_POLICY_VERSION
+        } else {
+            1
+        },
+        minimum_support: if recurrence {
+            input.minimum_recurring_query_support
+        } else {
+            1
+        },
+        numerator: signal.numerator,
+        denominator: signal.denominator,
+        missing: signal.missing,
+        coverage_basis_points: signal.coverage_basis_points,
+        pattern_ref: recurrence.then(|| recurrence_pattern_ref(input)).flatten(),
+        digest: signal.digest.clone(),
+    }
+}
+
+fn select_primary_signal_index(
+    signals: &[DeterministicSignal],
+    minimum_recurring_query_support: u64,
+) -> Option<usize> {
+    signals
+        .iter()
+        .enumerate()
+        .max_by(|left, right| {
+            let qualifies = |signal: &DeterministicSignal| {
+                if signal.metric_id == "e0_recurring_copilot_query_cases" {
+                    signal.numerator >= minimum_recurring_query_support && signal.denominator > 0
+                } else {
+                    signal.numerator > 0 && signal.denominator > 0
+                }
+            };
+            let left_signal = left.1;
+            let right_signal = right.1;
+            qualifies(left_signal)
+                .cmp(&qualifies(right_signal))
+                .then_with(|| {
+                    (left_signal.numerator * right_signal.denominator)
+                        .cmp(&(right_signal.numerator * left_signal.denominator))
+                })
+                .then_with(|| {
+                    (left_signal.metric_id == "e0_technical_error_rate")
+                        .cmp(&(right_signal.metric_id == "e0_technical_error_rate"))
+                })
+        })
+        .map(|(index, _)| index)
 }
 
 fn simulate_agent_core_and_model(
@@ -647,9 +907,9 @@ fn simulate_agent_core_and_model(
     ),
     LocalRunError,
 > {
-    let job_id = format!("job_{}", input.run_id.replace('-', "_"));
+    let job_id = format!("job_{}", input.metadata.run_id.replace('-', "_"));
     let scope = CoreTaskScope::new(
-        input.tenant_id.clone(),
+        input.metadata.tenant_id.clone(),
         job_id,
         "local_grant",
         "local_adapter",
@@ -674,7 +934,7 @@ fn simulate_agent_core_and_model(
             CoreTaskInvocation::new(
                 scope.clone(),
                 binding,
-                format!("attempt_{}", input.run_id.replace('-', "_")),
+                format!("attempt_{}", input.metadata.run_id.replace('-', "_")),
                 signal.digest.clone(),
             )
             .map_err(|error| {
@@ -716,7 +976,7 @@ fn simulate_agent_core_and_model(
     let invocation = ModelInvocation::from_verified(
         scope.clone(),
         policy.clone(),
-        format!("attempt_model_{}", input.run_id.replace('-', "_")),
+        format!("attempt_model_{}", input.metadata.run_id.replace('-', "_")),
         projection,
     )
     .map_err(|error| LocalRunError::Model(format!("local invocation invalid: {error:?}")))?;
@@ -794,31 +1054,43 @@ fn build_exploratory_draft(
     let route = most_frequent(&route_counts).unwrap_or("not_observed");
     let layer = most_frequent(&layer_counts).unwrap_or("not_observed");
     let tool = most_frequent(&tool_counts).unwrap_or("not_observed");
-    let hypothesis = format!(
-        "Investigate whether observed technical errors cluster around route {route}, layer {layer}, and tool {tool}; this co-occurrence is descriptive, not causal."
-    );
+    let hypothesis = if signal.metric_id == "e0_recurring_copilot_query_cases" {
+        format!(
+            "An opaque copilot query pattern recurs across {} of {} discovery cases; investigate whether a reusable Agent Core artifact could handle it. This recurrence is descriptive and does not prove friction, causality, or business lift.",
+            signal.numerator, signal.denominator
+        )
+    } else {
+        format!(
+            "Investigate whether observed technical errors cluster around route {route}, layer {layer}, and tool {tool}; this co-occurrence is descriptive, not causal."
+        )
+    };
     let mut draft = json!({
-        "artifact_kind": "flow",
+        "artifact_kind": if signal.metric_id == "e0_recurring_copilot_query_cases" { "unclassified_candidate" } else { "flow" },
         "draft_id": format!("local_flow_{}", &signal.digest[7..19]),
         "version": "0.1.0-local-draft",
         "status": "simulated_unverified",
         "executable": false,
-        "source_snapshot": input.snapshot_ref,
+        "source_snapshot": input.metadata.snapshot_ref,
         "hypothesis": hypothesis,
         "observed_evidence": {
             "cases_observed": signal.denominator + signal.missing,
             "events_observed": input.events.len(),
             "parent_linked_events": linked_event_count,
             "metric_id": signal.metric_id,
+            "detector_policy_id": signal.detector_policy_id,
+            "detector_policy_version": signal.detector_policy_version,
+            "minimum_support": signal.minimum_support,
             "numerator": signal.numerator,
             "denominator": signal.denominator,
             "missing": signal.missing,
-            "route_code_with_most_errors": route,
-            "actor_layer_with_most_errors": layer,
-            "tool_code_with_most_errors": tool,
-            "error_routes": route_counts,
-            "error_actor_layers": layer_counts,
-            "error_tools": tool_counts,
+            "pattern_ref": signal.pattern_ref,
+            "primary_signal_policy": "local_primary_signal_v1",
+            "route_code_with_most_errors": if signal.metric_id == "e0_technical_error_rate" { json!(route) } else { json!(null) },
+            "actor_layer_with_most_errors": if signal.metric_id == "e0_technical_error_rate" { json!(layer) } else { json!(null) },
+            "tool_code_with_most_errors": if signal.metric_id == "e0_technical_error_rate" { json!(tool) } else { json!(null) },
+            "error_routes": if signal.metric_id == "e0_technical_error_rate" { json!(route_counts) } else { json!({}) },
+            "error_actor_layers": if signal.metric_id == "e0_technical_error_rate" { json!(layer_counts) } else { json!({}) },
+            "error_tools": if signal.metric_id == "e0_technical_error_rate" { json!(tool_counts) } else { json!({}) },
             "event_kinds": event_kind_counts,
             "approval_decisions": approval_counts,
             "signals": signal_counts,
@@ -913,6 +1185,14 @@ fn valid_code(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'_' | b'-' | b'.'))
+}
+
+fn is_opaque_query_signature(value: &str) -> bool {
+    value.len() == 63
+        && value.starts_with("sha256_")
+        && value.as_bytes()[7..]
+            .iter()
+            .all(|byte| matches!(*byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 fn is_identifier(value: &str) -> bool {

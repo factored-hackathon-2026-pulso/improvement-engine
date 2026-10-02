@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
@@ -6,10 +7,11 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use improvement_engine_core::local_simulation::{
-    LocalObservedEvent, LocalRunInput, LocalRunResult, LocalSourceKind, run_local_simulation,
+    LocalObservedEvent, LocalObservedQuery, LocalRunInput, LocalRunMetadata, LocalRunResult,
+    LocalSourceKind, run_local_simulation,
 };
 use improvement_engine_source_adapters::{
-    CasePhase, PreparationConfig, PreparedSource, prepare_e0_package, prepare_original_bank,
+    CasePhase, E0Fact, PreparationConfig, PreparedSource, prepare_e0_package, prepare_original_bank,
 };
 
 fn main() {
@@ -40,7 +42,9 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
     .map_err(|error| format!("source preparation failed: {error}"))?;
 
     let run_id = make_run_id()?;
-    let input = to_run_input(&prepared, &run_id, &options.tenant_id)?;
+    let input = to_run_input(&prepared, &run_id, &options.tenant_id)?
+        .with_minimum_recurring_query_support(options.minimum_recurring_query_support)
+        .map_err(|error| format!("invalid recurrence policy: {error:?}"))?;
     let result = run_local_simulation(input).map_err(|error| format!("run failed: {error}"))?;
     persist_result(&options.output, &result)?;
     println!("run_id={run_id}");
@@ -68,13 +72,14 @@ fn to_run_input(
             LocalSourceKind::OriginalBank
         }
     };
-    let case_ordinals = prepared
+    let case_ordinals: Vec<u32> = prepared
         .agent_inputs()
         .cases()
         .iter()
         .filter(|case| case.phase() == CasePhase::Arranque)
         .map(|case| case.ordinal())
         .collect();
+    let discovery_case_set = case_ordinals.iter().copied().collect::<BTreeSet<_>>();
     let excluded_replay_cases = prepared
         .agent_inputs()
         .cases()
@@ -103,18 +108,39 @@ fn to_run_input(
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
+    let queries = prepared
+        .agent_inputs()
+        .facts()
+        .iter()
+        .filter_map(|fact| match fact {
+            E0Fact::CopilotQuery {
+                case_ordinal,
+                event_time,
+                query_signature,
+                ..
+            } if discovery_case_set.contains(case_ordinal) => Some(LocalObservedQuery::new(
+                *case_ordinal,
+                query_signature.clone(),
+                event_time.clone(),
+            )),
+            _ => None,
+        })
+        .collect();
     Ok(LocalRunInput::new(
-        run_id,
-        tenant_id,
-        source_kind,
-        prepared.manifest_digest(),
-        prepared.snapshot_ref().clone(),
-        prepared.cutoff_unix_seconds(),
-        prepared.observed_cutoff(),
+        LocalRunMetadata::new(
+            run_id,
+            tenant_id,
+            source_kind,
+            prepared.manifest_digest(),
+            prepared.snapshot_ref().clone(),
+            prepared.cutoff_unix_seconds(),
+            prepared.observed_cutoff(),
+        ),
         case_ordinals,
         excluded_replay_cases,
         events,
-    ))
+    )
+    .with_queries(queries))
 }
 
 fn safe_code(value: &str) -> Result<String, String> {
@@ -188,6 +214,7 @@ struct Options {
     tenant_id: String,
     observed_cutoff: String,
     arranque_cases: usize,
+    minimum_recurring_query_support: u64,
     help: bool,
 }
 
@@ -201,6 +228,7 @@ impl Options {
             tenant_id: "pulso_local".into(),
             observed_cutoff: "".into(),
             arranque_cases: 200,
+            minimum_recurring_query_support: 20,
             help: false,
         };
         let mut args = args.into_iter();
@@ -229,6 +257,17 @@ impl Options {
                         .parse()
                         .map_err(|_| "--arranque-cases must be a positive integer".to_owned())?
                 }
+                "--min-recurring-query-cases" => {
+                    options.minimum_recurring_query_support = value.parse().map_err(|_| {
+                        "--min-recurring-query-cases must be an integer from 5 to 5000".to_owned()
+                    })?;
+                    if !(5..=5_000).contains(&options.minimum_recurring_query_support) {
+                        return Err(
+                            "--min-recurring-query-cases must be an integer from 5 to 5000"
+                                .to_owned(),
+                        );
+                    }
+                }
                 _ => return Err(format!("unknown option {key}")),
             }
         }
@@ -249,7 +288,7 @@ impl Options {
 
 fn print_help() {
     println!(
-        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200]"
+        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20]"
     );
 }
 
@@ -298,6 +337,32 @@ mod tests {
     }
 
     #[test]
+    fn cli_rejects_recurrence_support_below_privacy_floor() {
+        let args = [
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+            "x",
+            "--output",
+            "y",
+            "--observed-cutoff",
+            "2026-10-02T12:00:00Z",
+            "--min-recurring-query-cases",
+            "4",
+        ]
+        .map(OsString::from);
+
+        assert!(
+            Options::parse(args)
+                .unwrap_err()
+                .contains("integer from 5 to 5000")
+        );
+    }
+
+    #[test]
     fn safe_code_projection_rejects_arbitrary_text() {
         assert_eq!(safe_code("tool_lookup").unwrap(), "tool_lookup");
         assert!(safe_code("customer says private text").is_err());
@@ -324,9 +389,11 @@ mod tests {
             determinism: "deterministic".into(),
             terminal_status: "complete_simulated".into(),
             formal_route: "do_nothing".into(),
+            primary_signal_policy: "local_primary_signal_v1".into(),
             discovery_case_count: 0,
             excluded_replay_case_count: 0,
             signal: None,
+            signals: Vec::new(),
             candidates: Vec::new(),
             verification_status: None,
             proposal: None,

@@ -92,6 +92,134 @@ fn e0_fixture(root: &Path, discovery_status: &str, replay_status: &str) {
     );
 }
 
+fn e0_recurrence_fixture(root: &Path, replay_signature: &str) {
+    e0_fixture(root, "ok", "ok");
+    let data = root.join("datos");
+    let case_ids = (1..=22)
+        .map(|ordinal| format!("private-case-{ordinal}"))
+        .collect::<Vec<_>>();
+    let case_id_refs = case_ids.iter().map(String::as_str).collect::<Vec<_>>();
+    let at = 1_750_000_000_000_000_i64;
+    write_parquet(
+        &data.join("case.parquet"),
+        Schema::new(vec![
+            Field::new("case_id", DataType::LargeUtf8, false),
+            Field::new(
+                "opened_at",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                false,
+            ),
+            Field::new("channel", DataType::LargeUtf8, false),
+            Field::new("language", DataType::LargeUtf8, false),
+            Field::new("topic", DataType::LargeUtf8, false),
+            Field::new("priority", DataType::LargeUtf8, false),
+        ]),
+        vec![
+            large_strings(case_id_refs.clone()),
+            Arc::new(
+                TimestampMicrosecondArray::from(
+                    (0..22)
+                        .map(|offset| at + offset * 1_000_000)
+                        .collect::<Vec<_>>(),
+                )
+                .with_timezone("UTC"),
+            ),
+            large_strings(vec!["chat"; 22]),
+            large_strings(vec!["es"; 22]),
+            large_strings(vec!["support"; 22]),
+            large_strings(vec!["normal"; 22]),
+        ],
+    );
+    let call_ids = (1..=22)
+        .map(|ordinal| format!("private-call-{ordinal}"))
+        .collect::<Vec<_>>();
+    write_parquet(
+        &data.join("tool_call.parquet"),
+        Schema::new(vec![
+            Field::new("case_id", DataType::LargeUtf8, false),
+            Field::new(
+                "event_time",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                false,
+            ),
+            Field::new("call_id", DataType::LargeUtf8, false),
+            Field::new("actor_role", DataType::LargeUtf8, false),
+            Field::new("tool_id", DataType::LargeUtf8, false),
+            Field::new("permission_level", DataType::LargeUtf8, false),
+            Field::new("status", DataType::LargeUtf8, false),
+            Field::new("verified", DataType::Boolean, true),
+            Field::new("state_change", DataType::LargeUtf8, true),
+            Field::new("retry_count", DataType::Int32, true),
+            Field::new("latency_ms", DataType::Int64, true),
+        ]),
+        vec![
+            large_strings(case_id_refs),
+            Arc::new(
+                TimestampMicrosecondArray::from(
+                    (0..22)
+                        .map(|offset| at + offset * 1_000_000 + 10)
+                        .collect::<Vec<_>>(),
+                )
+                .with_timezone("UTC"),
+            ),
+            large_strings(call_ids.iter().map(String::as_str).collect()),
+            large_strings(vec!["tree"; 22]),
+            large_strings(vec!["status_lookup"; 22]),
+            large_strings(vec!["read"; 22]),
+            large_strings(vec!["ok"; 22]),
+            Arc::new(BooleanArray::from(vec![Some(true); 22])),
+            large_strings(vec!["{}"; 22]),
+            Arc::new(Int32Array::from(vec![Some(0); 22])),
+            Arc::new(Int64Array::from(vec![Some(20); 22])),
+        ],
+    );
+    let mut query_case_ids = (1..=20)
+        .map(|ordinal| format!("private-case-{ordinal}"))
+        .collect::<Vec<_>>();
+    query_case_ids.extend([
+        "private-case-1".into(),
+        "private-case-21".into(),
+        "private-case-22".into(),
+    ]);
+    let mut signatures = vec!["normalized-query-pattern"; 20];
+    signatures.extend([
+        "normalized-query-pattern",
+        "unique-pattern",
+        replay_signature,
+    ]);
+    let query_ids = (1..=23)
+        .map(|ordinal| format!("private-query-{ordinal}"))
+        .collect::<Vec<_>>();
+    write_parquet(
+        &data.join("copilot_query.parquet"),
+        Schema::new(vec![
+            Field::new("query_id", DataType::LargeUtf8, false),
+            Field::new("case_id", DataType::LargeUtf8, false),
+            Field::new(
+                "event_time",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                false,
+            ),
+            Field::new("query_signature", DataType::LargeUtf8, false),
+            Field::new("answered_by", DataType::LargeUtf8, false),
+        ]),
+        vec![
+            large_strings(query_ids.iter().map(String::as_str).collect()),
+            large_strings(query_case_ids.iter().map(String::as_str).collect()),
+            Arc::new(
+                TimestampMicrosecondArray::from(
+                    (0..23)
+                        .map(|offset| at + offset * 1_000_000 + 20)
+                        .collect::<Vec<_>>(),
+                )
+                .with_timezone("UTC"),
+            ),
+            large_strings(signatures),
+            large_strings(vec!["tool:status_lookup"; 23]),
+        ],
+    );
+}
+
 #[test]
 fn binary_persists_simulated_result_and_timeline_without_source_identifiers() {
     let temp = TempDir::new().expect("temp directory");
@@ -267,4 +395,69 @@ fn binary_emits_no_opportunity_when_discovery_has_no_positive_support() {
     assert!(timeline.contains("no_opportunity"));
     assert!(!timeline.contains("improvement_draft"));
     assert!(!timeline.contains("jev_or_agent_core_scout"));
+}
+
+#[test]
+fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0-recurrence");
+    let output = temp.path().join("runs-recurrence");
+    e0_recurrence_fixture(&input, "normalized-query-pattern");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "21",
+        ])
+        .output()
+        .expect("run E0 recurrence fixture through CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result JSON");
+    let serialized = result.to_string();
+
+    assert_eq!(result["terminal_status"], "complete_simulated");
+    assert_eq!(result["excluded_replay_case_count"], 1);
+    assert_eq!(result["primary_signal_policy"], "local_primary_signal_v1");
+    assert_eq!(
+        result["signal"]["metric_id"],
+        "e0_recurring_copilot_query_cases"
+    );
+    assert_eq!(result["signal"]["numerator"], 20);
+    assert_eq!(result["signal"]["denominator"], 21);
+    assert_eq!(result["signal"]["minimum_support"], 20);
+    assert_eq!(result["proposal"]["status"], "simulated_unverified");
+    assert_eq!(result["proposal"]["execution_status"], "not_executed");
+    assert_eq!(result["formal_route"], "do_nothing");
+    assert_eq!(result["signals"].as_array().unwrap().len(), 2);
+    assert!(result["signal"]["pattern_ref"].as_str().is_some());
+    assert!(!serialized.contains("private-case-"));
+    assert!(!serialized.contains("private-query-"));
+    assert!(!serialized.contains("normalized-query-pattern"));
 }

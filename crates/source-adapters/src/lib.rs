@@ -725,12 +725,12 @@ pub mod evaluator {
             path: "datos/labels.parquet".to_owned(),
             source,
         })?;
-        let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|error| AdapterError::Parquet(error.to_string()))?
             .build()
             .map_err(|error| AdapterError::Parquet(error.to_string()))?;
         let mut rows = Vec::new();
-        while let Some(batch) = reader.next() {
+        for batch in reader {
             let batch = batch.map_err(|error| AdapterError::Parquet(error.to_string()))?;
             let case_ids = required_strings(&batch, "case_id")?;
             let splits = required_strings(&batch, "split")?;
@@ -866,7 +866,7 @@ fn prepared_source(
 
 fn scan_csv_tree(root: &Path) -> Result<Vec<ManifestEntry>, AdapterError> {
     let mut paths = Vec::new();
-    collect_csv_paths(root, root, &mut paths)?;
+    collect_csv_paths(root, &mut paths)?;
     paths.sort();
     paths
         .into_iter()
@@ -883,11 +883,7 @@ fn scan_csv_tree(root: &Path) -> Result<Vec<ManifestEntry>, AdapterError> {
         .collect()
 }
 
-fn collect_csv_paths(
-    root: &Path,
-    directory: &Path,
-    output: &mut Vec<PathBuf>,
-) -> Result<(), AdapterError> {
+fn collect_csv_paths(directory: &Path, output: &mut Vec<PathBuf>) -> Result<(), AdapterError> {
     let entries = fs::read_dir(directory).map_err(AdapterError::ReadDirectory)?;
     for entry in entries {
         let entry = entry.map_err(AdapterError::ReadDirectory)?;
@@ -899,7 +895,7 @@ fn collect_csv_paths(
             ));
         }
         if metadata.is_dir() {
-            collect_csv_paths(root, &path, output)?;
+            collect_csv_paths(&path, output)?;
         } else if metadata.is_file()
             && path
                 .extension()
@@ -961,8 +957,8 @@ fn manifest_for_csv(
     }
     let canonical_header = serde_json::to_vec(&headers).map_err(AdapterError::Serialization)?;
     let mut row_count = 0_u64;
-    let mut records = reader.into_byte_records();
-    while let Some(record) = records.next() {
+    let records = reader.into_byte_records();
+    for record in records {
         record.map_err(|error| {
             AdapterError::InvalidInputOwned(format!(
                 "cannot parse CSV record {}: {error}",
@@ -1020,11 +1016,11 @@ fn manifest_for_file(
         let builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|error| AdapterError::Parquet(error.to_string()))?;
         let schema_digest = digest(format!("{:?}", builder.schema()).as_bytes());
-        let mut batches = builder
+        let batches = builder
             .build()
             .map_err(|error| AdapterError::Parquet(error.to_string()))?;
         let mut count = 0_u64;
-        while let Some(batch) = batches.next() {
+        for batch in batches {
             count += batch
                 .map_err(|error| AdapterError::Parquet(error.to_string()))?
                 .num_rows() as u64;
@@ -1079,12 +1075,12 @@ fn read_cases(path: &Path) -> Result<Vec<RawCase>, AdapterError> {
         path: "datos/case.parquet".to_owned(),
         source,
     })?;
-    let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)
         .map_err(|error| AdapterError::Parquet(error.to_string()))?
         .build()
         .map_err(|error| AdapterError::Parquet(error.to_string()))?;
     let mut cases = Vec::new();
-    while let Some(batch) = reader.next() {
+    for batch in reader {
         let batch = batch.map_err(|error| AdapterError::Parquet(error.to_string()))?;
         let ids = required_strings(&batch, "case_id")?;
         let channel = required_strings(&batch, "channel")?;
@@ -1118,12 +1114,12 @@ fn read_tool_calls(path: &Path) -> Result<Vec<RawToolCall>, AdapterError> {
         path: "datos/tool_call.parquet".to_owned(),
         source,
     })?;
-    let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)
         .map_err(|error| AdapterError::Parquet(error.to_string()))?
         .build()
         .map_err(|error| AdapterError::Parquet(error.to_string()))?;
     let mut calls = Vec::new();
-    while let Some(batch) = reader.next() {
+    for batch in reader {
         let batch = batch.map_err(|error| AdapterError::Parquet(error.to_string()))?;
         let ids = required_strings(&batch, "case_id")?;
         let call_ids = required_strings(&batch, "call_id")?;
@@ -2158,7 +2154,10 @@ fn is_utc_timestamp(value: &str) -> bool {
 fn parse_utc_timestamp(value: &str) -> Result<i64, AdapterError> {
     let invalid =
         || AdapterError::InvalidConfig("timestamp must be a valid RFC3339 UTC instant ending in Z");
-    if value.len() < 20 || !value.ends_with('Z') || value.as_bytes().get(10) != Some(&b'T') {
+    // The persisted cutoff is represented to whole seconds. Reject fractional
+    // timestamps instead of silently truncating them while retaining their
+    // original RFC3339 spelling as run provenance.
+    if value.len() != 20 || !value.ends_with('Z') || value.as_bytes().get(10) != Some(&b'T') {
         return Err(invalid());
     }
     let bytes = value.as_bytes();

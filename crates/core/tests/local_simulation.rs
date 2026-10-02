@@ -1,6 +1,7 @@
 use improvement_engine_core::ArtifactReference;
 use improvement_engine_core::local_simulation::{
-    LocalObservedEvent, LocalRunInput, LocalSourceKind, run_local_simulation,
+    LocalObservedEvent, LocalObservedQuery, LocalRunInput, LocalRunMetadata, LocalSourceKind,
+    run_local_simulation,
 };
 
 fn snapshot() -> ArtifactReference {
@@ -38,13 +39,15 @@ fn event(
 #[test]
 fn local_simulation_runs_detection_to_proposal_without_claiming_native_execution_or_lift() {
     let input = LocalRunInput::new(
-        "run-local-01",
-        "pulso_local",
-        LocalSourceKind::E0,
-        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        snapshot(),
-        1_785_542_403,
-        "2026-08-01T00:00:03Z",
+        LocalRunMetadata::new(
+            "run-local-01",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
         vec![1, 2, 3, 4, 5],
         0,
         vec![
@@ -130,15 +133,147 @@ fn local_simulation_runs_detection_to_proposal_without_claiming_native_execution
 }
 
 #[test]
+fn recurring_opaque_copilot_query_across_cases_creates_only_a_simulated_candidate() {
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-recurring-query",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=21).collect(),
+        2,
+        vec![event(
+            21,
+            1,
+            Some(false),
+            Some("payments"),
+            Some("tree"),
+            Some("status_lookup"),
+        )],
+    )
+    .with_queries(
+        (1..=20)
+            .map(|case_ordinal| {
+                LocalObservedQuery::new(
+                    case_ordinal,
+                    format!("sha256_{}", "a".repeat(56)),
+                    "2026-08-01T00:00:01Z",
+                )
+            })
+            .chain([
+                LocalObservedQuery::new(
+                    1,
+                    format!("sha256_{}", "a".repeat(56)),
+                    "2026-08-01T00:00:02Z",
+                ),
+                LocalObservedQuery::new(
+                    21,
+                    format!("sha256_{}", "b".repeat(56)),
+                    "2026-08-01T00:00:01Z",
+                ),
+            ])
+            .collect(),
+    );
+
+    let result = run_local_simulation(input).expect("recurrence detector completes");
+
+    let signal = result
+        .signal
+        .as_ref()
+        .expect("recurrence signal is reported");
+    assert_eq!(signal.metric_id, "e0_recurring_copilot_query_cases");
+    assert_eq!(
+        signal.numerator, 20,
+        "support counts distinct cases, not rows"
+    );
+    assert_eq!(signal.denominator, 21);
+    assert_eq!(signal.minimum_support, 20);
+    assert_eq!(
+        signal.detector_policy_id,
+        "e0_recurring_copilot_query_support_v1"
+    );
+    assert_eq!(signal.detector_policy_version, 1);
+    assert!(signal.pattern_ref.is_some());
+    assert_eq!(result.signals.len(), 2, "both detectors remain visible");
+    assert!(
+        result.signals.iter().any(|signal| {
+            signal.metric_id == "e0_technical_error_rate" && signal.numerator == 0
+        })
+    );
+    assert_eq!(result.primary_signal_policy, "local_primary_signal_v1");
+    assert_eq!(result.terminal_status, "complete_simulated");
+    assert_eq!(result.formal_route, "do_nothing");
+    assert!(!result.candidates.is_empty());
+    let proposal = result
+        .proposal
+        .as_ref()
+        .expect("proposal draft is simulated");
+    assert_eq!(proposal.status, "simulated_unverified");
+    assert_eq!(proposal.execution_status, "not_executed");
+    assert!(proposal.hypothesis.contains("copilot query"));
+    let serialized = serde_json::to_string(&result).unwrap();
+    assert!(!serialized.contains(&format!("sha256_{}", "a".repeat(56))));
+    assert!(!serialized.contains(&format!("sha256_{}", "b".repeat(56))));
+}
+
+#[test]
+fn recurring_query_below_versioned_support_threshold_remains_visible_but_noops() {
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-recurring-query-below-threshold",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        vec![1, 2, 3, 4],
+        0,
+        Vec::new(),
+    )
+    .with_queries(
+        (1..=4)
+            .map(|case_ordinal| {
+                LocalObservedQuery::new(
+                    case_ordinal,
+                    format!("sha256_{}", "c".repeat(56)),
+                    "2026-08-01T00:00:01Z",
+                )
+            })
+            .collect(),
+    );
+
+    let result = run_local_simulation(input).expect("low-support pattern is reported");
+
+    let recurrence = result
+        .signals
+        .iter()
+        .find(|signal| signal.metric_id == "e0_recurring_copilot_query_cases")
+        .expect("recurrence metric remains visible");
+    assert_eq!(recurrence.numerator, 4);
+    assert_eq!(recurrence.minimum_support, 20);
+    assert_eq!(result.terminal_status, "complete_no_opportunity");
+    assert!(result.candidates.is_empty());
+    assert!(result.proposal.is_none());
+}
+
+#[test]
 fn zero_positive_support_does_not_create_a_candidate_or_proposal() {
     let input = LocalRunInput::new(
-        "run-local-no-opportunity",
-        "pulso_local",
-        LocalSourceKind::E0,
-        "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        snapshot(),
-        1_785_542_403,
-        "2026-08-01T00:00:03Z",
+        LocalRunMetadata::new(
+            "run-local-no-opportunity",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
         vec![1, 2],
         1,
         vec![
@@ -186,13 +321,15 @@ fn zero_positive_support_does_not_create_a_candidate_or_proposal() {
 #[test]
 fn source_without_an_allowlisted_signal_is_reported_not_fabricated() {
     let input = LocalRunInput::new(
-        "run-local-02",
-        "pulso_local",
-        LocalSourceKind::OriginalBank,
-        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        snapshot(),
-        1_785_542_401,
-        "2026-08-01T00:00:01Z",
+        LocalRunMetadata::new(
+            "run-local-02",
+            "pulso_local",
+            LocalSourceKind::OriginalBank,
+            "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            snapshot(),
+            1_785_542_401,
+            "2026-08-01T00:00:01Z",
+        ),
         vec![1, 2],
         0,
         vec![

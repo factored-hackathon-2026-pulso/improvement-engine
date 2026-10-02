@@ -20,6 +20,17 @@ fn config_with_cutoff(arranque_cases: usize, cutoff: &str) -> PreparationConfig 
     PreparationConfig::new("demo-tenant", cutoff, arranque_cases).expect("valid config")
 }
 
+#[test]
+fn cutoff_rejects_fractional_seconds_instead_of_silently_truncating_them() {
+    let result = PreparationConfig::new("demo-tenant", "2025-07-01T00:00:00.500Z", 10);
+
+    assert!(result.is_err());
+    assert_eq!(
+        config_with_cutoff(10, "2025-07-01T00:00:00Z").observed_cutoff(),
+        "2025-07-01T00:00:00Z"
+    );
+}
+
 fn write_parquet(path: &Path, schema: Schema, columns: Vec<ArrayRef>) {
     let schema = Arc::new(schema);
     let batch = RecordBatch::try_new(schema.clone(), columns).expect("valid synthetic batch");
