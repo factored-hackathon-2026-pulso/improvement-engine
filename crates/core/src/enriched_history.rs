@@ -11,11 +11,124 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
-use crate::source_validation::SourceSnapshot;
+use crate::source_validation::{SourceFileSeal, SourceSnapshot};
 
 const DISCOVERY_FORBIDDEN_TABLES: &[&str] = &["labels", "signal"];
-const REQUIRED_AVAILABILITY_CLOCKS: &[&str] = &["event_time", "ingested_at"];
+const EVENT_TIME_CLOCK: &str = "event_time";
+const INGESTED_AT_CLOCK: &str = "ingested_at";
+const LEGACY_MANIFEST_VERSION: u16 = 1;
+const CURRENT_MANIFEST_VERSION: u16 = 2;
+
+/// The clock that proves when a row may participate in discovery.
+///
+/// `ReplayAtEventTime` is deliberately a separate, sealed mode for E0. It
+/// means the package has no observed physical ingestion timestamp and replay
+/// therefore assumes availability at `event_time` with a zero ingestion lag.
+/// It is not evidence about production ingestion latency.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum AvailabilityClockMode {
+    #[default]
+    ObservedIngestedAt,
+    ReplayAtEventTime {
+        assumption_label: String,
+    },
+}
+
+impl AvailabilityClockMode {
+    #[must_use]
+    pub fn observed_ingested_at() -> Self {
+        Self::ObservedIngestedAt
+    }
+
+    #[must_use]
+    pub fn replay_at_event_time(assumption_label: impl Into<String>) -> Self {
+        Self::ReplayAtEventTime {
+            assumption_label: assumption_label.into(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), EnrichedHistoryError> {
+        match self {
+            Self::ObservedIngestedAt => Ok(()),
+            Self::ReplayAtEventTime { assumption_label }
+                if is_assumption_label(assumption_label) =>
+            {
+                Ok(())
+            }
+            Self::ReplayAtEventTime { .. } => Err(EnrichedHistoryError::InvalidReplayAssumption),
+        }
+    }
+
+    fn requires_physical_ingested_at(&self) -> bool {
+        matches!(self, Self::ObservedIngestedAt)
+    }
+}
+
+/// Versioned commitment for an availability-clock interpretation. The digest
+/// commits to the mode, its assumption label and one immutable source snapshot
+/// byte representation; a caller cannot flip the clock after the profile was
+/// sealed without invalidating it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AvailabilityProfile {
+    pub profile_id: String,
+    pub profile_version: u16,
+    #[serde(default)]
+    pub availability_clock: AvailabilityClockMode,
+    pub source_snapshot_digest: String,
+    pub profile_digest: String,
+}
+
+impl AvailabilityProfile {
+    #[must_use]
+    pub fn new(
+        profile_id: impl Into<String>,
+        profile_version: u16,
+        availability_clock: AvailabilityClockMode,
+        source_snapshot_digest: impl Into<String>,
+    ) -> Self {
+        let profile_id = profile_id.into();
+        let source_snapshot_digest = source_snapshot_digest.into();
+        let profile_digest = availability_profile_digest(
+            &profile_id,
+            profile_version,
+            &availability_clock,
+            &source_snapshot_digest,
+        );
+        Self {
+            profile_id,
+            profile_version,
+            availability_clock,
+            source_snapshot_digest,
+            profile_digest,
+        }
+    }
+
+    fn validate(&self) -> Result<(), EnrichedHistoryError> {
+        if !is_identifier(&self.profile_id)
+            || self.profile_version == 0
+            || !is_sha256_digest(&self.source_snapshot_digest)
+            || !is_sha256_digest(&self.profile_digest)
+        {
+            return Err(EnrichedHistoryError::InvalidAvailabilityProfile);
+        }
+        self.availability_clock.validate()?;
+        if self.profile_digest
+            != availability_profile_digest(
+                &self.profile_id,
+                self.profile_version,
+                &self.availability_clock,
+                &self.source_snapshot_digest,
+            )
+        {
+            return Err(EnrichedHistoryError::InvalidAvailabilityProfile);
+        }
+        Ok(())
+    }
+}
 
 /// Four independent seals carried by every enriched package file.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -67,6 +180,15 @@ pub struct PackageFile {
     /// nested JSON, but it receives the same immutable availability decision.
     #[serde(default)]
     pub field_availability: BTreeMap<String, String>,
+    /// Digest of the sealed E0 row/field availability projection. It is
+    /// required only for `replay_at_event_time`; it prevents a caller from
+    /// swapping temporal annotations independently from the data rows.
+    #[serde(default)]
+    pub replay_projection_digest: Option<String>,
+    /// Exact source-file commitment supplied by `SourceSnapshot`. It is
+    /// required when the package is opened through `from_snapshot`.
+    #[serde(skip)]
+    source_file_seal: Option<SourceFileSeal>,
 }
 
 impl PackageFile {
@@ -81,6 +203,8 @@ impl PackageFile {
             digests,
             available_at: available_at.into(),
             field_availability: BTreeMap::new(),
+            replay_projection_digest: None,
+            source_file_seal: None,
         }
     }
 
@@ -89,15 +213,33 @@ impl PackageFile {
         self.field_availability = field_availability;
         self
     }
+
+    #[must_use]
+    pub fn with_replay_projection_digest(mut self, replay_projection_digest: String) -> Self {
+        self.replay_projection_digest = Some(replay_projection_digest);
+        self
+    }
+
+    #[must_use]
+    pub fn with_source_file_seal(mut self, source_file_seal: SourceFileSeal) -> Self {
+        self.source_file_seal = Some(source_file_seal);
+        self
+    }
 }
 
 /// Read-only package manifest, independently sealed before the adapter runs.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EnrichedHistoryManifest {
+    #[serde(default = "legacy_manifest_version")]
+    pub manifest_version: u16,
     pub source_namespace: String,
     pub world_ref: String,
     pub observed_cutoff: String,
+    #[serde(default)]
+    pub availability_clock: AvailabilityClockMode,
+    #[serde(default)]
+    pub availability_profile: Option<AvailabilityProfile>,
     pub files: Vec<PackageFile>,
 }
 
@@ -107,12 +249,35 @@ impl EnrichedHistoryManifest {
         source_namespace: impl Into<String>,
         world_ref: impl Into<String>,
         observed_cutoff: impl Into<String>,
+        availability_clock: AvailabilityClockMode,
         files: Vec<PackageFile>,
     ) -> Self {
         Self {
+            manifest_version: LEGACY_MANIFEST_VERSION,
             source_namespace: source_namespace.into(),
             world_ref: world_ref.into(),
             observed_cutoff: observed_cutoff.into(),
+            availability_clock,
+            availability_profile: None,
+            files,
+        }
+    }
+
+    #[must_use]
+    pub fn new_replay(
+        source_namespace: impl Into<String>,
+        world_ref: impl Into<String>,
+        observed_cutoff: impl Into<String>,
+        availability_profile: AvailabilityProfile,
+        files: Vec<PackageFile>,
+    ) -> Self {
+        Self {
+            manifest_version: CURRENT_MANIFEST_VERSION,
+            source_namespace: source_namespace.into(),
+            world_ref: world_ref.into(),
+            observed_cutoff: observed_cutoff.into(),
+            availability_clock: availability_profile.availability_clock.clone(),
+            availability_profile: Some(availability_profile),
             files,
         }
     }
@@ -128,13 +293,68 @@ impl EnrichedHistoryManifest {
 pub struct TableInput {
     pub digests: ProvenanceDigests,
     pub rows: Vec<Value>,
+    replay_row_availability: Option<Vec<ReplayRowAvailability>>,
 }
 
 impl TableInput {
     #[must_use]
     pub fn new(digests: ProvenanceDigests, rows: Vec<Value>) -> Self {
-        Self { digests, rows }
+        Self {
+            digests,
+            rows,
+            replay_row_availability: None,
+        }
     }
+
+    #[must_use]
+    pub fn with_replay_row_availability(
+        mut self,
+        replay_row_availability: Vec<ReplayRowAvailability>,
+    ) -> Self {
+        self.replay_row_availability = Some(replay_row_availability);
+        self
+    }
+}
+
+/// Sealed availability annotations for one E0 replay row. They stay outside
+/// the discovery projection and are never exposed as customer attributes.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplayRowAvailability {
+    pub fields: BTreeMap<String, String>,
+}
+
+impl ReplayRowAvailability {
+    #[must_use]
+    pub fn new(fields: BTreeMap<String, String>) -> Self {
+        Self { fields }
+    }
+}
+
+/// Canonical digest of a replay projection and its per-row availability seals.
+#[must_use]
+pub fn replay_projection_digest(rows: &[Value], availability: &[ReplayRowAvailability]) -> String {
+    let mut canonical = String::new();
+    canonical.push('[');
+    for (index, (row, row_availability)) in rows.iter().zip(availability).enumerate() {
+        if index > 0 {
+            canonical.push(',');
+        }
+        canonical_json(row, &mut canonical);
+        canonical.push('|');
+        canonical.push('{');
+        for (field_index, (field, available_at)) in row_availability.fields.iter().enumerate() {
+            if field_index > 0 {
+                canonical.push(',');
+            }
+            canonical_json(&Value::String(field.clone()), &mut canonical);
+            canonical.push(':');
+            canonical_json(&Value::String(available_at.clone()), &mut canonical);
+        }
+        canonical.push('}');
+    }
+    canonical.push(']');
+    format!("sha256:{:x}", Sha256::digest(canonical.as_bytes()))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -142,6 +362,8 @@ pub struct EnrichedHistoryProvenance {
     pub source_namespace: String,
     pub world_ref: String,
     pub observed_cutoff: String,
+    pub availability_clock: AvailabilityClockMode,
+    pub availability_profile: Option<AvailabilityProfile>,
     pub digests: ProvenanceDigests,
 }
 
@@ -179,6 +401,50 @@ pub enum EnrichedHistoryError {
     InvalidManifestField {
         field: String,
     },
+    InvalidReplayAssumption,
+    UnsupportedManifestVersion {
+        manifest_version: u16,
+    },
+    MissingAvailabilityProfile,
+    InvalidAvailabilityProfile,
+    SnapshotAvailabilityProfileMismatch,
+    ReplaySnapshotBindingRequired,
+    SnapshotSourceNotListed {
+        table: String,
+    },
+    MissingSourceFileSeal {
+        table: String,
+    },
+    SourceFileSealMismatch {
+        table: String,
+    },
+    MissingReplayProjectionDigest {
+        table: String,
+    },
+    UnexpectedReplayProjectionDigest {
+        table: String,
+    },
+    ReplayProjectionDigestMismatch {
+        table: String,
+    },
+    MissingReplayRowAvailability {
+        table: String,
+    },
+    ReplayAvailabilityRowCountMismatch {
+        table: String,
+    },
+    ReplayAvailabilityFieldMismatch {
+        table: String,
+        field: String,
+    },
+    InvalidReplayFieldAvailability {
+        table: String,
+        field: String,
+    },
+    FutureFieldAtEvent {
+        table: String,
+        field: String,
+    },
     UnavailableFile {
         table: String,
     },
@@ -197,6 +463,10 @@ pub enum EnrichedHistoryError {
         table: String,
     },
     MissingAvailabilityClock {
+        table: String,
+        field: String,
+    },
+    UnexpectedAvailabilityClock {
         table: String,
         field: String,
     },
@@ -232,15 +502,54 @@ pub struct EnrichedHistoryAdapter {
     source_namespace: String,
     world_ref: String,
     observed_cutoff: String,
+    availability_clock: AvailabilityClockMode,
+    availability_profile: Option<AvailabilityProfile>,
     files: BTreeMap<String, PackageFile>,
 }
 
 impl EnrichedHistoryAdapter {
     /// Validates a manifest before any rows are considered.
     pub fn from_manifest(manifest: EnrichedHistoryManifest) -> Result<Self, EnrichedHistoryError> {
+        Self::from_manifest_bound(manifest, None)
+    }
+
+    fn from_manifest_bound(
+        manifest: EnrichedHistoryManifest,
+        snapshot_binding_digest: Option<&str>,
+    ) -> Result<Self, EnrichedHistoryError> {
         validate_required_string(&manifest.source_namespace, "source_namespace")?;
         validate_required_string(&manifest.world_ref, "world_ref")?;
         validate_timestamp(&manifest.observed_cutoff, "observed_cutoff")?;
+        manifest.availability_clock.validate()?;
+        match manifest.manifest_version {
+            LEGACY_MANIFEST_VERSION => {
+                if !manifest.availability_clock.requires_physical_ingested_at()
+                    || manifest.availability_profile.is_some()
+                {
+                    return Err(EnrichedHistoryError::UnsupportedManifestVersion {
+                        manifest_version: manifest.manifest_version,
+                    });
+                }
+            }
+            CURRENT_MANIFEST_VERSION => {
+                let profile = manifest
+                    .availability_profile
+                    .as_ref()
+                    .ok_or(EnrichedHistoryError::MissingAvailabilityProfile)?;
+                profile.validate()?;
+                if profile.availability_clock != manifest.availability_clock {
+                    return Err(EnrichedHistoryError::InvalidAvailabilityProfile);
+                }
+                if snapshot_binding_digest != Some(profile.source_snapshot_digest.as_str()) {
+                    return Err(EnrichedHistoryError::ReplaySnapshotBindingRequired);
+                }
+            }
+            _ => {
+                return Err(EnrichedHistoryError::UnsupportedManifestVersion {
+                    manifest_version: manifest.manifest_version,
+                });
+            }
+        }
         if manifest.files.is_empty() {
             return Err(EnrichedHistoryError::InvalidManifestField {
                 field: "files".to_owned(),
@@ -263,6 +572,35 @@ impl EnrichedHistoryAdapter {
                 return Err(EnrichedHistoryError::InvalidManifestField {
                     field: format!("files.{}.field_availability", file.table),
                 });
+            }
+            if !manifest.availability_clock.requires_physical_ingested_at()
+                && file.field_availability.contains_key(INGESTED_AT_CLOCK)
+            {
+                return Err(EnrichedHistoryError::UnexpectedAvailabilityClock {
+                    table: file.table,
+                    field: INGESTED_AT_CLOCK.to_owned(),
+                });
+            }
+            match (
+                manifest.availability_clock.requires_physical_ingested_at(),
+                &file.replay_projection_digest,
+            ) {
+                (false, None) => {
+                    return Err(EnrichedHistoryError::MissingReplayProjectionDigest {
+                        table: file.table,
+                    });
+                }
+                (false, Some(digest)) if !is_sha256_digest(digest) => {
+                    return Err(EnrichedHistoryError::InvalidManifestField {
+                        field: format!("files.{}.replay_projection_digest", file.table),
+                    });
+                }
+                (true, Some(_)) => {
+                    return Err(EnrichedHistoryError::UnexpectedReplayProjectionDigest {
+                        table: file.table,
+                    });
+                }
+                _ => {}
             }
             for (field, available_at) in &file.field_availability {
                 if !is_identifier(field) {
@@ -288,6 +626,8 @@ impl EnrichedHistoryAdapter {
             source_namespace: manifest.source_namespace,
             world_ref: manifest.world_ref,
             observed_cutoff: manifest.observed_cutoff,
+            availability_clock: manifest.availability_clock,
+            availability_profile: manifest.availability_profile,
             files,
         })
     }
@@ -305,7 +645,34 @@ impl EnrichedHistoryAdapter {
         {
             return Err(EnrichedHistoryError::SnapshotProvenanceMismatch);
         }
-        Self::from_manifest(manifest)
+        if manifest.manifest_version == CURRENT_MANIFEST_VERSION
+            && manifest
+                .availability_profile
+                .as_ref()
+                .is_none_or(|profile| profile.source_snapshot_digest != snapshot.binding_digest())
+        {
+            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        }
+        for file in &manifest.files {
+            let snapshot_seal = snapshot.source_file_seal(&file.table).ok_or_else(|| {
+                EnrichedHistoryError::SnapshotSourceNotListed {
+                    table: file.table.clone(),
+                }
+            })?;
+            let package_seal = file.source_file_seal.as_ref().ok_or_else(|| {
+                EnrichedHistoryError::MissingSourceFileSeal {
+                    table: file.table.clone(),
+                }
+            })?;
+            if package_seal != &snapshot_seal
+                || file.digests.file_digest != snapshot_seal.file_digest()
+            {
+                return Err(EnrichedHistoryError::SourceFileSealMismatch {
+                    table: file.table.clone(),
+                });
+            }
+        }
+        Self::from_manifest_bound(manifest, Some(&snapshot.binding_digest()))
     }
 
     /// Returns a deterministic, discovery-safe projection for exactly one table.
@@ -332,12 +699,16 @@ impl EnrichedHistoryAdapter {
                 findings,
             });
         }
-        for row in &input.rows {
+        let replay_availability =
+            validate_replay_projection(table, &input, sealed, &self.availability_clock)?;
+        for (index, row) in input.rows.iter().enumerate() {
             validate_discovery_row(
                 table,
                 row,
                 &self.observed_cutoff,
+                &self.availability_clock,
                 &sealed.field_availability,
+                replay_availability.map(|values| &values[index]),
             )?;
         }
 
@@ -347,6 +718,8 @@ impl EnrichedHistoryAdapter {
                 source_namespace: self.source_namespace.clone(),
                 world_ref: self.world_ref.clone(),
                 observed_cutoff: self.observed_cutoff.clone(),
+                availability_clock: self.availability_clock.clone(),
+                availability_profile: self.availability_profile.clone(),
                 digests: sealed.digests.clone(),
             },
             rows: input.rows,
@@ -404,7 +777,9 @@ fn validate_discovery_row(
     table: &str,
     row: &Value,
     cutoff: &str,
+    availability_clock: &AvailabilityClockMode,
     field_availability: &BTreeMap<String, String>,
+    replay_availability: Option<&ReplayRowAvailability>,
 ) -> Result<(), EnrichedHistoryError> {
     let object = row
         .as_object()
@@ -418,6 +793,13 @@ fn validate_discovery_row(
             field,
         });
     }
+    if !availability_clock.requires_physical_ingested_at() && object.contains_key(INGESTED_AT_CLOCK)
+    {
+        return Err(EnrichedHistoryError::UnexpectedAvailabilityClock {
+            table: table.to_owned(),
+            field: INGESTED_AT_CLOCK.to_owned(),
+        });
+    }
     for field in object.keys() {
         if !field_availability.contains_key(field) {
             return Err(EnrichedHistoryError::UnavailableField {
@@ -426,7 +808,12 @@ fn validate_discovery_row(
             });
         }
     }
-    for field in REQUIRED_AVAILABILITY_CLOCKS {
+    let required_clocks: &[&str] = if availability_clock.requires_physical_ingested_at() {
+        &[EVENT_TIME_CLOCK, INGESTED_AT_CLOCK]
+    } else {
+        &[EVENT_TIME_CLOCK]
+    };
+    for field in required_clocks {
         let value = object.get(*field).and_then(Value::as_str).ok_or_else(|| {
             EnrichedHistoryError::MissingAvailabilityClock {
                 table: table.to_owned(),
@@ -446,7 +833,69 @@ fn validate_discovery_row(
             });
         }
     }
+    if let Some(replay_availability) = replay_availability {
+        let event_time = object
+            .get(EVENT_TIME_CLOCK)
+            .and_then(Value::as_str)
+            .expect("replay event_time is validated before row availability");
+        for field in object.keys() {
+            let available_at = replay_availability.fields.get(field).ok_or_else(|| {
+                EnrichedHistoryError::ReplayAvailabilityFieldMismatch {
+                    table: table.to_owned(),
+                    field: field.clone(),
+                }
+            })?;
+            if !is_rfc3339_utc(available_at) {
+                return Err(EnrichedHistoryError::InvalidReplayFieldAvailability {
+                    table: table.to_owned(),
+                    field: field.clone(),
+                });
+            }
+            if available_at.as_str() > event_time {
+                return Err(EnrichedHistoryError::FutureFieldAtEvent {
+                    table: table.to_owned(),
+                    field: field.clone(),
+                });
+            }
+        }
+        for field in replay_availability.fields.keys() {
+            if !object.contains_key(field) {
+                return Err(EnrichedHistoryError::ReplayAvailabilityFieldMismatch {
+                    table: table.to_owned(),
+                    field: field.clone(),
+                });
+            }
+        }
+    }
     Ok(())
+}
+
+fn validate_replay_projection<'a>(
+    table: &str,
+    input: &'a TableInput,
+    sealed: &PackageFile,
+    availability_clock: &AvailabilityClockMode,
+) -> Result<Option<&'a [ReplayRowAvailability]>, EnrichedHistoryError> {
+    if availability_clock.requires_physical_ingested_at() {
+        return Ok(None);
+    }
+    let availability = input.replay_row_availability.as_deref().ok_or_else(|| {
+        EnrichedHistoryError::MissingReplayRowAvailability {
+            table: table.to_owned(),
+        }
+    })?;
+    if availability.len() != input.rows.len() {
+        return Err(EnrichedHistoryError::ReplayAvailabilityRowCountMismatch {
+            table: table.to_owned(),
+        });
+    }
+    let actual_digest = replay_projection_digest(&input.rows, availability);
+    if sealed.replay_projection_digest.as_deref() != Some(actual_digest.as_str()) {
+        return Err(EnrichedHistoryError::ReplayProjectionDigestMismatch {
+            table: table.to_owned(),
+        });
+    }
+    Ok(Some(availability))
 }
 
 fn find_forbidden_field(object: &serde_json::Map<String, Value>) -> Option<String> {
@@ -561,4 +1010,68 @@ fn is_identifier(value: &str) -> bool {
         && characters.all(|character| {
             character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
         })
+}
+
+fn is_assumption_label(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+        })
+}
+
+fn legacy_manifest_version() -> u16 {
+    LEGACY_MANIFEST_VERSION
+}
+
+fn availability_profile_digest(
+    profile_id: &str,
+    profile_version: u16,
+    availability_clock: &AvailabilityClockMode,
+    source_snapshot_digest: &str,
+) -> String {
+    let clock = match availability_clock {
+        AvailabilityClockMode::ObservedIngestedAt => "observed_ingested_at".to_owned(),
+        AvailabilityClockMode::ReplayAtEventTime { assumption_label } => {
+            format!("replay_at_event_time:{assumption_label}")
+        }
+    };
+    format!(
+        "sha256:{:x}",
+        Sha256::digest(
+            format!("{profile_id}|{profile_version}|{clock}|{source_snapshot_digest}").as_bytes()
+        )
+    )
+}
+
+fn canonical_json(value: &Value, output: &mut String) {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
+            output.push_str(&serde_json::to_string(value).expect("JSON value serializes"));
+        }
+        Value::Array(values) => {
+            output.push('[');
+            for (index, value) in values.iter().enumerate() {
+                if index > 0 {
+                    output.push(',');
+                }
+                canonical_json(value, output);
+            }
+            output.push(']');
+        }
+        Value::Object(values) => {
+            output.push('{');
+            let mut keys = values.keys().collect::<Vec<_>>();
+            keys.sort_unstable();
+            for (index, key) in keys.into_iter().enumerate() {
+                if index > 0 {
+                    output.push(',');
+                }
+                canonical_json(&Value::String(key.clone()), output);
+                output.push(':');
+                canonical_json(&values[key], output);
+            }
+            output.push('}');
+        }
+    }
 }

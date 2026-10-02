@@ -1,0 +1,90 @@
+# U04-B — reloj explícito para replay E0 sin `ingested_at`
+
+## Decisión y alcance
+
+El histórico enriquecido E0 no trae una columna física `ingested_at`. Forzarla
+en el adapter mezclaba una convención de replay con evidencia operativa y
+bloqueaba el paquete correcto. `AvailabilityClockMode` y el
+`AvailabilityProfile` V2 hacen la distinción parte del manifest sellado y de la
+proveniencia que recibe cada consumidor:
+
+- `observed_ingested_at` exige `event_time` e `ingested_at` en cada fila. Es el
+  contrato para fuentes que sí demuestran disponibilidad observada.
+- `replay_at_event_time` exige sólo `event_time` y una etiqueta de supuesto
+  versionable. Por definición, asume disponibilidad en el instante del evento
+  con `ingestion_lag=0`; no demuestra la latencia ni el orden de ingestión de
+  producción.
+
+No existe un constructor implícito entre ambos modos para replay. El modo de
+replay rechaza tanto un `ingested_at` declarado en `field_availability` como
+una fila que lo introduzca. La etiqueta se valida como identificador versionable
+(minúsculas, dígitos y `_`). De esa forma, un paquete no puede afirmar a la vez
+que usa el supuesto E0 y que cuenta con reloj físico.
+
+`AvailabilityProfile` tiene `profile_id`, versión, modo, etiqueta y el digest
+del byte-stream exacto de `SourceSnapshot`; su propio digest cubre todos esos
+campos. El adapter V2 de replay sólo se crea con `from_snapshot`: rechaza la
+lectura vía `from_manifest` porque aún no tendría un snapshot con el cual
+comparar el enlace. Cambiar modo, supuesto o snapshot después de sellar el
+perfil invalida el contrato. La proveniencia de cada tabla expone el perfil que
+se usó.
+
+La migración es deliberadamente estrecha: manifest unversioned/N-1 se trata
+como V1 `observed_ingested_at`, para no romper el histórico que sí trae ese
+reloj. V1 no puede expresar replay; `replay_at_event_time` requiere manifest
+V2 y `AvailabilityProfile` válido. No hay fallback de E0 a V1.
+
+## Controles que permanecen intactos
+
+El modo E0 no relaja ninguna frontera de descubrimiento. El `event_time` debe
+seguir siendo UTC válido y no posterior al `observed_cutoff`; la disponibilidad
+sellada de archivo y de todos los campos sigue limitada por el mismo corte; los
+digests, namespace/mundo/snapshot y calidad continúan siendo obligatorios. Las
+tablas `labels`/`signal` y cualquier campo final, expected, signal o label
+anidado continúan bloqueados antes de exponer filas. Un snapshot de bytes
+posterior no habilita eventos, campos o resultados futuros.
+
+Además, cada fila E0 lleva metadatos de disponibilidad por campo fuera de la
+proyección visible. Su digest canónico, junto con las filas, debe coincidir con
+el digest sellado del archivo. Todos sus `available_at` deben ser UTC válidos y
+no posteriores al `event_time` de esa misma fila; no basta con que sean
+anteriores al cutoff global. Esto impide que un atributo aparecido después del
+contacto entre retrospectivamente al contexto de esa decisión.
+
+## Evidencia TDD y validación
+
+1. Se añadió primero la prueba de un manifest `replay_at_event_time` con fila
+   E0 sin `ingested_at`; falló en rojo por no existir tipo, constructor ni
+   proveniencia del modo.
+2. Se implementó el tipo sellado, el constructor explícito y la validación por
+   modo; la prueba quedó verde.
+3. Una segunda prueba roja mostró que el manifest de replay todavía aceptaba
+   declarar un reloj físico. Se añadió el rechazo tipado
+   `UnexpectedAvailabilityClock` antes de abrir filas.
+4. La revisión adversarial detectó dos P1: atributos posteriores al evento y
+   modo mutable sin compromiso con snapshot. Se añadieron el digest de
+   proyección fila/campo y el perfil V2 ligado a bytes de snapshot; una lectura
+   replay sin `from_snapshot`, una mutación de modo o un snapshot con idéntica
+   proveniencia pero bytes diferentes son rechazados.
+5. Las regresiones cubren corte futuro, disponibilidad posterior por campo,
+   fuga final, N/N-1, modo/etiqueta inválidos, rechazo de `ingested_at` físico
+   en manifest/fila y las garantías U04 previas.
+6. Una segunda revisión encontró que el perfil aún no probaba que cada archivo
+   del paquete perteneciera al snapshot. `SourceSnapshot::source_file_seal`
+   expone ahora una vista read-only, sin constructor público, que compromete
+   tabla, URI, `file_digest`, `header_digest` y referencia/digest del contrato.
+   `from_snapshot` exige un seal idéntico para **cada** `PackageFile`, además
+   de igualdad del `file_digest` de la proyección. Tabla no listada, seal
+   ausente y cualquier divergencia fallan cerrados antes de abrir filas.
+
+Comandos verdes:
+
+```powershell
+cargo +1.98.1 fmt --all
+cargo +1.98.1 test -p improvement-engine-core --test enriched_history
+cargo +1.98.1 clippy -p improvement-engine-core --all-targets -- -D warnings
+```
+
+El modo no implementa aún el protocolo frozen/continuous (U23), ni permite
+reclasificar resultados posteriores como inputs disponibles. Es únicamente el
+contrato de disponibilidad E0 que esos consumidores deberán respetar.

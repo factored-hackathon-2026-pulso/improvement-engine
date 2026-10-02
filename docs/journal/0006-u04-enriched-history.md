@@ -26,9 +26,11 @@ Una normalización case/underscore-insensible bloquea claves que contienen
 `human_errors`/`stress_test`, incluso dentro de objetos o arrays anidados. Cada
 tabla declara la disponibilidad sellada de cada campo/grupo superior: una fila
 con un campo que no fue declarado o cuya disponibilidad es posterior al corte
-falla antes de exponerse. Cada fila también debe tener `event_time` e
-`ingested_at` UTC válidos, ambos no posteriores al corte; así un evento ocurrido
-antes pero disponible después tampoco aparece. La disponibilidad del archivo y
+falla antes de exponerse. Bajo el reloj observado original, cada fila debe tener
+`event_time` e `ingested_at` UTC válidos, ambos no posteriores al corte; así un
+evento ocurrido antes pero disponible después tampoco aparece. U04-B añade el
+modo E0 de replay sin `ingested_at` físico, documentado separadamente; no
+convierte esa suposición en timing observado. La disponibilidad del archivo y
 de cada grupo se valida al construir el adapter.
 
 Los desacuerdos de los cuatro digests son `QualityFinding` deterministas en

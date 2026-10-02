@@ -222,6 +222,8 @@ pub struct SourceSnapshot {
     pub world_ref: String,
     pub observed_cutoff: String,
     sources: Vec<SnapshotSource>,
+    #[serde(skip)]
+    raw_digest: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -243,11 +245,62 @@ struct SourceContractRef {
     digest: String,
 }
 
+/// Read-only seal for one exact file entry in an immutable source snapshot.
+/// It intentionally has no public constructor: callers obtain it only from the
+/// parsed `SourceSnapshot` and can use it to bind a downstream projection back
+/// to its table, object, header and source-contract commitments.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceFileSeal {
+    table: String,
+    uri: String,
+    file_digest: String,
+    header_digest: String,
+    source_contract_id: String,
+    source_contract_version: String,
+    source_contract_digest: String,
+}
+
+impl SourceFileSeal {
+    #[must_use]
+    pub fn table(&self) -> &str {
+        &self.table
+    }
+
+    #[must_use]
+    pub fn file_digest(&self) -> &str {
+        &self.file_digest
+    }
+}
+
 impl SourceSnapshot {
     pub fn from_json(raw: &str) -> Result<Self, SourceDefinitionError> {
-        let snapshot: Self = serde_json::from_str(raw).map_err(SourceDefinitionError::Json)?;
+        let mut snapshot: Self = serde_json::from_str(raw).map_err(SourceDefinitionError::Json)?;
         snapshot.validate()?;
+        snapshot.raw_digest = sha256(raw.as_bytes());
         Ok(snapshot)
+    }
+
+    /// Digest of the immutable snapshot bytes used by availability profiles.
+    #[must_use]
+    pub fn binding_digest(&self) -> String {
+        format!("sha256:{}", self.raw_digest)
+    }
+
+    /// Returns a sealed, read-only commitment for exactly one snapshot table.
+    #[must_use]
+    pub fn source_file_seal(&self, table: &str) -> Option<SourceFileSeal> {
+        self.sources
+            .iter()
+            .find(|source| source.table == table)
+            .map(|source| SourceFileSeal {
+                table: source.table.clone(),
+                uri: source.uri.clone(),
+                file_digest: source.file_digest.clone(),
+                header_digest: source.header_digest.clone(),
+                source_contract_id: source.source_contract_ref.id.clone(),
+                source_contract_version: source.source_contract_ref.version.clone(),
+                source_contract_digest: source.source_contract_ref.digest.clone(),
+            })
     }
 
     fn validate(&self) -> Result<(), SourceDefinitionError> {
