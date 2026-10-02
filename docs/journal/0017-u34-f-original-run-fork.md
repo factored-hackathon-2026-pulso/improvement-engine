@@ -3,7 +3,7 @@
 ## Decisión
 
 El fork de depuración es un reducer aislado que recibe un `ForkAuthorization`
-con actor, grant, motivo, estado y versión esperados, además de
+con actor, grant, revisión de grant, motivo, estado y versión esperados, además de
 `(replay_of,idempotency_key)`. No acepta snapshot, configuración, memoria ni
 cutoff del operador. El padre sólo se registra tras una atestación contra el
 repositorio de artifacts: kind, digest, tenant, cutoff, vida y final-lock se
@@ -12,11 +12,14 @@ fijados junto a `replay_of`; por tanto un fork no reescribe evidencia histórica
 
 La condición dinámica `final_locked` y el control state/version no entran por
 el request ni por la atestación de padre: `ForkRunLifecycle` los resuelve en
-cada operación, incluido retry. La autoridad de grant también se vuelve a
-consultar antes de cada resultado. `RunForkStore` es el contrato ejecutable en memoria. El adaptador durable debe
-hacer en una sola transacción el lookup de idempotencia, revalidación de
-disponibilidad/revocación/final-lock, control-version, inserción de hija y
-receipt/event de auditoría. Un retry revalida liveness y devuelve
+cada operación, incluido retry. `ForkGrantAuthority` resuelve grant y su
+revisión en el mismo borde. `ForkCommitPort` es el contrato durable: su única
+operación condicional revalida idempotency digest, grant/revisión, lifecycle
+(state/version/final-lock) y cada referencia atestada viva/exacta antes de
+persistir hija, receipt y evento de auditoría juntos. `InMemoryForkCommitPort`
+lo implementa sobre interfaces genéricas de artifacts, policy, grants y
+lifecycle —no queda acoplado al grant in-memory— y repite el conjunto de
+condiciones inmediatamente antes de hacer visibles las tres escrituras. Un retry revalida liveness y devuelve
 `ReferenceUnavailable` si el padre se revocó desde la primera respuesta; no
 devuelve una hija que ya no sería ejecutable. Esta unidad no
 afirma que ya existe el endpoint `/fork-replay`, autorización humana, PG ni un
@@ -25,7 +28,7 @@ replay E0: corresponden a U24/U34-FE y sus dependencias.
 ## Invariantes implementados
 
 - La clave de idempotencia se ata al payload completo, incluido actor/grant,
-  motivo y control-state/version; conserva el digest SHA-256 completo, nunca
+  revisión de grant, motivo y control-state/version; conserva el digest SHA-256 completo, nunca
   un prefijo truncado.
 - La inserción sólo ocurre tras autorización y atestación de padre en el mismo
   tenant. Un padre ajeno se ve como inexistente para no filtrar tenancy.
@@ -35,6 +38,8 @@ replay E0: corresponden a U24/U34-FE y sus dependencias.
 - Un re-registro se rechaza antes de validar o insertar el nuevo binding, de
   modo que no puede sustituir la primera atestación. Grant revocado, lifecycle
   ausente, versión/cambio concurrente o final-lock también invalidan un retry.
+- Un cambio entre preflight y commit falla cerrado sin hijo ni evento; el mismo
+  request exitoso devuelve el receipt idéntico y no crea segundo hijo ni audit.
 - El hijo conserva cutoff y referencias exactas del padre, incluye
   `replay_of`, y no ofrece API de mutación del padre.
 
@@ -58,7 +63,11 @@ cargo +1.98.1 test -p improvement-engine-core --test run_fork
 5. Una segunda revisión adversarial eliminó `final_locked` forjable de la
    atestación, añadió lifecycle/grant revalidables y comprobó que un duplicate
    registration no altera el primer padre.
+6. La tercera revisión P1 convirtió la atomicidad declarada en `ForkCommitPort`:
+   grant versionado, lifecycle y referencias se revalidan en la condición final;
+   se añadieron regresiones de grant/policy/lifecycle mutables entre lectura y
+   commit, y de retry con un único receipt/hijo/audit.
 
-Resultado: 7 pruebas verdes. Antes de integración acumulativa, un revisor
+Resultado: 11 pruebas verdes. Antes de integración acumulativa, un revisor
 independiente debe comprobar el contrato contra U03/U15/U33 y que el adaptador
 durable conserva la atomicidad declarada.

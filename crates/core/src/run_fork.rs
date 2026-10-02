@@ -24,6 +24,7 @@ pub struct ForkAuthorization {
     actor_id: String,
     grant_id: String,
     reason: String,
+    expected_grant_version: u64,
     expected_control_state: ForkControlState,
     expected_control_version: u64,
 }
@@ -33,6 +34,7 @@ impl ForkAuthorization {
         actor_id: impl Into<String>,
         grant_id: impl Into<String>,
         reason: impl Into<String>,
+        expected_grant_version: u64,
         expected_control_state: ForkControlState,
         expected_control_version: u64,
     ) -> Result<Self, RunForkError> {
@@ -41,6 +43,7 @@ impl ForkAuthorization {
             actor_id: actor_id.into(),
             grant_id: grant_id.into(),
             reason: reason.into(),
+            expected_grant_version,
             expected_control_state,
             expected_control_version,
         };
@@ -48,6 +51,9 @@ impl ForkAuthorization {
         validate_identifier(&value.actor_id, "actor_id")?;
         validate_identifier(&value.grant_id, "grant_id")?;
         validate_identifier(&value.reason, "reason")?;
+        if value.expected_grant_version == 0 {
+            return Err(RunForkError::InvalidGrantVersion);
+        }
         if value.expected_control_version == 0 {
             return Err(RunForkError::InvalidControlVersion);
         }
@@ -171,11 +177,50 @@ pub trait ForkReferencePolicy {
     ) -> bool;
 }
 
+/// Current, versioned authorization read by a conditional fork commit. The
+/// grant is deliberately resolved by the authority at commit time rather than
+/// trusted from a request object.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ForkGrant {
+    version: u64,
+}
+impl ForkGrant {
+    pub fn new(version: u64) -> Result<Self, RunForkError> {
+        if version == 0 {
+            return Err(RunForkError::InvalidGrantVersion);
+        }
+        Ok(Self { version })
+    }
+    #[must_use]
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+}
+
+/// Authorization authority used by a durable conditional commit. Implementors
+/// must return `None` for a revoked or otherwise unavailable grant.
+pub trait ForkGrantAuthority {
+    fn current_grant(
+        &mut self,
+        tenant_id: &str,
+        actor_id: &str,
+        grant_id: &str,
+    ) -> Option<ForkGrant>;
+}
+
 /// Dynamic run state is at a lifecycle authority, never caller input or a
 /// mutable field cached in the fork binding. A durable adapter evaluates this
 /// record conditionally with the child insert.
 pub trait ForkRunLifecycle {
     fn current(&mut self, tenant_id: &str, run_id: &str) -> Option<RunLifecycle>;
+}
+
+/// One durable operation: it must conditionally revalidate grant revision,
+/// lifecycle state/version/final lock, every attested live reference and the
+/// idempotency digest, then persist child, receipt and audit event together.
+/// An unavailable or changed precondition has no durable side effect.
+pub trait ForkCommitPort {
+    fn commit_conditionally(&mut self, request: ForkRequest) -> Result<ForkReceipt, RunForkError>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -262,7 +307,7 @@ impl ForkReferencePolicy for InMemoryForkReferencePolicy {
 
 #[derive(Default)]
 pub struct InMemoryForkGrantAuthority {
-    grants: BTreeSet<(String, String, String)>,
+    grants: BTreeMap<(String, String, String), u64>,
 }
 impl InMemoryForkGrantAuthority {
     pub fn authorize(
@@ -277,15 +322,27 @@ impl InMemoryForkGrantAuthority {
         validate_identifier(&tenant_id, "tenant_id")?;
         validate_identifier(&actor_id, "actor_id")?;
         validate_identifier(&grant_id, "grant_id")?;
-        self.grants.insert((tenant_id, actor_id, grant_id));
+        self.grants.insert((tenant_id, actor_id, grant_id), 1);
         Ok(())
     }
-    fn allows(&self, auth: &ForkAuthorization) -> bool {
-        self.grants.contains(&(
-            auth.tenant_id.clone(),
-            auth.actor_id.clone(),
-            auth.grant_id.clone(),
-        ))
+    pub fn authorize_at_version(
+        &mut self,
+        tenant_id: impl Into<String>,
+        actor_id: impl Into<String>,
+        grant_id: impl Into<String>,
+        version: u64,
+    ) -> Result<(), RunForkError> {
+        if version == 0 {
+            return Err(RunForkError::InvalidGrantVersion);
+        }
+        let tenant_id = tenant_id.into();
+        let actor_id = actor_id.into();
+        let grant_id = grant_id.into();
+        validate_identifier(&tenant_id, "tenant_id")?;
+        validate_identifier(&actor_id, "actor_id")?;
+        validate_identifier(&grant_id, "grant_id")?;
+        self.grants.insert((tenant_id, actor_id, grant_id), version);
+        Ok(())
     }
     pub fn revoke(&mut self, tenant_id: &str, actor_id: &str, grant_id: &str) {
         self.grants.remove(&(
@@ -295,11 +352,29 @@ impl InMemoryForkGrantAuthority {
         ));
     }
 }
+impl ForkGrantAuthority for InMemoryForkGrantAuthority {
+    fn current_grant(
+        &mut self,
+        tenant_id: &str,
+        actor_id: &str,
+        grant_id: &str,
+    ) -> Option<ForkGrant> {
+        self.grants
+            .get(&(
+                tenant_id.to_owned(),
+                actor_id.to_owned(),
+                grant_id.to_owned(),
+            ))
+            .copied()
+            .and_then(|version| ForkGrant::new(version).ok())
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct RunForkStore {
     originals: BTreeMap<(String, String), AttestedOriginalRun>,
     forks: BTreeMap<(String, String), ForkedRun>,
+    audit_events: BTreeMap<(String, String), ForkAuditEvent>,
     idempotency: BTreeMap<(String, String), (String, ForkReceipt)>,
 }
 impl RunForkStore {
@@ -341,17 +416,35 @@ impl RunForkStore {
         self.originals.insert(key, original);
         Ok(())
     }
-    pub fn fork<R: ArtifactRepository, P: ForkReferencePolicy, L: ForkRunLifecycle>(
+    pub fn fork<
+        R: ArtifactRepository,
+        P: ForkReferencePolicy,
+        G: ForkGrantAuthority,
+        L: ForkRunLifecycle,
+    >(
         &mut self,
         request: ForkRequest,
         artifacts: &mut R,
         policy: &mut P,
-        grants: &InMemoryForkGrantAuthority,
+        grants: &mut G,
         lifecycle: &mut L,
     ) -> Result<ForkReceipt, RunForkError> {
-        if !grants.allows(&request.authorization) {
-            return Err(RunForkError::Unauthorized);
-        }
+        self.commit_conditional(request, artifacts, policy, grants, lifecycle)
+    }
+
+    fn commit_conditional<
+        R: ArtifactRepository,
+        P: ForkReferencePolicy,
+        G: ForkGrantAuthority,
+        L: ForkRunLifecycle,
+    >(
+        &mut self,
+        request: ForkRequest,
+        artifacts: &mut R,
+        policy: &mut P,
+        grants: &mut G,
+        lifecycle: &mut L,
+    ) -> Result<ForkReceipt, RunForkError> {
         let key = (
             request.authorization.tenant_id.clone(),
             request.idempotency_key.clone(),
@@ -362,16 +455,40 @@ impl RunForkStore {
                 return Err(RunForkError::IdempotencyConflict);
             }
             let parent = self.parent(&request)?;
-            let lifecycle_record = validate_lifecycle(parent, &request.authorization, lifecycle)?;
-            validate_original(parent, artifacts, policy)?;
+            let lifecycle_record = validate_conditions(
+                parent,
+                &request.authorization,
+                artifacts,
+                policy,
+                grants,
+                lifecycle,
+            )?;
             if receipt.event.parent_control_version != lifecycle_record.control_version {
                 return Err(RunForkError::ControlStateConflict);
             }
             return Ok(receipt.clone());
         }
         let parent = self.parent(&request)?.clone();
-        let lifecycle_record = validate_lifecycle(&parent, &request.authorization, lifecycle)?;
-        validate_original(&parent, artifacts, policy)?;
+        // The first read is a preflight only. A durable implementation maps
+        // the second, identical condition set to one transaction/CAS directly
+        // before writing any record; this in-memory port makes that boundary
+        // executable and testable without exposing its storage internals.
+        validate_conditions(
+            &parent,
+            &request.authorization,
+            artifacts,
+            policy,
+            grants,
+            lifecycle,
+        )?;
+        let lifecycle_record = validate_conditions(
+            &parent,
+            &request.authorization,
+            artifacts,
+            policy,
+            grants,
+            lifecycle,
+        )?;
         let run_id = format!("fork_{digest}");
         if self
             .forks
@@ -399,9 +516,20 @@ impl RunForkStore {
         };
         let receipt = ForkReceipt {
             fork: fork.clone(),
-            event,
+            event: event.clone(),
         };
+        // No fallible work remains after the durable condition gate. These
+        // three inserts are the in-memory equivalent of one transaction:
+        // child, immutable audit event and idempotency receipt either all
+        // become visible or none does.
         self.forks.insert((parent.tenant_id, run_id), fork);
+        self.audit_events.insert(
+            (
+                receipt.event.tenant_id.clone(),
+                receipt.event.event_id.clone(),
+            ),
+            event,
+        );
         self.idempotency.insert(key, (digest, receipt.clone()));
         Ok(receipt)
     }
@@ -418,6 +546,69 @@ impl RunForkStore {
             .keys()
             .filter(|(tenant, _)| tenant == tenant_id)
             .count()
+    }
+    pub fn audit_count(&self, tenant_id: &str) -> usize {
+        self.audit_events
+            .keys()
+            .filter(|(tenant, _)| tenant == tenant_id)
+            .count()
+    }
+}
+
+/// In-memory realization of the one conditional commit port. Its dependencies
+/// are generic authority interfaces, so callers cannot accidentally rely on
+/// `InMemoryForkGrantAuthority` semantics when implementing a durable adapter.
+pub struct InMemoryForkCommitPort<'a, R, P, G, L> {
+    store: &'a mut RunForkStore,
+    artifacts: &'a mut R,
+    policy: &'a mut P,
+    grants: &'a mut G,
+    lifecycle: &'a mut L,
+}
+impl<'a, R, P, G, L> InMemoryForkCommitPort<'a, R, P, G, L>
+where
+    R: ArtifactRepository,
+    P: ForkReferencePolicy,
+    G: ForkGrantAuthority,
+    L: ForkRunLifecycle,
+{
+    pub fn new(
+        store: &'a mut RunForkStore,
+        artifacts: &'a mut R,
+        policy: &'a mut P,
+        grants: &'a mut G,
+        lifecycle: &'a mut L,
+    ) -> Self {
+        Self {
+            store,
+            artifacts,
+            policy,
+            grants,
+            lifecycle,
+        }
+    }
+    pub fn fork_count(&self, tenant_id: &str) -> usize {
+        self.store.fork_count(tenant_id)
+    }
+    pub fn audit_count(&self, tenant_id: &str) -> usize {
+        self.store.audit_count(tenant_id)
+    }
+}
+impl<R, P, G, L> ForkCommitPort for InMemoryForkCommitPort<'_, R, P, G, L>
+where
+    R: ArtifactRepository,
+    P: ForkReferencePolicy,
+    G: ForkGrantAuthority,
+    L: ForkRunLifecycle,
+{
+    fn commit_conditionally(&mut self, request: ForkRequest) -> Result<ForkReceipt, RunForkError> {
+        self.store.commit_conditional(
+            request,
+            self.artifacts,
+            self.policy,
+            self.grants,
+            self.lifecycle,
+        )
     }
 }
 
@@ -455,6 +646,40 @@ fn validate_original<R: ArtifactRepository, P: ForkReferencePolicy>(
     )
 }
 
+fn validate_conditions<
+    R: ArtifactRepository,
+    P: ForkReferencePolicy,
+    G: ForkGrantAuthority,
+    L: ForkRunLifecycle,
+>(
+    original: &AttestedOriginalRun,
+    authorization: &ForkAuthorization,
+    artifacts: &mut R,
+    policy: &mut P,
+    grants: &mut G,
+    lifecycle: &mut L,
+) -> Result<RunLifecycle, RunForkError> {
+    validate_grant(authorization, grants)?;
+    let lifecycle_record = validate_lifecycle(original, authorization, lifecycle)?;
+    validate_original(original, artifacts, policy)?;
+    Ok(lifecycle_record)
+}
+fn validate_grant<G: ForkGrantAuthority>(
+    authorization: &ForkAuthorization,
+    grants: &mut G,
+) -> Result<(), RunForkError> {
+    let grant = grants
+        .current_grant(
+            &authorization.tenant_id,
+            &authorization.actor_id,
+            &authorization.grant_id,
+        )
+        .ok_or(RunForkError::Unauthorized)?;
+    if grant.version != authorization.expected_grant_version {
+        return Err(RunForkError::Unauthorized);
+    }
+    Ok(())
+}
 fn validate_lifecycle<L: ForkRunLifecycle>(
     original: &AttestedOriginalRun,
     authorization: &ForkAuthorization,
@@ -536,6 +761,7 @@ fn request_digest(request: &ForkRequest) -> String {
         ForkControlState::Paused => 1,
         ForkControlState::Completed => 2,
     }]);
+    hasher.update(request.authorization.expected_grant_version.to_be_bytes());
     hasher.update(request.authorization.expected_control_version.to_be_bytes());
     format!("sha256:{:x}", hasher.finalize())
 }
@@ -544,6 +770,7 @@ pub enum RunForkError {
     InvalidIdentifier { field: &'static str },
     InvalidCutoff,
     InvalidControlVersion,
+    InvalidGrantVersion,
     ParentNotFound,
     LifecycleUnavailable,
     RunAlreadyRegistered,
