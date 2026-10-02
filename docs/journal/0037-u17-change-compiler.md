@@ -1,21 +1,37 @@
-# U17 — compiler de cambios sellados
+# U17 — compilador de cambios autorizados y sellados
 
-U17 introduce una frontera pura `change_compiler`: sólo convierte una
-`FinalEligibilityDecision::Eligible` y un `ChangeSpec` con commitments exactos
-de bridge/plan en `EntityDraft` inmutables. La identidad de readiness se coteja
-antes de leer operaciones; una decisión inelegible o un commitment distinto
-falla cerrada.
+U17 convierte exclusivamente un `AuthorizedChangeSpec` en un `EntityDraft`
+inmutable. La frontera pública empieza en `UntrustedChangeSpec`: cualquiera
+puede describir el cambio que propone, pero no puede fabricar la capacidad que
+lo compila. `AuthorizedChangeSpec`, `CompilationAuthorization` y el
+compositor `TrustedChangeAuthorizer` no exponen constructores públicos.
 
-El primer RED fue `crates/core/tests/change_compiler.rs`: el import de
-`change_compiler` no resolvía porque el módulo no existía. El primer GREEN
-cubre el rechazo de readiness inelegible. La integración interna compone una
-tripleta real U14→U16→U20→U35 y prueba que sólo esa readiness produce un draft
-con digest determinista; una variación de commitment queda bloqueada.
+La composición confiable interna exige una decisión U35 `Eligible` y el bridge
+U16 real con grado `MechanismProxy`. Sella tenant, scope completo,
+`ArtifactReference` del snapshot, commitment de bridge y plan, ruta,
+mecanismo, tipo/operación Core, identidad y versión exactas de entidad, y una
+precondición ejecutable tipada. El compilador vuelve a cotejar esos valores
+antes de materializar el draft; por tanto ni un cambio posterior a la
+autorización ni un commitment público leído por un consumidor equivalen a
+autoridad.
 
-Este corte sólo soporta operaciones `add` de un `Flow` Core mínimo: prioridad,
-al menos un nodo `end` y un outcome permitido por el pin 0.5.0. Valida digest
-de precondición, identidad de entidad y versión semver. `replace`/`disable`,
-otros EntityKinds, resolver la clausura completa Core y validar el schema
-upstream completo son extensiones que deben ser cortes posteriores; no se
-aceptan silenciosamente. U17 no escribe al registry, no ejecuta Core, no evalúa
-y no libera. Esas responsabilidades quedan en U18/U19/U21.
+El RED inicial fue `crates/core/tests/change_compiler.rs`: el import de
+`change_compiler` no resolvía porque el módulo no existía. Las regresiones
+cubren tenant, scope, snapshot, ruta, mecanismo, tipo, operación, identidad,
+versión y precondición divergentes, además de una mutación interna simulada
+después de sellar. Los doctests `compile_fail` prueban que un consumidor no
+puede construir ni el spec autorizado ni el compositor confiable.
+
+Este corte acepta una sola operación `add` sobre un `Flow` Core mínimo:
+identificador canónico, semver acotado y canónico, prioridad no negativa y
+nodos `end` únicos sin transiciones contradictorias. `replace`/`disable`, los
+demás EntityKinds y la clausura completa de schemas Core son cortes futuros;
+fallan cerrados ahora. U17 no escribe registry, no ejecuta Core, no evalúa ni
+libera: U18 y cortes posteriores revalidarán atómicamente los metadatos
+preservados en el draft antes de cualquier efecto mutable.
+
+Decisión abierta explícita: el compositor crate-private es una frontera
+confiable temporal hasta que exista el adaptador gobernado de política/autoridad
+de U18. La capacidad ya es opaca para consumidores, pero la autoridad externa
+persistida y su lifecycle no pertenecen a este corte y no deben inferirse de
+getters de commitments.
