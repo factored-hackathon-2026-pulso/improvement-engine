@@ -30,6 +30,17 @@ green unit test as proof that a broader product flow is complete.
   or Agent Core. A versioned recurrence detector counts distinct Arranque
   cases sharing the leading opaque Copilot-query signature; its default
   support floor is 20, configurable from the CLI and committed in provenance.
+  After a supported recurrence becomes the primary signal and the core has
+  admitted an opportunity candidate, the runner now evaluates the selected
+  opaque signature against distinct queried Reproduccion cases. This is
+  strictly post-selection and never feeds back into discovery, candidate
+  scoring, or proposal construction. The JSON result/timeline contain only
+  policy/source commitments, aggregate counts/rate, a safe status and a
+  non-causal interpretation; no selected candidate means no holdout result.
+  A synthetic CLI regression proves that changing only Reproduccion signatures
+  changes holdout status while Arranque metrics, proposal hypothesis and
+  candidate count stay fixed. The actual augmented-sample smoke is documented
+  once in `docs/architecture/e0-recurrence-holdout.md`.
   Technical errors remain an independent metric. If both qualify, the explicit
   primary policy prefers direct observed technical failures over semantically
   opaque query recurrence; every measured metric remains visible, but only the
@@ -40,24 +51,34 @@ green unit test as proof that a broader product flow is complete.
   semantic, causal, lift, or real-bank claim. Only the selected supported
   signal proceeds into the local Scout/verifier path; zero positive support
   produces an explicit no-op. The formal route is always `do_nothing`.
-  Actual local E0 smoke (2026-10-02) used 200 Arranque cases and excluded
-  1,800 Reproduccion cases. The leading opaque query signature recurred in
+  Actual local E0 smoke (2026-10-02) used 200 Arranque cases; the total
+  Reproduccion population is intentionally suppressed. The leading opaque query signature recurred in
   154/200 cases (policy floor 20); technical errors remained 0/187 supported,
   with 13 missing. The runner recorded three Scout candidates and one
   exploratory proposal. Persisted output contains the exact
   configured cutoff and no known PII sentinels or evaluator labels.
   This demonstrates only bounded local detection/simulation behavior, not
   native Agent Core execution, causal validation, release, or business lift.
-  Persisted output contains the exact configured cutoff and no known PII
-  sentinels or evaluator labels. This demonstrates only bounded local
-  detection/simulation behavior, not native Agent Core execution, causal
-  validation, release, or business lift. Original-bank CLI was exercised
-  against the partitioned call-center CSV source and returned
-  `unsupported_source`, no signal, zero
-  candidates, and formal `do_nothing`; this is truthful manifest preparation,
+  Original-bank CLI was exercised against the partitioned call-center CSV
+  source and returned `unsupported_source`, no signal, zero candidates, and
+  formal `do_nothing`; this is truthful manifest preparation,
   not completed discovery. A supported original-bank contact/repeat/SLA
   projection remains a follow-up slice; technical errors are not inferred from
   those tables.
+- Windows local E0 convenience wrapper: scripts/run-local-e0-e2e.ps1 invokes
+  the opt-in local simulation with locked/offline Cargo, required UTC cutoff,
+  default Arranque/support settings and a fresh non-overlapping output path;
+  observed existing reparse-point components fail closed before Cargo runs.
+  Mapped-drive/UNC alias equivalence and concurrent path mutation are outside
+  this guarantee. It prints only allowlisted aggregate summaries, including
+  post-selection holdout status and, only when support meets the privacy floor,
+  matching/queried counts marked descriptive-only; below the floor all exact
+  holdout counts/rate are null. The E0 top-level excluded-replay total is
+  always null (including absent/unavailable holdout), and the wrapper prints
+  `counts=suppressed` / `replay_excluded=suppressed` as applicable.
+  Missing holdout is `none`. Pester tests use a temporary
+  Cargo shim and do not substitute for a real package run. Usage and safety
+  boundaries are in docs/local-e0-e2e-runner.md.
 - U13-A / Issue #43: opaque, verified Scout-candidate admission. Candidate
   batches are canonical and atomic; durable reload validates member and batch
   commitments; downstream code receives a read-only capability rather than a
@@ -214,6 +235,17 @@ green unit test as proof that a broader product flow is complete.
   admits Frozen only until U20-E/U27 supplies a sealed outcome adapter. This is not the
   full U23 E0 runner, CampaignManifest, scoring, or replay-result flow; those
   remain dependent on U09, U20-E and U27.
+
+## Still pending for the complete product flow
+
+- Native Agent Core/Jev invocation and artifact execution are not connected;
+  local Scout, proposal and holdout outputs remain simulation/adapter evidence.
+- The E0 holdout checks descriptive recurrence only. Causal/business lift,
+  customer resolution, and successful automation cannot be inferred from this
+  augmented sample and have not been measured.
+- The full stateful evaluation/release loop is not yet integrated end to end.
+  U26 is an isolated synthetic-bank sandbox contract, not proof of a complete
+  E0 candidate-vs-baseline deployment or canary flow.
 
 ## Delivery discipline
 

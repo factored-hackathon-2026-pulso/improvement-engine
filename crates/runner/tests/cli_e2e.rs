@@ -92,10 +92,17 @@ fn e0_fixture(root: &Path, discovery_status: &str, replay_status: &str) {
     );
 }
 
-fn e0_recurrence_fixture(root: &Path, replay_signature: &str) {
+fn e0_recurrence_fixture(
+    root: &Path,
+    replay_signature: &str,
+    replay_query_cases: usize,
+    matching_replay_cases: usize,
+) {
+    assert!(matching_replay_cases <= replay_query_cases);
+    assert!(replay_query_cases <= 21);
     e0_fixture(root, "ok", "ok");
     let data = root.join("datos");
-    let case_ids = (1..=22)
+    let case_ids = (1..=42)
         .map(|ordinal| format!("private-case-{ordinal}"))
         .collect::<Vec<_>>();
     let case_id_refs = case_ids.iter().map(String::as_str).collect::<Vec<_>>();
@@ -118,19 +125,19 @@ fn e0_recurrence_fixture(root: &Path, replay_signature: &str) {
             large_strings(case_id_refs.clone()),
             Arc::new(
                 TimestampMicrosecondArray::from(
-                    (0..22)
+                    (0..42)
                         .map(|offset| at + offset * 1_000_000)
                         .collect::<Vec<_>>(),
                 )
                 .with_timezone("UTC"),
             ),
-            large_strings(vec!["chat"; 22]),
-            large_strings(vec!["es"; 22]),
-            large_strings(vec!["support"; 22]),
-            large_strings(vec!["normal"; 22]),
+            large_strings(vec!["chat"; 42]),
+            large_strings(vec!["es"; 42]),
+            large_strings(vec!["support"; 42]),
+            large_strings(vec!["normal"; 42]),
         ],
     );
-    let call_ids = (1..=22)
+    let call_ids = (1..=42)
         .map(|ordinal| format!("private-call-{ordinal}"))
         .collect::<Vec<_>>();
     write_parquet(
@@ -156,38 +163,40 @@ fn e0_recurrence_fixture(root: &Path, replay_signature: &str) {
             large_strings(case_id_refs),
             Arc::new(
                 TimestampMicrosecondArray::from(
-                    (0..22)
+                    (0..42)
                         .map(|offset| at + offset * 1_000_000 + 10)
                         .collect::<Vec<_>>(),
                 )
                 .with_timezone("UTC"),
             ),
             large_strings(call_ids.iter().map(String::as_str).collect()),
-            large_strings(vec!["tree"; 22]),
-            large_strings(vec!["status_lookup"; 22]),
-            large_strings(vec!["read"; 22]),
-            large_strings(vec!["ok"; 22]),
-            Arc::new(BooleanArray::from(vec![Some(true); 22])),
-            large_strings(vec!["{}"; 22]),
-            Arc::new(Int32Array::from(vec![Some(0); 22])),
-            Arc::new(Int64Array::from(vec![Some(20); 22])),
+            large_strings(vec!["tree"; 42]),
+            large_strings(vec!["status_lookup"; 42]),
+            large_strings(vec!["read"; 42]),
+            large_strings(vec!["ok"; 42]),
+            Arc::new(BooleanArray::from(vec![Some(true); 42])),
+            large_strings(vec!["{}"; 42]),
+            Arc::new(Int32Array::from(vec![Some(0); 42])),
+            Arc::new(Int64Array::from(vec![Some(20); 42])),
         ],
     );
     let mut query_case_ids = (1..=20)
         .map(|ordinal| format!("private-case-{ordinal}"))
         .collect::<Vec<_>>();
-    query_case_ids.extend([
-        "private-case-1".into(),
-        "private-case-21".into(),
-        "private-case-22".into(),
-    ]);
+    query_case_ids.extend(["private-case-1".into(), "private-case-21".into()]);
+    query_case_ids.extend(
+        (22..=42)
+            .take(replay_query_cases)
+            .map(|ordinal| format!("private-case-{ordinal}")),
+    );
     let mut signatures = vec!["normalized-query-pattern"; 20];
-    signatures.extend([
-        "normalized-query-pattern",
-        "unique-pattern",
-        replay_signature,
+    signatures.extend(["normalized-query-pattern", "unique-pattern"]);
+    signatures.extend(vec!["normalized-query-pattern"; matching_replay_cases]);
+    signatures.extend(vec![
+        replay_signature;
+        replay_query_cases - matching_replay_cases
     ]);
-    let query_ids = (1..=23)
+    let query_ids = (1..=query_case_ids.len())
         .map(|ordinal| format!("private-query-{ordinal}"))
         .collect::<Vec<_>>();
     write_parquet(
@@ -208,16 +217,54 @@ fn e0_recurrence_fixture(root: &Path, replay_signature: &str) {
             large_strings(query_case_ids.iter().map(String::as_str).collect()),
             Arc::new(
                 TimestampMicrosecondArray::from(
-                    (0..23)
-                        .map(|offset| at + offset * 1_000_000 + 20)
+                    (0..query_ids.len())
+                        .map(|offset| at + offset as i64 * 1_000_000 + 20)
                         .collect::<Vec<_>>(),
                 )
                 .with_timezone("UTC"),
             ),
             large_strings(signatures),
-            large_strings(vec!["tool:status_lookup"; 23]),
+            large_strings(vec!["tool:status_lookup"; query_ids.len()]),
         ],
     );
+}
+
+fn run_e0_cli(input: &Path, output: &Path) -> serde_json::Value {
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(input)
+        .args(["--output"])
+        .arg(output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "21",
+        ])
+        .output()
+        .expect("run E0 fixture through CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+        .expect("valid result JSON")
 }
 
 #[test]
@@ -273,7 +320,7 @@ fn binary_persists_simulated_result_and_timeline_without_source_identifiers() {
     assert_eq!(result["proposal"]["status"], "simulated_unverified");
     assert_eq!(result["formal_route"], "do_nothing");
     assert_eq!(result["discovery_case_count"], 1);
-    assert_eq!(result["excluded_replay_case_count"], 1);
+    assert!(result["excluded_replay_case_count"].is_null());
     assert_eq!(result["signal"]["numerator"], 1);
     assert_eq!(result["signal"]["denominator"], 1);
     assert!(timeline.contains("2025-07-01T00:00:00Z"));
@@ -398,11 +445,12 @@ fn binary_emits_no_opportunity_when_discovery_has_no_positive_support() {
             .iter()
             .all(|signal| signal["metric_id"] != "e0_recurring_copilot_query_cases")
     );
-    assert_eq!(result["excluded_replay_case_count"], 1);
+    assert!(result["excluded_replay_case_count"].is_null());
     assert_eq!(result["terminal_status"], "complete_no_opportunity");
     assert!(result["candidates"].as_array().unwrap().is_empty());
     assert!(result["proposal"].is_null());
     assert!(result["evaluation"].is_null());
+    assert!(result["e0_recurrence_holdout"].is_null());
     assert!(timeline.contains("no_opportunity"));
     assert!(!timeline.contains("improvement_draft"));
     assert!(!timeline.contains("jev_or_agent_core_scout"));
@@ -413,7 +461,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("e0-recurrence");
     let output = temp.path().join("runs-recurrence");
-    e0_recurrence_fixture(&input, "normalized-query-pattern");
+    e0_recurrence_fixture(&input, "normalized-query-pattern", 21, 21);
 
     let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
         .args([
@@ -452,9 +500,14 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
         serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
             .expect("valid result JSON");
     let serialized = result.to_string();
+    let timeline: Vec<serde_json::Value> = fs::read_to_string(run_dir.join("events.ndjson"))
+        .expect("timeline file")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("valid timeline event"))
+        .collect();
 
     assert_eq!(result["terminal_status"], "complete_simulated");
-    assert_eq!(result["excluded_replay_case_count"], 1);
+    assert!(result["excluded_replay_case_count"].is_null());
     assert_eq!(result["primary_signal_policy"], "local_primary_signal_v2");
     assert_eq!(
         result["signal"]["metric_id"],
@@ -463,6 +516,28 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
     assert_eq!(result["signal"]["numerator"], 20);
     assert_eq!(result["signal"]["denominator"], 21);
     assert_eq!(result["signal"]["minimum_support"], 20);
+    assert_eq!(result["e0_recurrence_holdout"]["status"], "replicated");
+    assert_eq!(
+        result["e0_recurrence_holdout"]["reproduction_case_count"],
+        21
+    );
+    assert_eq!(result["e0_recurrence_holdout"]["queried_case_count"], 21);
+    assert_eq!(result["e0_recurrence_holdout"]["matching_case_count"], 21);
+    assert_eq!(
+        result["e0_recurrence_holdout"]["interpretation"],
+        "descriptive_recurrence_only_no_causal_or_outcome_claim"
+    );
+    assert_eq!(
+        result["events"].as_array().unwrap().last().unwrap()["stage"],
+        "e0_recurrence_holdout"
+    );
+    assert_eq!(timeline.last().unwrap()["stage"], "e0_recurrence_holdout");
+    assert!(
+        timeline.last().unwrap()["detail"]
+            .as_str()
+            .unwrap()
+            .contains("no causal or outcome claim")
+    );
     assert_eq!(result["proposal"]["status"], "simulated_unverified");
     assert_eq!(result["proposal"]["execution_status"], "not_executed");
     assert_eq!(result["formal_route"], "do_nothing");
@@ -471,6 +546,74 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
     assert!(!serialized.contains("private-case-"));
     assert!(!serialized.contains("private-query-"));
     assert!(!serialized.contains("normalized-query-pattern"));
+
+    let changed_holdout_input = temp.path().join("e0-recurrence-changed-holdout");
+    let changed_holdout_output = temp.path().join("runs-recurrence-changed-holdout");
+    e0_recurrence_fixture(&changed_holdout_input, "different-replay-pattern", 21, 0);
+    let changed_holdout = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&changed_holdout_input)
+        .args(["--output"])
+        .arg(&changed_holdout_output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "21",
+        ])
+        .output()
+        .expect("run with changed Reproduccion-only query signature");
+    assert!(
+        changed_holdout.status.success(),
+        "{}",
+        String::from_utf8_lossy(&changed_holdout.stderr)
+    );
+    let changed_holdout_dir = fs::read_dir(&changed_holdout_output)
+        .expect("changed holdout output directory")
+        .next()
+        .expect("changed holdout run")
+        .expect("read changed holdout run")
+        .path();
+    let changed_holdout_result: serde_json::Value = serde_json::from_slice(
+        &fs::read(changed_holdout_dir.join("result.json")).expect("changed holdout result"),
+    )
+    .expect("valid changed holdout result");
+    assert_eq!(
+        changed_holdout_result["signal"]["numerator"],
+        result["signal"]["numerator"]
+    );
+    assert_eq!(
+        changed_holdout_result["signal"]["denominator"],
+        result["signal"]["denominator"]
+    );
+    assert_eq!(
+        changed_holdout_result["proposal"]["hypothesis"],
+        result["proposal"]["hypothesis"]
+    );
+    assert_eq!(
+        changed_holdout_result["candidates"]
+            .as_array()
+            .unwrap()
+            .len(),
+        result["candidates"].as_array().unwrap().len()
+    );
+    assert_eq!(
+        changed_holdout_result["e0_recurrence_holdout"]["matching_case_count"],
+        0
+    );
+    assert_eq!(
+        changed_holdout_result["e0_recurrence_holdout"]["status"],
+        "not_observed"
+    );
 
     fs::write(
         input.join("datos/signal.parquet"),
@@ -533,4 +676,49 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
         result["signal"]["pattern_ref"]
     );
     assert_eq!(changed_result["candidates"].as_array().unwrap().len(), 3);
+}
+
+#[test]
+fn binary_suppresses_holdout_counts_for_one_through_four_matching_cases() {
+    for matching_cases in 1..=4 {
+        let temp = TempDir::new().expect("temp directory");
+        let input = temp.path().join("e0-low-support");
+        let output = temp.path().join("runs-low-support");
+        e0_recurrence_fixture(&input, "different-replay-pattern", 21, matching_cases);
+
+        let result = run_e0_cli(&input, &output);
+        assert_eq!(
+            result["e0_recurrence_holdout"]["status"],
+            "insufficient_support"
+        );
+        assert!(result["excluded_replay_case_count"].is_null());
+        assert!(result["e0_recurrence_holdout"]["reproduction_case_count"].is_null());
+        assert!(result["e0_recurrence_holdout"]["queried_case_count"].is_null());
+        assert!(result["e0_recurrence_holdout"]["matching_case_count"].is_null());
+        assert!(result["e0_recurrence_holdout"]["recurrence_rate_basis_points"].is_null());
+        let event = result["events"].as_array().unwrap().last().unwrap();
+        assert_eq!(event["status"], "insufficient_support");
+        assert!(
+            event["detail"]
+                .as_str()
+                .unwrap()
+                .contains("exact counts suppressed")
+        );
+    }
+}
+
+#[test]
+fn binary_suppresses_replay_count_when_holdout_denominator_is_below_floor() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0-low-denominator");
+    let output = temp.path().join("runs-low-denominator");
+    e0_recurrence_fixture(&input, "different-replay-pattern", 4, 0);
+
+    let result = run_e0_cli(&input, &output);
+    assert_eq!(
+        result["e0_recurrence_holdout"]["status"],
+        "insufficient_support"
+    );
+    assert!(result["e0_recurrence_holdout"]["queried_case_count"].is_null());
+    assert!(result["excluded_replay_case_count"].is_null());
 }

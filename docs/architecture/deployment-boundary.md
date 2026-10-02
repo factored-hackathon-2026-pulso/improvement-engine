@@ -9,17 +9,18 @@ has been deployed.
 | Capability | Owner | Current status | Evidence needed before it is operational |
 |---|---|---|---|
 | Domain, worker, contracts and service telemetry | `improvement-engine` | Implemented incrementally by vertical slices | Slice-specific code, tests and CI |
-| Local Podman Compose, LocalStack, disposable PostgreSQL and local smoke | `improvement-engine` | **Not yet implemented in this repository** | Versioned `local/` manifest, launcher and opt-in smoke contract; infra must not be the fallback owner |
+| Local Podman Compose, LocalStack, disposable PostgreSQL and local smoke | `improvement-engine` | Compose manifest, Windows launcher and contract tests exist; **runtime smoke is not verified** (Windows Podman currently returns `Access is denied`) | Successful opt-in smoke with the selected Windows Podman backend, including healthy PostgreSQL/LocalStack and E0 CLI execution; infra must not be the fallback owner |
 | Ephemeral PostgreSQL migration CI | `improvement-engine` | Implemented in the service CI | The isolated CI job and its destructive-test consent |
 | AWS network, IAM, storage, database, compute and infrastructure alarms | `infra` | Terraform declarations are in progress; no apply is implied | Approved backend/OIDC/inputs, reviewed plan and separately authorized apply |
 | Engine ingress and debug console exposure | Joint contract; infra provisions only after it is complete | **`dependency_blocked`** | Listener, health, auth, identity proxy and private-network contract, plus integration test |
 | Agent Core and model routing | External dependencies | Not owned here | Consumer contract and integration evidence |
 
-The engine owns local development even while the current local stack is
-missing. Removing legacy local assets from `infra` is correct only when the
-engine-local replacement is added in the same or a linked, verified slice.
-The GitHub Actions PostgreSQL service is not a substitute for a developer
-Compose/LocalStack stack.
+The engine owns local development. Its versioned `local/compose.yaml`, local
+launcher and structural/contract tests are present, but they do not prove the
+stack runs on this Windows host. Podman currently fails with `Access is denied`,
+so the smoke remains an active environment blocker and no operational local
+stack is claimed. The GitHub Actions PostgreSQL service is not a substitute for
+a developer Compose/LocalStack stack.
 
 ## Concrete debug-ingress decision
 
