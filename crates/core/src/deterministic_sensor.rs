@@ -51,12 +51,24 @@ pub struct DeterministicSignal {
     pub missing: u64,
     pub coverage_basis_points: u16,
     pub source_snapshot_ref: ArtifactReference,
+    pub tenant_id: String,
+    pub grant_id: String,
+    pub authority_ref: String,
     pub source_contract_digest: String,
     pub source_digest: String,
     pub transform_digest: String,
     pub cutoff_unix_seconds: u64,
     pub query_receipts: Vec<QueryReceipt>,
     pub digest: String,
+}
+
+impl DeterministicSignal {
+    #[must_use]
+    pub fn has_valid_digest(&self) -> bool {
+        let mut unsigned = self.clone();
+        let expected = std::mem::take(&mut unsigned.digest);
+        expected == digest_of(&unsigned)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -93,6 +105,9 @@ impl DeterministicSensor {
                 || receipt.sequence != expected_sequence
                 || receipt.session_id != baseline.session_id
                 || receipt.run_id != baseline.run_id
+                || receipt.tenant_id != baseline.tenant_id
+                || receipt.grant_id != baseline.grant_id
+                || receipt.authority_ref != baseline.authority_ref
                 || receipt.source_snapshot_ref != baseline.source_snapshot_ref
                 || receipt.source_contract_digest != baseline.source_contract_digest
                 || receipt.source_digest != baseline.source_digest
@@ -130,6 +145,9 @@ impl DeterministicSensor {
             missing,
             coverage_basis_points,
             source_snapshot_ref: baseline.source_snapshot_ref.clone(),
+            tenant_id: baseline.tenant_id.clone(),
+            grant_id: baseline.grant_id.clone(),
+            authority_ref: baseline.authority_ref.clone(),
             source_contract_digest: baseline.source_contract_digest.clone(),
             source_digest: baseline.source_digest.clone(),
             transform_digest: baseline.transform_digest.clone(),

@@ -33,6 +33,7 @@ pub struct LabAccess {
     pub tenant_id: String,
     pub purpose: String,
     pub grant_id: String,
+    pub authority_ref: String,
     pub snapshot_ref: ArtifactReference,
     pub expires_at_unix_seconds: u64,
 }
@@ -44,6 +45,7 @@ impl LabAccess {
         tenant_id: impl Into<String>,
         purpose: impl Into<String>,
         grant_id: impl Into<String>,
+        authority_ref: impl Into<String>,
         snapshot_ref: ArtifactReference,
         expires_at_unix_seconds: u64,
     ) -> Self {
@@ -52,6 +54,7 @@ impl LabAccess {
             tenant_id: tenant_id.into(),
             purpose: purpose.into(),
             grant_id: grant_id.into(),
+            authority_ref: authority_ref.into(),
             snapshot_ref,
             expires_at_unix_seconds,
         }
@@ -397,6 +400,9 @@ impl LabSession {
 pub struct QueryReceipt {
     pub session_id: String,
     pub run_id: String,
+    pub tenant_id: String,
+    pub grant_id: String,
+    pub authority_ref: String,
     pub sequence: u64,
     pub digest: String,
     pub query_digest: String,
@@ -570,6 +576,9 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
         let mut receipt = QueryReceipt {
             session_id: session_id.to_owned(),
             run_id: session.access.run_id.clone(),
+            tenant_id: session.access.tenant_id.clone(),
+            grant_id: session.access.grant_id.clone(),
+            authority_ref: session.access.authority_ref.clone(),
             sequence,
             digest: String::new(),
             query_digest,

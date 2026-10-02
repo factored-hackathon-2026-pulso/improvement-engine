@@ -9,6 +9,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+pub mod autonomous_scout;
 pub mod core_task;
 pub mod deterministic_sensor;
 pub mod durable_jobs;

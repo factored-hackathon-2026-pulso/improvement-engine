@@ -29,6 +29,7 @@ fn access() -> LabAccess {
         "bank_demo",
         "investigation",
         "grant-1",
+        "authority-1",
         reference(),
         200,
     )
