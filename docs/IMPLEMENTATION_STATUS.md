@@ -70,9 +70,10 @@ green unit test as proof that a broader product flow is complete.
   atomically evaluating that predicate and writing to the registry. This slice
   neither persists, executes nor releases a candidate.
 - U23-P / Issue #47: the narrow Frozen/Continuous temporal protocol over
-  U04-B's replay cutoff and U22/U33 governed admission. It binds the temporal
-  claim to U33's authorized receipt clock, forbids outcome feedback in Frozen,
-  and requires an already-observable outcome in Continuous. This is not the
+  U04-B's replay cutoff and U22/U33 governed admission. An opaque, trusted
+  evidence commitment (not caller-provided timestamps) is part of the U33
+  canonical receipt; Frozen forbids outcome feedback and Continuous requires
+  an already-observable, provenanced outcome. This is not the
   full U23 E0 runner, CampaignManifest, scoring, or replay-result flow; those
   remain dependent on U09, U20-E and U27.
 

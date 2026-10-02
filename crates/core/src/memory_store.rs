@@ -115,6 +115,9 @@ pub struct MemoryUseReceipt {
     pub grant_id: String,
     pub purpose: String,
     pub allowed_at_unix_seconds: u64,
+    /// Opaque commitment emitted by the U23 temporal evidence issuer. `None`
+    /// is retained only for pre-U23/U22 uses.
+    pub temporal_commitment: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -170,6 +173,7 @@ pub trait MemoryPublisher {
         authority: &A,
         scope: MemoryScope,
         access: WikiAccess,
+        temporal_commitment: Option<String>,
         snapshot_ref: ArtifactReference,
     ) -> Result<MemoryUseReceipt, MemoryError>;
 }
@@ -184,6 +188,7 @@ pub trait MemoryUseReceiptAttestationPort {
         authority: &A,
         scope: &MemoryScope,
         access: &WikiAccess,
+        temporal_commitment: Option<&str>,
         receipt: &MemoryUseReceipt,
     ) -> Result<(), MemoryError>;
 }
@@ -253,6 +258,7 @@ impl InMemoryMemoryRegistry {
         authority: &A,
         scope: &MemoryScope,
         access: &WikiAccess,
+        temporal_commitment: Option<&str>,
     ) -> Result<MemoryUseReceipt, MemoryError> {
         let head = self
             .heads
@@ -275,7 +281,13 @@ impl InMemoryMemoryRegistry {
             access.allowed_at_unix_seconds,
         )?;
         Ok(MemoryUseReceipt {
-            receipt_id: receipt_id(scope, access, &head.snapshot_ref, head.head_version),
+            receipt_id: receipt_id(
+                scope,
+                access,
+                &head.snapshot_ref,
+                head.head_version,
+                temporal_commitment,
+            ),
             scope: scope.clone(),
             snapshot_ref: head.snapshot_ref,
             head_version: head.head_version,
@@ -283,6 +295,7 @@ impl InMemoryMemoryRegistry {
             grant_id: access.grant_id.clone(),
             purpose: access.purpose.clone(),
             allowed_at_unix_seconds: access.allowed_at_unix_seconds,
+            temporal_commitment: temporal_commitment.map(str::to_owned),
         })
     }
 }
@@ -438,12 +451,19 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
         authority: &A,
         scope: MemoryScope,
         access: WikiAccess,
+        temporal_commitment: Option<String>,
         snapshot_ref: ArtifactReference,
     ) -> Result<MemoryUseReceipt, MemoryError> {
         if access.snapshot_ref != snapshot_ref {
             return Err(MemoryError::SnapshotMismatch);
         }
-        let receipt = self.expected_allowed_use_receipt(artifacts, authority, &scope, &access)?;
+        let receipt = self.expected_allowed_use_receipt(
+            artifacts,
+            authority,
+            &scope,
+            &access,
+            temporal_commitment.as_deref(),
+        )?;
         if let Some(existing) = self
             .receipts
             .iter()
@@ -467,9 +487,16 @@ impl MemoryUseReceiptAttestationPort for InMemoryMemoryRegistry {
         authority: &A,
         scope: &MemoryScope,
         access: &WikiAccess,
+        temporal_commitment: Option<&str>,
         receipt: &MemoryUseReceipt,
     ) -> Result<(), MemoryError> {
-        let expected = self.expected_allowed_use_receipt(artifacts, authority, scope, access)?;
+        let expected = self.expected_allowed_use_receipt(
+            artifacts,
+            authority,
+            scope,
+            access,
+            temporal_commitment,
+        )?;
         if &expected != receipt || !self.receipts.iter().any(|recorded| recorded == receipt) {
             return Err(MemoryError::ReceiptConflict);
         }
@@ -538,6 +565,7 @@ fn receipt_id(
     access: &WikiAccess,
     snapshot_ref: &ArtifactReference,
     head_version: u64,
+    temporal_commitment: Option<&str>,
 ) -> String {
     let bytes = serde_json::to_vec(&(
         scope,
@@ -548,6 +576,7 @@ fn receipt_id(
         snapshot_ref,
         access.allowed_at_unix_seconds,
         head_version,
+        temporal_commitment,
     ))
     .expect("memory receipt inputs serialize deterministically");
     format!("sha256:{:x}", Sha256::digest(bytes))

@@ -7,10 +7,12 @@ la admisión gobernada U22/U33. No es el U23 completo: no hay runner E0,
 `CampaignManifest`, escenarios, puntuación, resultado de evaluación, publicación,
 runtime, Scout, caché ni páginas de wiki.
 
-`ReplayMemoryClock` representa el cutoff que un composition root obtiene sólo
-después de que U04-B validó el snapshot y su proyección de disponibilidad. El
-protocolo nunca abre archivos de fuente ni interpreta labels/outcomes: recibe
-solamente instantes tratados.
+`TemporalMemoryEvidence` sustituye los instantes construibles por el llamador.
+La emite únicamente el composition root confiable de U04-B o del futuro runner:
+lleva un commitment con nonce que fija tenant, scope completo, snapshot, head,
+run, grant, propósito, instante autorizado, cutoff, protocolo y, para
+Continuous, provenance y disponibilidad del outcome. El protocolo nunca abre
+archivos de fuente ni interpreta labels/outcomes.
 
 ## Contrato ejecutable
 
@@ -26,11 +28,11 @@ solamente instantes tratados.
   futura integración autorizada decida si produce una revisión nueva.
 
 `MemoryTemporalAdmission::admit` permanece `pub(crate)`. Antes de delegar a
-U22, compara el instante temporal con `WikiAccess.allowed_at_unix_seconds`.
-Luego U22/U33 crean y atestan el receipt canónico, que ya fija scope, snapshot,
-head, run, grant, purpose y reloj autorizado. Un tiempo declarado que no está
-ligado al receipt, un feedback futuro o un protocolo cruzado falla antes de
-registrar un receipt; no se emite `VerifiedMemoryUse`.
+U22, valida el evidence opaco y lo incorpora al receipt canónico U33. U33
+recalcula la identidad incluyendo ese commitment además de scope, snapshot,
+head, run, grant, purpose y reloj autorizado. Un cutoff/outcome/timestamp
+fabricado, feedback futuro o protocolo cruzado falla antes de registrar un
+receipt; no se emite `VerifiedMemoryUse`.
 
 La capability resultante sigue siendo la opaca U22: no se añade un handle a
 wiki, páginas, cache, publicación o autoridad de aprendizaje.

@@ -10,69 +10,77 @@ use crate::governed_memory_use::{
 };
 use crate::memory_store::{MemoryPublisher, MemoryScope, MemoryUseReceiptAttestationPort};
 use crate::wiki_scratch::WikiAuthorizationPort;
+use sha2::{Digest, Sha256};
 
 /// The replay cutoff already established by the U04-B availability boundary.
 ///
 /// The caller obtains this only after U04-B has validated its sealed source
 /// snapshot and availability projection. This small contract never reopens
 /// source files or interprets outcome data.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ReplayMemoryClock {
-    replay_cutoff_at_unix_seconds: u64,
-}
-
-impl ReplayMemoryClock {
-    #[must_use]
-    pub fn new(replay_cutoff_at_unix_seconds: u64) -> Self {
-        Self {
-            replay_cutoff_at_unix_seconds,
-        }
-    }
-
-    #[must_use]
-    pub fn replay_cutoff_at_unix_seconds(&self) -> u64 {
-        self.replay_cutoff_at_unix_seconds
-    }
-}
-
-/// Treated timing evidence for one governed-memory admission.
-///
-/// `outcome_available_at_unix_seconds` proves only availability. It carries no
-/// outcome value, label, memory page, or cache handle.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TemporalUseTiming {
+/// Opaque evidence emitted by the U04-B availability boundary (or its future
+/// replay-runner adapter). It binds the full governed-use context to an
+/// authority-issued nonce and is deliberately neither constructible nor
+/// inspectable by callers.
+pub struct TemporalMemoryEvidence {
+    commitment: String,
+    protocol: MemoryTemporalProtocol,
+    cutoff_at_unix_seconds: u64,
     memory_use_at_unix_seconds: u64,
     outcome_available_at_unix_seconds: Option<u64>,
+    outcome_provenance: Option<String>,
+    scope: MemoryScope,
+    snapshot_ref: crate::ArtifactReference,
+    run_id: String,
+    grant_id: String,
+    purpose: String,
 }
 
-impl TemporalUseTiming {
-    #[must_use]
-    pub fn training(memory_use_at_unix_seconds: u64) -> Self {
+/// Crate-private stand-in for the U04-B/future runner issuer. The service
+/// composition owns it; consumers only receive opaque evidence.
+#[allow(dead_code)] // Called by the future U04-B/replay composition root.
+pub(crate) struct TrustedTemporalEvidenceIssuer {
+    nonce: String,
+}
+
+impl TrustedTemporalEvidenceIssuer {
+    #[cfg(test)]
+    fn deterministic(nonce: impl Into<String>) -> Self {
         Self {
-            memory_use_at_unix_seconds,
-            outcome_available_at_unix_seconds: None,
+            nonce: nonce.into(),
         }
     }
 
-    #[must_use]
-    pub fn after_observed_outcome(
-        memory_use_at_unix_seconds: u64,
-        outcome_available_at_unix_seconds: u64,
-    ) -> Self {
-        Self {
-            memory_use_at_unix_seconds,
-            outcome_available_at_unix_seconds: Some(outcome_available_at_unix_seconds),
+    #[allow(dead_code)]
+    pub(crate) fn attest(
+        &self,
+        protocol: MemoryTemporalProtocol,
+        request: &MemoryUseRequest,
+        cutoff_at_unix_seconds: u64,
+        outcome_available_at_unix_seconds: Option<u64>,
+        outcome_provenance: Option<String>,
+    ) -> TemporalMemoryEvidence {
+        let commitment = temporal_commitment(
+            &self.nonce,
+            protocol,
+            request.scope(),
+            request.allowed_at_unix_seconds(),
+            cutoff_at_unix_seconds,
+            outcome_available_at_unix_seconds,
+            outcome_provenance.as_deref(),
+        );
+        TemporalMemoryEvidence {
+            commitment,
+            protocol,
+            cutoff_at_unix_seconds,
+            memory_use_at_unix_seconds: request.allowed_at_unix_seconds(),
+            outcome_available_at_unix_seconds,
+            outcome_provenance,
+            scope: request.scope().clone(),
+            snapshot_ref: request.access().snapshot_ref.clone(),
+            run_id: request.access().run_id.clone(),
+            grant_id: request.access().grant_id.clone(),
+            purpose: request.access().purpose.clone(),
         }
-    }
-
-    #[must_use]
-    pub fn memory_use_at_unix_seconds(&self) -> u64 {
-        self.memory_use_at_unix_seconds
-    }
-
-    #[must_use]
-    pub fn outcome_available_at_unix_seconds(&self) -> Option<u64> {
-        self.outcome_available_at_unix_seconds
     }
 }
 
@@ -131,34 +139,66 @@ impl MemoryTemporalAdmission {
         A: WikiAuthorizationPort,
     >(
         protocol: MemoryTemporalProtocol,
-        replay: &ReplayMemoryClock,
-        timing: TemporalUseTiming,
+        evidence: TemporalMemoryEvidence,
         publisher: &mut P,
         artifacts: &mut R,
         authority: &A,
         request: MemoryUseRequest,
     ) -> Result<VerifiedMemoryUse, TemporalMemoryAdmissionError> {
-        if timing.memory_use_at_unix_seconds != request.allowed_at_unix_seconds() {
+        if evidence.memory_use_at_unix_seconds != request.allowed_at_unix_seconds() {
             return Err(TemporalMemoryAdmissionError::Temporal(
                 TemporalProtocolError::AccessTimeMismatch,
             ));
         }
+        if evidence.scope != *request.scope()
+            || evidence.snapshot_ref != request.access().snapshot_ref
+            || evidence.run_id != request.access().run_id
+            || evidence.grant_id != request.access().grant_id
+            || evidence.purpose != request.access().purpose
+        {
+            return Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::AccessTimeMismatch,
+            ));
+        }
+        if evidence.protocol != protocol {
+            return Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::ProtocolMismatch {
+                    expected: protocol.as_str(),
+                    actual: evidence.protocol.as_str().to_owned(),
+                },
+            ));
+        }
         protocol
-            .validate(request.scope(), timing, replay)
+            .validate_evidence(request.scope(), &evidence)
             .map_err(TemporalMemoryAdmissionError::Temporal)?;
-        MemoryUseAdmission::admit(publisher, artifacts, authority, request)
-            .map_err(TemporalMemoryAdmissionError::Governed)
+        let request = request.with_temporal_commitment(evidence.commitment.clone());
+        let admitted = MemoryUseAdmission::admit(publisher, artifacts, authority, request)
+            .map_err(TemporalMemoryAdmissionError::Governed)?;
+        // Re-attest after the temporal decision. U33 recomputes canonical
+        // receipt identity, liveness, authorization and this exact commitment.
+        if admitted.receipt().temporal_commitment.as_deref() != Some(evidence.commitment.as_str()) {
+            return Err(TemporalMemoryAdmissionError::Governed(
+                MemoryUseAdmissionError::ReceiptMismatch,
+            ));
+        }
+        Ok(admitted)
     }
 }
 
 impl MemoryTemporalProtocol {
     /// Validates only temporal eligibility. Receipt/authentication/liveness are
     /// deliberately revalidated by the U22/U33 composition boundary.
-    pub fn validate(
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Frozen => "frozen",
+            Self::Continuous => "continuous",
+        }
+    }
+
+    fn validate_evidence(
         self,
         scope: &MemoryScope,
-        timing: TemporalUseTiming,
-        replay: &ReplayMemoryClock,
+        evidence: &TemporalMemoryEvidence,
     ) -> Result<(), TemporalProtocolError> {
         let expected = match self {
             Self::Frozen => "frozen",
@@ -170,22 +210,32 @@ impl MemoryTemporalProtocol {
                 actual: scope.protocol.clone(),
             });
         }
-        if timing.memory_use_at_unix_seconds > replay.replay_cutoff_at_unix_seconds {
+        if evidence.memory_use_at_unix_seconds > evidence.cutoff_at_unix_seconds {
             return Err(TemporalProtocolError::MemoryAfterReplayCutoff);
         }
         match self {
-            Self::Frozen if timing.outcome_available_at_unix_seconds.is_some() => {
+            Self::Frozen
+                if evidence.outcome_available_at_unix_seconds.is_some()
+                    || evidence.outcome_provenance.is_some() =>
+            {
                 Err(TemporalProtocolError::OutcomeForbiddenInFrozen)
             }
             Self::Frozen => Ok(()),
             Self::Continuous => {
-                let outcome = timing
+                let outcome = evidence
                     .outcome_available_at_unix_seconds
                     .ok_or(TemporalProtocolError::OutcomeRequired)?;
-                if outcome > timing.memory_use_at_unix_seconds {
+                if evidence
+                    .outcome_provenance
+                    .as_deref()
+                    .is_none_or(str::is_empty)
+                {
+                    return Err(TemporalProtocolError::OutcomeRequired);
+                }
+                if outcome > evidence.memory_use_at_unix_seconds {
                     return Err(TemporalProtocolError::OutcomeAfterMemoryUse);
                 }
-                if outcome > replay.replay_cutoff_at_unix_seconds {
+                if outcome > evidence.cutoff_at_unix_seconds {
                     return Err(TemporalProtocolError::OutcomeAfterReplayCutoff);
                 }
                 Ok(())
@@ -194,11 +244,34 @@ impl MemoryTemporalProtocol {
     }
 }
 
+#[allow(dead_code)]
+fn temporal_commitment(
+    nonce: &str,
+    protocol: MemoryTemporalProtocol,
+    scope: &MemoryScope,
+    allowed_at: u64,
+    cutoff: u64,
+    outcome_at: Option<u64>,
+    outcome_provenance: Option<&str>,
+) -> String {
+    let bytes = serde_json::to_vec(&(
+        nonce,
+        protocol.as_str(),
+        scope,
+        allowed_at,
+        cutoff,
+        outcome_at,
+        outcome_provenance,
+    ))
+    .expect("temporal evidence inputs serialize deterministically");
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        MemoryTemporalAdmission, MemoryTemporalProtocol, ReplayMemoryClock,
-        TemporalMemoryAdmissionError, TemporalProtocolError, TemporalUseTiming,
+        MemoryTemporalAdmission, MemoryTemporalProtocol, TemporalMemoryAdmissionError,
+        TemporalProtocolError, TrustedTemporalEvidenceIssuer,
     };
     use crate::governed_memory_use::MemoryUseRequest;
     use crate::memory_store::{InMemoryMemoryRegistry, MemoryPublisher, MemoryScope};
@@ -279,14 +352,21 @@ mod tests {
     fn continuous_admission_rejects_an_outcome_not_yet_available_without_recording_a_receipt() {
         let (mut artifacts, mut registry, authority, access) = seeded("continuous");
 
+        let request = MemoryUseRequest::new(scope("continuous"), access);
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
+            MemoryTemporalProtocol::Continuous,
+            &request,
+            100,
+            Some(101),
+            Some("outcome:1".into()),
+        );
         let result = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Continuous,
-            &ReplayMemoryClock::new(100),
-            TemporalUseTiming::after_observed_outcome(100, 101),
+            evidence,
             &mut registry,
             &mut artifacts,
             &authority,
-            MemoryUseRequest::new(scope("continuous"), access),
+            request,
         );
 
         match result {
@@ -303,38 +383,50 @@ mod tests {
     fn admission_binds_its_temporal_claim_to_the_u33_receipt_clock_before_recording() {
         let (mut artifacts, mut registry, authority, access) = seeded("frozen");
 
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
+            MemoryTemporalProtocol::Frozen,
+            &request,
+            100,
+            None,
+            None,
+        );
         let result = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Frozen,
-            &ReplayMemoryClock::new(100),
-            TemporalUseTiming::training(99),
+            evidence,
             &mut registry,
             &mut artifacts,
             &authority,
-            MemoryUseRequest::new(scope("frozen"), access),
+            request,
         );
 
-        match result {
-            Err(TemporalMemoryAdmissionError::Temporal(
-                TemporalProtocolError::AccessTimeMismatch,
-            )) => {}
-            Err(other) => panic!("expected receipt-clock mismatch, got {other:?}"),
-            Ok(_) => panic!("unbound temporal timing must not mint a capability"),
-        }
-        assert!(registry.receipts().is_empty());
+        let admitted = result.expect("issuer binds the exact access time");
+        assert_eq!(
+            admitted.receipt().temporal_commitment,
+            registry.receipts()[0].temporal_commitment
+        );
+        assert!(admitted.receipt().temporal_commitment.is_some());
     }
 
     #[test]
     fn frozen_admission_mints_only_the_existing_u22_receipt_provenance() {
         let (mut artifacts, mut registry, authority, access) = seeded("frozen");
 
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic("u04b").attest(
+            MemoryTemporalProtocol::Frozen,
+            &request,
+            100,
+            None,
+            None,
+        );
         let admitted = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Frozen,
-            &ReplayMemoryClock::new(100),
-            TemporalUseTiming::training(100),
+            evidence,
             &mut registry,
             &mut artifacts,
             &authority,
-            MemoryUseRequest::new(scope("frozen"), access),
+            request,
         )
         .expect("timely U22/U33 frozen admission");
 

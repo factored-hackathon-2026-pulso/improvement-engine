@@ -16,12 +16,17 @@ use crate::wiki_scratch::{WikiAccess, WikiAuthorizationPort};
 pub struct MemoryUseRequest {
     scope: MemoryScope,
     access: WikiAccess,
+    temporal_commitment: Option<String>,
 }
 
 impl MemoryUseRequest {
     #[must_use]
     pub fn new(scope: MemoryScope, access: WikiAccess) -> Self {
-        Self { scope, access }
+        Self {
+            scope,
+            access,
+            temporal_commitment: None,
+        }
     }
 
     #[must_use]
@@ -32,6 +37,21 @@ impl MemoryUseRequest {
     #[must_use]
     pub(crate) fn allowed_at_unix_seconds(&self) -> u64 {
         self.access.allowed_at_unix_seconds
+    }
+
+    /// Only the U23 trusted temporal evidence boundary may bind a receipt to
+    /// a temporal claim. The public U22 request deliberately cannot set this.
+    pub(crate) fn with_temporal_commitment(mut self, commitment: String) -> Self {
+        self.temporal_commitment = Some(commitment);
+        self
+    }
+
+    pub(crate) fn temporal_commitment(&self) -> Option<&str> {
+        self.temporal_commitment.as_deref()
+    }
+
+    pub(crate) fn access(&self) -> &WikiAccess {
+        &self.access
     }
 }
 
@@ -56,6 +76,9 @@ pub struct VerifiedMemoryUse {
 }
 
 impl VerifiedMemoryUse {
+    pub(crate) fn receipt(&self) -> &MemoryUseReceipt {
+        &self.receipt
+    }
     #[must_use]
     pub fn receipt_id(&self) -> &str {
         &self.receipt.receipt_id
@@ -124,6 +147,7 @@ impl MemoryUseAdmission {
                 authority,
                 request.scope.clone(),
                 request.access.clone(),
+                request.temporal_commitment.clone(),
                 request.access.snapshot_ref.clone(),
             )
             .map_err(MemoryUseAdmissionError::Denied)?;
@@ -133,6 +157,7 @@ impl MemoryUseAdmission {
                 authority,
                 &request.scope,
                 &request.access,
+                request.temporal_commitment(),
                 &receipt,
             )
             .map_err(MemoryUseAdmissionError::Denied)?;
@@ -152,6 +177,7 @@ fn receipt_matches_request(receipt: &MemoryUseReceipt, request: &MemoryUseReques
         && receipt.grant_id == request.access.grant_id
         && receipt.purpose == request.access.purpose
         && receipt.allowed_at_unix_seconds == request.access.allowed_at_unix_seconds
+        && receipt.temporal_commitment.as_deref() == request.temporal_commitment()
 }
 
 #[cfg(test)]
@@ -355,6 +381,7 @@ mod tests {
             _: &A,
             scope: MemoryScope,
             access: WikiAccess,
+            _: Option<String>,
             snapshot_ref: crate::ArtifactReference,
         ) -> Result<MemoryUseReceipt, MemoryError> {
             Ok(MemoryUseReceipt {
@@ -366,6 +393,7 @@ mod tests {
                 grant_id: access.grant_id,
                 purpose: access.purpose,
                 allowed_at_unix_seconds: access.allowed_at_unix_seconds,
+                temporal_commitment: None,
             })
         }
     }
@@ -380,6 +408,7 @@ mod tests {
             _: &A,
             _: &MemoryScope,
             _: &WikiAccess,
+            _: Option<&str>,
             _: &MemoryUseReceipt,
         ) -> Result<(), MemoryError> {
             Ok(())
@@ -426,11 +455,17 @@ mod tests {
             authority: &A,
             scope: MemoryScope,
             access: WikiAccess,
+            temporal_commitment: Option<String>,
             snapshot_ref: crate::ArtifactReference,
         ) -> Result<MemoryUseReceipt, MemoryError> {
-            let receipt =
-                self.inner
-                    .record_allowed_use(artifacts, authority, scope, access, snapshot_ref)?;
+            let receipt = self.inner.record_allowed_use(
+                artifacts,
+                authority,
+                scope,
+                access,
+                temporal_commitment,
+                snapshot_ref,
+            )?;
             self.inner
                 .revoke(receipt.snapshot_ref.clone(), "deterministic_interleaving")?;
             Ok(receipt)
@@ -447,10 +482,17 @@ mod tests {
             authority: &A,
             scope: &MemoryScope,
             access: &WikiAccess,
+            temporal_commitment: Option<&str>,
             receipt: &MemoryUseReceipt,
         ) -> Result<(), MemoryError> {
-            self.inner
-                .attest_allowed_use(artifacts, authority, scope, access, receipt)
+            self.inner.attest_allowed_use(
+                artifacts,
+                authority,
+                scope,
+                access,
+                temporal_commitment,
+                receipt,
+            )
         }
     }
 
@@ -498,19 +540,34 @@ mod tests {
                 &authority,
                 scope(),
                 access.clone(),
+                None,
                 access.snapshot_ref.clone(),
             )
             .expect("fixed U33 receipt");
         let mut wrong_id = receipt.clone();
         wrong_id.receipt_id = "forged-receipt-id".to_owned();
         assert_eq!(
-            registry.attest_allowed_use(&mut artifacts, &authority, &scope(), &access, &wrong_id),
+            registry.attest_allowed_use(
+                &mut artifacts,
+                &authority,
+                &scope(),
+                &access,
+                None,
+                &wrong_id
+            ),
             Err(MemoryError::ReceiptConflict)
         );
         let mut wrong_head = receipt;
         wrong_head.head_version = 2;
         assert_eq!(
-            registry.attest_allowed_use(&mut artifacts, &authority, &scope(), &access, &wrong_head),
+            registry.attest_allowed_use(
+                &mut artifacts,
+                &authority,
+                &scope(),
+                &access,
+                None,
+                &wrong_head
+            ),
             Err(MemoryError::ReceiptConflict)
         );
     }

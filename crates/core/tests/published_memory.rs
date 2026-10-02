@@ -125,6 +125,7 @@ fn publishes_verified_scratch_diff_by_scoped_cas_and_records_allowed_use() {
             &authority,
             scope(),
             published_access.clone(),
+            None,
             published.snapshot.reference(),
         )
         .unwrap();
@@ -134,6 +135,7 @@ fn publishes_verified_scratch_diff_by_scoped_cas_and_records_allowed_use() {
             &authority,
             scope(),
             published_access,
+            None,
             published.snapshot.reference(),
         )
         .unwrap();
@@ -208,6 +210,7 @@ fn tombstone_blocks_new_use_and_survives_registry_restore() {
                 &authority,
                 scope(),
                 request_access,
+                None,
                 initial.reference()
             )
             .unwrap_err(),
@@ -320,6 +323,7 @@ fn ancestor_tombstone_revokes_descendant_snapshot_and_wrong_scope_receipt() {
                 &authority,
                 scope(),
                 child_access,
+                None,
                 published.snapshot.reference(),
             )
             .unwrap_err(),
