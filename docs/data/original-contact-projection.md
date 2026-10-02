@@ -22,16 +22,21 @@ values are never stored in result types or error details.
 descriptions, IDs, product/customer/agent attributes, claims, compensation,
 and transcripts are not read into the projection.
 
-Dates must begin with a syntactically valid `YYYY-MM-DD` date. Aggregation
-period is the month from that event/creation date, not a claim about when the
-bank learned the fact. Invalid rows are counted as rejected, not emitted.
+Event/creation timestamps are accepted only as exact UTC second timestamps
+(`YYYY-MM-DDTHH:MM:SSZ`). Naive timestamps, offsets, fractional seconds, and
+date-only values are rejected; the projector never guesses a timezone or
+silently drops time precision. Aggregation period is the month from that
+event/creation timestamp, not a claim about when the bank learned the fact.
+Invalid/missing timestamps are counted as rejected, not emitted. If no valid
+timezone-qualified timestamps remain, status is `unsupported` and no
+aggregates are emitted.
 Boolean values accept `true/false`, `1/0`, `yes/no`; other values are missing.
 Durations and resolution days must be finite and non-negative. Satisfaction is
 included only on the assumed common 1–5 scale; confirm the scale against the
 source dictionary before interpreting its magnitude. First response time is
-elapsed calendar days between `creation_date` and `first_response_date`, only
-when both dates are valid and ordered; it is not a business-hours or legally
-defined SLA calculation. Means use only rows with valid values, with no
+elapsed days between `creation_date` and `first_response_date`, at second
+precision, only when both timestamps are valid and ordered; it is not a
+business-hours or legally defined SLA calculation. Means use only rows with valid values, with no
 imputation. Every numeric and boolean metric carries `valid_count` and
 `missing_count` per visible aggregate cell; their sum is that cell's row
 denominator. Boolean metrics also expose positive count, and numeric means use
@@ -62,8 +67,29 @@ source snapshot plus that snapshot's canonical byte binding, a cutoff, and an
 exact inventory of opaque partition IDs with SHA-256 digests. The projector
 fails closed on missing/extra/duplicate IDs, digest mismatch, duplicate
 headers, malformed/truncated records, or invalid manifest. Rows after the
-cutoff are excluded. Source date columns are day-granular; no event-time
-precision is inferred.
+cutoff are excluded by exact UTC second comparison. The cutoff must use the
+same exact timestamp grammar; malformed or higher-precision cutoffs are
+rejected rather than rounded.
+
+The source contract declares the contact date as `timestamp` but specifies no
+timezone; supplied local source values are naive timestamps. Accordingly, the
+current original-source projection is fail-closed/unsupported for those rows.
+No actual business aggregate or prevalence estimate is claimed until the
+source contract defines a timezone or a compatible same-clock cutoff contract.
+
+For partitioned tables, the additive optional `partition_inventory_digest`
+seal must be the canonical partition-inventory digest produced by
+`canonical_partition_inventory_digest`: SHA-256 over the domain separator
+`pulso-source-partition-inventory-v1\0`, then each partition ID and its
+`sha256:` digest in ID order, each UTF-8 value prefixed by its 64-bit
+big-endian byte length. This supplemental seal never repurposes `file_digest`,
+which continues to mean SHA-256 of the source object bytes for existing source
+validation. The projector requires the supplemental seal for partitioned
+inputs; older snapshots without it remain valid for non-partitioned consumers
+but are not eligible for this projection. Each partition's actual bytes and
+exact first-line header digest are checked against the inventory and the
+snapshot's `header_digest`. Tests and local smoke bind the inventory to the
+exact partition bytes they then project.
 
 `coverage=complete` is valid only when the caller enumerates every partition in
 the selected source snapshot. Bounded smoke/tests use explicit sample
@@ -96,7 +122,9 @@ path order (not the full history):
 cargo test --locked --offline -p improvement-engine-core --test original_contact_projection local_original_contacts_and_complaints_smoke_aggregates_only -- --ignored --nocapture
 ```
 
-The smoke test asserts support and non-empty aggregates and prints only
-per-table record/rejection/aggregate-cell counts. It prints no row, identifier,
-category source string, path, or individual metric value. Historical source
-files remain outside Git.
+The smoke test verifies the current source is reported as unsupported (naive
+timestamp semantics), counts rejected rows, and emits zero aggregate cells.
+It prints only partition/rejection/cell counts and the partial-coverage label;
+it prints no row, identifier, category source string, path, or metric value.
+This is a fail-closed compatibility check, not a successful business projection
+or prevalence estimate. Historical source files remain outside Git.

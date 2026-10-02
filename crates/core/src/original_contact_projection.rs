@@ -1,4 +1,6 @@
-use crate::{ArtifactReference, source_validation::SourceSnapshot};
+use crate::{
+    ArtifactKind, ArtifactReference, ArtifactRepository, source_validation::SourceSnapshot,
+};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -40,6 +42,11 @@ impl ManifestPartition {
     pub fn new(id: String, sha256: String) -> Self {
         Self { id, sha256 }
     }
+
+    #[must_use]
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +55,7 @@ pub enum ProjectionError {
     PartitionSetMismatch,
     DigestMismatch,
     DuplicateHeader,
+    HeaderDigestMismatch,
     MalformedCsv,
 }
 
@@ -182,7 +190,8 @@ pub struct ProjectionManifest {
     source_snapshot_ref: ArtifactReference,
     snapshot_binding_digest: String,
     table: ProjectionTable,
-    cutoff_day: String,
+    source_header_digest: String,
+    cutoff_timestamp: String,
     observed_cutoff: String,
     partitions: BTreeMap<String, String>,
     coverage: ProjectionCoverage,
@@ -192,6 +201,45 @@ pub struct ProjectionManifest {
 
 impl ProjectionManifest {
     pub fn new(
+        repository: &mut impl ArtifactRepository,
+        source_snapshot_ref: ArtifactReference,
+        table: ProjectionTable,
+        partitions: Vec<ManifestPartition>,
+        coverage: ProjectionCoverage,
+        policy: ProjectionPolicy,
+    ) -> Result<Self, ProjectionError> {
+        let draft = repository
+            .get(
+                &source_snapshot_ref.tenant_id,
+                &source_snapshot_ref.id,
+                source_snapshot_ref.revision,
+            )
+            .map_err(|_| ProjectionError::InvalidManifest)?
+            .ok_or(ProjectionError::InvalidManifest)?;
+        if draft.kind != ArtifactKind::SourceSnapshot || draft.reference() != source_snapshot_ref {
+            return Err(ProjectionError::InvalidManifest);
+        }
+        let raw_snapshot = draft
+            .payload
+            .get("source_snapshot_json")
+            .and_then(serde_json::Value::as_str)
+            .ok_or(ProjectionError::InvalidManifest)?;
+        let snapshot = SourceSnapshot::from_json(raw_snapshot)
+            .map_err(|_| ProjectionError::InvalidManifest)?;
+        if snapshot.tenant_id() != source_snapshot_ref.tenant_id {
+            return Err(ProjectionError::InvalidManifest);
+        }
+        Self::from_verified_snapshot(
+            source_snapshot_ref,
+            &snapshot,
+            table,
+            partitions,
+            coverage,
+            policy,
+        )
+    }
+
+    fn from_verified_snapshot(
         source_snapshot_ref: ArtifactReference,
         snapshot: &SourceSnapshot,
         table: ProjectionTable,
@@ -221,14 +269,22 @@ impl ProjectionManifest {
             }
         }
         let cutoff = snapshot.observed_cutoff().to_owned();
-        let cutoff_day = cutoff
-            .get(..10)
-            .ok_or(ProjectionError::InvalidManifest)?
-            .to_owned();
+        if parse_utc_timestamp(&cutoff).is_none() {
+            return Err(ProjectionError::InvalidManifest);
+        }
+        let seal = snapshot
+            .source_file_seal(table.as_str())
+            .ok_or(ProjectionError::InvalidManifest)?;
+        let inventory_digest = partition_inventory_digest(&expected);
+        if seal.partition_inventory_digest() != Some(inventory_digest.as_str()) {
+            return Err(ProjectionError::InvalidManifest);
+        }
+        let source_header_digest = seal.header_digest().to_owned();
         let digest = manifest_digest(
             &source_snapshot_ref,
             snapshot.binding_digest().as_str(),
             table,
+            &source_header_digest,
             &cutoff,
             &expected,
             coverage,
@@ -238,7 +294,8 @@ impl ProjectionManifest {
             source_snapshot_ref,
             snapshot_binding_digest: snapshot.binding_digest(),
             table,
-            cutoff_day,
+            source_header_digest,
+            cutoff_timestamp: cutoff.clone(),
             observed_cutoff: cutoff,
             partitions: expected,
             coverage,
@@ -260,6 +317,7 @@ pub fn project_contacts<R: Read>(
     let mut grouped: BTreeMap<(String, ContactCategory, Channel), ContactAccumulator> =
         BTreeMap::new();
     let mut rejected_rows = 0_u64;
+    let mut valid_timestamps = 0_u64;
     for partition in partitions {
         if !manifest.partitions.contains_key(&partition.id) || !seen.insert(partition.id.clone()) {
             return Err(ProjectionError::PartitionSetMismatch);
@@ -300,10 +358,12 @@ pub fn project_contacts<R: Read>(
                     return Err(ProjectionError::MalformedCsv);
                 }
                 let date = csv_value(&record, date_idx);
-                let Some((full_date, period)) = date_and_period(date) else {
+                let Some((timestamp, period)) = date_and_period(date) else {
+                    rejected_rows += 1;
                     continue;
                 };
-                if full_date.as_str() > manifest.cutoff_day.as_str() {
+                valid_timestamps += 1;
+                if timestamp.as_str() > manifest.cutoff_timestamp.as_str() {
                     continue;
                 }
                 let Some(channel) = normalize_channel(csv_value(&record, channel_idx)) else {
@@ -343,17 +403,24 @@ pub fn project_contacts<R: Read>(
             }
         }
         let hasher = csv.into_inner();
+        let header_digest = hasher.header_digest();
         let actual_digest = format!("sha256:{:x}", hasher.hash.finalize());
         if manifest.partitions.get(&partition.id) != Some(&actual_digest) {
             return Err(ProjectionError::DigestMismatch);
+        }
+        if header_digest != manifest.source_header_digest {
+            return Err(ProjectionError::HeaderDigestMismatch);
         }
     }
     if seen.len() != manifest.partitions.len() {
         return Err(ProjectionError::PartitionSetMismatch);
     }
-    let status = if missing_fields.is_empty() {
+    let status = if missing_fields.is_empty() && (valid_timestamps > 0 || rejected_rows == 0) {
         SupportStatus::Supported
     } else {
+        if valid_timestamps == 0 && rejected_rows > 0 {
+            missing_fields.insert("timezone-qualified timestamp");
+        }
         SupportStatus::Unsupported {
             missing_fields: missing_fields.into_iter().collect(),
         }
@@ -410,6 +477,7 @@ pub fn project_complaints<R: Read>(
     let mut grouped: BTreeMap<(String, ContactCategory, Channel), ComplaintAccumulator> =
         BTreeMap::new();
     let mut rejected_rows = 0_u64;
+    let mut valid_timestamps = 0_u64;
     for partition in partitions {
         if !manifest.partitions.contains_key(&partition.id) || !seen.insert(partition.id.clone()) {
             return Err(ProjectionError::PartitionSetMismatch);
@@ -451,12 +519,14 @@ pub fn project_complaints<R: Read>(
                 if record.len() != headers.len() {
                     return Err(ProjectionError::MalformedCsv);
                 }
-                let Some((creation_date, period)) = date_and_period(csv_value(&record, date_idx))
+                let Some((creation_timestamp, period)) =
+                    date_and_period(csv_value(&record, date_idx))
                 else {
                     rejected_rows += 1;
                     continue;
                 };
-                if creation_date > manifest.cutoff_day {
+                valid_timestamps += 1;
+                if creation_timestamp > manifest.cutoff_timestamp {
                     continue;
                 }
                 let Some(channel) = normalize_channel(csv_value(&record, channel_idx)) else {
@@ -472,7 +542,7 @@ pub fn project_complaints<R: Read>(
                 )));
                 let response_days = field(&positions, &["first_response_date"])
                     .and_then(|idx| csv_value(&record, idx))
-                    .and_then(|end| elapsed_calendar_days(csv_value(&record, date_idx)?, end));
+                    .and_then(|end| elapsed_timestamp_days(csv_value(&record, date_idx)?, end));
                 aggregate.first_response_calendar_days.push(response_days);
                 aggregate.resolution_days.push(parse_nonnegative(csv_field(
                     &record,
@@ -491,17 +561,24 @@ pub fn project_complaints<R: Read>(
             }
         }
         let hasher = csv.into_inner();
+        let header_digest = hasher.header_digest();
         let actual_digest = format!("sha256:{:x}", hasher.hash.finalize());
         if manifest.partitions.get(&partition.id) != Some(&actual_digest) {
             return Err(ProjectionError::DigestMismatch);
+        }
+        if header_digest != manifest.source_header_digest {
+            return Err(ProjectionError::HeaderDigestMismatch);
         }
     }
     if seen.len() != manifest.partitions.len() {
         return Err(ProjectionError::PartitionSetMismatch);
     }
-    let status = if missing_fields.is_empty() {
+    let status = if missing_fields.is_empty() && (valid_timestamps > 0 || rejected_rows == 0) {
         SupportStatus::Supported
     } else {
+        if valid_timestamps == 0 && rejected_rows > 0 {
+            missing_fields.insert("timezone-qualified timestamp");
+        }
         SupportStatus::Unsupported {
             missing_fields: missing_fields.into_iter().collect(),
         }
@@ -549,6 +626,40 @@ pub fn project_complaints<R: Read>(
     })
 }
 
+/// Canonical `SourceSnapshot.partition_inventory_digest` for a partitioned
+/// source table. Partition IDs are opaque and sorted before hashing. Each ID
+/// and digest is length-prefixed to make the encoding unambiguous.
+#[must_use]
+pub fn canonical_partition_inventory_digest(partitions: &[ManifestPartition]) -> Option<String> {
+    let mut inventory = BTreeMap::new();
+    for partition in partitions {
+        if !valid_partition_id(&partition.id)
+            || !valid_digest(&partition.sha256)
+            || inventory
+                .insert(partition.id.clone(), partition.sha256.clone())
+                .is_some()
+        {
+            return None;
+        }
+    }
+    if inventory.is_empty() {
+        return None;
+    }
+    Some(partition_inventory_digest(&inventory))
+}
+
+fn partition_inventory_digest(partitions: &BTreeMap<String, String>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"pulso-source-partition-inventory-v1\0");
+    for (id, digest) in partitions {
+        hasher.update((id.len() as u64).to_be_bytes());
+        hasher.update(id.as_bytes());
+        hasher.update((digest.len() as u64).to_be_bytes());
+        hasher.update(digest.as_bytes());
+    }
+    format!("sha256:{:x}", hasher.finalize())
+}
+
 #[derive(Default)]
 struct ComplaintAccumulator {
     complaint_count: u64,
@@ -577,13 +688,14 @@ fn date_ordinal(date: &str) -> Option<i64> {
     Some(era * 146097 + day_of_era)
 }
 
-fn elapsed_calendar_days(start: &str, end: &str) -> Option<f64> {
+fn elapsed_timestamp_days(start: &str, end: &str) -> Option<f64> {
     let (start, _) = date_and_period(Some(start))?;
     let (end, _) = date_and_period(Some(end))?;
-    if end < start {
+    let elapsed_seconds = parse_utc_timestamp(&end)? - parse_utc_timestamp(&start)?;
+    if elapsed_seconds < 0 {
         return None;
     }
-    Some((date_ordinal(&end)? - date_ordinal(&start)?) as f64)
+    Some(elapsed_seconds as f64 / 86_400.0)
 }
 
 fn valid_partition_id(id: &str) -> bool {
@@ -597,19 +709,37 @@ fn valid_partition_id(id: &str) -> bool {
 struct HashingReader<R> {
     inner: R,
     hash: Sha256,
+    header: Vec<u8>,
+    header_complete: bool,
 }
 impl<R> HashingReader<R> {
     fn new(inner: R) -> Self {
         Self {
             inner,
             hash: Sha256::new(),
+            header: Vec::new(),
+            header_complete: false,
         }
+    }
+
+    fn header_digest(&self) -> String {
+        let bytes = self.header.strip_suffix(b"\r").unwrap_or(&self.header);
+        format!("sha256:{:x}", Sha256::digest(bytes))
     }
 }
 impl<R: Read> Read for HashingReader<R> {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
         let count = self.inner.read(buffer)?;
         self.hash.update(&buffer[..count]);
+        if !self.header_complete {
+            for byte in &buffer[..count] {
+                if *byte == b'\n' {
+                    self.header_complete = true;
+                    break;
+                }
+                self.header.push(*byte);
+            }
+        }
         Ok(count)
     }
 }
@@ -720,6 +850,18 @@ fn normalize_category(value: Option<&str>) -> ContactCategory {
 }
 fn date_and_period(value: Option<&str>) -> Option<(String, String)> {
     let value = value?;
+    if parse_utc_timestamp(value).is_none() {
+        return None;
+    }
+    let date = value.get(..10)?;
+    Some((value.to_owned(), date[..7].to_owned()))
+}
+
+fn parse_utc_timestamp(value: &str) -> Option<i64> {
+    if value.len() != 20 || value.as_bytes().get(10) != Some(&b'T') || value.ends_with('Z') == false
+    {
+        return None;
+    }
     let date = value.get(..10)?;
     let b = date.as_bytes();
     if b.len() != 10
@@ -753,7 +895,26 @@ fn date_and_period(value: Option<&str>) -> Option<(String, String)> {
     if month == 0 || month > 12 || day == 0 || day > days[month as usize - 1] {
         return None;
     }
-    Some((date.to_owned(), date[..7].to_owned()))
+    let time = value.get(11..19)?.as_bytes();
+    if time[2] != b':' || time[5] != b':' {
+        return None;
+    }
+    let digits = [time[0], time[1], time[3], time[4], time[6], time[7]];
+    if !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    let hour = value[11..13].parse::<u8>().ok()?;
+    let minute = value[14..16].parse::<u8>().ok()?;
+    let second = value[17..19].parse::<u8>().ok()?;
+    if hour > 23 || minute > 59 || second > 59 {
+        return None;
+    }
+    Some(
+        date_ordinal(date)? * 86_400
+            + i64::from(hour) * 3_600
+            + i64::from(minute) * 60
+            + i64::from(second),
+    )
 }
 fn valid_uuid_v7(value: &str) -> bool {
     let b = value.as_bytes();
@@ -777,6 +938,7 @@ fn manifest_digest(
     reference: &ArtifactReference,
     snapshot_digest: &str,
     table: ProjectionTable,
+    source_header_digest: &str,
     cutoff: &str,
     partitions: &BTreeMap<String, String>,
     coverage: ProjectionCoverage,
@@ -791,6 +953,7 @@ fn manifest_digest(
         reference.digest.as_str(),
         snapshot_digest,
         table.as_str(),
+        source_header_digest,
         cutoff,
         if coverage == ProjectionCoverage::Complete {
             "complete"

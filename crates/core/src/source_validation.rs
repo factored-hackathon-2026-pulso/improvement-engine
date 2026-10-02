@@ -232,6 +232,8 @@ struct SnapshotSource {
     table: String,
     uri: String,
     file_digest: String,
+    #[serde(default, deserialize_with = "deserialize_partition_inventory_digest")]
+    partition_inventory_digest: Option<String>,
     header_digest: String,
     row_count: u64,
     source_contract_ref: SourceContractRef,
@@ -245,6 +247,15 @@ struct SourceContractRef {
     digest: String,
 }
 
+fn deserialize_partition_inventory_digest<'de, D>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(Some)
+}
+
 /// Read-only seal for one exact file entry in an immutable source snapshot.
 /// It intentionally has no public constructor: callers obtain it only from the
 /// parsed `SourceSnapshot` and can use it to bind a downstream projection back
@@ -254,6 +265,7 @@ pub struct SourceFileSeal {
     table: String,
     uri: String,
     file_digest: String,
+    partition_inventory_digest: Option<String>,
     header_digest: String,
     source_contract_id: String,
     source_contract_version: String,
@@ -340,6 +352,16 @@ impl SourceFileSeal {
     pub fn file_digest(&self) -> &str {
         &self.file_digest
     }
+
+    #[must_use]
+    pub fn partition_inventory_digest(&self) -> Option<&str> {
+        self.partition_inventory_digest.as_deref()
+    }
+
+    #[must_use]
+    pub fn header_digest(&self) -> &str {
+        &self.header_digest
+    }
 }
 
 impl SourceSnapshot {
@@ -410,6 +432,7 @@ impl SourceSnapshot {
                 table: source.table.clone(),
                 uri: source.uri.clone(),
                 file_digest: source.file_digest.clone(),
+                partition_inventory_digest: source.partition_inventory_digest.clone(),
                 header_digest: source.header_digest.clone(),
                 source_contract_id: source.source_contract_ref.id.clone(),
                 source_contract_version: source.source_contract_ref.version.clone(),
@@ -441,6 +464,10 @@ impl SourceSnapshot {
             }
             if !(source.uri.starts_with("file://") || source.uri.starts_with("s3://"))
                 || !is_sha256_digest(&source.file_digest)
+                || source
+                    .partition_inventory_digest
+                    .as_deref()
+                    .is_some_and(|digest| !is_sha256_digest(digest))
                 || !is_sha256_digest(&source.header_digest)
                 || !is_contract_id(&source.source_contract_ref.id)
                 || !is_contract_version(&source.source_contract_ref.version)

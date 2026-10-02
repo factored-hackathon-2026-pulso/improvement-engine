@@ -27,6 +27,7 @@
           "table": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
           "uri": {"type": "string", "pattern": "^(file|s3)://"},
           "file_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "partition_inventory_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
           "header_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
           "row_count": {"type": "integer", "minimum": 0},
           "source_contract_ref": {
