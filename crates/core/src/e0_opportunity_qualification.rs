@@ -123,7 +123,7 @@ impl FrozenE0OpportunityQualification {
     /// Crate-private follow-on boundary. A scratch preparation must recompute
     /// this intentionally non-causal qualification from the exact candidate
     /// and verifier report before it can touch a workspace.
-    #[allow(dead_code)] // Consumed by the future U15-EQ composition root.
+    #[allow(dead_code)] // Consumed by U15-EQ's crate-private composition root.
     pub(crate) fn revalidate_for_inputs(
         &self,
         candidate: &VerifiedScoutCandidate,
@@ -137,7 +137,7 @@ impl FrozenE0OpportunityQualification {
         }
     }
 
-    #[allow(dead_code)] // Reached only through the pending U15-EQ composition root.
+    #[allow(dead_code)] // Reached only through U15-EQ's crate-private composition root.
     fn matches(&self, other: &Self) -> bool {
         self.scope == other.scope
             && self.candidate_digest == other.candidate_digest

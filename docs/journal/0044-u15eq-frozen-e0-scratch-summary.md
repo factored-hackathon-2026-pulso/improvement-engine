@@ -28,6 +28,9 @@ coincidan con la proveniencia E0 sellada.
 - La salida `PreparedFrozenE0MemorySummary` no implementa `Debug` y expone
   únicamente commitments/recibos derivados; nunca workspace, páginas, ruta o
   texto. Tampoco autoriza publicación o uso de memoria.
+- Si ya existe la ruta canónica `prepared/frozen-e0-summary.md`, `Create`
+  devuelve `PageAlreadyExists`: no hay output preparado, `Replace`, reutilización
+  del texto anterior ni resultado de transform observable.
 
 ## RED → GREEN
 
@@ -43,6 +46,6 @@ cierran la composición y cualquier `Debug` del output.
 ## Fuera de alcance
 
 No hay U33 publish/head/artifact, U22 `MemoryUse`, U23 temporal admission,
-U16, LLM/Jev, Agent Core, runtime, HTTP o release. La futura raíz de
-composición debe conectar este recibo opaco con U33-E/U23-E sin abrir los
+U16, LLM/Jev, Agent Core, runtime, HTTP o release. La raíz de composición del
+servicio debe conectar este recibo opaco con U33-E/U23-E sin abrir los
 bytes ni cambiar las precondiciones Frozen.

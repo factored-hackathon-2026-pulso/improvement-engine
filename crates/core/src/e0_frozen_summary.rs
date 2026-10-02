@@ -6,8 +6,6 @@
 //! transform inside an ephemeral workspace. U33-E/U23-E own every later
 //! publication and governed-memory linkage.
 
-#![allow(dead_code)] // Wired by the future trusted service-composition root.
-
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -24,13 +22,19 @@ use crate::wiki_scratch::{
     WikiTransformOperation,
 };
 
+#[allow(dead_code)] // Used by the crate-private composition root, not a public API.
 const PURPOSE: &str = "investigation";
+#[allow(dead_code)] // Used by the crate-private composition root, not a public API.
 const CAMPAIGN: &str = "e0_diagnostic";
+#[allow(dead_code)] // Used by the crate-private composition root, not a public API.
 const PROTOCOL: &str = "frozen";
+#[allow(dead_code)] // Used by the crate-private composition root, not a public API.
 const PARTITION: &str = "train";
+#[allow(dead_code)] // Used by the crate-private composition root, not a public API.
 const SUMMARY_PATH: &str = "prepared/frozen-e0-summary.md";
 // This text is intentionally static: no candidate facts, user text, outcomes,
 // values, causal claims or source/wiki content can enter a U15-EQ transform.
+#[allow(dead_code)] // Used by the crate-private composition root, not a public API.
 const SUMMARY_CONTENT: &str =
     "# Frozen E0 preparation\n\nPrepared provenance for later governed evaluation.\n";
 
@@ -135,8 +139,10 @@ impl From<WikiError> for FrozenE0SummaryPreparationError {
 /// transport caller cannot select a permissive wiki port, scope, grant, clock
 /// or replay projection. The enclosing service composition must obtain each
 /// input from its owning sealed boundary.
+#[allow(dead_code)] // Activated only by the trusted service-composition root.
 pub(crate) struct FrozenE0SummaryComposer;
 
+#[allow(dead_code)] // Activated only by the trusted service-composition root.
 impl FrozenE0SummaryComposer {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare<R: ArtifactRepository, W: WikiScratchPort>(
@@ -242,6 +248,7 @@ impl FrozenE0SummaryComposer {
     }
 }
 
+#[allow(dead_code)] // Reached only through the crate-private composer.
 fn canonical_transform() -> WikiTransform {
     WikiTransform::new(vec![WikiTransformOperation::create(
         SUMMARY_PATH,
@@ -250,6 +257,7 @@ fn canonical_transform() -> WikiTransform {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)] // Commitment domain for the crate-private composer.
 struct ReplayCommitment<'a> {
     tenant_id: &'a str,
     world_ref: &'a str,
@@ -258,6 +266,7 @@ struct ReplayCommitment<'a> {
     availability_profile_digest: &'a str,
 }
 #[derive(Serialize)]
+#[allow(dead_code)] // Commitment domain for the crate-private composer.
 struct AccessCommitment<'a> {
     tenant_id: &'a str,
     run_id: &'a str,
@@ -269,6 +278,7 @@ struct AccessCommitment<'a> {
     scope: &'a MemoryScope,
 }
 #[derive(Serialize)]
+#[allow(dead_code)] // Commitment domain for the crate-private composer.
 struct PreparationCommitment<'a> {
     candidate_digest: &'a str,
     qualification_commitment: &'a str,
@@ -279,6 +289,7 @@ struct PreparationCommitment<'a> {
     result_commitment: &'a str,
     status: PreparedFrozenE0MemorySummaryStatus,
 }
+#[allow(dead_code)] // Reached only through the crate-private composer.
 fn digest<T: Serialize>(value: &T) -> String {
     format!(
         "sha256:{:x}",
@@ -320,6 +331,21 @@ mod tests {
         FrozenE0OpportunityQualification,
         VerifiedReplayAvailability,
     ) {
+        seeded_with_pages(json!({"index.md": "seed"}))
+    }
+
+    fn seeded_with_pages(
+        pages: serde_json::Value,
+    ) -> (
+        InMemoryArtifactRepository,
+        InMemoryWikiGrantAuthority,
+        WikiAccess,
+        MemoryScope,
+        VerifiedScoutCandidate,
+        FrozenE0VerificationReport,
+        FrozenE0OpportunityQualification,
+        VerifiedReplayAvailability,
+    ) {
         let candidate = verified_real_e0_candidate_for_frozen_verifier_test();
         let report = FrozenE0IndependentVerifier::verify(&candidate).unwrap();
         let qualification = FrozenE0OpportunityQualifier::qualify(&candidate, &report).unwrap();
@@ -328,10 +354,20 @@ mod tests {
             "tenant_a", PURPOSE, "world_a", CAMPAIGN, PROTOCOL, PARTITION,
         );
         let mut repository = InMemoryArtifactRepository::default();
-        let snapshot_ref = repository.append(None, ArtifactDraft::new(
-            "tenant_a", "018f50a1-7f00-7000-8000-000000000015", 1, ArtifactKind::MemoryWiki,
-            json!({"available_at_unix_seconds": 100, "purpose": PURPOSE, "pages": {"index.md": "seed"}}), None,
-        )).unwrap().reference();
+        let snapshot_ref = repository
+            .append(
+                None,
+                ArtifactDraft::new(
+                    "tenant_a",
+                    "018f50a1-7f00-7000-8000-000000000015",
+                    1,
+                    ArtifactKind::MemoryWiki,
+                    json!({"available_at_unix_seconds": 100, "purpose": PURPOSE, "pages": pages}),
+                    None,
+                ),
+            )
+            .unwrap()
+            .reference();
         let binding = MemoryScopeBinding::new("world_a", CAMPAIGN, PROTOCOL, PARTITION);
         let access = WikiAccess::new_scoped(
             "run_e0",
@@ -461,6 +497,29 @@ mod tests {
                 &mut repository
             ),
             Err(FrozenE0SummaryPreparationError::ScopeMismatch)
+        ));
+    }
+
+    #[test]
+    fn existing_canonical_summary_path_returns_no_output_or_observable_transform_result() {
+        let (mut repository, mut scratch, access, scope, candidate, report, qualification, replay) =
+            seeded_with_pages(json!({SUMMARY_PATH: "previous scratch text"}));
+
+        let result = FrozenE0SummaryComposer::prepare(
+            &qualification,
+            &candidate,
+            &report,
+            &replay,
+            &scope,
+            &access,
+            &mut scratch,
+            &mut repository,
+        );
+
+        assert!(matches!(
+            result,
+            Err(FrozenE0SummaryPreparationError::Scratch(WikiError::PageAlreadyExists { path }))
+                if path == SUMMARY_PATH
         ));
     }
 }
