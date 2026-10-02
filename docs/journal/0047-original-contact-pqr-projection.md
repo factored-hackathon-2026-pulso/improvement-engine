@@ -29,13 +29,27 @@ technical disclosure-control heuristic, not a formal anonymity guarantee.
 PQR first-response time is elapsed seconds expressed as fractional days, not
 business/legal SLA.
 
+The Complaints dictionary includes `first_response_date`, `resolution_date`,
+and `closing_date` timestamps, but neither its `TIMESTAMP` declarations nor
+the current snapshot provide timezone semantics. The projector therefore does
+not censor final PQR outcome fields against the UTC snapshot cutoff. It selects
+the creation-date cohort at/before cutoff and labels outcome fields
+`final_*` with `CreationCohortWithFinalOutcomes`; these are retrospective
+cohort outcomes, not as-of metrics. Until a reliable timezone/same-clock
+contract is defined, original naive timestamp rows remain unsupported and no
+real-source business outcomes are emitted.
+The call-center projection declares `EventDateCohort`, which describes its
+interaction-date membership only and does not claim that row-attached resolved,
+followup, or escalation status was independently known at that cutoff.
+
 ## Verification
 
 Synthetic tests persist the exact snapshot artifact and compute its seals from
 the same fixture bytes being projected; they cover unrelated refs, inventory
 digest mismatch, header-seal mismatch, exact-second cutoff, invalid and naive timestamps,
 quoted/escaped and multiline CSV, duplicate headers, truncated rows, blank
-channel, denominators, k suppression, and PQR elapsed-time metrics. The gated
+channel, denominators, k suppression, and PQR final-outcome cohort semantics,
+including response timestamps after the cutoff. The gated
 local smoke builds an in-memory source snapshot from the exact 25-partition
 sample, marks it `partial`, and verifies current source timestamp semantics
 fail closed (unsupported, rejected rows counted, no aggregate cells). This is

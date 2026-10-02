@@ -10,7 +10,7 @@ operational SLA calculator, or a technical-error detector.
 | Source | Grouping | Aggregates |
 | --- | --- | --- |
 | `call_center_interactions` | `interaction_date` month × normalized `reason_category` (fallback to `contact_reason` only if that column is absent) × normalized `channel` | Contact count; known/positive counts for `was_resolved`, `requires_followup`, `was_escalated`; mean `duration_seconds` and `wait_time_seconds` where valid values exist |
-| `complaints` | `creation_date` month × normalized `category` × normalized `reception_channel` | PQR count; known/positive counts for `sla_breached`; mean elapsed calendar days to `first_response_date`; mean `resolution_days` and `resolution_satisfaction` where valid values exist |
+| `complaints` | `creation_date` month × normalized `category` × normalized `reception_channel` | Creation-cohort PQR count; final-extract known/positive counts for `sla_breached`; mean `final_first_response_elapsed_days`; mean final `resolution_days` and `resolution_satisfaction` where valid values exist |
 
 Grouping labels are closed enums. Recognized Spanish/English spellings map to
 stable lower-case labels; any unrecognized, null, or PII-like category maps to
@@ -36,7 +36,9 @@ included only on the assumed common 1–5 scale; confirm the scale against the
 source dictionary before interpreting its magnitude. First response time is
 elapsed days between `creation_date` and `first_response_date`, at second
 precision, only when both timestamps are valid and ordered; it is not a
-business-hours or legally defined SLA calculation. Means use only rows with valid values, with no
+business-hours or legally defined SLA calculation. Complaint outputs rename
+these fields with `final_` prefixes and declare
+`CreationCohortWithFinalOutcomes` temporal semantics. Means use only rows with valid values, with no
 imputation. Every numeric and boolean metric carries `valid_count` and
 `missing_count` per visible aggregate cell; their sum is that cell's row
 denominator. Boolean metrics also expose positive count, and numeric means use
@@ -71,11 +73,27 @@ cutoff are excluded by exact UTC second comparison. The cutoff must use the
 same exact timestamp grammar; malformed or higher-precision cutoffs are
 rejected rather than rounded.
 
-The source contract declares the contact date as `timestamp` but specifies no
-timezone; supplied local source values are naive timestamps. Accordingly, the
-current original-source projection is fail-closed/unsupported for those rows.
-No actual business aggregate or prevalence estimate is claimed until the
-source contract defines a timezone or a compatible same-clock cutoff contract.
+The call-center source contract declares `interaction_date` as `timestamp`
+without a timezone, and the supplied contact values are naive. There is not
+yet a canonical Complaints SourceContract; its dictionary lists
+`creation_date`, `first_response_date`, `resolution_date`, and
+`closing_date` as timestamps, but provides no timezone. The CSV header confirms
+those columns exist; their availability does not establish when the outcomes
+became observable relative to the UTC snapshot cutoff. Therefore complaint
+rows are a cohort selected by `creation_date <= observed_cutoff`, while
+`final_sla_breached`, `final_first_response_elapsed_days`,
+`final_resolution_days`, and `final_resolution_satisfaction` are retrospective
+final-extract outcomes that may occur after that cutoff. They are not as-of
+metrics and must not be used for online/as-of decisions or leakage-sensitive
+evaluation. No reliable outcome censoring is attempted until a timezone/same-
+clock contract exists. All current naive timestamps remain fail-closed, so the
+original-source projection emits no business aggregates.
+
+For call-center contacts, `EventDateCohort` means only that rows are selected
+by `interaction_date`; it does not claim the attached `was_resolved`,
+`requires_followup`, or `was_escalated` values were observable at that cutoff,
+because those outcomes have no separate reliable event timestamp in the
+available contract.
 
 For partitioned tables, the additive optional `partition_inventory_digest`
 seal must be the canonical partition-inventory digest produced by

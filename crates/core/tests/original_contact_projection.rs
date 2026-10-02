@@ -161,33 +161,66 @@ fn complaint_metrics_keep_known_denominators_and_elapsed_calendar_time() {
     assert_eq!(cell.complaint_count, 5);
     assert_eq!(
         (
-            cell.sla_breached.valid_count,
-            cell.sla_breached.missing_count,
-            cell.sla_breached.positive_count
+            cell.final_sla_breached.valid_count,
+            cell.final_sla_breached.missing_count,
+            cell.final_sla_breached.positive_count
         ),
         (4, 1, 2)
     );
     assert_eq!(
         (
-            cell.first_response_calendar_days.valid_count,
-            cell.first_response_calendar_days.missing_count
+            cell.final_first_response_elapsed_days.valid_count,
+            cell.final_first_response_elapsed_days.missing_count
         ),
         (5, 0)
     );
-    assert_eq!(cell.first_response_calendar_days.mean, Some(1.0));
+    assert_eq!(cell.final_first_response_elapsed_days.mean, Some(1.0));
     assert_eq!(
         (
-            cell.resolution_days.valid_count,
-            cell.resolution_days.missing_count
+            cell.final_resolution_days.valid_count,
+            cell.final_resolution_days.missing_count
         ),
         (4, 1)
     );
     assert_eq!(
         (
-            cell.resolution_satisfaction.valid_count,
-            cell.resolution_satisfaction.missing_count
+            cell.final_resolution_satisfaction.valid_count,
+            cell.final_resolution_satisfaction.missing_count
         ),
         (4, 1)
+    );
+}
+
+#[test]
+fn complaint_outcomes_after_cutoff_are_marked_as_final_creation_cohort_metrics() {
+    let bytes = b"creation_date,category,reception_channel,sla_breached,first_response_date,resolution_date,closing_date,resolution_days,resolution_satisfaction\n2026-08-31T09:00:00Z,Queja,Phone,true,2026-09-05T09:00:00Z,2026-09-10T09:00:00Z,2026-09-12T09:00:00Z,10,2\n";
+    let manifest = plan(
+        ProjectionTable::Complaints,
+        &[('p', bytes)],
+        ProjectionCoverage::Partial,
+        1,
+    );
+    let projection =
+        project_complaints(&manifest, [CsvPartition::new("p", Cursor::new(bytes))]).unwrap();
+
+    assert_eq!(
+        projection.temporal_semantics,
+        ProjectionTemporalSemantics::CreationCohortWithFinalOutcomes
+    );
+    assert_eq!(projection.aggregates[0].final_sla_breached.valid_count, 1);
+    assert_eq!(
+        projection.aggregates[0]
+            .final_first_response_elapsed_days
+            .mean,
+        Some(5.0)
+    );
+    assert_eq!(
+        projection.aggregates[0].final_resolution_days.mean,
+        Some(10.0)
+    );
+    assert_eq!(
+        projection.aggregates[0].final_resolution_satisfaction.mean,
+        Some(2.0)
     );
 }
 

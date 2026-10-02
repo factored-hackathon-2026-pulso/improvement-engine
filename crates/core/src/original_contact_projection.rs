@@ -65,6 +65,16 @@ pub enum SupportStatus {
     Unsupported { missing_fields: Vec<&'static str> },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectionTemporalSemantics {
+    /// Rows are selected by source event timestamp; no as-of claim is implied
+    /// for status/outcome values carried by those rows.
+    EventDateCohort,
+    /// Rows are selected by creation timestamp at or before cutoff, but their
+    /// outcome fields are final values from the extract and may be later.
+    CreationCohortWithFinalOutcomes,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ContactCategory {
     Complaint,
@@ -145,10 +155,14 @@ pub struct ComplaintAggregate {
     pub category: ContactCategory,
     pub channel: Channel,
     pub complaint_count: u64,
-    pub sla_breached: BooleanSummary,
-    pub first_response_calendar_days: MetricSummary,
-    pub resolution_days: MetricSummary,
-    pub resolution_satisfaction: MetricSummary,
+    /// Final extract value for the creation-date cohort; not an as-of-cutoff metric.
+    pub final_sla_breached: BooleanSummary,
+    /// Elapsed days to the final recorded first response; may be after cutoff.
+    pub final_first_response_elapsed_days: MetricSummary,
+    /// Final extract's resolution duration; may be after cutoff.
+    pub final_resolution_days: MetricSummary,
+    /// Final extract's satisfaction score; may be after cutoff.
+    pub final_resolution_satisfaction: MetricSummary,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -161,9 +175,13 @@ pub struct BooleanSummary {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Projection<T> {
     pub status: SupportStatus,
+    /// Explicitly distinguishes row-date cohorting from retrospective outcomes.
+    pub temporal_semantics: ProjectionTemporalSemantics,
     pub source_snapshot_ref: ArtifactReference,
     pub source_snapshot_binding_digest: String,
     pub manifest_digest: String,
+    /// Snapshot observation cutoff. Its business-time interpretation is bounded
+    /// by `temporal_semantics`; it does not imply outcome censoring.
     pub observed_cutoff: String,
     pub coverage: ProjectionCoverage,
     pub policy_version: u32,
@@ -453,6 +471,7 @@ pub fn project_contacts<R: Read>(
     };
     Ok(Projection {
         status,
+        temporal_semantics: ProjectionTemporalSemantics::EventDateCohort,
         source_snapshot_ref: manifest.source_snapshot_ref.clone(),
         source_snapshot_binding_digest: manifest.snapshot_binding_digest.clone(),
         manifest_digest: manifest.digest.clone(),
@@ -597,12 +616,14 @@ pub fn project_complaints<R: Read>(
                         category,
                         channel,
                         complaint_count: values.complaint_count,
-                        sla_breached: values.sla_breached.finish(values.complaint_count),
-                        first_response_calendar_days: values
+                        final_sla_breached: values.sla_breached.finish(values.complaint_count),
+                        final_first_response_elapsed_days: values
                             .first_response_calendar_days
                             .finish(values.complaint_count),
-                        resolution_days: values.resolution_days.finish(values.complaint_count),
-                        resolution_satisfaction: values
+                        final_resolution_days: values
+                            .resolution_days
+                            .finish(values.complaint_count),
+                        final_resolution_satisfaction: values
                             .resolution_satisfaction
                             .finish(values.complaint_count),
                     })
@@ -614,6 +635,7 @@ pub fn project_complaints<R: Read>(
     };
     Ok(Projection {
         status,
+        temporal_semantics: ProjectionTemporalSemantics::CreationCohortWithFinalOutcomes,
         source_snapshot_ref: manifest.source_snapshot_ref.clone(),
         source_snapshot_binding_digest: manifest.snapshot_binding_digest.clone(),
         manifest_digest: manifest.digest.clone(),
