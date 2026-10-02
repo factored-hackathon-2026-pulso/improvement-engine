@@ -252,7 +252,7 @@ $metricLines = [System.Collections.Generic.List[string]]::new()
 if ($null -ne $result['signals']) {
     foreach ($metric in $result['signals']) {
         $metricId = [string] $metric['metric_id']
-        Assert-AllowedValue -Value $metricId -Allowed @('e0_technical_error_rate', 'e0_recurring_copilot_query_cases')
+        Assert-AllowedValue -Value $metricId -Allowed @('e0_technical_error_rate', 'e0_tool_retry_case_rate', 'e0_recurring_copilot_query_cases')
         $numerator = Get-NonNegativeInteger -Object $metric -Name 'numerator'
         $denominator = Get-NonNegativeInteger -Object $metric -Name 'denominator'
         $missing = Get-NonNegativeInteger -Object $metric -Name 'missing'

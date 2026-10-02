@@ -25,6 +25,15 @@ fn large_strings(values: Vec<&str>) -> ArrayRef {
 }
 
 fn e0_fixture(root: &Path, discovery_status: &str, replay_status: &str) {
+    e0_fixture_with_retries(root, discovery_status, replay_status, [Some(0), Some(0)]);
+}
+
+fn e0_fixture_with_retries(
+    root: &Path,
+    discovery_status: &str,
+    replay_status: &str,
+    retry_counts: [Option<i32>; 2],
+) {
     let data = root.join("datos");
     fs::create_dir_all(&data).expect("create data directory");
     fs::create_dir_all(root.join("contratos")).expect("create contracts directory");
@@ -86,7 +95,7 @@ fn e0_fixture(root: &Path, discovery_status: &str, replay_status: &str) {
             large_strings(vec![discovery_status, replay_status]),
             Arc::new(BooleanArray::from(vec![Some(false), Some(false)])),
             large_strings(vec!["{}", "{}"]),
-            Arc::new(Int32Array::from(vec![Some(0), Some(0)])),
+            Arc::new(Int32Array::from(retry_counts.to_vec())),
             Arc::new(Int64Array::from(vec![Some(5), Some(5)])),
         ],
     );
@@ -230,6 +239,14 @@ fn e0_recurrence_fixture(
 }
 
 fn run_e0_cli(input: &Path, output: &Path) -> serde_json::Value {
+    run_e0_cli_with_arranque(input, output, "21")
+}
+
+fn run_e0_cli_with_arranque(
+    input: &Path,
+    output: &Path,
+    arranque_cases: &str,
+) -> serde_json::Value {
     let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
         .args([
             "local-sim",
@@ -248,7 +265,7 @@ fn run_e0_cli(input: &Path, output: &Path) -> serde_json::Value {
             "--observed-cutoff",
             "2025-07-01T00:00:00Z",
             "--arranque-cases",
-            "21",
+            arranque_cases,
         ])
         .output()
         .expect("run E0 fixture through CLI");
@@ -265,6 +282,46 @@ fn run_e0_cli(input: &Path, output: &Path) -> serde_json::Value {
         .path();
     serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
         .expect("valid result JSON")
+}
+
+#[test]
+fn e0_cli_surfaces_retry_case_rate_with_known_denominator_and_missing_cases() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0-retries");
+    let output = temp.path().join("runs-retries");
+    e0_fixture_with_retries(&input, "ok", "ok", [Some(2), None]);
+
+    let result = run_e0_cli_with_arranque(&input, &output, "2");
+    let retry = result["signals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|signal| signal["metric_id"] == "e0_tool_retry_case_rate")
+        .expect("retry signal is persisted");
+    assert_eq!(retry["numerator"], 1);
+    assert_eq!(retry["denominator"], 1);
+    assert_eq!(retry["missing"], 1);
+    assert_eq!(result["signal"]["metric_id"], "e0_tool_retry_case_rate");
+    assert_eq!(result["proposal"]["status"], "simulated_unverified");
+    assert_eq!(result["proposal"]["execution_status"], "not_executed");
+    assert_eq!(
+        result["proposal"]["proposed_artifact"]["observed_evidence"]["retry_cases"],
+        1
+    );
+    assert_eq!(
+        result["proposal"]["proposed_artifact"]["observed_evidence"]["retry_denominator_known_cases"],
+        1
+    );
+    assert_eq!(
+        result["proposal"]["proposed_artifact"]["observed_evidence"]["retry_cases_missing"],
+        1
+    );
+    assert!(
+        result
+            .to_string()
+            .contains("does not establish cause or savings")
+    );
+    assert!(!result.to_string().contains("private-case-id"));
 }
 
 #[test]
@@ -508,7 +565,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
 
     assert_eq!(result["terminal_status"], "complete_simulated");
     assert!(result["excluded_replay_case_count"].is_null());
-    assert_eq!(result["primary_signal_policy"], "local_primary_signal_v2");
+    assert_eq!(result["primary_signal_policy"], "local_primary_signal_v3");
     assert_eq!(
         result["signal"]["metric_id"],
         "e0_recurring_copilot_query_cases"
@@ -541,7 +598,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
     assert_eq!(result["proposal"]["status"], "simulated_unverified");
     assert_eq!(result["proposal"]["execution_status"], "not_executed");
     assert_eq!(result["formal_route"], "do_nothing");
-    assert_eq!(result["signals"].as_array().unwrap().len(), 2);
+    assert_eq!(result["signals"].as_array().unwrap().len(), 3);
     assert!(result["signal"]["pattern_ref"].as_str().is_some());
     assert!(!serialized.contains("private-case-"));
     assert!(!serialized.contains("private-query-"));

@@ -5,8 +5,8 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef, BooleanArray, RecordBatch, StringArray, TimestampMicrosecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use improvement_engine_source_adapters::{
-    CasePhase, PreparationConfig, PreparedSource, SourceKind, evaluator, prepare_e0_package,
-    prepare_original_bank,
+    AdapterError, CasePhase, PreparationConfig, PreparedSource, SourceKind, evaluator,
+    prepare_e0_package, prepare_original_bank,
 };
 use parquet::arrow::ArrowWriter;
 use tempfile::TempDir;
@@ -41,6 +41,11 @@ fn write_parquet(path: &Path, schema: Schema, columns: Vec<ArrayRef>) {
 }
 
 fn e0_fixture(root: &Path) {
+    e0_fixture_with_retry_counts(root, vec![Some(0), Some(0), Some(1), None]);
+}
+
+fn e0_fixture_with_retry_counts(root: &Path, retry_counts: Vec<Option<i64>>) {
+    assert_eq!(retry_counts.len(), 4);
     let data = root.join("datos");
     fs::create_dir_all(&data).expect("create data dir");
     fs::create_dir_all(root.join("contratos")).expect("create contracts dir");
@@ -102,7 +107,7 @@ fn e0_fixture(root: &Path) {
         Field::new("status", DataType::Utf8, false),
         Field::new("verified", DataType::Boolean, true),
         Field::new("state_change", DataType::Utf8, true),
-        Field::new("retry_count", DataType::Int32, true),
+        Field::new("retry_count", DataType::Int64, true),
         Field::new("latency_ms", DataType::Int64, true),
         Field::new("params", DataType::Utf8, true),
     ]);
@@ -148,7 +153,7 @@ fn e0_fixture(root: &Path) {
                 Some("{\"status\":\"updated\"}"),
                 None,
             ])),
-            Arc::new(arrow_array::Int32Array::from(vec![0_i32, 0, 1, 0])),
+            Arc::new(arrow_array::Int64Array::from(retry_counts)),
             Arc::new(arrow_array::Int64Array::from(vec![100_i64, 20, 200, 0])),
             Arc::new(StringArray::from(vec![
                 "{MONTO}",
@@ -410,6 +415,18 @@ fn e0_agent_projection_is_chronological_safe_and_excludes_evaluator_labels() {
     assert_eq!(tool_events.len(), 2);
     assert_eq!(tool_events[0].technical_error(), Some(false));
     assert_eq!(tool_events[1].technical_error(), Some(true));
+    assert_eq!(tool_events[0].retry_count(), Some(0));
+    assert_eq!(tool_events[1].retry_count(), Some(1));
+    assert_eq!(
+        cases[2]
+            .events()
+            .iter()
+            .find(|event| event.event_kind() == "tool_call")
+            .unwrap()
+            .retry_count(),
+        None,
+        "null retry count remains unknown rather than becoming zero"
+    );
     assert_eq!(tool_events[0].actor_role(), Some("tree"));
     assert!(
         tool_events[0]
@@ -484,6 +501,24 @@ fn e0_agent_projection_is_chronological_safe_and_excludes_evaluator_labels() {
         } if topic == "unknown"
     )));
     assert!(!serialized.contains("person@example.test"));
+}
+
+#[test]
+fn e0_retry_count_above_supported_u32_range_is_rejected_instead_of_wrapping() {
+    let temp = TempDir::new().expect("temp dir");
+    e0_fixture_with_retry_counts(
+        temp.path(),
+        vec![Some(i64::from(u32::MAX) + 1), Some(0), Some(1), None],
+    );
+
+    let error = match prepare_e0_package(temp.path(), &config(2)) {
+        Err(error) => error,
+        Ok(_) => panic!("oversized retry count should be rejected"),
+    };
+    assert!(matches!(
+        error,
+        AdapterError::InvalidInput("optional E0 retry count exceeds supported range")
+    ));
 }
 
 #[test]

@@ -198,6 +198,7 @@ fn to_run_input(
                 actor_layer: event.actor_role().map(safe_code).transpose()?,
                 tool_code: event.tool_code().map(safe_code).transpose()?,
                 technical_error: event.technical_error(),
+                retry_count: event.retry_count(),
                 approval: event.approval().map(|value| value.to_string()),
                 signal_code: event.signal_code().map(safe_code).transpose()?,
             })
