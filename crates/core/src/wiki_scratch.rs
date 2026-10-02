@@ -15,6 +15,39 @@ use sha2::{Digest, Sha256};
 
 use crate::{ArtifactKind, ArtifactReference, ArtifactRepository};
 
+/// Pinned information partition for memory work. It deliberately excludes tenant
+/// and purpose because those remain explicit `WikiAccess` claims and are checked
+/// together at every boundary.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct MemoryScopeBinding {
+    pub world: String,
+    pub campaign: String,
+    pub protocol: String,
+    pub partition: String,
+}
+
+impl MemoryScopeBinding {
+    #[must_use]
+    pub fn new(
+        world: impl Into<String>,
+        campaign: impl Into<String>,
+        protocol: impl Into<String>,
+        partition: impl Into<String>,
+    ) -> Self {
+        Self {
+            world: world.into(),
+            campaign: campaign.into(),
+            protocol: protocol.into(),
+            partition: partition.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn unscoped() -> Self {
+        Self::new("unscoped", "unscoped", "unscoped", "unscoped")
+    }
+}
+
 /// An exact snapshot and caller context submitted at every workspace operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WikiAccess {
@@ -24,6 +57,7 @@ pub struct WikiAccess {
     pub grant_id: String,
     pub snapshot_ref: ArtifactReference,
     pub allowed_at_unix_seconds: u64,
+    pub memory_scope: MemoryScopeBinding,
 }
 
 impl WikiAccess {
@@ -36,6 +70,27 @@ impl WikiAccess {
         snapshot_ref: ArtifactReference,
         allowed_at_unix_seconds: u64,
     ) -> Self {
+        Self::new_scoped(
+            run_id,
+            tenant_id,
+            purpose,
+            grant_id,
+            snapshot_ref,
+            allowed_at_unix_seconds,
+            MemoryScopeBinding::unscoped(),
+        )
+    }
+
+    #[must_use]
+    pub fn new_scoped(
+        run_id: impl Into<String>,
+        tenant_id: impl Into<String>,
+        purpose: impl Into<String>,
+        grant_id: impl Into<String>,
+        snapshot_ref: ArtifactReference,
+        allowed_at_unix_seconds: u64,
+        memory_scope: MemoryScopeBinding,
+    ) -> Self {
         Self {
             run_id: run_id.into(),
             tenant_id: tenant_id.into(),
@@ -43,6 +98,7 @@ impl WikiAccess {
             grant_id: grant_id.into(),
             snapshot_ref,
             allowed_at_unix_seconds,
+            memory_scope,
         }
     }
 }
@@ -59,6 +115,7 @@ pub struct WikiGrant {
     tenant_id: String,
     purpose: String,
     snapshot_ref: ArtifactReference,
+    memory_scope: MemoryScopeBinding,
 }
 
 impl WikiGrant {
@@ -70,12 +127,32 @@ impl WikiGrant {
         purpose: impl Into<String>,
         snapshot_ref: ArtifactReference,
     ) -> Self {
+        Self::new_scoped(
+            grant_id,
+            run_id,
+            tenant_id,
+            purpose,
+            snapshot_ref,
+            MemoryScopeBinding::unscoped(),
+        )
+    }
+
+    #[must_use]
+    pub fn new_scoped(
+        grant_id: impl Into<String>,
+        run_id: impl Into<String>,
+        tenant_id: impl Into<String>,
+        purpose: impl Into<String>,
+        snapshot_ref: ArtifactReference,
+        memory_scope: MemoryScopeBinding,
+    ) -> Self {
         Self {
             grant_id: grant_id.into(),
             run_id: run_id.into(),
             tenant_id: tenant_id.into(),
             purpose: purpose.into(),
             snapshot_ref,
+            memory_scope,
         }
     }
 }
@@ -108,6 +185,7 @@ impl WikiAuthorizationPort for InMemoryWikiGrantAuthority {
                 && grant.purpose == access.purpose
                 && grant.snapshot_ref == *snapshot_ref
                 && access.snapshot_ref == *snapshot_ref
+                && grant.memory_scope == access.memory_scope
         })
     }
 }
@@ -119,6 +197,7 @@ pub struct WikiWorkspace {
     run_id: String,
     snapshot_ref: ArtifactReference,
     purpose: String,
+    memory_scope: MemoryScopeBinding,
     snapshot_available_at_unix_seconds: u64,
     pages: BTreeMap<String, String>,
 }
@@ -203,6 +282,11 @@ impl WikiTransform {
 pub struct WikiTransformReceipt {
     pub workspace_id: String,
     pub snapshot_ref: ArtifactReference,
+    pub run_id: String,
+    pub tenant_id: String,
+    pub purpose: String,
+    pub grant_id: String,
+    pub memory_scope: MemoryScopeBinding,
     pub transform_digest: String,
     pub result_digest: String,
 }
@@ -301,6 +385,7 @@ impl WikiScratchPort for InMemoryWikiGrantAuthority {
             run_id: access.run_id,
             snapshot_ref: access.snapshot_ref,
             purpose: decoded.purpose,
+            memory_scope: access.memory_scope,
             snapshot_available_at_unix_seconds: decoded.available_at_unix_seconds,
             pages: decoded.pages,
         })
@@ -349,6 +434,11 @@ impl WikiScratchPort for InMemoryWikiGrantAuthority {
             receipt: WikiTransformReceipt {
                 workspace_id: workspace.workspace_id.clone(),
                 snapshot_ref: workspace.snapshot_ref.clone(),
+                run_id: access.run_id.clone(),
+                tenant_id: access.tenant_id.clone(),
+                purpose: access.purpose.clone(),
+                grant_id: access.grant_id.clone(),
+                memory_scope: access.memory_scope.clone(),
                 transform_digest,
                 result_digest,
             },
@@ -414,6 +504,7 @@ fn validate_workspace_access<A: WikiAuthorizationPort>(
     if workspace.run_id != access.run_id
         || workspace.snapshot_ref != access.snapshot_ref
         || workspace.purpose != access.purpose
+        || workspace.memory_scope != access.memory_scope
     {
         return Err(WikiError::WorkspaceAccessDenied);
     }
@@ -480,6 +571,7 @@ fn workspace_id(access: &WikiAccess) -> String {
         &access.purpose,
         &access.grant_id,
         &access.snapshot_ref,
+        &access.memory_scope,
         access.allowed_at_unix_seconds,
     ))
 }

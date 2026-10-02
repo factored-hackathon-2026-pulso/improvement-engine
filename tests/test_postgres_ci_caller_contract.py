@@ -26,7 +26,7 @@ class PostgresCiContractTest(unittest.TestCase):
         self.assertIn("PULSO_TEST_POSTGRES_URL", workflow)
         self.assertIn("PULSO_ALLOW_DESTRUCTIVE_TEST_DB", workflow)
         self.assertIn(
-            "cargo +1.98.1 test --locked --workspace migration_enforces_cas_immutability_and_source_snapshot_kind -- --ignored",
+            "cargo +1.98.1 test --locked --workspace migration_enforces_cas_immutability_and_memory_tombstones -- --ignored",
             workflow,
         )
 
