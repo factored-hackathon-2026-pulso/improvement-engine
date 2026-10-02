@@ -217,10 +217,10 @@ pub fn load_canonical_contracts(
 #[serde(deny_unknown_fields)]
 pub struct SourceSnapshot {
     contract_version: ContractVersion,
-    pub tenant_id: String,
-    pub source_namespace: String,
-    pub world_ref: String,
-    pub observed_cutoff: String,
+    tenant_id: String,
+    source_namespace: String,
+    world_ref: String,
+    observed_cutoff: String,
     sources: Vec<SnapshotSource>,
     #[serde(skip)]
     raw_digest: String,
@@ -273,6 +273,18 @@ impl SourceFileSeal {
 }
 
 impl SourceSnapshot {
+    /// Identity fields are intentionally immutable after parsing: the binding
+    /// digest commits exact snapshot bytes, and downstream consumers must not
+    /// be able to mutate provenance without constructing a new snapshot.
+    ///
+    /// ```compile_fail
+    /// # use improvement_engine_core::source_validation::SourceSnapshot;
+    /// # let mut snapshot = SourceSnapshot::from_json("{}").unwrap();
+    /// snapshot.tenant_id = "another-tenant".to_owned();
+    /// snapshot.source_namespace = "another_namespace".to_owned();
+    /// snapshot.world_ref = "another-world".to_owned();
+    /// snapshot.observed_cutoff = "2026-01-01T00:00:00Z".to_owned();
+    /// ```
     pub fn from_json(raw: &str) -> Result<Self, SourceDefinitionError> {
         let mut snapshot: Self = serde_json::from_str(raw).map_err(SourceDefinitionError::Json)?;
         snapshot.validate()?;
@@ -284,6 +296,26 @@ impl SourceSnapshot {
     #[must_use]
     pub fn binding_digest(&self) -> String {
         format!("sha256:{}", self.raw_digest)
+    }
+
+    #[must_use]
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    #[must_use]
+    pub fn source_namespace(&self) -> &str {
+        &self.source_namespace
+    }
+
+    #[must_use]
+    pub fn world_ref(&self) -> &str {
+        &self.world_ref
+    }
+
+    #[must_use]
+    pub fn observed_cutoff(&self) -> &str {
+        &self.observed_cutoff
     }
 
     /// Returns a sealed, read-only commitment for exactly one snapshot table.

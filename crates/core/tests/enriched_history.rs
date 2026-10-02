@@ -80,10 +80,19 @@ fn replay_snapshot_with_uri(
     contract_digest: &str,
     uri: &str,
 ) -> SourceSnapshot {
+    replay_snapshot_for_tenant("tenant-a", header_digest, contract_digest, uri)
+}
+
+fn replay_snapshot_for_tenant(
+    tenant_id: &str,
+    header_digest: &str,
+    contract_digest: &str,
+    uri: &str,
+) -> SourceSnapshot {
     SourceSnapshot::from_json(
         &json!({
           "contract_version":{"major":1,"minor":0},
-          "tenant_id":"tenant-a",
+          "tenant_id":tenant_id,
           "source_namespace":"platform_history",
           "world_ref":"e0-disputes-2025",
           "observed_cutoff":"2025-06-30T23:59:59Z",
@@ -152,6 +161,7 @@ fn replay_manifest(
             "e0_replay_clock",
             1,
             AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
+            snapshot.tenant_id(),
             snapshot.binding_digest(),
         ),
         vec![
@@ -214,6 +224,7 @@ fn replay_at_event_time_rejects_a_manifest_that_claims_a_physical_ingestion_cloc
             "e0_replay_clock",
             1,
             AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
+            snapshot.tenant_id(),
             snapshot.binding_digest(),
         ),
         vec![
@@ -299,6 +310,7 @@ fn replay_at_event_time_rejects_rows_with_physical_ingested_at_to_avoid_mode_amb
             "e0_replay_clock",
             1,
             AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
+            snapshot.tenant_id(),
             snapshot.binding_digest(),
         ),
         vec![
@@ -343,6 +355,7 @@ fn availability_clock_is_explicit_and_replay_assumptions_are_machine_validated()
             "e0_replay_clock",
             1,
             AvailabilityClockMode::replay_at_event_time("human-readable but unversioned"),
+            snapshot.tenant_id(),
             snapshot.binding_digest(),
         ),
         vec![
@@ -418,6 +431,7 @@ fn replay_at_event_time_rejects_a_field_that_only_became_available_after_its_eve
             "e0_replay_clock",
             1,
             AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
+            snapshot.tenant_id(),
             snapshot.binding_digest(),
         ),
         vec![
@@ -478,6 +492,7 @@ fn replay_profile_commits_the_clock_and_exact_source_snapshot_bytes() {
         "e0_replay_clock",
         1,
         AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
+        snapshot.tenant_id(),
         snapshot.binding_digest(),
     );
     let manifest = EnrichedHistoryManifest::new_replay(
@@ -520,6 +535,7 @@ fn replay_profile_commits_the_clock_and_exact_source_snapshot_bytes() {
         "e0_replay_clock",
         1,
         AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
+        same_provenance_different_bytes.tenant_id(),
         same_provenance_different_bytes.binding_digest(),
     );
     let mismatched_manifest = EnrichedHistoryManifest::new_replay(
@@ -707,6 +723,24 @@ fn v1_manifest_cannot_bind_to_an_indistinguishable_snapshot_from_another_tenant(
         EnrichedHistoryError::SnapshotBindingUnavailable {
             manifest_version: 1,
         }
+    );
+}
+
+#[test]
+fn v2_manifest_rejects_a_snapshot_from_another_tenant_even_when_every_file_matches() {
+    let tenant_a = replay_snapshot();
+    let tenant_b =
+        replay_snapshot_for_tenant("tenant-b", &digest('b'), &digest('c'), "file://fixture.csv");
+    let rows = vec![json!({
+        "case_id": "case-1",
+        "event_time": "2025-06-01T10:00:00Z",
+        "topic": "disputar_cargo"
+    })];
+    let manifest = replay_manifest(&rows, &tenant_a);
+
+    assert_eq!(
+        EnrichedHistoryAdapter::from_snapshot(manifest, &tenant_b).unwrap_err(),
+        EnrichedHistoryError::SnapshotAvailabilityProfileMismatch
     );
 }
 
@@ -1005,6 +1039,7 @@ fn enriched_manifest_cannot_substitute_world_or_cutoff_of_the_existing_source_sn
             "observed_snapshot_clock",
             1,
             AvailabilityClockMode::observed_ingested_at(),
+            snapshot.tenant_id(),
             snapshot.binding_digest(),
         )
     };

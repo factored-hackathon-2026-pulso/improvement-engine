@@ -78,6 +78,10 @@ pub struct AvailabilityProfile {
     pub profile_version: u16,
     #[serde(default)]
     pub availability_clock: AvailabilityClockMode,
+    /// Tenant committed by the source snapshot this profile is permitted to
+    /// bind. It is explicit in addition to the snapshot-byte digest so a
+    /// cross-tenant substitution is rejected without relying on inference.
+    pub source_tenant_id: String,
     pub source_snapshot_digest: String,
     pub profile_digest: String,
 }
@@ -88,20 +92,24 @@ impl AvailabilityProfile {
         profile_id: impl Into<String>,
         profile_version: u16,
         availability_clock: AvailabilityClockMode,
+        source_tenant_id: impl Into<String>,
         source_snapshot_digest: impl Into<String>,
     ) -> Self {
         let profile_id = profile_id.into();
+        let source_tenant_id = source_tenant_id.into();
         let source_snapshot_digest = source_snapshot_digest.into();
         let profile_digest = availability_profile_digest(
             &profile_id,
             profile_version,
             &availability_clock,
+            &source_tenant_id,
             &source_snapshot_digest,
         );
         Self {
             profile_id,
             profile_version,
             availability_clock,
+            source_tenant_id,
             source_snapshot_digest,
             profile_digest,
         }
@@ -110,6 +118,8 @@ impl AvailabilityProfile {
     fn validate(&self) -> Result<(), EnrichedHistoryError> {
         if !is_identifier(&self.profile_id)
             || self.profile_version == 0
+            || self.source_tenant_id.is_empty()
+            || self.source_tenant_id.len() > 128
             || !is_sha256_digest(&self.source_snapshot_digest)
             || !is_sha256_digest(&self.profile_digest)
         {
@@ -121,6 +131,7 @@ impl AvailabilityProfile {
                 &self.profile_id,
                 self.profile_version,
                 &self.availability_clock,
+                &self.source_tenant_id,
                 &self.source_snapshot_digest,
             )
         {
@@ -656,13 +667,15 @@ impl EnrichedHistoryAdapter {
         {
             return Err(EnrichedHistoryError::SnapshotProvenanceMismatch);
         }
-        if manifest.manifest_version == CURRENT_MANIFEST_VERSION
-            && manifest
-                .availability_profile
-                .as_ref()
-                .is_none_or(|profile| profile.source_snapshot_digest != snapshot.binding_digest())
-        {
-            return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+        if manifest.manifest_version == CURRENT_MANIFEST_VERSION {
+            let Some(profile) = manifest.availability_profile.as_ref() else {
+                return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+            };
+            if profile.source_tenant_id != snapshot.tenant_id()
+                || profile.source_snapshot_digest != snapshot.binding_digest()
+            {
+                return Err(EnrichedHistoryError::SnapshotAvailabilityProfileMismatch);
+            }
         }
         for file in &manifest.files {
             let snapshot_seal = snapshot.source_file_seal(&file.table).ok_or_else(|| {
@@ -1039,6 +1052,7 @@ fn availability_profile_digest(
     profile_id: &str,
     profile_version: u16,
     availability_clock: &AvailabilityClockMode,
+    source_tenant_id: &str,
     source_snapshot_digest: &str,
 ) -> String {
     let clock = match availability_clock {
@@ -1050,7 +1064,10 @@ fn availability_profile_digest(
     format!(
         "sha256:{:x}",
         Sha256::digest(
-            format!("{profile_id}|{profile_version}|{clock}|{source_snapshot_digest}").as_bytes()
+            format!(
+                "{profile_id}|{profile_version}|{clock}|{source_tenant_id}|{source_snapshot_digest}"
+            )
+            .as_bytes()
         )
     )
 }

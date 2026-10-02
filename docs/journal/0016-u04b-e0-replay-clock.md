@@ -90,6 +90,14 @@ contacto entre retrospectivamente al contexto de esa decisión.
    los mismos digests y un seal de otra tabla. El perfil V2 ya fija el digest
    de bytes completos del snapshot, por lo que su enlace incorpora tenant y
    los seals siguen fijando tabla/URI/contrato por archivo.
+8. La revisión final observó que los campos de identidad de `SourceSnapshot`
+   todavía eran mutables públicamente después de parsear sus bytes. Ahora son
+   privados y sólo se exponen por getters; un doctest `compile_fail` cubre los
+   cuatro intentos de mutación (`tenant_id`, namespace, mundo y cutoff). El
+   perfil V2 también carga `source_tenant_id`, incluido en su digest, y
+   `from_snapshot` compara explícitamente ese valor además del digest de bytes.
+   Un manifest V2 de tenant A contra un JSON idéntico de tenant B falla cerrado
+   antes de que se abra cualquier proyección.
 
 Comandos verdes:
 
