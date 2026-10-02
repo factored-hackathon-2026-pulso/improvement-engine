@@ -1312,7 +1312,7 @@ fn validate_timestamp(value: &str, field: &str) -> Result<(), EnrichedHistoryErr
 
 // Fixed-width UTC timestamps are intentionally required. Their lexical order is
 // chronological, so cutoff comparison remains dependency-free and deterministic.
-fn is_rfc3339_utc(value: &str) -> bool {
+pub(crate) fn is_rfc3339_utc(value: &str) -> bool {
     if !(value.len() == 20
         && value.as_bytes().get(4) == Some(&b'-')
         && value.as_bytes().get(7) == Some(&b'-')

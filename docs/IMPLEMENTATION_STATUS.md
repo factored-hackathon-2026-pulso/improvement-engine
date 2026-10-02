@@ -110,8 +110,11 @@ green unit test as proof that a broader product flow is complete.
 - U16: provisional WorkflowBridge. It accepts only a U14 verification report
   and sealed internal catalogue/source-validation facts, preserves its
   commitments and scope, includes `do_nothing`, and caps a supported route at
-  `mechanism_proxy`. U20/U35 still own the sealed outcome/oracle and final
-  eligibility gates.
+  `mechanism_proxy`. Its as-of cutoff now reuses the U04-B fixed-width UTC
+  timestamp validator; date-only, local/offset, fractional, impossible-date,
+  and out-of-range-time values fail closed. The cutoff is part of the bridge
+  commitment, which U17 preserves in compilation authorization. U20/U35 still
+  own the sealed outcome/oracle and final eligibility gates.
 - U26: stateful synthetic-bank sandbox. Each tenant/namespace evaluation arm
   starts from one sealed fixture seed, applies only typed permitted effects
   behind an expected-revision fence, and proves the outcome through scoped
