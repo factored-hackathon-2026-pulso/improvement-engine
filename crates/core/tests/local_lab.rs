@@ -77,6 +77,7 @@ fn access(expires_at: u64) -> LabAccess {
         TENANT,
         "investigation",
         "grant-001",
+        "authority-001",
         snapshot_ref(),
         expires_at,
     )

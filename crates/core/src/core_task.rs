@@ -202,6 +202,9 @@ pub enum CoreTaskOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTaskReceipt {
+    scope: CoreTaskScope,
+    attempt_id: String,
+    input_digest: String,
     binding_digest: String,
     outcome: CoreTaskOutcome,
     core_run_id: Option<String>,
@@ -209,6 +212,15 @@ pub struct CoreTaskReceipt {
 }
 
 impl CoreTaskReceipt {
+    pub fn scope(&self) -> &CoreTaskScope {
+        &self.scope
+    }
+    pub fn attempt_id(&self) -> &str {
+        &self.attempt_id
+    }
+    pub fn input_digest(&self) -> &str {
+        &self.input_digest
+    }
     pub fn binding_digest(&self) -> &str {
         &self.binding_digest
     }
@@ -332,6 +344,9 @@ impl CoreTaskPort for CoreTaskSimulator {
                     .clone()
                     .ok_or(CoreTaskError::MissingSuccessScript)?;
                 CoreTaskReceipt {
+                    scope: invocation.scope.clone(),
+                    attempt_id: invocation.attempt_id.clone(),
+                    input_digest: invocation.input_digest.clone(),
                     binding_digest: invocation.binding.digest.clone(),
                     outcome: CoreTaskOutcome::Succeeded,
                     core_run_id: Some(core_run_id),
@@ -340,6 +355,9 @@ impl CoreTaskPort for CoreTaskSimulator {
             }
             SimulatorDisposition::TimeoutAfterDispatch
             | SimulatorDisposition::CrashAfterDispatch => CoreTaskReceipt {
+                scope: invocation.scope.clone(),
+                attempt_id: invocation.attempt_id.clone(),
+                input_digest: invocation.input_digest.clone(),
                 binding_digest: invocation.binding.digest.clone(),
                 outcome: CoreTaskOutcome::Unknown,
                 core_run_id: None,
