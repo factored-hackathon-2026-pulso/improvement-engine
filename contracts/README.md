@@ -11,6 +11,12 @@ mínimas hacia revisiones propias y la fuente original readonly. El `payload`
 se especializa por `kind` en slices posteriores; ninguno de estos contratos
 pretende sustituir schemas de Agent Core.
 
+En SourceSnapshot v1, `file_digest` conserva siempre el SHA-256 del objeto de
+fuente. El campo opcional `partition_inventory_digest` agrega un compromiso
+distinto para adaptadores que leen particiones; snapshots antiguos sin ese
+campo siguen válidos y los consumidores que necesiten particiones deben
+rechazarlos si falta.
+
 Las referencias llevan tenant para que los consumidores rechacen lineage entre
 tenants antes de persistir. `sources/call_center_interactions.v1.json` es el
 único ejemplo original de SourceContract en este corte: declara una vista

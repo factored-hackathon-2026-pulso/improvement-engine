@@ -44,7 +44,7 @@ SOURCE_SNAPSHOT_FIELDS = frozenset(
     {"contract_version", "tenant_id", "source_namespace", "world_ref", "observed_cutoff", "sources"}
 )
 SOURCE_SNAPSHOT_SOURCE_FIELDS = frozenset(
-    {"table", "uri", "file_digest", "header_digest", "row_count", "source_contract_ref"}
+    {"table", "uri", "file_digest", "partition_inventory_digest", "header_digest", "row_count", "source_contract_ref"}
 )
 SOURCE_CONTRACT_FIELDS = frozenset(
     {"contract_version", "source_namespace", "source_kind", "table", "primary_key", "event_clock", "read_only", "access_policy", "columns"}
@@ -217,6 +217,11 @@ def validate_source_snapshot(value: object) -> list[str]:
         for digest_name in ("file_digest", "header_digest"):
             if not isinstance(source[digest_name], str) or not SHA256.fullmatch(source[digest_name]):
                 errors.append("invalid_snapshot_source")
+        if "partition_inventory_digest" in source and (
+            not isinstance(source["partition_inventory_digest"], str)
+            or not SHA256.fullmatch(source["partition_inventory_digest"])
+        ):
+            errors.append("invalid_snapshot_source")
         if not isinstance(source["row_count"], int) or isinstance(source["row_count"], bool) or source["row_count"] < 0:
             errors.append("invalid_snapshot_source")
         contract_ref = source["source_contract_ref"]
