@@ -58,6 +58,13 @@ Production ingestion must use the same canonical inventory convention and
 define timezone semantics before this projector supports the original tables.
 No source data is checked in or printed.
 
+El CI remoto de PR #56 reportó tres errores de Clippy: uso de `is_none()` con
+retorno temprano en parsing, comparación booleana contra `false` y ocho
+argumentos en `manifest_digest`. Se corrigieron con `?`, negación directa y un
+`ManifestDigestInput` privado, sin suppressions. La ejecución local
+`cargo +1.98.1 clippy --locked --offline --workspace --all-targets -- -D warnings`
+quedó verde. La suite dirigida de Rust también pasó después de la corrección.
+
 ## Trade-offs and limits
 
 - Uses the existing core crate and a small `csv` dependency rather than a new

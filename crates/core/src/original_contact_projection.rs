@@ -298,19 +298,20 @@ impl ProjectionManifest {
             return Err(ProjectionError::InvalidManifest);
         }
         let source_header_digest = seal.header_digest().to_owned();
-        let digest = manifest_digest(
-            &source_snapshot_ref,
-            snapshot.binding_digest().as_str(),
+        let snapshot_binding_digest = snapshot.binding_digest();
+        let digest = manifest_digest(ManifestDigestInput {
+            reference: &source_snapshot_ref,
+            snapshot_digest: &snapshot_binding_digest,
             table,
-            &source_header_digest,
-            &cutoff,
-            &expected,
+            source_header_digest: &source_header_digest,
+            cutoff: &cutoff,
+            partitions: &expected,
             coverage,
             policy,
-        );
+        });
         Ok(Self {
             source_snapshot_ref,
-            snapshot_binding_digest: snapshot.binding_digest(),
+            snapshot_binding_digest,
             table,
             source_header_digest,
             cutoff_timestamp: cutoff.clone(),
@@ -872,16 +873,13 @@ fn normalize_category(value: Option<&str>) -> ContactCategory {
 }
 fn date_and_period(value: Option<&str>) -> Option<(String, String)> {
     let value = value?;
-    if parse_utc_timestamp(value).is_none() {
-        return None;
-    }
+    parse_utc_timestamp(value)?;
     let date = value.get(..10)?;
     Some((value.to_owned(), date[..7].to_owned()))
 }
 
 fn parse_utc_timestamp(value: &str) -> Option<i64> {
-    if value.len() != 20 || value.as_bytes().get(10) != Some(&b'T') || value.ends_with('Z') == false
-    {
+    if value.len() != 20 || value.as_bytes().get(10) != Some(&b'T') || !value.ends_with('Z') {
         return None;
     }
     let date = value.get(..10)?;
@@ -956,39 +954,41 @@ fn valid_digest(value: &str) -> bool {
                 .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
     })
 }
-fn manifest_digest(
-    reference: &ArtifactReference,
-    snapshot_digest: &str,
+struct ManifestDigestInput<'a> {
+    reference: &'a ArtifactReference,
+    snapshot_digest: &'a str,
     table: ProjectionTable,
-    source_header_digest: &str,
-    cutoff: &str,
-    partitions: &BTreeMap<String, String>,
+    source_header_digest: &'a str,
+    cutoff: &'a str,
+    partitions: &'a BTreeMap<String, String>,
     coverage: ProjectionCoverage,
     policy: ProjectionPolicy,
-) -> String {
+}
+
+fn manifest_digest(input: ManifestDigestInput<'_>) -> String {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
     for field in [
-        reference.tenant_id.as_str(),
-        reference.id.as_str(),
-        &reference.revision.to_string(),
-        reference.digest.as_str(),
-        snapshot_digest,
-        table.as_str(),
-        source_header_digest,
-        cutoff,
-        if coverage == ProjectionCoverage::Complete {
+        input.reference.tenant_id.as_str(),
+        input.reference.id.as_str(),
+        &input.reference.revision.to_string(),
+        input.reference.digest.as_str(),
+        input.snapshot_digest,
+        input.table.as_str(),
+        input.source_header_digest,
+        input.cutoff,
+        if input.coverage == ProjectionCoverage::Complete {
             "complete"
         } else {
             "partial"
         },
-        &policy.version.to_string(),
-        &policy.minimum_cell_count.to_string(),
+        &input.policy.version.to_string(),
+        &input.policy.minimum_cell_count.to_string(),
     ] {
         h.update((field.len() as u64).to_be_bytes());
         h.update(field.as_bytes());
     }
-    for (id, digest) in partitions {
+    for (id, digest) in input.partitions {
         h.update((id.len() as u64).to_be_bytes());
         h.update(id.as_bytes());
         h.update(digest.as_bytes());

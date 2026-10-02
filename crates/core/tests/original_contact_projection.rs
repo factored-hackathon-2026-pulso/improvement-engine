@@ -480,24 +480,23 @@ fn projection_preserves_second_precision_at_cutoff() {
 fn projection_manifest_rejects_cutoffs_without_supported_utc_second_semantics() {
     let bytes = b"interaction_date,reason_category,channel\n2026-09-01T11:59:59Z,Queja,Phone\n";
     let inventory = vec![ManifestPartition::new("p".into(), digest(bytes))];
-    for cutoff in ["2026-09-01T12:00:00.500Z"] {
-        let (mut repository, source_ref) =
-            stored_snapshot(ProjectionTable::Contacts, cutoff, &inventory, bytes);
-        assert!(
-            ProjectionManifest::new(
-                &mut repository,
-                source_ref,
-                ProjectionTable::Contacts,
-                inventory.clone(),
-                ProjectionCoverage::Partial,
-                ProjectionPolicy {
-                    version: 1,
-                    minimum_cell_count: 1
-                },
-            )
-            .is_err()
-        );
-    }
+    let cutoff = "2026-09-01T12:00:00.500Z";
+    let (mut repository, source_ref) =
+        stored_snapshot(ProjectionTable::Contacts, cutoff, &inventory, bytes);
+    assert!(
+        ProjectionManifest::new(
+            &mut repository,
+            source_ref,
+            ProjectionTable::Contacts,
+            inventory,
+            ProjectionCoverage::Partial,
+            ProjectionPolicy {
+                version: 1,
+                minimum_cell_count: 1
+            },
+        )
+        .is_err()
+    );
 }
 
 #[test]
