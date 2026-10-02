@@ -39,6 +39,9 @@ La cobertura sigue exactamente la fórmula U12:
 Las regresiones rechazan policy, semántica, bounds o cobertura inconsistentes,
 y un registro E0 alterado pero rehasheado con `metric_spec_commitment` distinto
 del spec autorizado falla durante la rehidratación antes de emitir reporte.
+El mismo gate enlaza explícitamente `ScoutCandidateDraft.metric_id` con el
+`DiagnosticMetricSpec` autorizado: un metric ID alterado y rehasheado también
+falla como `ProvenanceMismatch` antes de poder reportarse como consistente.
 
 ## Fuera de alcance
 

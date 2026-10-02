@@ -716,6 +716,9 @@ impl VerifiedScoutCandidate {
         let Some(e0) = record.candidate.e0_provenance.clone() else {
             return Err(FrozenE0ScoutCandidateError::NotE0Candidate);
         };
+        let expected_metric = crate::e0_deterministic_sensor::DiagnosticMetricSpec::from_policy(
+            crate::e0_deterministic_sensor::DiagnosticMetricPolicy::TechnicalErrorRateV1,
+        );
         if e0.commitment != e0_provenance_digest(&e0)
             || e0.tenant_id != record.scope.tenant_id()
             || e0.job_id != record.scope.job_id()
@@ -728,11 +731,8 @@ impl VerifiedScoutCandidate {
             || e0.cutoff_unix_seconds != record.candidate.cutoff_unix_seconds
             || e0.query_receipt_digests != record.candidate.query_receipt_digests
             || e0.signal_commitment != record.candidate.signal_commitment
-            || e0.metric_spec_commitment
-                != crate::e0_deterministic_sensor::DiagnosticMetricSpec::from_policy(
-                    crate::e0_deterministic_sensor::DiagnosticMetricPolicy::TechnicalErrorRateV1,
-                )
-                .commitment()
+            || record.candidate.metric_id != expected_metric.metric_id()
+            || e0.metric_spec_commitment != expected_metric.commitment()
         {
             return Err(FrozenE0ScoutCandidateError::ProvenanceMismatch);
         }
@@ -855,6 +855,14 @@ pub(crate) fn corrupt_e0_metric_spec_for_frozen_verifier_test(
         .expect("real E0 test candidate");
     e0.metric_spec_commitment = format!("sha256:{}", "0".repeat(64));
     e0.commitment = e0_provenance_digest(e0);
+    candidate.record.candidate.digest = candidate_digest(&candidate.record.candidate);
+}
+
+#[cfg(all(test, feature = "test-support"))]
+pub(crate) fn corrupt_e0_candidate_metric_for_frozen_verifier_test(
+    candidate: &mut VerifiedScoutCandidate,
+) {
+    candidate.record.candidate.metric_id = "other_metric".into();
     candidate.record.candidate.digest = candidate_digest(&candidate.record.candidate);
 }
 

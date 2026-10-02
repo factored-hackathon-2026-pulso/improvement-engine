@@ -238,11 +238,14 @@ const _FROZEN_E0_REPORT_AND_PORT_ARE_NOT_CALLER_CONSTRUCTIBLE: () = ();
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "test-support")]
-    use crate::autonomous_scout::corrupt_e0_metric_spec_for_frozen_verifier_test;
     use crate::autonomous_scout::verified_candidate_for_independent_verifier_test;
     #[cfg(feature = "test-support")]
     use crate::autonomous_scout::verified_real_e0_candidate_for_frozen_verifier_test;
+    #[cfg(feature = "test-support")]
+    use crate::autonomous_scout::{
+        corrupt_e0_candidate_metric_for_frozen_verifier_test,
+        corrupt_e0_metric_spec_for_frozen_verifier_test,
+    };
 
     #[cfg(feature = "test-support")]
     #[test]
@@ -332,6 +335,17 @@ mod tests {
     fn altered_but_rehashed_e0_canonical_record_is_rejected_during_rehydration() {
         let mut candidate = verified_real_e0_candidate_for_frozen_verifier_test();
         corrupt_e0_metric_spec_for_frozen_verifier_test(&mut candidate);
+        assert!(matches!(
+            FrozenE0IndependentVerifier::verify(&candidate),
+            Err(FrozenE0VerificationError::ProvenanceMismatch)
+        ));
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn altered_but_rehashed_candidate_metric_is_rejected_during_rehydration() {
+        let mut candidate = verified_real_e0_candidate_for_frozen_verifier_test();
+        corrupt_e0_candidate_metric_for_frozen_verifier_test(&mut candidate);
         assert!(matches!(
             FrozenE0IndependentVerifier::verify(&candidate),
             Err(FrozenE0VerificationError::ProvenanceMismatch)
