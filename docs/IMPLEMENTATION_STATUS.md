@@ -18,7 +18,8 @@ green unit test as proof that a broader product flow is complete.
 ## In progress in the cumulative branch
 
 - U30 / Issue #41: deterministic platform sensor. It consumes the U29 safe
-  projection; it must never reconstruct observation batches or coverage.
+  projection and emits only sealed, mapping-resolution-bound signals; it never
+  reconstructs observation batches or coverage.
 - U14: independent verifier. It accepts only the U13-A opaque capability and
   emits a provenance-bound supported/refuted/uncertain report; persistent
   reports and U11 Jev-adapter wiring remain later dependent work.
