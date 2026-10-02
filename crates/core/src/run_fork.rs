@@ -5,7 +5,7 @@
 //! atomically check idempotency, liveness and control state before inserting the
 //! child and its audit event.
 
-use crate::{ArtifactKind, ArtifactReference, ArtifactRepository};
+use crate::{ArtifactKind, ArtifactReference, ArtifactRepository, InMemoryArtifactRepository};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -115,6 +115,7 @@ struct CommitFence {
     snapshot: ReferenceFence,
     config: ReferenceFence,
     memory: ReferenceFence,
+    reference_policy_version: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -198,6 +199,7 @@ pub trait ForkReferencePolicy {
         reference: &ArtifactReference,
         cutoff_unix_seconds: u64,
     ) -> ForkReferenceLiveness;
+    fn fence_version(&self) -> u64;
 }
 
 /// Versioned liveness observed for one exact artifact reference. A commit
@@ -287,6 +289,8 @@ impl RunLifecycle {
 #[derive(Default)]
 pub struct InMemoryForkRunLifecycle {
     records: BTreeMap<(String, String), RunLifecycle>,
+    condition_reads: u64,
+    scheduled_final_locks: BTreeMap<u64, (String, String)>,
 }
 impl InMemoryForkRunLifecycle {
     pub fn attest(
@@ -314,9 +318,19 @@ impl InMemoryForkRunLifecycle {
         self.records
             .insert((tenant_id.to_owned(), run_id.to_owned()), lifecycle);
     }
+    pub fn schedule_final_lock_on_read(&mut self, invocation: u64, tenant_id: &str, run_id: &str) {
+        self.scheduled_final_locks
+            .insert(invocation, (tenant_id.to_owned(), run_id.to_owned()));
+    }
 }
 impl ForkRunLifecycle for InMemoryForkRunLifecycle {
     fn current(&mut self, tenant_id: &str, run_id: &str) -> Option<RunLifecycle> {
+        self.condition_reads += 1;
+        if let Some((scheduled_tenant, scheduled_run)) =
+            self.scheduled_final_locks.remove(&self.condition_reads)
+        {
+            self.revoke_to_final_lock(&scheduled_tenant, &scheduled_run);
+        }
         self.records
             .get(&(tenant_id.to_owned(), run_id.to_owned()))
             .cloned()
@@ -326,17 +340,22 @@ impl ForkRunLifecycle for InMemoryForkRunLifecycle {
 pub struct InMemoryForkReferencePolicy {
     revoked: BTreeMap<String, u64>,
     final_locked: BTreeMap<String, u64>,
+    condition_reads: u64,
+    scheduled_revocations: BTreeMap<u64, ArtifactReference>,
+    fence_version: u64,
 }
 impl InMemoryForkReferencePolicy {
     pub fn revoke(&mut self, reference: &ArtifactReference) {
         let key = reference_key(reference);
         let version = self.version_for(&key).saturating_add(1);
         self.revoked.insert(key, version);
+        self.fence_version = self.fence_version.saturating_add(1);
     }
     pub fn final_lock(&mut self, reference: &ArtifactReference) {
         let key = reference_key(reference);
         let version = self.version_for(&key).saturating_add(1);
         self.final_locked.insert(key, version);
+        self.fence_version = self.fence_version.saturating_add(1);
     }
     fn version_for(&self, key: &str) -> u64 {
         self.revoked
@@ -347,6 +366,13 @@ impl InMemoryForkReferencePolicy {
             .max()
             .unwrap_or(1)
     }
+    pub fn schedule_revoke_on_liveness_read(
+        &mut self,
+        invocation: u64,
+        reference: ArtifactReference,
+    ) {
+        self.scheduled_revocations.insert(invocation, reference);
+    }
 }
 impl ForkReferencePolicy for InMemoryForkReferencePolicy {
     fn liveness_for_fork(
@@ -355,6 +381,10 @@ impl ForkReferencePolicy for InMemoryForkReferencePolicy {
         reference: &ArtifactReference,
         _: u64,
     ) -> ForkReferenceLiveness {
+        self.condition_reads += 1;
+        if let Some(reference) = self.scheduled_revocations.remove(&self.condition_reads) {
+            self.revoke(&reference);
+        }
         let key = reference_key(reference);
         ForkReferenceLiveness::new(
             reference.tenant_id == tenant_id
@@ -363,11 +393,16 @@ impl ForkReferencePolicy for InMemoryForkReferencePolicy {
             self.version_for(&key),
         )
     }
+    fn fence_version(&self) -> u64 {
+        self.fence_version
+    }
 }
 
 #[derive(Default)]
 pub struct InMemoryForkGrantAuthority {
     grants: BTreeMap<(String, String, String), u64>,
+    condition_reads: u64,
+    scheduled_revocations: BTreeMap<u64, (String, String, String)>,
 }
 impl InMemoryForkGrantAuthority {
     pub fn authorize(
@@ -411,6 +446,22 @@ impl InMemoryForkGrantAuthority {
             grant_id.to_owned(),
         ));
     }
+    pub fn schedule_revoke_on_read(
+        &mut self,
+        invocation: u64,
+        tenant_id: &str,
+        actor_id: &str,
+        grant_id: &str,
+    ) {
+        self.scheduled_revocations.insert(
+            invocation,
+            (
+                tenant_id.to_owned(),
+                actor_id.to_owned(),
+                grant_id.to_owned(),
+            ),
+        );
+    }
 }
 impl ForkGrantAuthority for InMemoryForkGrantAuthority {
     fn current_grant(
@@ -419,6 +470,12 @@ impl ForkGrantAuthority for InMemoryForkGrantAuthority {
         actor_id: &str,
         grant_id: &str,
     ) -> Option<ForkGrant> {
+        self.condition_reads += 1;
+        if let Some((tenant_id, actor_id, grant_id)) =
+            self.scheduled_revocations.remove(&self.condition_reads)
+        {
+            self.revoke(&tenant_id, &actor_id, &grant_id);
+        }
         self.grants
             .get(&(
                 tenant_id.to_owned(),
@@ -431,14 +488,14 @@ impl ForkGrantAuthority for InMemoryForkGrantAuthority {
 }
 
 #[derive(Debug, Default)]
-pub struct RunForkStore {
+struct RunForkStore {
     originals: BTreeMap<(String, String), AttestedOriginalRun>,
     forks: BTreeMap<(String, String), ForkedRun>,
     audit_events: BTreeMap<(String, String), ForkAuditEvent>,
     idempotency: BTreeMap<(String, String), (String, ForkReceipt)>,
 }
 impl RunForkStore {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self::default()
     }
     #[allow(clippy::too_many_arguments)]
@@ -476,22 +533,6 @@ impl RunForkStore {
         self.originals.insert(key, original);
         Ok(())
     }
-    pub fn fork<
-        R: ArtifactRepository,
-        P: ForkReferencePolicy,
-        G: ForkGrantAuthority,
-        L: ForkRunLifecycle,
-    >(
-        &mut self,
-        request: ForkRequest,
-        artifacts: &mut R,
-        policy: &mut P,
-        grants: &mut G,
-        lifecycle: &mut L,
-    ) -> Result<ForkReceipt, RunForkError> {
-        self.commit_conditional(request, artifacts, policy, grants, lifecycle)
-    }
-
     fn commit_conditional<
         R: ArtifactRepository,
         P: ForkReferencePolicy,
@@ -611,34 +652,61 @@ impl RunForkStore {
 /// In-memory realization of the one conditional commit port. Its dependencies
 /// are generic authority interfaces, so callers cannot accidentally rely on
 /// `InMemoryForkGrantAuthority` semantics when implementing a durable adapter.
-pub struct InMemoryForkCommitPort<'a, R, P, G, L> {
-    store: &'a mut RunForkStore,
-    artifacts: &'a mut R,
-    policy: &'a mut P,
-    grants: &'a mut G,
-    lifecycle: &'a mut L,
+pub struct InMemoryForkCommitPort {
+    store: RunForkStore,
+    artifacts: InMemoryArtifactRepository,
+    policy: InMemoryForkReferencePolicy,
+    grants: InMemoryForkGrantAuthority,
+    lifecycle: InMemoryForkRunLifecycle,
 }
-impl<'a, R, P, G, L> InMemoryForkCommitPort<'a, R, P, G, L>
-where
-    R: ArtifactRepository,
-    P: ForkReferencePolicy,
-    G: ForkGrantAuthority,
-    L: ForkRunLifecycle,
-{
-    pub fn new(
-        store: &'a mut RunForkStore,
-        artifacts: &'a mut R,
-        policy: &'a mut P,
-        grants: &'a mut G,
-        lifecycle: &'a mut L,
-    ) -> Self {
+impl Default for InMemoryForkCommitPort {
+    fn default() -> Self {
         Self {
-            store,
-            artifacts,
-            policy,
-            grants,
-            lifecycle,
+            store: RunForkStore::new(),
+            artifacts: InMemoryArtifactRepository::default(),
+            policy: InMemoryForkReferencePolicy::default(),
+            grants: InMemoryForkGrantAuthority::default(),
+            lifecycle: InMemoryForkRunLifecycle::default(),
         }
+    }
+}
+impl InMemoryForkCommitPort {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn artifacts_mut(&mut self) -> &mut InMemoryArtifactRepository {
+        &mut self.artifacts
+    }
+    pub fn policy_mut(&mut self) -> &mut InMemoryForkReferencePolicy {
+        &mut self.policy
+    }
+    pub fn grants_mut(&mut self) -> &mut InMemoryForkGrantAuthority {
+        &mut self.grants
+    }
+    pub fn lifecycle_mut(&mut self) -> &mut InMemoryForkRunLifecycle {
+        &mut self.lifecycle
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn register_attested_original(
+        &mut self,
+        tenant_id: impl Into<String>,
+        run_id: impl Into<String>,
+        snapshot_ref: ArtifactReference,
+        config_ref: ArtifactReference,
+        memory_ref: ArtifactReference,
+        cutoff_unix_seconds: u64,
+    ) -> Result<(), RunForkError> {
+        self.store.register_attested_original(
+            tenant_id,
+            run_id,
+            snapshot_ref,
+            config_ref,
+            memory_ref,
+            cutoff_unix_seconds,
+            &mut self.artifacts,
+            &mut self.policy,
+        )
     }
     pub fn fork_count(&self, tenant_id: &str) -> usize {
         self.store.fork_count(tenant_id)
@@ -647,20 +715,18 @@ where
         self.store.audit_count(tenant_id)
     }
 }
-impl<R, P, G, L> ForkCommitPort for InMemoryForkCommitPort<'_, R, P, G, L>
-where
-    R: ArtifactRepository,
-    P: ForkReferencePolicy,
-    G: ForkGrantAuthority,
-    L: ForkRunLifecycle,
-{
+impl ForkCommitPort for InMemoryForkCommitPort {
     fn commit_conditionally(&mut self, request: ForkRequest) -> Result<ForkReceipt, RunForkError> {
+        // The port owns every mutable authority and its durable maps. Holding
+        // `&mut self` is the in-memory transaction lock: no caller-supplied
+        // policy/grant/lifecycle callback can interleave capture, fence compare
+        // and the child/receipt/audit/idempotency write set.
         self.store.commit_conditional(
             request,
-            self.artifacts,
-            self.policy,
-            self.grants,
-            self.lifecycle,
+            &mut self.artifacts,
+            &mut self.policy,
+            &mut self.grants,
+            &mut self.lifecycle,
         )
     }
 }
@@ -682,6 +748,7 @@ fn capture_commit_fence<
     let grant = capture_grant(authorization, grants)?;
     let lifecycle = capture_lifecycle(original, authorization, lifecycle)?;
     let (snapshot, config, memory) = capture_original_references(original, artifacts, policy)?;
+    let reference_policy_version = policy.fence_version();
     Ok(CommitFence {
         request_digest: request_digest.to_owned(),
         grant,
@@ -689,6 +756,7 @@ fn capture_commit_fence<
         snapshot,
         config,
         memory,
+        reference_policy_version,
     })
 }
 
@@ -727,6 +795,9 @@ fn compare_commit_fence<
         {
             return Err(RunForkError::CommitFenceChanged);
         }
+    }
+    if policy.fence_version() != fence.reference_policy_version {
+        return Err(RunForkError::CommitFenceChanged);
     }
     Ok(())
 }

@@ -19,8 +19,12 @@ un `CommitFence` inmutable con idempotency digest, grant/revisión, lifecycle
 versionada. El adaptador durable compara *ese mismo fence* y persiste hija,
 receipt y auditoría en una sola transacción/conditional write; no recompone
 checks secuenciales. `InMemoryForkCommitPort` lo implementa sobre interfaces
-genéricas de artifacts, policy, grants y lifecycle —no queda acoplado al grant
-in-memory— y compara el fence antes de hacer visibles las tres escrituras. Un retry revalida liveness y devuelve
+genéricas de artifacts, policy, grants y lifecycle. Para la simulación local,
+`InMemoryForkCommitPort` posee *todo* el estado mutable (artifacts, policy,
+grants, lifecycle, hija, audit e idempotencia) y el `RunForkStore` interno no
+expone operación pública de commit. Así `&mut self` es su lock transaccional:
+no hay callbacks de una autoridad externa entre captura, compare y escrituras.
+Un retry revalida liveness y devuelve
 `ReferenceUnavailable` si el padre se revocó desde la primera respuesta; no
 devuelve una hija que ya no sería ejecutable. Esta unidad no
 afirma que ya existe el endpoint `/fork-replay`, autorización humana, PG ni un
@@ -73,7 +77,11 @@ cargo +1.98.1 test -p improvement-engine-core --test run_fork
    `CommitFence` versionado. La regresión adversarial revoca el snapshot al
    revisar config/memory y confirma que el compare final no deja hija, receipt
    ni audit.
+8. La quinta revisión P1 eliminó autoridades prestadas durante el commit. El
+   puerto in-memory pasó a poseer su estado y simula cambios adversariales como
+   mutaciones internas programadas; un epoch de policy hace visible incluso una
+   revocación que ocurre durante la comparación final de otra referencia.
 
-Resultado: 11 pruebas verdes. Antes de integración acumulativa, un revisor
+Resultado: 6 pruebas de contrato U34 verdes. Antes de integración acumulativa, un revisor
 independiente debe comprobar el contrato contra U03/U15/U33 y que el adaptador
 durable conserva la atomicidad declarada.
