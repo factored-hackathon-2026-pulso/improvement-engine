@@ -2,26 +2,33 @@
 
 ## Decisión
 
-El fork de depuración es un reducer aislado: recibe únicamente `(tenant,
-replay_of,idempotency_key,reason)`, localiza un padre previamente registrado y
-crea una corrida nueva. No acepta snapshot, configuración, memoria ni cutoff
-del operador. Los cuatro valores se copian del padre y quedan fijados junto a
-`replay_of`; por tanto un fork no reescribe ni actualiza la evidencia original.
+El fork de depuración es un reducer aislado que recibe un `ForkAuthorization`
+con actor, grant, motivo, estado y versión esperados, además de
+`(replay_of,idempotency_key)`. No acepta snapshot, configuración, memoria ni
+cutoff del operador. El padre sólo se registra tras una atestación contra el
+repositorio de artifacts: kind, digest, tenant, cutoff, vida y final-lock se
+verifican antes de conservarlo. Los cuatro valores se copian al hijo y quedan
+fijados junto a `replay_of`; por tanto un fork no reescribe evidencia histórica.
 
 `RunForkStore` es el contrato ejecutable en memoria. El adaptador durable debe
-hacer en una sola transacción el lookup de idempotencia, la comprobación de
-disponibilidad/revocación y la inserción de corrida hija/recibo. Esta unidad no
+hacer en una sola transacción el lookup de idempotencia, revalidación de
+disponibilidad/revocación/final-lock, control-version, inserción de hija y
+receipt/event de auditoría. Un retry revalida liveness y devuelve
+`ReferenceUnavailable` si el padre se revocó desde la primera respuesta; no
+devuelve una hija que ya no sería ejecutable. Esta unidad no
 afirma que ya existe el endpoint `/fork-replay`, autorización humana, PG ni un
 replay E0: corresponden a U24/U34-FE y sus dependencias.
 
 ## Invariantes implementados
 
-- La clave de idempotencia se ata al payload completo; la misma solicitud
-  devuelve la misma hija, mientras que cambiar motivo o padre se rechaza.
-- La inserción sólo ocurre tras encontrar el padre en el mismo tenant y tras
-  comprobar snapshot/config/memoria disponibles. Un padre ajeno se ve como
-  inexistente para no filtrar tenancy.
-- Un snapshot/config/memoria revocado falla cerrado sin dejar corrida hija.
+- La clave de idempotencia se ata al payload completo, incluido actor/grant,
+  motivo y control-state/version; conserva el digest SHA-256 completo, nunca
+  un prefijo truncado.
+- La inserción sólo ocurre tras autorización y atestación de padre en el mismo
+  tenant. Un padre ajeno se ve como inexistente para no filtrar tenancy.
+- Snapshot/config/memoria usan `ArtifactReference` y kind/digest exactos;
+  referencia revocada, final-locked, futura o con cutoff divergente falla
+  cerrado sin dejar una hija.
 - El hijo conserva cutoff y referencias exactas del padre, incluye
   `replay_of`, y no ofrece API de mutación del padre.
 
@@ -29,8 +36,12 @@ replay E0: corresponden a U24/U34-FE y sus dependencias.
 
 1. El test inicial falló con `E0432` al no existir el módulo `run_fork`.
 2. Se añadió el reducer mínimo y pasó la creación de hijo inmutable.
-3. Se añadieron regresiones para retry/crash idempotente, payload alterado,
-   padre desconocido/cross-tenant y referencia revocada.
+3. La revisión adversarial P1 reemplazó referencias string fabricables con
+   attestation por `ArtifactRepository`, `ForkReferencePolicy` y autorización
+   explícita; se agregaron receipt/event, final-lock y digest completo.
+4. Se añadieron regresiones para retry/crash idempotente con revocación,
+   payload alterado, control stale, autorización, padre cross-tenant, cutoff y
+   final-lock.
 
 Comando verificado:
 
@@ -38,6 +49,6 @@ Comando verificado:
 cargo +1.98.1 test -p improvement-engine-core --test run_fork
 ```
 
-Resultado: 3 pruebas verdes. Antes de integración acumulativa, un revisor
+Resultado: 4 pruebas verdes. Antes de integración acumulativa, un revisor
 independiente debe comprobar el contrato contra U03/U15/U33 y que el adaptador
 durable conserva la atomicidad declarada.
