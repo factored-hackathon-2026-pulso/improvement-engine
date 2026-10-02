@@ -96,8 +96,11 @@ green unit test as proof that a broader product flow is complete.
   Its opaque internal readback rechecks the same registry evidence before
   attribution; a future Unit 6 transport must supply a sealed readback issuer/
   repository rather than treating HTTP as evidence. It has no dispatch,
-  runtime, verdict or `EvalRun`; missing U18-E/Agent Core Unit 6 remains
-  `dependency_unavailable` rather than a simulated native result.
+  runtime, verdict or `EvalRun`; U19 native execution remains blocked until
+  U18-E supplies real registered-candidate evidence and Agent Core Unit 6
+  supplies its contractual `EvalPort`, evaluation harness and sandbox. Those
+  missing dependencies remain `dependency_unavailable`, never a simulated
+  native result.
 - U08-E / Issue #50: E0 read-only query receipt adapter. It accepts only an
   opaque candidate reloaded from U08's live governed ledger plus a U04-B V2
   projection. An explicit private mapping binds the U08 artifact-content
