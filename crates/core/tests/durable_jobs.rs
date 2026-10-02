@@ -1,6 +1,7 @@
 use improvement_engine_core::durable_jobs::{
-    DurableJobError, DurableJobRepository, DurableJobStore, JobAdmissionRequest, JobEffectState,
-    JobStatus, ReconciliationEvidence, RecoveryDisposition,
+    DurableJobError, DurableJobRepository, DurableJobStore, JobAdmissionRequest, JobControlCommand,
+    JobControlKind, JobControlOutcome, JobEffectState, JobStatus, ReconciliationEvidence,
+    RecoveryDisposition,
 };
 use improvement_engine_core::quota_grant::{
     AuthorizedGrant, QuotaLimit, QuotaReservation, QuotaResource, QuotaWindow,
@@ -33,6 +34,7 @@ fn crash_after_dispatch_is_unknown_and_recovery_never_releases_it_for_retry() {
     store
         .begin_effect_dispatch("demo", &job_id, "worker_a", lease.fence_token(), 1_101)
         .expect("the real boundary records ambiguity before an external effect");
+    let before_first_recovery = store.control_version("demo", &job_id).expect("version");
 
     assert_eq!(
         store
@@ -47,6 +49,19 @@ fn crash_after_dispatch_is_unknown_and_recovery_never_releases_it_for_retry() {
     assert_eq!(
         store.acquire_lease("demo", &job_id, "worker_b", 1_120, 10),
         Err(DurableJobError::ReconciliationRequired),
+    );
+    let after_first_recovery = store.control_version("demo", &job_id).expect("version");
+    assert_eq!(after_first_recovery, before_first_recovery + 1);
+    assert_eq!(store.active_fence("demo", &job_id), Ok(None));
+    assert_eq!(
+        store
+            .recover_after_restart("demo", &job_id, 1_121)
+            .expect("repeated unknown recovery"),
+        RecoveryDisposition::ReconciliationRequired,
+    );
+    assert_eq!(
+        store.control_version("demo", &job_id),
+        Ok(after_first_recovery)
     );
 }
 
@@ -481,4 +496,254 @@ fn reducer_is_consumable_through_the_durable_repository_port() {
         .expect("configured quota");
     admit_via_port(&mut store, request("demo", "contact_spike_011"))
         .expect("admission through port");
+}
+
+#[test]
+fn pause_is_an_atomic_durable_transition_with_idempotent_audit_receipt() {
+    let (mut store, job_id) = admitted_store("control_pause_001");
+    let command = control(
+        &store,
+        &job_id,
+        "operator_a",
+        "pause_001",
+        JobControlKind::Pause,
+    );
+
+    let first = DurableJobRepository::control_job_atomically(&mut store, command.clone(), 1_010)
+        .expect("durable pause");
+    let replay = DurableJobRepository::control_job_atomically(&mut store, command, 1_999)
+        .expect("same semantic command replays its recorded receipt");
+
+    assert_eq!(first, replay);
+    assert_eq!(first.outcome(), &JobControlOutcome::Paused);
+    assert_eq!(first.tenant_id(), "demo");
+    assert_eq!(first.job_id(), job_id);
+    assert_eq!(first.operator_id(), "operator_a");
+    assert_eq!(first.idempotency_key(), "pause_001");
+    assert_eq!(first.expected_fence(), None);
+    assert_eq!(first.confirmed_status(), &JobStatus::Paused);
+    assert_eq!(first.target_version() + 1, first.confirmed_version());
+    assert_eq!(store.status("demo", &job_id), Ok(JobStatus::Paused));
+}
+
+#[test]
+fn unknown_or_in_dispatch_job_never_claims_cancelled_before_effect() {
+    let (mut store, job_id) = admitted_store("control_unknown_001");
+    let lease = store
+        .acquire_lease("demo", &job_id, "worker_a", 1_010, 30)
+        .expect("lease");
+    let leased_cancel = control(
+        &store,
+        &job_id,
+        "operator_a",
+        "cancel_leased_001",
+        JobControlKind::Cancel,
+    );
+    let leased_receipt = store
+        .control_job(leased_cancel, 1_010)
+        .expect("leased run stays truthful");
+    assert_eq!(
+        leased_receipt.outcome(),
+        &JobControlOutcome::ReconciliationRequired
+    );
+    assert_eq!(
+        leased_receipt.target_version(),
+        leased_receipt.confirmed_version()
+    );
+    assert!(matches!(
+        store.status("demo", &job_id),
+        Ok(JobStatus::Leased { .. })
+    ));
+    store
+        .begin_effect_dispatch("demo", &job_id, "worker_a", lease.fence_token(), 1_011)
+        .expect("unknown before effect");
+    let command = control(
+        &store,
+        &job_id,
+        "operator_a",
+        "cancel_001",
+        JobControlKind::Cancel,
+    );
+
+    let receipt = store
+        .control_job(command, 1_012)
+        .expect("truthful command receipt");
+    assert_eq!(
+        receipt.outcome(),
+        &JobControlOutcome::ReconciliationRequired
+    );
+    assert_eq!(receipt.target_version(), receipt.confirmed_version());
+    assert_eq!(
+        receipt.confirmed_effect(),
+        &JobEffectState::UnknownPendingReconciliation
+    );
+    assert_eq!(
+        store.status("demo", &job_id),
+        Ok(JobStatus::UnknownPendingReconciliation)
+    );
+}
+
+#[test]
+fn stale_control_read_loses_to_a_lease_transition_and_cross_tenant_is_not_inferred() {
+    let (mut store, job_id) = admitted_store("control_race_001");
+    let stale = control(
+        &store,
+        &job_id,
+        "operator_a",
+        "cancel_002",
+        JobControlKind::Cancel,
+    );
+    store
+        .acquire_lease("demo", &job_id, "worker_a", 1_010, 30)
+        .expect("concurrent lease wins");
+    assert_eq!(
+        store.control_job(stale, 1_011),
+        Err(DurableJobError::ControlVersionConflict)
+    );
+
+    let foreign = JobControlCommand::new(
+        "other",
+        &job_id,
+        "operator_a",
+        "cancel_003",
+        1,
+        None,
+        JobControlKind::Cancel,
+    )
+    .expect("well formed foreign command");
+    assert_eq!(
+        store.control_job(foreign, 1_012),
+        Err(DurableJobError::JobNotFound)
+    );
+}
+
+#[test]
+fn control_idempotency_key_binds_all_semantic_fields_and_terminal_cancel_does_not_pause() {
+    let (mut store, job_id) = admitted_store("control_key_001");
+    let cancel = control(
+        &store,
+        &job_id,
+        "operator_a",
+        "shared_key",
+        JobControlKind::Cancel,
+    );
+    store
+        .control_job(cancel, 1_010)
+        .expect("cancel before effect");
+    let after_cancel = store.control_version("demo", &job_id).expect("version");
+    let changed_operator = JobControlCommand::new(
+        "demo",
+        &job_id,
+        "operator_b",
+        "shared_key",
+        after_cancel,
+        None,
+        JobControlKind::Pause,
+    )
+    .expect("formed command");
+    assert_eq!(
+        store.control_job(changed_operator, 1_011),
+        Err(DurableJobError::ControlIdempotencyConflict)
+    );
+    let changed_fence = JobControlCommand::new(
+        "demo",
+        &job_id,
+        "operator_a",
+        "shared_key",
+        after_cancel,
+        Some(1),
+        JobControlKind::Pause,
+    )
+    .expect("formed command");
+    assert_eq!(
+        store.control_job(changed_fence, 1_011),
+        Err(DurableJobError::ControlIdempotencyConflict)
+    );
+    let pause = JobControlCommand::new(
+        "demo",
+        &job_id,
+        "operator_a",
+        "new_key",
+        after_cancel,
+        None,
+        JobControlKind::Pause,
+    )
+    .expect("formed command");
+    assert_eq!(
+        store
+            .control_job(pause, 1_012)
+            .expect("terminal receipt")
+            .outcome(),
+        &JobControlOutcome::AlreadyTerminal
+    );
+}
+
+#[test]
+fn recovery_of_an_already_queued_job_is_a_noop_for_control_version() {
+    let (mut store, job_id) = admitted_store("recovery_queued_001");
+    let before = store.control_version("demo", &job_id).expect("version");
+    assert_eq!(
+        store
+            .recover_after_restart("demo", &job_id, 1_010)
+            .expect("queued recovery"),
+        RecoveryDisposition::ReadyForLease,
+    );
+    assert_eq!(store.control_version("demo", &job_id), Ok(before));
+}
+
+#[test]
+fn expired_no_effect_lease_recovery_bumps_once_then_repeated_recovery_is_a_noop() {
+    let (mut store, job_id) = admitted_store("recovery_expired_001");
+    store
+        .acquire_lease("demo", &job_id, "worker_a", 1_010, 10)
+        .expect("lease");
+    let before_recovery = store.control_version("demo", &job_id).expect("version");
+    assert_eq!(
+        store
+            .recover_after_restart("demo", &job_id, 1_020)
+            .expect("expired lease recovery"),
+        RecoveryDisposition::ReadyForLease,
+    );
+    let after_first_recovery = store.control_version("demo", &job_id).expect("version");
+    assert_eq!(after_first_recovery, before_recovery + 1);
+    assert_eq!(store.active_fence("demo", &job_id), Ok(None));
+    assert_eq!(
+        store
+            .recover_after_restart("demo", &job_id, 1_021)
+            .expect("queued repeat recovery"),
+        RecoveryDisposition::ReadyForLease,
+    );
+    assert_eq!(
+        store.control_version("demo", &job_id),
+        Ok(after_first_recovery)
+    );
+}
+
+fn admitted_store(trigger: &str) -> (DurableJobStore, String) {
+    let mut store = DurableJobStore::new();
+    store
+        .configure_quota(QuotaLimit::new(window("demo"), 10).expect("limit"))
+        .expect("quota");
+    let receipt = store.admit(request("demo", trigger)).expect("admitted");
+    let job_id = receipt.job().expect("admitted job").job_id().to_owned();
+    (store, job_id)
+}
+
+fn control(
+    store: &DurableJobStore,
+    job_id: &str,
+    operator: &str,
+    key: &str,
+    kind: JobControlKind,
+) -> JobControlCommand {
+    JobControlCommand::new(
+        "demo",
+        job_id,
+        operator,
+        key,
+        store.control_version("demo", job_id).expect("version"),
+        store.active_fence("demo", job_id).expect("fence"),
+        kind,
+    )
+    .expect("valid control command")
 }
