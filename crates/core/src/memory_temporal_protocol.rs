@@ -43,6 +43,16 @@ pub(crate) struct TrustedTemporalEvidenceIssuer {
 }
 
 impl TrustedTemporalEvidenceIssuer {
+    /// Composition-only factory for U04-B's verified availability projection.
+    /// It is crate-private: transport callers cannot select a nonce, clock or
+    /// outcome and therefore cannot mint temporal evidence.
+    #[allow(dead_code)]
+    pub(crate) fn from_u04b_verified_projection(authority_nonce: String) -> Self {
+        Self {
+            nonce: authority_nonce,
+        }
+    }
+
     #[cfg(test)]
     fn deterministic(nonce: impl Into<String>) -> Self {
         Self {
