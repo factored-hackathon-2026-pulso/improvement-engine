@@ -1,8 +1,8 @@
 use improvement_engine_core::run_fork::{
     ForkAuthorization, ForkCommitPort, ForkControlState, ForkGrant, ForkGrantAuthority,
-    ForkReferencePolicy, ForkRequest, ForkRunLifecycle, InMemoryForkCommitPort,
-    InMemoryForkGrantAuthority, InMemoryForkReferencePolicy, InMemoryForkRunLifecycle,
-    RunForkError, RunForkStore, RunLifecycle,
+    ForkReferenceLiveness, ForkReferencePolicy, ForkRequest, ForkRunLifecycle,
+    InMemoryForkCommitPort, InMemoryForkGrantAuthority, InMemoryForkReferencePolicy,
+    InMemoryForkRunLifecycle, RunForkError, RunForkStore, RunLifecycle,
 };
 use improvement_engine_core::{
     ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository, InMemoryArtifactRepository,
@@ -474,12 +474,27 @@ impl ForkGrantAuthority for RevokingGrant {
 
 #[derive(Default)]
 struct RevokingPolicy {
-    checks: u8,
+    snapshot_revoked: bool,
 }
 impl ForkReferencePolicy for RevokingPolicy {
-    fn is_live_for_fork(&mut self, _: &str, _: &ArtifactReference, _: u64) -> bool {
-        self.checks += 1;
-        self.checks <= 3
+    fn liveness_for_fork(
+        &mut self,
+        _: &str,
+        reference: &ArtifactReference,
+        _: u64,
+    ) -> ForkReferenceLiveness {
+        let snapshot_live = !self.snapshot_revoked;
+        // A hostile authority revokes the snapshot while the fence is being
+        // captured for config/memory. The final fence comparison must catch it
+        // before any child, receipt or audit is written.
+        if reference.id == CONFIG {
+            self.snapshot_revoked = true;
+        }
+        if reference.id == SOURCE {
+            ForkReferenceLiveness::new(snapshot_live, if snapshot_live { 1 } else { 2 })
+        } else {
+            ForkReferenceLiveness::new(true, 1)
+        }
     }
 }
 

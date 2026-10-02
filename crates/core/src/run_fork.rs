@@ -8,7 +8,7 @@
 use crate::{ArtifactKind, ArtifactReference, ArtifactRepository};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -103,6 +103,29 @@ struct AttestedOriginalRun {
     cutoff_unix_seconds: u64,
 }
 
+/// Immutable condition set captured for exactly one fork attempt. A durable
+/// adapter persists only if this whole fence still compares equal inside its
+/// one transaction/conditional write; it must never recreate individual
+/// precondition checks after capturing the fence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CommitFence {
+    request_digest: String,
+    grant: ForkGrant,
+    lifecycle: RunLifecycle,
+    snapshot: ReferenceFence,
+    config: ReferenceFence,
+    memory: ReferenceFence,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ReferenceFence {
+    reference: ArtifactReference,
+    kind: ArtifactKind,
+    cutoff_unix_seconds: u64,
+    exact_cutoff: bool,
+    liveness: ForkReferenceLiveness,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ForkedRun {
     run_id: String,
@@ -169,12 +192,27 @@ impl ForkReceipt {
 /// Lifecycle/final-lock checks belong to the source authorities, never to a
 /// caller-controlled string list in the fork request.
 pub trait ForkReferencePolicy {
-    fn is_live_for_fork(
+    fn liveness_for_fork(
         &mut self,
         tenant_id: &str,
         reference: &ArtifactReference,
         cutoff_unix_seconds: u64,
-    ) -> bool;
+    ) -> ForkReferenceLiveness;
+}
+
+/// Versioned liveness observed for one exact artifact reference. A commit
+/// fence pins this value and a durable adapter compares it atomically before
+/// writing a fork.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ForkReferenceLiveness {
+    live: bool,
+    version: u64,
+}
+impl ForkReferenceLiveness {
+    #[must_use]
+    pub fn new(live: bool, version: u64) -> Self {
+        Self { live, version }
+    }
 }
 
 /// Current, versioned authorization read by a conditional fork commit. The
@@ -286,22 +324,44 @@ impl ForkRunLifecycle for InMemoryForkRunLifecycle {
 }
 #[derive(Default)]
 pub struct InMemoryForkReferencePolicy {
-    revoked: BTreeSet<String>,
-    final_locked: BTreeSet<String>,
+    revoked: BTreeMap<String, u64>,
+    final_locked: BTreeMap<String, u64>,
 }
 impl InMemoryForkReferencePolicy {
     pub fn revoke(&mut self, reference: &ArtifactReference) {
-        self.revoked.insert(reference_key(reference));
+        let key = reference_key(reference);
+        let version = self.version_for(&key).saturating_add(1);
+        self.revoked.insert(key, version);
     }
     pub fn final_lock(&mut self, reference: &ArtifactReference) {
-        self.final_locked.insert(reference_key(reference));
+        let key = reference_key(reference);
+        let version = self.version_for(&key).saturating_add(1);
+        self.final_locked.insert(key, version);
+    }
+    fn version_for(&self, key: &str) -> u64 {
+        self.revoked
+            .get(key)
+            .into_iter()
+            .chain(self.final_locked.get(key))
+            .copied()
+            .max()
+            .unwrap_or(1)
     }
 }
 impl ForkReferencePolicy for InMemoryForkReferencePolicy {
-    fn is_live_for_fork(&mut self, tenant_id: &str, reference: &ArtifactReference, _: u64) -> bool {
-        reference.tenant_id == tenant_id
-            && !self.revoked.contains(&reference_key(reference))
-            && !self.final_locked.contains(&reference_key(reference))
+    fn liveness_for_fork(
+        &mut self,
+        tenant_id: &str,
+        reference: &ArtifactReference,
+        _: u64,
+    ) -> ForkReferenceLiveness {
+        let key = reference_key(reference);
+        ForkReferenceLiveness::new(
+            reference.tenant_id == tenant_id
+                && !self.revoked.contains_key(&key)
+                && !self.final_locked.contains_key(&key),
+            self.version_for(&key),
+        )
     }
 }
 
@@ -412,7 +472,7 @@ impl RunForkStore {
             memory_ref,
             cutoff_unix_seconds,
         };
-        validate_original(&original, artifacts, policy)?;
+        let _ = capture_original_references(&original, artifacts, policy)?;
         self.originals.insert(key, original);
         Ok(())
     }
@@ -450,45 +510,38 @@ impl RunForkStore {
             request.idempotency_key.clone(),
         );
         let digest = request_digest(&request);
+        let parent = self.parent(&request)?.clone();
+        let fence = capture_commit_fence(
+            &parent,
+            &request.authorization,
+            &digest,
+            artifacts,
+            policy,
+            grants,
+            lifecycle,
+        )?;
+        // This is the in-memory conditional-write boundary. A database adapter
+        // must compare this same immutable fence in one transaction before
+        // inserting child, receipt, audit and idempotency records.
+        compare_commit_fence(
+            &parent,
+            &request.authorization,
+            &digest,
+            &fence,
+            artifacts,
+            policy,
+            grants,
+            lifecycle,
+        )?;
         if let Some((recorded, receipt)) = self.idempotency.get(&key) {
             if recorded != &digest {
                 return Err(RunForkError::IdempotencyConflict);
             }
-            let parent = self.parent(&request)?;
-            let lifecycle_record = validate_conditions(
-                parent,
-                &request.authorization,
-                artifacts,
-                policy,
-                grants,
-                lifecycle,
-            )?;
-            if receipt.event.parent_control_version != lifecycle_record.control_version {
+            if receipt.event.parent_control_version != fence.lifecycle.control_version {
                 return Err(RunForkError::ControlStateConflict);
             }
             return Ok(receipt.clone());
         }
-        let parent = self.parent(&request)?.clone();
-        // The first read is a preflight only. A durable implementation maps
-        // the second, identical condition set to one transaction/CAS directly
-        // before writing any record; this in-memory port makes that boundary
-        // executable and testable without exposing its storage internals.
-        validate_conditions(
-            &parent,
-            &request.authorization,
-            artifacts,
-            policy,
-            grants,
-            lifecycle,
-        )?;
-        let lifecycle_record = validate_conditions(
-            &parent,
-            &request.authorization,
-            artifacts,
-            policy,
-            grants,
-            lifecycle,
-        )?;
         let run_id = format!("fork_{digest}");
         if self
             .forks
@@ -512,7 +565,7 @@ impl RunForkStore {
             actor_id: request.authorization.actor_id.clone(),
             grant_id: request.authorization.grant_id.clone(),
             reason: request.authorization.reason.clone(),
-            parent_control_version: lifecycle_record.control_version,
+            parent_control_version: fence.lifecycle.control_version,
         };
         let receipt = ForkReceipt {
             fork: fork.clone(),
@@ -612,41 +665,7 @@ where
     }
 }
 
-fn validate_original<R: ArtifactRepository, P: ForkReferencePolicy>(
-    original: &AttestedOriginalRun,
-    artifacts: &mut R,
-    policy: &mut P,
-) -> Result<(), RunForkError> {
-    validate_reference(
-        artifacts,
-        policy,
-        &original.tenant_id,
-        &original.snapshot_ref,
-        ArtifactKind::SourceSnapshot,
-        original.cutoff_unix_seconds,
-        true,
-    )?;
-    validate_reference(
-        artifacts,
-        policy,
-        &original.tenant_id,
-        &original.config_ref,
-        ArtifactKind::RunConfig,
-        original.cutoff_unix_seconds,
-        false,
-    )?;
-    validate_reference(
-        artifacts,
-        policy,
-        &original.tenant_id,
-        &original.memory_ref,
-        ArtifactKind::MemoryWiki,
-        original.cutoff_unix_seconds,
-        false,
-    )
-}
-
-fn validate_conditions<
+fn capture_commit_fence<
     R: ArtifactRepository,
     P: ForkReferencePolicy,
     G: ForkGrantAuthority,
@@ -654,20 +673,68 @@ fn validate_conditions<
 >(
     original: &AttestedOriginalRun,
     authorization: &ForkAuthorization,
+    request_digest: &str,
     artifacts: &mut R,
     policy: &mut P,
     grants: &mut G,
     lifecycle: &mut L,
-) -> Result<RunLifecycle, RunForkError> {
-    validate_grant(authorization, grants)?;
-    let lifecycle_record = validate_lifecycle(original, authorization, lifecycle)?;
-    validate_original(original, artifacts, policy)?;
-    Ok(lifecycle_record)
+) -> Result<CommitFence, RunForkError> {
+    let grant = capture_grant(authorization, grants)?;
+    let lifecycle = capture_lifecycle(original, authorization, lifecycle)?;
+    let (snapshot, config, memory) = capture_original_references(original, artifacts, policy)?;
+    Ok(CommitFence {
+        request_digest: request_digest.to_owned(),
+        grant,
+        lifecycle,
+        snapshot,
+        config,
+        memory,
+    })
 }
-fn validate_grant<G: ForkGrantAuthority>(
+
+#[allow(clippy::too_many_arguments)] // Fence comparison names each independent authority explicitly.
+fn compare_commit_fence<
+    R: ArtifactRepository,
+    P: ForkReferencePolicy,
+    G: ForkGrantAuthority,
+    L: ForkRunLifecycle,
+>(
+    original: &AttestedOriginalRun,
+    authorization: &ForkAuthorization,
+    request_digest: &str,
+    fence: &CommitFence,
+    artifacts: &mut R,
+    policy: &mut P,
+    grants: &mut G,
+    lifecycle: &mut L,
+) -> Result<(), RunForkError> {
+    if fence.request_digest != request_digest
+        || capture_grant(authorization, grants)? != fence.grant
+        || capture_lifecycle(original, authorization, lifecycle)? != fence.lifecycle
+    {
+        return Err(RunForkError::CommitFenceChanged);
+    }
+    for expected in [&fence.snapshot, &fence.config, &fence.memory] {
+        if capture_reference_fence(
+            artifacts,
+            policy,
+            &original.tenant_id,
+            &expected.reference,
+            expected.kind.clone(),
+            expected.cutoff_unix_seconds,
+            expected.exact_cutoff,
+        )? != *expected
+        {
+            return Err(RunForkError::CommitFenceChanged);
+        }
+    }
+    Ok(())
+}
+
+fn capture_grant<G: ForkGrantAuthority>(
     authorization: &ForkAuthorization,
     grants: &mut G,
-) -> Result<(), RunForkError> {
+) -> Result<ForkGrant, RunForkError> {
     let grant = grants
         .current_grant(
             &authorization.tenant_id,
@@ -678,9 +745,9 @@ fn validate_grant<G: ForkGrantAuthority>(
     if grant.version != authorization.expected_grant_version {
         return Err(RunForkError::Unauthorized);
     }
-    Ok(())
+    Ok(grant)
 }
-fn validate_lifecycle<L: ForkRunLifecycle>(
+fn capture_lifecycle<L: ForkRunLifecycle>(
     original: &AttestedOriginalRun,
     authorization: &ForkAuthorization,
     lifecycle: &mut L,
@@ -698,7 +765,42 @@ fn validate_lifecycle<L: ForkRunLifecycle>(
     }
     Ok(live)
 }
-fn validate_reference<R: ArtifactRepository, P: ForkReferencePolicy>(
+fn capture_original_references<R: ArtifactRepository, P: ForkReferencePolicy>(
+    original: &AttestedOriginalRun,
+    artifacts: &mut R,
+    policy: &mut P,
+) -> Result<(ReferenceFence, ReferenceFence, ReferenceFence), RunForkError> {
+    Ok((
+        capture_reference_fence(
+            artifacts,
+            policy,
+            &original.tenant_id,
+            &original.snapshot_ref,
+            ArtifactKind::SourceSnapshot,
+            original.cutoff_unix_seconds,
+            true,
+        )?,
+        capture_reference_fence(
+            artifacts,
+            policy,
+            &original.tenant_id,
+            &original.config_ref,
+            ArtifactKind::RunConfig,
+            original.cutoff_unix_seconds,
+            false,
+        )?,
+        capture_reference_fence(
+            artifacts,
+            policy,
+            &original.tenant_id,
+            &original.memory_ref,
+            ArtifactKind::MemoryWiki,
+            original.cutoff_unix_seconds,
+            false,
+        )?,
+    ))
+}
+fn capture_reference_fence<R: ArtifactRepository, P: ForkReferencePolicy>(
     artifacts: &mut R,
     policy: &mut P,
     tenant_id: &str,
@@ -706,8 +808,9 @@ fn validate_reference<R: ArtifactRepository, P: ForkReferencePolicy>(
     expected_kind: ArtifactKind,
     cutoff: u64,
     exact_cutoff: bool,
-) -> Result<(), RunForkError> {
-    if reference.tenant_id != tenant_id || !policy.is_live_for_fork(tenant_id, reference, cutoff) {
+) -> Result<ReferenceFence, RunForkError> {
+    let liveness = policy.liveness_for_fork(tenant_id, reference, cutoff);
+    if reference.tenant_id != tenant_id || !liveness.live {
         return Err(RunForkError::ReferenceUnavailable);
     }
     let artifact = artifacts
@@ -729,7 +832,13 @@ fn validate_reference<R: ArtifactRepository, P: ForkReferencePolicy>(
     {
         return Err(RunForkError::CutoffMismatch);
     }
-    Ok(())
+    Ok(ReferenceFence {
+        reference: reference.clone(),
+        kind: expected_kind,
+        cutoff_unix_seconds: cutoff,
+        exact_cutoff,
+        liveness,
+    })
 }
 fn artifact_is_final_locked(payload: &Value) -> bool {
     payload
@@ -779,6 +888,7 @@ pub enum RunForkError {
     FinalLocked,
     Unauthorized,
     ControlStateConflict,
+    CommitFenceChanged,
     IdempotencyConflict,
     ForkCollision,
 }

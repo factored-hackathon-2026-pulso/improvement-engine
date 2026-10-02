@@ -13,13 +13,14 @@ fijados junto a `replay_of`; por tanto un fork no reescribe evidencia histórica
 La condición dinámica `final_locked` y el control state/version no entran por
 el request ni por la atestación de padre: `ForkRunLifecycle` los resuelve en
 cada operación, incluido retry. `ForkGrantAuthority` resuelve grant y su
-revisión en el mismo borde. `ForkCommitPort` es el contrato durable: su única
-operación condicional revalida idempotency digest, grant/revisión, lifecycle
-(state/version/final-lock) y cada referencia atestada viva/exacta antes de
-persistir hija, receipt y evento de auditoría juntos. `InMemoryForkCommitPort`
-lo implementa sobre interfaces genéricas de artifacts, policy, grants y
-lifecycle —no queda acoplado al grant in-memory— y repite el conjunto de
-condiciones inmediatamente antes de hacer visibles las tres escrituras. Un retry revalida liveness y devuelve
+revisión en el mismo borde. `ForkCommitPort` es el contrato durable: captura
+un `CommitFence` inmutable con idempotency digest, grant/revisión, lifecycle
+(state/version/final-lock) y las tres referencias exactas con su liveness
+versionada. El adaptador durable compara *ese mismo fence* y persiste hija,
+receipt y auditoría en una sola transacción/conditional write; no recompone
+checks secuenciales. `InMemoryForkCommitPort` lo implementa sobre interfaces
+genéricas de artifacts, policy, grants y lifecycle —no queda acoplado al grant
+in-memory— y compara el fence antes de hacer visibles las tres escrituras. Un retry revalida liveness y devuelve
 `ReferenceUnavailable` si el padre se revocó desde la primera respuesta; no
 devuelve una hija que ya no sería ejecutable. Esta unidad no
 afirma que ya existe el endpoint `/fork-replay`, autorización humana, PG ni un
@@ -38,8 +39,9 @@ replay E0: corresponden a U24/U34-FE y sus dependencias.
 - Un re-registro se rechaza antes de validar o insertar el nuevo binding, de
   modo que no puede sustituir la primera atestación. Grant revocado, lifecycle
   ausente, versión/cambio concurrente o final-lock también invalidan un retry.
-- Un cambio entre preflight y commit falla cerrado sin hijo ni evento; el mismo
-  request exitoso devuelve el receipt idéntico y no crea segundo hijo ni audit.
+- Un cambio entre captura y comparación del fence falla cerrado sin hijo ni
+  evento; el mismo request exitoso devuelve el receipt idéntico y no crea
+  segundo hijo ni audit.
 - El hijo conserva cutoff y referencias exactas del padre, incluye
   `replay_of`, y no ofrece API de mutación del padre.
 
@@ -67,6 +69,10 @@ cargo +1.98.1 test -p improvement-engine-core --test run_fork
    grant versionado, lifecycle y referencias se revalidan en la condición final;
    se añadieron regresiones de grant/policy/lifecycle mutables entre lectura y
    commit, y de retry con un único receipt/hijo/audit.
+7. La cuarta revisión P1 reemplazó dos validaciones secuenciales por un
+   `CommitFence` versionado. La regresión adversarial revoca el snapshot al
+   revisar config/memory y confirma que el compare final no deja hija, receipt
+   ni audit.
 
 Resultado: 11 pruebas verdes. Antes de integración acumulativa, un revisor
 independiente debe comprobar el contrato contra U03/U15/U33 y que el adaptador
