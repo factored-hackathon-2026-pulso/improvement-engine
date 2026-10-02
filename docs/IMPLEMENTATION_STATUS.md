@@ -75,7 +75,8 @@ green unit test as proof that a broader product flow is complete.
   U04-B's replay cutoff and U22/U33 governed admission. An opaque, trusted
   evidence commitment (not caller-provided timestamps) is part of the U33
   canonical receipt; Frozen forbids outcome feedback and Continuous requires
-  an already-observable, provenanced outcome. This is not the
+  an already-observable, provenanced outcome. The current non-test U04-B path
+  admits Frozen only until U20-E/U27 supplies a sealed outcome adapter. This is not the
   full U23 E0 runner, CampaignManifest, scoring, or replay-result flow; those
   remain dependent on U09, U20-E and U27.
 

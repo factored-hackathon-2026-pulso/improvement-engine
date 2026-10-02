@@ -10,7 +10,6 @@ use crate::governed_memory_use::{
     MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest, VerifiedMemoryUse,
 };
 use crate::memory_store::{AtomicMemoryUseCommitPort, MemoryScope};
-use crate::wiki_scratch::MemoryUseCommitAuthority;
 use sha2::{Digest, Sha256};
 
 /// The replay cutoff already established by the U04-B availability boundary.
@@ -203,16 +202,11 @@ pub struct MemoryTemporalAdmission {
 
 impl MemoryTemporalAdmission {
     #[allow(dead_code)] // Invoked by the future trusted service composition root.
-    pub(crate) fn admit<
-        R: ArtifactRepository,
-        P: AtomicMemoryUseCommitPort,
-        A: MemoryUseCommitAuthority,
-    >(
+    pub(crate) fn admit<R: ArtifactRepository, P: AtomicMemoryUseCommitPort>(
         protocol: MemoryTemporalProtocol,
         evidence: TemporalMemoryEvidence,
         publisher: &mut P,
         artifacts: &mut R,
-        authority: &A,
         request: MemoryUseRequest,
     ) -> Result<VerifiedMemoryUse, TemporalMemoryAdmissionError> {
         if evidence.memory_use_at_unix_seconds != request.allowed_at_unix_seconds() {
@@ -247,7 +241,7 @@ impl MemoryTemporalAdmission {
             .validate_evidence(request.scope(), &evidence)
             .map_err(TemporalMemoryAdmissionError::Temporal)?;
         let request = request.with_temporal_commitment(evidence.commitment.clone());
-        let admitted = MemoryUseAdmission::admit(publisher, artifacts, authority, request)
+        let admitted = MemoryUseAdmission::admit(publisher, artifacts, request)
             .map_err(TemporalMemoryAdmissionError::Governed)?;
         // The atomic U33 commit recomputes canonical receipt identity,
         // liveness, authorization and this exact commitment before exposing a
@@ -367,7 +361,9 @@ mod tests {
         EnrichedHistoryManifest, PackageFile, ProvenanceDigests,
     };
     use crate::governed_memory_use::MemoryUseRequest;
-    use crate::memory_store::{InMemoryMemoryRegistry, MemoryPublisher, MemoryScope};
+    use crate::memory_store::{
+        InMemoryGovernedMemoryCommitPort, InMemoryMemoryRegistry, MemoryPublisher, MemoryScope,
+    };
     use crate::source_validation::SourceSnapshot;
     use crate::wiki_scratch::{
         InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
@@ -460,8 +456,7 @@ mod tests {
         protocol: &str,
     ) -> (
         InMemoryArtifactRepository,
-        InMemoryMemoryRegistry,
-        InMemoryWikiGrantAuthority,
+        InMemoryGovernedMemoryCommitPort,
         WikiAccess,
     ) {
         let mut artifacts = InMemoryArtifactRepository::default();
@@ -506,12 +501,16 @@ mod tests {
         registry
             .seed_head(&mut artifacts, scope(protocol), snapshot)
             .expect("fixed memory head");
-        (artifacts, registry, authority, access)
+        (
+            artifacts,
+            InMemoryGovernedMemoryCommitPort::new(registry, authority),
+            access,
+        )
     }
 
     #[test]
     fn continuous_admission_rejects_an_outcome_not_yet_available_without_recording_a_receipt() {
-        let (mut artifacts, mut registry, authority, access) = seeded("continuous");
+        let (mut artifacts, mut publisher, access) = seeded("continuous");
 
         let request = MemoryUseRequest::new(scope("continuous"), access);
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
@@ -526,9 +525,8 @@ mod tests {
         let result = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Continuous,
             evidence,
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             request,
         );
 
@@ -539,12 +537,12 @@ mod tests {
             Err(other) => panic!("expected temporal outcome denial, got {other:?}"),
             Ok(_) => panic!("future outcome must not mint a capability"),
         }
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
     }
 
     #[test]
     fn admission_binds_its_temporal_claim_to_the_u33_receipt_clock_before_recording() {
-        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
 
         let request = MemoryUseRequest::new(scope("frozen"), access);
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
@@ -554,23 +552,22 @@ mod tests {
         let result = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Frozen,
             evidence,
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             request,
         );
 
         let admitted = result.expect("issuer binds the exact access time");
         assert_eq!(
             admitted.receipt().temporal_commitment,
-            registry.receipts()[0].temporal_commitment
+            publisher.receipts()[0].temporal_commitment
         );
         assert!(admitted.receipt().temporal_commitment.is_some());
     }
 
     #[test]
     fn frozen_admission_mints_only_the_existing_u22_receipt_provenance() {
-        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
 
         let request = MemoryUseRequest::new(scope("frozen"), access);
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
@@ -580,21 +577,20 @@ mod tests {
         let admitted = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Frozen,
             evidence,
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             request,
         )
         .expect("timely U22/U33 frozen admission");
 
         assert_eq!(admitted.head_version(), 1);
         assert_eq!(admitted.run_id(), "run-2");
-        assert_eq!(registry.receipts().len(), 1);
+        assert_eq!(publisher.receipts().len(), 1);
     }
 
     #[test]
     fn production_issuer_only_accepts_a_revalidated_u04b_replay_projection() {
-        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access);
         let issuer = TrustedTemporalEvidenceIssuer::from_u04b_replay(
             u04b_replay_projection(),
@@ -604,20 +600,19 @@ mod tests {
         let admitted = MemoryTemporalAdmission::admit(
             MemoryTemporalProtocol::Frozen,
             issuer.attest(MemoryTemporalProtocol::Frozen),
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             request,
         )
         .expect("bound replay projection can produce only the governed receipt");
 
         assert_eq!(admitted.scope().tenant_id, TENANT);
-        assert_eq!(registry.receipts().len(), 1);
+        assert_eq!(publisher.receipts().len(), 1);
     }
 
     #[test]
     fn production_issuer_rejects_u04b_projection_for_another_world_before_a_receipt() {
-        let (_artifacts, registry, _authority, access) = seeded("frozen");
+        let (_artifacts, publisher, access) = seeded("frozen");
         let request = MemoryUseRequest::new(
             MemoryScope::new(
                 TENANT,
@@ -634,12 +629,12 @@ mod tests {
             TrustedTemporalEvidenceIssuer::from_u04b_replay(u04b_replay_projection(), request),
             Err(TemporalProtocolError::U04BReplayScopeMismatch)
         ));
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
     }
 
     #[test]
     fn production_issuer_rejects_u04b_projection_for_another_tenant_before_a_receipt() {
-        let (_artifacts, registry, _authority, access) = seeded("frozen");
+        let (_artifacts, publisher, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access);
 
         assert!(matches!(
@@ -649,12 +644,12 @@ mod tests {
             ),
             Err(TemporalProtocolError::U04BReplayScopeMismatch)
         ));
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
     }
 
     #[test]
     fn source_snapshot_and_profile_digest_change_the_temporal_commitment() {
-        let (_artifacts, _registry, _authority, access) = seeded("frozen");
+        let (_artifacts, _publisher, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access);
         let first = TrustedTemporalEvidenceIssuer::from_u04b_replay(
             u04b_replay_projection_for(TENANT, ""),
@@ -678,7 +673,7 @@ mod tests {
 
     #[test]
     fn reissued_grant_revision_cannot_reuse_prior_temporal_evidence_or_leave_a_receipt() {
-        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
         let original_request = MemoryUseRequest::new(scope("frozen"), access.clone());
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
             VerifiedAvailabilityProjection::deterministic(original_request, 100, None, None),
@@ -686,7 +681,7 @@ mod tests {
         .attest(MemoryTemporalProtocol::Frozen);
 
         let binding = MemoryScopeBinding::new("world-a", "campaign-a", "frozen", "train");
-        authority.issue(
+        publisher.authority().issue(
             WikiGrant::new_scoped(
                 "grant-2",
                 "run-2",
@@ -704,21 +699,20 @@ mod tests {
             MemoryTemporalAdmission::admit(
                 MemoryTemporalProtocol::Frozen,
                 evidence,
-                &mut registry,
+                &mut publisher,
                 &mut artifacts,
-                &authority,
                 reissued_request,
             ),
             Err(TemporalMemoryAdmissionError::Temporal(
                 TemporalProtocolError::GrantRevisionMismatch
             ))
         ));
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
     }
 
     #[test]
     fn evidence_rejects_caller_elevation_of_allowed_at_before_u33_side_effects() {
-        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access);
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
             VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
@@ -742,21 +736,20 @@ mod tests {
             MemoryTemporalAdmission::admit(
                 MemoryTemporalProtocol::Frozen,
                 evidence,
-                &mut registry,
+                &mut publisher,
                 &mut artifacts,
-                &authority,
                 elevated,
             ),
             Err(TemporalMemoryAdmissionError::Temporal(
                 TemporalProtocolError::AccessTimeMismatch
             ))
         ));
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
     }
 
     #[test]
     fn evidence_cannot_cross_a_memory_scope_before_u33_side_effects() {
-        let (mut artifacts, mut registry, authority, access) = seeded("frozen");
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
         let request = MemoryUseRequest::new(scope("frozen"), access.clone());
         let evidence = TrustedTemporalEvidenceIssuer::deterministic(
             VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
@@ -777,15 +770,14 @@ mod tests {
             MemoryTemporalAdmission::admit(
                 MemoryTemporalProtocol::Frozen,
                 evidence,
-                &mut registry,
+                &mut publisher,
                 &mut artifacts,
-                &authority,
                 crossed,
             ),
             Err(TemporalMemoryAdmissionError::Temporal(
                 TemporalProtocolError::AccessTimeMismatch
             ))
         ));
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
     }
 }

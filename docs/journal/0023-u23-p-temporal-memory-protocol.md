@@ -38,8 +38,10 @@ U22 usa exclusivamente `AtomicMemoryUseCommitPort`, también `pub(crate)`: un
 no contiene una observación de autorización. La implementación durable U33
 debe resolver y comparar grant/revisión viva dentro de la misma transacción
 condicional que head identidad/versión actual, tombstone/linaje y solicitud
-exacta antes de escribir (o devolver idempotentemente) el receipt. Un fence
-fallido no deja receipt. El puerto público `MemoryPublisher` no puede emitir la
+exacta antes de escribir (o devolver idempotentemente) el receipt. El adapter
+local posee autoridad y ledger bajo un único `&mut self`; el contrato durable
+debe preservar esa co-transacción, no aceptar un authority callback separado.
+Un fence fallido no deja receipt. El puerto público `MemoryPublisher` no puede emitir la
 capability. U33 recalcula la identidad incluyendo el commitment además de
 scope, snapshot, head, run, grant, revisión, purpose y reloj autorizado. Un
 cutoff/outcome/timestamp fabricado, feedback futuro o protocolo cruzado falla

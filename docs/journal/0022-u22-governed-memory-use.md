@@ -13,9 +13,11 @@ U33 sigue siendo dueño del estado mutable: head, tombstones, autorización
 exacta, lectura de revisión viva e idempotencia del receipt. La admisión U22
 usa únicamente el puerto interno `AtomicMemoryUseCommitPort` con un
 `AtomicMemoryUseRequest` sellado. U22 no lee ni transporta un fence de grant:
-el adapter U33 resuelve grant y revisión desde su estado durable y los verifica
-en **la misma** operación condicional que scope, snapshot, request completo,
-head identidad/versión y tombstone/linaje; sólo entonces inserta (o devuelve
+el único adapter local U33 posee conjuntamente autoridad de grants y ledger de
+receipts; el adapter durable debe hacerlo en la misma transacción. Así resuelve
+grant y revisión desde su estado durable y los verifica en **la misma**
+operación condicional que scope, snapshot, request completo, head
+identidad/versión y tombstone/linaje; sólo entonces inserta (o devuelve
 idempotentemente) el receipt. U22 liga por ello scope, snapshot, run, grant,
 revisión de grant, propósito, instante permitido y commitment temporal. Un
 fence que pierde no deja receipt ni capability.
@@ -44,7 +46,8 @@ Cobertura ejecutable:
 4. Interleavings deterministas de revocación y cambio de head ganan entre la
    primera lectura y el predicado final: ambos dejan el ledger sin receipt ni
    `VerifiedMemoryUse`; una revisión de grant reemplazada o revocada también
-   falla cerrada.
+   falla cerrada exactamente en el límite final de la operación poseída por
+   U33, sin un callback de autoridad de caller entre predicate e insert.
 5. Tres doctests `compile_fail` bloquean construction literal de
    `VerifiedMemoryUse` y `MemoryUseAdmission`, además de la invocación externa
    de `MemoryUseAdmission::admit`.

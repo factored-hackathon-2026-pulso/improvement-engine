@@ -8,7 +8,7 @@ use crate::ArtifactRepository;
 use crate::memory_store::{
     AtomicMemoryUseCommitPort, AtomicMemoryUseRequest, MemoryError, MemoryScope, MemoryUseReceipt,
 };
-use crate::wiki_scratch::{MemoryUseCommitAuthority, WikiAccess};
+use crate::wiki_scratch::WikiAccess;
 
 /// Caller-supplied context which U33 must validate before a memory use is
 /// admitted. It contains no wiki payload or cache handle.
@@ -131,20 +131,14 @@ pub struct MemoryUseAdmission {
 
 impl MemoryUseAdmission {
     #[allow(dead_code)] // Invoked by the future trusted service composition root.
-    pub(crate) fn admit<
-        R: ArtifactRepository,
-        P: AtomicMemoryUseCommitPort,
-        A: MemoryUseCommitAuthority,
-    >(
+    pub(crate) fn admit<R: ArtifactRepository, P: AtomicMemoryUseCommitPort>(
         publisher: &mut P,
         artifacts: &mut R,
-        authority: &A,
         request: MemoryUseRequest,
     ) -> Result<VerifiedMemoryUse, MemoryUseAdmissionError> {
         let receipt = publisher
             .commit_allowed_use(
                 artifacts,
-                authority,
                 AtomicMemoryUseRequest::new(
                     request.scope.clone(),
                     request.access.clone(),
@@ -181,12 +175,11 @@ fn receipt_matches_request(receipt: &MemoryUseReceipt, request: &MemoryUseReques
 mod tests {
     use super::{MemoryUseAdmission, MemoryUseAdmissionError, MemoryUseRequest};
     use crate::memory_store::{
-        InMemoryMemoryRegistry, MemoryError, MemoryPublisher, MemoryScope,
-        MemoryUseCommitInterleaving, MemoryUseReceiptAttestationPort,
+        InMemoryGovernedMemoryCommitPort, InMemoryMemoryRegistry, MemoryError, MemoryPublisher,
+        MemoryScope, MemoryUseCommitInterleaving, MemoryUseReceiptAttestationPort,
     };
     use crate::wiki_scratch::{
-        InMemoryWikiGrantAuthority, MemoryScopeBinding, MemoryUseGrantInterleaving, WikiAccess,
-        WikiGrant,
+        InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
     };
     use crate::{ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository};
     use serde_json::json;
@@ -205,7 +198,7 @@ mod tests {
         )
     }
 
-    fn seeded() -> (
+    fn seeded_unwrapped() -> (
         InMemoryArtifactRepository,
         InMemoryMemoryRegistry,
         InMemoryWikiGrantAuthority,
@@ -255,18 +248,29 @@ mod tests {
         (artifacts, registry, authority, access)
     }
 
+    fn seeded() -> (
+        InMemoryArtifactRepository,
+        InMemoryGovernedMemoryCommitPort,
+        WikiAccess,
+    ) {
+        let (artifacts, registry, authority, access) = seeded_unwrapped();
+        (
+            artifacts,
+            InMemoryGovernedMemoryCommitPort::new(registry, authority),
+            access,
+        )
+    }
+
     #[test]
     fn admits_a_second_run_only_through_u33_and_replays_the_same_receipt() {
-        let (mut artifacts, mut registry, authority, access) = seeded();
+        let (mut artifacts, mut publisher, access) = seeded();
         let request = MemoryUseRequest::new(scope(), access.clone());
 
-        let admitted =
-            MemoryUseAdmission::admit(&mut registry, &mut artifacts, &authority, request)
-                .expect("U33-authorized second-run use");
+        let admitted = MemoryUseAdmission::admit(&mut publisher, &mut artifacts, request)
+            .expect("U33-authorized second-run use");
         let replay = MemoryUseAdmission::admit(
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             MemoryUseRequest::new(scope(), access),
         )
         .expect("same U33 receipt on replay");
@@ -276,20 +280,20 @@ mod tests {
         assert_eq!(admitted.purpose(), "investigation");
         assert_eq!(admitted.head_version(), 1);
         assert_eq!(admitted.receipt_id(), replay.receipt_id());
-        assert_eq!(registry.receipts().len(), 1);
+        assert_eq!(publisher.receipts().len(), 1);
     }
 
     #[test]
     fn revoked_or_cross_scope_memory_never_mints_a_second_run_capability() {
-        let (mut artifacts, mut registry, authority, access) = seeded();
+        let (mut artifacts, mut publisher, access) = seeded();
         let snapshot = access.snapshot_ref.clone();
-        registry
+        publisher
+            .registry_mut()
             .revoke(snapshot, "permission_revoked")
             .expect("fixed revocation");
         match MemoryUseAdmission::admit(
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             MemoryUseRequest::new(scope(), access),
         ) {
             Err(error) => assert_eq!(
@@ -299,7 +303,7 @@ mod tests {
             Ok(_) => panic!("revoked memory must not mint a capability"),
         }
 
-        let (mut artifacts, mut registry, authority, access) = seeded();
+        let (mut artifacts, mut publisher, access) = seeded();
         let other_scope = MemoryScope::new(
             TENANT,
             "investigation",
@@ -309,9 +313,8 @@ mod tests {
             "train",
         );
         match MemoryUseAdmission::admit(
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             MemoryUseRequest::new(other_scope, access),
         ) {
             Err(error) => assert_eq!(
@@ -321,7 +324,7 @@ mod tests {
             Ok(_) => panic!("cross-scope memory must not mint a capability"),
         }
 
-        let (mut artifacts, mut registry, authority, access) = seeded();
+        let (mut artifacts, mut publisher, access) = seeded();
         let cross_tenant_access = WikiAccess::new_scoped(
             "run-2",
             "tenant-b",
@@ -332,9 +335,8 @@ mod tests {
             MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train"),
         );
         match MemoryUseAdmission::admit(
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             MemoryUseRequest::new(scope(), cross_tenant_access),
         ) {
             Err(error) => assert_eq!(
@@ -347,13 +349,12 @@ mod tests {
 
     #[test]
     fn revocation_that_wins_inside_the_atomic_u33_predicate_emits_no_receipt_or_capability() {
-        let (mut artifacts, mut registry, authority, access) = seeded();
-        registry.schedule_atomic_commit_interleaving(MemoryUseCommitInterleaving::RevokeSnapshot);
+        let (mut artifacts, mut publisher, access) = seeded();
+        publisher.schedule_atomic_commit_interleaving(MemoryUseCommitInterleaving::RevokeSnapshot);
 
         match MemoryUseAdmission::admit(
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             MemoryUseRequest::new(scope(), access),
         ) {
             Err(MemoryUseAdmissionError::Denied(MemoryError::SnapshotRevoked)) => {}
@@ -361,34 +362,33 @@ mod tests {
             Ok(_) => panic!("atomic revocation must not emit a capability"),
         }
         assert!(
-            registry.receipts().is_empty(),
+            publisher.receipts().is_empty(),
             "a failed conditional admission must not leave a receipt behind"
         );
     }
 
     #[test]
     fn head_change_that_wins_inside_the_atomic_u33_predicate_emits_no_receipt_or_capability() {
-        let (mut artifacts, mut registry, authority, access) = seeded();
-        registry.schedule_atomic_commit_interleaving(MemoryUseCommitInterleaving::AdvanceHead);
+        let (mut artifacts, mut publisher, access) = seeded();
+        publisher.schedule_atomic_commit_interleaving(MemoryUseCommitInterleaving::AdvanceHead);
 
         match MemoryUseAdmission::admit(
-            &mut registry,
+            &mut publisher,
             &mut artifacts,
-            &authority,
             MemoryUseRequest::new(scope(), access),
         ) {
             Err(MemoryUseAdmissionError::Denied(MemoryError::HeadConflict { .. })) => {}
             Err(other) => panic!("expected atomic head conflict, got {other:?}"),
             Ok(_) => panic!("stale atomic head must not mint a capability"),
         }
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
     }
 
     #[test]
     fn replaced_or_revoked_grant_revision_cannot_pass_the_u33_fence_or_leave_a_receipt() {
-        let (mut artifacts, mut registry, authority, access) = seeded();
+        let (mut artifacts, mut publisher, access) = seeded();
         let binding = MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train");
-        authority.issue(
+        publisher.authority().issue(
             WikiGrant::new_scoped(
                 "grant-2",
                 "run-2",
@@ -402,48 +402,45 @@ mod tests {
 
         assert!(matches!(
             MemoryUseAdmission::admit(
-                &mut registry,
+                &mut publisher,
                 &mut artifacts,
-                &authority,
                 MemoryUseRequest::new(scope(), access.clone()),
             ),
             Err(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))
         ));
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
 
-        assert!(authority.revoke("grant-2"));
+        assert!(publisher.authority().revoke("grant-2"));
         assert!(matches!(
             MemoryUseAdmission::admit(
-                &mut registry,
+                &mut publisher,
                 &mut artifacts,
-                &authority,
                 MemoryUseRequest::new(scope(), access),
             ),
             Err(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))
         ));
-        assert!(registry.receipts().is_empty());
+        assert!(publisher.receipts().is_empty());
     }
 
     #[test]
     fn grant_revoke_or_replacement_that_wins_inside_u33_predicate_leaves_no_receipt() {
         for interleaving in [
-            MemoryUseGrantInterleaving::Revoke,
-            MemoryUseGrantInterleaving::ReplaceWithRevision(2),
+            MemoryUseCommitInterleaving::RevokeGrant,
+            MemoryUseCommitInterleaving::ReplaceGrantWithRevision(2),
         ] {
-            let (mut artifacts, mut registry, authority, access) = seeded();
-            authority.schedule_memory_use_interleaving(interleaving);
+            let (mut artifacts, mut publisher, access) = seeded();
+            publisher.schedule_atomic_commit_interleaving(interleaving);
 
             assert!(matches!(
                 MemoryUseAdmission::admit(
-                    &mut registry,
+                    &mut publisher,
                     &mut artifacts,
-                    &authority,
                     MemoryUseRequest::new(scope(), access),
                 ),
                 Err(MemoryUseAdmissionError::Denied(MemoryError::AccessDenied))
             ));
             assert!(
-                registry.receipts().is_empty(),
+                publisher.receipts().is_empty(),
                 "{interleaving:?} must fail the final U33 predicate before receipt insertion"
             );
         }
@@ -451,7 +448,7 @@ mod tests {
 
     #[test]
     fn u33_attestation_rejects_a_forged_receipt_id_or_positive_wrong_head() {
-        let (mut artifacts, mut registry, authority, access) = seeded();
+        let (mut artifacts, mut registry, authority, access) = seeded_unwrapped();
         let receipt = registry
             .record_allowed_use(
                 &mut artifacts,

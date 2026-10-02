@@ -185,6 +185,7 @@ pub trait WikiAuthorizationPort {
 /// implementation must resolve the exact grant revision and verify it remains
 /// live *inside the same transaction* as the U33 receipt predicate. U22 must
 /// not pre-read a fence and hand a stale authorization observation to U33.
+#[allow(dead_code)] // Consumed only by the crate-private U33 composition adapter.
 pub(crate) trait MemoryUseCommitAuthority: WikiAuthorizationPort {
     fn memory_use_grant_is_live(&self, access: &WikiAccess) -> bool;
 }
@@ -196,18 +197,6 @@ pub(crate) trait MemoryUseCommitAuthority: WikiAuthorizationPort {
 #[derive(Default)]
 pub struct InMemoryWikiGrantAuthority {
     grants: RefCell<BTreeMap<String, WikiGrant>>,
-    #[cfg(test)]
-    next_memory_use_interleaving: RefCell<Option<MemoryUseGrantInterleaving>>,
-}
-
-/// A deterministic mutation that wins after U33 has observed an initially live
-/// grant, but before it may materialize a receipt. This test-only schedule
-/// models a concurrent grant transaction in the durable adapter's predicate.
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum MemoryUseGrantInterleaving {
-    Revoke,
-    ReplaceWithRevision(u64),
 }
 
 impl InMemoryWikiGrantAuthority {
@@ -221,30 +210,17 @@ impl InMemoryWikiGrantAuthority {
         self.grants.borrow_mut().remove(grant_id).is_some()
     }
 
-    #[cfg(test)]
-    pub(crate) fn schedule_memory_use_interleaving(
-        &self,
-        interleaving: MemoryUseGrantInterleaving,
-    ) {
-        *self.next_memory_use_interleaving.borrow_mut() = Some(interleaving);
-    }
-
-    #[cfg(test)]
-    fn apply_scheduled_memory_use_interleaving(&self, grant_id: &str) {
-        let Some(interleaving) = self.next_memory_use_interleaving.borrow_mut().take() else {
-            return;
-        };
-        let mut grants = self.grants.borrow_mut();
-        match interleaving {
-            MemoryUseGrantInterleaving::Revoke => {
-                grants.remove(grant_id);
-            }
-            MemoryUseGrantInterleaving::ReplaceWithRevision(revision) => {
-                if let Some(grant) = grants.get_mut(grant_id) {
-                    grant.revision = revision;
-                }
-            }
+    #[allow(dead_code)] // Used by U33's deterministic final-boundary race regression.
+    pub(crate) fn replace_revision(&self, grant_id: &str, revision: u64) -> bool {
+        if revision == 0 {
+            return false;
         }
+        let mut grants = self.grants.borrow_mut();
+        let Some(grant) = grants.get_mut(grant_id) else {
+            return false;
+        };
+        grant.revision = revision;
+        true
     }
 }
 
@@ -267,10 +243,7 @@ impl WikiAuthorizationPort for InMemoryWikiGrantAuthority {
 
 impl MemoryUseCommitAuthority for InMemoryWikiGrantAuthority {
     fn memory_use_grant_is_live(&self, access: &WikiAccess) -> bool {
-        let live = self.authorize(access, &access.snapshot_ref);
-        #[cfg(test)]
-        self.apply_scheduled_memory_use_interleaving(&access.grant_id);
-        live
+        self.authorize(access, &access.snapshot_ref)
     }
 }
 
