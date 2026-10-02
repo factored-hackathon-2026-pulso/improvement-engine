@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use sha2::{Digest, Sha256};
 
 /// Synthetic state that can be cloned into isolated evaluation arms.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct SandboxFixture {
     tenant_id: String,
     namespace: String,
@@ -19,6 +19,7 @@ pub struct SandboxFixture {
     initial_state: BTreeMap<String, String>,
     allowed_actions: BTreeSet<String>,
     identity_policy: Option<SandboxIdentityPolicy>,
+    identity_issuer: Option<SandboxIdentityIssuer>,
 }
 
 impl SandboxFixture {
@@ -37,6 +38,7 @@ impl SandboxFixture {
             initial_state,
             allowed_actions,
             identity_policy: None,
+            identity_issuer: None,
         }
     }
 
@@ -52,15 +54,41 @@ impl SandboxFixture {
         allowed_actions: BTreeSet<String>,
         identity_policy: SandboxIdentityPolicy,
     ) -> Self {
+        let tenant_id = tenant_id.into();
+        let namespace = namespace.into();
+        let fixture_id = fixture_id.into();
+        let identity_issuer = SandboxIdentityIssuer {
+            issuer_id: fixture_issuer_id(&tenant_id, &namespace, &fixture_id, &identity_policy),
+        };
         Self {
-            tenant_id: tenant_id.into(),
-            namespace: namespace.into(),
-            fixture_id: fixture_id.into(),
+            tenant_id,
+            namespace,
+            fixture_id,
             initial_state,
             allowed_actions,
             identity_policy: Some(identity_policy),
+            identity_issuer: Some(identity_issuer),
         }
     }
+
+    /// Returns the opaque issuer capability installed with this fixture.
+    /// Only trusted fixture setup should retain this capability.
+    #[must_use]
+    pub fn identity_issuer(&self) -> Option<SandboxIdentityIssuer> {
+        self.identity_issuer.clone()
+    }
+}
+
+/// Opaque fixture capability allowed to mint identity evidence. It has no
+/// public constructor or `Debug` implementation.
+///
+/// ```compile_fail
+/// use improvement_engine_core::sandbox::SandboxIdentityIssuer;
+/// let _ = SandboxIdentityIssuer::new();
+/// ```
+#[derive(Clone, Eq, PartialEq)]
+pub struct SandboxIdentityIssuer {
+    issuer_id: String,
 }
 
 /// Sealed identity rules for one sandbox fixture. This is a test/sandbox
@@ -102,12 +130,17 @@ impl SandboxIdentityPolicy {
 ///
 /// ```compile_fail
 /// use improvement_engine_core::sandbox::IdentityEvidence;
-/// let proof = IdentityEvidence::new("p", "t", "case", "chat", "policy", "questions", 1);
-/// let _ = format!("{proof:?}");
+/// let _ = IdentityEvidence::new("p", "t", "case", "chat", "policy", "questions", 1);
 /// ```
 ///
-/// The proof intentionally does not implement `Debug`, preventing accidental
-/// formatting into log-like outputs.
+/// ```compile_fail
+/// use improvement_engine_core::sandbox::IdentityEvidence;
+/// fn requires_debug<T: std::fmt::Debug>() {}
+/// requires_debug::<IdentityEvidence>();
+/// ```
+///
+/// The proof intentionally has no public constructor and does not implement
+/// `Debug`, preventing caller-forgery and accidental log-like formatting.
 #[derive(Clone, Eq, PartialEq)]
 pub struct IdentityEvidence {
     principal_id: String,
@@ -117,6 +150,8 @@ pub struct IdentityEvidence {
     policy_digest: String,
     questions_digest: String,
     valid_until: u64,
+    nonce: String,
+    issuer_id: String,
 }
 
 /// Clock owned by sandbox composition, rather than by untrusted requests.
@@ -127,34 +162,41 @@ pub trait SandboxClock: Send + Sync {
     fn now(&self) -> u64;
 }
 
-#[derive(Default)]
-struct ZeroSandboxClock;
+/// Explicit deterministic clock for local fixtures. Production composition
+/// must inject a sealed runtime clock instead of relying on `Default`.
+pub struct FixedSandboxClock(u64);
 
-impl SandboxClock for ZeroSandboxClock {
+impl FixedSandboxClock {
+    #[must_use]
+    pub fn new(now: u64) -> Self {
+        Self(now)
+    }
+}
+
+impl SandboxClock for FixedSandboxClock {
     fn now(&self) -> u64 {
-        0
+        self.0
     }
 }
 
 impl IdentityEvidence {
-    #[must_use]
-    pub fn new(
+    fn issue(
         principal_id: impl Into<String>,
         tenant_id: impl Into<String>,
-        case_id: impl Into<String>,
-        channel: impl Into<String>,
-        policy_digest: impl Into<String>,
-        questions_digest: impl Into<String>,
-        valid_until: u64,
+        policy: &SandboxIdentityPolicy,
+        nonce: impl Into<String>,
+        issuer_id: impl Into<String>,
     ) -> Self {
         Self {
             principal_id: principal_id.into(),
             tenant_id: tenant_id.into(),
-            case_id: case_id.into(),
-            channel: channel.into(),
-            policy_digest: policy_digest.into(),
-            questions_digest: questions_digest.into(),
-            valid_until,
+            case_id: policy.case_id.clone(),
+            channel: policy.channel.clone(),
+            policy_digest: policy.policy_digest.clone(),
+            questions_digest: policy.questions_digest.clone(),
+            valid_until: policy.valid_until,
+            nonce: nonce.into(),
+            issuer_id: issuer_id.into(),
         }
     }
 
@@ -167,6 +209,8 @@ impl IdentityEvidence {
             &self.channel,
             &self.policy_digest,
             &self.questions_digest,
+            &self.nonce,
+            &self.issuer_id,
         ] {
             digest.update(part.len().to_be_bytes());
             digest.update(part.as_bytes());
@@ -402,13 +446,15 @@ pub trait SandboxPort {
     ) -> Result<ResetReceipt, SandboxError>;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ArmState {
     fixture: SandboxFixture,
     state: BTreeMap<String, String>,
     revision: u64,
     actions: BTreeMap<String, (Action, ActionReceipt)>,
     revoked_identity_bindings: BTreeSet<String>,
+    issued_identity_evidence: BTreeMap<String, IdentityEvidence>,
+    next_identity_nonce: u64,
 }
 
 /// A deterministic fixture simulator. It is deliberately in-memory: no
@@ -417,12 +463,6 @@ pub struct StatefulSandbox {
     arms: BTreeMap<SandboxArmRef, ArmState>,
     evaluation_fixtures: BTreeMap<String, SandboxFixture>,
     clock: Box<dyn SandboxClock>,
-}
-
-impl Default for StatefulSandbox {
-    fn default() -> Self {
-        Self::with_clock(ZeroSandboxClock)
-    }
 }
 
 impl StatefulSandbox {
@@ -469,6 +509,8 @@ impl SandboxPort for StatefulSandbox {
                 revision: 0,
                 actions: BTreeMap::new(),
                 revoked_identity_bindings: BTreeSet::new(),
+                issued_identity_evidence: BTreeMap::new(),
+                next_identity_nonce: 0,
             },
         );
         self.evaluation_fixtures
@@ -489,6 +531,7 @@ impl SandboxPort for StatefulSandbox {
             &state.fixture,
             request.identity.as_ref(),
             now,
+            &state.issued_identity_evidence,
             &state.revoked_identity_bindings,
         )?;
         let action = request.action;
@@ -548,6 +591,7 @@ impl SandboxPort for StatefulSandbox {
             &state.fixture,
             request.identity.as_ref(),
             now,
+            &state.issued_identity_evidence,
             &state.revoked_identity_bindings,
         )?;
         let value =
@@ -579,6 +623,7 @@ impl SandboxPort for StatefulSandbox {
             &state.fixture,
             scope.identity.as_ref(),
             now,
+            &state.issued_identity_evidence,
             &state.revoked_identity_bindings,
         )?;
         let before_revision = state.revision;
@@ -597,6 +642,48 @@ impl SandboxPort for StatefulSandbox {
 }
 
 impl StatefulSandbox {
+    /// Issues opaque evidence from the registered identity policy for one
+    /// arm. This is the synthetic identity-verifier boundary: callers select a
+    /// principal but cannot construct, amend or replay the resulting proof in
+    /// another arm.
+    pub fn issue_identity(
+        &mut self,
+        issuer: &SandboxIdentityIssuer,
+        arm: &SandboxArmRef,
+        principal_id: impl Into<String>,
+    ) -> Result<IdentityEvidence, SandboxError> {
+        let state = self.arms.get_mut(arm).ok_or(SandboxError::ArmUnknown)?;
+        let policy = state
+            .fixture
+            .identity_policy
+            .as_ref()
+            .ok_or(SandboxError::IdentityEvidenceMismatch)?
+            .clone();
+        if state.fixture.identity_issuer.as_ref() != Some(issuer) {
+            return Err(SandboxError::IdentityEvidenceMismatch);
+        }
+        let principal_id = principal_id.into();
+        if !policy.permitted_principals.contains(&principal_id) {
+            return Err(SandboxError::IdentityEvidenceMismatch);
+        }
+        state.next_identity_nonce = state
+            .next_identity_nonce
+            .checked_add(1)
+            .ok_or(SandboxError::IdentityEvidenceMismatch)?;
+        let nonce = identity_nonce(arm, state.next_identity_nonce);
+        let evidence = IdentityEvidence::issue(
+            principal_id,
+            state.fixture.tenant_id.clone(),
+            &policy,
+            nonce.clone(),
+            issuer.issuer_id.clone(),
+        );
+        state
+            .issued_identity_evidence
+            .insert(nonce, evidence.clone());
+        Ok(evidence)
+    }
+
     /// Revokes matching identity evidence for one arm. The effect is local to
     /// that arm so candidate and baseline never share mutable authorization.
     pub fn revoke_identity(
@@ -611,6 +698,9 @@ impl StatefulSandbox {
             return Err(SandboxError::IdentityEvidenceMismatch);
         };
         if !identity_matches(&state.fixture.tenant_id, policy, &identity) {
+            return Err(SandboxError::IdentityEvidenceMismatch);
+        }
+        if state.issued_identity_evidence.get(&identity.nonce) != Some(&identity) {
             return Err(SandboxError::IdentityEvidenceMismatch);
         }
         state
@@ -636,6 +726,7 @@ fn fixture_is_valid(fixture: &SandboxFixture) -> bool {
             .identity_policy
             .as_ref()
             .is_none_or(identity_policy_is_valid)
+        && (fixture.identity_policy.is_some() == fixture.identity_issuer.is_some())
 }
 
 fn identity_policy_is_valid(policy: &SandboxIdentityPolicy) -> bool {
@@ -655,12 +746,23 @@ fn validate_identity(
     fixture: &SandboxFixture,
     identity: Option<&IdentityEvidence>,
     observed_at: u64,
+    issued_identity_evidence: &BTreeMap<String, IdentityEvidence>,
     revoked_identity_bindings: &BTreeSet<String>,
 ) -> Result<(), SandboxError> {
     let Some(policy) = &fixture.identity_policy else {
         return Ok(());
     };
     let identity = identity.ok_or(SandboxError::IdentityEvidenceMissing)?;
+    if issued_identity_evidence.get(&identity.nonce) != Some(identity) {
+        return Err(SandboxError::IdentityEvidenceMismatch);
+    }
+    if fixture
+        .identity_issuer
+        .as_ref()
+        .is_none_or(|issuer| issuer.issuer_id != identity.issuer_id)
+    {
+        return Err(SandboxError::IdentityEvidenceMismatch);
+    }
     if identity.valid_until <= observed_at || policy.valid_until <= observed_at {
         return Err(SandboxError::IdentityEvidenceExpired);
     }
@@ -671,6 +773,39 @@ fn validate_identity(
         return Err(SandboxError::IdentityRevoked);
     }
     Ok(())
+}
+
+fn identity_nonce(arm: &SandboxArmRef, sequence: u64) -> String {
+    let mut digest = Sha256::new();
+    for part in [&arm.evaluation_id, &arm.arm_id] {
+        digest.update(part.len().to_be_bytes());
+        digest.update(part.as_bytes());
+    }
+    digest.update(sequence.to_be_bytes());
+    format!("sandbox-identity:sha256:{:x}", digest.finalize())
+}
+
+fn fixture_issuer_id(
+    tenant_id: &str,
+    namespace: &str,
+    fixture_id: &str,
+    policy: &SandboxIdentityPolicy,
+) -> String {
+    let mut digest = Sha256::new();
+    for part in [
+        tenant_id,
+        namespace,
+        fixture_id,
+        &policy.case_id,
+        &policy.channel,
+        &policy.policy_digest,
+        &policy.questions_digest,
+    ] {
+        digest.update(part.len().to_be_bytes());
+        digest.update(part.as_bytes());
+    }
+    digest.update(policy.valid_until.to_be_bytes());
+    format!("sandbox-issuer:sha256:{:x}", digest.finalize())
 }
 
 fn identity_matches(

@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use improvement_engine_core::sandbox::{
-    Action, ActionRequest, ReadRequest, SandboxError, SandboxFixture, SandboxPort, SandboxScope,
-    StatefulSandbox,
+    Action, ActionRequest, FixedSandboxClock, ReadRequest, SandboxError, SandboxFixture,
+    SandboxPort, SandboxScope, StatefulSandbox,
 };
 
 fn fixture() -> SandboxFixture {
@@ -23,9 +23,13 @@ fn scope() -> SandboxScope {
     SandboxScope::new("tenant-a", "evaluation")
 }
 
+fn sandbox() -> StatefulSandbox {
+    StatefulSandbox::with_clock(FixedSandboxClock::new(0))
+}
+
 #[test]
 fn allowed_action_changes_only_its_arm_and_authorized_readback_proves_the_effect() {
-    let mut sandbox = StatefulSandbox::default();
+    let mut sandbox = sandbox();
     let arm = sandbox
         .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();
@@ -62,7 +66,7 @@ fn allowed_action_changes_only_its_arm_and_authorized_readback_proves_the_effect
 
 #[test]
 fn evaluation_arms_start_from_the_same_fixture_and_reset_does_not_leak_state() {
-    let mut sandbox = StatefulSandbox::default();
+    let mut sandbox = sandbox();
     let baseline = sandbox
         .start_arm("evaluation-1", "baseline", fixture())
         .unwrap();
@@ -137,7 +141,7 @@ fn evaluation_arms_start_from_the_same_fixture_and_reset_does_not_leak_state() {
 
 #[test]
 fn evaluation_rejects_a_different_fixture_for_another_arm() {
-    let mut sandbox = StatefulSandbox::default();
+    let mut sandbox = sandbox();
     sandbox
         .start_arm("evaluation-1", "baseline", fixture())
         .unwrap();
@@ -159,7 +163,7 @@ fn evaluation_rejects_a_different_fixture_for_another_arm() {
 
 #[test]
 fn reset_denies_cross_scope_without_changing_the_arm() {
-    let mut sandbox = StatefulSandbox::default();
+    let mut sandbox = sandbox();
     let arm = sandbox
         .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();
@@ -202,7 +206,7 @@ fn reset_denies_cross_scope_without_changing_the_arm() {
 
 #[test]
 fn readback_denies_cross_tenant_and_namespace_requests() {
-    let mut sandbox = StatefulSandbox::default();
+    let mut sandbox = sandbox();
     let arm = sandbox
         .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();
@@ -229,7 +233,7 @@ fn readback_denies_cross_tenant_and_namespace_requests() {
 
 #[test]
 fn stale_forbidden_and_unknown_actions_are_explicitly_rejected_without_effect() {
-    let mut sandbox = StatefulSandbox::default();
+    let mut sandbox = sandbox();
     let arm = sandbox
         .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();
@@ -311,7 +315,7 @@ fn stale_forbidden_and_unknown_actions_are_explicitly_rejected_without_effect() 
 
 #[test]
 fn equivalent_retry_returns_the_original_receipt_without_applying_a_second_effect() {
-    let mut sandbox = StatefulSandbox::default();
+    let mut sandbox = sandbox();
     let arm = sandbox
         .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();
@@ -335,7 +339,7 @@ fn equivalent_retry_returns_the_original_receipt_without_applying_a_second_effec
 
 #[test]
 fn execution_denies_cross_tenant_and_namespace_before_attempting_an_effect() {
-    let mut sandbox = StatefulSandbox::default();
+    let mut sandbox = sandbox();
     let arm = sandbox
         .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();

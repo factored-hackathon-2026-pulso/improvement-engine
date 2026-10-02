@@ -11,10 +11,15 @@ mutar el estado del brazo.
 
 `IdentityEvidence` contiene únicamente IDs y compromisos (`*_digest`): no hay
 campo para respuestas de preguntas, texto de reto, tokens de cliente ni output
-de modelo, y deliberadamente no implementa `Debug`. Los `ActionReceipt` y
-`Readback` existentes continúan registrando solamente la evidencia sintética de
-efecto (evaluación/brazo/fixture/revisión), no evidencia de autenticación ni
-respuestas.
+de modelo, y deliberadamente no implementa `Debug`. No tiene constructor
+público: `SandboxIdentityIssuer` es una capability opaca emitida por el
+fixture registrado y requerida por `StatefulSandbox::issue_identity`; éste crea
+un nonce opaco y conserva el proof canónico en estado privado del brazo. La
+frontera rechaza proof no registrado, alterado o emitido para otro brazo,
+aunque el caller conozca todos los IDs y digests de la policy.
+Los `ActionReceipt` y `Readback` existentes continúan registrando solamente la
+evidencia sintética de efecto (evaluación/brazo/fixture/revisión), no evidencia
+de autenticación ni respuestas.
 
 Los fixtures heredados sin `SandboxIdentityPolicy` se mantienen como fixtures
 genéricos U26; no representan una operación sensible E0. Las suites que
@@ -27,7 +32,7 @@ que el modo de compatibilidad sea una afirmación de seguridad.
   vencimiento con el fixture.
 - `ActionRequest::with_identity` y `ReadRequest::with_identity` presentan
   evidencia; el instante no procede de requests. `StatefulSandbox` consulta un
-  `SandboxClock` interno (inyectable sólo al componer el sandbox para tests),
+  `SandboxClock` interno (inyectable sólo al componer el sandbox),
   de modo que action/read/reset no pueden falsificar un timestamp. Una petición
   sin evidencia sobre fixture protegido devuelve `IdentityEvidenceMissing`.
 - Un tenant/caso/canal/policy/preguntas/principal distinto devuelve
@@ -59,7 +64,10 @@ cargo +1.98.1 clippy -p improvement-engine-core --test sandbox_identity -- -D wa
 ```
 
 Las pruebas nuevas cubren ausencia de evidencia, cada componente de binding
-equivocado, vencimiento de evidencia, vencimiento de policy, acción y
-readback válidos, reloj interno para action/read/reset, revocación en vuelo y
-aislamiento candidate/baseline. Un doctest `compile_fail` comprueba que el
-proof no puede formatearse con `Debug`.
+equivocado, issuer no autorizado, proof cruzado de brazo para action/read/reset,
+vencimiento de evidencia, acción y readback válidos, reloj interno para
+action/read/reset, revocación en vuelo y aislamiento candidate/baseline. Un
+doctest `compile_fail` comprueba que el proof no puede construirse ni
+formatearse con `Debug`. `StatefulSandbox` ya no tiene `Default`: cada
+composición debe declarar un clock; `FixedSandboxClock` se limita a fixtures
+locales explícitas.
