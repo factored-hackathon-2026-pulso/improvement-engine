@@ -16,6 +16,7 @@ pub mod debug_console;
 pub mod deterministic_sensor;
 pub mod durable_jobs;
 pub mod e0_deterministic_sensor;
+pub mod e0_frozen_verifier;
 pub mod e0_query_lab;
 pub mod e0_safety_oracle;
 pub mod enriched_history;

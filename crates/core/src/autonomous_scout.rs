@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::ArtifactReference;
 use crate::core_task::{CoreTaskOutcome, CoreTaskReceipt, CoreTaskScope};
 use crate::deterministic_sensor::DeterministicSignal;
 use crate::e0_deterministic_sensor::{E0DiagnosticSignal, E0ScoutSignalBinding};
@@ -700,6 +701,99 @@ impl VerifiedScoutCandidate {
     pub fn source_snapshot_ref(&self) -> &crate::ArtifactReference {
         &self.record.candidate.source_snapshot_ref
     }
+
+    /// Crate-private U14-E boundary. It rehydrates the canonical U13-A record
+    /// before exposing an opaque Frozen E0 capability; a generic U13 draft or
+    /// a caller-created E0 provenance can never cross this boundary.
+    pub(crate) fn rehydrate_frozen_e0(
+        &self,
+    ) -> Result<VerifiedFrozenE0ScoutCandidate, FrozenE0ScoutCandidateError> {
+        let record = ScoutCandidateRecord::rehydrate(
+            self.record.scope.clone(),
+            self.record.candidate.clone(),
+        )
+        .map_err(|_| FrozenE0ScoutCandidateError::InvalidCanonicalRecord)?;
+        let Some(e0) = record.candidate.e0_provenance.clone() else {
+            return Err(FrozenE0ScoutCandidateError::NotE0Candidate);
+        };
+        if e0.commitment != e0_provenance_digest(&e0)
+            || e0.tenant_id != record.scope.tenant_id()
+            || e0.job_id != record.scope.job_id()
+            || e0.grant_id != record.scope.grant_id()
+            || e0.authority_ref != record.scope.authority_ref()
+            || e0.source_snapshot_ref != record.candidate.source_snapshot_ref
+            || e0.source_digest != record.candidate.source_data_digest
+            || e0.source_contract_digest != record.candidate.source_contract_digest
+            || e0.transform_digest != record.candidate.transform_digest
+            || e0.cutoff_unix_seconds != record.candidate.cutoff_unix_seconds
+            || e0.query_receipt_digests != record.candidate.query_receipt_digests
+            || e0.signal_commitment != record.candidate.signal_commitment
+        {
+            return Err(FrozenE0ScoutCandidateError::ProvenanceMismatch);
+        }
+        Ok(VerifiedFrozenE0ScoutCandidate {
+            scope: record.scope,
+            candidate_digest: record.candidate.digest,
+            provenance_commitment: record.candidate.provenance_commitment,
+            e0,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum FrozenE0ScoutCandidateError {
+    NotE0Candidate,
+    InvalidCanonicalRecord,
+    ProvenanceMismatch,
+}
+
+/// Rehydrated, opaque E0-specific input for U14-E. It is intentionally
+/// crate-private and has no conversion from a public draft or receipt.
+pub(crate) struct VerifiedFrozenE0ScoutCandidate {
+    scope: CoreTaskScope,
+    candidate_digest: String,
+    provenance_commitment: String,
+    e0: E0ScoutCandidateProvenance,
+}
+
+impl VerifiedFrozenE0ScoutCandidate {
+    pub(crate) fn scope(&self) -> &CoreTaskScope {
+        &self.scope
+    }
+    pub(crate) fn candidate_digest(&self) -> &str {
+        &self.candidate_digest
+    }
+    pub(crate) fn provenance_commitment(&self) -> &str {
+        &self.provenance_commitment
+    }
+    pub(crate) fn e0_commitment(&self) -> &str {
+        &self.e0.commitment
+    }
+    pub(crate) fn source_snapshot_ref(&self) -> ArtifactReference {
+        self.e0.source_snapshot_ref.clone()
+    }
+    pub(crate) fn metric_policy(&self) -> (&str, u16, &str) {
+        (
+            &self.e0.metric_policy_id,
+            self.e0.metric_policy_version,
+            &self.e0.metric_semantics,
+        )
+    }
+    pub(crate) fn frozen_bounds_are_consistent(&self) -> bool {
+        self.e0.window_start_unix_seconds <= self.e0.window_end_unix_seconds
+            && self.e0.window_end_unix_seconds <= self.e0.cutoff_unix_seconds
+            && self.e0.numerator <= self.e0.denominator
+            && self.e0.missing <= self.e0.denominator
+            && self.e0.coverage_basis_points <= 10_000
+            && !self.e0.run_id.is_empty()
+            && !self.e0.table.is_empty()
+            && !self.e0.field_commitment.is_empty()
+            && !self.e0.source_snapshot_binding.is_empty()
+            && !self.e0.availability_profile_digest.is_empty()
+            && !self.e0.replay_projection_digest.is_empty()
+            && !self.e0.source_evidence_digest.is_empty()
+            && !self.e0.query_receipt_digests.is_empty()
+    }
 }
 
 /// Error at the single boundary from a public Scout draft to an opaque,
@@ -1380,6 +1474,13 @@ pub(crate) fn verified_candidate_for_independent_verifier_test() -> VerifiedScou
     VerifiedScoutCandidate { record }
 }
 
+/// Test-only complete U02→U04-B→U08→U12-E→U13-E→U13-A chain for the
+/// downstream U14-E contract. Production never receives this fixture.
+#[cfg(all(test, feature = "test-support"))]
+pub(crate) fn verified_real_e0_candidate_for_frozen_verifier_test() -> VerifiedScoutCandidate {
+    candidate_admission_tests::verified_real_e0_candidate_for_frozen_verifier_test()
+}
+
 #[cfg(test)]
 mod candidate_admission_tests {
     use super::*;
@@ -1514,6 +1615,34 @@ mod candidate_admission_tests {
             ScoutCandidateRecordOutcome::Recorded
         );
         recorder.into_admission_authority()
+    }
+
+    #[cfg(feature = "test-support")]
+    pub(super) fn verified_real_e0_candidate_for_frozen_verifier_test() -> VerifiedScoutCandidate {
+        let signal = crate::e0_deterministic_sensor::real_signal_for_scout_test();
+        let e0_scope = e0_scope(&signal);
+        let core = e0_core(
+            e0_scope.clone(),
+            &signal.scout_binding().signal_digest,
+            "attempt_e0_u14",
+        );
+        let model = e0_model(e0_scope.clone(), "attempt_model_e0_u14");
+        let evidence = TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model)
+            .expect("real E0 evidence seals");
+        let (result, mut authority) = record_e0_scout_discovery(
+            InMemoryScoutCandidateRepository::default(),
+            &e0_scope,
+            &evidence,
+            &core,
+            &model,
+        )
+        .expect("real E0 discovery records");
+        let ScoutResult::Candidates(candidates) = result else {
+            panic!("real E0 discovery must produce drafts")
+        };
+        authority
+            .admit(&e0_scope, &candidates[0])
+            .expect("U13-A admits real E0 candidate")
     }
 
     #[cfg(feature = "test-support")]

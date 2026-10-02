@@ -40,6 +40,13 @@ green unit test as proof that a broader product flow is complete.
 - U14: independent verifier. It accepts only the U13-A opaque capability and
   emits a provenance-bound supported/refuted/uncertain report; persistent
   reports and U11 Jev-adapter wiring remain later dependent work.
+- U14-E: Frozen E0 consistency verifier. It is a separate, deterministic
+  route from the generic verifier: it rehydrates only U13-A's E0 candidate,
+  validates sealed Frozen provenance under a versioned policy and emits an
+  opaque `Consistent` report bound to exact commitments. `Consistent` is not
+  causal corroboration, outcome evidence, eligibility or release authority;
+  this slice has no pluggable receipt/port, storage, runtime or Agent Core
+  side effect.
 - U16: provisional WorkflowBridge. It accepts only a U14 verification report
   and sealed internal catalogue/source-validation facts, preserves its
   commitments and scope, includes `do_nothing`, and caps a supported route at
