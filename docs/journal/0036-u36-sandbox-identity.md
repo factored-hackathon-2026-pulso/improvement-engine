@@ -11,9 +11,10 @@ mutar el estado del brazo.
 
 `IdentityEvidence` contiene únicamente IDs y compromisos (`*_digest`): no hay
 campo para respuestas de preguntas, texto de reto, tokens de cliente ni output
-de modelo. Los `ActionReceipt` y `Readback` existentes continúan registrando
-solamente la evidencia sintética de efecto (evaluación/brazo/fixture/revisión),
-no evidencia de autenticación ni respuestas.
+de modelo, y deliberadamente no implementa `Debug`. Los `ActionReceipt` y
+`Readback` existentes continúan registrando solamente la evidencia sintética de
+efecto (evaluación/brazo/fixture/revisión), no evidencia de autenticación ni
+respuestas.
 
 Los fixtures heredados sin `SandboxIdentityPolicy` se mantienen como fixtures
 genéricos U26; no representan una operación sensible E0. Las suites que
@@ -25,8 +26,10 @@ que el modo de compatibilidad sea una afirmación de seguridad.
 - `SandboxIdentityPolicy` sella caso, canal, digests, principals permitidos y
   vencimiento con el fixture.
 - `ActionRequest::with_identity` y `ReadRequest::with_identity` presentan
-  evidencia y el instante observado; una petición sin ella sobre fixture
-  protegido devuelve `IdentityEvidenceMissing`.
+  evidencia; el instante no procede de requests. `StatefulSandbox` consulta un
+  `SandboxClock` interno (inyectable sólo al componer el sandbox para tests),
+  de modo que action/read/reset no pueden falsificar un timestamp. Una petición
+  sin evidencia sobre fixture protegido devuelve `IdentityEvidenceMissing`.
 - Un tenant/caso/canal/policy/preguntas/principal distinto devuelve
   `IdentityEvidenceMismatch`; el vencimiento de la evidencia o de la policy
   devuelve `IdentityEvidenceExpired`. Ninguno cambia estado.
@@ -35,10 +38,12 @@ que el modo de compatibilidad sea una afirmación de seguridad.
   readback en ese brazo (`IdentityRevoked`), mientras un brazo baseline del
   mismo fixture continúa aislado y utilizable.
 
-La revocación es una semántica del simulador de evaluación: U20-E y el broker
-de sandbox posterior deberán decidir la autoridad administrativa que puede
-emitirla, el clock sellado y cómo se persiste la auditoría. Esta unidad no
-declara revocación de credenciales de producción.
+`revoke_identity` es una semántica local, en memoria y **no autorizada** del
+fixture para inyectar un evento de revocación durante la evaluación. No es una
+API de revocación bancaria ni acredita quién podría emitirla. U20-E y el broker
+de sandbox posterior deberán decidir la autoridad administrativa, clock sellado
+y persistencia de auditoría. Esta unidad no declara revocación de credenciales
+de producción.
 
 ## Evidencia TDD
 
@@ -55,4 +60,6 @@ cargo +1.98.1 clippy -p improvement-engine-core --test sandbox_identity -- -D wa
 
 Las pruebas nuevas cubren ausencia de evidencia, cada componente de binding
 equivocado, vencimiento de evidencia, vencimiento de policy, acción y
-readback válidos, revocación en vuelo y aislamiento candidate/baseline.
+readback válidos, reloj interno para action/read/reset, revocación en vuelo y
+aislamiento candidate/baseline. Un doctest `compile_fail` comprueba que el
+proof no puede formatearse con `Debug`.

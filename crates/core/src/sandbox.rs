@@ -99,7 +99,16 @@ impl SandboxIdentityPolicy {
 /// Attestation supplied to the fixture boundary after identity verification.
 /// The attestation intentionally holds only commitments to the policy and
 /// question set, never challenge answers or a model response.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// ```compile_fail
+/// use improvement_engine_core::sandbox::IdentityEvidence;
+/// let proof = IdentityEvidence::new("p", "t", "case", "chat", "policy", "questions", 1);
+/// let _ = format!("{proof:?}");
+/// ```
+///
+/// The proof intentionally does not implement `Debug`, preventing accidental
+/// formatting into log-like outputs.
+#[derive(Clone, Eq, PartialEq)]
 pub struct IdentityEvidence {
     principal_id: String,
     tenant_id: String,
@@ -108,6 +117,23 @@ pub struct IdentityEvidence {
     policy_digest: String,
     questions_digest: String,
     valid_until: u64,
+}
+
+/// Clock owned by sandbox composition, rather than by untrusted requests.
+/// Production composition supplies a sealed evaluation clock; fixtures may
+/// inject a deterministic clock for tests without adding a caller timestamp to
+/// an action, read or reset request.
+pub trait SandboxClock: Send + Sync {
+    fn now(&self) -> u64;
+}
+
+#[derive(Default)]
+struct ZeroSandboxClock;
+
+impl SandboxClock for ZeroSandboxClock {
+    fn now(&self) -> u64 {
+        0
+    }
 }
 
 impl IdentityEvidence {
@@ -160,11 +186,10 @@ pub struct SandboxArmRef {
 ///
 /// The deterministic adapter validates this assertion against the arm. It is
 /// not a substitute for U36 identity and policy enforcement.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct SandboxScope {
     tenant_id: String,
     namespace: String,
-    observed_at: u64,
     identity: Option<IdentityEvidence>,
 }
 
@@ -174,7 +199,6 @@ impl SandboxScope {
         Self {
             tenant_id: tenant_id.into(),
             namespace: namespace.into(),
-            observed_at: 0,
             identity: None,
         }
     }
@@ -183,13 +207,11 @@ impl SandboxScope {
     pub fn with_identity(
         tenant_id: impl Into<String>,
         namespace: impl Into<String>,
-        observed_at: u64,
         identity: IdentityEvidence,
     ) -> Self {
         Self {
             tenant_id: tenant_id.into(),
             namespace: namespace.into(),
-            observed_at,
             identity: Some(identity),
         }
     }
@@ -206,11 +228,10 @@ pub struct Action {
 }
 
 /// An action plus the authorization scope that the executor revalidates.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ActionRequest {
     scope: SandboxScope,
     action: Action,
-    observed_at: u64,
     identity: Option<IdentityEvidence>,
 }
 
@@ -220,7 +241,6 @@ impl ActionRequest {
         Self {
             scope: SandboxScope::new(tenant_id, namespace),
             action,
-            observed_at: 0,
             identity: None,
         }
     }
@@ -229,14 +249,12 @@ impl ActionRequest {
     pub fn with_identity(
         tenant_id: impl Into<String>,
         namespace: impl Into<String>,
-        observed_at: u64,
         identity: IdentityEvidence,
         action: Action,
     ) -> Self {
         Self {
             scope: SandboxScope::new(tenant_id, namespace),
             action,
-            observed_at,
             identity: Some(identity),
         }
     }
@@ -272,11 +290,10 @@ pub struct ActionReceipt {
 }
 
 /// Caller-scoped request for a value in an arm's synthetic state.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ReadRequest {
     scope: SandboxScope,
     resource: String,
-    observed_at: u64,
     identity: Option<IdentityEvidence>,
 }
 
@@ -290,7 +307,6 @@ impl ReadRequest {
         Self {
             scope: SandboxScope::new(tenant_id, namespace),
             resource: resource.into(),
-            observed_at: 0,
             identity: None,
         }
     }
@@ -299,14 +315,12 @@ impl ReadRequest {
     pub fn with_identity(
         tenant_id: impl Into<String>,
         namespace: impl Into<String>,
-        observed_at: u64,
         identity: IdentityEvidence,
         resource: impl Into<String>,
     ) -> Self {
         Self {
             scope: SandboxScope::new(tenant_id, namespace),
             resource: resource.into(),
-            observed_at,
             identity: Some(identity),
         }
     }
@@ -399,10 +413,27 @@ struct ArmState {
 
 /// A deterministic fixture simulator. It is deliberately in-memory: no
 /// source-system data, bank credentials, or effects are accepted or retained.
-#[derive(Default)]
 pub struct StatefulSandbox {
     arms: BTreeMap<SandboxArmRef, ArmState>,
     evaluation_fixtures: BTreeMap<String, SandboxFixture>,
+    clock: Box<dyn SandboxClock>,
+}
+
+impl Default for StatefulSandbox {
+    fn default() -> Self {
+        Self::with_clock(ZeroSandboxClock)
+    }
+}
+
+impl StatefulSandbox {
+    #[must_use]
+    pub fn with_clock(clock: impl SandboxClock + 'static) -> Self {
+        Self {
+            arms: BTreeMap::new(),
+            evaluation_fixtures: BTreeMap::new(),
+            clock: Box::new(clock),
+        }
+    }
 }
 
 impl SandboxPort for StatefulSandbox {
@@ -451,12 +482,13 @@ impl SandboxPort for StatefulSandbox {
         arm: &SandboxArmRef,
         request: ActionRequest,
     ) -> Result<ActionReceipt, SandboxError> {
+        let now = self.clock.now();
         let state = self.arms.get_mut(arm).ok_or(SandboxError::ArmUnknown)?;
         validate_scope(&state.fixture, &request.scope)?;
         validate_identity(
             &state.fixture,
             request.identity.as_ref(),
-            request.observed_at,
+            now,
             &state.revoked_identity_bindings,
         )?;
         let action = request.action;
@@ -509,12 +541,13 @@ impl SandboxPort for StatefulSandbox {
     }
 
     fn read(&self, arm: &SandboxArmRef, request: ReadRequest) -> Result<Readback, SandboxError> {
+        let now = self.clock.now();
         let state = self.arms.get(arm).ok_or(SandboxError::ArmUnknown)?;
         validate_scope(&state.fixture, &request.scope)?;
         validate_identity(
             &state.fixture,
             request.identity.as_ref(),
-            request.observed_at,
+            now,
             &state.revoked_identity_bindings,
         )?;
         let value =
@@ -539,12 +572,13 @@ impl SandboxPort for StatefulSandbox {
         arm: &SandboxArmRef,
         scope: SandboxScope,
     ) -> Result<ResetReceipt, SandboxError> {
+        let now = self.clock.now();
         let state = self.arms.get_mut(arm).ok_or(SandboxError::ArmUnknown)?;
         validate_scope(&state.fixture, &scope)?;
         validate_identity(
             &state.fixture,
             scope.identity.as_ref(),
-            scope.observed_at,
+            now,
             &state.revoked_identity_bindings,
         )?;
         let before_revision = state.revision;

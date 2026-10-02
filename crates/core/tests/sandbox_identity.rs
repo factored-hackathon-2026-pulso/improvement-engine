@@ -1,11 +1,31 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
 use improvement_engine_core::sandbox::{
-    Action, ActionRequest, IdentityEvidence, ReadRequest, SandboxError, SandboxFixture,
-    SandboxIdentityPolicy, SandboxPort, SandboxScope, StatefulSandbox,
+    Action, ActionRequest, IdentityEvidence, ReadRequest, SandboxClock, SandboxError,
+    SandboxFixture, SandboxIdentityPolicy, SandboxPort, SandboxScope, StatefulSandbox,
 };
 
 const NOW: u64 = 1_000;
+
+#[derive(Clone)]
+struct TestClock(Arc<AtomicU64>);
+
+impl SandboxClock for TestClock {
+    fn now(&self) -> u64 {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+fn sandbox_at(now: u64) -> (StatefulSandbox, TestClock) {
+    let clock = TestClock(Arc::new(AtomicU64::new(now)));
+    (StatefulSandbox::with_clock(clock.clone()), clock)
+}
 
 fn policy() -> SandboxIdentityPolicy {
     SandboxIdentityPolicy::new(
@@ -66,7 +86,7 @@ fn action() -> Action {
 
 #[test]
 fn sensitive_actions_and_readback_require_a_current_matching_identity_policy_and_question_proof() {
-    let mut sandbox = StatefulSandbox::default();
+    let (mut sandbox, _) = sandbox_at(NOW);
     let arm = sandbox
         .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();
@@ -132,7 +152,7 @@ fn sensitive_actions_and_readback_require_a_current_matching_identity_policy_and
             sandbox
                 .execute(
                     &arm,
-                    ActionRequest::with_identity("tenant-a", "evaluation", NOW, invalid, action())
+                    ActionRequest::with_identity("tenant-a", "evaluation", invalid, action())
                 )
                 .unwrap_err(),
             SandboxError::IdentityEvidenceMismatch
@@ -152,7 +172,7 @@ fn sensitive_actions_and_readback_require_a_current_matching_identity_policy_and
         sandbox
             .execute(
                 &arm,
-                ActionRequest::with_identity("tenant-a", "evaluation", NOW, expired, action())
+                ActionRequest::with_identity("tenant-a", "evaluation", expired, action())
             )
             .unwrap_err(),
         SandboxError::IdentityEvidenceExpired
@@ -161,14 +181,14 @@ fn sensitive_actions_and_readback_require_a_current_matching_identity_policy_and
     let receipt = sandbox
         .execute(
             &arm,
-            ActionRequest::with_identity("tenant-a", "evaluation", NOW, evidence(), action()),
+            ActionRequest::with_identity("tenant-a", "evaluation", evidence(), action()),
         )
         .unwrap();
     assert_eq!(receipt.state_revision, 1);
     let readback = sandbox
         .read(
             &arm,
-            ReadRequest::with_identity("tenant-a", "evaluation", NOW, evidence(), "dispute-1"),
+            ReadRequest::with_identity("tenant-a", "evaluation", evidence(), "dispute-1"),
         )
         .unwrap();
     assert_eq!(readback.value, "resolved");
@@ -189,7 +209,7 @@ fn sensitive_actions_and_readback_require_a_current_matching_identity_policy_and
         sandbox
             .reset_arm(
                 &arm,
-                SandboxScope::with_identity("tenant-a", "evaluation", NOW, evidence()),
+                SandboxScope::with_identity("tenant-a", "evaluation", evidence()),
             )
             .unwrap()
             .state_revision,
@@ -199,7 +219,7 @@ fn sensitive_actions_and_readback_require_a_current_matching_identity_policy_and
 
 #[test]
 fn a_fixture_policy_expiring_in_flight_denies_the_effect_before_state_mutation() {
-    let mut sandbox = StatefulSandbox::default();
+    let (mut sandbox, _) = sandbox_at(NOW);
     let expiring_fixture = SandboxFixture::with_identity_policy(
         "tenant-a",
         "evaluation",
@@ -222,7 +242,57 @@ fn a_fixture_policy_expiring_in_flight_denies_the_effect_before_state_mutation()
         sandbox
             .execute(
                 &arm,
-                ActionRequest::with_identity("tenant-a", "evaluation", NOW, evidence(), action()),
+                ActionRequest::with_identity("tenant-a", "evaluation", evidence(), action()),
+            )
+            .unwrap_err(),
+        SandboxError::IdentityEvidenceExpired
+    );
+}
+
+#[test]
+fn sealed_sandbox_clock_not_a_forged_request_timestamp_controls_action_read_and_reset_expiry() {
+    let (mut sandbox, clock) = sandbox_at(NOW - 1);
+    let arm = sandbox
+        .start_arm("evaluation-1", "candidate", fixture())
+        .unwrap();
+    sandbox
+        .execute(
+            &arm,
+            ActionRequest::with_identity("tenant-a", "evaluation", evidence(), action()),
+        )
+        .unwrap();
+
+    // A request has no timestamp argument to falsify. Advancing only the
+    // injected sandbox clock makes the prior proof expired at every boundary.
+    clock.0.store(2_000, Ordering::Relaxed);
+    assert_eq!(
+        sandbox
+            .execute(
+                &arm,
+                ActionRequest::with_identity(
+                    "tenant-a",
+                    "evaluation",
+                    evidence(),
+                    Action::replace("action-2", 1, "resolve_dispute", "dispute-1", "open"),
+                ),
+            )
+            .unwrap_err(),
+        SandboxError::IdentityEvidenceExpired
+    );
+    assert_eq!(
+        sandbox
+            .read(
+                &arm,
+                ReadRequest::with_identity("tenant-a", "evaluation", evidence(), "dispute-1"),
+            )
+            .unwrap_err(),
+        SandboxError::IdentityEvidenceExpired
+    );
+    assert_eq!(
+        sandbox
+            .reset_arm(
+                &arm,
+                SandboxScope::with_identity("tenant-a", "evaluation", evidence()),
             )
             .unwrap_err(),
         SandboxError::IdentityEvidenceExpired
@@ -231,13 +301,42 @@ fn a_fixture_policy_expiring_in_flight_denies_the_effect_before_state_mutation()
 
 #[test]
 fn revocation_in_flight_blocks_only_the_revoked_arm_without_leaking_answers_or_cross_arm_state() {
-    let mut sandbox = StatefulSandbox::default();
+    let (mut sandbox, _) = sandbox_at(NOW);
     let baseline = sandbox
         .start_arm("evaluation-1", "baseline", fixture())
         .unwrap();
     let candidate = sandbox
         .start_arm("evaluation-1", "candidate", fixture())
         .unwrap();
+
+    // An invalid revocation event is rejected and must not poison the arm.
+    assert_eq!(
+        sandbox
+            .revoke_identity(
+                &candidate,
+                SandboxScope::new("tenant-a", "evaluation"),
+                evidence_with(
+                    "tenant-a",
+                    "other-case",
+                    "app_chat",
+                    "policy:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "questions:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    2_000,
+                ),
+            )
+            .unwrap_err(),
+        SandboxError::IdentityEvidenceMismatch
+    );
+    assert_eq!(
+        sandbox
+            .execute(
+                &candidate,
+                ActionRequest::with_identity("tenant-a", "evaluation", evidence(), action()),
+            )
+            .unwrap()
+            .state_revision,
+        1
+    );
 
     sandbox
         .revoke_identity(
@@ -250,7 +349,12 @@ fn revocation_in_flight_blocks_only_the_revoked_arm_without_leaking_answers_or_c
         sandbox
             .execute(
                 &candidate,
-                ActionRequest::with_identity("tenant-a", "evaluation", NOW, evidence(), action())
+                ActionRequest::with_identity(
+                    "tenant-a",
+                    "evaluation",
+                    evidence(),
+                    Action::replace("action-2", 1, "resolve_dispute", "dispute-1", "open"),
+                )
             )
             .unwrap_err(),
         SandboxError::IdentityRevoked
@@ -259,7 +363,7 @@ fn revocation_in_flight_blocks_only_the_revoked_arm_without_leaking_answers_or_c
         sandbox
             .execute(
                 &baseline,
-                ActionRequest::with_identity("tenant-a", "evaluation", NOW, evidence(), action())
+                ActionRequest::with_identity("tenant-a", "evaluation", evidence(), action())
             )
             .unwrap()
             .state_revision,
@@ -269,7 +373,7 @@ fn revocation_in_flight_blocks_only_the_revoked_arm_without_leaking_answers_or_c
     let denied = sandbox
         .read(
             &candidate,
-            ReadRequest::with_identity("tenant-a", "evaluation", NOW, evidence(), "dispute-1"),
+            ReadRequest::with_identity("tenant-a", "evaluation", evidence(), "dispute-1"),
         )
         .unwrap_err();
     assert_eq!(denied, SandboxError::IdentityRevoked);
