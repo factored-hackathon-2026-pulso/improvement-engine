@@ -373,8 +373,20 @@ pub(crate) fn report_for_workflow_bridge_with_snapshot_test(
     status: VerificationStatus,
     source_snapshot_ref: ArtifactReference,
 ) -> VerificationReport {
-    let scope = CoreTaskScope::new("tenant_a", "job_a", "grant_a", "authority_a")
-        .expect("fixed test scope is valid");
+    report_for_workflow_bridge_with_snapshot_and_scope_test(
+        status,
+        source_snapshot_ref,
+        CoreTaskScope::new("tenant_a", "job_a", "grant_a", "authority_a")
+            .expect("fixed test scope is valid"),
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn report_for_workflow_bridge_with_snapshot_and_scope_test(
+    status: VerificationStatus,
+    source_snapshot_ref: ArtifactReference,
+    scope: CoreTaskScope,
+) -> VerificationReport {
     let candidate_digest = format!("sha256:{}", "b".repeat(64));
     let provenance_commitment = format!("sha256:{}", "c".repeat(64));
     let input_commitment = input_commitment(

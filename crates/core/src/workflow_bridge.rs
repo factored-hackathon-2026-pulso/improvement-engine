@@ -523,6 +523,20 @@ pub(crate) fn bridge_for_evaluation_plan_test(
     source_snapshot_ref: crate::ArtifactReference,
     status: crate::independent_verifier::VerificationStatus,
 ) -> WorkflowBridgeContract {
+    report_and_bridge_for_final_eligibility_test(source_snapshot_ref, status).1
+}
+
+/// Crate-private U14/U16 fixture for U35's integration contract.  The report
+/// and bridge are built from the same sealed input, rather than fabricated
+/// independently by a consumer.
+#[cfg(test)]
+pub(crate) fn report_and_bridge_for_final_eligibility_test(
+    source_snapshot_ref: crate::ArtifactReference,
+    status: crate::independent_verifier::VerificationStatus,
+) -> (
+    crate::independent_verifier::VerificationReport,
+    WorkflowBridgeContract,
+) {
     use crate::independent_verifier::report_for_workflow_bridge_with_snapshot_test;
     let report = report_for_workflow_bridge_with_snapshot_test(status, source_snapshot_ref);
     let input = WorkflowBridgeInput::new(
@@ -557,9 +571,10 @@ pub(crate) fn bridge_for_evaluation_plan_test(
     .expect("fixed test validation is valid");
     let evidence = WorkflowBridgeValidator::validate(&report, &input, validation)
         .expect("fixed test validation binds");
-    WorkflowBridge::assess_verified(&report, input, evidence)
+    let bridge = WorkflowBridge::assess_verified(&report, input, evidence)
         .expect("fixed test bridge assesses")
-        .contract
+        .contract;
+    (report, bridge)
 }
 
 /// ```compile_fail

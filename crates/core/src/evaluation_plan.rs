@@ -367,6 +367,18 @@ impl EvaluationPlan {
     pub fn eligible_for_proposal(&self) -> bool {
         false
     }
+
+    /// Internal linkage check for U35. It does not grant any outcome or
+    /// release claim; it merely prevents a plan sealed for one bridge from
+    /// being reused with another bridge.
+    pub(crate) fn is_bound_to_bridge(&self, bridge: &WorkflowBridgeContract) -> bool {
+        self.bridge_commitment == bridge.commitment()
+            && self.source_snapshot_ref == *bridge.source_snapshot_ref()
+            && self.baseline_ref.tenant_id == bridge.scope().tenant_id()
+            && self.oracle_ref.tenant_id == bridge.scope().tenant_id()
+            && self.development_suite_ref.tenant_id == bridge.scope().tenant_id()
+            && self.final_suite_ref.tenant_id == bridge.scope().tenant_id()
+    }
 }
 
 struct VerifiedInput {
