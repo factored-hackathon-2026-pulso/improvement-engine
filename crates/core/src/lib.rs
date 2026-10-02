@@ -23,6 +23,7 @@ pub mod independent_verifier;
 pub mod jev_decision;
 pub mod local_lab;
 pub mod memory_store;
+pub mod memory_temporal_protocol;
 pub mod model_provider;
 pub mod platform_observations;
 pub mod platform_sensor;

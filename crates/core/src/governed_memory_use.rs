@@ -23,6 +23,16 @@ impl MemoryUseRequest {
     pub fn new(scope: MemoryScope, access: WikiAccess) -> Self {
         Self { scope, access }
     }
+
+    #[must_use]
+    pub(crate) fn scope(&self) -> &MemoryScope {
+        &self.scope
+    }
+
+    #[must_use]
+    pub(crate) fn allowed_at_unix_seconds(&self) -> u64 {
+        self.access.allowed_at_unix_seconds
+    }
 }
 
 /// Opaque provenance capability for one already-authorized use in a later run.
