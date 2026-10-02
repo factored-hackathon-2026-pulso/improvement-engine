@@ -9,7 +9,11 @@ green unit test as proof that a broader product flow is complete.
 - U29: tenant-scoped platform observation ingestion, source-contract
   provenance, truthful coverage and PostgreSQL RLS contract.
 - U34: durable, fenced and truthful operator run-control receipts.
-- U13: autonomous Scout drafts with sealed source/Core/model provenance.
+- U13: autonomous Scout drafts with bounded U08/U12/Core/model provenance.
+  Its current DeterministicSensor route is public/test-oriented, not evidence
+  authenticated for E0 improvement. U12-E remains the only planned
+  authenticated E0 route; until it is integrated U13 must not treat a public
+  `QueryResult` as improvement evidence.
 - U33: scoped immutable published-memory revisions, head CAS and idempotent use
   receipts. Its present in-memory adapter is not production-durability proof;
   the U33 corrective slice covers an overflow atomicity regression.

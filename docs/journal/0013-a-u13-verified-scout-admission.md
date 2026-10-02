@@ -33,6 +33,11 @@ intentos/salidas Core y modelo, policy y capability del modelo. Sólo expone los
 accesores de lectura que U14 necesita inicialmente: scope, digest de candidato,
 commitment de provenance y snapshot.
 
+La admisión U13-A conserva la proveniencia que U13 le entrega, pero no eleva la
+confianza de un `QueryResult` público ni convierte el `DeterministicSensor`
+actual en evidencia E0. Hasta integrar U12-E, la capability no debe usarse para
+afirmar que una señal/query pública prueba una mejora autónoma.
+
 ## TDD y verificación local
 
 RED inicial, contra el head exacto de PR #42 `014fdf7`, fue el error E0432 por
