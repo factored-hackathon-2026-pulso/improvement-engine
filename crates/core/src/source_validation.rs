@@ -291,7 +291,10 @@ impl VerifiedSourceArtifactBinding {
 
 /// Resolves a U04 mapping only from U02's immutable revision port. The exact
 /// reference, kind and stored content digest are rechecked before the exact
-/// raw snapshot JSON bytes retained in the immutable artifact are parsed again.
+/// raw snapshot JSON bytes retained under `source_snapshot_json` in the
+/// immutable artifact are parsed again. This is the sole U02 payload key for
+/// exact `SourceSnapshot` bytes; parsing a JSON value and serializing it again
+/// would create a different U04 binding domain.
 #[allow(dead_code)] // Called by the future U04/U08 composition root.
 pub(crate) fn resolve_source_snapshot_artifact<R: crate::ArtifactRepository>(
     repository: &mut R,
@@ -310,7 +313,7 @@ pub(crate) fn resolve_source_snapshot_artifact<R: crate::ArtifactRepository>(
     }
     let raw = draft
         .payload
-        .get("raw_source_snapshot_json")
+        .get("source_snapshot_json")
         .and_then(serde_json::Value::as_str)
         .ok_or(SourceDefinitionError::Invalid(
             "source artifact omits exact raw snapshot bytes",

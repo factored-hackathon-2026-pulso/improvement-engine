@@ -247,7 +247,9 @@ mod tests {
                     "018f50a1-7f00-7000-8000-000000000008",
                     1,
                     ArtifactKind::SourceSnapshot,
-                    json!({"raw_source_snapshot_json": raw_snapshot}),
+                    // This exact U02 payload key is shared with U20. `raw_snapshot`
+                    // stays a string: its spacing and key ordering are part of U04.
+                    json!({"source_snapshot_json": raw_snapshot}),
                     None,
                 ),
             )
