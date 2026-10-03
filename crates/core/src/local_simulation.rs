@@ -50,6 +50,8 @@ const RECURRING_QUERY_POLICY: &str = "e0_recurring_copilot_query_support_v1";
 const RECURRING_QUERY_POLICY_VERSION: u16 = 1;
 const TOOL_RETRY_POLICY: &str = "e0_tool_retry_case_rate_v1";
 const LOCAL_PRIMARY_SIGNAL_POLICY: &str = "local_primary_signal_v3";
+const RETRY_ERROR_OVERLAP_POLICY_ID: &str = "e0_retry_error_overlap_k_v2";
+const MIN_REPORTABLE_RETRY_ERROR_OVERLAP_CASES: u64 = 5;
 
 /// Minimal, treated event projection passed from a local source adapter.
 /// Identity, prompts, transcripts, customer values and evaluator labels have
@@ -1314,6 +1316,7 @@ fn build_exploratory_draft(
             "retry_cases": retry_cases.len(),
             "retry_denominator_known_cases": retry_known_cases.len(),
             "retry_cases_missing": input.case_ordinals.len().saturating_sub(retry_known_cases.len()),
+            "retry_error_overlap": summarize_retry_error_overlap(input),
             "pattern_ref": signal.pattern_ref,
             "primary_signal_policy": LOCAL_PRIMARY_SIGNAL_POLICY,
             "route_code_with_most_errors": if signal.metric_id == "e0_technical_error_rate" { json!(route) } else { json!(null) },
@@ -1351,6 +1354,87 @@ fn build_exploratory_draft(
         simulation_version: SIMULATION_VERSION.into(),
         native_agent_core_status: "dependency_unavailable".into(),
     }
+}
+
+fn summarize_retry_error_overlap(input: &LocalRunInput) -> serde_json::Value {
+    let discovery_cases = input.case_ordinals.iter().copied().collect::<BTreeSet<_>>();
+    let mut observations = BTreeMap::<u32, (bool, bool, bool, Option<bool>)>::new();
+    for event in input
+        .events
+        .iter()
+        .filter(|event| discovery_cases.contains(&event.case_ordinal))
+    {
+        let observation = observations.entry(event.case_ordinal).or_default();
+        if event.event_kind == "tool_call" {
+            observation.0 = true;
+            match event.retry_count {
+                Some(retry_count) => observation.2 |= retry_count > 0,
+                None => observation.1 = true,
+            }
+        }
+        match event.technical_error {
+            Some(true) => observation.3 = Some(true),
+            Some(false) if observation.3 != Some(true) => observation.3 = Some(false),
+            Some(false) | None => {}
+        }
+    }
+
+    let retry_positive_with_known_error_status = observations
+        .values()
+        .filter(
+            |(has_tool_call, retry_count_missing, retry_positive, error)| {
+                *has_tool_call && !*retry_count_missing && *retry_positive && error.is_some()
+            },
+        )
+        .count() as u64;
+    let retry_and_error = observations
+        .values()
+        .filter(
+            |(has_tool_call, retry_count_missing, retry_positive, error)| {
+                *has_tool_call && !*retry_count_missing && *retry_positive && *error == Some(true)
+            },
+        )
+        .count() as u64;
+    let retry_status_known_cases = observations
+        .values()
+        .filter(|(has_tool_call, retry_count_missing, _, _)| {
+            *has_tool_call && !*retry_count_missing
+        })
+        .count() as u64;
+    let retry_status_missing_cases =
+        (discovery_cases.len() as u64).saturating_sub(retry_status_known_cases);
+    let retry_without_error =
+        retry_positive_with_known_error_status.saturating_sub(retry_and_error);
+    let reportable = retry_status_missing_cases == 0
+        && retry_and_error >= MIN_REPORTABLE_RETRY_ERROR_OVERLAP_CASES
+        && retry_without_error >= MIN_REPORTABLE_RETRY_ERROR_OVERLAP_CASES;
+    let status = if retry_status_missing_cases > 0 {
+        "insufficient_retry_status_coverage"
+    } else if reportable {
+        "reportable"
+    } else {
+        "suppressed_below_minimum_support"
+    };
+    let error_rate_basis_points = reportable.then(|| {
+        ((u128::from(retry_and_error) * 10_000)
+            / u128::from(retry_positive_with_known_error_status)) as u16
+    });
+
+    json!({
+        "status": status,
+        "policy_id": RETRY_ERROR_OVERLAP_POLICY_ID,
+        "policy_version": 2,
+        "minimum_reportable_cases": MIN_REPORTABLE_RETRY_ERROR_OVERLAP_CASES,
+        "retry_positive_cases_with_known_error_status": reportable.then_some(retry_positive_with_known_error_status),
+        "retry_and_technical_error_cases": reportable.then_some(retry_and_error),
+        "error_rate_within_retry_positive_known_error_status_basis_points": error_rate_basis_points,
+        "unknown_error_status_policy": "retry-positive cases without explicit technical-error status are excluded; their count is not serialized",
+        "interpretation": match status {
+            "reportable" => "co-occurrence is descriptive evidence only; it is not causal and does not establish direction",
+            "insufficient_retry_status_coverage" => "retry status coverage is incomplete because a discovery case has no ToolCall or a ToolCall has a missing retry count; known positive retries may exist, but incomplete calls are not treated as zero, so overlap counts and rate are withheld",
+            _ => "cross-signal counts, rates, and direction are withheld because reportable minimum support was not established",
+        },
+    })
 }
 
 fn evaluate_draft_shape(draft: &ImprovementDraft) -> EvaluationSummary {

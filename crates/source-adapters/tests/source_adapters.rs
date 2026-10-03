@@ -47,6 +47,13 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
             "INTERACTION-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-c218f6a9,CUSTOMER-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-9d07c351,2025-01-05T10:00:00,Queja,Phone,true,false,AGENT-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-2fa19c73,70,9\n",
             "INTERACTION-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-3d5f209a,CUSTOMER-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-ec68240b,2099-01-06T10:00:00,person@example.test,Phone,true,false,AGENT-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-98a61e0d,80,10\n",
             "INTERACTION-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-d0512a86,CUSTOMER-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-0f23bd74,2025-01-07T10:00:00,Queja,,true,false,AGENT-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-a67c3d18,80,10\n",
+            "interaction-identifier-pii-sentinel-0001,customer-identifier-pii-sentinel-0001,2025-01-01T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0001,30,5\n",
+            "interaction-identifier-pii-sentinel-0002,customer-identifier-pii-sentinel-0002,2025-01-02T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0002,40,6\n",
+            "interaction-identifier-pii-sentinel-0003,customer-identifier-pii-sentinel-0003,2025-01-03T10:00:00,Queja,Phone,false,true,agent-identifier-pii-sentinel-0003,50,7\n",
+            "interaction-identifier-pii-sentinel-0004,customer-identifier-pii-sentinel-0004,2025-01-04T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0004,60,8\n",
+            "interaction-identifier-pii-sentinel-0005,customer-identifier-pii-sentinel-0005,2025-01-05T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0005,70,9\n",
+            "interaction-identifier-pii-sentinel-0006,customer-identifier-pii-sentinel-0006,2099-01-06T10:00:00,person@example.test,Phone,true,false,agent-identifier-pii-sentinel-0006,80,10\n",
+            "interaction-identifier-pii-sentinel-0007,customer-identifier-pii-sentinel-0007,2025-01-07T10:00:00,Queja,,true,false,agent-identifier-pii-sentinel-0007,80,10\n",
         ),
     )
     .unwrap();
@@ -93,9 +100,52 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
         "2025-01-01",
         "2099-01-06T10:00:00",
     ] {
+    for ordinal in 1..=7 {
+        for forbidden in [
+            format!("interaction-identifier-pii-sentinel-{ordinal:04}"),
+            format!("customer-identifier-pii-sentinel-{ordinal:04}"),
+            format!("agent-identifier-pii-sentinel-{ordinal:04}"),
+        ] {
+            assert!(
+                !serialized.contains(&forbidden),
+                "serialized source sentinel"
+            );
+        }
+        let (year, day) = if ordinal == 6 {
+            (2099, ordinal)
+        } else {
+            (2025, ordinal)
+        };
+        let forbidden_timestamp = format!("{year}-01-{day:02}T10:00:00");
+        assert!(!serialized.contains(&forbidden_timestamp));
+    }
+    for forbidden in ["person@example.test", "Queja", "Phone"] {
         assert!(!serialized.contains(forbidden));
     }
-    assert!(!serialized.contains("true"));
+    let serialized_json: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+    fn contains_key(value: &serde_json::Value, expected: &str) -> bool {
+        match value {
+            serde_json::Value::Object(object) => {
+                object.contains_key(expected)
+                    || object.values().any(|child| contains_key(child, expected))
+            }
+            serde_json::Value::Array(items) => {
+                items.iter().any(|child| contains_key(child, expected))
+            }
+            _ => false,
+        }
+    }
+    for forbidden_key in [
+        "interaction_id",
+        "customer_id",
+        "agent_id",
+        "was_resolved",
+        "requires_followup",
+        "duration_seconds",
+        "wait_time_seconds",
+    ] {
+        assert!(!contains_key(&serialized_json, forbidden_key));
+    }
 }
 
 #[test]

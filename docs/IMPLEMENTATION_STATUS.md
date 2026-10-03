@@ -31,6 +31,15 @@ green unit test as proof that a broader product flow is complete.
   run/sequence cursor without a versioned contract change. See ADR 0004 and
   journal 0051; the isolated PostgreSQL test requires explicit DB opt-in.
 
+- P1 platform discovery-input seam (current feature branch): measured U30
+  signals can be converted to a non-forgeable, provenance-preserving typed
+  input for hypothesis generation, bound to the tenant in the U29 projection
+  and checked against the active task scope; insufficient evidence and
+  cross-tenant replay are rejected. This is not yet U13 Scout integration or an Opportunity/proposal. U13 currently
+  requires U08/U09/U10 receipts or E0-specific U04/U08/U12 evidence; a trusted
+  platform-specific invocation/receipt contract is still required before the
+  input can traverse Scout. See journal 0052.
+
 - Local E2E composition/runner (new vertical): opt-in `local-sim` CLI joins
   immutable source provenance to the safe event projection and invokes local
   detection. Only positive supported signal evidence proceeds into the local
@@ -63,6 +72,27 @@ green unit test as proof that a broader product flow is complete.
   null counts remain explicitly missing. Retries do not establish cause or
   savings. This signal is aggregate-only and may produce only the existing
   simulated, unverified, non-executable review draft.
+  Proposal evidence now includes a case-level retry/technical-error
+  co-occurrence diagnostic. It uses only cases with known retry-positive and
+  technical-error status; both the co-occurring and non-co-occurring cells
+  must meet a versioned minimum of five before counts/rates are emitted under
+  `e0_retry_error_overlap_k_v2`.
+  Unknown technical-error status among retry-positive cases is excluded from
+  the denominator and its count is not serialized. The diagnostic is
+  descriptive association, not cause or direction.
+  Its statuses distinguish incomplete retry-count coverage
+  (`insufficient_retry_status_coverage`), reportable support, and all other
+  complete-coverage cases (`suppressed_below_minimum_support`). Missing
+  technical-error status, zero support, and small support share the same
+  generic suppressed status; none exposes whether positive retries were
+  observed. No overlap status specifically names zero retries, and no
+  counts/rates/direction are emitted unless both cells meet k.
+  Completeness is per case over `tool_call` events: each discovery case must
+  contain at least one such event and every call must have a retry count. A
+  case with no `tool_call`, or with mixed known/missing call counts, is
+  incomplete even if a known call is positive. Any incomplete case makes
+  overlap values unavailable; missing status is never called no retries or no
+  errors.
   The primary-signal policy is versioned as `local_primary_signal_v3` because
   adding retries changes candidate-selection priority; v2 remains historical.
   If the optional `copilot_query` source table is absent, recurrence is marked
@@ -74,11 +104,19 @@ green unit test as proof that a broader product flow is complete.
   Actual local E0 smoke (2026-10-02) used 200 Arranque cases; the total
   Reproduccion population is intentionally suppressed. The leading opaque query signature recurred in
   154/200 cases (policy floor 20); technical errors remained 0/187 supported,
-  with 13 missing. The runner recorded three Scout candidates and one
+  with 13 missing. The overlap status is
+  `insufficient_retry_status_coverage`; it does not treat absent ToolCall rows
+  or missing call counts as zero retries. The runner recorded three Scout candidates and one
   exploratory proposal. Persisted output contains the exact
   configured cutoff and no known PII sentinels or evaluator labels.
   This demonstrates only bounded local detection/simulation behavior, not
   native Agent Core execution, causal validation, release, or business lift.
+  The CLI additionally supports opt-in `--progress-jsonl` diagnostics on
+  stderr: flushed phase-start/completion/skip/failure records with monotonic
+  elapsed milliseconds and no source values, identifiers, paths, proposal
+  text, or raw errors. This is live process progress only; the final domain
+  timeline remains atomically persisted, and no durable U07, OpenTelemetry,
+  health endpoint, or production-monitoring claim is added. See journal 0053.
   Original-bank local execution now supports an independently sealed,
   privacy-safe snapshot projection for call-center reason × channel. The API
   names its metric `record_count`: it counts CSV records and does not deduplicate
@@ -124,6 +162,13 @@ green unit test as proof that a broader product flow is complete.
 - U30 / Issue #41: deterministic platform sensor. It consumes the U29 safe
   projection and emits only sealed, mapping-resolution-bound signals; it never
   reconstructs observation batches or coverage.
+- P1 platform discovery-input seam (current feature branch): measured U30
+  signals can be converted to a non-forgeable, provenance-preserving typed
+  input for hypothesis generation; insufficient U30 results are rejected. This
+  is not yet U13 Scout integration or an Opportunity/proposal. U13 currently
+  requires U08/U09/U10 receipts or E0-specific U04/U08/U12 evidence; a trusted
+  platform-specific invocation/receipt contract is still required before the
+  input can traverse Scout. See journal 0052.
 - U14: independent verifier. It accepts only the U13-A opaque capability and
   emits a provenance-bound supported/refuted/uncertain report; persistent
   reports and U11 Jev-adapter wiring remain later dependent work.
@@ -145,17 +190,33 @@ green unit test as proof that a broader product flow is complete.
   single static allowlisted U15 `Create` transform. Scope/access are exact
   Frozen bindings with `allowed_at == cutoff`; output is opaque commitments
   only, never pages, workspace/text, publication, memory use or an artifact.
-  U33-E publication and U23-E governed-memory linkage remain explicitly
-  pending.
+  U33-E publication exists locally; U23-E admission now re-attests the exact
+  published revision against the same U33-E sidecar/head and creates one
+  opaque receipt per publication/scope/run. This remains a crate-private
+  semantic contract, not wired into the CLI runtime.
 - U33-E: Frozen E0 summary publication boundary. A crate-private composer
   redeems only the opaque U15-EQ preparation after recomputing the exact
   U13-A/U14-E/U14-EQ/U04-B and canonical U15 transform chain. It emits an
   opaque publication capability, not MemoryUse, proposal, route or release
   authority. The local adapter models head-CAS/idempotent provenance-sidecar
   writes; the durable adapter is intentionally `DependencyUnavailable` until
-  a U05 grant revision/liveness fence can be evaluated in the same durable
-  transaction. U23-E remains pending and is the sole future consumer allowed
-  to attest governed use of this publication.
+  both the U33-E publication sidecar and transaction-bound U05 grant
+  revision/liveness contract exist. Current PostgreSQL migrations persist U02
+  revisions, generic U33 heads/tombstones/use receipts, and temporal cutoff
+  receipts, but have no U33-E publication record and accept grant reference as
+  a string rather than resolving its authority. U23-E is the sole consumer
+  allowed to attest governed use:
+  its local path checks exact revision/head, tenant/world/scope, replay cutoff,
+  grant liveness and revocation, and makes retries idempotent by
+  `(publication_commitment, scope, run_id)`. A changed grant or access time for
+  the same semantic use conflicts without a second receipt. Durable admission
+  remains `DependencyUnavailable` until one database transaction can lock and
+  resolve a U05 `GrantSnapshot`/`AuthorityDecision` (authority, tenant, grant
+  revision, liveness/validity, revocation epoch, action, scope/snapshot binding
+  and authorization digest), re-attest the U33-E publication/head and snapshot,
+  then append one payload-free receipt. A pre-read bool or parallel grant
+  table is not sufficient. The durable contract gap and required real-Postgres
+  acceptance tests are recorded in `docs/journal/0053-p4-u23e-frozen-memory-admission.md`.
 - U16: provisional WorkflowBridge. It accepts only a U14 verification report
   and sealed internal catalogue/source-validation facts, preserves its
   commitments and scope, includes `do_nothing`, and caps a supported route at

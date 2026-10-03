@@ -112,4 +112,5 @@ jobs:
           if ((Get-Module Pester).Version -ne $requiredPester) {
             throw "Loaded Pester version does not match required version $requiredPester."
           }
+          Invoke-Pester -Path tests/run-local-ci.Tests.ps1 -EnableExit
           Invoke-Pester -Path tests/run-local-e0-e2e.Tests.ps1 -EnableExit

@@ -662,6 +662,7 @@ pub struct CoreVerificationReceipt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WindowProjection {
+    tenant_id: String,
     window_start_ms: i64,
     window_end_ms: i64,
     received_as_of_ms: i64,
@@ -672,6 +673,9 @@ pub struct WindowProjection {
 }
 
 impl WindowProjection {
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
     pub fn window_start_ms(&self) -> i64 {
         self.window_start_ms
     }
@@ -1501,6 +1505,7 @@ fn make_projection(
         .map(|item| item.event.clone())
         .collect();
     WindowProjection {
+        tenant_id: tenant_id.to_owned(),
         window_start_ms: start,
         window_end_ms: end,
         received_as_of_ms,
