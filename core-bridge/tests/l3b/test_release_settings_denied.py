@@ -29,3 +29,24 @@ def test_ordinary_drafts_are_unaffected() -> None:
     env.call(ic, "registry/create_proposal", CREATE, key="e1")
     r = env.call(ic, "registry/put_draft", {"proposal_id": "prop-1", "expected_rev": 1, "changes": CHANGES}, key="e2")
     assert r.status is ToolStatus.ok
+
+
+def test_kind_variants_are_denied_too_defence_in_depth() -> None:
+    """Upstream matches the kind exactly today (a variant is an unknown kind there); the deny must not depend on that."""
+    for variant in ("Release_Settings", " release_settings", "RELEASE_SETTINGS\n", "release_settings​"):
+        changes = [*CHANGES, {**SETTINGS, "kind": variant}]
+        env, ic = writer(commitment(put_draft_digest=put_draft_digest(None, None, changes)))
+        env.call(ic, "registry/create_proposal", CREATE, key="e1")
+        n = len(env.inner.calls)
+        r = env.call(ic, "registry/put_draft", {"proposal_id": "prop-1", "expected_rev": 1, "changes": changes}, key="e2")
+        assert r.status is ToolStatus.denied and r.error == "pulso:release_settings_not_allowed", repr(variant)
+        assert len(env.inner.calls) == n
+
+
+def test_nested_or_unrelated_mentions_are_not_denied() -> None:
+    """Only the draft kind matters: content that merely contains the words is an ordinary draft."""
+    changes = [{**CHANGES[0], "docs": {**DOCS, "description": "release_settings"}}, *CHANGES[1:]]
+    env, ic = writer(commitment(put_draft_digest=put_draft_digest(None, None, changes)))
+    env.call(ic, "registry/create_proposal", CREATE, key="e1")
+    r = env.call(ic, "registry/put_draft", {"proposal_id": "prop-1", "expected_rev": 1, "changes": changes}, key="e2")
+    assert r.status is ToolStatus.ok

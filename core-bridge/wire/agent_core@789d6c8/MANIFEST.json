@@ -29,17 +29,17 @@
     {
       "derived_by_pulso": true,
       "path": "derived/EntityVersion.schema.json",
-      "sha256": "3ffd06c10625eeefdc896cce354ec1867248e3347809c1c25960d37e5225ad27"
+      "sha256": "76c2780658d723cfdb9ff9d4392c73a41b2d1b9d836533737eba3c623b5b9c5a"
     },
     {
       "derived_by_pulso": true,
       "path": "derived/EvalReport.schema.json",
-      "sha256": "4bc41ab9a48b67175a6eecae3358f9cc19dba5d259c5b518af5db9929fb66415"
+      "sha256": "a40055dd86bd6bd76422d158e11b59bb0ddaa3b3414db52f5be146992b592ab9"
     },
     {
       "derived_by_pulso": true,
       "path": "derived/EvalRun.schema.json",
-      "sha256": "43ab27979fe3f0019c07cbb9a0373f8fcf295c4fc3ec928cdaa4d0a1a56650d6"
+      "sha256": "7590c2cd462782a0faccc68be4ab1552c2469a34b390ec6be6feef149dba8450"
     },
     {
       "derived_by_pulso": true,
@@ -64,7 +64,7 @@
     {
       "derived_by_pulso": true,
       "path": "derived/ProposalDetail.schema.json",
-      "sha256": "45f8104aa16c1c3934c74a4cb875f7afd2632665269be6d776ffb45661062667"
+      "sha256": "dd6e75e09b9919e7b6b6ce9339af9b7420047a1ad7512a09fc06f360e567d87e"
     },
     {
       "derived_by_pulso": true,

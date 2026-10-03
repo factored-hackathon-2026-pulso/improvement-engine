@@ -210,9 +210,6 @@
         "base_value": {
           "anyOf": [
             {
-              "type": "number"
-            },
-            {
               "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
               "type": "string"
             },
@@ -225,9 +222,6 @@
         },
         "floor": {
           "anyOf": [
-            {
-              "type": "number"
-            },
             {
               "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
               "type": "string"
@@ -245,9 +239,6 @@
         },
         "noise_margin": {
           "anyOf": [
-            {
-              "type": "number"
-            },
             {
               "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
               "type": "string"
@@ -296,9 +287,6 @@
         },
         "value": {
           "anyOf": [
-            {
-              "type": "number"
-            },
             {
               "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
               "type": "string"
@@ -364,9 +352,6 @@
           "type": "integer"
         },
         {
-          "type": "number"
-        },
-        {
           "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
           "type": "string"
         },
@@ -411,9 +396,6 @@
         },
         "score": {
           "anyOf": [
-            {
-              "type": "number"
-            },
             {
               "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
               "type": "string"
@@ -624,15 +606,8 @@
       "properties": {
         "metrics": {
           "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-                "type": "string"
-              }
-            ]
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "type": "string"
           },
           "title": "Metrics",
           "type": "object"

@@ -21,6 +21,11 @@ PLATFORM_SIM = Path(__file__).resolve().parents[2] / "platform-sim"
 
 DERIVED = ["EvalSuite", "EntityDraft", "VersionDocs", "Proposal", "ValidationReport", "CandidateView",
            "ReleaseDetail", "EntityVersion", "ReleaseDiff", "EvalReport", "ProposalDetail", "WriteRecord", "EvalRun"]
+# Models Core SERVES (responses): schema in serialization mode, like upstream's `contracts/registry/` outputs (N-01). A
+# validation-mode schema of an output is looser (a Decimal metric validates as a number too). Everything else in DERIVED
+# plus BODY_MODELS is request input (validation mode).
+OUTPUT_MODELS = {"Proposal", "ValidationReport", "CandidateView", "ReleaseDetail", "EntityVersion", "ReleaseDiff",
+                 "EvalReport", "ProposalDetail", "WriteRecord", "EvalRun"}
 BODY_MODELS = ["_Create", "_Draft", "_Evaluate", "_Approve", "_Promote", "_Reason"]
 
 
@@ -131,7 +136,8 @@ def derived(out: Path, files: list[dict], app) -> None:
         die(f"registry models not found: {missing}")
     (out / "derived").mkdir(parents=True, exist_ok=True)
     for name, model in sorted(pool.items()):
-        data = dump(TypeAdapter(model).json_schema(mode="validation", by_alias=True))
+        mode = "serialization" if name in OUTPUT_MODELS else "validation"
+        data = dump(TypeAdapter(model).json_schema(mode=mode, by_alias=True))
         rel = f"derived/{name.lstrip('_')}.schema.json"
         (out / rel).write_bytes(data)
         files.append({"path": rel, "sha256": sha(data), "derived_by_pulso": True})

@@ -9,9 +9,6 @@
           "type": "integer"
         },
         {
-          "type": "number"
-        },
-        {
           "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
           "type": "string"
         },

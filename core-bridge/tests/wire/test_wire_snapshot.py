@@ -110,3 +110,27 @@ def test_every_entity_vector_rederives_independently() -> None:
 def test_candidate_vector_is_complete() -> None:
     cand = json.loads((WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))["candidate"]
     assert len(cand["candidate_hash"]) == 64 and int(cand["candidate_hash"], 16) >= 0
+
+
+UPSTREAM_NAME = {"Create": "CreateProposalBody", "Draft": "PutDraftBody", "Evaluate": "EvaluateBody",
+                 "Approve": "ApproveBody", "Promote": "PromoteBody", "Reason": "ReasonBody"}
+
+
+def _schema(rel: str) -> dict:
+    doc = json.loads((WIRE / rel).read_text(encoding="utf-8"))
+    doc.pop("$comment", None)
+    return doc
+
+
+def test_derived_schemas_published_upstream_equal_the_upstream_ones() -> None:
+    """N-01: upstream publishes input models (validation) and output models (serialization). A derived schema that has
+    an upstream twin must BE that twin (modulo the generator `$comment`): a derived validation-mode output schema is
+    looser (a Decimal metric validates as a number too) than what Core really serves."""
+    compared = 0
+    for path in sorted((WIRE / "derived").glob("*.schema.json")):
+        name = path.name.removesuffix(".schema.json")
+        twin = WIRE / "registry" / f"{UPSTREAM_NAME.get(name, name)}.json"
+        if twin.exists():
+            assert _schema(f"derived/{path.name}") == _schema(f"registry/{twin.name}"), name
+            compared += 1
+    assert compared >= 15

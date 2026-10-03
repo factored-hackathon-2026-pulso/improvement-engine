@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from typing import Any, Protocol
 
 from agent_core.composition.builder_tools import BUILDER_TOOL_DEFS
@@ -81,8 +82,17 @@ def _digest(value: str) -> str:
 RELEASE_SETTINGS_KIND = "release_settings"
 
 
+def _is_release_settings_kind(kind: Any) -> bool:
+    """Exact match today (upstream compares exactly); also case/width/punctuation/zero-width variants, so the deny does
+    not silently depend on upstream never normalising a kind (defence in depth, zero cost for legitimate kinds)."""
+    if not isinstance(kind, str):
+        return False
+    folded = "".join(ch for ch in unicodedata.normalize("NFKC", kind).casefold() if ch.isalnum())
+    return folded == "releasesettings"
+
+
 def _has_release_settings(changes: Any) -> bool:
-    return isinstance(changes, list) and any(isinstance(c, dict) and c.get("kind") == RELEASE_SETTINGS_KIND
+    return isinstance(changes, list) and any(isinstance(c, dict) and _is_release_settings_kind(c.get("kind"))
                                              for c in changes)
 
 
