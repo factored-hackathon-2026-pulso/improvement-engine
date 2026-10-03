@@ -1,6 +1,6 @@
 # Journal claude-0013: pin bump 789d6c8 -> 894fa65 (WP1 + WP3)
 
-Branch `claude/r2-bridge-gaps`. Plan: `docs/AGENT_CORE_PIN_BUMP_2_ANALYSIS_CLAUDE.md`. Decisions: ADR 0009.
+Branch `claude/r2-bridge-gaps`. Plan: `docs/AGENT_CORE_PIN_BUMP_2_ANALYSIS_CLAUDE.md`. Decisions: ADR 0010.
 
 ## First RED evidence
 - `tests/wire` (pin 894fa65, derived seed id): 14 failed (no wire dir, fallback sha, `seeded_release_id` missing).
@@ -13,7 +13,7 @@ Branch `claude/r2-bridge-gaps`. Plan: `docs/AGENT_CORE_PIN_BUMP_2_ANALYSIS_CLAUD
 ## Results (PG16 `pulso-claude-u-pg`, pulso-dev, --cgroups=disabled, 127.0.0.1:47641, removed afterwards)
 - `core-bridge/tests` against the 894fa65 venv: 561 passed, 5 skipped, 0 failed (sequential, ~9 min). `test_expand_contract`
   4 passed (OLD 789d6c8 venv + NEW 894fa65 checkout). No stuck tests.
-- `gen-wire.ps1 -Check`: "wire check OK (no drift)"; `assert_compat()`: ok. MANIFEST digest `ed000b81...809b5` (ADR 0009).
+- `gen-wire.ps1 -Check`: "wire check OK (no drift)"; `assert_compat()`: ok. MANIFEST digest `ed000b81...809b5` (ADR 0010).
 - Wire diff vs 789d6c8: 10 changed files, 0 added, 0 removed, `openapi.json` identical.
 - `platform-sim/tests` (out of scope, run only to size WP2): 82 failed, 8 errors, 118 passed.
 

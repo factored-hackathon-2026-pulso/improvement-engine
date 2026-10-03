@@ -1,4 +1,4 @@
-# ADR 0009: Bump the agent-core pin 789d6c8 -> 894fa65 (PR #29)
+# ADR 0010: Bump the agent-core pin 789d6c8 -> 894fa65 (PR #29)
 
 Status: proposed (implementer: Claude; reviewer and integrator approval pending). Analysis:
 `docs/AGENT_CORE_PIN_BUMP_2_ANALYSIS_CLAUDE.md`. Scope of this ADR: WP1 (pin, wire) and WP3 (runtime). The mock/parity
