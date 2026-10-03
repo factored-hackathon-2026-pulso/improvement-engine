@@ -40,13 +40,13 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
         table.join("part-000.csv"),
         concat!(
             "interaction_id,customer_id,interaction_date,contact_reason,channel,was_resolved,requires_followup,agent_id,duration_seconds,wait_time_seconds\n",
-            "id-1,c-1,2025-01-01T10:00:00,Queja,Phone,true,false,a-1,30,5\n",
-            "id-2,c-2,2025-01-02T10:00:00,Queja,Phone,true,false,a-2,40,6\n",
-            "id-3,c-3,2025-01-03T10:00:00,Queja,Phone,false,true,a-3,50,7\n",
-            "id-4,c-4,2025-01-04T10:00:00,Queja,Phone,true,false,a-4,60,8\n",
-            "id-5,c-5,2025-01-05T10:00:00,Queja,Phone,true,false,a-5,70,9\n",
-            "id-6,c-6,2099-01-06T10:00:00,person@example.test,Phone,true,false,a-6,80,10\n",
-            "id-7,c-7,2025-01-07T10:00:00,Queja,,true,false,a-7,80,10\n",
+            "INTERACTION-PII-SENTINEL-ROW-01-DO-NOT-SERIALIZE-6f11c9e8,CUSTOMER-PII-SENTINEL-ROW-01-DO-NOT-SERIALIZE-19bc3a7d,2025-01-01T10:00:00,Queja,Phone,true,false,AGENT-PII-SENTINEL-ROW-01-DO-NOT-SERIALIZE-7ad3f065,30,5\n",
+            "INTERACTION-PII-SENTINEL-ROW-02-DO-NOT-SERIALIZE-41c87da5,CUSTOMER-PII-SENTINEL-ROW-02-DO-NOT-SERIALIZE-0b28f4a6,2025-01-02T10:00:00,Queja,Phone,true,false,AGENT-PII-SENTINEL-ROW-02-DO-NOT-SERIALIZE-38b0ac12,40,6\n",
+            "INTERACTION-PII-SENTINEL-ROW-03-DO-NOT-SERIALIZE-8e05bca2,CUSTOMER-PII-SENTINEL-ROW-03-DO-NOT-SERIALIZE-746f190d,2025-01-03T10:00:00,Queja,Phone,false,true,AGENT-PII-SENTINEL-ROW-03-DO-NOT-SERIALIZE-b3a6015f,50,7\n",
+            "INTERACTION-PII-SENTINEL-ROW-04-DO-NOT-SERIALIZE-a5096e31,CUSTOMER-PII-SENTINEL-ROW-04-DO-NOT-SERIALIZE-e7132f44,2025-01-04T10:00:00,Queja,Phone,true,false,AGENT-PII-SENTINEL-ROW-04-DO-NOT-SERIALIZE-5c8bd201,60,8\n",
+            "INTERACTION-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-c218f6a9,CUSTOMER-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-9d07c351,2025-01-05T10:00:00,Queja,Phone,true,false,AGENT-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-2fa19c73,70,9\n",
+            "INTERACTION-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-3d5f209a,CUSTOMER-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-ec68240b,2099-01-06T10:00:00,person@example.test,Phone,true,false,AGENT-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-98a61e0d,80,10\n",
+            "INTERACTION-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-d0512a86,CUSTOMER-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-0f23bd74,2025-01-07T10:00:00,Queja,,true,false,AGENT-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-a67c3d18,80,10\n",
         ),
     )
     .unwrap();
@@ -67,7 +67,32 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
     assert_eq!(summary.rejected_rows(), 1);
     assert_eq!(summary.suppressed_cells(), 1);
     let serialized = serde_json::to_string(&prepared).unwrap();
-    for forbidden in ["id-1", "c-1", "a-1", "person@example.test", "2025-01-01"] {
+    for forbidden in [
+        "INTERACTION-PII-SENTINEL-ROW-01-DO-NOT-SERIALIZE-6f11c9e8",
+        "CUSTOMER-PII-SENTINEL-ROW-01-DO-NOT-SERIALIZE-19bc3a7d",
+        "AGENT-PII-SENTINEL-ROW-01-DO-NOT-SERIALIZE-7ad3f065",
+        "INTERACTION-PII-SENTINEL-ROW-02-DO-NOT-SERIALIZE-41c87da5",
+        "CUSTOMER-PII-SENTINEL-ROW-02-DO-NOT-SERIALIZE-0b28f4a6",
+        "AGENT-PII-SENTINEL-ROW-02-DO-NOT-SERIALIZE-38b0ac12",
+        "INTERACTION-PII-SENTINEL-ROW-03-DO-NOT-SERIALIZE-8e05bca2",
+        "CUSTOMER-PII-SENTINEL-ROW-03-DO-NOT-SERIALIZE-746f190d",
+        "AGENT-PII-SENTINEL-ROW-03-DO-NOT-SERIALIZE-b3a6015f",
+        "INTERACTION-PII-SENTINEL-ROW-04-DO-NOT-SERIALIZE-a5096e31",
+        "CUSTOMER-PII-SENTINEL-ROW-04-DO-NOT-SERIALIZE-e7132f44",
+        "AGENT-PII-SENTINEL-ROW-04-DO-NOT-SERIALIZE-5c8bd201",
+        "INTERACTION-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-c218f6a9",
+        "CUSTOMER-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-9d07c351",
+        "AGENT-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-2fa19c73",
+        "INTERACTION-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-3d5f209a",
+        "CUSTOMER-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-ec68240b",
+        "AGENT-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-98a61e0d",
+        "INTERACTION-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-d0512a86",
+        "CUSTOMER-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-0f23bd74",
+        "AGENT-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-a67c3d18",
+        "person@example.test",
+        "2025-01-01",
+        "2099-01-06T10:00:00",
+    ] {
         assert!(!serialized.contains(forbidden));
     }
     assert!(!serialized.contains("true"));
