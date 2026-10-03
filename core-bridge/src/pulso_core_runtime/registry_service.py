@@ -36,6 +36,7 @@ from pulso_core_runtime.evaluation.admission import (
     InvocationContext,
     ProposalView,
     eval_key,
+    valid_context_ref,
 )
 from pulso_core_runtime.evaluation.budget import BudgetLimits
 from pulso_core_runtime.evaluation.native import BoundEvaluator, EvalComposition, EvaluationGate, PulsoEvalPort
@@ -57,6 +58,19 @@ class EvaluateOutcome:
     report: dict[str, Any]
 
 
+class FailClosedRegistryService(RegistryService):
+    """Process-wide shared service: `evaluate` has NO effect (no draft write, no quota, no run).
+
+    Stock Core stores even a `failed_infra` result under the caller's idempotency key, so a call without an
+    admission could otherwise burn the future key `pulso-eval:<ref>` (replayed as `failed_infra` later)."""
+
+    def evaluate(self, actor: Principal, proposal_id: str, suite_id: str, suite_version: str | None = None, *,
+                 idempotency_key: str | None = None, audit: AuditContext | None = None) -> Any:
+        from agent_core.registry import EvalReport
+
+        return EvalReport(verdict="failed_infra", detail="HarnessUnavailable: no_admission")
+
+
 class EvaluationRuntime:
     def __init__(self, *, store: RegistryStore, composition: EvalComposition, clock: Any, ids: Any,
                  admissions: AdmissionStore, reports: ReportStore, broker: BrokerPort, budgets: BudgetResolver,
@@ -68,10 +82,10 @@ class EvaluationRuntime:
         self.port = PulsoEvalPort(composition, gate or EvaluationGate())
         kwargs: dict[str, Any] = {} if now is None else {"now": now}
         self.gate = AdmissionGate(admissions, broker, **kwargs)
-        self.service = self._service(self.port)  # fail-closed shared service
+        self.service = self._service(self.port, FailClosedRegistryService)  # fail-closed shared service
 
-    def _service(self, evaluator: Any) -> RegistryService:
-        return RegistryService(self._store, evaluator, self._clock, self._ids, runs=self._runs,
+    def _service(self, evaluator: Any, cls: type[RegistryService] = RegistryService) -> RegistryService:
+        return cls(self._store, evaluator, self._clock, self._ids, runs=self._runs,
                                limits=self._limits, quotas=self._quotas)
 
     # --- helpers ---------------------------------------------------------------------------------------
@@ -208,7 +222,9 @@ class FlowEvaluationGate:
 
         c = ic.commitment
         ref = ic.evaluation_context_ref
-        if c is None or ref is None or idempotency_key != eval_key(ref):
+        if c is None or ref is None or not valid_context_ref(ref):
+            return ToolStatus.denied, None, "pulso:evaluation_context_invalid"  # L3b's `$` regex accepts a trailing newline
+        if idempotency_key != eval_key(ref):
             return ToolStatus.denied, None, "pulso:commitment_mismatch"
         ctx = InvocationContext(tenant_id=ic.tenant_id, job_id=ic.job_id, binding_ref=ic.binding_ref,
                                 binding_confirmed=True, evaluate_enabled=bool(c.evaluate_enabled),
