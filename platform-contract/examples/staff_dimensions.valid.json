@@ -1,0 +1,28 @@
+[
+  {
+    "id": "STF-0002",
+    "roles": [
+      "analyst"
+    ],
+    "languages": [
+      "es",
+      "pt"
+    ],
+    "team": "general",
+    "active": true,
+    "version": 1
+  },
+  {
+    "id": "STF-0003",
+    "roles": [
+      "supervisor",
+      "analyst"
+    ],
+    "languages": [
+      "es"
+    ],
+    "team_id": "TEAM-0001",
+    "active": true,
+    "version": 2
+  }
+]

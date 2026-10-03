@@ -1,0 +1,29 @@
+[project]
+name = "pulso-platform-exporter"
+version = "0.1.0"
+description = "Read-only exporter of the real attention platform (platform_live source profile) to Pulso observations."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx>=0.27",
+    "psycopg[binary]>=3.2",
+    "rfc8785>=0.1.4",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "fastapi>=0.115", "cryptography>=43", "pydantic>=2.9,<3", "uvicorn>=0.30"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "../platform-sim"]
+addopts = "-q --strict-markers"
+markers = [
+    "pg: needs real Postgres 16 (PULSO_TEST_PG_ADMIN)",
+    "sim: runs against platform-sim/platform_live (simulator double)",
+]

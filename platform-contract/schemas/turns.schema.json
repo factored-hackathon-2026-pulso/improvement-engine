@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.0.0/turns.schema.json",
+  "title": "turns",
+  "description": "platform_live row from source table `turns` (append-only).",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^TRN-.+$"
+    },
+    "case_id": {
+      "type": "string",
+      "pattern": "^CASE-.+$"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "message",
+        "routing",
+        "notice"
+      ]
+    },
+    "audience": {
+      "type": "string",
+      "enum": [
+        "everyone",
+        "staff"
+      ]
+    },
+    "author_role": {
+      "type": "string",
+      "enum": [
+        "customer",
+        "analyst",
+        "system"
+      ]
+    },
+    "author_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(CUS|STF)-.+$"
+    },
+    "text": {
+      "type": "string",
+      "x-sensitive-text": true
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "es",
+        "pt"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+    },
+    "client_message_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "case_id",
+    "sequence",
+    "kind",
+    "audience",
+    "author_role",
+    "author_id",
+    "text",
+    "language",
+    "created_at",
+    "client_message_id"
+  ],
+  "additionalProperties": false,
+  "x-primary-key": [
+    "id"
+  ],
+  "x-denied-columns": [],
+  "x-contract-version": "1.0.0"
+}

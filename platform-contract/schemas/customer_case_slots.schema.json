@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.0.0/customer_case_slots.schema.json",
+  "title": "customer_case_slots",
+  "description": "platform_live row from source table `customer_case_slots` (mutable, optimistic version).",
+  "type": "object",
+  "properties": {
+    "customer_id": {
+      "type": "string",
+      "pattern": "^CUS-.+$"
+    },
+    "open_case_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^CASE-.+$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "customer_id",
+    "open_case_id",
+    "version"
+  ],
+  "additionalProperties": false,
+  "x-primary-key": [
+    "customer_id"
+  ],
+  "x-denied-columns": [],
+  "x-contract-version": "1.0.0"
+}

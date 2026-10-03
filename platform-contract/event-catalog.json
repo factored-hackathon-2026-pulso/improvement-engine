@@ -1,0 +1,125 @@
+{
+  "catalog_version": "1.0.0",
+  "contract_version": "1.0.0",
+  "profile": "platform_live.phase1",
+  "statuses": {
+    "admitted": "ingest",
+    "denied": "known security/credential telemetry, never ingested",
+    "planned": "announced by Product, not yet admitted: quarantine like unknown"
+  },
+  "unknown_policy": "count, quarantine with a quality finding, never fail the batch",
+  "planned_prefixes": [
+    "staff.",
+    "team."
+  ],
+  "event_types": [
+    {
+      "event_type": "case.opened",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted"
+    },
+    {
+      "event_type": "case.queued",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted"
+    },
+    {
+      "event_type": "case.assigned",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted"
+    },
+    {
+      "event_type": "case.status_changed",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted"
+    },
+    {
+      "event_type": "case.read",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted"
+    },
+    {
+      "event_type": "case.first_responded",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted"
+    },
+    {
+      "event_type": "case.closed",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted"
+    },
+    {
+      "event_type": "case.viewed",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted"
+    },
+    {
+      "event_type": "turn.created",
+      "family": "messages",
+      "entity": "turn",
+      "status": "admitted"
+    },
+    {
+      "event_type": "staff.availability_changed",
+      "family": "team",
+      "entity": "staff",
+      "status": "admitted"
+    },
+    {
+      "event_type": "auth.login_failed",
+      "family": "access",
+      "entity": "staff",
+      "status": "admitted"
+    },
+    {
+      "event_type": "auth.account_locked",
+      "family": "access",
+      "entity": "staff",
+      "status": "admitted"
+    },
+    {
+      "event_type": "auth.session_started",
+      "family": "access",
+      "entity": "staff",
+      "status": "admitted"
+    },
+    {
+      "event_type": "auth.session_ended",
+      "family": "access",
+      "entity": "staff",
+      "status": "admitted"
+    },
+    {
+      "event_type": "auth.password_accepted",
+      "family": "access",
+      "entity": "staff",
+      "status": "denied"
+    },
+    {
+      "event_type": "auth.mfa_challenge_issued",
+      "family": "access",
+      "entity": "staff",
+      "status": "denied"
+    },
+    {
+      "event_type": "auth.mfa_failed",
+      "family": "access",
+      "entity": "staff",
+      "status": "denied"
+    },
+    {
+      "event_type": "customer.session_started",
+      "family": "access",
+      "entity": "customer",
+      "status": "denied"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "table": "customers",
+  "row": {
+    "id": "CUS-0001",
+    "country": "BR",
+    "city": "Sao Paulo",
+    "locale": "pt-BR",
+    "simulator": false,
+    "display_name": "A B"
+  }
+}

@@ -4,6 +4,7 @@ import { api, ApiError, loadConfig, onSessionExpired, setCsrf } from '../api/cli
 import type * as S from '../api/schemas';
 import { RunView } from '../features/RunView';
 import { MemoryView } from '../features/Panels';
+import { SourcesView } from '../features/SourcesView';
 import { ModeBanner } from './ModeBanner';
 import { LiveRegionProvider, useAnnounce } from '../a11y/AnnounceContext';
 import { t } from '../i18n/es419';
@@ -71,14 +72,14 @@ function Shell() {
           {t(session === 'expired' ? 'session.expired' : 'session.unavailable')}
         </div>
       )}
-      <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a></nav>
+      <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a> · <a href="#/sources">{t('sources.nav')}</a></nav>
       <main>
         {run?.[1]
           ? <RunView
               runId={run[1]} nodeId={node}
               onNode={(id) => { window.location.hash = id ? `#/run/${run[1]}?node=${id}` : `#/run/${run[1]}`; }}
             />
-          : path === '/memory' ? <MemoryView /> : <><h1>{t('app.title')}</h1><RunList /></>}
+          : path === '/sources' ? <SourcesView /> : path === '/memory' ? <MemoryView /> : <><h1>{t('app.title')}</h1><RunList /></>}
       </main>
     </>
   );

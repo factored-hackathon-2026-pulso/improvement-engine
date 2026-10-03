@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: pulso-platform-exporter
+Version: 0.1.0
+Summary: Read-only exporter of the real attention platform (platform_live source profile) to Pulso observations.
+Requires-Python: <3.13,>=3.12
+Requires-Dist: httpx>=0.27
+Requires-Dist: psycopg[binary]>=3.2
+Requires-Dist: rfc8785>=0.1.4
