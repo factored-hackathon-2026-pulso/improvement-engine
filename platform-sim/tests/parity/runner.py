@@ -266,8 +266,10 @@ def _dig(body: Any, dotted: str) -> Any:
     return body
 
 
-def run_case(client: httpx.Client, case: Case, *, sim: bool, reset: Callable[[], None] | None = None) -> CaseResult:
-    """`reset` isolates cases on a target without `/_sim` (the real server): the harness, not the served app, resets."""
+def run_case(client: httpx.Client, case: Case, *, sim: bool, reset: Callable[[], None] | None = None,
+             control: Any = None) -> CaseResult:
+    """`reset` isolates cases on a target without `/_sim` (the real server): the harness, not the served app, resets.
+    `control` (real_pg_scripted) programs the eval/clock doubles in-process (`program_eval`, `advance`); no /_sim."""
     if sim:
         client.post("/_sim/reset").raise_for_status()
     elif reset is not None:
@@ -276,13 +278,19 @@ def run_case(client: httpx.Client, case: Case, *, sim: bool, reset: Callable[[],
     result = CaseResult(case.id)
     for step in case.steps:
         if "sim" in step:
-            if not sim:
+            if not sim and control is None:
                 raise RuntimeError(f"{case.id}: requires the /_sim channel")
             s = step["sim"]
             if "eval" in s:
-                client.post("/_sim/eval", json={"script": s["eval"]}).raise_for_status()
+                if control is not None:
+                    control.program_eval(s["eval"])
+                else:
+                    client.post("/_sim/eval", json={"script": s["eval"]}).raise_for_status()
             if "advance" in s:
-                client.post("/_sim/clock/advance", json={"seconds": s["advance"]}).raise_for_status()
+                if control is not None:
+                    control.advance(float(s["advance"]))
+                else:
+                    client.post("/_sim/clock/advance", json={"seconds": s["advance"]}).raise_for_status()
             if "method" not in step:
                 continue
         for i in range(int(step.get("repeat", 1))):
@@ -309,7 +317,7 @@ def run_case(client: httpx.Client, case: Case, *, sim: bool, reset: Callable[[],
 
 def fixtures_dir(target: str = "a2") -> Path:
     """a2 (and mock-only) fixtures live in the pin dir; real_local recordings in `<pin>/real/`."""
-    return FIXTURES / "real" if target == "real" else FIXTURES
+    return {"real": FIXTURES / "real", "real_scripted": FIXTURES / "real_pg_scripted"}.get(target, FIXTURES)
 
 
 def fixture_path(case_id: str) -> Path:

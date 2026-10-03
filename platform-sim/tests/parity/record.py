@@ -17,7 +17,7 @@ from parity import runner
 from parity.servers import serve
 
 
-def record(base_url: str, target: str, *, sim: bool, only_mock_only: bool, reset=None) -> int:
+def record(base_url: str, target: str, *, sim: bool, only_mock_only: bool, reset=None, control=None) -> int:
     out = runner.fixtures_dir(target)
     out.mkdir(parents=True, exist_ok=True)
     written = 0
@@ -25,9 +25,9 @@ def record(base_url: str, target: str, *, sim: bool, only_mock_only: bool, reset
         for case in runner.load_cases():
             if (case.applies_to == "mock_only") != only_mock_only:
                 continue
-            if case.requires_sim and not sim:
+            if case.requires_sim and not sim and control is None:
                 continue
-            result = runner.run_case(client, case, sim=sim, reset=reset)
+            result = runner.run_case(client, case, sim=sim, reset=reset, control=control)
             (out / f"{case.id}.json").write_bytes(runner.dump_fixture(result).encode("utf-8"))  # LF on every OS
             written += 1
     return written
@@ -35,7 +35,7 @@ def record(base_url: str, target: str, *, sim: bool, only_mock_only: bool, reset
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--target", choices=["a2", "real", "mock"], required=True)
+    ap.add_argument("--target", choices=["a2", "real", "real_scripted", "mock"], required=True)
     ap.add_argument("--base-url")
     ap.add_argument("--only-mock-only", action="store_true")
     a = ap.parse_args()
@@ -48,6 +48,14 @@ def main() -> None:
 
         with serve_real(admin) as (url, harness):
             print(record(url, "real", sim=False, only_mock_only=False, reset=harness.reset), "fixtures")
+        return
+    if a.target == "real_scripted":
+        admin = os.environ.get("PULSO_TEST_PG_ADMIN") or sys.exit("--target real_scripted needs PULSO_TEST_PG_ADMIN")
+        from registry_mock.real_app import serve_real
+
+        with serve_real(admin, scripted=True) as (url, harness):
+            print(record(url, "real_scripted", sim=False, only_mock_only=False, reset=harness.reset, control=harness),
+                  "fixtures")
         return
     with serve(a.target) as url:
         print(record(url, a.target, sim=True, only_mock_only=a.only_mock_only), "fixtures")

@@ -41,7 +41,11 @@ from agent_core.registry.http import registry_extension  # noqa: E402
 from agent_core.registry.service import RegistryService  # noqa: E402
 
 from registry_mock import jws  # noqa: E402
+from registry_mock.a2_app import ScriptedEval  # noqa: E402
+from registry_mock.sim_common import SimClock, SimIds  # noqa: E402
 
+DOUBLES_SCRIPTED = ["eval_port:scripted", "clock:fake", "ids:sim (deterministic)",
+                    "identity:sim_staff_key (JwsIdentityVerifier, sim public key)"]
 DOUBLES = ["eval_port:fixed_pass (not programmable)", "identity:sim_staff_key (JwsIdentityVerifier, sim public key)"]
 
 
@@ -64,15 +68,39 @@ def _with_db(admin_dsn: str, name: str) -> str:
 class Harness:
     """Owns the throw-away databases; the served app reads `dsn` late so `reset()` swaps the world."""
 
-    def __init__(self, admin_dsn: str, checkout: Path = CHECKOUT) -> None:
-        self.admin_dsn, self.checkout = admin_dsn, checkout
+    def __init__(self, admin_dsn: str, checkout: Path = CHECKOUT, *, scripted: bool = False) -> None:
+        """`scripted=True` (level real_pg_scripted): the EvalPort, clock and ids are the a2 doubles, programmed ONLY
+        in-process through `program_eval` / `advance` (never through the served app, which has no /_sim)."""
+        self.admin_dsn, self.checkout, self.scripted = admin_dsn, checkout, scripted
         self.tag = uuid.uuid4().hex[:8]
         self.n = 0
         self.dsn = ""
         self.names: list[str] = []
         self.reset()
 
+    def _new_world(self) -> None:
+        if self.scripted:
+            self.evaluator, self.clock, self.ids = ScriptedEval(), SimClock(), SimIds()
+        else:
+            self.evaluator, self.clock, self.ids = FixedPassEval(), SystemClock(), SystemIds()
+
+    # in-process control of the scripted doubles (harness only; the served app exposes no control surface)
+    def program_eval(self, script: list[str]) -> None:
+        if not self.scripted:
+            raise RuntimeError("eval is not programmable at level real_local")
+        self.evaluator.script = list(script)  # type: ignore[union-attr]
+
+    def advance(self, seconds: float) -> None:
+        if not self.scripted:
+            raise RuntimeError("the clock is not controllable at level real_local")
+        self.clock.advance(seconds)  # type: ignore[union-attr]
+
+    def _service(self, dsn: str) -> RegistryService:
+        store = PgRegistryStore(lambda: psycopg.connect(dsn, autocommit=False))
+        return RegistryService(store, self.evaluator, self.clock, self.ids)  # type: ignore[arg-type]
+
     def reset(self) -> None:
+        self._new_world()
         self.n += 1
         name = f"parity_{self.tag}_{self.n}"
         with psycopg.connect(self.admin_dsn, autocommit=True) as admin:
@@ -81,9 +109,7 @@ class Harness:
         with psycopg.connect(dsn) as conn:
             apply_schema(conn, None)
             apply_registry_schema(conn, None)
-        store = PgRegistryStore(lambda: psycopg.connect(dsn, autocommit=False))
-        RegistryService(store, FixedPassEval(), SystemClock(), SystemIds()).import_seed(  # type: ignore[arg-type]
-            _admin(), self.checkout / "tests" / "fixtures" / "registry-demo")
+        self._service(dsn).import_seed(_admin(), self.checkout / "tests" / "fixtures" / "registry-demo")
         old, self.dsn = self.names[-1:], dsn
         self.names.append(name)
         for o in old:
@@ -101,29 +127,33 @@ class Harness:
     def build_app(self) -> FastAPI:
         h = self
         app = FastAPI(title="real-registry", version="1.0.0", docs_url=None, redoc_url=None, openapi_url="/openapi.json")
-        ids = SystemIds()
-        install_tracing(app, ids)
+        install_tracing(app, h.ids)
         install_error_handlers(app)
 
         class _Dispatch:
             def __getattr__(self, name: str) -> Any:  # late-bound: a fresh store/service on the current database
-                dsn = h.dsn
-                store = PgRegistryStore(lambda: psycopg.connect(dsn, autocommit=False))
-                return getattr(RegistryService(store, FixedPassEval(), SystemClock(), ids), name)  # type: ignore[arg-type]
+                return getattr(h._service(h.dsn), name)
+
+        class _Clock:  # late-bound too: reset() swaps the clock
+            def now(self) -> Any:
+                return h.clock.now()
+
+            def monotonic_ns(self) -> int:
+                return h.clock.monotonic_ns()
 
         verifier = JwsIdentityVerifier({jws.SIM_KID: jws.sim_public_key()}, {}, lambda _r, _n: False)
-        registry_extension(_Dispatch(), verifier, SystemClock())(app, lambda r, a: (_ for _ in ()).throw(RuntimeError()))  # type: ignore[arg-type]
+        registry_extension(_Dispatch(), verifier, _Clock())(app, lambda r, a: (_ for _ in ()).throw(RuntimeError()))  # type: ignore[arg-type]
         return app
 
 
 @contextmanager
-def serve_real(admin_dsn: str) -> Iterator[tuple[str, Harness]]:
+def serve_real(admin_dsn: str, *, scripted: bool = False) -> Iterator[tuple[str, Harness]]:
     """Run the real app in a uvicorn thread; yield (base_url, harness). Cleans every throw-away database."""
     import uvicorn
 
     from parity.servers import free_port
 
-    h = Harness(admin_dsn)
+    h = Harness(admin_dsn, scripted=scripted)
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(h.build_app(), host="127.0.0.1", port=port, log_level="warning", access_log=False))
     t = threading.Thread(target=server.run, daemon=True)

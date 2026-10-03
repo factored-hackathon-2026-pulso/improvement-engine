@@ -1,0 +1,34 @@
+{
+  "cases_both": 109,
+  "cases_ran": 109,
+  "cases_total": 110,
+  "claim_note": "real code and real PG16, but with a scripted EvalPort and a fake clock programmed in-process: this is NOT the production evaluator or clock and never claims real_local",
+  "claims_real_local": false,
+  "claims_real_pg_scripted": true,
+  "doubles": [
+    "eval_port:scripted",
+    "clock:fake",
+    "ids:sim (deterministic)",
+    "identity:sim_staff_key (JwsIdentityVerifier, sim public key)"
+  ],
+  "evidence_notes": [
+    "harness app (no image, no /readyz): image_digest is null",
+    "control of eval/clock is in-process (Harness); the served app has no /_sim"
+  ],
+  "failed": [],
+  "fixtures_digest": "50f3f24779d114a9625d9b97be7417b703bd60b1a02106cc2dab886e8ca27ea8",
+  "label": "real_local_scripted",
+  "mock_only": [
+    "sim-info-contract"
+  ],
+  "passed": 109,
+  "postgres_version": "16.15 (Debian 16.15-1.pgdg13+2)",
+  "real_vs_a2_differences": {},
+  "route_table_digest": "3e48d6b6a9b45189f778b7eee88d57ff148495ef782ec69dfd3eda4b9a284079",
+  "runtime_profile": "registry_extension_over_pg_registry_store",
+  "sha": "86a767474042a566a0dbd6ed23588959f27ebdb3",
+  "skipped": [
+    "sim-info-contract"
+  ],
+  "target": "real_local_scripted"
+}

@@ -1,4 +1,4 @@
-"""registry-wire-contract (V3 31.10.3). Inputs: REGISTRY_BASE_URL, TARGET in {mock, a2, real} (default mock).
+"""registry-wire-contract (V3 31.10.3). Inputs: REGISTRY_BASE_URL, TARGET in {mock, a2, real, real_scripted} (default mock).
 
 mock != fixture  -> `mock_infidelity` (ordinary CI fails)
 a2/real != fixture -> `wire_drift_detected` (blocks a pin bump)
@@ -23,7 +23,9 @@ TARGET = os.environ.get("TARGET", "mock")
 BASE_URL = os.environ.get("REGISTRY_BASE_URL")
 PG_ADMIN = os.environ.get("PULSO_TEST_PG_ADMIN")
 SIM = TARGET in ("mock", "a2")
-_reset = [None]  # harness reset for TARGET=real over the throw-away PG (the served app has no /_sim)
+REAL = TARGET in ("real", "real_scripted")
+_reset = [None]  # harness reset for TARGET=real* over the throw-away PG (the served app has no /_sim)
+_control = [None]  # in-process eval/clock control (real_scripted only): the Harness, never the served app
 _real_info: dict = {}
 LABEL = "mock_infidelity" if TARGET == "mock" else "wire_drift_detected"
 REPORT = Path(os.environ.get("PARITY_REPORT", runner.HERE / ".out" / f"parity_report.{TARGET}.json"))
@@ -33,6 +35,7 @@ _route_digest: list[str] = []
 
 pytestmark = pytest.mark.parity
 REAL_VS_A2_DIFFERENCES: dict[str, str] = {}  # case id -> justification (none at the pin)
+SCRIPTED_VS_A2_DIFFERENCES: dict[str, str] = {}  # real_pg_scripted vs a2: case id -> justification
 
 
 @pytest.fixture(scope="session")
@@ -40,19 +43,21 @@ def client():
     if BASE_URL:
         with httpx.Client(base_url=BASE_URL, timeout=120) as c:
             yield c
-    elif TARGET == "real":
+    elif REAL:
         if not PG_ADMIN:
             pytest.skip("TARGET=real needs REGISTRY_BASE_URL or PULSO_TEST_PG_ADMIN (throw-away PG16)")
         import subprocess
 
-        from registry_mock.real_app import CHECKOUT, DOUBLES, serve_real
+        from registry_mock.real_app import CHECKOUT, DOUBLES, DOUBLES_SCRIPTED, serve_real
 
         head = subprocess.run(["git", "-C", str(CHECKOUT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
         assert head == PIN_SHA, f"checkout HEAD {head} != pin"
 
-        with serve_real(PG_ADMIN) as (url, harness), httpx.Client(base_url=url, timeout=120) as c:
+        scripted = TARGET == "real_scripted"
+        with serve_real(PG_ADMIN, scripted=scripted) as (url, harness), httpx.Client(base_url=url, timeout=120) as c:
             _reset[0] = harness.reset
-            _real_info.update(doubles=DOUBLES, sim_absent=c.get("/_sim/info").status_code == 404,
+            _control[0] = harness if scripted else None
+            _real_info.update(doubles=DOUBLES_SCRIPTED if scripted else DOUBLES, sim_absent=c.get("/_sim/info").status_code == 404,
                               pg=_pg_version(PG_ADMIN))
             yield c
     else:
@@ -70,7 +75,7 @@ def _pg_version(admin_dsn: str) -> str:
 def _applies(case: runner.Case) -> str | None:
     if case.applies_to == "mock_only" and TARGET != "mock":
         return "mock_only"
-    if case.requires_sim and not SIM:
+    if case.requires_sim and not SIM and TARGET != "real_scripted":
         return "requires_sim"
     return None
 
@@ -84,7 +89,7 @@ def test_case(client, case: runner.Case) -> None:
     fixture = runner.fixture_path(case.id)
     assert fixture.exists(), f"no recorded fixture for {case.id}: run `python -m parity.record --target a2`"
     expected = json.loads(fixture.read_text(encoding="utf-8"))["steps"]
-    actual = runner.run_case(client, case, sim=SIM, reset=_reset[0]).steps
+    actual = runner.run_case(client, case, sim=SIM, reset=_reset[0], control=_control[0]).steps
     problems = runner.diff_steps(expected, actual)
     _results[case.id] = "failed" if problems else "passed"
     assert not problems, f"{LABEL} [{case.id}] ({TARGET}):\n  " + "\n  ".join(problems[:12])
@@ -110,6 +115,27 @@ def test_real_covers_exactly_the_non_sim_both_cases() -> None:
         pytest.skip("no real/ recordings")
     expected = {c.id for c in CASES if c.applies_to == "both" and not c.requires_sim}
     assert {f.stem for f in real_dir.glob("*.json")} == expected
+
+
+def test_real_scripted_recordings_equal_a2_fixtures() -> None:
+    """Recorded `real_pg_scripted/` fixtures (real service over PG16, scripted eval + fake clock) vs the a2 ones:
+    every difference is a mock/a2 infidelity or must be justified in SCRIPTED_VS_A2_DIFFERENCES."""
+    d = runner.fixtures_dir("real_scripted")
+    if not d.is_dir():
+        pytest.skip("no real_pg_scripted/ recordings (run `python -m parity.record --target real_scripted`)")
+    differing = []
+    for f in sorted(d.glob("*.json")):
+        a2 = json.loads(runner.fixture_path(f.stem).read_text(encoding="utf-8"))["steps"]
+        if runner.diff_steps(a2, json.loads(f.read_text(encoding="utf-8"))["steps"]):
+            differing.append(f.stem)
+    assert sorted(differing) == sorted(SCRIPTED_VS_A2_DIFFERENCES), differing
+
+
+def test_real_scripted_covers_exactly_the_both_cases() -> None:
+    d = runner.fixtures_dir("real_scripted")
+    if not d.is_dir():
+        pytest.skip("no real_pg_scripted/ recordings")
+    assert {f.stem for f in d.glob("*.json")} == {c.id for c in CASES if c.applies_to == "both"}
 
 
 def test_fixtures_exist_for_every_case() -> None:
@@ -154,7 +180,7 @@ def _report():
     failed = [c.id for c in ran if _results[c.id] == "failed"]
     report = {
         "target": TARGET, "sha": PIN_SHA, "label": {"mock": "contract_mock", "a2": "a2_real_service_in_memory",
-                                                    "real": "real_local"}[TARGET],
+                                                    "real": "real_local", "real_scripted": "real_local_scripted"}[TARGET],
         "cases_total": len(CASES), "cases_both": len(both), "cases_ran": len(ran), "passed": len(passed),
         "failed": failed,
         "skipped": sorted(k for k, v in _results.items() if v.startswith("skipped")),
@@ -162,6 +188,18 @@ def _report():
         "route_table_digest": _route_digest[0] if _route_digest else None, "fixtures_digest": fixtures_digest(),
         "claims_real_local": False,
     }
+    if TARGET == "real_scripted" and _real_info:
+        report.update({
+            "target": "real_local_scripted", "label": "real_local_scripted",
+            "runtime_profile": "registry_extension_over_pg_registry_store", "doubles": _real_info["doubles"],
+            "postgres_version": _real_info["pg"], "real_vs_a2_differences": SCRIPTED_VS_A2_DIFFERENCES,
+            "claims_real_local": False,
+            "claim_note": "real code and real PG16, but with a scripted EvalPort and a fake clock programmed in-process: "
+                          "this is NOT the production evaluator or clock and never claims real_local",
+            "claims_real_pg_scripted": bool(_real_info["sim_absent"] and not failed and len(ran) == len(both)),
+            "evidence_notes": ["harness app (no image, no /readyz): image_digest is null",
+                               "control of eval/clock is in-process (Harness); the served app has no /_sim"],
+        })
     if TARGET == "real" and _real_info:
         needs_eval = sorted(c.id for c in both if c.requires_sim)
         report.update({

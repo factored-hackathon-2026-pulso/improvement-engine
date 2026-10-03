@@ -39,7 +39,7 @@ def serve(target: str, extra_env: dict[str, str] | None = None, platform_sim: Pa
         cmd = [str(py), "-W", "ignore", "-m", "registry_mock.a2_app", "--port", str(port)]
     else:
         raise ValueError(target)
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(cmd, env=env, cwd=str(platform_sim or PLATFORM_SIM), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     base = f"http://127.0.0.1:{port}"
     try:
         deadline = time.time() + 60
