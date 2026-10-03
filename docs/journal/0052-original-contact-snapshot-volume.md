@@ -94,15 +94,16 @@ positive, not evidence that a source identifier was emitted. The same generic
 substring approach for `true` could match unrelated serialized content.
 
 The regression fixture now uses long, unique PII sentinels for interaction,
-customer and agent IDs and searches for those exact values, source email/date,
-and raw category strings. It checks sensitive ID, outcome and operational
-columns by parsed JSON key names instead of banning generic substrings. No
-production serialization behavior was changed. The post-fix focused Windows
-command `cargo +1.98.1 test --locked -p
+customer and agent IDs and searches for every sentinel across all seven rows,
+plus every timestamp (including the post-cutoff row), source email and raw
+category strings. It checks sensitive ID, outcome and operational columns by
+parsed JSON key names instead of banning generic substrings. No production
+serialization behavior was changed. The post-fix focused Windows command
+`cargo +1.98.1 test --locked -p
 improvement-engine-source-adapters --test source_adapters
 original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories`
-passed (1 passed, 10 filtered). Broader gates remain those documented above;
-the complete source-adapter suite was not rerun after this test-only correction.
+passed twice after the test-only correction (1 passed, 10 filtered each run).
+`git diff --check` also passed; the complete source-adapter suite was not rerun.
 
 ## Follow-up / risks
 

@@ -67,15 +67,26 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
     assert_eq!(summary.rejected_rows(), 1);
     assert_eq!(summary.suppressed_cells(), 1);
     let serialized = serde_json::to_string(&prepared).unwrap();
-    for forbidden in [
-        "interaction-identifier-pii-sentinel-0001",
-        "customer-identifier-pii-sentinel-0001",
-        "agent-identifier-pii-sentinel-0001",
-        "person@example.test",
-        "2025-01-01T10:00:00",
-        "Queja",
-        "Phone",
-    ] {
+    for ordinal in 1..=7 {
+        for forbidden in [
+            format!("interaction-identifier-pii-sentinel-{ordinal:04}"),
+            format!("customer-identifier-pii-sentinel-{ordinal:04}"),
+            format!("agent-identifier-pii-sentinel-{ordinal:04}"),
+        ] {
+            assert!(
+                !serialized.contains(&forbidden),
+                "serialized source sentinel"
+            );
+        }
+        let (year, day) = if ordinal == 6 {
+            (2099, ordinal)
+        } else {
+            (2025, ordinal)
+        };
+        let forbidden_timestamp = format!("{year}-01-{day:02}T10:00:00");
+        assert!(!serialized.contains(&forbidden_timestamp));
+    }
+    for forbidden in ["person@example.test", "Queja", "Phone"] {
         assert!(!serialized.contains(forbidden));
     }
     let serialized_json: serde_json::Value = serde_json::from_str(&serialized).unwrap();
