@@ -23,13 +23,15 @@ def test_grants_workaround_is_gone() -> None:
     assert not hasattr(stack, "apply_grants_workaround") and not hasattr(stack, "GRANTS_WORKAROUND")
 
 
-def test_overlay_carries_budgets_and_the_gateway_pair_only_no_service_keys(tmp_path: Path) -> None:
+def test_no_overlay_image_the_stack_forwards_gateway_pair_and_budgets_via_core_env(tmp_path: Path) -> None:
     keys = stack.prepare("claude-e2e-1", tmp_path)
-    docker = (tmp_path / "context" / "Dockerfile").read_text(encoding="ascii")
-    assert "PULSO_SERVICE_KEYS" not in docker and "LLM_ENDPOINTS" not in docker
-    assert "PULSO_EVAL_BUDGETS" in docker and "AGENTCORE_LLM_GATEWAY_URL" in docker
-    assert not (tmp_path / "context" / "service.json").exists()
+    assert not (tmp_path / "context").exists() and not hasattr(stack, "overlay")
     assert "service_seed" not in keys  # the control-api seed is read from the stack volume after start
+    lines = stack.core_env_lines()
+    assert any(x.startswith("PULSO_EVAL_BUDGETS_JSON={") and "bud-e2e" in x for x in lines)
+    compose = (REPO / "local" / "core" / "compose.core.yaml").read_text(encoding="utf-8")
+    for var in ("AGENTCORE_LLM_GATEWAY_URL", "AGENTCORE_LLM_GATEWAY_TOKEN", "PULSO_EVAL_BUDGETS_JSON"):
+        assert var + ": ${" + var in compose, var
 
 
 def test_llm_gateway_settings_use_the_agent_core_gateway_env_pair() -> None:
@@ -73,11 +75,10 @@ def test_ring_trusts_the_stack_exporter_keys_as_issued_without_issuer_override()
 def test_report_lists_only_the_remaining_doubles_and_gaps() -> None:
     pieces = report.declared_doubles(["llm:scripted", "control-api", "lab-broker", "bank", "ingest"])
     kinds = {d["piece"] for d in pieces}
-    assert kinds == {"llm:scripted", "control-api", "lab-broker", "bank", "ingest", "codex-standin",
-                     "runtime-config-overlay"}
+    assert kinds == {"llm:scripted", "control-api", "lab-broker", "bank", "ingest", "codex-standin"}
     assert not any("workaround" in d["piece"] for d in pieces)
     codes = {g["code"] for g in report.KNOWN_STACK_GAPS}
     assert not codes & {"core_app_engine_table_grants_missing", "eval_sequences_grant_missing",
                         "no_control_api_to_bridge_service_key", "exporter_key_issuer_mismatch",
                         "llm_env_not_passed_through_compose"}
-    assert "eval_budgets_not_passed_through_compose" in codes
+    assert not codes & {"eval_budgets_not_passed_through_compose", "llm_gateway_env_not_passed_through_compose"}

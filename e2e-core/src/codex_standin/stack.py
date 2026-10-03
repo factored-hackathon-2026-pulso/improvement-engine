@@ -1,7 +1,6 @@
 """Stack provisioning helpers for the E2E (host side). CLI used by e2e-core/run.ps1:
 
-  python -m codex_standin.stack prepare  --ns NS --dir DIR        test keys + overlay build context (no secrets in git)
-  python -m codex_standin.stack overlay  --dir DIR --base IMG --tag TAG
+  python -m codex_standin.stack prepare  --ns NS --dir DIR        core.env lines (no secrets in git)
   python -m codex_standin.stack fixtures --ns NS --dir DIR        starts the `e2e-fixtures` DOUBLE container
   python -m codex_standin.stack cleanup  --ns NS --dir DIR [--tag TAG]
 
@@ -58,28 +57,22 @@ def gateway_url() -> str:
     return fixtures_url() + "/llm"  # the runtime posts to <url>/v1/generate (agent-core llm-gateway service protocol)
 
 
+BUDGETS = {"bud-e2e": {"cost_usd_max": "5", "tokens_max": 200000, "jobs_max": 50}}
+
+
 def core_env_lines() -> list[str]:
-    """Extra lines for the stack's core.env (the compose env file): the scripted llm-gateway the runtime calls
-    (AGENTCORE_LLM_GATEWAY_URL / _TOKEN of the pinned agent-core). Throw-away values. The stack's compose does not
-    forward them yet, so the budgets overlay below also carries them (declared gap)."""
-    return [f"AGENTCORE_LLM_GATEWAY_URL={gateway_url()}", f"AGENTCORE_LLM_GATEWAY_TOKEN={LLM_KEY_VALUE}"]
+    """Extra lines for the stack's core.env (the compose env file), all forwarded by compose.core.yaml to core-runtime:
+    the scripted llm-gateway (AGENTCORE_LLM_GATEWAY_URL / _TOKEN of the pinned agent-core) and the eval budgets table
+    inline (PULSO_EVAL_BUDGETS_JSON). Throw-away values, no image overlay needed."""
+    return [f"AGENTCORE_LLM_GATEWAY_URL={gateway_url()}", f"AGENTCORE_LLM_GATEWAY_TOKEN={LLM_KEY_VALUE}",
+            "PULSO_EVAL_BUDGETS_JSON=" + json.dumps(BUDGETS, separators=(",", ":"))]
 
 
 def prepare(ns: str, out: Path) -> dict[str, Any]:
-    """Writes the E2E inputs: the eval budgets overlay context (the stack passes no PULSO_EVAL_BUDGETS: declared gap)
-    and the core.env LLM lines under the git-ignored local/.secrets/<ns>. No key material: the control-api -> bridge
-    service key is the stack's own (control-api-core-bridge.key), read from the keys volume after start."""
+    """Writes the E2E inputs: the core.env LLM/budgets lines under the git-ignored local/.secrets/<ns>. No key
+    material: the control-api -> bridge service key is the stack's own (control-api-core-bridge.key), read from the keys
+    volume after start."""
     out.mkdir(parents=True, exist_ok=True)
-    ctx = out / "context"
-    ctx.mkdir(exist_ok=True)
-    (ctx / "budgets.json").write_text(json.dumps({
-        "bud-e2e": {"cost_usd_max": "5", "tokens_max": 200000, "jobs_max": 50}}), encoding="ascii")
-    (ctx / "Dockerfile").write_text("\n".join([
-        "# E2E overlay: SAME runtime layers, only the budgets file + env the stack does not forward (never pushed).",
-        "ARG BASE", "FROM ${BASE}", "USER 0", "COPY budgets.json /opt/e2e/",
-        "RUN chown -R 10001:10001 /opt/e2e && chmod 640 /opt/e2e/*", "USER 10001",
-        "ENV PULSO_EVAL_BUDGETS=/opt/e2e/budgets.json AGENTCORE_LLM_GATEWAY_URL=" + gateway_url()
-        + " AGENTCORE_LLM_GATEWAY_TOKEN=" + LLM_KEY_VALUE, "LABEL com.pulso.e2e.overlay=true", ""]), encoding="ascii")
     secrets = SECRETS / ns
     secrets.mkdir(parents=True, exist_ok=True)
     core_env = secrets / "core.env"
@@ -88,11 +81,6 @@ def prepare(ns: str, out: Path) -> dict[str, Any]:
     keys = {"service_kid": SERVICE_KID, "namespace": ns, "fixtures_url": fixtures_url()}
     (out / "e2e-keys.json").write_text(json.dumps(keys), encoding="ascii")
     return keys
-
-
-def overlay(ctx_dir: Path, base: str, tag: str) -> str:
-    podman("build", "--build-arg", f"BASE={base}", "-t", tag, str(ctx_dir / "context"))
-    return podman("image", "inspect", tag, "--format", "{{.Id}}")
 
 
 def read_volume_file(ns: str, name: str) -> str:
@@ -158,20 +146,15 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
-def cleanup(ns: str, ctx_dir: Path | None, tag: str | None) -> None:
+def cleanup(ns: str, ctx_dir: Path | None) -> None:
     podman("rm", "-f", f"{project(ns)}-{FIXTURE_ALIAS}-1", check=False)
-    if tag:
-        ident = podman("image", "inspect", tag, "--format", "{{.Id}}", check=False).replace("sha256:", "")[:12]
-        podman("rmi", "-f", tag, check=False)
-        if ident:  # the doubles image start.ps1 builds FROM the overlay (never shared with other namespaces)
-            podman("rmi", "-f", f"localhost/pulso-platform-sim:{ident}", check=False)
     if ctx_dir and ctx_dir.exists():
         shutil.rmtree(ctx_dir, ignore_errors=True)
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prepare", "overlay", "fixtures", "cleanup"])
+    ap.add_argument("cmd", choices=["prepare", "fixtures", "cleanup"])
     ap.add_argument("--ns", default="")
     ap.add_argument("--dir", default="")
     ap.add_argument("--base", default="")
@@ -182,14 +165,11 @@ def main(argv: list[str] | None = None) -> int:
         assert d is not None
         prepare(a.ns, d)
         print("prepared")
-    elif a.cmd == "overlay":
-        assert d is not None
-        print("overlay_id=" + overlay(d, a.base, a.tag))
     elif a.cmd == "fixtures":
         assert d is not None
         print(json.dumps(start_fixtures(a.ns, d)))
     else:
-        cleanup(a.ns, d, a.tag or None)
+        cleanup(a.ns, d)
         print("cleaned")
     return 0
 

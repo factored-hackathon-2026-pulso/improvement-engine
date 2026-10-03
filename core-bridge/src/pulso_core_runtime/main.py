@@ -155,7 +155,7 @@ def _wiring_stand_ins(budgets: Any) -> dict[str, str]:
     """Stand-ins decided by the composition itself (not by a factory)."""
     out: dict[str, str] = {}
     out["eval-budgets"] = ("static file resolver (control-api budget contract not defined)" if budgets.configured
-                           else "no PULSO_EVAL_BUDGETS file: every budget_ref resolves to None (fails closed)")
+                           else "no PULSO_EVAL_BUDGETS file or PULSO_EVAL_BUDGETS_JSON: every budget_ref resolves to None (fails closed)")
     return out
 
 
@@ -254,7 +254,10 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         # Evaluation composes from the UNGUARDED gateway/providers (synthetic principals, own budget meter);
         # only the live path below is wrapped by the binding guards.
         broker = BrokerAuthPort(tool_runtime.broker)
-        budgets = StaticBudgetResolver(_path(env.get("PULSO_EVAL_BUDGETS")))
+        try:
+            budgets = StaticBudgetResolver(_path(env.get("PULSO_EVAL_BUDGETS")), env.get("PULSO_EVAL_BUDGETS_JSON"))
+        except ValueError as exc:
+            return _fail(err, str(exc))
         gate = EvaluationGate(permits=int(env.get("PULSO_EVAL_PERMITS", "1")))
         try:
             evaluation = build_evaluation_runtime(dataclasses.replace(ports, transcript=EvalTranscript()),

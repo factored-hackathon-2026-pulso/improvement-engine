@@ -37,10 +37,20 @@ class StaticBudgetResolver:
     "deadline", "tenant_id"?}}`. No file (or an unknown ref / other tenant) resolves to None (fail closed).
     A stand-in until the control-api budget resolver contract exists (reported in `/version.doubles[]`)."""
 
-    def __init__(self, path: Path | None) -> None:
+    def __init__(self, path: Path | None, inline: str | None = None) -> None:
+        """`inline` (env `PULSO_EVAL_BUDGETS_JSON`, same JSON shape; budgets carry no secrets) is for compose/Fargate
+        where mounting a file is awkward; a readable file wins over it. Invalid inline JSON raises `ValueError`."""
         self._table: dict[str, Any] = {}
         if path is not None and path.is_file():
             self._table = json.loads(path.read_text(encoding="utf-8"))
+        elif inline and inline.strip():
+            try:
+                table = json.loads(inline)
+            except ValueError:
+                raise ValueError("PULSO_EVAL_BUDGETS_JSON is not valid JSON") from None
+            if not isinstance(table, dict):
+                raise ValueError("PULSO_EVAL_BUDGETS_JSON must be a JSON object")
+            self._table = table
 
     @property
     def configured(self) -> bool:

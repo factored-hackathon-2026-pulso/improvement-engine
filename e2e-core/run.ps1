@@ -3,10 +3,8 @@
   One-command Claude-side E2E precursor of the joint H4 E2E (codex-standin drives the REAL real_local Core stack).
   e2e-core/run.ps1 [-Namespace claude-e2e-<ms>] [-Keep] [-UnitOnly] [-PytestArgs ...]
 .DESCRIPTION
-  1. unit tests of the stand-in (no stack); 2. LLM env lines in the stack's core.env + a budgets-only overlay image
-  (same runtime layers; the stack does not pass PULSO_EVAL_BUDGETS); 3. local/core/start.ps1 -Profile real_local on machine pulso-dev with the control-api / lab-broker
-  URLs pointed at the `e2e-fixtures` double container; 4. live pytest; 5. ALWAYS tear down (stop, reset -Confirm,
-  overlay image removal) unless -Keep. Writes e2e-core/.out/e2e-report.json.
+  1. unit tests of the stand-in (no stack); 2. LLM-gateway + inline eval-budgets env lines in the stack's core.env (compose forwards them); 3. local/core/start.ps1 -Profile real_local on machine pulso-dev with the control-api / lab-broker
+  URLs pointed at the `e2e-fixtures` double container; 4. live pytest; 5. ALWAYS tear down (stop, reset -Confirm) unless -Keep. Writes e2e-core/.out/e2e-report.json.
 #>
 [CmdletBinding()]
 param([string]$Namespace, [string]$BaseImage, [switch]$Keep, [switch]$UnitOnly, [string[]]$PytestArgs = @())
@@ -30,7 +28,6 @@ try {
     if ($UnitOnly) { exit 0 }
     if (-not $Namespace) { $Namespace = 'claude-e2e-' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
     $dir = Join-Path $root "local\.secrets\$Namespace\e2e"
-    $overlayTag = "localhost/pulso-core-runtime:e2e-$($Namespace.Substring(11))"
 } catch { Write-Error $_; Pop-Location; exit 1 }
 $exit = 1
 try {
@@ -44,12 +41,10 @@ try {
         & pwsh -NoProfile -File (Join-Path $root 'core-bridge\scripts\build-image.ps1')
         if ($LASTEXITCODE -ne 0) { throw 'image build failed' }
     }
-    & $py -m codex_standin.stack overlay --dir $dir --base $base --tag $overlayTag
-    if ($LASTEXITCODE -ne 0) { throw 'overlay build failed' }
     # The runtime and the exporter read these URLs from compose interpolation; both point at the fixtures double.
     $env:PULSO_CONTROL_API_URL = 'http://e2e-fixtures:8700'
     $env:PULSO_LAB_BROKER_URL = 'http://e2e-fixtures:8700'
-    & pwsh -NoProfile -File (Join-Path $core 'start.ps1') -Namespace $Namespace -Profile real_local -Image $overlayTag
+    & pwsh -NoProfile -File (Join-Path $core 'start.ps1') -Namespace $Namespace -Profile real_local -Image $base
     if ($LASTEXITCODE -ne 0) { throw "start.ps1 failed (exit $LASTEXITCODE)" }
     & $py -m codex_standin.stack fixtures --ns $Namespace --dir $dir
     if ($LASTEXITCODE -ne 0) { throw 'fixtures start failed' }
@@ -66,7 +61,7 @@ try {
     if ($Keep) { Write-Output "run: -Keep, stack left running as namespace $Namespace" } else {
         try { & pwsh -NoProfile -File (Join-Path $core 'stop.ps1') -Namespace $Namespace | Out-Null } catch { Write-Warning $_ }
         try { & pwsh -NoProfile -File (Join-Path $core 'reset.ps1') -Namespace $Namespace -Confirm | Out-Null } catch { Write-Warning $_ }
-        try { & $py -m codex_standin.stack cleanup --ns $Namespace --dir $dir --tag $overlayTag | Out-Null } catch { Write-Warning $_ }
+        try { & $py -m codex_standin.stack cleanup --ns $Namespace --dir $dir | Out-Null } catch { Write-Warning $_ }
         Write-Output "run: torn down namespace $Namespace"
     }
     Pop-Location

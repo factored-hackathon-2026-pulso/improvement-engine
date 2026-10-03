@@ -170,6 +170,8 @@ services:
       AGENTCORE_LLM_GATEWAY_TOKEN: ${AGENTCORE_LLM_GATEWAY_TOKEN:-}
       # Static budget file for evaluation (path inside the container; empty = every budget_ref fails closed).
       PULSO_EVAL_BUDGETS: ${PULSO_EVAL_BUDGETS:-}
+      # Same table inline (no file mount needed; no secrets in it). A readable PULSO_EVAL_BUDGETS file wins.
+      PULSO_EVAL_BUDGETS_JSON: ${PULSO_EVAL_BUDGETS_JSON:-}
     volumes:
       - core-keys:/run/pulso-keys:ro
     depends_on:

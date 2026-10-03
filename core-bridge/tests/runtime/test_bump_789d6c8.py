@@ -4,6 +4,7 @@ Non-PG: config parsing and compat. PG-gated: the composed app (export off by def
 
 from __future__ import annotations
 
+import json
 
 import pytest
 
@@ -69,3 +70,18 @@ def test_version_info_reports_reload_error_type_only() -> None:
     info = runtime_main.version_info({"PULSO_SHA": "x"}, ["d"], Ports())()
     assert info["keys_reload_error"] == "SchemaError" and info["agent_core_sha"] == PIN_SHA
     assert runtime_main.version_info({}, [], None)()["keys_reload_error"] is None
+
+
+def test_inline_budgets_json_resolves_and_invalid_fails_closed(tmp_path) -> None:
+    from pulso_core_runtime.adapters import StaticBudgetResolver
+
+    inline = json.dumps({"bud-1": {"cost_usd_max": "5", "tokens_max": 10, "jobs_max": 2}})
+    r = StaticBudgetResolver(None, inline)
+    assert r.configured and r.resolve("bud-1", "t1") is not None and r.resolve("nope", "t1") is None
+    assert not StaticBudgetResolver(None, "").configured and not StaticBudgetResolver(None, None).configured
+    f = tmp_path / "b.json"
+    f.write_text(json.dumps({"file-1": {"tokens_max": 1}}))
+    assert StaticBudgetResolver(f, inline).resolve("bud-1", "t1") is None  # a readable file wins
+    for bad in ("{oops", "[1]"):
+        with pytest.raises(ValueError):
+            StaticBudgetResolver(None, bad)
