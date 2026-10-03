@@ -10,7 +10,7 @@ const PHASE_TEXT: Partial<Record<Phase, Parameters<typeof t>[0]>> = {
 };
 
 /** Human release decision. 202 means "requested"; only the command receipt confirms. */
-export function DecisionPanel() {
+export function DecisionPanel({ hookPending = false }: { hookPending?: boolean }) {
   const announce = useAnnounce();
   const [state, setState] = useState<{ commands: string[]; revision: number } | null>(null);
   const [note, setNote] = useState('');
@@ -62,6 +62,7 @@ export function DecisionPanel() {
   return (
     <section aria-label={t('dec.title')} data-testid="decision">
       <h2>{t('dec.title')}</h2>
+      {hookPending && <p className="hook" data-testid="decision-hook">{t('dec.hookPending')}</p>}
       {canApprove ? (
         <>
           <label>{t('dec.note')} <textarea value={note} onChange={(e) => setNote(e.target.value)} /></label>

@@ -3,11 +3,14 @@ import type { z } from 'zod';
 import { api } from '../api/client';
 import type * as S from '../api/schemas';
 import { t } from '../i18n/es419';
+import { AlternativesPanel, AttemptHistory, HypothesesList, NativeReport } from './DemoPanels';
+import { hypothesesOf } from './demoModel';
 
 type Inv = z.infer<typeof S.Investigation>;
 type GatesT = z.infer<typeof S.Gates>;
 type DiffT = z.infer<typeof S.Diff>;
 type MemT = z.infer<typeof S.Memory>;
+type AltsT = z.infer<typeof S.Alternatives>;
 
 const KNOWN_GATE = ['pending', 'pass', 'fail', 'unknown', 'not_evaluable', 'insufficient_power', 'dependency_blocked', 'unsupported', 'failed_infra', 'unsafe'];
 export const label = (v: string, known: string[]) => (known.includes(v) ? v : t('enum.unrecognised', { code: v }));
@@ -29,6 +32,7 @@ export function Investigation({ runId }: { runId: string }) {
     <section aria-label={t('inv.title')} data-testid="investigation">
       <h2>{t('inv.title')}</h2>
       <p>{t('inv.hypothesis', { value: v.hypothesis ?? t('inv.noHypothesis') })} <strong data-testid="verifier">{v.verifier}</strong></p>
+      <HypothesesList hypotheses={hypothesesOf(v)} />
       {RELATIONS.map(([rel, key]) => (
         <div key={rel} data-testid={`ev-${rel}`}>
           <h3>{t(key)} ({v.evidence.filter((e) => e.relation === rel).length})</h3>
@@ -44,26 +48,47 @@ export function Investigation({ runId }: { runId: string }) {
   );
 }
 
-export function Gates({ runId }: { runId: string }) {
+/** Alternatives, gates (with per-attempt history) and the diff of the proposal that THIS run produced. */
+export function RunOutcome({ runId }: { runId: string }) {
   const { v, err } = useLoad<GatesT>(() => api.gates(runId), runId);
-  if (err) return <p>{t('gates.unavailable')}</p>;
-  if (!v) return <p>{t('gates.loading')}</p>;
+  const alts = useLoad<AltsT | null>(() => api.alternatives(runId).catch(() => null), runId);
+  return (
+    <>
+      {alts.v && <AlternativesPanel items={alts.v.items} />}
+      {err ? <p>{t('gates.unavailable')}</p> : !v ? <p>{t('gates.loading')}</p> : <Gates v={v} />}
+      {err ? <p>{t('diff.unavailable')}</p> : !v ? <p>{t('diff.loading')}</p> : <DiffView proposalId={v.proposal_id ?? null} />}
+    </>
+  );
+}
+
+export function Gates({ v }: { v: GatesT }) {
   return (
     <section aria-label={t('gates.title')} data-testid="gates">
       <h2>{t('gates.title')}</h2>
       <div className="cards">
-        <div className="card" data-testid="gate-native" data-status={v.native.status}><h3>{t('gates.native')}</h3><p>{label(v.native.status, KNOWN_GATE)}</p></div>
+        <div className="card" data-testid="gate-native" data-status={v.native.status}>
+          <h3>{t('gates.native')}</h3><p>{label(v.native.status, KNOWN_GATE)}{v.native.attempt ? ` (${t('gates.attempt', { n: v.native.attempt })})` : ''}</p>
+          {v.native.status !== 'not_evaluable' && <NativeReport reportRef={v.native.report_ref} />}
+        </div>
         <div className="card" data-testid="gate-improvement" data-status={v.improvement.status}>
           <h3>{t('gates.improvement')}</h3><p>{label(v.improvement.status, KNOWN_GATE)}{v.improvement.reason_code ? ` · ${v.improvement.reason_code}` : ''}</p>
         </div>
         <div className="card" data-testid="gate-combined"><h3>{t('gates.combined')}</h3><p>{v.combined.decision}{v.combined.reason_code ? ` · ${v.combined.reason_code}` : ''}</p></div>
       </div>
+      <AttemptHistory attempts={v.attempts ?? []} />
     </section>
   );
 }
 
-export function DiffView() {
-  const { v, err } = useLoad<DiffT>(() => api.diff(), 'diff');
+export function DiffView({ proposalId }: { proposalId: string | null }) {
+  if (!proposalId) {
+    return <section aria-label={t('diff.section')} data-testid="diff"><h2>{t('diff.title')}</h2><p>{t('diff.noProposal')}</p></section>;
+  }
+  return <DiffFor id={proposalId} />;
+}
+
+function DiffFor({ id }: { id: string }) {
+  const { v, err } = useLoad<DiffT>(() => api.diff(id), id);
   if (err) return <p>{t('diff.unavailable')}</p>;
   if (!v) return <p>{t('diff.loading')}</p>;
   return (
