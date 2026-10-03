@@ -637,6 +637,20 @@ pub enum UnsupportedMetric {
     TechnicalErrorNotPresentInOriginalBankHistory,
 }
 
+/// Privacy-safe aggregate progress for the local OriginalBank source adapter.
+/// It intentionally contains no source paths, row identifiers, or digests.
+/// While a stage is `started`, zero totals mean inventory/size is not measured
+/// yet; they must not be interpreted as an observed empty source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OriginalPreparationProgress {
+    pub stage: &'static str,
+    pub status: &'static str,
+    pub files_completed: u64,
+    pub files_total: u64,
+    pub bytes_completed: u64,
+    pub bytes_total: u64,
+}
+
 /// The original-bank adapter scans source bytes to seal a manifest, but does
 /// not expose source rows. Existing original-source schemas do not define an
 /// approved technical-error metric; fabricating zero-error observations would
@@ -645,12 +659,67 @@ pub fn prepare_original_bank(
     root: &Path,
     config: &PreparationConfig,
 ) -> Result<PreparedSource, AdapterError> {
-    let files = scan_csv_tree(root)?;
+    prepare_original_bank_with_progress(root, config, |_| {})
+}
+
+/// OriginalBank preparation with an optional aggregate progress observer.
+/// Observer events are metadata-only and do not participate in manifest
+/// construction, ordering, or digest calculation.
+pub fn prepare_original_bank_with_progress(
+    root: &Path,
+    config: &PreparationConfig,
+    mut progress: impl FnMut(OriginalPreparationProgress),
+) -> Result<PreparedSource, AdapterError> {
+    let files = scan_csv_tree_with_progress(root, &mut progress)?;
     if files.is_empty() {
         return Err(AdapterError::MissingInput("no CSV files found"));
     }
+    let contact_files = files
+        .iter()
+        .filter(|entry| entry.table == "call_center_interactions")
+        .count() as u64;
+    progress(OriginalPreparationProgress {
+        stage: "contact_projection",
+        status: "started",
+        files_completed: 0,
+        files_total: contact_files,
+        bytes_completed: 0,
+        bytes_total: 0,
+    });
+    let contact_bytes_result = files
+        .iter()
+        .filter(|entry| entry.table == "call_center_interactions")
+        .try_fold(0_u64, |sum, entry| {
+            let path = root.join(&entry.relative_path);
+            let metadata = fs::metadata(&path).map_err(|source| AdapterError::ReadFile {
+                path: entry.relative_path.clone(),
+                source,
+            })?;
+            Ok::<u64, AdapterError>(sum.saturating_add(metadata.len()))
+        });
+    let contact_bytes = match contact_bytes_result {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            progress(OriginalPreparationProgress {
+                stage: "contact_projection",
+                status: "failed",
+                files_completed: 0,
+                files_total: contact_files,
+                bytes_completed: 0,
+                bytes_total: 0,
+            });
+            return Err(error);
+        }
+    };
     let (contact_volumes, contact_projection, descriptive_contact_projection) =
-        project_contact_snapshot(root, &files, CONTACT_PROJECTION_MINIMUM_CELL_COUNT)?;
+        project_contact_snapshot_with_progress(
+            root,
+            &files,
+            CONTACT_PROJECTION_MINIMUM_CELL_COUNT,
+            &mut progress,
+            contact_files,
+            contact_bytes,
+        )?;
     let available_tables = files.iter().map(|entry| entry.table.clone()).collect();
     let mut manifest = DatasetManifest::new(
         SourceKind::OriginalBank,
@@ -1100,13 +1169,76 @@ fn prepared_source(
     })
 }
 
-fn scan_csv_tree(root: &Path) -> Result<Vec<ManifestEntry>, AdapterError> {
-    let mut paths = Vec::new();
-    collect_csv_paths(root, &mut paths)?;
-    paths.sort();
-    paths
-        .into_iter()
-        .map(|path| {
+fn scan_csv_tree_with_progress(
+    root: &Path,
+    progress: &mut impl FnMut(OriginalPreparationProgress),
+) -> Result<Vec<ManifestEntry>, AdapterError> {
+    progress(OriginalPreparationProgress {
+        stage: "inventory",
+        status: "started",
+        files_completed: 0,
+        files_total: 0,
+        bytes_completed: 0,
+        bytes_total: 0,
+    });
+    let inventory = (|| {
+        let mut paths = Vec::new();
+        collect_csv_paths(root, &mut paths)?;
+        paths.sort();
+        let file_bytes = paths
+            .iter()
+            .map(|path| {
+                fs::metadata(path)
+                    .map(|metadata| metadata.len())
+                    .map_err(|source| AdapterError::ReadFile {
+                        path: path
+                            .strip_prefix(root)
+                            .unwrap_or(path)
+                            .to_string_lossy()
+                            .into_owned(),
+                        source,
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok::<_, AdapterError>((paths, file_bytes))
+    })();
+    let (paths, file_bytes) = match inventory {
+        Ok(inventory) => inventory,
+        Err(error) => {
+            progress(OriginalPreparationProgress {
+                stage: "inventory",
+                status: "failed",
+                files_completed: 0,
+                files_total: 0,
+                bytes_completed: 0,
+                bytes_total: 0,
+            });
+            return Err(error);
+        }
+    };
+    let files_total = paths.len() as u64;
+    let bytes_total = file_bytes.iter().copied().fold(0_u64, u64::saturating_add);
+    progress(OriginalPreparationProgress {
+        stage: "inventory",
+        status: "completed",
+        files_completed: files_total,
+        files_total,
+        bytes_completed: bytes_total,
+        bytes_total,
+    });
+    progress(OriginalPreparationProgress {
+        stage: "manifest_scan",
+        status: "started",
+        files_completed: 0,
+        files_total,
+        bytes_completed: 0,
+        bytes_total,
+    });
+    let manifest_stride = progress_stride(files_total);
+    let mut entries = Vec::with_capacity(paths.len());
+    let mut bytes_completed = 0_u64;
+    let manifest_scan = (|| {
+        for (path, file_bytes) in paths.into_iter().zip(file_bytes) {
             let relative = path.strip_prefix(root).expect("collected under root");
             let table = relative
                 .components()
@@ -1114,9 +1246,54 @@ fn scan_csv_tree(root: &Path) -> Result<Vec<ManifestEntry>, AdapterError> {
                 .and_then(|part| part.as_os_str().to_str())
                 .unwrap_or("source")
                 .to_owned();
-            manifest_for_csv(root, &path, relative, &table)
-        })
-        .collect()
+            entries.push(manifest_for_csv(root, &path, relative, &table)?);
+            bytes_completed = bytes_completed.saturating_add(file_bytes);
+            let files_completed = entries.len() as u64;
+            if should_emit_progress(files_completed, files_total, manifest_stride) {
+                progress(OriginalPreparationProgress {
+                    stage: "manifest_scan",
+                    status: "progress",
+                    files_completed,
+                    files_total,
+                    bytes_completed,
+                    bytes_total,
+                });
+            }
+        }
+        Ok::<_, AdapterError>(())
+    })();
+    if let Err(error) = manifest_scan {
+        progress(OriginalPreparationProgress {
+            stage: "manifest_scan",
+            status: "failed",
+            files_completed: entries.len() as u64,
+            files_total,
+            bytes_completed,
+            bytes_total,
+        });
+        return Err(error);
+    }
+    progress(OriginalPreparationProgress {
+        stage: "manifest_scan",
+        status: "completed",
+        files_completed: files_total,
+        files_total,
+        bytes_completed: bytes_total,
+        bytes_total,
+    });
+    Ok(entries)
+}
+
+fn progress_stride(files_total: u64) -> u64 {
+    files_total
+        .saturating_add(99)
+        .checked_div(100)
+        .unwrap_or(1)
+        .max(1)
+}
+
+fn should_emit_progress(files_completed: u64, files_total: u64, stride: u64) -> bool {
+    files_completed < files_total && files_completed % stride == 0
 }
 
 #[cfg(test)]
@@ -1149,22 +1326,206 @@ mod contact_snapshot_tests {
     }
 }
 
+#[cfg(test)]
+mod original_progress_tests {
+    use super::{PreparationConfig, prepare_original_bank_with_progress};
+
+    #[test]
+    fn contact_failure_after_first_file_reports_only_completed_file_progress() {
+        let root = tempfile::tempdir().expect("source directory");
+        let contacts = root.path().join("call_center_interactions");
+        std::fs::create_dir_all(&contacts).expect("contact directory");
+        let first_file = contacts.join("part-a.csv");
+        let second_file = contacts.join("part-b.csv");
+        std::fs::write(
+            &first_file,
+            "interaction_id,channel,contact_reason\nprivate-first,phone,complaint\n",
+        )
+        .expect("first contact CSV");
+        std::fs::write(
+            &second_file,
+            "interaction_id,channel,contact_reason\nprivate-second,chat,technical\n",
+        )
+        .expect("second contact CSV");
+        let first_bytes = std::fs::metadata(&first_file).unwrap().len();
+        let total_bytes = first_bytes + std::fs::metadata(&second_file).unwrap().len();
+        let config =
+            PreparationConfig::new("test-tenant", "2025-07-01T00:00:00Z", 1).expect("valid config");
+        let mut events = Vec::new();
+
+        let result = prepare_original_bank_with_progress(root.path(), &config, |event| {
+            events.push(event);
+            if event.stage == "contact_projection"
+                && event.status == "progress"
+                && event.files_completed == 1
+            {
+                std::fs::remove_file(&second_file)
+                    .expect("remove second file after first file completed");
+            }
+        });
+
+        assert!(result.is_err());
+        let contact_events = events
+            .iter()
+            .filter(|event| event.stage == "contact_projection")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            contact_events
+                .iter()
+                .filter(|event| event.status == "failed")
+                .count(),
+            1
+        );
+        assert_eq!(
+            contact_events
+                .iter()
+                .filter(|event| event.status == "progress")
+                .count(),
+            1
+        );
+        assert!(
+            !contact_events
+                .iter()
+                .any(|event| event.status == "completed")
+        );
+        let progress = contact_events
+            .iter()
+            .find(|event| event.status == "progress")
+            .unwrap();
+        assert_eq!(progress.files_completed, 1);
+        assert_eq!(progress.files_total, 2);
+        assert_eq!(progress.bytes_completed, first_bytes);
+        assert_eq!(progress.bytes_total, total_bytes);
+        let failed = contact_events
+            .iter()
+            .find(|event| event.status == "failed")
+            .unwrap();
+        assert_eq!(failed.files_completed, 1);
+        assert_eq!(failed.files_total, 2);
+        assert_eq!(failed.bytes_completed, first_bytes);
+        assert_eq!(failed.bytes_total, total_bytes);
+    }
+
+    #[test]
+    fn contact_metadata_failure_after_stage_start_emits_one_failed_event() {
+        let root = tempfile::tempdir().expect("source directory");
+        let contacts = root.path().join("call_center_interactions");
+        std::fs::create_dir_all(&contacts).expect("contact directory");
+        let contact_file = contacts.join("part.csv");
+        std::fs::write(
+            &contact_file,
+            "interaction_id,channel,contact_reason\nprivate-id,phone,complaint\n",
+        )
+        .expect("contact CSV");
+        let config =
+            PreparationConfig::new("test-tenant", "2025-07-01T00:00:00Z", 1).expect("valid config");
+        let mut events = Vec::new();
+
+        let result = prepare_original_bank_with_progress(root.path(), &config, |event| {
+            events.push(event);
+            if event.stage == "manifest_scan" && event.status == "completed" {
+                std::fs::remove_file(&contact_file).expect("remove contact after manifest scan");
+            }
+        });
+
+        assert!(result.is_err());
+        let contact_events = events
+            .iter()
+            .filter(|event| event.stage == "contact_projection")
+            .collect::<Vec<_>>();
+        assert_eq!(contact_events.first().unwrap().status, "started");
+        assert_eq!(
+            contact_events
+                .iter()
+                .filter(|event| event.status == "failed")
+                .count(),
+            1
+        );
+        assert!(
+            !contact_events
+                .iter()
+                .any(|event| event.status == "completed")
+        );
+    }
+}
+
 type ContactSnapshotProjection = (
     Vec<SnapshotContactVolume>,
     Option<ContactProjectionSummary>,
     Option<DescriptiveContactProjection>,
 );
 
+#[cfg(test)]
 fn project_contact_snapshot(
     root: &Path,
     entries: &[ManifestEntry],
     minimum_cell_count: u64,
+) -> Result<ContactSnapshotProjection, AdapterError> {
+    project_contact_snapshot_with_progress(root, entries, minimum_cell_count, &mut |_| {}, 0, 0)
+}
+
+fn project_contact_snapshot_with_progress(
+    root: &Path,
+    entries: &[ManifestEntry],
+    minimum_cell_count: u64,
+    progress: &mut impl FnMut(OriginalPreparationProgress),
+    files_total: u64,
+    bytes_total: u64,
+) -> Result<ContactSnapshotProjection, AdapterError> {
+    let mut progress_context = ContactProjectionProgress {
+        callback: progress,
+        files_total,
+        bytes_total,
+        files_completed: 0,
+        bytes_completed: 0,
+    };
+    let result =
+        project_contact_snapshot_inner(root, entries, minimum_cell_count, &mut progress_context);
+    if result.is_err() {
+        progress_context.report("failed");
+    }
+    result
+}
+
+struct ContactProjectionProgress<'a, F>
+where
+    F: FnMut(OriginalPreparationProgress),
+{
+    callback: &'a mut F,
+    files_total: u64,
+    bytes_total: u64,
+    files_completed: u64,
+    bytes_completed: u64,
+}
+
+impl<F> ContactProjectionProgress<'_, F>
+where
+    F: FnMut(OriginalPreparationProgress),
+{
+    fn report(&mut self, status: &'static str) {
+        (self.callback)(OriginalPreparationProgress {
+            stage: "contact_projection",
+            status,
+            files_completed: self.files_completed,
+            files_total: self.files_total,
+            bytes_completed: self.bytes_completed,
+            bytes_total: self.bytes_total,
+        });
+    }
+}
+
+fn project_contact_snapshot_inner(
+    root: &Path,
+    entries: &[ManifestEntry],
+    minimum_cell_count: u64,
+    progress: &mut ContactProjectionProgress<'_, impl FnMut(OriginalPreparationProgress)>,
 ) -> Result<ContactSnapshotProjection, AdapterError> {
     let mut grouped = BTreeMap::<(ContactReasonCategory, ContactChannel), u64>::new();
     let mut descriptive_grouped =
         BTreeMap::<(String, ContactReasonCategory, ContactChannel), u64>::new();
     let mut saw_contacts_table = false;
     let mut unsupported_schema = false;
+    let contact_stride = progress_stride(progress.files_total);
     for entry in entries
         .iter()
         .filter(|entry| entry.table == "call_center_interactions")
@@ -1175,6 +1536,13 @@ fn project_contact_snapshot(
             path: entry.relative_path.clone(),
             source,
         })?;
+        let source_bytes = file
+            .metadata()
+            .map_err(|source| AdapterError::ReadFile {
+                path: entry.relative_path.clone(),
+                source,
+            })?
+            .len();
         let hashing_reader = SourceHashingReader::new(BufReader::new(file));
         let mut csv = csv::ReaderBuilder::new()
             .flexible(false)
@@ -1251,8 +1619,18 @@ fn project_contact_snapshot(
                 "contact CSV changed after source manifest sealing",
             ));
         }
+        progress.files_completed = progress.files_completed.saturating_add(1);
+        progress.bytes_completed = progress.bytes_completed.saturating_add(source_bytes);
+        if should_emit_progress(
+            progress.files_completed,
+            progress.files_total,
+            contact_stride,
+        ) {
+            progress.report("progress");
+        }
     }
     if unsupported_schema {
+        progress.report("completed");
         return Ok((Vec::new(), None, None));
     }
     let contact_volumes = grouped
@@ -1303,6 +1681,7 @@ fn project_contact_snapshot(
         included_contact_count,
         aggregates: descriptive_aggregates,
     });
+    progress.report("completed");
     Ok((contact_volumes, summary, descriptive_projection))
 }
 

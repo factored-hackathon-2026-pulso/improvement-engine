@@ -23,7 +23,13 @@ pub(crate) mod e0_frozen_memory_cycle;
 pub mod e0_frozen_memory_publication;
 pub mod e0_frozen_summary;
 pub mod e0_frozen_verifier;
+#[cfg(feature = "local-simulation")]
+pub mod e0_investigation_plan;
+#[cfg(feature = "local-simulation")]
+pub mod e0_mechanism_resolution;
 pub mod e0_opportunity_qualification;
+#[cfg(feature = "local-simulation")]
+pub mod e0_proposal_assembly;
 pub mod e0_query_lab;
 pub mod e0_safety_oracle;
 pub mod enriched_history;
@@ -49,6 +55,7 @@ pub mod run_config;
 pub mod run_fork;
 pub(crate) mod run_timeline_v2;
 pub mod sandbox;
+pub mod signal_portfolio;
 pub mod source_validation;
 pub mod wiki_scratch;
 pub mod workflow_bridge;

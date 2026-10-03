@@ -14,6 +14,11 @@ use crate::platform_observations::{
     EvidenceKind, InteractionEventKind, Layer, TargetSystem, WindowProjection,
 };
 
+/// V3's initial handoff-rate denominator: distinct eligible attention source
+/// runs, not decision-tree goals. The source contract must attest this grain.
+pub const ATTENTION_SOURCE_RUNS_POPULATION_REF: &str = "attention_source_runs";
+pub const ATTENTION_RUN_HANDOFF_RATE_METRIC_ID: &str = "attention_run_handoff_rate";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct LayerMetricSpec {
     metric_id: String,
@@ -24,6 +29,9 @@ pub struct LayerMetricSpec {
 }
 
 impl LayerMetricSpec {
+    /// Builds the initial V3 attention handoff rate. Its denominator grain is
+    /// deliberately fixed; the trusted source contract must attest that the
+    /// expected population counts distinct eligible attention source runs.
     pub fn handoff_rate(
         metric_id: impl Into<String>,
         metric_version: u16,
@@ -55,8 +63,10 @@ impl LayerMetricSpec {
 
     fn validate(&self) -> Result<(), PlatformSensorError> {
         if !valid_identifier(&self.metric_id)
+            || self.metric_id != ATTENTION_RUN_HANDOFF_RATE_METRIC_ID
             || self.metric_version == 0
             || !valid_ref(&self.population_ref)
+            || self.population_ref != ATTENTION_SOURCE_RUNS_POPULATION_REF
             || self.layer == Layer::Unknown
         {
             return Err(PlatformSensorError::InvalidSpec);
@@ -129,7 +139,7 @@ pub enum PlatformSignalStatus {
 /// ```compile_fail
 /// use improvement_engine_core::platform_observations::Layer;
 /// use improvement_engine_core::platform_sensor::{PlatformLayerSignal, PlatformSignalStatus};
-/// let _forged = PlatformLayerSignal { tenant_id: "bank_demo".to_owned(), metric_id: "tree_handoff_rate".to_owned(), metric_version: 1, layer: Layer::Tree, population_ref: "tree_goals".to_owned(), status: PlatformSignalStatus::InsufficientEvidence, window_start_ms: 1, window_end_ms: 2, received_as_of_ms: 2, projection_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(), source_id: None, contract_ref: None, batch_digest: None, coverage_evidence_digest: None, metric_mapping_digest: None, digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned() };
+/// let _forged = PlatformLayerSignal { tenant_id: "bank_demo".to_owned(), metric_id: "attention_run_handoff_rate".to_owned(), metric_version: 1, layer: Layer::Tree, population_ref: "attention_source_runs".to_owned(), status: PlatformSignalStatus::InsufficientEvidence, window_start_ms: 1, window_end_ms: 2, received_as_of_ms: 2, projection_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(), source_id: None, contract_ref: None, batch_digest: None, coverage_evidence_digest: None, metric_mapping_digest: None, digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned() };
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct PlatformLayerSignal {
@@ -231,7 +241,7 @@ pub enum PlatformSensorError {
 /// };
 ///
 /// let mapping = TrustedLayerMetricMapping::handoff_rate(
-///     LayerMetricSpec::handoff_rate("arbitrary", 1, Layer::Tree, "anything").unwrap(),
+///     LayerMetricSpec::handoff_rate("attention_run_handoff_rate", 1, Layer::Tree, "attention_source_runs").unwrap(),
 ///     "unreviewed-source",
 ///     "contract:unreviewed",
 /// );
@@ -306,8 +316,9 @@ impl PlatformLayerSensor {
             }
             let Some((coverage, denominator)) =
                 projection.coverages().iter().find_map(|coverage| {
-                    coverage
-                        .denominator_for(observed)
+                    (coverage.coverage().population_ref() == spec.population_ref)
+                        .then(|| coverage.denominator_for(observed))
+                        .flatten()
                         .map(|denominator| (coverage, denominator))
                 })
             else {
@@ -491,8 +502,13 @@ fn mapping_digest(mapping: &TrustedLayerMetricMapping) -> String {
 fn platform_audit_mappings() -> Vec<TrustedLayerMetricMapping> {
     vec![
         TrustedLayerMetricMapping::handoff_rate(
-            LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Tree, "tree_goals")
-                .expect("reviewed platform-audit metric spec is valid"),
+            LayerMetricSpec::handoff_rate(
+                ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+                1,
+                Layer::Tree,
+                ATTENTION_SOURCE_RUNS_POPULATION_REF,
+            )
+            .expect("reviewed platform-audit metric spec is valid"),
             "attention-platform",
             "contract:attention-v1",
         )
@@ -598,8 +614,13 @@ mod tests {
 
     fn mapping(source_id: &str, contract_ref: &str) -> TrustedLayerMetricMapping {
         TrustedLayerMetricMapping::handoff_rate(
-            LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Tree, "tree_goals")
-                .unwrap(),
+            LayerMetricSpec::handoff_rate(
+                ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+                1,
+                Layer::Tree,
+                ATTENTION_SOURCE_RUNS_POPULATION_REF,
+            )
+            .unwrap(),
             source_id,
             contract_ref,
         )
@@ -609,10 +630,10 @@ mod tests {
     #[test]
     fn missing_mapping_receipt_commits_registry_presence_and_configuration() {
         let requested = LayerMetricSpec::handoff_rate(
-            "tree_handoff_rate",
+            ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
             1,
             Layer::Tree,
-            "tree_goals_excluding_retries",
+            ATTENTION_SOURCE_RUNS_POPULATION_REF,
         )
         .unwrap();
         let first = mapping("attention-platform", "contract:attention-v1");
@@ -642,8 +663,13 @@ mod tests {
 
     #[test]
     fn mapped_and_missing_resolution_receipts_cannot_collide() {
-        let spec = LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Tree, "tree_goals")
-            .unwrap();
+        let spec = LayerMetricSpec::handoff_rate(
+            ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+            1,
+            Layer::Tree,
+            ATTENTION_SOURCE_RUNS_POPULATION_REF,
+        )
+        .unwrap();
         let mapping = mapping("attention-platform", "contract:attention-v1");
         let registry = registry_digest(std::slice::from_ref(&mapping));
         let projection_digest =
@@ -653,5 +679,18 @@ mod tests {
             mapping_resolution_digest(&spec, projection_digest, &registry, Some(&mapping.digest)),
             mapping_resolution_digest(&spec, projection_digest, &registry, None),
         );
+    }
+
+    #[test]
+    fn trusted_mapping_digest_commits_the_fixed_run_population_grain() {
+        let mapping = mapping("attention-platform", "contract:attention-v1");
+        let commitment = serde_json::to_string(&MappingCommitment {
+            spec: &mapping.spec,
+            source_id: &mapping.source_id,
+            contract_ref: &mapping.contract_ref,
+        })
+        .unwrap();
+        assert!(commitment.contains(ATTENTION_SOURCE_RUNS_POPULATION_REF));
+        assert_eq!(mapping.digest, mapping_digest(&mapping));
     }
 }

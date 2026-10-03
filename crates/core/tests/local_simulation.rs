@@ -990,7 +990,7 @@ fn direct_technical_failure_is_primary_without_hiding_other_qualifying_signals()
             .collect(),
     );
 
-    let result = run_local_simulation(input).expect("both metrics qualify");
+    let result = run_local_simulation(input.clone()).expect("both metrics qualify");
 
     assert_eq!(result.primary_signal_policy, "local_primary_signal_v3");
     assert_eq!(
@@ -1000,9 +1000,97 @@ fn direct_technical_failure_is_primary_without_hiding_other_qualifying_signals()
     assert!(result.signals.iter().any(|signal| signal.metric_id
         == "e0_recurring_copilot_query_cases"
         && signal.numerator == 20));
+    let portfolio = result
+        .local_simulation_portfolio
+        .as_ref()
+        .expect("E0 local runs expose a simulator-only signal portfolio");
+    assert_eq!(portfolio.source_family, "e0");
+    assert_eq!(portfolio.authority, "simulator_only");
+    assert_eq!(portfolio.status, "candidates_ready");
+    assert_eq!(
+        portfolio.primary_signal_digest.as_deref(),
+        result.signal.as_ref().map(|signal| signal.digest.as_str())
+    );
+    assert_eq!(
+        portfolio
+            .candidate_signal_digests
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec![
+            result.signals[0].digest.as_str(),
+            result.signals[2].digest.as_str()
+        ]
+    );
+    assert_eq!(
+        portfolio
+            .candidate_signal_digests
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        portfolio.candidate_signal_digests.len()
+    );
+    assert!(portfolio.dispositions.iter().all(|item| matches!(
+        item.metric_id.as_str(),
+        "e0_technical_error_rate" | "e0_tool_retry_case_rate" | "e0_recurring_copilot_query_cases"
+    )));
+    assert_eq!(
+        portfolio
+            .dispositions
+            .iter()
+            .map(|item| item.metric_id.as_str())
+            .collect::<Vec<_>>(),
+        result
+            .signals
+            .iter()
+            .map(|item| item.metric_id.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        portfolio.dispositions[0].state,
+        "candidate_for_simulated_investigation"
+    );
+    assert_eq!(
+        portfolio.dispositions[0].signal_digest,
+        Some(result.signals[0].digest.clone())
+    );
+    assert_eq!(portfolio.dispositions[1].state, "insufficient_evidence");
+    assert_eq!(portfolio.dispositions[1].reason, "no_known_denominator");
+    assert_eq!(
+        portfolio.dispositions[2].state,
+        "candidate_for_simulated_investigation"
+    );
     assert_eq!(
         result.proposal.as_ref().unwrap().evidence.metric_id,
         "e0_technical_error_rate"
+    );
+    let portfolio_event = result
+        .events
+        .iter()
+        .find(|event| event.stage == "signal_portfolio")
+        .expect("portfolio timeline summary is present");
+    assert_eq!(portfolio_event.status, "simulator_only");
+    assert!(portfolio_event.detail.contains("candidates=2"));
+    assert!(!portfolio_event.detail.contains(&result.signals[0].digest));
+    assert!(!portfolio_event.detail.contains("numerator"));
+    let repeated = run_local_simulation(input).expect("identical input is repeatable");
+    assert_eq!(
+        result
+            .local_simulation_portfolio
+            .as_ref()
+            .unwrap()
+            .dispositions
+            .iter()
+            .map(|item| item.metric_id.as_str())
+            .collect::<Vec<_>>(),
+        repeated
+            .local_simulation_portfolio
+            .as_ref()
+            .unwrap()
+            .dispositions
+            .iter()
+            .map(|item| item.metric_id.as_str())
+            .collect::<Vec<_>>()
     );
 }
 
@@ -1023,7 +1111,7 @@ fn absent_query_table_is_reported_as_unavailable_not_zero_recurrence() {
         vec![event(
             1,
             1,
-            Some(false),
+            Some(true),
             Some("payments"),
             Some("tree"),
             Some("status_lookup"),
@@ -1043,6 +1131,14 @@ fn absent_query_table_is_reported_as_unavailable_not_zero_recurrence() {
             .iter()
             .any(|signal| signal.metric_id == "e0_recurring_copilot_query_cases")
     );
+    let portfolio = result.local_simulation_portfolio.as_ref().unwrap();
+    assert_eq!(portfolio.status, "candidates_ready");
+    assert!(portfolio.dispositions.iter().any(|item| {
+        item.metric_id == "e0_recurring_copilot_query_cases"
+            && item.signal_digest.is_none()
+            && item.state == "unavailable"
+            && item.reason == "source_table_unavailable"
+    }));
 }
 
 #[test]
@@ -1089,6 +1185,24 @@ fn recurring_query_below_versioned_support_threshold_remains_visible_but_noops()
 
 #[test]
 fn zero_positive_support_does_not_create_a_candidate_or_proposal() {
+    let mut first_event = event(
+        1,
+        1,
+        Some(false),
+        Some("payments"),
+        Some("tree"),
+        Some("status_lookup"),
+    );
+    first_event.retry_count = Some(0);
+    let mut second_event = event(
+        2,
+        1,
+        Some(false),
+        Some("cards"),
+        Some("tree"),
+        Some("status_lookup"),
+    );
+    second_event.retry_count = Some(0);
     let input = LocalRunInput::new(
         LocalRunMetadata::new(
             "run-local-no-opportunity",
@@ -1101,31 +1215,35 @@ fn zero_positive_support_does_not_create_a_candidate_or_proposal() {
         ),
         vec![1, 2],
         1,
-        vec![
-            event(
-                1,
-                1,
-                Some(false),
-                Some("payments"),
-                Some("tree"),
-                Some("status_lookup"),
-            ),
-            event(
-                2,
-                1,
-                Some(false),
-                Some("cards"),
-                Some("tree"),
-                Some("status_lookup"),
-            ),
-        ],
-    );
+        vec![first_event, second_event],
+    )
+    .with_queries(vec![
+        LocalObservedQuery::new(
+            1,
+            format!("sha256_{}", "a".repeat(56)),
+            "2026-08-01T00:00:01Z",
+        ),
+        LocalObservedQuery::new(
+            2,
+            format!("sha256_{}", "b".repeat(56)),
+            "2026-08-01T00:00:02Z",
+        ),
+    ]);
 
     let result = run_local_simulation(input).expect("detector reports no opportunity");
 
     assert_eq!(result.terminal_status, "complete_no_opportunity");
     assert_eq!(result.formal_route, "do_nothing");
     assert_eq!(result.signal.as_ref().unwrap().numerator, 0);
+    let portfolio = result.local_simulation_portfolio.as_ref().unwrap();
+    assert_eq!(portfolio.status, "no_qualifying_signals");
+    assert!(portfolio.candidate_signal_digests.is_empty());
+    assert!(
+        portfolio
+            .dispositions
+            .iter()
+            .all(|item| item.state == "not_qualified")
+    );
     assert!(result.candidates.is_empty());
     assert!(result.proposal.is_none());
     assert!(result.evaluation.is_none());
@@ -1166,6 +1284,7 @@ fn source_without_an_allowlisted_signal_is_reported_not_fabricated() {
     let result = run_local_simulation(input).expect("unsupported source still yields a run");
 
     assert!(result.signal.is_none());
+    assert!(result.local_simulation_portfolio.is_none());
     assert_eq!(result.terminal_status, "unsupported_source");
     assert!(result.candidates.is_empty());
     assert!(result.proposal.is_none());

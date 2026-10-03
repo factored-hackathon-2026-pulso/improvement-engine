@@ -439,6 +439,294 @@ fn e0_cli_emits_opt_in_sanitized_live_progress_for_each_execution_phase() {
 }
 
 #[test]
+fn original_cli_reports_sanitized_source_preparation_progress_without_changing_manifest() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("original-progress-input");
+    let interactions = input.join("call_center_interactions");
+    fs::create_dir_all(&interactions).expect("create original input");
+    let interaction_csv = interactions.join("part-000.csv");
+    fs::write(
+        &interaction_csv,
+        concat!(
+            "interaction_id,customer_id,interaction_date,contact_reason,channel\n",
+            "private-interaction-sentinel,private-customer-sentinel,2025-01-01T10:00:00,Complaint,Phone\n",
+        ),
+    )
+    .expect("write synthetic contact source");
+    let auxiliary = input.join("transactions");
+    fs::create_dir_all(&auxiliary).expect("create auxiliary table");
+    fs::write(
+        auxiliary.join("part-001.csv"),
+        "id,value\nprivate-row-sentinel,1\n",
+    )
+    .expect("write synthetic auxiliary source");
+
+    let run = |name: &str, progress: bool| {
+        let output = temp.path().join(name);
+        let mut command = Command::new(env!("CARGO_BIN_EXE_improvement-engine"));
+        command.args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+        ]);
+        command.arg(&input).args(["--output"]).arg(&output).args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+        ]);
+        if progress {
+            command.arg("--progress-jsonl");
+        }
+        let completed = command.output().expect("run original source through CLI");
+        assert!(
+            completed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&completed.stderr)
+        );
+        let run_dir = fs::read_dir(&output)
+            .expect("read output root")
+            .next()
+            .expect("one output run")
+            .expect("output run entry")
+            .path();
+        let result: serde_json::Value = serde_json::from_slice(
+            &fs::read(run_dir.join("result.json")).expect("read result envelope"),
+        )
+        .expect("parse result envelope");
+        (completed, result)
+    };
+
+    let (completed, progressed_result) = run("progress-output", true);
+    let (_, baseline_result) = run("baseline-output", false);
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 progress output");
+    let progress = stderr
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("JSONL progress"))
+        .collect::<Vec<_>>();
+
+    for stage in ["inventory", "manifest_scan", "contact_projection"] {
+        assert!(
+            progress
+                .iter()
+                .any(|event| event["stage"] == stage && event["status"] == "completed"),
+            "missing completed progress for {stage}: {stderr}"
+        );
+    }
+    let completed_stages = progress
+        .iter()
+        .filter(|event| event.get("stage").is_some() && event["status"] == "completed")
+        .map(|event| event["stage"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        completed_stages,
+        ["inventory", "manifest_scan", "contact_projection"]
+    );
+    for event in progress.iter().filter(|event| event.get("stage").is_some()) {
+        assert_eq!(event["phase"], "source_preparation");
+        assert!(event["files_completed"].as_u64().is_some());
+        assert!(event["files_total"].as_u64().is_some());
+        assert!(event["bytes_completed"].as_u64().is_some());
+        assert!(event["bytes_total"].as_u64().is_some());
+        assert!(event["elapsed_ms"].as_u64().is_some());
+        assert!(
+            event["files_completed"].as_u64().unwrap() <= event["files_total"].as_u64().unwrap()
+        );
+        assert!(
+            event["bytes_completed"].as_u64().unwrap() <= event["bytes_total"].as_u64().unwrap()
+        );
+    }
+    for (stage, expected_files) in [
+        ("inventory", 2),
+        ("manifest_scan", 2),
+        ("contact_projection", 1),
+    ] {
+        let completed = progress
+            .iter()
+            .find(|event| event["stage"] == stage && event["status"] == "completed")
+            .expect("completed stage event");
+        assert_eq!(completed["files_completed"], expected_files);
+        assert_eq!(completed["files_total"], expected_files);
+        assert!(completed["bytes_total"].as_u64().unwrap() > 0);
+        assert_eq!(completed["bytes_completed"], completed["bytes_total"]);
+    }
+    for forbidden in [
+        input.to_string_lossy().as_ref(),
+        "private-interaction-sentinel",
+        "private-customer-sentinel",
+        "private-row-sentinel",
+        "part-000.csv",
+        "sha256:",
+    ] {
+        assert!(!stderr.contains(forbidden), "progress exposed {forbidden}");
+    }
+    assert_eq!(
+        progressed_result["manifest_digest"],
+        baseline_result["manifest_digest"]
+    );
+    assert_eq!(
+        progressed_result["snapshot_ref"]["digest"],
+        baseline_result["snapshot_ref"]["digest"]
+    );
+}
+
+#[test]
+fn original_cli_bounds_manifest_progress_for_many_files_and_preserves_exact_totals() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("many-original-csvs");
+    let transactions = input.join("transactions");
+    let contacts = input.join("call_center_interactions");
+    fs::create_dir_all(&transactions).expect("create transactions");
+    fs::create_dir_all(&contacts).expect("create contacts");
+    let transaction_csv = "id,value\nrow,1\n";
+    for index in 0..205 {
+        fs::write(
+            transactions.join(format!("part-{index:03}.csv")),
+            transaction_csv,
+        )
+        .expect("write synthetic transaction file");
+    }
+    let contact_csv = "interaction_id,customer_id,interaction_date,contact_reason,channel\nprivate-id,private-customer,2025-01-01,complaint,phone\n";
+    for index in 0..205 {
+        fs::write(contacts.join(format!("part-{index:03}.csv")), contact_csv)
+            .expect("write synthetic contact file");
+    }
+
+    let output = temp.path().join("many-original-output");
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--progress-jsonl",
+        ])
+        .output()
+        .expect("run original source through CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 progress output");
+    let progress = stderr
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("JSONL progress"))
+        .collect::<Vec<_>>();
+    let manifest_events = progress
+        .iter()
+        .filter(|event| event["stage"] == "manifest_scan")
+        .collect::<Vec<_>>();
+    assert!(
+        manifest_events.len() <= 102,
+        "too many manifest progress events: {}",
+        manifest_events.len()
+    );
+    let completed_manifest = manifest_events
+        .iter()
+        .find(|event| event["status"] == "completed")
+        .expect("completed manifest scan event");
+    assert_eq!(completed_manifest["files_completed"], 410);
+    assert_eq!(completed_manifest["files_total"], 410);
+    let expected_contact_bytes = contact_csv.len() as u64 * 205;
+    let expected_bytes = transaction_csv.len() as u64 * 205 + expected_contact_bytes;
+    assert_eq!(completed_manifest["bytes_completed"], expected_bytes);
+    assert_eq!(completed_manifest["bytes_total"], expected_bytes);
+    let contact_events = progress
+        .iter()
+        .filter(|event| event["stage"] == "contact_projection")
+        .collect::<Vec<_>>();
+    assert!(
+        contact_events.len() <= 102,
+        "too many contact progress events: {}",
+        contact_events.len()
+    );
+    let completed_contact = contact_events
+        .iter()
+        .find(|event| event["status"] == "completed")
+        .expect("completed contact projection event");
+    assert_eq!(completed_contact["files_completed"], 205);
+    assert_eq!(completed_contact["files_total"], 205);
+    assert_eq!(completed_contact["bytes_completed"], expected_contact_bytes);
+    assert_eq!(completed_contact["bytes_total"], expected_contact_bytes);
+    assert!(!stderr.contains("private-customer"));
+}
+
+#[test]
+fn original_cli_reports_one_failed_event_for_each_source_preparation_stage_error() {
+    let temp = TempDir::new().expect("temp directory");
+    let manifest_input = temp.path().join("invalid-manifest");
+    let transaction_dir = manifest_input.join("transactions");
+    fs::create_dir_all(&transaction_dir).expect("create transaction directory");
+    fs::write(transaction_dir.join("bad.csv"), "id,value\nrow\n")
+        .expect("write malformed transaction CSV");
+    let contact_input = temp.path().join("invalid-contact-projection");
+    let contact_dir = contact_input.join("call_center_interactions");
+    fs::create_dir_all(&contact_dir).expect("create contact directory");
+    fs::write(
+        contact_dir.join("bad.csv"),
+        "interaction_id,channel,channel\nprivate-id,phone,app\n",
+    )
+    .expect("write duplicate-header contact CSV");
+
+    for (name, input, failed_stage) in [
+        ("manifest", manifest_input, "manifest_scan"),
+        ("contact", contact_input, "contact_projection"),
+    ] {
+        let output = temp.path().join(format!("failed-{name}-output"));
+        let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+            .args([
+                "local-sim",
+                "--mode",
+                "local-simulation",
+                "--source",
+                "original",
+                "--input",
+            ])
+            .arg(&input)
+            .args(["--output"])
+            .arg(&output)
+            .args([
+                "--observed-cutoff",
+                "2025-07-01T00:00:00Z",
+                "--progress-jsonl",
+            ])
+            .output()
+            .expect("run invalid original source through CLI");
+        assert!(!completed.status.success());
+        let stderr = String::from_utf8(completed.stderr).expect("UTF-8 progress output");
+        let progress = stderr
+            .lines()
+            .filter(|line| line.starts_with('{'))
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("JSONL progress"))
+            .filter(|event| event["stage"] == failed_stage)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            progress
+                .iter()
+                .filter(|event| event["status"] == "failed")
+                .count(),
+            1,
+            "expected exactly one failed event for {failed_stage}: {stderr}"
+        );
+        assert!(!progress.iter().any(|event| event["status"] == "completed"));
+        assert!(!stderr.contains("private-id"));
+    }
+}
+
+#[test]
 fn e0_cli_emits_failed_phase_without_continuing_when_source_preparation_fails() {
     let temp = TempDir::new().expect("temp directory");
     let missing_input = temp.path().join("missing-e0-source");
@@ -882,6 +1170,22 @@ fn binary_emits_no_opportunity_when_discovery_has_no_positive_support() {
     assert!(result["proposal"].is_null());
     assert!(result["evaluation"].is_null());
     assert!(result["e0_recurrence_holdout"].is_null());
+    assert!(result.get("e0_mechanism_resolution").is_none());
+    assert!(result.get("e0_investigation_proposal_plan").is_none());
+    assert!(
+        result["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|event| event["stage"] != "e0_mechanism_resolution")
+    );
+    assert!(
+        result["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|event| event["stage"] != "e0_investigation_proposal_plan")
+    );
     assert!(timeline.contains("no_opportunity"));
     assert!(!timeline.contains("improvement_draft"));
     assert!(!timeline.contains("jev_or_agent_core_scout"));
@@ -931,7 +1235,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
         serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
             .expect("valid result JSON");
     let serialized = result.to_string();
-    let timeline: Vec<serde_json::Value> = fs::read_to_string(run_dir.join("events.ndjson"))
+    let ndjson_timeline: Vec<serde_json::Value> = fs::read_to_string(run_dir.join("events.ndjson"))
         .expect("timeline file")
         .lines()
         .map(|line| serde_json::from_str(line).expect("valid timeline event"))
@@ -958,13 +1262,179 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
         result["e0_recurrence_holdout"]["interpretation"],
         "descriptive_recurrence_only_no_causal_or_outcome_claim"
     );
+    let mechanism = result
+        .get("e0_mechanism_resolution")
+        .expect("E0 recurrence result includes explicit mechanism resolution");
+    assert_eq!(mechanism["evidence_origin"], "e0_local_run");
     assert_eq!(
-        result["events"].as_array().unwrap().last().unwrap()["stage"],
-        "e0_recurrence_holdout"
+        mechanism["catalog_origin"],
+        "team_generated_empty_local_catalog_fixture"
     );
-    assert_eq!(timeline.last().unwrap()["stage"], "e0_recurrence_holdout");
+    assert_eq!(mechanism["catalog_durability"], "ephemeral");
+    assert_eq!(
+        mechanism["resolution"]["status"], "unlinked",
+        "the runner's empty fixture catalog cannot invent a Core route"
+    );
+    assert_eq!(
+        mechanism["resolution"]["reason"],
+        "no_exact_supported_flow_mapping"
+    );
+    assert_eq!(
+        mechanism["resolution"]["catalog_ref"]["id"],
+        "0199b21c-7eab-7000-8000-000000000205"
+    );
+    assert_eq!(mechanism["resolution"]["catalog_ref"]["revision"], 1);
+    assert_eq!(
+        mechanism["resolution"]["catalog_ref"]["digest"],
+        "sha256:ebf1ae456ab9bfa6e06bea342f2c1d377783ce04a33a19e4c66cf6515a21320a"
+    );
+    assert_eq!(
+        mechanism["evidence_packet"]["metric_id"],
+        "e0_recurring_copilot_query_cases"
+    );
+    let recurrence_candidate = result["proposal_assembly"]["candidates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|candidate| candidate["metric_id"] == "e0_recurring_copilot_query_cases")
+        .expect("recurrence candidate from the same assembly");
+    assert_eq!(
+        mechanism["evidence_packet"]["signal_digest"],
+        recurrence_candidate["signal_digest"]
+    );
+    assert_eq!(
+        mechanism["evidence_packet"]["summary_commitment"],
+        recurrence_candidate["summary_commitment"]
+    );
+    assert_eq!(
+        mechanism["evidence_packet"]["source_run_id"],
+        result["run_id"]
+    );
+    assert_eq!(
+        mechanism["evidence_packet"]["observed_cutoff_rfc3339"],
+        result["observed_cutoff_rfc3339"]
+    );
+    assert_eq!(mechanism["evidence_packet"]["numerator"], 20);
+    assert_eq!(mechanism["evidence_packet"]["denominator"], 21);
+    assert_eq!(
+        mechanism["evidence_packet"]["claim_level"],
+        "descriptive_only"
+    );
+    let investigation_plan = result
+        .get("e0_investigation_proposal_plan")
+        .expect("E0 candidate has a typed read-only investigation plan");
+    assert_eq!(
+        investigation_plan["artifact_kind"],
+        "e0_read_only_investigation_plan_not_agent_core_proposal"
+    );
     assert!(
-        timeline.last().unwrap()["detail"]
+        investigation_plan["plan_digest"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:")
+    );
+    assert_eq!(
+        investigation_plan["proposal_ref"],
+        recurrence_candidate["proposal_ref"]
+    );
+    assert_eq!(
+        investigation_plan["evidence_packet"],
+        mechanism["evidence_packet"]
+    );
+    assert_eq!(
+        investigation_plan["decision"]["recommended_option"],
+        "investigate_mapping"
+    );
+    assert_eq!(
+        investigation_plan["decision"]["available_options"],
+        serde_json::json!(["investigate_mapping", "do_nothing"])
+    );
+    assert_eq!(investigation_plan["decision"]["authority"], "none");
+    assert_eq!(
+        investigation_plan["decision"]["execution_state"],
+        "not_executable"
+    );
+    assert_eq!(investigation_plan["business_lift"], serde_json::Value::Null);
+    assert!(!investigation_plan.to_string().contains("pulso_local"));
+    assert!(!investigation_plan.to_string().contains("private-query-"));
+    assert!(mechanism["evidence_packet"].get("tenant_scope").is_none());
+    assert!(!mechanism.to_string().contains("pulso_local"));
+    assert!(!mechanism.to_string().contains("normalized-query-pattern"));
+    assert!(!mechanism.to_string().contains("private-query-"));
+    assert!(!mechanism.to_string().contains("private-case-"));
+    assert!(mechanism["resolution"].get("flow_ref").is_none());
+    assert!(mechanism.get("business_lift").is_none());
+    assert!(mechanism.get("execution_status").is_none());
+    assert!(mechanism["resolution"].get("may_compile").is_none());
+    assert!(
+        mechanism["resolution"]
+            .get("may_start_sandbox_trial")
+            .is_none()
+    );
+    let holdout_event = result["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|event| event["stage"] == "e0_recurrence_holdout")
+        .expect("persisted holdout event");
+    assert_eq!(
+        ndjson_timeline
+            .iter()
+            .find(|event| event["stage"] == "e0_recurrence_holdout"),
+        Some(holdout_event)
+    );
+    let result_timeline = result["events"].as_array().unwrap();
+    let proposal_event = result_timeline
+        .iter()
+        .find(|event| event["stage"] == "proposal_assembly")
+        .expect("persisted proposal activity event");
+    assert_eq!(
+        proposal_event["sequence"].as_u64(),
+        holdout_event["sequence"].as_u64().map(|value| value + 1)
+    );
+    let mechanism_events = result_timeline
+        .iter()
+        .filter(|event| event["stage"] == "e0_mechanism_resolution")
+        .collect::<Vec<_>>();
+    assert_eq!(mechanism_events.len(), 1);
+    let mechanism_event = mechanism_events[0];
+    assert_eq!(mechanism_event["status"], "unlinked");
+    assert_eq!(
+        mechanism_event["detail"],
+        "catalog_origin=team_generated_empty_local_catalog_fixture; catalog_durability=ephemeral; resolution_count=1; mapped_count=0; unlinked_count=1; reason=no_exact_supported_flow_mapping"
+    );
+    assert_eq!(
+        mechanism_event["sequence"].as_u64(),
+        proposal_event["sequence"].as_u64().map(|value| value + 1)
+    );
+    let investigation_plan_event = result_timeline
+        .last()
+        .filter(|event| event["stage"] == "e0_investigation_proposal_plan")
+        .expect("investigation plan event follows mechanism resolution");
+    assert_eq!(investigation_plan_event["status"], "pending_review");
+    assert_eq!(
+        investigation_plan_event["sequence"].as_u64(),
+        mechanism_event["sequence"].as_u64().map(|value| value + 1)
+    );
+    assert!(!investigation_plan_event.to_string().contains("pulso_local"));
+    assert!(
+        !investigation_plan_event
+            .to_string()
+            .contains("private-query-")
+    );
+    assert!(!investigation_plan_event.to_string().contains("sha256"));
+    assert_eq!(ndjson_timeline.last().unwrap(), investigation_plan_event);
+    assert!(!mechanism_event.to_string().contains("pulso_local"));
+    assert!(!mechanism_event.to_string().contains("private-case-"));
+    assert!(!mechanism_event.to_string().contains("private-query-"));
+    assert!(!mechanism_event.to_string().contains("sha256"));
+    assert_eq!(
+        result_timeline,
+        ndjson_timeline.as_slice(),
+        "JSON and NDJSON timelines remain identical"
+    );
+    assert!(
+        holdout_event["detail"]
             .as_str()
             .unwrap()
             .contains("no causal or outcome claim")
@@ -1127,7 +1597,12 @@ fn binary_suppresses_holdout_counts_for_one_through_four_matching_cases() {
         assert!(result["e0_recurrence_holdout"]["queried_case_count"].is_null());
         assert!(result["e0_recurrence_holdout"]["matching_case_count"].is_null());
         assert!(result["e0_recurrence_holdout"]["recurrence_rate_basis_points"].is_null());
-        let event = result["events"].as_array().unwrap().last().unwrap();
+        let event = result["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|event| event["stage"] == "e0_recurrence_holdout")
+            .expect("holdout event");
         assert_eq!(event["status"], "insufficient_support");
         assert!(
             event["detail"]

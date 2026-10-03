@@ -129,8 +129,66 @@ function Assert-AllowedValue {
 
 function Invoke-LocalCargoRun {
     param([Parameter(Mandatory = $true)][string[]] $Arguments)
-    $null = & cargo @Arguments 2>&1
+    & cargo @Arguments 2>&1 | ForEach-Object {
+        $line = [string] $_
+        try {
+            $event = $line | ConvertFrom-Json -ErrorAction Stop
+            if ($event.schema_version -ne 1 -or $event.event -ne 'run_progress') {
+                return
+            }
+            if ($event.phase -eq 'source_preparation' -and $event.stage -in @('inventory', 'manifest_scan', 'contact_projection')) {
+                $stageLabels = @{
+                    inventory = 'source inventory'
+                    manifest_scan = 'manifest scan'
+                    contact_projection = 'contact projection'
+                }
+                if ($event.status -notin @('started', 'progress', 'completed', 'failed') -or
+                    $event.files_completed -isnot [long] -or $event.files_total -isnot [long] -or
+                    $event.bytes_completed -isnot [long] -or $event.bytes_total -isnot [long] -or
+                    $event.elapsed_ms -isnot [long] -or $event.files_completed -gt $event.files_total -or
+                    $event.bytes_completed -gt $event.bytes_total) {
+                    return
+                }
+                $bytesCompleted = Format-SafeCount -Value $event.bytes_completed
+                $bytesTotal = Format-SafeCount -Value $event.bytes_total
+                $statusLabel = switch ($event.status) {
+                    'started' { 'started' }
+                    'progress' { 'in progress' }
+                    'completed' { 'complete' }
+                    'failed' { 'failed' }
+                }
+                $fileSummary = if ($event.stage -eq 'inventory' -and $event.status -eq 'started') {
+                    'inventory pending'
+                }
+                else {
+                    "{0}/{1} files" -f $event.files_completed, $event.files_total
+                }
+                $byteSummary = if ($event.status -eq 'started' -and
+                    $event.stage -in @('inventory', 'contact_projection')) {
+                    'size pending'
+                }
+                else {
+                    "{0}/{1} bytes" -f $bytesCompleted, $bytesTotal
+                }
+                Write-Host ("Progress: {0} {1} — {2}; {3}; {4} ms." -f `
+                    $stageLabels[$event.stage], $statusLabel, $fileSummary, $byteSummary, $event.elapsed_ms)
+                return
+            }
+            if ($event.phase -in @('source_preparation', 'detection', 'post_selection_holdout', 'persist_outputs') -and
+                $event.status -in @('started', 'completed', 'failed', 'skipped')) {
+                Write-Host ("Progress: {0} {1}." -f $event.phase.Replace('_', ' '), $event.status)
+            }
+        }
+        catch {
+            # Cargo diagnostics and all unrecognized output are intentionally suppressed.
+        }
+    }
     return $LASTEXITCODE
+}
+
+function Format-SafeCount {
+    param([Parameter(Mandatory = $true)][long] $Value)
+    return $Value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 }
 
 try {
@@ -211,7 +269,8 @@ $cargoArguments = @(
     '--tenant-id',
     'pulso_local',
     '--observed-cutoff',
-    $ObservedCutoff
+    $ObservedCutoff,
+    '--progress-jsonl'
 )
 if ($Source -eq 'e0') {
     $cargoArguments += @(
@@ -279,8 +338,112 @@ if ($Source -eq 'e0') {
         throw 'Engine result contains an unsafe E0 replay count; raw result values are suppressed.'
     }
     $excludedReplayCases = 'suppressed'
+    $portfolio = $result['local_simulation_portfolio']
+    if (($portfolio -isnot [System.Collections.IDictionary]) -or
+        ([string] $portfolio['source_family'] -ne 'e0') -or
+        ([string] $portfolio['authority'] -ne 'simulator_only')) {
+        throw 'Engine result is missing the E0 simulator portfolio; raw result values are suppressed.'
+    }
+    $portfolioStatus = [string] $portfolio['status']
+    Assert-AllowedValue -Value $portfolioStatus -Allowed @('candidates_ready', 'no_qualifying_signals', 'insufficient_evidence')
+    $allowedMetrics = @('e0_technical_error_rate', 'e0_tool_retry_case_rate', 'e0_recurring_copilot_query_cases')
+    $signalByMetric = @{}
+    foreach ($signal in @($result['signals'])) {
+        if ($signal -isnot [System.Collections.IDictionary]) {
+            throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+        }
+        $metricId = [string] $signal['metric_id']
+        if ($metricId -notin $allowedMetrics -or $signalByMetric.ContainsKey($metricId) -or
+            [string]::IsNullOrWhiteSpace([string] $signal['digest'])) {
+            throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+        }
+        $signalByMetric[$metricId] = [string] $signal['digest']
+    }
+    if ($result.Keys -notcontains 'recurrence_measurement_status') {
+        throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+    }
+    $recurrenceMeasurementStatus = [string] $result['recurrence_measurement_status']
+    Assert-AllowedValue -Value $recurrenceMeasurementStatus -Allowed @('observed', 'source_table_unavailable')
+    if (-not $signalByMetric.ContainsKey('e0_technical_error_rate') -or
+        -not $signalByMetric.ContainsKey('e0_tool_retry_case_rate') -or
+        ($recurrenceMeasurementStatus -eq 'observed' -and -not $signalByMetric.ContainsKey('e0_recurring_copilot_query_cases')) -or
+        ($recurrenceMeasurementStatus -eq 'source_table_unavailable' -and $signalByMetric.ContainsKey('e0_recurring_copilot_query_cases'))) {
+        throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+    }
+    $portfolioCounts = @{
+        candidate_for_simulated_investigation = 0
+        not_qualified = 0
+        insufficient_evidence = 0
+        unavailable = 0
+    }
+    $portfolioDispositions = @($portfolio['dispositions'])
+    if ($portfolioDispositions.Count -eq 0) {
+        throw 'Engine result has no E0 portfolio dispositions; raw result values are suppressed.'
+    }
+    $seenDispositionMetrics = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    $candidateDigests = [System.Collections.Generic.List[string]]::new()
+    $unavailableCount = 0
+    foreach ($disposition in $portfolioDispositions) {
+        if ($disposition -isnot [System.Collections.IDictionary]) {
+            throw 'Engine result has an invalid E0 portfolio disposition; raw result values are suppressed.'
+        }
+        $metricId = [string] $disposition['metric_id']
+        Assert-AllowedValue -Value $metricId -Allowed $allowedMetrics
+        if (-not $seenDispositionMetrics.Add($metricId)) {
+            throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+        }
+        $state = [string] $disposition['state']
+        Assert-AllowedValue -Value $state -Allowed @('candidate_for_simulated_investigation', 'not_qualified', 'insufficient_evidence', 'unavailable')
+        $digest = $disposition['signal_digest']
+        if ($state -eq 'unavailable') {
+            if ($metricId -ne 'e0_recurring_copilot_query_cases' -or $null -ne $digest -or $signalByMetric.ContainsKey($metricId)) {
+                throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+            }
+            $unavailableCount++
+        }
+        elseif (-not $signalByMetric.ContainsKey($metricId) -or [string] $digest -cne $signalByMetric[$metricId]) {
+            throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+        }
+        if ($state -eq 'candidate_for_simulated_investigation') {
+            $candidateDigests.Add([string] $digest)
+        }
+        $portfolioCounts[$state]++
+    }
+    if ($seenDispositionMetrics.Count -ne ($signalByMetric.Count + $unavailableCount)) {
+        throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+    }
+    if (($recurrenceMeasurementStatus -eq 'source_table_unavailable' -and $unavailableCount -ne 1) -or
+        ($recurrenceMeasurementStatus -eq 'observed' -and $unavailableCount -ne 0)) {
+        throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+    }
+    $declaredCandidates = @($portfolio['candidate_signal_digests'])
+    if ($declaredCandidates.Count -ne $candidateDigests.Count) {
+        throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+    }
+    for ($index = 0; $index -lt $candidateDigests.Count; $index++) {
+        if ([string] $declaredCandidates[$index] -cne $candidateDigests[$index]) {
+            throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+        }
+    }
+    if (($result['signal'] -isnot [System.Collections.IDictionary]) -or
+        [string]::IsNullOrWhiteSpace([string] $result['signal']['digest']) -or
+        [string] $portfolio['primary_signal_digest'] -cne [string] $result['signal']['digest'] -or
+        [string] $portfolio['primary_signal_digest'] -cnotin @($signalByMetric.Values)) {
+        throw 'Engine result does not match E0 signals and portfolio; raw result values are suppressed.'
+    }
+    $candidateCount = $portfolioCounts['candidate_for_simulated_investigation']
+    $incompleteCount = $portfolioCounts['insufficient_evidence'] + $portfolioCounts['unavailable']
+    if (($portfolioStatus -eq 'candidates_ready' -and $candidateCount -eq 0) -or
+        ($portfolioStatus -eq 'no_qualifying_signals' -and ($candidateCount -gt 0 -or $incompleteCount -gt 0)) -or
+        ($portfolioStatus -eq 'insufficient_evidence' -and ($candidateCount -gt 0 -or $incompleteCount -eq 0))) {
+        throw 'Engine result has an inconsistent E0 portfolio status; raw result values are suppressed.'
+    }
+    $portfolioSummary = "status=$portfolioStatus; candidates=$($portfolioCounts['candidate_for_simulated_investigation']); not_qualified=$($portfolioCounts['not_qualified']); insufficient=$($portfolioCounts['insufficient_evidence']); unavailable=$($portfolioCounts['unavailable'])"
 }
 else {
+    if ($null -ne $result['local_simulation_portfolio']) {
+        throw 'Original-bank snapshot runs must not report an E0 portfolio; raw result values are suppressed.'
+    }
     if ($null -ne $holdout) {
         throw 'Original-bank runs must not report E0 recurrence holdout results.'
     }
@@ -357,6 +520,7 @@ Write-Output "Source: $expectedSourceKind"
 Write-Output "Status: $($result['terminal_status'])"
 if ($Source -eq 'e0') {
     Write-Output "Cases: discovery=$discoveryCases; replay_excluded=$excludedReplayCases"
+    Write-Output "Portfolio: $portfolioSummary"
     Write-Output 'Metrics:'
     if ($metricLines.Count -eq 0) {
         Write-Output '  none'
