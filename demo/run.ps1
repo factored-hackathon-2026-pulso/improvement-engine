@@ -21,7 +21,7 @@ $py = Join-Path $env:TEMP "pulso-wire-venv-$pin7\Scripts\python.exe"
 if (-not (Test-Path $py)) { Write-Error "pulso:demo_toolchain_missing: pinned venv %TEMP%\pulso-wire-venv-$pin7 not found"; exit 3 }
 $out = Join-Path $here 'out'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
-$env:PYTHONPATH = (Join-Path $here 'src') + ';' + (Join-Path $root 'e2e-core\src') + ';' + (Join-Path $root 'core-bridge\src') + ';' + (Join-Path $root 'e2e-core\tests\live') + ';' + (Join-Path $root 'local-identitysrc')
+$env:PYTHONPATH = (Join-Path $here 'src') + ';' + (Join-Path $root 'e2e-core\src') + ';' + (Join-Path $root 'core-bridge\src') + ';' + (Join-Path $root 'e2e-core\tests\live') + ';' + (Join-Path $root 'local-identity\src')
 $exit = 1
 Push-Location $here
 try {
