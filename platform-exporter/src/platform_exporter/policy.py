@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from collections.abc import Callable
 
 DENIED_TABLES = ("login_accounts", "mfa_challenges", "staff_sessions")
 
@@ -82,7 +83,7 @@ _SQLITE_RECURSIVE = 33
 _OK, _DENY = sqlite3.SQLITE_OK, sqlite3.SQLITE_DENY
 
 
-def install_sqlite_guard(conn: sqlite3.Connection) -> None:
+def install_sqlite_guard(conn: sqlite3.Connection, on_read: Callable[[str, str], None] | None = None) -> None:
     """Deny every write and every read outside the allow-list at the engine (authorizer), not by convention."""
 
     def authorizer(action: int, a1: str | None, a2: str | None, _db: str | None, _src: str | None) -> int:
@@ -90,6 +91,8 @@ def install_sqlite_guard(conn: sqlite3.Connection) -> None:
             return _OK
         if action == _SQLITE_READ:
             table, column = (a1 or "").lower(), (a2 or "").lower()
+            if on_read is not None:
+                on_read(table, column)
             if table in ("sqlite_master", "sqlite_schema"):
                 return _OK  # schema names only (drift detection); never row data of a table
             if table in DENIED_TABLES or table not in ALLOWED_COLUMNS:
