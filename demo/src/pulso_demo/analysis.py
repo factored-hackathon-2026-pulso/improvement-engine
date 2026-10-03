@@ -12,6 +12,7 @@ from typing import Any
 
 GUARD_MAX_EXPOSURE = 0.0035  # risky sessions given extra attempts, as a share of all sessions
 MIN_LIFT = 0.002
+DO_NOTHING_SQL = "select sum(outcome = 'abandoned') from sessions"
 
 
 def _digest(rows: Any) -> str:
@@ -127,7 +128,7 @@ def revise(conn: sqlite3.Connection, cand: dict[str, Any], result: dict[str, Any
 
 
 def alternatives(conn: sqlite3.Connection, cand: dict[str, Any]) -> list[dict[str, Any]]:
-    q = run_query(conn, "q-do-nothing", "select sum(outcome = 'abandoned') from sessions")
+    q = run_query(conn, "q-do-nothing", DO_NOTHING_SQL)
     base = q["rows"][0][0]
     s = _sim(conn, cand)
     return [{"id": "alt-0", "kind": "do_nothing", "summary": "Keep the current retry policy", "expected_abandoned": base, "risk": "none new"},

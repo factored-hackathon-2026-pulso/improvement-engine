@@ -113,7 +113,7 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         _node("scout", LABELS["scout"], "scout", st(_core_ok(scout_core)), ["signals"], None if _core_ok(scout_core) else "core_scout_unknown"),
         _node("verify", LABELS["verify"], "verifier", st(_core_ok(ver_core) and bool(assess)), ["scout"], None if _core_ok(ver_core) else "core_verifier_unknown"),
         _node("opportunity", LABELS["opportunity"], "hypothesis", st(top is not None, "dead"), ["verify"], None if top else "no_supported_hypothesis"),
-        _node("change", LABELS["change"], "proposal", st(_core_ok(design_core) and writer_ok), ["opportunity"], None if writer_ok else "writer_receipts_unverified"),
+        _node("change", LABELS["change"], "proposal", st(_core_ok(design_core) and writer_ok), ["opportunity"], None if writer_ok and _core_ok(design_core) else ("core_design_failed" if not _core_ok(design_core) else "writer_receipts_unverified")),
         _eval_node(1, ["change"], core_att[0] if core_att else None, an_att[0] if an_att else None),
     ]
     prev = "evaluate_1"

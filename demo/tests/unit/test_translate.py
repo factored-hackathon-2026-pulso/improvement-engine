@@ -85,3 +85,10 @@ def test_decision_hook_default_is_pending_and_interface_is_stable():
     from pulso_demo import decision_hook
     req = decision_hook.DecisionRequest(run_id="run-demo", proposal_id="p", candidate_hash="h" * 64, operation="approve")
     assert decision_hook.PendingHook().decide(req).state == "pending"
+
+
+def test_failed_design_stage_marks_change_unknown_with_a_reason(results):
+    r = copy.deepcopy(results)
+    r["core"]["design"]["state"] = "terminal_failed"
+    n = nodes(translate.build_world(r))
+    assert n["change"]["status"] == "unknown" and n["change"]["reason_code"] == "core_design_failed"

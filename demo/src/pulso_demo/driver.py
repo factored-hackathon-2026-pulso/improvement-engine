@@ -95,7 +95,7 @@ def run_live(scout: dict[str, Any], verify: dict[str, Any], attempts: list[dict[
     n = str(time.time_ns())[-12:]
     outs = model_outputs(scout, verify, alts, ref_of(TENANT))
     # scripted model: the scout/verifier issue the REAL lab_query tool calls (SQL text recorded from the dataset), then answer
-    for rid, marker, queries in ((f"scout-{n}", RESEARCH, scout["queries"]), (f"verifier-{n}", VERIFY, verify["queries"][:3]), (f"design-{n}", DESIGN, [])):
+    for rid, marker, queries in ((f"scout-{n}", RESEARCH, scout["queries"]), (f"verifier-{n}", VERIFY, verify["queries"][:3]), (f"design-{n}", DESIGN, [{"sql": analysis.DO_NOTHING_SQL, "params": []}])):  # the builder prices do_nothing through the lab too
         e.configure(llm_rules=[{"id": rid, "match": {"system_contains": marker},
                                 "responses": _tool_calls(queries) + [{"kind": "final", "output": outs[marker]}]}])
     rel = e.releases
