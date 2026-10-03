@@ -19,8 +19,8 @@ import httpx
 import rfc8785
 
 from .asof import CaseState, reconstruct_cases
-from .catalog import (CATALOG_VERSION, KNOWN_EVENT_TYPES, SOURCE_NAMESPACE, fmt_ts, jcs_digest, parse_ts,
-                      treat_payload)
+from .catalog import (CATALOG_VERSION, DENIED_EVENT_TYPES, KNOWN_EVENT_TYPES, PLANNED_PREFIXES, SOURCE_NAMESPACE,
+                      fmt_ts, jcs_digest, parse_ts, treat_payload)
 from .config import ARTIFACTS_PATH, CONTRACT, OBSERVATIONS_PATH, ExporterConfig
 from .profile import build_profile
 from .source import RawEvent, SchemaDrift, SqlSource
@@ -46,6 +46,7 @@ class PollReport:
     stopped: dict[str, str] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     unknown_event_types: dict[str, int] = field(default_factory=dict)
+    denied_event_types: dict[str, int] = field(default_factory=dict)
     gaps: list[tuple[int, int]] = field(default_factory=list)
     backfill_requests: list[tuple[int, int]] = field(default_factory=list)
     late_events: list[str] = field(default_factory=list)
@@ -196,10 +197,18 @@ class Exporter:
                 bump["bad_row"] = bump.get("bad_row", 0) + 1
                 return [self._finding(f"bad_row:{ev.event_id}", "bad_row", ev.sequence,
                                       {"event_id": ev.event_id, "reason": reason, "sequence": ev.sequence})]
+            if ev.event_type in DENIED_EVENT_TYPES:
+                bump["denied_event_type"] = bump.get("denied_event_type", 0) + 1
+                info["denied"][ev.event_type] = info["denied"].get(ev.event_type, 0) + 1
+                return [self._finding(f"denied_event_type:{ev.event_id}", "denied_event_type", ev.sequence, {
+                    "event_type": ev.event_type, "event_id": ev.event_id, "sequence": ev.sequence,
+                    "quarantined": True, "payload_forwarded": False})]
+            status = "planned" if ev.event_type.startswith(PLANNED_PREFIXES) else "unknown"
             bump["unknown_event_type"] = bump.get("unknown_event_type", 0) + 1
             info["unknown"][ev.event_type] = info["unknown"].get(ev.event_type, 0) + 1
             return [self._finding(f"unknown_event_type:{ev.event_id}", "unknown_event_type", ev.sequence, {
-                "event_type": ev.event_type, "event_id": ev.event_id, "sequence": ev.sequence,
+                "event_type": ev.event_type, "catalog_status": status, "event_id": ev.event_id,
+                "sequence": ev.sequence,
                 "event_time": fmt_ts(ev.event_time), "ingested_at": fmt_ts(ev.ingested_at),
                 "quarantined": True, "payload_forwarded": False})]
         late, wstart, wend = self._is_late(ev)
@@ -207,7 +216,7 @@ class Exporter:
         sim = self._is_simulator(ev)
         se = {**self._base(ev.event_type), "event_id": ev.event_id, "event_time": fmt_ts(ev.event_time),
               "ingested_at": fmt_ts(ev.ingested_at), "available_at": fmt_ts(ev.ingested_at), "case_id": ev.case_id,
-              "entity_id": ev.entity_id, "actor_ref": ev.actor_id,
+              "entity": ev.entity, "entity_id": ev.entity_id, "actor_role": ev.actor_role, "actor_ref": ev.actor_id,
               "payload": treat_payload(ev.payload, redacted), "redacted_fields": sorted(redacted),
               "evidence_kind": "team_generated" if sim else "observed", "population_excluded": sim, "late": late}
         out = [self._obs(ev.event_id, se, ev.sequence, "late" if (late or force_late) else None,
@@ -253,7 +262,7 @@ class Exporter:
 
     def _assemble(self, rows: list[RawEvent], mode: str, skipped: list[list[int]], force_late: bool, clear: bool,
                   extra: list[dict[str, Any]], meta: dict[str, str]) -> Spec:
-        info: dict[str, Any] = {"unknown": {}, "late": [], "gaps": []}
+        info: dict[str, Any] = {"unknown": {}, "denied": {}, "late": [], "gaps": []}
         delta = self._new_delta()
         last = rows[-1].sequence
         events: list[dict[str, Any]] = []
@@ -300,7 +309,7 @@ class Exporter:
                 return None
             cursor = cur[0] or "s.0"  # profile-only batch: no rows, the cursor does not move
             return Spec("fast_poll", None, None, cursor, [prof], {"meta": prof_meta, "counters": {}}, {
-                "unknown": {}, "late": [], "gaps": []})
+                "unknown": {}, "denied": {}, "late": [], "gaps": []})
         return self._fit(taken, "fast_poll", skipped, extra=[prof] if prof else None, meta=prof_meta)
 
     def _build_late(self) -> Spec | None:
@@ -326,7 +335,7 @@ class Exporter:
             extra.append(self._finding(f"turn_sequence_gap:{case_id}:{missing[0]}-{missing[-1]}",
                                        "turn_sequence_gap", None, {"case_id": case_id, "missing": missing}))
         return Spec("rescan", None, None, "r.0", extra, {"meta": meta, "counters": {}}, {
-            "unknown": {}, "late": [], "gaps": []})
+            "unknown": {}, "denied": {}, "late": [], "gaps": []})
 
     # ------------------------------------------------------------------ loop
     def _blocked(self) -> bool:
@@ -420,6 +429,8 @@ class Exporter:
             return False
         for name, n in spec.info["unknown"].items():
             rep.unknown_event_types[name] = rep.unknown_event_types.get(name, 0) + n
+        for name, n in spec.info["denied"].items():
+            rep.denied_event_types[name] = rep.denied_event_types.get(name, 0) + n
         rep.gaps.extend(spec.info["gaps"])
         rep.late_events.extend(spec.info["late"])
         rep.quality_findings += sum(1 for e in spec.events if e["source_event"]["event_type"] == "exporter.finding")

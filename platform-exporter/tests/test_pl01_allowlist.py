@@ -52,4 +52,4 @@ def test_sqlite_engine_guard_denies_credential_tables_state_columns_and_writes(t
                 "SELECT text FROM turns"):
         with pytest.raises(sqlite3.DatabaseError):
             conn.execute(sql).fetchall()
-    assert conn.execute("SELECT case_id, customer_id FROM cases").fetchall()  # dimension columns stay readable
+    assert conn.execute("SELECT id, customer_id FROM cases").fetchall()  # dimension columns stay readable

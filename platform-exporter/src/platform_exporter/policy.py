@@ -14,22 +14,38 @@ from collections.abc import Callable
 DENIED_TABLES = ("login_accounts", "mfa_challenges", "staff_sessions")
 
 # table -> readable columns. Mutable `cases` state columns (status, close_reason, close_note, assigned_analyst_id,
-# closed_at, version) are NOT readable: state comes from events (spec 32.2 item 3). Names, emails and message text
+# closed_at, first_response_at, assigned_*, version) are NOT readable: state comes from events (spec 32.2 item 3). Names, emails and message text
 # are never readable either.
 ALLOWED_COLUMNS: dict[str, tuple[str, ...]] = {
-    "event_log": ("sequence", "event_id", "event_type", "entity_id", "case_id", "actor_id", "actor_type", "event_time",
-                  "ingested_at", "payload", "tenant_id"),
-    "cases": ("case_id", "customer_id", "channel", "language", "priority", "previous_case_id", "sla_due_at",
-              "created_at", "tenant_id"),
-    "customers": ("customer_id", "simulator"),
-    "staff": ("staff_id", "roles", "languages", "team_id", "active"),
-    "turns": ("turn_id", "case_id", "sequence", "author", "created_at"),
-    "assignments": ("assignment_id", "case_id", "staff_id", "reason", "policy_rule_id", "strategy",
-                    "open_cases_at_assignment", "waited_seconds", "previous_staff_id", "paused_override",
-                    "created_at"),
+    "event_log": ("sequence", "event_id", "event_type", "entity", "entity_id", "case_id", "actor_role", "actor_id",
+                  "event_time", "ingested_at", "payload", "tenant_id"),
+    "cases": ("id", "customer_id", "channel", "language", "priority", "opened_at", "sla_due_at", "previous_case_id",
+              "tenant_id"),
+    "customers": ("id", "simulator"),
+    "staff": ("id", "roles", "languages", "team", "team_id", "active"),
+    "turns": ("id", "case_id", "sequence", "kind", "audience", "author_role", "created_at"),
+    "assignments": ("id", "case_id", "staff_id", "reason", "policy_rule_id", "strategy", "open_cases_at_assignment",
+                    "waited_seconds", "previous_staff_id", "paused_override", "assigned_at"),
     "customer_case_slots": ("customer_id", "open_case_id"),
 }
 ALLOWED_TABLES = tuple(ALLOWED_COLUMNS)
+
+# Columns known from the Product artifact that are deliberately not readable (mutable state, PII, free text, demo
+# data). They are not reported as schema drift; only genuinely new columns are.
+KNOWN_UNREADABLE: dict[str, frozenset[str]] = {
+    "cases": frozenset({
+        "status", "first_response_at", "assigned_analyst_id", "assigned_at", "queued_at", "queue_label",
+        "last_sequence", "last_public_sequence", "last_message_at", "last_message_author_role",
+        "last_message_preview", "last_turn_author_role", "last_turn_preview", "assignee_read_sequence",
+        "unread_sequences", "search_text", "closed_at", "closed_by_id", "closed_by_role", "close_reason",
+        "close_note", "version"}),
+    "customers": frozenset({"display_name", "country", "city", "locale", "suggestions"}),
+    "staff": frozenset({"name", "email", "version"}),
+    "turns": frozenset({"author_id", "text", "language", "client_message_id"}),
+    "assignments": frozenset({"assigned_by_role", "assigned_by_id"}),
+    "customer_case_slots": frozenset({"version"}),
+    "event_log": frozenset(),
+}
 
 _IDENT = re.compile(r"^[a-z_][a-z0-9_]*$")
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import parse_ts
-from .policy import ALLOWED_COLUMNS, assert_table_allowed, install_sqlite_guard, select_sql
+from .policy import ALLOWED_COLUMNS, KNOWN_UNREADABLE, assert_table_allowed, install_sqlite_guard, select_sql
 
 REQUIRED_EVENT_COLUMNS = ("sequence", "event_id", "event_type", "event_time", "ingested_at", "payload")
 CAPABILITY_TABLES = ("routing_step", "identity_check", "copilot_query", "tool_call", "approval", "suggestion",
@@ -29,8 +29,10 @@ class RawEvent:
     sequence: int
     event_id: str
     event_type: str
+    entity: str | None
     entity_id: str | None
     case_id: str | None
+    actor_role: str | None
     actor_id: str | None
     event_time: datetime | None
     ingested_at: datetime | None
@@ -71,7 +73,7 @@ class SqlSource:
     def unexpected_columns(self) -> dict[str, list[str]]:
         out: dict[str, list[str]] = {}
         for table in ALLOWED_COLUMNS:
-            extra = sorted(set(self.table_columns(table)) - set(ALLOWED_COLUMNS[table]))
+            extra = sorted(set(self.table_columns(table)) - set(ALLOWED_COLUMNS[table]) - KNOWN_UNREADABLE[table])
             if extra:
                 out[table] = extra
         return out
@@ -92,8 +94,8 @@ class SqlSource:
             except ValueError:
                 payload, problem = None, problem or "payload_unparseable"
         actor = d.get("actor_id")
-        return RawEvent(int(d["sequence"]), str(d["event_id"]), str(d["event_type"]), d.get("entity_id"),
-                        d.get("case_id"), None if actor is None else str(actor), et, it, payload, d.get("tenant_id"),
+        return RawEvent(int(d["sequence"]), str(d["event_id"]), str(d["event_type"]), d.get("entity"),
+                        d.get("entity_id"), d.get("case_id"), d.get("actor_role"), None if actor is None else str(actor), et, it, payload, d.get("tenant_id"),
                         problem)
 
     def events_after(self, sequence: int, limit: int) -> list[RawEvent]:
@@ -118,20 +120,20 @@ class SqlSource:
 
     # --- dimensions (immutable columns only; never state, names or text) ---
     def case_customers(self) -> dict[str, str]:
-        cols = self._present("cases", ("case_id", "customer_id"))
-        if cols != ["case_id", "customer_id"]:
+        cols = self._present("cases", ("id", "customer_id"))
+        if cols != ["id", "customer_id"]:
             return {}
         return {str(c): str(u) for c, u in self._rows(select_sql("cases", cols))}
 
     def simulator_customers(self) -> set[str]:
-        cols = self._present("customers", ("customer_id", "simulator"))
-        if cols != ["customer_id", "simulator"]:
+        cols = self._present("customers", ("id", "simulator"))
+        if cols != ["id", "simulator"]:
             return set()
         return {str(c) for c, s in self._rows(select_sql("customers", cols)) if s in (1, True, "1", "true", "t")}
 
     def staff_dimension(self) -> list[dict[str, Any]]:
         cols = self._present("staff", ALLOWED_COLUMNS["staff"])
-        return [dict(zip(cols, r, strict=True)) for r in self._rows(select_sql("staff", cols, order_by="staff_id"))]
+        return [dict(zip(cols, r, strict=True)) for r in self._rows(select_sql("staff", cols, order_by="id"))]
 
     def turn_sequence_gaps(self) -> dict[str, list[int]]:
         """Per case, missing `turns.sequence` values inside 1..max (completeness proof of the append-only table)."""

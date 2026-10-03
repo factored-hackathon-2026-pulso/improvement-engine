@@ -11,11 +11,18 @@ import rfc8785
 CATALOG_VERSION = "platform_live.events/1"
 SOURCE_NAMESPACE = "platform_live"
 
-# Closed catalog admitted by default. `auth.*` is default-deny: admit single types with ExporterConfig.extra_event_types.
+# Mirror of platform-contract/event-catalog.json 1.0.0 (a conformance test fails on drift). Closed catalog admitted by
+# default; `auth.*` is default-deny except the four allow-listed telemetry types.
 KNOWN_EVENT_TYPES = frozenset({
-    "case.created", "case.status_changed", "case.assigned", "case.closed", "case.viewed", "case.read",
-    "turn.created", "staff.availability_changed",
+    "case.opened", "case.queued", "case.assigned", "case.status_changed", "case.read", "case.first_responded",
+    "case.closed", "case.viewed", "turn.created", "staff.availability_changed",
+    "auth.login_failed", "auth.account_locked", "auth.session_started", "auth.session_ended",
 })
+# Known security/credential telemetry: never ingested, payload never forwarded (counted as denied_event_type).
+DENIED_EVENT_TYPES = frozenset({"auth.password_accepted", "auth.mfa_challenge_issued", "auth.mfa_failed",
+                                "customer.session_started"})
+# Announced by Product but not admitted yet: quarantined like an unknown type (finding says catalog_status=planned).
+PLANNED_PREFIXES = ("staff.", "team.")
 
 # Keys never forwarded, at any depth: message text, names, contact data, credentials, free-text notes.
 REDACTED_KEYS = frozenset({

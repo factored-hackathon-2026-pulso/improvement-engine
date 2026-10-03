@@ -21,6 +21,7 @@ class CaseState:
     close_reason: str | None = None
     opened_at: datetime | None = None
     closed_at: datetime | None = None
+    first_responded_at: datetime | None = None
     last_sequence: int = 0
 
 
@@ -41,8 +42,12 @@ def reconstruct_cases(events: Iterable[RawEvent], cutoff: datetime) -> dict[str,
             continue
         st = out.setdefault(ev.case_id, CaseState(ev.case_id))
         st.last_sequence = ev.sequence
-        if ev.event_type == "case.created":
+        if ev.event_type in ("case.opened", "case.created"):
             st.status, st.opened_at = _first(ev.payload, "status") or "open", ev.event_time
+        elif ev.event_type == "case.queued":
+            st.status = "queued"
+        elif ev.event_type == "case.first_responded":
+            st.first_responded_at = ev.event_time
         elif ev.event_type == "case.status_changed":
             st.status = _first(ev.payload, "to", "to_status", "status") or st.status
             if st.status != "closed":

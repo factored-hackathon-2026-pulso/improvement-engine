@@ -172,7 +172,7 @@ def test_manual_backfill_by_sequence_marks_events_late_and_dedupes(rig):
 
 
 def test_rescan_emits_dimension_snapshot_and_turn_gap_findings(rig):
-    rig.db.executemany("INSERT INTO turns(turn_id,case_id,sequence) VALUES(?,?,?)",
+    rig.db.executemany("INSERT INTO turns(id,case_id,sequence) VALUES(?,?,?)",
                        [("T1", "CASE-1", 1), ("T3", "CASE-1", 3)])
     rig.db.commit()
     ex = rig.make()

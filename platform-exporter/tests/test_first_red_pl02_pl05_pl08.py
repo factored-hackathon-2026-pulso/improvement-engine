@@ -15,7 +15,7 @@ def _findings(rig, name):
 
 
 def test_pl02_unknown_event_type_is_counted_quarantined_and_batch_acked(rig):
-    add_event(rig.db, 1, "case.created")
+    add_event(rig.db, 1, "case.opened")
     add_event(rig.db, 2, "team.created", payload={"secret_marker": "DO-NOT-FORWARD"})
     add_event(rig.db, 3, "case.assigned")
     ex = rig.make()
@@ -66,7 +66,7 @@ def test_pl04_event_ingested_after_window_close_triggers_window_revision(rig):
 
 
 def test_pl05_case_closed_after_cutoff_is_open_without_close_reason_in_extract(rig):
-    add_event(rig.db, 1, "case.created", event_time="2026-03-01T10:00:00Z", payload={"status": "open"})
+    add_event(rig.db, 1, "case.opened", event_time="2026-03-01T10:00:00Z", payload={"status": "open"})
     add_event(rig.db, 2, "case.assigned", event_time="2026-03-01T10:05:00Z", payload={"analyst_id": "S1"})
     add_event(rig.db, 3, "case.closed", event_time="2026-03-01T12:00:00Z", payload={"close_reason": "resolved"})
     ex = rig.make()
@@ -78,7 +78,7 @@ def test_pl05_case_closed_after_cutoff_is_open_without_close_reason_in_extract(r
 
 
 def test_pl05_extract_excludes_events_not_yet_ingested_at_the_cutoff(rig):
-    add_event(rig.db, 1, "case.created", event_time="2026-03-01T10:00:00Z")
+    add_event(rig.db, 1, "case.opened", event_time="2026-03-01T10:00:00Z")
     add_event(rig.db, 2, "case.closed", event_time="2026-03-01T10:30:00Z", ingested_at="2026-03-01T12:30:00Z",
               payload={"close_reason": "resolved"})
     st = rig.make().case_extract(datetime(2026, 3, 1, 11, 0, tzinfo=UTC))["CASE-1"]
@@ -86,12 +86,12 @@ def test_pl05_extract_excludes_events_not_yet_ingested_at_the_cutoff(rig):
 
 
 def test_pl08_simulator_customers_are_team_generated_and_excluded_from_populations(rig):
-    rig.db.execute("INSERT INTO cases(case_id,customer_id,status) VALUES('CASE-SIM','CUS-SIM','open')")
+    rig.db.execute("INSERT INTO cases(id,customer_id,status) VALUES('CASE-SIM','CUS-SIM','open')")
     rig.db.commit()
-    add_event(rig.db, 1, "case.created", case_id="CASE-SIM")
-    add_event(rig.db, 2, "case.created", case_id="CASE-1")
+    add_event(rig.db, 1, "case.opened", case_id="CASE-SIM")
+    add_event(rig.db, 2, "case.opened", case_id="CASE-1")
     rig.make().poll_once()
     by_case = {e["source_event"]["case_id"]: e["source_event"] for e in _events(rig)
-               if e["source_event"]["event_type"] == "case.created"}
+               if e["source_event"]["event_type"] == "case.opened"}
     assert by_case["CASE-SIM"]["evidence_kind"] == "team_generated" and by_case["CASE-SIM"]["population_excluded"]
     assert by_case["CASE-1"]["evidence_kind"] == "observed" and not by_case["CASE-1"]["population_excluded"]
