@@ -18,9 +18,11 @@ dev = ["pytest>=8.3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "../platform-sim/tests"]
-pythonpath = [".", "../platform-sim", "../platform-sim/tests"]
+pythonpath = [".", "src", "../platform-sim", "../platform-sim/tests"]
 addopts = "-q --strict-markers"
 markers = [
     "wire: L1a wire snapshot and golden vectors",
     "parity: registry-wire-contract (mock / a2 / real)",
+    "runtime: L2 composed runtime (preflight, factories, pin, internal API)",
+    "pg: needs real Postgres 16 (PULSO_TEST_PG_DSN)",
 ]
