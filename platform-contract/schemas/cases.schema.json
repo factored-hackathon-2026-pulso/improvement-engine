@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.0.0/cases.schema.json",
+  "title": "cases",
+  "description": "platform_live row from source table `cases` (mutable, optimistic version).",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^CASE-.+$"
+    },
+    "customer_id": {
+      "type": "string",
+      "pattern": "^CUS-.+$"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "app_chat",
+        "web_chat"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "es",
+        "pt"
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "assigned",
+        "in_progress",
+        "closed"
+      ]
+    },
+    "opened_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sla_due_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "first_response_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "previous_case_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^CASE-.+$"
+    },
+    "assigned_analyst_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^STF-.+$"
+    },
+    "assigned_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "queued_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "queue_label": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "last_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_public_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_message_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "last_message_author_role": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "customer",
+        "analyst",
+        "supervisor",
+        "admin",
+        "system",
+        null
+      ]
+    },
+    "last_turn_author_role": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "customer",
+        "analyst",
+        "supervisor",
+        "admin",
+        "system",
+        null
+      ]
+    },
+    "assignee_read_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unread_sequences": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "closed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "closed_by_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "closed_by_role": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "customer",
+        "analyst",
+        "supervisor",
+        "admin",
+        "system",
+        null
+      ]
+    },
+    "close_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "resolved",
+        "customer_unresponsive",
+        "duplicate",
+        "out_of_scope",
+        "other",
+        null
+      ]
+    },
+    "close_note": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 500,
+      "x-sensitive-text": true
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "id",
+    "customer_id",
+    "channel",
+    "language",
+    "priority",
+    "status",
+    "opened_at",
+    "sla_due_at",
+    "first_response_at",
+    "previous_case_id",
+    "assigned_analyst_id",
+    "assigned_at",
+    "queued_at",
+    "queue_label",
+    "last_sequence",
+    "last_public_sequence",
+    "last_message_at",
+    "last_message_author_role",
+    "last_turn_author_role",
+    "assignee_read_sequence",
+    "unread_sequences",
+    "closed_at",
+    "closed_by_id",
+    "closed_by_role",
+    "close_reason",
+    "close_note",
+    "version"
+  ],
+  "additionalProperties": false,
+  "x-primary-key": [
+    "id"
+  ],
+  "x-denied-columns": [
+    "search_text",
+    "last_message_preview",
+    "last_turn_preview"
+  ],
+  "x-contract-version": "1.0.0"
+}

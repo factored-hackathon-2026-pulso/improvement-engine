@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.0.0/assignments.schema.json",
+  "title": "assignments",
+  "description": "platform_live row from source table `assignments` (append-only).",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^ASG-.+$"
+    },
+    "case_id": {
+      "type": "string",
+      "pattern": "^CASE-.+$"
+    },
+    "staff_id": {
+      "type": "string",
+      "pattern": "^STF-.+$"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "language_least_loaded",
+        "queue_drained",
+        "manual"
+      ]
+    },
+    "policy_rule_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "open_cases_at_assignment": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "strategy": {
+      "type": "string"
+    },
+    "assigned_by_role": {
+      "type": "string",
+      "enum": [
+        "system",
+        "supervisor",
+        "admin"
+      ]
+    },
+    "assigned_by_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "waited_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "previous_staff_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^STF-.+$"
+    },
+    "paused_override": {
+      "type": "boolean"
+    },
+    "assigned_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "id",
+    "case_id",
+    "staff_id",
+    "reason",
+    "policy_rule_id",
+    "open_cases_at_assignment",
+    "strategy",
+    "assigned_by_role",
+    "assigned_by_id",
+    "waited_seconds",
+    "previous_staff_id",
+    "paused_override",
+    "assigned_at"
+  ],
+  "additionalProperties": false,
+  "x-primary-key": [
+    "id"
+  ],
+  "x-denied-columns": [],
+  "x-contract-version": "1.0.0"
+}

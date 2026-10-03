@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.0.0/customers.schema.json",
+  "title": "customers",
+  "description": "platform_live row from source table `customers` (append-only).",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^CUS-.+$"
+    },
+    "country": {
+      "type": "string",
+      "enum": [
+        "CO",
+        "MX",
+        "AR",
+        "BR"
+      ]
+    },
+    "city": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "locale": {
+      "type": "string",
+      "enum": [
+        "es-CO",
+        "es-MX",
+        "es-AR",
+        "pt-BR"
+      ]
+    },
+    "simulator": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "country",
+    "city",
+    "locale",
+    "simulator"
+  ],
+  "additionalProperties": false,
+  "x-primary-key": [
+    "id"
+  ],
+  "x-denied-columns": [
+    "display_name",
+    "suggestions"
+  ],
+  "x-contract-version": "1.0.0"
+}

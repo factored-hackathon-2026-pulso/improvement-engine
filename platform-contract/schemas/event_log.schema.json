@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.0.0/event_log.schema.json",
+  "title": "event_log",
+  "description": "platform_live row from source table `event_log` (append-only).",
+  "type": "object",
+  "properties": {
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^EVT-.+$"
+    },
+    "event_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entity": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "entity_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "case_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^CASE-.+$"
+    },
+    "actor_role": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "customer",
+        "analyst",
+        "supervisor",
+        "admin",
+        "system",
+        null
+      ]
+    },
+    "actor_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "event_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ingested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "sequence",
+    "event_id",
+    "event_type",
+    "entity",
+    "entity_id",
+    "case_id",
+    "actor_role",
+    "actor_id",
+    "event_time",
+    "ingested_at",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "x-primary-key": [
+    "sequence"
+  ],
+  "x-denied-columns": [],
+  "x-contract-version": "1.0.0"
+}

@@ -1,0 +1,45 @@
+[
+  {
+    "sequence": 1,
+    "event_id": "EVT-0001",
+    "event_type": "case.opened",
+    "entity": "case",
+    "entity_id": "CASE-0001",
+    "case_id": "CASE-0001",
+    "actor_role": "customer",
+    "actor_id": "CUS-0001",
+    "event_time": "2026-03-02T14:00:00Z",
+    "ingested_at": "2026-03-02T14:00:00Z",
+    "payload": {}
+  },
+  {
+    "sequence": 2,
+    "event_id": "EVT-0002",
+    "event_type": "case.assigned",
+    "entity": "case",
+    "entity_id": "CASE-0001",
+    "case_id": "CASE-0001",
+    "actor_role": "system",
+    "actor_id": null,
+    "event_time": "2026-03-02T14:00:00Z",
+    "ingested_at": "2026-03-02T14:00:01Z",
+    "payload": {
+      "staff_id": "STF-0002"
+    }
+  },
+  {
+    "sequence": 3,
+    "event_id": "EVT-0003",
+    "event_type": "turn.created",
+    "entity": "turn",
+    "entity_id": "TRN-0001",
+    "case_id": "CASE-0001",
+    "actor_role": "customer",
+    "actor_id": "CUS-0001",
+    "event_time": "2026-03-02T14:00:00Z",
+    "ingested_at": "2026-03-02T14:00:01Z",
+    "payload": {
+      "sequence": 1
+    }
+  }
+]

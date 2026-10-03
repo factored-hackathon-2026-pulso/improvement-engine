@@ -1,0 +1,17 @@
+{
+  "table": "staff_dimensions",
+  "row": {
+    "id": "STF-0002",
+    "roles": [
+      "analyst"
+    ],
+    "languages": [
+      "es",
+      "pt"
+    ],
+    "team": "general",
+    "active": true,
+    "version": 1,
+    "email": "a@b.c"
+  }
+}

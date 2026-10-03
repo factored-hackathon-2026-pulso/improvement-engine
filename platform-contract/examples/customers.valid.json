@@ -1,0 +1,16 @@
+[
+  {
+    "id": "CUS-0001",
+    "country": "BR",
+    "city": "Sao Paulo",
+    "locale": "pt-BR",
+    "simulator": false
+  },
+  {
+    "id": "CUS-0002",
+    "country": "CO",
+    "city": null,
+    "locale": "es-CO",
+    "simulator": true
+  }
+]

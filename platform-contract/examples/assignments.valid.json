@@ -1,0 +1,17 @@
+[
+  {
+    "id": "ASG-0001",
+    "case_id": "CASE-0001",
+    "staff_id": "STF-0002",
+    "reason": "language_least_loaded",
+    "policy_rule_id": "H1",
+    "open_cases_at_assignment": 0,
+    "strategy": "language_least_loaded",
+    "assigned_by_role": "system",
+    "assigned_by_id": null,
+    "waited_seconds": 0,
+    "previous_staff_id": null,
+    "paused_override": false,
+    "assigned_at": "2026-03-02T14:00:00Z"
+  }
+]
