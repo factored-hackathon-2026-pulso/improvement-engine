@@ -91,11 +91,14 @@ class AuthoringService:
     def dry_run(self, claim_tenant: str, raw: Any) -> dict[str, Any]:
         try:
             req = DryRunRequest.model_validate(raw)
-        except pydantic.ValidationError:
+        except (pydantic.ValidationError, RecursionError):
             raise BridgeError("pulso:invalid_request", 422) from None
         if req.tenant_id != claim_tenant:
             raise BridgeError("pulso:tenant_mismatch", 403)
-        digest = request_digest(raw)
+        try:
+            digest = request_digest(raw)
+        except (ValueError, TypeError, RecursionError):  # not canonicalisable (e.g. absurd nesting)
+            raise BridgeError("pulso:invalid_request", 422) from None
         if req.request_digest is not None and req.request_digest != digest:
             raise BridgeError("pulso:invalid_request", 422, details={"fields": ["request_digest"]})
         if any(c.kind == RELEASE_SETTINGS for c in req.changes):  # CAP-23 / N-07: default deny

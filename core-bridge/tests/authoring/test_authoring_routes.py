@@ -310,3 +310,24 @@ def test_real_responses_validate_against_the_bridge_mock_schemas() -> None:
     check("CoreAuthoringDryRunRequest", _req(w))
     check("CoreAuthoringDryRun", w.dry(_req(w)).json())
     check("CoreAuthoringDryRun", w.dry(_req(w, [_draft("0.9.0")])).json())
+
+
+# ---- hostile bodies never become a 500 (review claude-0012) ---------------------------------------------
+
+def _post_raw(w: World, data: bytes) -> Any:
+    return w.client.post("/core-authoring/dry-run", content=data, headers={
+        "Authorization": f"Bearer {_token('authoring_dry_run')}", "content-type": "application/json"})
+
+
+def test_dry_run_non_finite_numbers_and_deep_nesting_are_422_and_write_nothing() -> None:
+    w = World()
+    before = w.counts()
+    nan = json.dumps(_req(w, [{**_draft(), "content": {**_draft()["content"], "x": 1.5}}])).replace("1.5", "NaN")
+    deep_body = b'{"a":' * 5000 + b"1" + b"}" * 5000
+    d = _draft()
+    d["content"]["n"] = "@@"
+    deep_content = json.dumps(_req(w, [d])).replace('"@@"', '{"n":' * 3000 + "1" + "}" * 3000)
+    for data in (nan.encode(), deep_body, deep_content.encode()):
+        r = _post_raw(w, data)
+        assert r.status_code == 422 and r.json()["code"] == "pulso:invalid_request", r.text
+    assert w.counts() == before

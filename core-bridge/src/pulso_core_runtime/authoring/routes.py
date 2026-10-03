@@ -6,6 +6,7 @@ before a handler runs. Errors use the D.1 envelope."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -22,6 +23,10 @@ from pulso_core_runtime.invoke.errors import BridgeError
 @dataclass
 class AuthoringDeps:
     service: AuthoringService
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(name)
 
 
 def _fail(exc: BridgeError, request: Request) -> JSONResponse:
@@ -42,8 +47,8 @@ def build_handlers(deps: AuthoringDeps) -> dict[str, Callable[[Request, Claims],
 
     async def dry_run(request: Request, claims: Claims) -> JSONResponse:
         try:
-            raw = await request.json()
-        except ValueError:
+            raw = json.loads(await request.body(), parse_constant=_reject_constant)
+        except (ValueError, RecursionError):  # bad UTF-8, bad JSON, NaN/Infinity, absurd nesting
             return _fail(BridgeError("pulso:invalid_request", 422), request)
         if not isinstance(raw, dict):
             return _fail(BridgeError("pulso:invalid_request", 422), request)
