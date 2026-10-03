@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from pulso_core_runtime.evaluation.budget import BudgetLimits
+from pulso_core_runtime.llm.metering import (
+    SpendMeteringGateway,  # noqa: F401  (re-export: moved to llm/)
+)
 from pulso_core_runtime.tools.broker import BrokerClient
 
 
@@ -182,39 +185,6 @@ def _same_proposal(c: dict[str, Any], get_write: Any, receipt: Any, pid: str, ct
         return False
     created = get_write(write_key(receipt.idempotency_key, receipt.stage, ops.index("create_proposal")))
     return isinstance(created, dict) and created.get("proposal_id") == pid
-
-
-class SpendMeteringGateway:
-    """Charges every live model call to `ReceiptStore.meter_spend` (atomic, capped). The cap comes from the
-    sealed invocation `budget.cost_usd_max`; an exhausted cap refuses the call result (`GatewayError.refused`).
-    Without a cap the spend is recorded against an unreachable cap (metering only, Core budgets still apply)."""
-
-    UNCAPPED = "1000000000"
-
-    def __init__(self, inner: Any, contexts: Any, store: Any,
-                 current: Any = None) -> None:
-        from pulso_core_runtime.tools.context import current_binding
-
-        self._inner, self._contexts, self._store = inner, contexts, store
-        self._current = current or current_binding
-
-    def generate(self, prompt: Any, inputs_model_view: Any, locale: Any, schema: Any = None) -> Any:
-        from agent_core.domain.errors import GatewayError, GatewayErrorKind
-
-        ref = self._current()
-        result = self._inner.generate(prompt, inputs_model_view, locale, schema)
-        if ref is None:
-            return result
-        ic = self._contexts.lookup(ref)
-        row = self._store.context_row(ref)
-        budget = ((row or {}).get("context") or {}).get("budget") or {}
-        cap = str(budget.get("cost_usd_max", self.UNCAPPED))
-        cost = str(getattr(result, "cost_usd", 0) or 0)
-        tokens = int(getattr(result, "tokens_in", 0)) + int(getattr(result, "tokens_out", 0))
-        if not self._store.meter_spend(ic.tenant_id, ic.job_id, ic.stage, ic.attempt, cost_usd=cost, cap_usd=cap,
-                                       tokens=tokens):
-            raise GatewayError(GatewayErrorKind.refused)
-        return result
 
 
 class EvalTranscript:

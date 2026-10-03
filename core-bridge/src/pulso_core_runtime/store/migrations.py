@@ -29,6 +29,24 @@ MIGRATIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
         " reconciled boolean NOT NULL DEFAULT false, updated_at timestamptz NOT NULL DEFAULT now(),"
         " PRIMARY KEY (tenant_id, job_id, stage, attempt))",
     )),
+    ("l3_002_model_call_ledger", (
+        # Pre-reservation (spend held until a known outcome) next to the existing meter.
+        "ALTER TABLE pulso_bridge.budget_meter ADD COLUMN IF NOT EXISTS reserved_usd numeric(20,8) NOT NULL DEFAULT 0",
+        # Append-only record of EVERY model call outcome. Metadata only: no prompt, input, output or provider text.
+        ("CREATE TABLE IF NOT EXISTS pulso_bridge.model_call_ledger ("
+        " id bigserial PRIMARY KEY, tenant_id text NOT NULL, job_id text NOT NULL, stage text NOT NULL,"
+        " attempt integer NOT NULL, binding_ref text NOT NULL,"
+        " outcome text NOT NULL CHECK (outcome IN ('ok','timeout','unavailable','rate_limited','invalid_output',"
+        "   'refused','over_cap','budget_exhausted','policy_denied','error')),"
+        " reason text, tokens_in integer NOT NULL DEFAULT 0, tokens_out integer NOT NULL DEFAULT 0,"
+        " cost_usd numeric(20,8) NOT NULL DEFAULT 0, gateway_cost_usd numeric(20,8),"
+        " usage_known boolean NOT NULL DEFAULT true, reserved_usd numeric(20,8) NOT NULL DEFAULT 0,"
+        " over_cap boolean NOT NULL DEFAULT false, price_mismatch boolean NOT NULL DEFAULT false,"
+        " endpoint_alias text, model_requested text, model_reported text,"
+        " created_at timestamptz NOT NULL DEFAULT now())"),
+        ("CREATE INDEX IF NOT EXISTS model_call_ledger_scope ON pulso_bridge.model_call_ledger"
+         " (tenant_id, job_id, stage, attempt, id)"),
+    )),
 )
 
 BOOKKEEPING = ("CREATE TABLE IF NOT EXISTS pulso_bridge.migrations (name text PRIMARY KEY, "

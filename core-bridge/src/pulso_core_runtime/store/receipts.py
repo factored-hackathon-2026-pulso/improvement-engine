@@ -178,6 +178,81 @@ class ReceiptStore:
                 "SELECT * FROM pulso_bridge.budget_meter WHERE tenant_id=%s AND job_id=%s AND stage=%s"
                 " AND attempt=%s", (tenant_id, job_id, stage, attempt)).fetchone()
 
+    # --- metering v2: atomic pre-reservation, settlement and the model-call ledger ------------------------------
+
+    def meter_reserve(self, tenant_id: str, job_id: str, stage: str, attempt: int, *, amount: str,
+                      cap_usd: str) -> bool:
+        """Atomically hold `amount` against the cap: one statement, applied only if `spent + reserved + amount <= cap`
+        (concurrent callers serialise on the row lock and re-check). Unparsable, negative or non-finite is refused."""
+        try:
+            hold = Decimal(amount)
+        except (InvalidOperation, ValueError):
+            return False
+        if not hold.is_finite() or hold < 0:
+            return False
+        with self._conn() as conn:
+            row = conn.execute(
+                "INSERT INTO pulso_bridge.budget_meter (tenant_id, job_id, stage, attempt, reserved_usd)"
+                " SELECT %s,%s,%s,%s,%s::numeric WHERE %s::numeric <= %s::numeric"
+                " ON CONFLICT (tenant_id, job_id, stage, attempt) DO UPDATE SET"
+                " reserved_usd=budget_meter.reserved_usd+EXCLUDED.reserved_usd, updated_at=now()"
+                " WHERE budget_meter.cost_usd+budget_meter.reserved_usd+EXCLUDED.reserved_usd <= %s::numeric"
+                " RETURNING 1", (tenant_id, job_id, stage, attempt, amount, amount, cap_usd, cap_usd)).fetchone()
+        return row is not None
+
+    def model_call_settle(self, tenant_id: str, job_id: str, stage: str, attempt: int, *, cap_usd: str,
+                          release_usd: Decimal, cost_usd: Decimal, tokens: int, usage_known: bool, tokens_in: int,
+                          tokens_out: int, outcome: str, binding_ref: str, **entry: Any) -> tuple[Decimal, bool]:
+        """Always applies the spend (never dropped), releases `release_usd` of the reservation (0 keeps it as unknown)
+        and appends the ledger row, in one transaction. Returns (total spent, over the cap)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "INSERT INTO pulso_bridge.budget_meter (tenant_id, job_id, stage, attempt, calls, tokens, cost_usd,"
+                " usage_known) VALUES (%s,%s,%s,%s,1,%s,%s::numeric,%s)"
+                " ON CONFLICT (tenant_id, job_id, stage, attempt) DO UPDATE SET calls=budget_meter.calls+1,"
+                " tokens=budget_meter.tokens+EXCLUDED.tokens, cost_usd=budget_meter.cost_usd+EXCLUDED.cost_usd,"
+                " reserved_usd=GREATEST(budget_meter.reserved_usd-%s::numeric, 0),"
+                " usage_known=budget_meter.usage_known AND EXCLUDED.usage_known, updated_at=now()"
+                " RETURNING cost_usd", (tenant_id, job_id, stage, attempt, tokens, str(cost_usd), usage_known,
+                                        str(release_usd))).fetchone()
+            assert row is not None
+            total = Decimal(row["cost_usd"])
+            over = total > Decimal(cap_usd)
+            self._ledger_insert(conn, tenant_id, job_id, stage, attempt,
+                                "over_cap" if over and outcome == "ok" else outcome, binding_ref=binding_ref,
+                                tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd,
+                                usage_known=usage_known, over_cap=over, **entry)
+        return total, over
+
+    def ledger_record(self, tenant_id: str, job_id: str, stage: str, attempt: int, *, outcome: str,
+                      binding_ref: str, **entry: Any) -> None:
+        """One ledger row for a call that never reached the model (policy denied, budget exhausted) or whose spend is
+        unknown (non-gateway error). No meter change."""
+        with self._conn() as conn:
+            self._ledger_insert(conn, tenant_id, job_id, stage, attempt, outcome, binding_ref=binding_ref, **entry)
+
+    @staticmethod
+    def _ledger_insert(conn: Any, tenant_id: str, job_id: str, stage: str, attempt: int, outcome: str, *,
+                       binding_ref: str, tokens_in: int = 0, tokens_out: int = 0, cost_usd: Decimal = Decimal(0),
+                       gateway_cost_usd: Decimal | None = None, usage_known: bool = True,
+                       reserved_usd: Decimal = Decimal(0), over_cap: bool = False, price_mismatch: bool = False,
+                       endpoint_alias: str | None = None, model_requested: str | None = None,
+                       model_reported: str | None = None, reason: str | None = None) -> None:
+        conn.execute(
+            "INSERT INTO pulso_bridge.model_call_ledger (tenant_id, job_id, stage, attempt, binding_ref, outcome,"
+            " reason, tokens_in, tokens_out, cost_usd, gateway_cost_usd, usage_known, reserved_usd, over_cap,"
+            " price_mismatch, endpoint_alias, model_requested, model_reported)"
+            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::numeric,%s::numeric,%s,%s::numeric,%s,%s,%s,%s,%s)",
+            (tenant_id, job_id, stage, attempt, binding_ref, outcome, reason, tokens_in, tokens_out, str(cost_usd),
+             None if gateway_cost_usd is None else str(gateway_cost_usd), usage_known, str(reserved_usd), over_cap,
+             price_mismatch, endpoint_alias, model_requested, model_reported))
+
+    def ledger_rows(self, tenant_id: str, job_id: str, stage: str, attempt: int) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT * FROM pulso_bridge.model_call_ledger WHERE tenant_id=%s AND job_id=%s AND stage=%s"
+                " AND attempt=%s ORDER BY id", (tenant_id, job_id, stage, attempt)).fetchall()
+
     def meter_reconcile(self, tenant_id: str, job_id: str, stage: str, attempt: int) -> bool:
         with self._conn() as conn:
             cur = conn.execute(
