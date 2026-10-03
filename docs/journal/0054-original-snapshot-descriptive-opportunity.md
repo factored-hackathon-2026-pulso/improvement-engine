@@ -101,3 +101,26 @@ prove contact causality, repeat-contact status, business lift, reduced PQRs,
 ROI, or operational suitability. Native Agent Core artifact authoring and
 admission remain dependency-blocked until Agent Core defines a snapshot-only
 contract that preserves this authority boundary.
+
+## CI correction (2026-10-03)
+
+The first PR verification failed at `cargo clippy --workspace --all-targets --
+-D warnings` on both Ubuntu and Windows. The diagnostic was
+`clippy::type_complexity` for the private contact projection helper's
+three-part tuple return. Reproducing the pinned lint locally produced the same
+warning. The helper now names that tuple with a private
+`ContactSnapshotProjection` alias; this changes no runtime behavior. The first
+full workspace test run also exposed a stale CLI test that still expected the
+removed `--min-contact-cell-count` flag to parse a variable numeric threshold.
+The policy is fixed at k=5, so the test now asserts the flag is rejected for
+both a sub-floor (4) and high (10,000) request rather than reopening a per-run
+override. The focused regression passed. Post-fix `cargo test --workspace
+--features test-support` passed, including 112 core unit tests, all workspace
+integration tests, 50 core doctests, and the original-snapshot CLI tests; the
+original-data scan test remains ignored. `cargo +1.98.1 fmt --all --check` and
+`cargo +1.98.1 clippy --workspace --all-targets -- -D warnings` passed before
+the test-only adjustment; Python contract tests passed (11 tests, 1 opt-in
+Podman test skipped), fixture validation passed, and Windows Pester passed
+10/10. This branch does not contain a `local-ci-preflight.ps1` script, so the
+workflow's local gates were run directly. The separate PostgreSQL service tests
+were not rerun locally; GitHub's PostgreSQL job passed on the failing head.

@@ -1149,18 +1149,17 @@ mod contact_snapshot_tests {
     }
 }
 
+type ContactSnapshotProjection = (
+    Vec<SnapshotContactVolume>,
+    Option<ContactProjectionSummary>,
+    Option<DescriptiveContactProjection>,
+);
+
 fn project_contact_snapshot(
     root: &Path,
     entries: &[ManifestEntry],
     minimum_cell_count: u64,
-) -> Result<
-    (
-        Vec<SnapshotContactVolume>,
-        Option<ContactProjectionSummary>,
-        Option<DescriptiveContactProjection>,
-    ),
-    AdapterError,
-> {
+) -> Result<ContactSnapshotProjection, AdapterError> {
     let mut grouped = BTreeMap::<(ContactReasonCategory, ContactChannel), u64>::new();
     let mut descriptive_grouped =
         BTreeMap::<(String, ContactReasonCategory, ContactChannel), u64>::new();
