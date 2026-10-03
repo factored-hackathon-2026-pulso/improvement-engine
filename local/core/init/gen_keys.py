@@ -5,6 +5,8 @@ Idempotent: existing key files are kept (a second run changes nothing). Files (n
   bridge-{identity,staff,callback,executor}.json   the bridge's private signers (credentials.issuer.load_signer format);
                                      the executor key (A03 iii, executor -> lab-broker) is a distinct keypair, never the callback key
   lab-broker-trust.json              PUBLIC half of the executor key, in the fixture-key format of the lab-broker double
+  control-api-core-bridge.key        seed of the control-api -> core-bridge service key (iss control-api); control-api-trust.json
+                                     = PUBLIC half of the callback key, for the control-api side of binding callbacks
   service.json                       public service keys (internal.auth.load_service_keys format)
   exporter-control-api.key / exporter-lab-broker.key   exporter private seeds (b64url, one line)
 Runs as root inside the image, then hands ownership to the runtime uid (10001).
@@ -63,7 +65,12 @@ def main(out: Path) -> int:
     for aud in ("control-api", "lab-broker"):
         seed, pub = new_pair()
         write(out / f"exporter-{aud}.key", seed + "\n")
-        service[f"exporter-{aud}"] = {"iss": "pulso-exporter", "aud": aud, "key": pub}
+        service[f"exporter-{aud}"] = {"iss": "core-bridge", "aud": aud, "key": pub}
+    seed, pub = new_pair()  # control-api -> core-bridge (A03 class i): the seed stays readable for the platform side
+    write(out / "control-api-core-bridge.key", seed + "\n")
+    service["control-api-core-bridge"] = {"iss": "control-api", "aud": "core-bridge", "key": pub}
+    cb_kid, _, cb_pub = signers["bridge-callback"]  # binding callbacks (runtime -> control-api): PUBLIC half only
+    write(out / "control-api-trust.json", json.dumps({"keys": {cb_kid: {"iss": "core-bridge", "aud": "control-api", "key": cb_pub}}}), 0o644)
     seed, pub = new_pair()  # smoke probe (core-bridge audience): used by local/core/smoke.ps1 -Exec only
     write(out / "smoke-probe.key", seed + "\n")
     service["smoke-probe"] = {"iss": "pulso-smoke", "aud": "core-bridge", "key": pub}

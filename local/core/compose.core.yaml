@@ -75,7 +75,7 @@ services:
   core-grants:
     image: docker.io/library/postgres@sha256:a85daf0dbd5e79586e850e3fe4b21b796799828ad015ce2166aeb98cc24da61c
     profiles: [real_local, fixture]
-    entrypoint: ["sh", "-c", "psql \"$$CORE_ADMIN_DSN\" -v ON_ERROR_STOP=1 -f /init/10-exporter-grants.sql -f /init/20-seed-state.sql && psql \"$$CORE_EVAL_ADMIN_DSN\" -v ON_ERROR_STOP=1 -f /init/15-eval-grants.sql"]
+    entrypoint: ["sh", "-c", "psql \"$$CORE_ADMIN_DSN\" -v ON_ERROR_STOP=1 -f /init/10-exporter-grants.sql -f /init/12-app-grants.sql -f /init/20-seed-state.sql && psql \"$$CORE_EVAL_ADMIN_DSN\" -v ON_ERROR_STOP=1 -f /init/15-eval-grants.sql"]
     environment:
       CORE_ADMIN_DSN: *admin-dsn
       CORE_EVAL_ADMIN_DSN: postgresql://postgres:${POSTGRES_PASSWORD:-unset}@core-postgres:5432/core_eval
@@ -85,7 +85,7 @@ services:
     restart: "no"
     labels:
       <<: [*labels, *runner]
-      com.pulso.runner.copy: '[{"src":"init/10-exporter-grants.sql","dest":"/init/10-exporter-grants.sql"},{"src":"init/15-eval-grants.sql","dest":"/init/15-eval-grants.sql"},{"src":"init/20-seed-state.sql","dest":"/init/20-seed-state.sql"}]'
+      com.pulso.runner.copy: '[{"src":"init/10-exporter-grants.sql","dest":"/init/10-exporter-grants.sql"},{"src":"init/12-app-grants.sql","dest":"/init/12-app-grants.sql"},{"src":"init/15-eval-grants.sql","dest":"/init/15-eval-grants.sql"},{"src":"init/20-seed-state.sql","dest":"/init/20-seed-state.sql"}]'
     networks: [core-net]
 
   core-keygen:
@@ -162,6 +162,10 @@ services:
       AGENTCORE_KEYS_FINGERPRINT: ${AGENTCORE_KEYS_FINGERPRINT:-}
       AGENTCORE_KEYS_TOKEN_MAP: ${AGENTCORE_KEYS_TOKEN_MAP:-}
       AGENTCORE_JEV_API_KEY: ${AGENTCORE_JEV_API_KEY:-}
+      # LLM gateway (agent_core LLM_ENDPOINTS: JSON {alias: {base_url, api_key_env}}); an alias's api_key_env may name
+      # PULSO_LLM_API_KEY. Empty = no endpoints. Values come from the env file, never from this repo.
+      LLM_ENDPOINTS: ${LLM_ENDPOINTS:-}
+      PULSO_LLM_API_KEY: ${PULSO_LLM_API_KEY:-}
     volumes:
       - core-keys:/run/pulso-keys:ro
     depends_on:

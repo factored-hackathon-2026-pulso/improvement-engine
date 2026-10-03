@@ -61,3 +61,32 @@ def test_second_run_changes_nothing(keys: Path) -> None:
     before = {p.name: p.read_bytes() for p in keys.iterdir()}
     assert gen_keys.main(keys) == 0
     assert {p.name: p.read_bytes() for p in keys.iterdir()} == before
+
+
+def test_exporter_keys_are_registered_with_the_issuer_the_exporter_signs(keys: Path) -> None:
+    from pulso_core_runtime.exporter.auth import ISSUER  # the exporter signs iss=core-bridge (A03)
+
+    service = _load(keys / "service.json")["keys"]
+    for aud in ("control-api", "lab-broker"):
+        assert service[f"exporter-{aud}"]["iss"] == ISSUER
+        assert service[f"exporter-{aud}"]["aud"] == aud
+
+
+def test_control_api_to_core_bridge_key_is_emitted_with_a_readable_seed(keys: Path) -> None:
+    entry = _load(keys / "service.json")["keys"]["control-api-core-bridge"]
+    assert (entry["iss"], entry["aud"]) == ("control-api", "core-bridge")
+    seed = (keys / "control-api-core-bridge.key").read_text(encoding="ascii").strip()
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    pub = Ed25519PrivateKey.from_private_bytes(base64.urlsafe_b64decode(seed + "=" * (-len(seed) % 4))).public_key()
+    raw = pub.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    assert entry["key"] == base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+def test_control_api_trust_holds_only_the_callback_public_key(keys: Path) -> None:
+    cb = _load(keys / "bridge-callback.json")
+    trust = _load(keys / "control-api-trust.json")["keys"]
+    assert list(trust) == [cb["kid"]]
+    assert (trust[cb["kid"]]["iss"], trust[cb["kid"]]["aud"]) == ("core-bridge", "control-api")
+    assert cb["key"] not in (keys / "control-api-trust.json").read_text(encoding="ascii")
