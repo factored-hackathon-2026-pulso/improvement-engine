@@ -41,7 +41,7 @@ ADR 0005 (per-route audience/purpose, `jti`, tenant claim). `PulsoAuthz` admits 
 `PinnedRegistryPort` honours the signed `pin_release_id` (active, belongs to the selected agent/version).
 
 ## Config
-Entry points of `docker-entrypoint.sh`: `runtime | exporter | seed | bootstrap | migrate | sweep | agentcore`; key JSON from
+Entry points of `docker-entrypoint.sh`: `runtime | exporter | migrate | agentcore` (seed/bootstrap/sweep were removed: no such modules; seeding is the local/core init job); key JSON from
 `CORE_IDENTITY_KEYS_JSON`, `CORE_STAFF_KEYS_JSON`, `PULSO_SERVICE_KEYS_JSON` is written to tmpfs and unset. Image: multi-stage
 (wheelhouse from the pinned checkout, contracts/VERSION must equal 1.3.0), non-root uid 10001, only
 `src/pulso_core_runtime` copied (no `testing`).
@@ -69,8 +69,6 @@ runtime error if a piece is used before composition. The exporter is a separate 
 
 ## Gaps
 - `mypy --strict` is not clean (agent_core ships no `py.typed`).
-- `docker-entrypoint.sh` references `seed`, `bootstrap`, `sweep` module entrypoints that are not present under
-  `src/pulso_core_runtime/` in this tree.
 - Transcript is a null stand-in (conversational runs rejected) and `grant-active` is always false; both are listed in
   `/version.doubles[]`. Calibration and classifier asset directories are optional and reported when absent.
 - No online key revocation (ADR 0005).

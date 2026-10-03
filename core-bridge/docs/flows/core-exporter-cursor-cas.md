@@ -87,6 +87,4 @@ Limits: batch <= 500 events and 512 KiB.
 ## Gaps
 `cut_ref` is always null (no consistent cut is produced). Source schema artifacts are bootstrapped through the artifact
 route unless refs are configured. Real control-api behaviour is not exercised (the ingest side is the double in
-`platform-sim/ingest_fixture`). `docker-entrypoint.sh` lists `seed|bootstrap|sweep` modules that do not exist as
-`pulso_core_runtime.<name>` in this tree (the exporter module exposes its own `__main__`); not verified how `sweep` is
-meant to be started from the image.
+`platform-sim/ingest_fixture`). `docker-entrypoint.sh` offers exactly `runtime|exporter|migrate|agentcore` (the exporter runs its own `__main__`).

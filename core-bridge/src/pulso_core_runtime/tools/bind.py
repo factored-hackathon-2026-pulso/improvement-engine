@@ -26,13 +26,25 @@ def bind_context(deps: Deps, ic: InvocationContext, args: Args, run_id: str) -> 
         # 409 binding_conflict|digest_mismatch, 404: final no. 5xx: unknown effect -> stays pending, denied.
         if exc.status in (409, 404):
             deps.contexts.deny(ic.binding_ref)
+        elif exc.status >= 500:
+            _unproven(deps, ic)
         return err(f"pulso:binding_failed:{exc.code}", ToolStatus.denied)
     except BrokerTimeout:
+        _unproven(deps, ic)
         return err("pulso:binding_failed:timeout", ToolStatus.denied)
     except BrokerUnavailable:
+        _unproven(deps, ic)
         return err("pulso:binding_failed:unavailable", ToolStatus.denied)
     deps.contexts.confirm(ic.binding_ref)
     return ok(_facts(ic))
+
+
+def _unproven(deps: Deps, ic: InvocationContext) -> None:
+    """Same rule as `invoke.binding.BindingService._unproven`: absence of effect is not proven, so the receipt
+    goes to `manual_reconcile` (a registry without a receipt store, e.g. unit doubles, has nothing to move)."""
+    mark = getattr(deps.contexts, "binding_unproven", None)
+    if mark is not None:
+        mark(ic.binding_ref)
 
 
 def _facts(ic: InvocationContext) -> dict[str, object]:

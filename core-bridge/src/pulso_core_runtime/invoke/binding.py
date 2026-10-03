@@ -1,5 +1,7 @@
 """`pulso/bind_context` backend: resolves the `InvocationContext` and calls the control-api binding callback
-(CAP-27). The ToolDef handler itself lives in `tools/bind.py` (L3b) and calls `BindingService.bind`.
+(CAP-27). The ToolDef handler itself lives in `tools/bind.py` (L3b) and calls `deps.control.bind`
+(`ControlApiClient`); `BindingService` is the equivalent used by the L3a handlers. Both treat an unproven callback
+identically (receipt -> `manual_reconcile`, see tests/l3b/test_binding_unproven.py).
 
 Callback: `POST {PULSO_CONTROL_API_URL}/internal/v1/core-task-bindings`, JWT `iss=core-bridge, aud=control-api,
 scope=binding`, `Idempotency-Key=command_key`, 5 s timeout, one retry on network error."""

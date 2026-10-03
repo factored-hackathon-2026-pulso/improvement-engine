@@ -42,7 +42,8 @@ $repo = (Resolve-Path (Join-Path $bridge '..')).Path
 $pin = '86a767474042a566a0dbd6ed23588959f27ebdb3'
 $pinFile = Join-Path $repo 'contracts\agent_core\pin.json'
 if (Test-Path $pinFile) { $pin = (Get-Content $pinFile -Raw | ConvertFrom-Json).sha }
-$venv = Join-Path $env:TEMP "pulso-wire-venv-$($pin.Substring(0, 7))"
+# Own venv: gen-wire.ps1 runs `uv sync --locked` on the shared pulso-wire-venv, which prunes anything outside the Core lock.
+$venv = Join-Path $env:TEMP "pulso-ci-venv-$($pin.Substring(0, 7))"
 $py = Join-Path $venv 'Scripts\python.exe'
 $results = [System.Collections.Generic.List[string]]::new()
 
@@ -58,6 +59,9 @@ function Ensure-Venv {
     $env:UV_PROJECT_ENVIRONMENT = $venv
     Push-Location $Checkout
     try { uv sync --locked --python 3.12 | Out-Null } finally { Pop-Location }
+    # The runtime-only dependencies the Core lock does not carry (same file the image build uses).
+    uv pip install --python $py -r (Join-Path $bridge 'runtime-requirements.txt') | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'ci: runtime-requirements install failed' }
 }
 
 function Need-Postgres {

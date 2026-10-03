@@ -120,10 +120,10 @@ class AnyAdmission:
 
 
 class Env:
-    def __init__(self, evaluate_gate: Any = None) -> None:
+    def __init__(self, evaluate_gate: Any = None, contexts: Any = None) -> None:
         self.backend = FakeBackend()
         self.http = httpx.Client(transport=httpx.MockTransport(self.backend.handle), base_url=BASE)
-        self.contexts = InvocationRegistry()
+        self.contexts = contexts if contexts is not None else InvocationRegistry()
         self.broker = BrokerClient(BASE, lambda scope, claims: "jwt-" + scope, http=self.http, sleep=lambda s: None,
                                    identity=self._identity)
         self.control = ControlApiClient(BASE, lambda scope, claims: "jwt-" + scope, http=self.http)

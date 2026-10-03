@@ -38,6 +38,19 @@ def _run(cmd: list[str], *, entrypoint: str | None = None, env: dict[str, str] |
 needs_image = pytest.mark.skipif("PULSO_TEST_IMAGE" not in os.environ, reason="PULSO_TEST_IMAGE not set")
 
 
+def test_dockerfile_installs_the_runtime_only_dependencies() -> None:
+    reqs = (Path(__file__).resolve().parents[2] / "runtime-requirements.txt").read_text()
+    assert "jsonschema" in reqs and "referencing" in reqs
+    assert "runtime-requirements.txt" in DOCKERFILE and "jsonschema referencing" in DOCKERFILE
+
+
+@needs_image
+def test_image_imports_the_facts_whitelist() -> None:
+    r = _run(["-c", "import pulso_core_runtime.facts.whitelist, jsonschema, referencing; print('ok')"],
+             entrypoint="python")
+    assert r.returncode == 0 and "ok" in r.stdout, r.stderr[-400:]
+
+
 @needs_image
 def test_image_has_no_testing_package_and_agentcore_works() -> None:
     assert _run(["-c", "import testing"], entrypoint="python").returncode != 0
@@ -55,3 +68,13 @@ def test_image_refuses_demo_flag_with_exit_2() -> None:
 def test_image_runs_as_non_root() -> None:
     r = _run(["-u"], entrypoint="id")
     assert r.stdout.strip() == "10001"
+
+
+def test_entrypoint_offers_exactly_the_modules_that_exist() -> None:
+    script = (Path(__file__).resolve().parents[2] / "docker-entrypoint.sh").read_text()
+    names = set(re.findall(r"^  ([a-z|]+)\)", script, re.MULTILINE))
+    assert names == {"runtime", "migrate", "agentcore", "exporter"}
+    src = Path(__file__).resolve().parents[2] / "src" / "pulso_core_runtime"
+    assert (src / "main.py").is_file() and (src / "exporter" / "__main__.py").is_file()
+    for gone in ("seed", "bootstrap", "sweep"):
+        assert gone not in script.split("case", 1)[1]

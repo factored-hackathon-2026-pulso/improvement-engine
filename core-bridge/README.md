@@ -43,7 +43,7 @@ accepts `AGENTCORE_ALLOW_DEMO`.
 | `wire/agent_core@86a7674/` | L1a generated wire snapshot (`scripts/gen-wire.ps1 [-Check]`) |
 | `scripts/` | `gen-wire.ps1`, `test.ps1`, `ci.ps1`, `build-image.ps1` |
 | `tests/` | `wire`, `runtime`, `l3a`, `l3b`, `l5`, `l6`, `integration` (most need real PG16) |
-| `Dockerfile`, `docker-entrypoint.sh` | non-root image, entrypoints `runtime|exporter|migrate|agentcore` (and `seed|bootstrap|sweep`, see gaps) |
+| `Dockerfile`, `docker-entrypoint.sh` | non-root image, entrypoints exactly `runtime|exporter|migrate|agentcore` (asserted by `tests/runtime/test_image.py`) |
 
 ## Documentation
 
@@ -76,6 +76,5 @@ Exit code 2 means configuration error (demo double, missing factory, pin drift, 
 
 ## Known gaps
 
-`docker-entrypoint.sh` names `seed`, `bootstrap` and `sweep` entrypoints that are not modules of this tree;
 `mypy --strict` is not clean (agent_core ships no `py.typed`); budgets come from a static file; see the journals for the
 per-package list.

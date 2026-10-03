@@ -30,3 +30,11 @@ class ConfirmingRegistry(InvocationRegistry):
 
     def deny(self, binding_ref: str) -> None:
         super().deny(binding_ref)
+
+    def binding_unproven(self, binding_ref: str) -> None:
+        """Timeout / network failure / 5xx on the binding callback: the control-api may have recorded it."""
+        try:
+            ctx = self.lookup(binding_ref)
+        except ContextError:
+            return
+        self._receipts.transition(ctx.tenant_id, ctx.command_key, "manual_reconcile", reason="binding_unproven")

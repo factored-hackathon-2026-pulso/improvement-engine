@@ -21,6 +21,6 @@ $env:TARGET = if ($Target -eq 'real_local') { 'real' } else { $Target }
 Push-Location $root
 try {
     uv sync --locked --python 3.12 | Out-Null
-    uv run --python 3.12 pytest -c pyproject.toml tests ../platform-sim/tests/parity
+    uv run --python 3.12 pytest -c pyproject.toml tests/wire ../platform-sim/tests/parity
     exit $LASTEXITCODE
 } finally { Pop-Location }

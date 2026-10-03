@@ -1,5 +1,5 @@
 #!/bin/sh
-# Entrypoints: runtime | exporter | seed | bootstrap | migrate | sweep | agentcore <args>.
+# Entrypoints: runtime | exporter | migrate | agentcore <args> (seeding is the local/core init job).
 # Fargate injects secrets as env (DR-89): materialise key files into tmpfs before exec.
 set -eu
 KEYS_DIR="${PULSO_KEYS_DIR:-/run/pulso-keys}"
@@ -15,6 +15,6 @@ case "$cmd" in
   runtime)  exec python -m pulso_core_runtime.main "$@" ;;
   migrate)  exec agentcore migrate "$@" ;;
   agentcore) exec agentcore "$@" ;;
-  exporter|seed|bootstrap|sweep) exec python -m "pulso_core_runtime.$cmd" "$@" ;;
+  exporter) exec python -m pulso_core_runtime.exporter "$@" ;;
   *) echo "pulso:entrypoint_unknown $cmd" >&2; exit 2 ;;
 esac
