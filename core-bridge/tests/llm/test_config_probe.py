@@ -1,12 +1,10 @@
 """WP-B first RED: fail-closed gateway config (exit 2 `pulso:runtime_config_invalid` naming the piece, never a value)
-and the `llm_gateway` readiness probe (authenticated empty-body POST: valid token + empty body => 400 with no provider
-call and no cost, bad token => 401). No Postgres needed."""
+and the `llm_gateway` readiness probe (plain reachability, GET /healthz). No Postgres needed."""
 
 from __future__ import annotations
 
 import io
 import json
-import logging
 from typing import Any
 
 import httpx
@@ -106,30 +104,13 @@ class Clock:
         return self.now
 
 
-def _probe(double: GatewayDouble, token: str = "tok-ok", clock: Clock | None = None) -> GatewayProbe:
-    return GatewayProbe(URL, token, client=double.client(), clock=clock or Clock())
-
-
-def test_probe_ok_means_valid_token_and_empty_body_got_400_with_no_provider_call() -> None:
+def test_probe_ok_when_the_gateway_answers_healthz_and_sends_no_token() -> None:
     double = GatewayDouble()
-    probe = _probe(double)
+    probe = GatewayProbe(URL, SECRET, client=double.client(), clock=Clock())
     assert probe.check() is True and probe.state == "ok"
-    assert double.requests == []  # nothing the gateway would price or forward
     sent = double.raw[0]
-    assert sent.method == "POST" and sent.url.path == "/v1/generate" and sent.content == b""
-    assert sent.headers["authorization"] == "Bearer tok-ok"
-
-
-def test_probe_bad_token_is_not_ready_and_logs_once_without_the_token(caplog: pytest.LogCaptureFixture) -> None:
-    double = GatewayDouble()
-    clock = Clock()
-    probe = _probe(double, token=SECRET, clock=clock)
-    with caplog.at_level(logging.WARNING):
-        assert probe.check() is False and probe.state == "auth_failed"
-        clock.now += 60
-        assert probe.check() is False
-    assert [r.getMessage() for r in caplog.records].count("llm_gateway_auth_failed") == 1
-    assert SECRET not in caplog.text
+    assert sent.method == "GET" and sent.url.path == "/healthz" and "authorization" not in sent.headers
+    assert double.requests == []
 
 
 def test_probe_unreachable_and_5xx_are_not_ready() -> None:
@@ -140,23 +121,23 @@ def test_probe_unreachable_and_5xx_are_not_ready() -> None:
     bad = GatewayProbe(URL, "t", client=httpx.Client(transport=httpx.MockTransport(
         lambda r: httpx.Response(502, json={}))), clock=Clock())
     assert bad.check() is False and bad.state == "unexpected_status"
-    ok200 = GatewayProbe(URL, "t", client=httpx.Client(transport=httpx.MockTransport(
-        lambda r: httpx.Response(200, json={}))), clock=Clock())
-    assert ok200.check() is False  # an empty body must never be accepted as a generation
 
 
 def test_probe_is_cached_and_recovers_after_the_ttl() -> None:
-    double = GatewayDouble()
+    state = {"up": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200 if state["up"] else 503)
+    seen: list[int] = []
     clock = Clock()
-    probe = GatewayProbe(URL, "tok-ok", client=double.client(), clock=clock, ttl_s=15, fail_ttl_s=5)
-    assert probe.check() and probe.check() and len(double.raw) == 1
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: (seen.append(1), handler(r))[1]))
+    probe = GatewayProbe(URL, None, client=client, clock=clock, ttl_s=15, fail_ttl_s=5)
+    assert probe.check() and probe.check() and len(seen) == 1
+    state["up"] = False
     clock.now += 16
-    assert probe.check() and len(double.raw) == 2
-    double.tokens = {"rotated"}  # the gateway rotated its token: the runtime's token is now stale
-    clock.now += 16
-    assert probe.check() is False and len(double.raw) == 3
-    assert probe.check() is False and len(double.raw) == 3  # failure cached for the short ttl
-    double.tokens = {"tok-ok"}
+    assert probe.check() is False and len(seen) == 2
+    assert probe.check() is False and len(seen) == 2  # failure cached for the short ttl
+    state["up"] = True
     clock.now += 6
     assert probe.check() is True
 

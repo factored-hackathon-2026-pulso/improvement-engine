@@ -219,6 +219,9 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         llm_cfg, llm_problems = parse_llm_config(env)
         if llm_cfg is None:
             return _fail(err, *llm_problems)
+        core_sha = env.get("PULSO_CORE_SHA", "").strip()
+        if core_sha and core_sha != PIN_SHA:  # Core's `/version` build sha must be the pinned one
+            return _fail(err, "PULSO_CORE_SHA must equal the pinned agent-core sha (or be unset)")
         dsn = env.get("AGENTCORE_REGISTRY_DSN", "")
         eval_dsn = env.get("AGENTCORE_EVAL_DSN", "")
         service_path = Path(env.get("PULSO_SERVICE_KEYS", f"{KEYS_DIR}/service.json"))
@@ -306,7 +309,8 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
 
         extra = (
             ("eval_db", _eval_ping(env)), bridge_schema_check(dsn),
-            ("key_files", key_files_check(key_paths)), factories_ok_check(set(FACTORY_NAMES), FACTORY_NAMES),
+            ("key_files", key_files_check(key_paths, verifiers=lambda: [
+                getattr(ports, "verifier", None), getattr(getattr(ports, "registry_api", None), "staff_verifier", None)])), factories_ok_check(set(FACTORY_NAMES), FACTORY_NAMES),
             *((llm_gateway_check(llm_cfg.url or "", llm_cfg.token or "", client=llm_probe_client),)
               if llm_cfg.mode == "gateway" else ()),
         )

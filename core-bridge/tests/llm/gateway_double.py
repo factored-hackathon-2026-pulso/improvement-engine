@@ -79,6 +79,8 @@ class GatewayDouble:
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.raw.append(request)
+        if request.url.path == "/healthz":
+            return httpx.Response(200, json={"status": "ok"})
         if request.url.path != "/v1/generate":
             return _err(404, "not_found")
         if request.method != "POST":

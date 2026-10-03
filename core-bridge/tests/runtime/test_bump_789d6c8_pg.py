@@ -21,10 +21,10 @@ pytestmark = [pytest.mark.runtime, pytest.mark.pg]
 
 def test_core_version_reports_the_build_sha(pg: PgDbs, keys: dict[str, Any]) -> None:  # noqa: F811
     ensure_schema(pg.runtime)
-    code, app, err = _compose(_env(pg, keys, PULSO_CORE_SHA="f" * 40))
+    code, app, err = _compose(_env(pg, keys, PULSO_CORE_SHA=PIN_SHA))
     assert code == 0, err
     body = TestClient(app).get("/version").json()
-    assert body["sha"] == "f" * 40 and body["contract"] and body["package"]
+    assert body["sha"] == PIN_SHA and body["contract"] and body["package"]
     code, app, err = _compose(_env(pg, keys))  # no PULSO_CORE_SHA: falls back to the pinned sha
     assert TestClient(app).get("/version").json()["sha"] == PIN_SHA
 

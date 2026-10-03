@@ -76,6 +76,8 @@ def parse_llm_config(env: Mapping[str, str]) -> tuple[LlmConfig | None, list[str
         problems.append(f"{URL_ENV} must be an http(s) URL with a host")
     if not token:
         problems.append(f"{TOKEN_ENV} is empty")
+    elif token.lower() == "unset":
+        problems.append(f"{TOKEN_ENV} is the placeholder `unset` (compose default); set a real consumer token")
     policy, policy_problems = _policy(env)
     problems += policy_problems
     if problems:
