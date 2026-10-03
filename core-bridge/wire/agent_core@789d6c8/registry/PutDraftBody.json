@@ -1,0 +1,113 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EntityDraft": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Content",
+          "type": "object"
+        },
+        "docs": {
+          "$ref": "#/$defs/VersionDocs"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "content",
+        "docs"
+      ],
+      "title": "EntityDraft",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "VersionDocs": {
+      "additionalProperties": false,
+      "properties": {
+        "changelog": {
+          "maxLength": 8000,
+          "title": "Changelog",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 4000,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "rationale",
+        "changelog"
+      ],
+      "title": "VersionDocs",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "changes": {
+      "items": {
+        "$ref": "#/$defs/EntityDraft"
+      },
+      "title": "Changes",
+      "type": "array"
+    },
+    "expected_rev": {
+      "title": "Expected Rev",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "expected_rev",
+    "changes"
+  ],
+  "title": "_Draft",
+  "type": "object"
+}

@@ -1,0 +1,53 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "title": "Actor",
+      "type": "string"
+    },
+    "after": {
+      "title": "After",
+      "type": "string"
+    },
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "alias": {
+      "title": "Alias",
+      "type": "string"
+    },
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "before": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Before"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_id",
+    "alias",
+    "before",
+    "after",
+    "actor",
+    "reason",
+    "at"
+  ],
+  "title": "AliasChange",
+  "type": "object"
+}

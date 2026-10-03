@@ -1,0 +1,35 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Origin": {
+      "enum": [
+        "manual",
+        "builder_chat",
+        "auto_detect",
+        "import"
+      ],
+      "title": "Origin",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "origin": {
+      "$ref": "#/$defs/Origin",
+      "default": "manual"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_id",
+    "title"
+  ],
+  "title": "_Create",
+  "type": "object"
+}

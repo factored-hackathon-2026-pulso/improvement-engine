@@ -125,13 +125,13 @@ def test_clock_is_injectable_never_wall_time(mock: httpx.Client) -> None:
 def test_info_exposes_pin(mock: httpx.Client) -> None:
     info = mock.get("/_sim/info").json()
     assert set(info) >= {"pinned_sha", "contract_version", "fixtures_digest"}
-    assert info["pinned_sha"] == "86a767474042a566a0dbd6ed23588959f27ebdb3" and info["contract_version"] == "1.3.0"
+    assert info["pinned_sha"] == "789d6c89b2fca90fc10e2abf157da51dc81c5d51" and info["contract_version"] == "1.3.0"
 
 
 # --- a2: the golden case of V3 31.4.12 reproduces the hashes of the wire snapshot --------------------------
 
 def test_a2_golden_candidate_matches_wire_vectors() -> None:
-    if not Path(os.environ.get("PULSO_CORE_PYTHON", "") or (Path(os.environ.get("TEMP", ".")) / "pulso-wire-venv-86a7674" / "Scripts" / "python.exe")).exists():
+    if not Path(os.environ.get("PULSO_CORE_PYTHON", "") or (Path(os.environ.get("TEMP", ".")) / "pulso-wire-venv-789d6c8" / "Scripts" / "python.exe")).exists():
         pytest.skip("pinned venv missing; run core-bridge/scripts/gen-wire.ps1")
     vectors = json.loads((runner.WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))
     with serve("a2") as base, httpx.Client(base_url=base, timeout=60) as c:

@@ -1,0 +1,19 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "properties": {
+    "accept_yardstick_loosened": {
+      "default": false,
+      "title": "Accept Yardstick Loosened",
+      "type": "boolean"
+    },
+    "candidate_hash": {
+      "title": "Candidate Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "candidate_hash"
+  ],
+  "title": "_Approve",
+  "type": "object"
+}

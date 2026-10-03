@@ -38,7 +38,7 @@ def test_version_is_labelled_contract_mock(bridge) -> None:
     assert r.status_code == 200
     validate("CoreVersion", r.json())
     assert r.json()["runtime_profile"] == "contract_mock"
-    assert r.json()["agent_core_sha"] == "86a767474042a566a0dbd6ed23588959f27ebdb3"
+    assert r.json()["agent_core_sha"] == "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
     assert r.json()["contracts_version"] == "1.3.0"
 
 

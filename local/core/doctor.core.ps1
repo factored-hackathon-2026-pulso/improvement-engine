@@ -11,7 +11,7 @@ param([switch]$Json, [switch]$SkipEngine, [string]$Machine = 'pulso-dev', [strin
       [string]$Checkout = 'D:\.codex\factored\references\agent-core', [string]$Profile = 'real_local')
 $ErrorActionPreference = 'Stop'
 foreach ($f in 'errors', 'machine', 'namespace', 'ports', 'runner', 'memory', 'keys') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
-$PinSha = '86a767474042a566a0dbd6ed23588959f27ebdb3'
+$PinSha = '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
 $checks = New-Object System.Collections.Generic.List[object]
 function Add-C([string]$check, [string]$status, $code, [string]$detail) { $checks.Add([pscustomobject]@{ check = $check; status = $status; code = $code; detail = $detail }) }
 

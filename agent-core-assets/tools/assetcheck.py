@@ -25,7 +25,7 @@ from typing import Any
 
 import yaml
 
-PIN_SHA = "86a767474042a566a0dbd6ed23588959f27ebdb3"
+PIN_SHA = "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
 PIN_CONTRACT_VERSION = "1.3.0"
 EVOLUTION_WORLD = "pulso-evolution"
 ENTITY_FOLDERS = (

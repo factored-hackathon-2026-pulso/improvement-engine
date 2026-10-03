@@ -1,6 +1,6 @@
 """Composed-runtime world (`main._compose`) on real PG16.
 
-REAL: PG16 (registry, eval DB, bridge schemas), pinned agent-core 86a7674 (Core API, engine, M9 identity,
+REAL: PG16 (registry, eval DB, bridge schemas), pinned agent-core 789d6c8 (Core API, engine, M9 identity,
 registry service, in-process evaluator), `pulso_core_runtime` (invoke, receipts, tools, guards, evaluation).
 DOUBLES (declared in every report): Loopback control-api + lab-broker (HTTP, route-table driven), the LLM
 gateway (scripted/`CitingGateway`), the decision providers + calibration of the evaluation fixture bank, the seed

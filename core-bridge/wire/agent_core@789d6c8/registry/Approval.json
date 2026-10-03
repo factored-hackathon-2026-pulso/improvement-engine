@@ -1,0 +1,99 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "YardstickChange": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/YardstickChangeKind"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "message"
+      ],
+      "title": "YardstickChange",
+      "type": "object"
+    },
+    "YardstickChangeKind": {
+      "enum": [
+        "metric_removed",
+        "role_degraded",
+        "metric_changed",
+        "threshold_removed",
+        "floor_loosened",
+        "noise_widened",
+        "scenario_removed",
+        "scenario_changed",
+        "repetitions_lowered"
+      ],
+      "title": "YardstickChangeKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "title": "Actor",
+      "type": "string"
+    },
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "candidate_hash": {
+      "title": "Candidate Hash",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "approved",
+        "rejected"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "yardstick_loosened": {
+      "items": {
+        "$ref": "#/$defs/YardstickChange"
+      },
+      "title": "Yardstick Loosened",
+      "type": "array"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "candidate_hash",
+    "actor",
+    "decision",
+    "at"
+  ],
+  "title": "Approval",
+  "type": "object"
+}

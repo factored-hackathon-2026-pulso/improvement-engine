@@ -1,0 +1,25 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Quién pidió la escritura (ADR 0019 §4): el run y su principal, solo para auditoría, nunca permisos.",
+  "properties": {
+    "on_behalf_of": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "On Behalf Of",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "on_behalf_of"
+  ],
+  "title": "AuditContext",
+  "type": "object"
+}

@@ -83,7 +83,7 @@ Describe 'ports' {
 }
 
 Describe 'evidence' {
-    $pin = '86a767474042a566a0dbd6ed23588959f27ebdb3'
+    $pin = '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
     It 'stamps target, runtime_profile, machine and doubles' {
         $s = New-EvidenceStamp -Target 'mock' -RuntimeProfile 'contract_mock' -Namespace 'claude-1' -Machine 'pulso-dev' `
             -Connection 'pulso-dev' -Doubles @('registry-mock')
@@ -131,7 +131,7 @@ Describe 'executor key verdict' {
     It 'probe args are python -c with no key values' {
         $a = Get-ExecutorKeyProbeArgs
         $a[0] | Should Be 'python'
-        $a[2] | Should Not Match '["
+        $a[2] | Should Not Match '["
 ]'
         $a[2] | Should Match '^exec\(__import__\(.base64.\)\.b64decode\(.[A-Za-z0-9+/=]+.\)\)$'
     }

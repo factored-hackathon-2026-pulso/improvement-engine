@@ -1,0 +1,12 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "enum": [
+    "draft",
+    "candidate",
+    "evaluated",
+    "approved",
+    "published"
+  ],
+  "title": "ProposalState",
+  "type": "string"
+}

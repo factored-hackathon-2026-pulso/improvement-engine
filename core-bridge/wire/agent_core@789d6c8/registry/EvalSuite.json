@@ -1,0 +1,584 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Assertion": {
+      "additionalProperties": false,
+      "description": "Assertion over the events of a run: an event matching the filter appears (or does not).",
+      "properties": {
+        "event": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Event",
+          "type": "string"
+        },
+        "expect": {
+          "default": "at_least_one",
+          "enum": [
+            "at_least_one",
+            "none"
+          ],
+          "title": "Expect",
+          "type": "string"
+        },
+        "where": {
+          "items": {
+            "$ref": "#/$defs/Predicate"
+          },
+          "maxItems": 8,
+          "title": "Where",
+          "type": "array"
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "title": "Assertion",
+      "type": "object"
+    },
+    "DatasetScenario": {
+      "additionalProperties": false,
+      "description": "`dataset` scenario: real cases by id and hash. DISABLED (`dataset_source_disabled`, topic #20).\n\nReal data never lives in the repo or the registry: only its id and hash.",
+      "properties": {
+        "assertions": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "maxItems": 20,
+          "title": "Assertions",
+          "type": "array"
+        },
+        "dataset_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Dataset Hash",
+          "type": "string"
+        },
+        "dataset_id": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "expect": {
+          "$ref": "#/$defs/Expect"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "reference_outcome": {
+          "default": false,
+          "title": "Reference Outcome",
+          "type": "boolean"
+        },
+        "repetitions": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repetitions"
+        },
+        "source": {
+          "const": "dataset",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "dataset_id",
+        "dataset_hash"
+      ],
+      "title": "DatasetScenario",
+      "type": "object"
+    },
+    "Expect": {
+      "additionalProperties": false,
+      "properties": {
+        "actions_verified": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions Verified",
+          "type": "array"
+        },
+        "escalated": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Escalated"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Outcome"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Expect",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "MetricThreshold": {
+      "additionalProperties": false,
+      "description": "Gate threshold for a `gate` or `guardrail` metric of the agent (evaluation spec §5).\n\n`noise_margin` is the tolerance against the base, in the metric's direction. `floor` is required of any\nnew or changed metric, with or without a base: a minimum if higher is better, a maximum if lower is.",
+      "properties": {
+        "floor": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Floor"
+        },
+        "noise_margin": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Noise Margin"
+        }
+      },
+      "required": [
+        "noise_margin"
+      ],
+      "title": "MetricThreshold",
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "Resultado final de un run (M0 §2.7).",
+      "enum": [
+        "resolved",
+        "abstained",
+        "cancelled",
+        "clarify_exhausted",
+        "completed",
+        "failed",
+        "abandoned",
+        "escalated",
+        "transferred"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "Predicate": {
+      "additionalProperties": false,
+      "description": "Filter on a field of the event catalog.",
+      "properties": {
+        "field": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "ne",
+            "in",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "title": "Predicate",
+      "type": "object"
+    },
+    "SandboxSeed": {
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/ToolReply"
+            },
+            "type": "array"
+          },
+          "title": "Tools",
+          "type": "object"
+        }
+      },
+      "title": "SandboxSeed",
+      "type": "object"
+    },
+    "Scenario": {
+      "additionalProperties": false,
+      "description": "`scripted` scenario: synthetic data, tools seeded in the sandbox and the real engine.",
+      "properties": {
+        "assertions": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "maxItems": 20,
+          "title": "Assertions",
+          "type": "array"
+        },
+        "expect": {
+          "$ref": "#/$defs/Expect"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "principal": {
+          "$ref": "#/$defs/ScenarioPrincipal"
+        },
+        "repetitions": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repetitions"
+        },
+        "seed": {
+          "$ref": "#/$defs/SandboxSeed"
+        },
+        "sensitive_values": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sensitive Values",
+          "type": "array"
+        },
+        "source": {
+          "const": "scripted",
+          "default": "scripted",
+          "title": "Source",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "principal",
+        "steps"
+      ],
+      "title": "Scenario",
+      "type": "object"
+    },
+    "ScenarioPrincipal": {
+      "additionalProperties": false,
+      "properties": {
+        "attrs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Attrs",
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ScenarioPrincipal",
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "properties": {
+        "answer": {
+          "anyOf": [
+            {
+              "enum": [
+                "yes",
+                "no"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answer"
+        },
+        "auth": {
+          "default": "step_up",
+          "enum": [
+            "anonymous",
+            "session",
+            "step_up"
+          ],
+          "title": "Auth",
+          "type": "string"
+        },
+        "lang": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lang"
+        },
+        "op": {
+          "enum": [
+            "start",
+            "turn",
+            "confirm"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "ToolReply": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "status": {
+          "$ref": "#/$defs/ToolStatus",
+          "default": "ok"
+        }
+      },
+      "title": "ToolReply",
+      "type": "object"
+    },
+    "ToolStatus": {
+      "description": "Estado del resultado de una tool (M0 §2.8).",
+      "enum": [
+        "ok",
+        "error",
+        "timeout",
+        "denied",
+        "uncertain",
+        "step_up_required"
+      ],
+      "title": "ToolStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "repetitions": {
+      "default": 3,
+      "exclusiveMinimum": 0,
+      "maximum": 10,
+      "title": "Repetitions",
+      "type": "integer"
+    },
+    "scenarios": {
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/Scenario"
+          },
+          {
+            "$ref": "#/$defs/DatasetScenario"
+          }
+        ]
+      },
+      "maxItems": 200,
+      "minItems": 1,
+      "title": "Scenarios",
+      "type": "array"
+    },
+    "thresholds": {
+      "additionalProperties": {
+        "$ref": "#/$defs/MetricThreshold"
+      },
+      "title": "Thresholds",
+      "type": "object"
+    },
+    "version": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "agent_id",
+    "scenarios"
+  ],
+  "title": "EvalSuite",
+  "type": "object"
+}

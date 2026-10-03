@@ -1,4 +1,5 @@
 {
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
   "$defs": {
     "EntityInRelease": {
       "additionalProperties": false,
@@ -82,11 +83,7 @@
   },
   "additionalProperties": false,
   "properties": {
-    "agent_id": {
-      "title": "Agent Id",
-      "type": "string"
-    },
-    "base_release_id": {
+    "approved_by": {
       "anyOf": [
         {
           "type": "string"
@@ -95,7 +92,18 @@
           "type": "null"
         }
       ],
-      "title": "Base Release Id"
+      "title": "Approved By"
+    },
+    "built_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Built By"
     },
     "entities": {
       "items": {
@@ -104,12 +112,21 @@
       "title": "Entities",
       "type": "array"
     },
-    "eval_suite_refs": {
-      "items": {
-        "$ref": "#/$defs/VersionRef"
-      },
-      "title": "Eval Suite Refs",
-      "type": "array"
+    "eval_verdict": {
+      "anyOf": [
+        {
+          "enum": [
+            "pass",
+            "fail",
+            "failed_infra"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Eval Verdict"
     },
     "knowledge_snapshot": {
       "anyOf": [
@@ -138,34 +155,26 @@
       "title": "Published At",
       "type": "string"
     },
-    "published_by": {
-      "title": "Published By",
-      "type": "string"
-    },
     "release_id": {
       "title": "Release Id",
       "type": "string"
     },
-    "status": {
-      "enum": [
-        "active",
-        "revoked"
-      ],
-      "title": "Status",
+    "run_id": {
+      "title": "Run Id",
       "type": "string"
     }
   },
   "required": [
+    "run_id",
     "release_id",
-    "status",
-    "agent_id",
     "entities",
     "knowledge_snapshot",
     "proposal_id",
-    "base_release_id",
-    "published_by",
+    "eval_verdict",
+    "built_by",
+    "approved_by",
     "published_at"
   ],
-  "title": "ReleaseDetail",
+  "title": "RunLineage",
   "type": "object"
 }

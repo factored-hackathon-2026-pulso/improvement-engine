@@ -39,7 +39,7 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bridge = (Resolve-Path (Join-Path $here '..')).Path
 $repo = (Resolve-Path (Join-Path $bridge '..')).Path
-$pin = '86a767474042a566a0dbd6ed23588959f27ebdb3'
+$pin = '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
 $pinFile = Join-Path $repo 'contracts\agent_core\pin.json'
 if (Test-Path $pinFile) { $pin = (Get-Content $pinFile -Raw | ConvertFrom-Json).sha }
 # Own venv: gen-wire.ps1 runs `uv sync --locked` on the shared pulso-wire-venv, which prunes anything outside the Core lock.

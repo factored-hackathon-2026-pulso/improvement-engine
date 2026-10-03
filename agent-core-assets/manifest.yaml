@@ -4,7 +4,7 @@ expected_state_digest: 8dd6b842c640b5f04a00e250fde7be360d82149c5aa6358a33b1b5fdc
 pin:
   contract_version: 1.3.0
   repo: agent-core
-  sha: 86a767474042a566a0dbd6ed23588959f27ebdb3
+  sha: 789d6c89b2fca90fc10e2abf157da51dc81c5d51
 release_ids:
   atencion: rel-98130317a1003849
   pulso-builder-design: rel-5f152bbf73ea31b4

@@ -29,7 +29,7 @@ def die(msg: str) -> None:
     raise SystemExit(2)
 
 
-FALLBACK_PIN = {"sha": "86a767474042a566a0dbd6ed23588959f27ebdb3", "contract_version": "1.3.0"}
+FALLBACK_PIN = {"sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51", "contract_version": "1.3.0"}
 SUPPORTED_CONTRACT = "1.3.0"
 
 
@@ -82,8 +82,10 @@ def preflight(checkout: Path, expected: str) -> str:
     if head != expected:
         die(f"checkout HEAD {head!r} != pin {expected}")
     version = (checkout / "contracts" / "VERSION").read_text().strip()
-    if version != "1.3.0":
-        die(f"contracts/VERSION {version} != 1.3.0")
+    if version != SUPPORTED_CONTRACT:
+        # Not a gate: upstream did not move VERSION across N-01..N-11 (agent-core 789d6c8). The pin is the SHA plus the
+        # MANIFEST digest; a VERSION change is only flagged so a human reviews it.
+        print(f"pulso:wire_note contracts/VERSION {version} != reviewed {SUPPORTED_CONTRACT}", file=sys.stderr)
     exe = Path(sys.executable).with_name("agentcore.exe")
     if not exe.exists():
         exe = Path(sys.executable).with_name("agentcore")
@@ -94,7 +96,7 @@ def preflight(checkout: Path, expected: str) -> str:
 
 
 def copy_bytes(checkout: Path, out: Path, files: list[dict]) -> None:
-    for sub in ("schemas", "events"):
+    for sub in ("schemas", "events", "registry"):  # `registry/`: N-01 (published upstream since 1.3.0+N-batch)
         base = checkout / "contracts" / sub
         for src in sorted(base.rglob("*")):
             if src.is_file():

@@ -1,6 +1,6 @@
 # agent-core-assets
 
-Versioned Core assets (YAML entities) for the pinned agent-core (SHA `86a767474042a566a0dbd6ed23588959f27ebdb3`, contracts
+Versioned Core assets (YAML entities) for the pinned agent-core (SHA `789d6c89b2fca90fc10e2abf157da51dc81c5d51`, contracts
 1.3.0), plus the validator that keeps them honest. Contract revision: `pulso-two-teams-1`.
 
 ## Worlds

@@ -3,9 +3,9 @@
   Regenerates core-bridge/wire/agent_core@<sha7>/ from the pinned agent-core checkout (L1a, plan 17.3.1).
 .DESCRIPTION
   Writes ONLY core-bridge/wire/agent_core@<sha7>/. Fails closed:
-  (1) HEAD == pin sha (contracts/agent_core/pin.json when present, else the constant below), contracts/VERSION == 1.3.0,
+  (1) HEAD == pin sha (contracts/agent_core/pin.json when present, else the constant below), contracts/VERSION noted (1.3.0 reviewed; not a gate),
       `uv sync --locked --python 3.12` in a scratch venv OUTSIDE the repo, `agentcore contracts --check`;
-  (2) byte copy of 193 schemas + 2 events (+ openapi.json); (3) derived schemas (flagged derived_by_pulso);
+  (2) byte copy of 194 schemas + 2 events + 31 registry schemas (+ openapi.json); (3) derived schemas (flagged derived_by_pulso);
   (4) golden hash vectors; (5) MANIFEST.json.
   -Check regenerates into a temp dir and compares with the committed wire dir (pulso:wire_drift on any difference).
 #>
@@ -15,7 +15,7 @@ param(
     [switch]$Check
 )
 $ErrorActionPreference = 'Stop'
-$PinSha = '86a767474042a566a0dbd6ed23588959f27ebdb3'
+$PinSha = '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = Resolve-Path (Join-Path $here '..\..')
 $pinFile = Join-Path $repo 'contracts\agent_core\pin.json'

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from registry_mock.jws import SIM_EPOCH
 
-PIN_SHA = "86a767474042a566a0dbd6ed23588959f27ebdb3"
+PIN_SHA = "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
 CONTRACT_VERSION = "1.3.0"
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "agent_core_wire" / PIN_SHA[:7]
 BASE_RELEASE_ID = "rel-98130317a1003849"

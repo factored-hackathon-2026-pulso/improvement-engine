@@ -1,0 +1,11 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "enum": [
+    "manual",
+    "builder_chat",
+    "auto_detect",
+    "import"
+  ],
+  "title": "Origin",
+  "type": "string"
+}

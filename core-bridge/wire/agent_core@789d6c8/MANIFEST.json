@@ -74,7 +74,7 @@
     {
       "derived_by_pulso": true,
       "path": "derived/ReleaseDetail.schema.json",
-      "sha256": "51d2f93d3d4f460e703cd53028f97b4d84e29ed8b321ce0d77dda8a79f0033fb"
+      "sha256": "9d7fe423cf99d63922be47e753edc216d2906355c575cadc441917c5dd8fdf83"
     },
     {
       "derived_by_pulso": true,
@@ -99,7 +99,7 @@
     {
       "derived_by_pulso": true,
       "path": "derived/registry_openapi.json",
-      "sha256": "4ff517d8c25da31ce1b8f41cd55812ca5f1c239071273b2e5306e47a0a055b58"
+      "sha256": "0a38050837faefbef81782aee874afcbd27017817a1ef81baaa7a5de4a8a2d3c"
     },
     {
       "path": "events/OutboundEvent.json",
@@ -121,7 +121,131 @@
     },
     {
       "path": "openapi.json",
-      "sha256": "be94ed0339991ae5efea85fd5a25758eb8a88e82d430e345b438a596fee186d8"
+      "sha256": "804b41b3fa8b9b29c85d6279efd746f7c626d7c57d2fb750b61a71616dce529a"
+    },
+    {
+      "path": "registry/AliasChange.json",
+      "sha256": "fb93d6a8a70defe9bb0487b9a18494440b5d34ef8d681246944e8d45ebe29268"
+    },
+    {
+      "path": "registry/AliasState.json",
+      "sha256": "bf647d2cd2bbe2fb7d59a64e335151bf1dac9936f28d1c4953029c787881dd0e"
+    },
+    {
+      "path": "registry/Approval.json",
+      "sha256": "d883d3ab23100efcaae2592d5a268fc67924c3161e184ac25463fccec24675f1"
+    },
+    {
+      "path": "registry/ApproveBody.json",
+      "sha256": "76c123cb07a40243c032a914241fe98fee0e74bf11a0710c482ad7cc507031d5"
+    },
+    {
+      "path": "registry/AuditContext.json",
+      "sha256": "f1526a79cf5b83bf3cdbab5b6023bfbba26b3083b0b32220d888510b1e5e97ff"
+    },
+    {
+      "path": "registry/ChangedRef.json",
+      "sha256": "0ad1538fa228b48d962743e831701fb677b8e06068390c6ca5a00da2ac498c1d"
+    },
+    {
+      "path": "registry/CreateProposalBody.json",
+      "sha256": "d3569cc2c48886df49417edd1a3e6fcc5d82367b8ad350fe64d1537e90bfead7"
+    },
+    {
+      "path": "registry/DraftWrite.json",
+      "sha256": "a5774cc3da022b56d60d03fb0fdec0736ffb1fe87d4c9303f996eaa399305012"
+    },
+    {
+      "path": "registry/EntityDraft.json",
+      "sha256": "d51b42f640c87efd3459e50ae55e1227d4158d824599eb3941ab36dc24f60797"
+    },
+    {
+      "path": "registry/EntityInRelease.json",
+      "sha256": "99585e4bae9306c5d03673940c53b3304b3fec0de35a1f218638a3a2d990b51a"
+    },
+    {
+      "path": "registry/EntityVersion.json",
+      "sha256": "cc7f9c6b1db3ed404a3f0c061a6e30460aefd6e2f18a718e171e49708e576c8d"
+    },
+    {
+      "path": "registry/EvalRun.json",
+      "sha256": "7d187c1f4072004d6436c799760b394e4e8728cb91789004c28eefffaf1e6600"
+    },
+    {
+      "path": "registry/EvalSuite.json",
+      "sha256": "896fdaf13e7a41bb26479f9fe51c4dfceac2071bc8cbdf68b67a31cdc2de89b3"
+    },
+    {
+      "path": "registry/EvaluateBody.json",
+      "sha256": "8451532650525b8a76b4f6aeaeacbc71cb3daef231d8a8d6e0aebfdb69f167fb"
+    },
+    {
+      "path": "registry/Origin.json",
+      "sha256": "febd0a8ab45708ec0cc16d4238d42337256f7b5a006a8c23078455dd570cc058"
+    },
+    {
+      "path": "registry/PromoteBody.json",
+      "sha256": "efcd0e1e13fbd0fe5a3602866e701f44edd5fa9dccc2be127c0f27ef9dd230d1"
+    },
+    {
+      "path": "registry/Proposal.json",
+      "sha256": "7d5b8a93aef7ad097ff4c38a4409e42379abe52928b7eb97d624b3bf44d4280d"
+    },
+    {
+      "path": "registry/ProposalState.json",
+      "sha256": "bec0fd4c76cdadb4592ad1cbdb72467623fd8e8024bd48b52eeca88e5bec3e2d"
+    },
+    {
+      "path": "registry/PutDraftBody.json",
+      "sha256": "760cf72b588d1e37b86d816e53b3752d4a21a697231d875cd9e2e9e38cfd72bc"
+    },
+    {
+      "path": "registry/ReasonBody.json",
+      "sha256": "df5c4325251a8b64a9030118d9372cf64bca2056b85a339255c0ecfa5cc301fc"
+    },
+    {
+      "path": "registry/RegistryEvent.json",
+      "sha256": "53f995b9250fc5699cba6379bb537e3ca4b6c0b9b4a7c3721b18bcc0a0906a54"
+    },
+    {
+      "path": "registry/ReleaseDetail.json",
+      "sha256": "2b4dc0079cce7e620264cb30224e60c559035cf3b6ec6fc75c424d4518ae8310"
+    },
+    {
+      "path": "registry/ReleaseDiff.json",
+      "sha256": "e4d26342224aa9412d77a19b60a9d62114a609874057b5d54416883db5aed364"
+    },
+    {
+      "path": "registry/ReleaseSettings.json",
+      "sha256": "30580f1125ee5961e2138d575855f9e80d454931317c46767c51041706dd22fd"
+    },
+    {
+      "path": "registry/RunLineage.json",
+      "sha256": "c5e2ccfd82e55a45b95b667ce0a8895c9a8d0f2d54d8a22bc1ac4c0f149f26a1"
+    },
+    {
+      "path": "registry/StoredRelease.json",
+      "sha256": "d72903fda39de05b89659c3e93e2358f401242b4f6a6096c9bd78a4796c7e6b8"
+    },
+    {
+      "path": "registry/StoredVersion.json",
+      "sha256": "772e7248969f754c9a1249681c1bf8b624a8778bcd2c54316a0daaa2fb1eb012"
+    },
+    {
+      "path": "registry/VersionDocs.json",
+      "sha256": "2618194355ba899b16a90b8c66ff6b028a36fde2b8e3da77e5a9e1d6c556dd4c"
+    },
+    {
+      "path": "registry/VersionRef.json",
+      "sha256": "fd1ae82cdf51c23840bbf76884e07f2e1728b23886f9e7684e43168867ad5b7f"
+    },
+    {
+      "path": "registry/VersionSummary.json",
+      "sha256": "d82aafd3f1f2a4e155be8ab04c32dca86421bfaae65b1d0e444e0cc0d0159a0c"
+    },
+    {
+      "path": "registry/WriteRecord.json",
+      "sha256": "62ceb8a241817dbf4e725f1a03cd24c78be329575c4d59bc85214ff920c8c90c"
     },
     {
       "path": "schemas/AcceptedSlot.json",
@@ -720,6 +844,10 @@
       "sha256": "b460d186edd8bf253371dfb0e5e1c72abc6c9331a7ebedc03f697db6f6684611"
     },
     {
+      "path": "schemas/RunSummary.json",
+      "sha256": "76002cfa963cf7f6a4f63197195e9aeb57838e90dac64d46eecb8c2f9e76dc1f"
+    },
+    {
       "path": "schemas/RunTransferred.json",
       "sha256": "81b48b7261a6cd3c5369372face8d75dfae19d91081092964c331baccc731d9e"
     },
@@ -897,9 +1025,9 @@
     }
   ],
   "repo": "agent-core",
-  "sha": "86a767474042a566a0dbd6ed23588959f27ebdb3",
+  "sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51",
   "tool_versions": {
-    "agent_core_checkout_sha": "86a767474042a566a0dbd6ed23588959f27ebdb3",
+    "agent_core_checkout_sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51",
     "fastapi": "0.142.1",
     "pydantic": "2.13.5",
     "python": "3.12.10",

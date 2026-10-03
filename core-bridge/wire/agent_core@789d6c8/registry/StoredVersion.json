@@ -1,0 +1,100 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "VersionDocs": {
+      "additionalProperties": false,
+      "properties": {
+        "changelog": {
+          "maxLength": 8000,
+          "title": "Changelog",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 4000,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "rationale",
+        "changelog"
+      ],
+      "title": "VersionDocs",
+      "type": "object"
+    },
+    "VersionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "version"
+      ],
+      "title": "VersionRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "created_by": {
+      "title": "Created By",
+      "type": "string"
+    },
+    "docs": {
+      "$ref": "#/$defs/VersionDocs"
+    },
+    "proposal_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Proposal Id"
+    },
+    "ref": {
+      "$ref": "#/$defs/VersionRef"
+    }
+  },
+  "required": [
+    "ref",
+    "content_hash",
+    "docs",
+    "proposal_id",
+    "created_by",
+    "created_at"
+  ],
+  "title": "StoredVersion",
+  "type": "object"
+}

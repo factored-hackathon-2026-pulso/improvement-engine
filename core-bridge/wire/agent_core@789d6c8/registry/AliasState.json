@@ -1,0 +1,35 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Hacia qué release apunta un alias hoy y si esa release sigue activa (N-02).",
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "alias": {
+      "title": "Alias",
+      "type": "string"
+    },
+    "release_id": {
+      "title": "Release Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "revoked"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_id",
+    "alias",
+    "release_id",
+    "status"
+  ],
+  "title": "AliasState",
+  "type": "object"
+}

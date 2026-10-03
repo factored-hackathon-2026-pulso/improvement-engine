@@ -1,0 +1,82 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "VersionDocs": {
+      "additionalProperties": false,
+      "properties": {
+        "changelog": {
+          "maxLength": 8000,
+          "title": "Changelog",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 4000,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "rationale",
+        "changelog"
+      ],
+      "title": "VersionDocs",
+      "type": "object"
+    },
+    "VersionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "version"
+      ],
+      "title": "VersionRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "changed_vs_base": {
+      "title": "Changed Vs Base",
+      "type": "boolean"
+    },
+    "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "docs": {
+      "$ref": "#/$defs/VersionDocs"
+    },
+    "ref": {
+      "$ref": "#/$defs/VersionRef"
+    }
+  },
+  "required": [
+    "ref",
+    "content_hash",
+    "docs",
+    "changed_vs_base"
+  ],
+  "title": "EntityInRelease",
+  "type": "object"
+}

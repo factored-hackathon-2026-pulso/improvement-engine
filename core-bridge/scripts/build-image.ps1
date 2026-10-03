@@ -10,7 +10,7 @@ param(
     [string]$Podman = 'C:\Users\alexg\AppData\Local\Programs\Podman\podman.exe'
 )
 $ErrorActionPreference = 'Stop'
-$PinSha = '86a767474042a566a0dbd6ed23588959f27ebdb3'
+$PinSha = '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
 $head = (git -C $Checkout rev-parse HEAD).Trim()
 if ($head -ne $PinSha) { Write-Error "pulso:image_build_failed checkout HEAD $head != pin $PinSha"; exit 2 }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path

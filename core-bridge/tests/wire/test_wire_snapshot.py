@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "86a767474042a566a0dbd6ed23588959f27ebdb3"
+PIN_SHA = "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
 WIRE = ROOT / "wire" / f"agent_core@{PIN_SHA[:7]}"
 pytestmark = pytest.mark.wire
 
@@ -38,12 +38,24 @@ def test_no_unlisted_files() -> None:
     assert on_disk == listed
 
 
-def test_193_schemas_and_2_events_byte_copied() -> None:
+def test_194_schemas_2_events_and_31_registry_schemas_byte_copied() -> None:
     files = [e for e in manifest()["files"] if not e.get("derived_by_pulso")]
     schemas = [e for e in files if e["path"].startswith("schemas/")]
     events = [e for e in files if e["path"].startswith("events/")]
-    assert len(schemas) == 193
+    registry = [e for e in files if e["path"].startswith("registry/")]
+    assert len(schemas) == 194  # +RunSummary (N-08)
     assert len(events) == 2
+    assert len(registry) == 31  # N-01: contracts/registry/ published upstream
+    assert "schemas/RunSummary.json" in {e["path"] for e in schemas}
+    assert {"registry/AliasState.json", "registry/VersionSummary.json", "registry/ReleaseSettings.json",
+            "registry/CreateProposalBody.json", "registry/PutDraftBody.json"} <= {e["path"] for e in registry}
+
+
+def test_release_detail_carries_the_n03_fields() -> None:
+    """N-03: both the upstream (serialization) and the derived (validation) ReleaseDetail have the four new fields."""
+    for rel in ("registry/ReleaseDetail.json", "derived/ReleaseDetail.schema.json"):
+        props = json.loads((WIRE / rel).read_text(encoding="utf-8"))["properties"]
+        assert {"interrupts", "language_detection", "injection_ruleset", "max_input_chars"} <= set(props), rel
 
 
 def test_derived_schemas_are_flagged_and_complete() -> None:

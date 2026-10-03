@@ -2,7 +2,7 @@
 
 Standalone local stack for the real Core runtime on a registered Claude Podman machine (default `pulso-dev`), plus
 includable fragments for Codex's stack. Contract revision: `pulso-two-teams-1`. Agent Core pin
-`86a767474042a566a0dbd6ed23588959f27ebdb3`. Never touches machine `pulso-codex` or any Codex-owned resource; machine and namespace
+`789d6c89b2fca90fc10e2abf157da51dc81c5d51`. Never touches machine `pulso-codex` or any Codex-owned resource; machine and namespace
 names are validated (`machine.registry.json`, namespaces prefixed `claude-`).
 
 ## Contents

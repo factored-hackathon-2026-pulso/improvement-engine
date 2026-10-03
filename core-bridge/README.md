@@ -25,7 +25,7 @@ a running `agent-core serve` (`REGISTRY_BASE_URL`).
 
 ## What this package is
 
-`pulso_core_runtime` composes the real pinned agent-core (SHA `86a767474042a566a0dbd6ed23588959f27ebdb3`, contracts
+`pulso_core_runtime` composes the real pinned agent-core (SHA `789d6c89b2fca90fc10e2abf157da51dc81c5d51`, contracts
 1.3.0) with Pulso's isolated `/internal/v1` API, tool runtime, evaluation runtime and a separate read-only exporter.
 Python 3.12 only (`uv --python 3.12`). Contract revision: `pulso-two-teams-1`. It never imports `testing.*` and never
 accepts `AGENTCORE_ALLOW_DEMO`.
@@ -40,7 +40,7 @@ accepts `AGENTCORE_ALLOW_DEMO`.
 | `tools/`, `facts/`, `stages/` | L3b: `pulso/*` dispatcher, protected writer, fact whitelist and schemas, stage catalogue |
 | `evaluation/`, `harness.py`, `registry_service.py` | L5: admissions, harness, native port, arms |
 | `exporter/` | L6: read-only exporter (`python -m pulso_core_runtime.exporter`) |
-| `wire/agent_core@86a7674/` | L1a generated wire snapshot (`scripts/gen-wire.ps1 [-Check]`) |
+| `wire/agent_core@789d6c8/` | L1a generated wire snapshot (`scripts/gen-wire.ps1 [-Check]`) |
 | `scripts/` | `gen-wire.ps1`, `test.ps1`, `ci.ps1`, `build-image.ps1` |
 | `tests/` | `wire`, `runtime`, `l3a`, `l3b`, `l5`, `l6`, `integration` (most need real PG16) |
 | `Dockerfile`, `docker-entrypoint.sh` | non-root image, entrypoints exactly `runtime|exporter|migrate|agentcore` (asserted by `tests/runtime/test_image.py`) |
