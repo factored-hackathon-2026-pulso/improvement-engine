@@ -51,16 +51,18 @@ def fixtures_url() -> str:
     return f"http://{FIXTURE_ALIAS}:{FIXTURE_PORT}"
 
 
-LLM_ALIAS = "pulso-evolution-llm"
 LLM_KEY_VALUE = "scripted-not-a-secret"
 
 
+def gateway_url() -> str:
+    return fixtures_url() + "/llm"  # the runtime posts to <url>/v1/generate (agent-core llm-gateway service protocol)
+
+
 def core_env_lines() -> list[str]:
-    """Extra lines for the stack's core.env (the compose env file): the scripted LLM provider reaches the runtime
-    through the stack's own LLM_ENDPOINTS / PULSO_LLM_API_KEY pass-through, no image overlay. Throw-away values."""
-    endpoints = {LLM_ALIAS: {"base_url": fixtures_url() + "/llm/v1", "api_key_env": "PULSO_LLM_API_KEY"}}
-    return ["LLM_ENDPOINTS='" + json.dumps(endpoints, separators=(",", ":")) + "'",
-            f"PULSO_LLM_API_KEY={LLM_KEY_VALUE}"]
+    """Extra lines for the stack's core.env (the compose env file): the scripted llm-gateway the runtime calls
+    (AGENTCORE_LLM_GATEWAY_URL / _TOKEN of the pinned agent-core). Throw-away values. The stack's compose does not
+    forward them yet, so the budgets overlay below also carries them (declared gap)."""
+    return [f"AGENTCORE_LLM_GATEWAY_URL={gateway_url()}", f"AGENTCORE_LLM_GATEWAY_TOKEN={LLM_KEY_VALUE}"]
 
 
 def prepare(ns: str, out: Path) -> dict[str, Any]:
@@ -73,10 +75,11 @@ def prepare(ns: str, out: Path) -> dict[str, Any]:
     (ctx / "budgets.json").write_text(json.dumps({
         "bud-e2e": {"cost_usd_max": "5", "tokens_max": 200000, "jobs_max": 50}}), encoding="ascii")
     (ctx / "Dockerfile").write_text("\n".join([
-        "# E2E budgets overlay: SAME runtime layers, only a static budgets file + its env var (never pushed).",
+        "# E2E overlay: SAME runtime layers, only the budgets file + env the stack does not forward (never pushed).",
         "ARG BASE", "FROM ${BASE}", "USER 0", "COPY budgets.json /opt/e2e/",
         "RUN chown -R 10001:10001 /opt/e2e && chmod 640 /opt/e2e/*", "USER 10001",
-        "ENV PULSO_EVAL_BUDGETS=/opt/e2e/budgets.json", "LABEL com.pulso.e2e.overlay=true", ""]), encoding="ascii")
+        "ENV PULSO_EVAL_BUDGETS=/opt/e2e/budgets.json AGENTCORE_LLM_GATEWAY_URL=" + gateway_url()
+        + " AGENTCORE_LLM_GATEWAY_TOKEN=" + LLM_KEY_VALUE, "LABEL com.pulso.e2e.overlay=true", ""]), encoding="ascii")
     secrets = SECRETS / ns
     secrets.mkdir(parents=True, exist_ok=True)
     core_env = secrets / "core.env"

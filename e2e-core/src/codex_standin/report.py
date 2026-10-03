@@ -33,6 +33,15 @@ KNOWN_STACK_GAPS: list[dict[str, str]] = [
                "`runtime-config-overlay`).",
      "request": "L8: pass PULSO_EVAL_BUDGETS through core-runtime environment (and seed a budgets file for local "
                 "real_local), or define the control-api budget contract."},
+    {"code": "llm_gateway_env_not_passed_through_compose",
+     "detail": "Since agent-core 789d6c8 the runtime reaches models through the external llm-gateway service "
+               "(AGENTCORE_LLM_GATEWAY_URL + AGENTCORE_LLM_GATEWAY_TOKEN, POST <url>/v1/generate); compose.core.yaml "
+               "still forwards the removed LLM_ENDPOINTS/PULSO_LLM_API_KEY, so no scripted gateway can be injected "
+               "through the env file. Without it every generation fails `unavailable` (scout terminal_failed). The "
+               "harness adds the pair to the same budgets-only overlay image.",
+     "request": "L8: replace LLM_ENDPOINTS/PULSO_LLM_API_KEY in core-runtime environment with "
+                "AGENTCORE_LLM_GATEWAY_URL/AGENTCORE_LLM_GATEWAY_TOKEN (values from the env file; the harness already "
+                "writes them to core.env)."},
     {"code": "jev_base_url_not_configurable",
      "detail": "agent_core HttpJevTransport uses a fixed DEFAULT_BASE_URL (no env), so decision-provider scenarios "
                "(atencion/disputas-suite) cannot be scripted in the real image; E2E uses LLM-only pulso agents.",

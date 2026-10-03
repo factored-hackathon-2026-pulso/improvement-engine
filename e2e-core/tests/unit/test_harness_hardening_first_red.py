@@ -23,24 +23,41 @@ def test_grants_workaround_is_gone() -> None:
     assert not hasattr(stack, "apply_grants_workaround") and not hasattr(stack, "GRANTS_WORKAROUND")
 
 
-def test_overlay_only_carries_the_eval_budgets_file_no_service_keys_no_llm(tmp_path: Path) -> None:
+def test_overlay_carries_budgets_and_the_gateway_pair_only_no_service_keys(tmp_path: Path) -> None:
     keys = stack.prepare("claude-e2e-1", tmp_path)
     docker = (tmp_path / "context" / "Dockerfile").read_text(encoding="ascii")
-    assert "PULSO_SERVICE_KEYS" not in docker and "LLM_ENDPOINTS" not in docker and "E2E_LLM_KEY" not in docker
-    assert "PULSO_EVAL_BUDGETS" in docker
+    assert "PULSO_SERVICE_KEYS" not in docker and "LLM_ENDPOINTS" not in docker
+    assert "PULSO_EVAL_BUDGETS" in docker and "AGENTCORE_LLM_GATEWAY_URL" in docker
     assert not (tmp_path / "context" / "service.json").exists()
     assert "service_seed" not in keys  # the control-api seed is read from the stack volume after start
 
 
-def test_llm_settings_go_through_the_env_file_with_pulso_llm_api_key(tmp_path: Path) -> None:
+def test_llm_gateway_settings_use_the_agent_core_gateway_env_pair() -> None:
     lines = stack.core_env_lines()
-    joined = "\n".join(lines)
-    assert any(line.startswith("PULSO_LLM_API_KEY=") for line in lines)
-    endpoints = next(line for line in lines if line.startswith("LLM_ENDPOINTS="))
-    value = json.loads(endpoints.split("=", 1)[1].strip("'"))
-    assert value["pulso-evolution-llm"]["api_key_env"] == "PULSO_LLM_API_KEY"
-    assert value["pulso-evolution-llm"]["base_url"].startswith("http://e2e-fixtures:")
-    assert "PULSO_TENANT_ID" not in joined or "tenant-local" in joined
+    assert any(line.startswith("AGENTCORE_LLM_GATEWAY_TOKEN=") for line in lines)
+    url = next(line for line in lines if line.startswith("AGENTCORE_LLM_GATEWAY_URL="))
+    assert url.split("=", 1)[1].startswith("http://e2e-fixtures:") and not any("LLM_ENDPOINTS" in x for x in lines)
+
+
+def test_scripted_llm_double_speaks_the_llm_gateway_generate_protocol() -> None:
+    from fastapi.testclient import TestClient
+
+    from codex_standin.fixtures_app import World, create_app
+    from codex_standin.jwtsvc import KeyRing
+    world = World(KeyRing({}))
+    world.llm_rules = [{"id": "r", "match": {"system_contains": "research stage"}, "repeat_last": False,
+                        "responses": [{"kind": "final", "output": {"ok": 1}}]}]
+    client = TestClient(create_app(world))
+    body = {"prompt": "You are a research stage.", "inputs": {"goal": "g"}, "schema": {}, "profile": {"model": "m"},
+            "labels": {}}
+    assert client.post("/llm/v1/generate", json=body).status_code == 401  # bearer required
+    r = client.post("/llm/v1/generate", json=body, headers={"Authorization": "Bearer t"})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["output"] == {"kind": "final", "output": {"ok": 1}} and out["usage_known"] is True
+    assert isinstance(out["cost_usd"], str) and isinstance(out["tokens_in"], int) and out["model"]
+    miss = client.post("/llm/v1/generate", json=body, headers={"Authorization": "Bearer t"})
+    assert miss.status_code == 500 and world.llm_unscripted == 1  # unscripted: counted, fails closed
 
 
 def test_ring_trusts_the_stack_exporter_keys_as_issued_without_issuer_override() -> None:

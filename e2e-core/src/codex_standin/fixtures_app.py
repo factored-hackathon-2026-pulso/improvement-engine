@@ -396,23 +396,21 @@ def create_app(world: World, ingest: FastAPI | None = None) -> FastAPI:
         s["closed"] = body.get("reason")
         return JSONResponse({"state": "closed", "final_state_ref": f"final:{sid}"})
 
-    # ---- scripted OpenAI-compatible chat endpoint (the model double) ---------------------------------------
-    @app.post("/llm/v1/chat/completions")
-    async def chat(request: Request) -> JSONResponse:
+    # ---- scripted llm-gateway service (the model double): POST /llm/v1/generate (agent-core HttpLLMGateway) ----
+    @app.post("/llm/v1/generate")
+    async def generate(request: Request) -> JSONResponse:
+        if not request.headers.get("authorization", "").startswith("Bearer "):
+            return _err(401, "unauthorized")
         body = json.loads(await request.body() or b"{}")
-        msgs = body.get("messages", [])
-        system = "\n".join(str(m.get("content", "")) for m in msgs if m.get("role") == "system")
-        user = "\n".join(str(m.get("content", "")) for m in msgs if m.get("role") == "user")
+        system = str(body.get("prompt", ""))  # the registry prompt text (carries the stage marker)
+        user = json.dumps(body.get("inputs", {}), sort_keys=True)
         answer = world.llm_answer(system, user)
         if answer is None:
             return _err(500, "unscripted_model_call")
         text = json.dumps(answer)
-        return JSONResponse({"id": "chatcmpl-e2e", "object": "chat.completion", "created": int(time.time()),
-                             "model": body.get("model", "scripted"),
-                             "choices": [{"index": 0, "finish_reason": "stop",
-                                          "message": {"role": "assistant", "content": text}}],
-                             "usage": {"prompt_tokens": max(1, len(user) // 4), "completion_tokens": len(text) // 4,
-                                       "total_tokens": max(1, len(user) // 4) + len(text) // 4}})
+        return JSONResponse({"output": answer, "model": (body.get("profile") or {}).get("model", "scripted"),
+                             "tokens_in": max(1, len(user) // 4), "tokens_out": max(1, len(text) // 4),
+                             "cost_usd": "0", "usage_known": True})
 
     # ---- admin channel (driver only) --------------------------------------------------------------------------
     ing = ingest.state.ingest if ingest is not None else None
