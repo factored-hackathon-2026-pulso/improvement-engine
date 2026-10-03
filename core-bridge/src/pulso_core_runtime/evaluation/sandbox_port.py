@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -43,7 +44,9 @@ class ActionResult:
 
 
 class EvaluationSandboxPort(Protocol):
-    def open(self, binding_ref: str, seed_manifest_ref: str) -> SandboxSession: ...
+    def open(self, binding_ref: str, seed_manifest_ref: str, context: Mapping[str, Any] | None = None) -> SandboxSession:
+        """`context` = arm identity (`tenant_id`, `job_id`, `campaign_ref`, `case_ref`, `arm`, `repetition`)."""
+        ...
 
     def reset(self, session: SandboxSession) -> SandboxSession: ...
 
@@ -135,12 +138,13 @@ class SandboxPortAdapter:
     receipts: list[str] = field(default_factory=list)
     initial_state_digests: list[str] = field(default_factory=list)
     final_state_refs: list[str] = field(default_factory=list)
+    context: Mapping[str, Any] | None = None
     unresolved: set[str] = field(default_factory=set)  # actions sent, timed out, never read back -> `unknown`
     _sessions: dict[str, tuple[SandboxSession, EvalTarget]] = field(default_factory=dict)
     _n: int = 0
 
     def provision(self, seed: SandboxSeed, target: EvalTarget) -> SandboxHandle:
-        session = self.port.open(self.binding_ref, self.seed_manifest_ref)  # the seed lives in the manifest
+        session = self.port.open(self.binding_ref, self.seed_manifest_ref, self.context)  # the seed lives in the manifest
         self._n += 1
         handle = SandboxHandle(f"bank-{self._n}")
         self._sessions[handle.handle_id] = (session, target)

@@ -22,7 +22,7 @@ from agent_core.registry import (
     ScenarioEvaluator,
 )
 
-from pulso_core_runtime.evaluation.budget import BudgetLimits, EvalBudgetMeter
+from pulso_core_runtime.evaluation.budget import BudgetLimits, EvalBudgetMeter, SpendLedger
 from pulso_core_runtime.harness import Mode, PulsoScenarioHarness
 
 
@@ -90,15 +90,25 @@ def infra_report(detail: str) -> EvalReport:
 class PulsoEvalPort:
     """Shared-service port. With no admission bound it fails closed (`failed_infra`, `no_admission`)."""
 
-    def __init__(self, composition: EvalComposition, gate: EvaluationGate) -> None:
-        self._comp, self._gate = composition, gate
+    @property
+    def composition(self) -> EvalComposition:
+        """Public handle for composers (arm runner): the same unguarded evaluation world native runs use."""
+        return self._comp
+
+    @property
+    def gate(self) -> EvaluationGate:
+        return self._gate
+
+    def __init__(self, composition: EvalComposition, gate: EvaluationGate, ledger: SpendLedger | None = None) -> None:
+        self._comp, self._gate, self._ledger = composition, gate, ledger
 
     def run(self, request: EvalRequest) -> EvalReport:
         return infra_report("HarnessUnavailable: no_admission")
 
     def run_admitted(self, request: EvalRequest, *, execution_id: str, budget: BudgetLimits | None,
                      tenant_id: str = "pulso") -> tuple[EvalReport, PulsoScenarioHarness | None]:
-        meter = EvalBudgetMeter(budget) if budget is not None else None
+        meter = (EvalBudgetMeter(budget, ledger=self._ledger, tenant_id=tenant_id, job_id=execution_id)
+                 if budget is not None else None)
         try:
             with self._gate.slot():
                 harness = self._comp.harness("native", execution_id=execution_id, meter=meter,

@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Protocol
 
 from agent_core.domain import EntityRef, GatewayError, GatewayErrorKind, JsonValue, Locale
 from agent_core.ports import GenerationResult
@@ -27,9 +27,26 @@ class BudgetLimits:
     deadline: datetime | None = None
 
 
+UNCAPPED_USD = "1000000000"
+
+
+class SpendLedger(Protocol):
+    """`ReceiptStore.meter_spend`: one atomic statement, applied only while the new total stays <= the cap."""
+
+    def meter_spend(self, tenant_id: str, job_id: str, stage: str, attempt: int, *, cost_usd: str, cap_usd: str,
+                    calls: int = 1, tokens: int = 0) -> bool: ...
+
+
 class EvalBudgetMeter:
-    def __init__(self, limits: BudgetLimits, now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    """Local counters (jobs, tokens, deadline, usage report) plus, when a `ledger` is given, the cost cap enforced
+    by the shared atomic ledger keyed `(tenant_id, job_id, stage, attempt)`: concurrent meters of one job can never
+    exceed the cap, a refused spend is never applied, an unreachable ledger is exhaustion (fail closed)."""
+
+    def __init__(self, limits: BudgetLimits, now: Callable[[], datetime] = lambda: datetime.now(UTC), *,
+                 ledger: SpendLedger | None = None, tenant_id: str = "", job_id: str = "",
+                 stage: str = "evaluation", attempt: int = 0) -> None:
         self.limits = limits
+        self._ledger, self._key = ledger, (tenant_id, job_id, stage, attempt)
         self._now = now
         self._lock = threading.Lock()
         self.jobs = 0
@@ -67,7 +84,17 @@ class EvalBudgetMeter:
             if not result.usage_known:
                 self.usage_known = False
             lim = self.limits
-            if lim.cost_usd_max is not None and self.cost_usd > lim.cost_usd_max:
+            if self._ledger is not None:
+                cap = UNCAPPED_USD if lim.cost_usd_max is None else str(lim.cost_usd_max)
+                try:
+                    accepted = self._ledger.meter_spend(*self._key, cost_usd=str(result.cost_usd), cap_usd=cap,
+                                                        calls=1, tokens=result.tokens_in + result.tokens_out)
+                except Exception:  # noqa: BLE001 - the ledger is the authority: unreachable means no more spend
+                    self._mark("ledger_unavailable")
+                else:
+                    if not accepted:
+                        self._mark("cost_usd_max")
+            elif lim.cost_usd_max is not None and self.cost_usd > lim.cost_usd_max:
                 self._mark("cost_usd_max")
             if lim.tokens_max is not None and self.tokens_in + self.tokens_out > lim.tokens_max:
                 self._mark("tokens_max")

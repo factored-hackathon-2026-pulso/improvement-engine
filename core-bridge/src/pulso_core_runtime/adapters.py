@@ -56,14 +56,6 @@ class StaticBudgetResolver:
                             entry.get("jobs_max"), None if deadline is None else datetime.fromisoformat(deadline))
 
 
-class NoArtifactPort:
-    """`ArtifactPort` without a broker route that carries a binding: the arm runner reports
-    `failed_infra manifest_missing` (documented gap: `artifact_get(ref, tenant_id)` has no binding_ref)."""
-
-    def artifact_get(self, ref: str, tenant_id: str) -> dict[str, Any]:
-        raise LookupError("no artifact port")
-
-
 class ReceiptBindingLookup:
     """`BindingLookup` over the receipt row: a confirmed binding (or one that recorded a Core run id) is proof
     that the control-api saw this command."""
@@ -106,6 +98,80 @@ def expected_write_keys(store: Any) -> Any:
         return keys
 
     return expected
+
+
+def _request_hash(op: str, payload: Any) -> str:
+    """Mirror of the pinned `RegistryService._request_hash` (it is private there; drift is caught by the
+    commitment tests, which would reject every legitimate write)."""
+    import hashlib
+
+    from agent_core.domain.json import canonical_bytes
+
+    return hashlib.sha256(canonical_bytes({"op": op, "payload": payload})).hexdigest()
+
+
+def sealed_commitment_check(store: Any, get_write: Any) -> Any:
+    """`Reconciler.commitment_check`: an adopted registry write must be exactly what the Codex-sealed commitment
+    (persisted in the invocation context before `sent`) allows: the op at its committed ordinal, the committed
+    proposal (or, for a fresh proposal, the one the committed `create_proposal` produced), the sealed create
+    content, and a revision past `expected_rev`. Anything unreadable, unknown or out of commitment is False
+    (the receipt then stays `manual_reconcile`). `put_draft` content cannot be re-hashed here (changes are not
+    retained); its op/proposal/revision are checked."""
+    from pulso_core_runtime.tools.builder import eval_key, write_key
+
+    def check(receipt: Any, key: str, found: dict[str, Any]) -> bool:
+        ctx = ((store.context_row(receipt.task_binding_ref) or {}).get("context")) or {}
+        c = ctx.get("commitment")
+        if not isinstance(c, dict) or c.get("mode") not in ("write", "evaluate_only"):
+            return False
+        op, pid, rev = found.get("op"), found.get("proposal_id"), found.get("rev_after")
+        if not isinstance(op, str) or not isinstance(pid, str) or not isinstance(rev, int):
+            return False
+        committed_pid = c.get("proposal_id")
+        if committed_pid is not None and pid != committed_pid:
+            return False
+        ref = c.get("evaluation_context_ref")
+        try:
+            is_eval = isinstance(ref, str) and key == eval_key(ref)
+        except ValueError:
+            return False
+        if is_eval:
+            return op == "evaluate" and c.get("evaluate_enabled") is True and _same_proposal(
+                c, get_write, receipt, pid, ctx)
+        ops = list(c.get("operations") or [])
+        if c["mode"] != "write":
+            return False
+        ordinal = next((n for n in range(len(ops)) if write_key(receipt.idempotency_key, receipt.stage, n) == key),
+                       None)
+        if ordinal is None or ops[ordinal] != op:
+            return False
+        if op == "create_proposal":
+            expected = _request_hash(op, {"agent_id": c.get("create_agent_id"), "origin": c.get("create_origin"),
+                                          "title": c.get("create_title")})
+            return found.get("request_hash") == expected and c.get("create_title") is not None
+        if not _same_proposal(c, get_write, receipt, pid, ctx):
+            return False
+        if op in ("freeze", "reopen"):
+            return found.get("request_hash") == _request_hash(op, {"proposal_id": pid})
+        if op == "put_draft":
+            expected_rev = c.get("expected_rev")
+            return expected_rev is None or rev > expected_rev
+        return False
+
+    return check
+
+
+def _same_proposal(c: dict[str, Any], get_write: Any, receipt: Any, pid: str, ctx: dict[str, Any]) -> bool:
+    """A fresh proposal (id unknown at commit time) must be the one the committed `create_proposal` made."""
+    if c.get("proposal_id") is not None:
+        return pid == c["proposal_id"]
+    from pulso_core_runtime.tools.builder import write_key
+
+    ops = list(c.get("operations") or [])
+    if "create_proposal" not in ops:
+        return False
+    created = get_write(write_key(receipt.idempotency_key, receipt.stage, ops.index("create_proposal")))
+    return isinstance(created, dict) and created.get("proposal_id") == pid
 
 
 class SpendMeteringGateway:

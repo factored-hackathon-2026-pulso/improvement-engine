@@ -75,15 +75,24 @@ class FailClosedRegistryService(RegistryService):
 class EvaluationRuntime:
     def __init__(self, *, store: RegistryStore, composition: EvalComposition, clock: Any, ids: Any,
                  admissions: AdmissionStore, reports: ReportStore, broker: BrokerPort, budgets: BudgetResolver,
-                 runs: Any = None, gate: EvaluationGate | None = None, limits: Any = DEFAULT_LIMITS,
+                 runs: Any = None, gate: EvaluationGate | None = None, ledger: Any = None, limits: Any = DEFAULT_LIMITS,
                  quotas: Quotas = DEFAULT_QUOTAS, now: Callable[[], Any] | None = None) -> None:
         self._store, self._clock, self._ids = store, clock, ids
         self._runs, self._limits, self._quotas = runs, limits, quotas
         self.admissions, self.reports, self._budgets = admissions, reports, budgets
-        self.port = PulsoEvalPort(composition, gate or EvaluationGate())
+        self.port = PulsoEvalPort(composition, gate or EvaluationGate(), ledger)
         kwargs: dict[str, Any] = {} if now is None else {"now": now}
         self.gate = AdmissionGate(admissions, broker, **kwargs)
         self.service = self._service(self.port, FailClosedRegistryService)  # fail-closed shared service
+
+    @property
+    def composition(self) -> EvalComposition:
+        return self.port.composition
+
+    @property
+    def evaluation_gate(self) -> EvaluationGate:
+        """The single evaluation semaphore shared by native runs and arms."""
+        return self.port.gate
 
     def _service(self, evaluator: Any, cls: type[RegistryService] = RegistryService) -> RegistryService:
         return cls(self._store, evaluator, self._clock, self._ids, runs=self._runs,
@@ -186,7 +195,7 @@ def _conforms() -> None:  # pragma: no cover
 
 def build_evaluation_runtime(ports: Any, *, runtime_dsn: str, eval_dsn: str, broker: BrokerPort,
                              budgets: BudgetResolver, gate: EvaluationGate | None = None,
-                             check_isolation: bool = True) -> EvaluationRuntime:
+                             ledger: Any = None, check_isolation: bool = True) -> EvaluationRuntime:
     """Replacement for `build_registry_service_for_serve(ports)` (L2 `main._compose`):
 
         runtime = build_evaluation_runtime(ports, runtime_dsn=dsn, eval_dsn=eval_dsn, broker=..., budgets=...)
@@ -216,7 +225,7 @@ def build_evaluation_runtime(ports: Any, *, runtime_dsn: str, eval_dsn: str, bro
         classifier=ports.classifier)
     return EvaluationRuntime(store=api.store, composition=composition, clock=ports.clock, ids=ports.ids,
                              admissions=PgAdmissionStore(runtime_dsn), reports=PgReportStore(runtime_dsn),
-                             broker=broker, budgets=budgets, runs=UowRunReleases(ports.uow_factory), gate=gate)
+                             broker=broker, budgets=budgets, runs=UowRunReleases(ports.uow_factory), gate=gate, ledger=ledger)
 
 
 class FlowEvaluationGate:

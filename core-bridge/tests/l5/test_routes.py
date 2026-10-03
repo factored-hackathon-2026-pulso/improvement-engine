@@ -33,8 +33,8 @@ def _token(purpose: str, **extra: Any) -> str:
 
 def _client(w: World) -> TestClient:
     arms = ArmRunner(store=PgArmStore(w.pg.runtime), broker=w.broker, artifacts=FakeArtifacts(),
-                     budgets=FixedBudgets(), loader=TargetLoader(w.store), composition=w.rt.port._comp,
-                     gate=w.rt.port._gate, sandbox=None)
+                     budgets=FixedBudgets(), loader=TargetLoader(w.store), composition=w.rt.composition,
+                     gate=w.rt.evaluation_gate, sandbox=None)
     handlers: dict[str, Any] = {}
     register(handlers, EvaluationDeps(runtime=w.rt, arms=arms, broker=w.broker, budgets=FixedBudgets(),
                                       now=lambda: w.clock_now))

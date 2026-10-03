@@ -58,3 +58,17 @@ def test_evolution_task_registry_is_isolated_and_cannot_evaluate() -> None:
     p = service.create_proposal(bot_actor(), "atencion", Origin.manual, "scratch")
     assert service.get_proposal(p.proposal_id).proposal.state.value == "draft"
     assert type(store).__name__ == "InMemoryRegistryStore"
+
+
+def test_composition_is_public_and_main_never_reads_private_evaluation_state() -> None:
+    import re
+    from pathlib import Path
+
+    import pulso_core_runtime.main as runtime_main
+    from pulso_core_runtime.evaluation.native import PulsoEvalPort
+    from pulso_core_runtime.registry_service import EvaluationRuntime
+
+    assert isinstance(EvaluationRuntime.composition, property) and isinstance(EvaluationRuntime.evaluation_gate, property)
+    assert isinstance(PulsoEvalPort.composition, property) and isinstance(PulsoEvalPort.gate, property)
+    source = Path(runtime_main.__file__).read_text(encoding="utf-8")
+    assert not re.search(r"\.port\._|evaluation\._|\._comp\b|\._gate\b", source)

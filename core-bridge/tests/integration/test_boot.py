@@ -23,8 +23,10 @@ def test_composed_app_boots_with_seven_factories_and_real_tools(composed: Compos
 def test_version_reports_only_true_doubles(composed: Composed) -> None:
     body = composed.client.get("/internal/v1/version", headers=composed.headers("version_probe")).json()
     assert not any(d.startswith("tools:") for d in body["doubles"])
-    for expected in ("transcript:", "grant-active:", "evaluation-sandbox:", "arm-artifact-port:"):
+    for expected in ("transcript:", "grant-active:"):
         assert any(d.startswith(expected) for d in body["doubles"]), body["doubles"]
+    # the bank client and the artifact port are real HTTP clients now (tested against the loopback broker)
+    assert not any(d.startswith(("evaluation-sandbox:", "arm-artifact-port:")) for d in body["doubles"])
     assert body["runtime_profile"] == "agent_core_real" and body["pulso_sha"] == "integ"
 
 

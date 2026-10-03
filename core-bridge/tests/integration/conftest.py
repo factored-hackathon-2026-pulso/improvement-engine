@@ -25,7 +25,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
 from fastapi.testclient import TestClient
 
-from integration.loopback import Loopback
+from integration.loopback import BankBackend, Loopback
 from pulso_core_runtime import main as runtime_main
 from pulso_core_runtime.internal.auth import b64url_encode, sign_service_jwt
 from runtime.conftest import PgDbs, pg  # noqa: F401  (fixture re-export)
@@ -158,7 +158,7 @@ def boot(c: Composed, extra: dict[str, str] | None = None) -> Composed:
 
 @pytest.fixture
 def loop() -> Iterator[Loopback]:
-    lb = Loopback()
+    lb = Loopback(BankBackend())
     try:
         yield lb
     finally:

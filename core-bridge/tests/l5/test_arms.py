@@ -38,8 +38,10 @@ class FakeBank:
     fail_open: Exception | None = None
     fail_act: bool = False
     actions: dict[str, ActionResult] = field(default_factory=dict)
+    contexts: list[Any] = field(default_factory=list)
 
-    def open(self, binding_ref: str, seed_manifest_ref: str) -> SandboxSession:
+    def open(self, binding_ref: str, seed_manifest_ref: str, context: Any = None) -> SandboxSession:
+        self.contexts.append(context)
         if self.fail_open:
             raise self.fail_open
         self.opened += 1
@@ -67,8 +69,10 @@ class FakeArtifacts:
     def __init__(self, scenarios: list[dict[str, Any]] | None = None) -> None:
         self.scenarios = scenarios if scenarios is not None else [suite_with().scenarios[0].model_dump(mode="json")]
         self.fail = False
+        self.calls: list[tuple[str, str, str]] = []
 
-    def artifact_get(self, ref: str, tenant_id: str) -> dict[str, Any]:
+    def artifact_get(self, ref: str, tenant_id: str, binding_ref: str) -> dict[str, Any]:
+        self.calls.append((ref, tenant_id, binding_ref))
         if self.fail or ref == "art-missing":
             raise KeyError(ref)
         return {"scenarios": copy.deepcopy(self.scenarios), "entries": {s["id"]: {} for s in self.scenarios}}
@@ -76,8 +80,8 @@ class FakeArtifacts:
 
 def runner(w: World, bank: FakeBank | None = None, store: Any = None, artifacts: Any = None) -> ArmRunner:
     return ArmRunner(store=store or PgArmStore(w.pg.runtime), broker=w.broker, artifacts=artifacts or FakeArtifacts(),
-                     budgets=FixedBudgets(), loader=TargetLoader(w.store), composition=w.rt.port._comp,
-                     gate=w.rt.port._gate, sandbox=bank)
+                     budgets=FixedBudgets(), loader=TargetLoader(w.store), composition=w.rt.composition,
+                     gate=w.rt.evaluation_gate, sandbox=bank)
 
 
 def req(key: str = "k1", **over: Any) -> dict[str, Any]:
@@ -185,9 +189,9 @@ def test_oracle_never_requested_and_canary_absent_from_events_and_report(pg) -> 
     asked: list[str] = []
 
     class Spy(FakeArtifacts):
-        def artifact_get(self, ref: str, tenant_id: str) -> dict[str, Any]:
+        def artifact_get(self, ref: str, tenant_id: str, binding_ref: str) -> dict[str, Any]:
             asked.append(ref)
-            return super().artifact_get(ref, tenant_id)
+            return super().artifact_get(ref, tenant_id, binding_ref)
 
     canary = "ORACLE-CANARY-7f3a"
     w = World(pg)
@@ -260,3 +264,15 @@ def test_in_memory_arm_store_single_flight() -> None:
     b, again = s.begin("e2", "k", "d")
     assert created and not again and b.execution_id == "e1"
     _ = (SandboxPortAdapter, ToolDef)  # imported for the public surface check
+
+
+def test_arm_runner_hands_binding_ref_to_the_artifact_port_and_arm_identity_to_the_bank(pg) -> None:  # type: ignore[no-untyped-def]
+    w = World(pg)
+    arts, bank = FakeArtifacts(), FakeBank()
+    rep = runner(w, bank, artifacts=arts).run(
+        req(mode="task_builder", seed_manifest_ref="seed-1", campaign_ref="camp-9", binding_ref="bind-7"),
+        tenant_id="t1").report or {}
+    assert rep["status"] == "completed", rep
+    assert arts.calls == [("art-1", "t1", "bind-7")]  # the broker route needs the binding for its grant check
+    assert bank.contexts == [{"tenant_id": "t1", "job_id": execution_id_for("k1", "t1"), "campaign_ref": "camp-9",
+                              "case_ref": "case-1", "arm": "base", "repetition": 0}]

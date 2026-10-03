@@ -18,7 +18,7 @@ from agent_core.registry import HarnessUnavailable, LocalSandbox, Scenario
 from pydantic import BaseModel, ConfigDict, Field
 
 from pulso_core_runtime.evaluation.admission import AdmissionDenied, BrokerPort, valid_context_ref
-from pulso_core_runtime.evaluation.budget import BudgetLimits, EvalBudgetMeter
+from pulso_core_runtime.evaluation.budget import BudgetLimits, EvalBudgetMeter, SpendLedger
 from pulso_core_runtime.evaluation.native import EvalComposition, EvaluationGate
 from pulso_core_runtime.evaluation.report import ArmRow, ArmStore, digest_of
 from pulso_core_runtime.evaluation.sandbox_port import (
@@ -40,6 +40,7 @@ class ArmRequest(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=200)
     binding_ref: str = Field(min_length=1, max_length=200)
     case_ref: str = Field(min_length=1, max_length=200)
+    campaign_ref: str | None = Field(default=None, min_length=1, max_length=200)  # bank session namespace (D.4)
     arm: str = Field(min_length=1, max_length=64)
     repetition: int = Field(ge=0)
     seed: int | str
@@ -55,7 +56,7 @@ class ArmRequest(BaseModel):
 
 
 class ArtifactPort(Protocol):
-    def artifact_get(self, ref: str, tenant_id: str) -> dict[str, Any]:
+    def artifact_get(self, ref: str, tenant_id: str, binding_ref: str) -> dict[str, Any]:
         """Sealed scenario manifest: {"scenarios": [Scenario JSON...], "entries": {scenario_id: {...}}}."""
         ...
 
@@ -89,6 +90,7 @@ class ArmRunner:
     composition: EvalComposition
     gate: EvaluationGate
     sandbox: EvaluationSandboxPort | None
+    ledger: SpendLedger | None = None  # atomic capped spend (ReceiptStore); None only in unit tests
     inflight: set[str] | None = None
 
     def __post_init__(self) -> None:
@@ -189,7 +191,7 @@ class ArmRunner:
         except Exception:  # store/transport failure while loading: infrastructure, never a 500
             return done("failed_infra", reason="target_load_failed")
         try:  # step 4: scenarios for the harness only (no gold, no oracle)
-            sealed = self.artifacts.artifact_get(req.scenario_manifest_ref, tenant_id)
+            sealed = self.artifacts.artifact_get(req.scenario_manifest_ref, tenant_id, req.binding_ref)
             scenarios = [Scenario.model_validate(s) for s in sealed["scenarios"]]
             entries = {sid: ManifestEntry(input=e.get("input"), attrs=e.get("attrs", {}), lang=e.get("lang"))
                        for sid, e in sealed.get("entries", {}).items()}
@@ -200,13 +202,15 @@ class ArmRunner:
         budget = self.budgets.resolve(req.budget_ref, tenant_id)
         if budget is None:
             return done("failed_infra", reason="budget_unknown")
-        meter = EvalBudgetMeter(budget)
+        meter = EvalBudgetMeter(budget, ledger=self.ledger, tenant_id=tenant_id, job_id=execution_id)
         adapter: SandboxPortAdapter | None = None
         sandbox: Any = LocalSandbox(self.composition.ids)
         if req.mode != "native":  # step 5
             assert self.sandbox is not None and req.seed_manifest_ref is not None
-            adapter = SandboxPortAdapter(self.sandbox, req.binding_ref, req.seed_manifest_ref, execution_id,
-                                         self.composition.ids)
+            adapter = SandboxPortAdapter(
+                self.sandbox, req.binding_ref, req.seed_manifest_ref, execution_id, self.composition.ids,
+                context={"tenant_id": tenant_id, "job_id": execution_id, "campaign_ref": req.campaign_ref,
+                         "case_ref": req.case_ref, "arm": req.arm, "repetition": req.repetition})
             sandbox = adapter
         extra: dict[str, Any] = {}
         if req.mode == "stateful_attention":

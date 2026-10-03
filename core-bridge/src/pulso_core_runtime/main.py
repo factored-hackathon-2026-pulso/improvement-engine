@@ -122,8 +122,7 @@ def _path(value: str | None) -> Path | None:
 
 def _wiring_stand_ins(budgets: Any) -> dict[str, str]:
     """Stand-ins decided by the composition itself (not by a factory)."""
-    out = {"evaluation-sandbox": "absent: task arm modes are refused (`sandbox_required`); native arms only",
-           "arm-artifact-port": "absent: arm scenario manifests cannot be fetched (`manifest_missing`)"}
+    out: dict[str, str] = {}
     out["eval-budgets"] = ("static file resolver (control-api budget contract not defined)" if budgets.configured
                            else "no PULSO_EVAL_BUDGETS file: every budget_ref resolves to None (fails closed)")
     return out
@@ -150,12 +149,12 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
     from pulso_core_runtime.adapters import (
         BrokerAuthPort,
         EvalTranscript,
-        NoArtifactPort,
         ServiceWriteProbe,
         SpendMeteringGateway,
         StaticBudgetResolver,
     )
     from pulso_core_runtime.evaluation.arms import ArmRunner
+    from pulso_core_runtime.evaluation.broker_clients import BrokerArtifactPort, BrokerSandboxClient
     from pulso_core_runtime.evaluation.native import EvaluationGate
     from pulso_core_runtime.evaluation.report import PgArmStore, ensure_eval_schema
     from pulso_core_runtime.evaluation.routes import EvaluationDeps
@@ -165,7 +164,7 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
     from pulso_core_runtime.internal.app import build_internal_app
     from pulso_core_runtime.internal.auth import ServiceJwtVerifier, load_service_keys
     from pulso_core_runtime.internal.store import PgJtiStore, ensure_schema
-    from pulso_core_runtime.invoke.wiring import build_l3, install_tools
+    from pulso_core_runtime.invoke.wiring import build_l3, install_tools, lab_broker_minter
     from pulso_core_runtime.pin import PinnedRegistryPort
     from pulso_core_runtime.readiness import bridge_schema_check, factories_ok_check, key_files_check
     from pulso_core_runtime.registry_service import FlowEvaluationGate, build_evaluation_runtime
@@ -225,13 +224,16 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         try:
             evaluation = build_evaluation_runtime(dataclasses.replace(ports, transcript=EvalTranscript()),
                                                   runtime_dsn=dsn, eval_dsn=eval_dsn, broker=broker,
-                                                  budgets=budgets, gate=gate)
+                                                  budgets=budgets, gate=gate, ledger=l3.store)
         except ValueError as exc:
             return _fail(err, str(exc))
         holder["service"] = evaluation.service
-        arms = ArmRunner(store=PgArmStore(dsn), broker=broker, artifacts=NoArtifactPort(), budgets=budgets,
-                         loader=TargetLoader(ports.registry_api.store), composition=evaluation.port._comp,
-                         gate=gate, sandbox=None)
+        mint = lab_broker_minter(l3, env)
+        lab_url = env.get("PULSO_LAB_BROKER_URL", "")
+        arms = ArmRunner(store=PgArmStore(dsn), broker=broker, artifacts=BrokerArtifactPort(lab_url, mint), budgets=budgets,
+                         loader=TargetLoader(ports.registry_api.store), composition=evaluation.composition,
+                         gate=evaluation.evaluation_gate, sandbox=BrokerSandboxClient(lab_url, mint),
+                         ledger=l3.store)
         holder["builder_factory"] = protected_builder_factory(
             evaluation.service, _constructor_principal, ports.ids, l3.registry, tool_runtime.broker,
             gate=FlowEvaluationGate(evaluation, _constructor_principal), admissions=evaluation.admissions)

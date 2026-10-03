@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pulso_core_runtime.adapters import ReceiptBindingLookup, expected_write_keys
+from pulso_core_runtime.adapters import ReceiptBindingLookup, expected_write_keys, sealed_commitment_check
 from pulso_core_runtime.credentials.issuer import CredentialIssuer, load_signer
 from pulso_core_runtime.invoke.binding import BindingService
 from pulso_core_runtime.invoke.context import ConfirmingRegistry, InvocationRegistry
@@ -71,12 +71,33 @@ def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Cal
         runs=runs, registry=inv_registry, settings=cfg, projector=projector,
         reconciler=reconciler or Reconciler(
             store=store, runs=runs, projector=projector, writes=writes, bindings=ReceiptBindingLookup(store),
-            expected_writes=expected_write_keys(store)))
+            expected_writes=expected_write_keys(store),
+            commitment_check=sealed_commitment_check(store, lambda key: writes.get_write(key) if writes else None)))
     binding = BindingService(
         store=store, registry=inv_registry, control_api_url=env.get("PULSO_CONTROL_API_URL", ""),
         signing_key=callback._key, kid=callback.kid, bridge_instance_id=env.get("PULSO_BRIDGE_INSTANCE", "bridge-1"))
     issuer = CredentialIssuer({"identity": identity, "staff": staff})
     return L3(make_handlers(service, issuer), service, binding, inv_registry, store, callback)
+
+
+def lab_broker_minter(l3: L3, env: Mapping[str, str]) -> Any:
+    """`mint(claims) -> JWS` for the arm-side broker clients (A03 class iii): `iss=core-bridge`, `aud=lab-broker`,
+    TTL 60 s, a fresh `jti` per call; the caller supplies `scope, purpose, tenant_id, job_id, binding_ref`."""
+    import time
+    import uuid
+
+    from pulso_core_runtime.internal.auth import sign_service_jwt
+
+    signer = l3.callback_signer
+
+    def mint(claims: dict[str, Any]) -> str:
+        now = int(time.time())
+        body = {k: v for k, v in claims.items() if v is not None}
+        return sign_service_jwt(signer._key, kid=signer.kid, claims={
+            "iss": "core-bridge", "aud": "lab-broker", "sub": f"bridge:{env.get('PULSO_BRIDGE_INSTANCE', 'bridge-1')}",
+            "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex, **body})
+
+    return mint
 
 
 def install_tools(l3: L3, env: Mapping[str, str], *, builder_factory: Any = None, leak_signal: Any = None) -> Any:
