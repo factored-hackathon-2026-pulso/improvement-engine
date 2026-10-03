@@ -3,7 +3,7 @@
     "agent_version": "1.0.0",
     "entities": [
       {
-        "content_hash": "f94fef3588265b627d184932f0a774ac8e37f4be5d343c9bd39d3ddfb7ef1add",
+        "content_hash": "9cba0662d6769eaff17fabe924294bc821414a412babb1e9c2e9bdad497a5294",
         "id": "atencion",
         "kind": "agent",
         "version": "1.0.0"
@@ -166,14 +166,14 @@
         "version": "1.0.0"
       }
     ],
-    "release_hash": "98130317a10038497cb752062500d056425c7be0225452e28a606ac9a1ed8549",
-    "release_id": "rel-98130317a1003849"
+    "release_hash": "e26df0070f6be82f9813caf03864442ee870b1626806eb096705e0351b6bfe6a",
+    "release_id": "rel-e26df0070f6be82f"
   },
   "pulso-builder-design": {
     "agent_version": "1.0.0",
     "entities": [
       {
-        "content_hash": "6f7964adb8503e8544e523161a8512ec16d45b8389a763ac6f01f78780852f60",
+        "content_hash": "701850044778b5a81c38b55888c6ac0409c1de258c84e4c36dd54a3e5d6ad34c",
         "id": "pulso-builder-design",
         "kind": "agent",
         "version": "1.0.0"
@@ -283,7 +283,7 @@
     "agent_version": "1.0.0",
     "entities": [
       {
-        "content_hash": "e1447e9d078ec1b362cb6a31620a402ec03bd7049571afa07fcafc41e710e6b7",
+        "content_hash": "3adbe7ab0f6ea68ed0d718a2fce6f269afd053e3e63d3ee2c7f08adfe6f56944",
         "id": "pulso-scout",
         "kind": "agent",
         "version": "1.0.0"
@@ -405,7 +405,7 @@
     "agent_version": "1.0.0",
     "entities": [
       {
-        "content_hash": "d4066fef7e8ddb0ac836222cfa55c65ddaa1186c78230caf54a6993ac03ce68c",
+        "content_hash": "b63036e992b77b174f01f64111cb48af4d06750b600980431ca15a5e326969d5",
         "id": "pulso-verifier",
         "kind": "agent",
         "version": "1.0.0"
@@ -527,7 +527,7 @@
     "agent_version": "1.0.0",
     "entities": [
       {
-        "content_hash": "f9946430f9a456b74a40097dc4472994be1555130b6f22bc3725e3527146f324",
+        "content_hash": "2425a4478c37683e95a51dafcc5804197ae9c419d90d31fa22f658dff736d13b",
         "id": "pulso-writer",
         "kind": "agent",
         "version": "1.0.0"

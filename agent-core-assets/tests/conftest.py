@@ -12,7 +12,7 @@ import pytest
 ASSETS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ASSETS / "tools"))
 
-PIN_SHA = "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
+PIN_SHA = "894fa65575d83420523f33ec1c6919b8965f7ebe"
 
 
 def find_checkout() -> Path | None:
@@ -20,7 +20,7 @@ def find_checkout() -> Path | None:
     if env:
         return Path(env)
     for parent in ASSETS.parents:
-        cand = parent / "references" / "agent-core-789d6c8"
+        cand = parent / "references" / "agent-core-894fa65"
         if cand.is_dir():
             return cand
     return None

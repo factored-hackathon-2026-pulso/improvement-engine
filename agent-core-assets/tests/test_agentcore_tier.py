@@ -50,7 +50,7 @@ def test_state_matches_expected_state_and_is_deterministic(checkout: Path, merge
     first = assetcheck.compute_state(checkout, merged)
     assert first == expected
     assert assetcheck.compute_state(checkout, merged) == first
-    assert expected["atencion"]["release_id"] == "rel-98130317a1003849"  # verified upstream value
+    assert expected["atencion"]["release_id"] == "rel-e26df0070f6be82f"  # verified against the real Core at 894fa65 (locked interrupt)
 
 
 def test_in_memory_import_semantics(checkout: Path, merged: Path) -> None:
