@@ -1,0 +1,18 @@
+body { font-family: system-ui, sans-serif; margin: 0; padding: 0 16px 24px; }
+.banner { position: sticky; top: 0; background: #fff3bf; border-bottom: 2px solid #b08900; padding: 6px 8px; font-weight: 600; }
+.banner.bad { background: #ffd6d6; border-color: #b00020; }
+.graph { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+.node { border: 2px solid #555; border-radius: 6px; padding: 8px; min-width: 140px; background: #fff; cursor: pointer; font: inherit; text-align: left; }
+.node[data-status="complete"] { border-color: #1b7f3b; }
+.node[data-status="running"] { border-color: #0b5fff; border-style: solid; }
+.node[data-status="planned"] { border-style: dashed; }
+.node[data-status="unknown"], .node[data-status="waiting_dependency"] { border-style: dotted; border-color: #8a5a00; }
+.node[data-pulse="1"] { animation: pulse 900ms ease-out 1; }
+@keyframes pulse { from { box-shadow: 0 0 0 0 rgba(11, 95, 255, .7); } to { box-shadow: 0 0 0 14px rgba(11, 95, 255, 0); } }
+@media (prefers-reduced-motion: reduce) { .node[data-pulse="1"] { animation: none; } }
+.contradicts { border-left: 6px solid #b00020; padding-left: 8px; }
+.supports { border-left: 6px solid #1b7f3b; padding-left: 8px; }
+.limits { border-left: 6px solid #8a5a00; padding-left: 8px; }
+.add { background: #e6ffed; } .del { background: #ffeef0; } pre { margin: 0; }
+.cards { display: flex; gap: 12px; flex-wrap: wrap; } .card { border: 1px solid #555; padding: 8px; min-width: 200px; }
+:focus-visible { outline: 3px solid #0b5fff; outline-offset: 2px; }
