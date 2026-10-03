@@ -1,0 +1,28 @@
+{
+  "description": "finding_code outside the closed list",
+  "records": [
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "finding:unknown_event_type:EVT-0003",
+      "source_sequence": 3,
+      "observed_at": "2026-03-02T14:05:00Z",
+      "source_event": {
+        "kind": "exporter_finding",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "finding_code": "made_up_code",
+        "severity": "warning",
+        "described_native_event_id": "EVT-0003",
+        "described_source_sequence": 3,
+        "details": {
+          "event_type": "case.escalated",
+          "catalog_status": "unknown",
+          "quarantined": true,
+          "payload_forwarded": false
+        }
+      }
+    }
+  ]
+}

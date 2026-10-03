@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.1.0/source_observation.schema.json",
+  "title": "source_observation",
+  "description": "Self-contained view of one `platform_event` observation: identity (tenant_id, source_id, native_event_id), nullable source_sequence and the discriminated `source_event` (`kind`). source_sequence is null for findings not tied to a row.",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "native_event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_sequence": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+    },
+    "source_event": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/exporter_finding"
+        },
+        {
+          "$ref": "#/$defs/domain_event"
+        }
+      ]
+    }
+  },
+  "required": [
+    "tenant_id",
+    "source_id",
+    "native_event_id",
+    "source_sequence",
+    "observed_at",
+    "source_event"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source_event": {
+            "properties": {
+              "kind": {
+                "const": "exporter_finding"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "native_event_id": {
+            "pattern": "^(finding|profile|dimensions):.+$"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "exporter_finding": {
+      "title": "exporter_finding",
+      "description": "Exporter metadata (quality/coverage/profile). Identity (tenant_id, source_id, native_event_id) and observed_at live on the observation envelope, outside the digest; never a domain row and never part of source-sequence continuity. `details` is inline and bounded (<= 32768 serialized bytes, checked by conformance).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "exporter_finding"
+        },
+        "source_namespace": {
+          "const": "platform_live"
+        },
+        "catalog_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding_code": {
+          "type": "string",
+          "enum": [
+            "bad_row",
+            "denied_event_type",
+            "unknown_event_type",
+            "late_event",
+            "gap_suspected",
+            "turn_sequence_gap",
+            "capability_profile",
+            "dimension_snapshot"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "described_native_event_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "described_source_sequence": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "details": {
+          "type": "object",
+          "maxProperties": 64
+        }
+      },
+      "required": [
+        "kind",
+        "source_namespace",
+        "catalog_version",
+        "tenant_id",
+        "finding_code",
+        "severity",
+        "described_native_event_id",
+        "described_source_sequence",
+        "details"
+      ],
+      "additionalProperties": false
+    },
+    "domain_event": {
+      "title": "domain_event",
+      "description": "Domain row of the platform event_log (event_type must not use the legacy `exporter.` prefix).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "domain_event"
+        },
+        "source_namespace": {
+          "const": "platform_live"
+        },
+        "catalog_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tenant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_type": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "^exporter\\."
+          }
+        },
+        "event_id": {
+          "type": "string",
+          "pattern": "^EVT-.+$"
+        },
+        "event_time": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+        },
+        "ingested_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+        },
+        "available_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+        },
+        "case_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entity_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor_role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payload": {
+          "type": "object"
+        },
+        "redacted_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_kind": {
+          "type": "string",
+          "enum": [
+            "observed",
+            "team_generated"
+          ]
+        },
+        "population_excluded": {
+          "type": "boolean"
+        },
+        "late": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "source_namespace",
+        "catalog_version",
+        "tenant_id",
+        "event_type",
+        "event_id",
+        "event_time",
+        "ingested_at",
+        "available_at",
+        "case_id",
+        "entity",
+        "entity_id",
+        "actor_role",
+        "actor_ref",
+        "payload",
+        "redacted_fields",
+        "evidence_kind",
+        "population_excluded",
+        "late"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "x-contract-version": "1.1.0"
+}

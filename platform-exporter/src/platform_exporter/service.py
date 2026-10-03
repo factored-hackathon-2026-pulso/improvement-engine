@@ -19,7 +19,7 @@ import httpx
 import rfc8785
 
 from .asof import CaseState, reconstruct_cases
-from .catalog import (CATALOG_VERSION, DENIED_EVENT_TYPES, KNOWN_EVENT_TYPES, PLANNED_PREFIXES, SOURCE_NAMESPACE,
+from .catalog import (CATALOG_VERSION, FINDING_SEVERITY, DENIED_EVENT_TYPES, KNOWN_EVENT_TYPES, PLANNED_PREFIXES, SOURCE_NAMESPACE,
                       fmt_ts, jcs_digest, parse_ts, treat_payload)
 from .config import ARTIFACTS_PATH, CONTRACT, OBSERVATIONS_PATH, ExporterConfig
 from .profile import build_profile
@@ -173,8 +173,27 @@ class Exporter:
                 "catalog_version": CATALOG_VERSION}
 
     def _finding(self, fid: str, name: str, seq: int | None, data: dict[str, Any]) -> dict[str, Any]:
-        se = {**self._base("exporter.finding"), "finding": {"type": name, **data}}
-        return self._obs(f"finding:{fid}", se, seq, None)
+        if self.cfg.legacy_prefix:  # contract 1.0.0 interim shape
+            se = {**self._base("exporter.finding"), "finding": {"type": name, **data}}
+            return self._obs(f"finding:{fid}", se, seq, None)
+        return self._meta_obs(f"finding:{fid}", name, data, described=data.get("event_id"), seq=seq)
+
+    def _meta_obs(self, native_id: str, code: str, details: dict[str, Any], *, described: str | None = None,
+                  seq: int | None = None) -> dict[str, Any]:
+        """Contract 1.1.0 exporter metadata: kind=exporter_finding, no event_type, identity on the envelope. The body
+        carries no wall-clock value, so re-emission (rescan, re-POST) keeps the same digest."""
+        se = {"kind": "exporter_finding", "source_namespace": SOURCE_NAMESPACE, "catalog_version": CATALOG_VERSION,
+              "tenant_id": self.cfg.tenant_id, "finding_code": code, "severity": FINDING_SEVERITY.get(code, "warning"),
+              "described_native_event_id": described, "described_source_sequence": seq if described else None,
+              "details": details}
+        return self._obs(native_id, se, seq, None)
+
+    @staticmethod
+    def _is_quality_finding(obs: dict[str, Any]) -> bool:
+        se = obs["source_event"]
+        if se.get("kind") == "exporter_finding":
+            return se["finding_code"] not in ("capability_profile", "dimension_snapshot")
+        return se.get("event_type") == "exporter.finding"
 
     def _window(self, event_time: datetime) -> tuple[datetime, datetime]:
         w = self.cfg.window_seconds
@@ -214,7 +233,8 @@ class Exporter:
         late, wstart, wend = self._is_late(ev)
         redacted: list[str] = []
         sim = self._is_simulator(ev)
-        se = {**self._base(ev.event_type), "event_id": ev.event_id, "event_time": fmt_ts(ev.event_time),
+        se = {**({} if self.cfg.legacy_prefix else {"kind": "domain_event"}), **self._base(ev.event_type),
+              "event_id": ev.event_id, "event_time": fmt_ts(ev.event_time),
               "ingested_at": fmt_ts(ev.ingested_at), "available_at": fmt_ts(ev.ingested_at), "case_id": ev.case_id,
               "entity": ev.entity, "entity_id": ev.entity_id, "actor_role": ev.actor_role, "actor_ref": ev.actor_id,
               "payload": treat_payload(ev.payload, redacted), "redacted_fields": sorted(redacted),
@@ -234,8 +254,11 @@ class Exporter:
         prof = build_profile(self.source, self.cfg.extra_event_types)
         if not always and self.state.meta("profile_digest") == prof["digest"]:
             return None, {}
-        se = {**self._base("exporter.capability_profile"), "profile": prof}
-        return self._obs(f"profile:{prof['digest']}", se, None, None), {"profile_digest": prof["digest"]}
+        if self.cfg.legacy_prefix:
+            se = {**self._base("exporter.capability_profile"), "profile": prof}
+            return self._obs(f"profile:{prof['digest']}", se, None, None), {"profile_digest": prof["digest"]}
+        return (self._meta_obs(f"profile:{prof['digest']}", "capability_profile", {"profile": prof}),
+                {"profile_digest": prof["digest"]})
 
     # ------------------------------------------------------------------ batch construction
     @staticmethod
@@ -334,8 +357,11 @@ class Exporter:
         dim = {"cases": len(self._cases), "simulator_customers": len(self._simulators),
                "staff": jcs_digest(self.source.staff_dimension()), "cases_digest": jcs_digest(sorted(self._cases.items())),
                "simulator_digest": jcs_digest(sorted(self._simulators))}
-        se = {**self._base("exporter.dimension_snapshot"), "snapshot": dim}
-        extra.append(self._obs(f"dimensions:{jcs_digest(dim)}", se, None, None))
+        if self.cfg.legacy_prefix:
+            se = {**self._base("exporter.dimension_snapshot"), "snapshot": dim}
+            extra.append(self._obs(f"dimensions:{jcs_digest(dim)}", se, None, None))
+        else:
+            extra.append(self._meta_obs(f"dimensions:{jcs_digest(dim)}", "dimension_snapshot", dim))
         for case_id, missing in sorted(self.source.turn_sequence_gaps().items()):
             extra.append(self._finding(f"turn_sequence_gap:{case_id}:{missing[0]}-{missing[-1]}",
                                        "turn_sequence_gap", None, {"case_id": case_id, "missing": missing}))
@@ -438,7 +464,7 @@ class Exporter:
             rep.denied_event_types[name] = rep.denied_event_types.get(name, 0) + n
         rep.gaps.extend(spec.info["gaps"])
         rep.late_events.extend(spec.info["late"])
-        rep.quality_findings += sum(1 for e in spec.events if e["source_event"]["event_type"] == "exporter.finding")
+        rep.quality_findings += sum(1 for e in spec.events if self._is_quality_finding(e))
         return True
 
     def _resume_pending(self, rep: PollReport) -> None:

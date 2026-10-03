@@ -12,7 +12,14 @@ import rfc8785
 CATALOG_VERSION = "platform_live.events/1"
 SOURCE_NAMESPACE = "platform_live"
 
-# Mirror of platform-contract/event-catalog.json 1.0.0 (a conformance test fails on drift). Closed catalog admitted by
+# platform-contract revision implemented here (a conformance test compares it with the contract package): exporter
+# metadata is `source_event.kind = "exporter_finding"`; ExporterConfig.legacy_prefix=True keeps the 1.0.0 `exporter.`
+# event_type prefix shape.
+CONTRACT_REVISION = "1.1.0"
+FINDING_SEVERITY = {"bad_row": "error", "late_event": "info", "capability_profile": "info",
+                    "dimension_snapshot": "info"}  # every other finding code defaults to "warning"
+
+# Mirror of platform-contract/event-catalog.json (a conformance test fails on drift). Closed catalog admitted by
 # default; `auth.*` is default-deny except the four allow-listed telemetry types.
 KNOWN_EVENT_TYPES = frozenset({
     "case.opened", "case.queued", "case.assigned", "case.status_changed", "case.read", "case.first_responded",

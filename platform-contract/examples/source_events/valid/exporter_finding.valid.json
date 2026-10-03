@@ -1,0 +1,58 @@
+{
+  "description": "Normal exporter finding about an unknown event type; sequence mirrors the described row.",
+  "records": [
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "EVT-0002",
+      "source_sequence": 2,
+      "observed_at": "2026-03-02T14:00:01Z",
+      "source_event": {
+        "kind": "domain_event",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "event_type": "case.opened",
+        "event_id": "EVT-0002",
+        "event_time": "2026-03-02T14:00:00Z",
+        "ingested_at": "2026-03-02T14:00:01Z",
+        "available_at": "2026-03-02T14:00:01Z",
+        "case_id": "CASE-0001",
+        "entity": "case",
+        "entity_id": "CASE-0001",
+        "actor_role": "customer",
+        "actor_ref": "CUS-0001",
+        "payload": {},
+        "redacted_fields": [],
+        "evidence_kind": "observed",
+        "population_excluded": false,
+        "late": false
+      }
+    },
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "finding:unknown_event_type:EVT-0003",
+      "source_sequence": 3,
+      "observed_at": "2026-03-02T14:05:00Z",
+      "source_event": {
+        "kind": "exporter_finding",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "finding_code": "unknown_event_type",
+        "severity": "warning",
+        "described_native_event_id": "EVT-0003",
+        "described_source_sequence": 3,
+        "details": {
+          "event_type": "case.escalated",
+          "catalog_status": "unknown",
+          "quarantined": true,
+          "payload_forwarded": false
+        }
+      }
+    }
+  ],
+  "unique_count": 2,
+  "sequence_findings": []
+}

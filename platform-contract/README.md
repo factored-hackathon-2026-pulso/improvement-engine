@@ -9,7 +9,7 @@ and the exporter (PL-L1) test against these files.
 
 | Field | Value |
 |---|---|
-| Contract version | 1.0.0 (profile `platform_live.phase1`) |
+| Contract version | 1.1.0 (profile `platform_live.phase1`); additive over 1.0.0 |
 | Source artifact | Product team, "Modelo de datos · Plataforma CC", id `BWx4saeWfYsLbQEbkNKMPg` |
 | Platform commit | `a492bfa` (slices 0-3) |
 | Captured | 2026-10-03 |
@@ -47,6 +47,26 @@ Admitted: `case.*` (opened, queued, assigned, status_changed, read, first_respon
 Denied (known, never ingested): `auth.password_accepted`, `auth.mfa_challenge_issued`, `auth.mfa_failed`,
 `customer.session_started`. Planned (announced prefixes `staff.`, `team.`) and unknown types are counted and
 quarantined with a quality finding; they never fail the batch.
+
+## Revision 1.1.0: exporter metadata discriminator
+
+`source_event.kind` separates exporter metadata from domain rows:
+
+- `exporter_finding`: `schemas/exporter_finding.schema.json`. Body: `kind`, `source_namespace`, `catalog_version`,
+  `tenant_id`, `finding_code` (closed list), `severity` (info|warning|error), `described_native_event_id` and
+  `described_source_sequence` (nullable), `details` (inline, <= 32 KiB serialized, <= 64 keys). Observation envelope
+  (outside the digest, so re-emission stays idempotent): `source_id`, `native_event_id` (identity, must be
+  `finding:|profile:|dimensions:` prefixed), `observed_at` (wall clock), `source_sequence` (null, or equal to
+  `described_source_sequence`: a finding about a late row reuses that row's sequence). Never a domain row, never part
+  of source-sequence continuity or population/window projections. Dedup key `(tenant_id, source_id, native_event_id)`.
+- `domain_event`: `schemas/domain_event.schema.json`; `event_type` must not start with `exporter.`.
+- `schemas/source_observation.schema.json`: self-contained observation view (identity + nullable sequence +
+  discriminated `source_event`). Wire `kind` stays `platform_event` (pulso-observations-2 is unchanged).
+- Golden fixtures: `examples/source_events/valid/*.json` (normal finding, null sequence, late-event sequence reuse,
+  dedup, domain row) and `examples/source_events/invalid/*.json` (unsupported code/kind, missing field, extra field,
+  prefix misuse, identity/tenant mismatch, legacy shape, domain without sequence).
+- Interim rule: for contract 1.0.0 the `exporter.` event_type prefix identifies exporter metadata. It remains valid
+  for 1.0.0 and for exporters run with `legacy_prefix=True`; it is rejected by the 1.1.0 schemas.
 
 ## Run
 

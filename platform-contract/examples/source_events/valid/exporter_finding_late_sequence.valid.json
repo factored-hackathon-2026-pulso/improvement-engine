@@ -1,0 +1,86 @@
+{
+  "description": "A finding reusing the sequence of the late domain row it describes; continuity ignores it.",
+  "records": [
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "EVT-0006",
+      "source_sequence": 6,
+      "observed_at": "2026-03-02T14:00:01Z",
+      "source_event": {
+        "kind": "domain_event",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "event_type": "case.opened",
+        "event_id": "EVT-0006",
+        "event_time": "2026-03-02T14:00:00Z",
+        "ingested_at": "2026-03-02T14:00:01Z",
+        "available_at": "2026-03-02T14:00:01Z",
+        "case_id": "CASE-0001",
+        "entity": "case",
+        "entity_id": "CASE-0001",
+        "actor_role": "customer",
+        "actor_ref": "CUS-0001",
+        "payload": {},
+        "redacted_fields": [],
+        "evidence_kind": "observed",
+        "population_excluded": false,
+        "late": false
+      }
+    },
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "EVT-0007",
+      "source_sequence": 7,
+      "observed_at": "2026-03-02T15:05:00Z",
+      "source_event": {
+        "kind": "domain_event",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "event_type": "case.opened",
+        "event_id": "EVT-0007",
+        "event_time": "2026-03-02T14:00:00Z",
+        "ingested_at": "2026-03-02T15:05:00Z",
+        "available_at": "2026-03-02T15:05:00Z",
+        "case_id": "CASE-0001",
+        "entity": "case",
+        "entity_id": "CASE-0001",
+        "actor_role": "customer",
+        "actor_ref": "CUS-0001",
+        "payload": {},
+        "redacted_fields": [],
+        "evidence_kind": "observed",
+        "population_excluded": false,
+        "late": true
+      }
+    },
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "finding:late_event:EVT-0007",
+      "source_sequence": 7,
+      "observed_at": "2026-03-02T15:05:00Z",
+      "source_event": {
+        "kind": "exporter_finding",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "finding_code": "late_event",
+        "severity": "info",
+        "described_native_event_id": "EVT-0007",
+        "described_source_sequence": 7,
+        "details": {
+          "window_start": "2026-03-02T14:00:00Z",
+          "window_end": "2026-03-02T15:00:00Z",
+          "lag_seconds": 300,
+          "window_revision_required": true
+        }
+      }
+    }
+  ],
+  "unique_count": 3,
+  "sequence_findings": []
+}

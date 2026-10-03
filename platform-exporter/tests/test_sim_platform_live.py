@@ -3,6 +3,7 @@
 Doubles: platform_live simulator (SQLite), ingest fixture (platform-sim/ingest_fixture, in-process ASGI)."""
 
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from tests.conftest import FakeClock
 
 pytestmark = pytest.mark.sim
 CONTRACT_CATALOG = Path(__file__).resolve().parents[2] / "platform-contract" / "event-catalog.json"
+sys.path.insert(0, str(CONTRACT_CATALOG.parent))
 
 
 @pytest.fixture
@@ -41,11 +43,36 @@ def _evs(ingest):
     return [e for b in ingest.batches for e in b["events"]]
 
 
+def _records(ingest):
+    return [{"tenant_id": b["tenant_id"], "source_id": b["source_id"], "native_event_id": e["native_event_id"],
+             "source_sequence": e["source_sequence"], "observed_at": e["observed_at"], "source_event": e["source_event"]}
+            for b in ingest.batches for e in b["events"]]
+
+
+def test_simulator_run_conforms_to_contract_1_1_0_and_findings_never_fill_continuity(sim_rig):
+    from platform_contract import conformance
+    sim, ex, ingest = sim_rig
+    ex.poll_once()
+    ex.rescan()
+    recs = _records(ingest)
+    assert conformance.validate_source_observations(recs) == []
+    seq_findings = conformance.check_observation_sequences(recs)
+    gap = next(f for f in sim.faults if f["kind"] == "sequence_gap")
+    assert {"code": "gap_suspected", "after": gap["after"], "next": gap["after"] + gap["size"] + 1} in seq_findings         or any(f["code"] == "gap_suspected" for f in seq_findings)
+    assert not [f for f in seq_findings if f["code"] == "finding_sequence_mismatch"]
+    _unique, dups = conformance.dedup_observations(recs)
+    assert all(d["code"] == "duplicate_identical" for d in dups)
+
+
 def test_embedded_catalog_matches_the_platform_contract_catalog():
     cat = json.loads(CONTRACT_CATALOG.read_text(encoding="utf-8"))
     by = {s: {e["event_type"] for e in cat["event_types"] if e["status"] == s} for s in ("admitted", "denied")}
     assert by["admitted"] == set(KNOWN_EVENT_TYPES) and by["denied"] == set(DENIED_EVENT_TYPES)
     assert tuple(cat["planned_prefixes"]) == PLANNED_PREFIXES
+    from platform_exporter.catalog import CONTRACT_REVISION
+    assert cat["contract_version"] == CONTRACT_REVISION
+    assert cat["exporter_finding"]["severities"] and set(cat["exporter_finding"]["finding_codes"]) >= {
+        "gap_suspected", "late_event", "capability_profile", "dimension_snapshot"}
 
 
 def test_full_scenario_faults_are_all_surfaced_and_nothing_sensitive_leaves(sim_rig):
@@ -89,8 +116,8 @@ def test_rescan_reports_the_injected_turn_sequence_gap(sim_rig):
     ex.poll_once()
     case_id = next(f for f in sim.faults if f["kind"] == "turn_gap")["case_id"]
     ex.rescan()
-    gaps = [e["source_event"]["finding"] for e in _evs(ingest)
-            if e["source_event"].get("finding", {}).get("type") == "turn_sequence_gap"]
+    gaps = [e["source_event"]["details"] for e in _evs(ingest)
+            if e["source_event"].get("finding_code") == "turn_sequence_gap"]
     assert any(g["case_id"] == case_id for g in gaps)
 
 
