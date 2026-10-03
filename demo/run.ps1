@@ -68,7 +68,8 @@ try {
         & $py -m codex_standin.stack finish --ns $ns --dir $e2eDir
         if ($LASTEXITCODE -ne 0) { throw 'stack finish failed' }
         $env:E2E_ENV_FILE = Join-Path $e2eDir 'e2e-env.json'
-        $env:E2E_KEYS_FILE = Join-Path $e2eDir 'e2e-keys.json'        $env:DEMO_NAMESPACE = $ns
+        $env:E2E_KEYS_FILE = Join-Path $e2eDir 'e2e-keys.json'
+        $env:DEMO_NAMESPACE = $ns
         & $py -m pulso_demo.driver --out $out --namespace $ns
         $exit = $LASTEXITCODE
     }
