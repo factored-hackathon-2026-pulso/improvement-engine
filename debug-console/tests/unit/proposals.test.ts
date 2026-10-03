@@ -7,7 +7,7 @@ const schemaByName = (name: string) => (S as unknown as Record<string, Parameter
 describe('consumer_proposal registry', () => {
   it('marks every provisional schema with metadata.consumer_proposal=true and a tracking ref', () => {
     expect(Object.keys(CONSUMER_PROPOSALS).sort()).toEqual(
-      ['Decision', 'Diff', 'Gates', 'Investigation', 'Memory', 'Profile', 'Session', 'StepUp'].sort(),
+      ['Alternatives', 'Decision', 'Diff', 'Gates', 'Investigation', 'Memory', 'Profile', 'Session', 'StepUp'].sort(),
     );
     for (const [name, ref] of Object.entries(CONSUMER_PROPOSALS)) {
       expect(proposalMeta(schemaByName(name)), name).toEqual({ consumer_proposal: true, ref });

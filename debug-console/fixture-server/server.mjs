@@ -1,9 +1,41 @@
+import fs from 'node:fs';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { makeScenario } from '../fixtures/scenarios.mjs';
 
 let scenario = 'default';
 let world = makeScenario(scenario);
+
+/** A world JSON (e.g. produced by the demo driver) must carry at least these collections; missing optional ones are defaulted. */
+function adoptWorld(w) {
+  const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+  if (!isObj(w) || !isObj(w.runs) || !isObj(w.decision)) throw new Error('invalid_world');
+  for (const r of Object.values(w.runs)) if (!isObj(r) || typeof r.run_id !== 'string' || !Array.isArray(r.nodes)) throw new Error('invalid_world');
+  const next = structuredClone(w);
+  next.events = isObj(next.events) ? next.events : {};
+  for (const id of Object.keys(next.runs)) next.events[id] ??= [];
+  next.investigation = isObj(next.investigation) ? next.investigation : {};
+  next.memory = Array.isArray(next.memory) ? next.memory : [];
+  next.commands = isObj(next.commands) ? next.commands : {};
+  next.gates ??= { native: { status: 'unknown', reason_code: null }, improvement: { status: 'unknown', reason_code: null }, combined: { decision: 'hold', reason_code: null } };
+  next.diff ??= { proposal_id: 'none', lines: [] };
+  return next;
+}
+if (process.env.FIXTURE_WORLD_FILE) {
+  world = adoptWorld(JSON.parse(fs.readFileSync(process.env.FIXTURE_WORLD_FILE, 'utf8')));
+  scenario = 'loaded';
+}
+/** Which runs own the gate/attempt/alternatives data: explicit gates_by_run, else (demo worlds) runs with an evaluation stage, else all. */
+const ownsEvaluation = (run) => (world.gates_by_run ? run.run_id in world.gates_by_run : world.demo ? run.nodes.some((n) => n.stage === 'evaluation') : true);
+const gatesFor = (run) => {
+  if (world.gates_by_run) return world.gates_by_run[run.run_id] ?? null;
+  return ownsEvaluation(run) ? world.gates : null;
+};
+const NOT_EVALUATED = {
+  native: { status: 'not_evaluable', reason_code: 'no_evaluation_in_run', checked_at: null },
+  improvement: { status: 'not_evaluable', reason_code: 'no_evaluation_in_run', receipt_refs: [], checked_at: null },
+  combined: { decision: 'not_applicable', reason_code: 'no_evaluation_in_run' },
+};
 const freshFaults = () => ({ stream: null, api: null, session: null, stepup: null });
 let faults = freshFaults(); // stream: 'gone' (410 once) | 'unauthorized'; api: 'unauthorized'; session|stepup: 'down' (503)
 const hb = { ms: 5000, muted: false }; // SSE heartbeat cadence; muted simulates a silent but connected stream
@@ -66,6 +98,15 @@ const server = http.createServer(async (req, res) => {
       hb.ms = 5000; hb.muted = false;
       return send(res, 200, { ok: true, scenario });
     }
+    if (p === '/__fixture/load') { // replace the whole world with the posted JSON (demo driver output)
+      const b = await readBody(req);
+      try { world = adoptWorld(b); scenario = 'loaded'; } catch { return problem(res, 'invalid_world', 400); }
+      for (const c of sseClients) c.res.end();
+      sseClients.clear();
+      faults = freshFaults();
+      hb.ms = 5000; hb.muted = false;
+      return send(res, 200, { ok: true, scenario, runs: Object.keys(world.runs) });
+    }
     if (p === '/__fixture/deliver') { // push existing log entries as raw SSE frames, in the given order (dup/reorder/gap)
       const b = await readBody(req);
       const list = b && world.events[b.run_id];
@@ -124,6 +165,14 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { level: 'step_up' });
   }
   if (p === `${PREFIX}/profile`) {
+    const d = world.demo;
+    if (d) {
+      return send(res, 200, {
+        target: 'demo-standin', runtime_profile: d.runtime_profile ?? 'fixture', doubles: d.doubles ?? ['api_fixture'], pin: null,
+        ...(d.mode ? { mode: d.mode } : {}), ...(d.decision_hook ? { decision_hook: d.decision_hook } : {}),
+        ...(d.doubles_detail ? { doubles_detail: d.doubles_detail } : {}),
+      });
+    }
     return send(res, 200, { target: 'mock', runtime_profile: 'fixture', doubles: ['api_fixture', 'sse_fixture', 'identity_fixture'], pin: null });
   }
   if (p === `${PREFIX}/runs`) {
@@ -132,7 +181,7 @@ const server = http.createServer(async (req, res) => {
     }));
     return send(res, 200, { ...env(null, 1, 'ok'), items, next_cursor: null });
   }
-  let mm = p.match(new RegExp(`^${PREFIX}/runs/([^/]+)/(graph|events|events/stream|investigation|gates)$`));
+  let mm = p.match(new RegExp(`^${PREFIX}/runs/([^/]+)/(graph|events|events/stream|investigation|gates|alternatives)$`));
   if (mm) {
     const run = world.runs[mm[1]];
     if (!run) return problem(res, 'not_found', 404);
@@ -147,7 +196,18 @@ const server = http.createServer(async (req, res) => {
       const inv = world.investigation[run.run_id] ?? { hypothesis: null, verifier: 'unknown', evidence: [] };
       return send(res, 200, { ...env(ref, run.revision, 'ok'), ...inv });
     }
-    if (kind === 'gates') return send(res, 200, { ...env(ref, run.revision, 'ok'), ...world.gates });
+    if (kind === 'gates') {
+      const g = gatesFor(run);
+      if (!g) return send(res, 200, { ...env(ref, run.revision, 'ok'), ...NOT_EVALUATED, proposal_id: null, attempts: [] });
+      return send(res, 200, {
+        ...env(ref, run.revision, 'ok'), ...g,
+        proposal_id: g.proposal_id ?? world.diff.proposal_id ?? null, attempts: g.attempts ?? (world.gates_by_run ? [] : (world.demo?.attempts ?? [])),
+      });
+    }
+    if (kind === 'alternatives') {
+      const items = ownsEvaluation(run) ? (world.demo?.alternatives ?? []) : [];
+      return send(res, 200, { ...env(ref, run.revision, 'ok'), items });
+    }
     if (faults.stream === 'unauthorized') return problem(res, 'session_expired', 401);
     if (faults.stream === 'gone') {
       faults.stream = null; // 410 body per CLQ-24: Problem{code:cursor_expired, current_ref, recovery_after_sequence, snapshot_url}
@@ -167,8 +227,12 @@ const server = http.createServer(async (req, res) => {
     req.on('close', () => { clearInterval(hbTimer); sseClients.delete(c); });
     return undefined;
   }
-  if (p === `${PREFIX}/proposals/prop-1/diff`) {
-    return send(res, 200, { ...env({ kind: 'proposal', id: 'prop-1' }, 1, 'ok'), ...world.diff });
+  mm = p.match(new RegExp(`^${PREFIX}/proposals/([^/]+)/diff$`));
+  if (mm) {
+    const id = decodeURIComponent(mm[1]);
+    const d = world.diffs?.[id] ?? (world.diff.proposal_id === id ? world.diff : null);
+    if (!d) return problem(res, 'not_found', 404);
+    return send(res, 200, { ...env({ kind: 'proposal', id }, 1, 'ok'), ...d });
   }
   if (p === `${PREFIX}/memory`) return send(res, 200, { ...env(null, 1, 'ok'), items: world.memory });
   if (p === `${PREFIX}/decisions/dec-1`) {
