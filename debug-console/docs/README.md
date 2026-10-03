@@ -7,8 +7,9 @@ The e2e run starts the fixture API/SSE (:4010) and Vite (:5173, same-origin prox
 
 ## What exists
 
-- SSE client: own fetch reader, jittered exponential backoff (500 ms .. 15 s), `Last-Event-ID` resume,
-  410 -> re-read the snapshot and resubscribe (a second consecutive 410 backs off), 401/403/404 -> terminal state without retry.
+- SSE client: own fetch reader, jittered exponential backoff (1 s .. 30 s, plan 16.13.4), `Last-Event-ID` resume,
+  410 -> re-read the snapshot with `recovery_after_sequence` as the floor, show an "earlier history purged" banner (a second consecutive 410 backs off),
+  stale after 2x the heartbeat without any event or heartbeat comment (`config.json` `sseHeartbeatMs`), 401/403/404 -> terminal state without retry.
   Reconnect never moves focus.
 - Schemas: routes plan 16.10 does not define (investigation, gates, diff, memory, decision, session, profile, step-up) are marked
   `consumer_proposal` (zod description, registry `CONSUMER_PROPOSALS` with the R/M/CO/CLQ reference).
@@ -23,12 +24,18 @@ The e2e run starts the fixture API/SSE (:4010) and Vite (:5173, same-origin prox
   CSP without `unsafe-inline` in `nginx/security-headers.inc` (asserted by `tests/unit/csp.test.ts`).
 - UI strings: es-419 dictionary in `src/i18n/es419.ts`; a unit test rejects hard-coded JSX text and missing keys. Codes stay verbatim.
 
+## Review-defect closure
+
+- Single rate-limited live region (`src/a11y`), only changed nodes are announced; no other `role=status/alert/aria-live`.
+- Session: a failed session fetch or any 401 shows a session banner; mutations are never sent with an empty CSRF; step-up errors are reported.
+- F11 (degraded trace panel when `trace_id` is null) and F21 (decision CAS: `expected_revision`, 409 `stale_revision`, reload with a new key) have UI and fixtures.
+- Fixture sets the loopback-HTTP cookie `pulso_local_session` (HttpOnly, SameSite=Lax, Path=/, no Domain/Secure); canary HAR/cookie/storage tests in `tests/e2e/leaks.spec.ts`.
+- axe for the S3-S6 panels in their states (`tests/e2e/a11y-panels.spec.ts`); `ModeBanner` and `DecisionPanel` component tests.
+- Dockerfile base images are digest-pinned; build with `podman build --format docker` or HEALTHCHECK is dropped.
+
 ## Known gaps vs plan 17.3.7
 
-- No react-router / react-query / react-virtual (hash routing, plain fetch, no virtualised timeline).
-- F11 (collector down, degraded trace panel) and F21 (stale `expected_revision` 409) have no UI yet; see `F_COVERAGE`.
-- No canary HAR/cookie/storage test, no real cookie flags (fixture serves no cookie), no evidence manifest, no `ModeBanner` four-combination
-  component test, `public/config.json` is not read by the app yet.
-- Dockerfile is not digest-pinned and `LocalServiceManifest` fragment/CI patch are not written.
-- Backoff uses real timers (no manual fixture clock yet), so reconnect e2e waits up to ~1 s.
-- The 410/reconnect/axe checks were authored by the implementer; the plan requires an independent reviewer for a11y/security.
+- No react-router / react-query / react-virtual (hash routing, plain fetch, no virtualised timeline); S3-S6 are panels of the run view, not routes.
+- `stale_revision` as the 409 code and `trace_id` on graph nodes are consumer assumptions until Codex records them; traceLinkOrigins links are not rendered.
+- No evidence manifest, `LocalServiceManifest` fragment or CI patch yet.
+- The 410/reconnect/axe/leak checks were authored by the implementer; the plan requires an independent reviewer for a11y/security.

@@ -36,6 +36,7 @@ test('axe: no critical/serious violations with a drawer open', async ({ page }) 
 
 test('text equivalent covers 100% of graph nodes', async ({ page }) => {
   await page.goto('/#/run/run-blocked');
+  await page.getByTestId('node-release').waitFor(); // the graph loads asynchronously
   const nodes = await page.locator('[data-testid^="node-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')!.slice(5)));
   expect(nodes.length).toBeGreaterThan(0);
   for (const id of nodes) await expect(page.getByTestId(`textgraph-${id}`)).toBeVisible();
