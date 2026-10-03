@@ -71,6 +71,7 @@ Describe 'secrets' {
         $null = Initialize-LocalSecrets -Root $root -Namespace 'claude-s1'
         (Get-Content $f -Raw) | Should Be $before
         $before | Should Match 'AGENTCORE_KEYS_FINGERPRINT=local1:'
+        $before | Should Match '(?m)^AGENTCORE_LLM_GATEWAY_TOKEN=[A-Za-z0-9]{32,}$'
         [IO.Directory]::Delete($root, $true)
     }
 }

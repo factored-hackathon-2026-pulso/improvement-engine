@@ -57,6 +57,7 @@ class World:
         self.llm_rules: list[dict[str, Any]] = []
         self.llm_calls: list[dict[str, Any]] = []
         self.llm_unscripted = 0
+        self.llm_seen: list[dict[str, str]] = []  # what the consumer sent: token hash + prompt text (canary proof)
 
     def put_artifact(self, tenant: str, art_id: str, content: Any,
                      media_type: str = "application/json") -> dict[str, Any]:
@@ -85,7 +86,7 @@ class World:
                 "binding_effects": {f"{k[0]}|{k[1]}": v for k, v in self.binding_effects.items()},
                 "bank_effects": {f"{k[0]}|{k[1]}": v for k, v in self.bank_effects.items()},
                 "requests": list(self.requests), "cross_tenant_denials": self.cross_tenant_denials,
-                "llm_calls": list(self.llm_calls), "llm_unscripted": self.llm_unscripted,
+                "llm_calls": list(self.llm_calls), "llm_unscripted": self.llm_unscripted, "llm_seen": list(self.llm_seen),
                 "accepted_tokens": {"control": list(self.control.accepted), "broker": list(self.broker.accepted)},
                 "sessions": {k: {"tenant": s["tenant"], "revision": s["revision"], "closed": s["closed"],
                                  "actions": len(s["actions"])} for k, s in self.sessions.items()},
@@ -404,6 +405,11 @@ def create_app(world: World, ingest: FastAPI | None = None) -> FastAPI:
         body = json.loads(await request.body() or b"{}")
         system = str(body.get("prompt", ""))  # the registry prompt text (carries the stage marker)
         user = json.dumps(body.get("inputs", {}), sort_keys=True)
+        with world.lock:
+            world.llm_seen.append({"auth_sha256": HEX(request.headers["authorization"].encode()).hexdigest(),
+                                   "system": system, "user": user})
+        if world.fault("llm"):  # gateway outage knob: the gateway-protocol typed error `unavailable`
+            return JSONResponse({"error": {"kind": "unavailable", "message": "scripted gateway outage"}}, status_code=502)
         answer = world.llm_answer(system, user)
         if answer is None:
             return _err(500, "unscripted_model_call")

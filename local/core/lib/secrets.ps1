@@ -26,6 +26,8 @@ function Initialize-LocalSecrets {
         AGENTCORE_KEYS_FINGERPRINT = { New-KeyEnvValue }; AGENTCORE_KEYS_TOKEN_MAP = { New-KeyEnvValue }
         # Local placeholder: no real JEV key exists on this machine; JEV calls are doubles/unavailable.
         AGENTCORE_JEV_API_KEY = { New-RandomSecret 40 }
+        # Consumer token the runtime presents to the llm-gateway (git-ignored core.env, never in the repo or logs).
+        AGENTCORE_LLM_GATEWAY_TOKEN = { New-RandomSecret 48 }
     }
     $existing = @(); if (Test-Path -LiteralPath $file) { $existing = @(Get-Content -LiteralPath $file | ForEach-Object { ($_ -split '=', 2)[0] }) }
     $add = @(); foreach ($k in $wanted.Keys) { if ($k -notin $existing) { $add += "$k=$(& $wanted[$k])" } }
