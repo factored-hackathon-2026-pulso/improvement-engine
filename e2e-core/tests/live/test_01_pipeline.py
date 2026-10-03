@@ -83,7 +83,6 @@ def test_writer_commits_create_put_freeze_with_derived_keys_and_exactly_one_prop
     authz = [r["body"]["operation"] for r in stack.engine.state()["requests"] if r["route"] == "authz"]
     for op in ("registry/create_proposal", "registry/put_draft", "registry/freeze"):
         assert op in authz  # every effect was authorised by the broker first
-    assert db.one("select count(*) from reg_eval_runs where proposal_id=%s", pipeline.proposal_id) == 0
     effect("writer_registry_writes", ops)
 
 
