@@ -28,7 +28,7 @@ const post = <T,>(schema: z.ZodType<T>, path: string, body: unknown, key?: strin
 
 export const api = {
   session: () => request(S.Session, '/api/v1/auth/session'),
-  stepUp: () => post(z.object({ level: z.string() }), '/api/v1/auth/step-up', {}),
+  stepUp: () => post(S.StepUp, '/api/v1/auth/step-up', {}),
   profile: () => request(S.Profile, `${DEBUG}/profile`),
   runs: () => request(S.RunList, `${DEBUG}/runs`),
   graph: (id: string) => request(S.Graph, `${DEBUG}/runs/${id}/graph`),

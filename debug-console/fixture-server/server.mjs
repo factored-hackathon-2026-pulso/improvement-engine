@@ -148,7 +148,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (world.decision.needs_step_up && !world.decision.stepped_up) return problem(res, 'waiting_human_reauthentication', 403);
     const id = `cmd-${key}`;
-    world.commands[id] = { polls: 0 };
+    const fingerprint = JSON.stringify(b);
+    if (world.commands[id] && world.commands[id].fingerprint !== fingerprint) return problem(res, 'idempotency_conflict', 409);
+    world.commands[id] ??= { polls: 0, fingerprint };
     return send(res, 202, {
       command_ref: { kind: 'external_command', id }, status_url: `${PREFIX}/commands/external_command/${id}`,
       entity_ref: { kind: 'decision', id: 'dec-1' },
