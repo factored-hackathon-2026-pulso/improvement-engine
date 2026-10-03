@@ -112,11 +112,7 @@ def test_existing_proposal_commitment_binds_id_rev_and_digest() -> None:
     assert env.call(ic, "registry/put_draft", ok, key="e2").status is ToolStatus.ok
     for tool in ("registry/validate", "registry/freeze", "registry/get_proposal"):
         assert env.call(ic, tool, {"proposal_id": "prop-9"}, key="k-" + tool).status is ToolStatus.ok, tool
-    # `reopen` is allowed by the executor (plan) but the writer Agent asset does not list it (L4 gap): the
-    # dispatcher's stage allow-list mirrors the asset, so only the executor path reaches it for now.
-    assert env.call(ic, "registry/reopen", {"proposal_id": "prop-9"}, key="kr").error == "tool_not_allowed"
-    direct = ProtectedBuilderToolExecutor(env.inner, env.contexts, env.broker)
-    assert direct.execute(ref("registry/reopen"), {"proposal_id": "prop-9"}, {}, tcx(ic), "kr").status is ToolStatus.ok
+    assert env.call(ic, "registry/reopen", {"proposal_id": "prop-9"}, key="kr").status is ToolStatus.ok
 
 
 def test_evaluate_requires_flag_ref_gate_and_authorisation_and_never_hits_the_inner_executor() -> None:
