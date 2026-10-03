@@ -30,9 +30,14 @@
   smoke remains evidence for the unchanged path; final-head regression tests
   passed, including no-plan behavior. This limitation is explicit in
   `docs/IMPLEMENTATION_STATUS.md` and journal 0065.
-- Windows `gh` is installed but `gh auth status` reports the `aleuse` token
-  invalid. The authenticated GitHub connector can read the private repo, but
-  local network access to GitHub is blocked. No PR has been created yet; next
-  step is to retry the Windows `gh` path if its auth/network recovers, otherwise
-  use the authenticated connector for a consolidated PR without claiming a
-  successful CLI push.
+- Windows `gh` 2.98 is installed, but its `aleuse` token is invalid and
+  `git push` cannot reach `github.com:443`. Published the content-verified
+  consolidated snapshot through the authenticated GitHub connector and opened
+  PR #78. GitHub compare confirms one commit ahead of main, zero behind, 42
+  changed files, and all remote blob SHAs match the local committed files.
+- PR #78's `rust-ci` run #127 failed in the PostgreSQL migration, Ubuntu, and
+  Windows jobs. The connector exposes no job steps and log retrieval returns
+  `BlobNotFound`. The project owner confirmed the GitHub Actions quota is
+  exhausted; treat this remote red status as quota-blocked, not as a code
+  failure. Local CI passed first; the PR remains reviewable, with merge gated
+  by the team's policy for the exhausted-quota checks.
