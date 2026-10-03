@@ -78,6 +78,14 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+RELEASE_SETTINGS_KIND = "release_settings"
+
+
+def _has_release_settings(changes: Any) -> bool:
+    return isinstance(changes, list) and any(isinstance(c, dict) and c.get("kind") == RELEASE_SETTINGS_KIND
+                                             for c in changes)
+
+
 def _denied(code: str) -> tuple[ToolStatus, JsonValue, str]:
     return ToolStatus.denied, None, code
 
@@ -140,6 +148,10 @@ class ProtectedBuilderToolExecutor:
         props = BUILDER_TOOL_DEFS[name].args_schema.get("properties", {})
         if not isinstance(props, dict) or not set(args) <= set(props):
             return _denied("invalid_args")
+        if name == "registry/put_draft" and _has_release_settings(args.get("changes")):
+            # N-07 (agent-core 789d6c8): `release_settings` can replace the whole interrupt list. Default deny, checked
+            # before the commitment so even a committed digest cannot carry it, until a Pulso guardrail exists (D-17).
+            return _denied("pulso:release_settings_not_allowed")
         mismatch = self._commitment_mismatch(name, args, ic, commitment)
         if mismatch:
             return _denied("commitment_mismatch")

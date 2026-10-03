@@ -49,10 +49,10 @@ accepts `AGENTCORE_ALLOW_DEMO`.
 
 - ADRs: `docs/adr/0001` FastAPI registry mock, `0002` native-evaluate digest/admission states/early close, `0003` writer
   modes and protected executor, `0004` run inputs as `bind_context` facts, `0005` per-route audiences and `jti` replay,
-  `0006` cgroups-disabled runner, `0007` `evaluation_context_ref` format.
+  `0006` cgroups-disabled runner, `0007` `evaluation_context_ref` format, `0008` agent-core pin bump to `789d6c8`.
 - Flows: `docs/flows/core-invoke.md`, `core-receipts-state-machine.md`, `core-reconcile-matrix.md`,
   `core-evaluation-admission-arms.md`, `core-exporter-cursor-cas.md`, `core-binding-context-channel.md`.
-- Per-package journals: `docs/journal/claude-0001` (L1) to `claude-0008` (L8).
+- Per-package journals: `docs/journal/claude-0001` (L1) to `claude-0008` (L8), `claude-0009` (pin bump `789d6c8`).
 - Sibling READMEs: `../platform-sim/README.md`, `../agent-core-assets/README.md`, `../local/core/README.md`.
 
 ## Running the tests
@@ -72,6 +72,11 @@ environment without them fails to collect `tests/l3b/test_catalog_and_facts.py`,
 `AGENTCORE_REGISTRY_DSN`, `AGENTCORE_EVAL_DSN`, `PULSO_SERVICE_KEYS`, `PULSO_IDENTITY_KEYS`, `PULSO_STAFF_KEYS`,
 `PULSO_BRIDGE_{IDENTITY,STAFF,CALLBACK,EXECUTOR}_SIGNER`, `PULSO_LAB_BROKER_URL`, `PULSO_CONTROL_API_URL`,
 `PULSO_EVAL_BUDGETS`, `PULSO_EVAL_PERMITS`, `PULSO_BRIDGE_MAX_INFLIGHT`, `PULSO_BRIDGE_INSTANCE`, `PULSO_FACTORY_<NAME>`.
+Since the `789d6c8` bump (ADR 0008): `PULSO_CORE_SHA` (build sha reported by Core's `/version`, set by the image),
+`PULSO_KEYS_RELOAD_SECONDS` (default 5, 0 = off), `PULSO_CORE_EXPORT_ENABLED` (default off: Core's `/v1/export/*` is not
+mounted; the PG exporter is the ingest path). Pass-through, untouched and off by default: `AGENTCORE_LLM_GATEWAY_URL` +
+`AGENTCORE_LLM_GATEWAY_TOKEN` (both or neither; neither = generation falls back to templates), `AGENTCORE_DB_POOL_MAX`,
+the S3 blob bucket and the SNS publisher.
 Exit code 2 means configuration error (demo double, missing factory, pin drift, unreadable key file, empty URL).
 
 ## Known gaps

@@ -6,7 +6,7 @@ Contract revision: `pulso-two-teams-1`. Agent Core pin `789d6c89b2fca90fc10e2abf
 
 | Piece | Path | What it is |
 |---|---|---|
-| Registry mock (CAP-52) | `registry_mock/` | FastAPI HTTP process, in-memory state, 16 `/v1/registry` routes, EdDSA JWS, 12 error codes, limits, quotas with an injectable clock, `/_sim/*` (info, reset, clock, eval, fault). ADR `core-bridge/docs/adr/0001`. |
+| Registry mock (CAP-52) | `registry_mock/` | FastAPI HTTP process, in-memory state, 18 `/v1/registry` routes (16 + N-02 alias/versions reads), `ReleaseDetail` with the N-03 fields, `eval_run_id` in `gate_failed` (N-10), EdDSA JWS, 12 error codes, limits, quotas with an injectable clock, `/_sim/*` (info, reset, clock, eval, fault). ADR `core-bridge/docs/adr/0001`. |
 | a2 harness | `registry_mock/a2_app.py` | the REAL `RegistryService` over `InMemoryRegistryStore`, sim staff verifier, scripted `EvalPort`; no `testing` import. The parity oracle. |
 | Bridge mock (CAP-53) | `bridge_mock/` | the `/internal/v1` routes of `pulso-core-runtime` (invoke, read, aliases, dry-run, version, credentials) with `runtime_profile=contract_mock`; bodies validated against `bridge_mock/schemas/*.json`. |
 | Ingest fixture | `ingest_fixture/` | server semantics of `pulso-observations-2` for the exporter: unknown fields rejected, server-side JCS digest, `Idempotency-Key == batch_digest`, `fast_poll` CAS on `expected_cursor_revision`, rescan never advances a checkpoint, dedup identity, 1 MiB artifacts. Not Codex's control-api. |
@@ -39,3 +39,9 @@ Mock candidate validation is a subset of the real rules (REG-KIND, REG-VERSION, 
 limits, 201-scenario REG-SCHEMA); other rules are covered only by a2. Cases needing a programmable evaluator are skipped on
 the real target. No real-PG recording was done (`record` is manual). The bridge mock does not execute Flows, validate
 registry content beyond limits/kind, or simulate the real broker. Details: `core-bridge/docs/journal/claude-0001-l1-wire-mock.md`.
+
+## Pin 789d6c8 notes
+Fixtures were re-recorded at `789d6c8` for a2, `real_local` and `real_pg_scripted` (`python -m parity.record --target a2|real|real_scripted`
+from `platform-sim/` with `PYTHONPATH=.;tests`; the real targets need `PULSO_TEST_PG_ADMIN`). Array bodies (`GET /versions/...`) now record
+`length` and item shape. The mock does NOT simulate the `release_settings` draft kind (N-07), `/version` or the export routes; a2/real are the
+authority there. `ReleaseDetail` values of the seed come from `golden/hash_vectors.json::release_detail`.

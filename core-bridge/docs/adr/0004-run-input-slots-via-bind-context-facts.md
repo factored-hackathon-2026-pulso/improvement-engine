@@ -27,5 +27,7 @@ reading `slots.*` of such a slot escalated before any tool call (recorded first 
 ## Consequences
 The slot values are visible to the model as facts (they are refs and flags, not secrets; sensitive material travels as
 refs resolved by the broker). If a later Core pin validates run-input slots, this ADR can be retired by reading
-`slots.*` again, and the catalogue check inverted. Unknown: whether the `claimed` state is intended upstream behaviour or
-a defect; no upstream issue was filed from this repository.
+`slots.*` again, and the catalogue check inverted. Update at agent-core `789d6c8` (pin bump, ADR 0008): the former Unknown
+is answered. Upstream documents the `claimed` state as design (spec `motor-de-decision-design`, ADR 0005: slots are not
+calibrated, always enter as `claimed` and never become facts by themselves), and the bump left it unchanged. Core-side
+validation of run-input slots is therefore NOT to be expected; `bind_context` facts remain the correct pattern.
