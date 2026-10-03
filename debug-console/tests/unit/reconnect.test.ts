@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { backoffDelay, classifyClose, parseSseFrames } from '../../src/api/reconnect';
 
-describe('backoffDelay', () => {
-  it('grows exponentially and caps', () => {
-    const noJitter = () => 1;
-    expect(backoffDelay(0, noJitter)).toBe(500);
-    expect(backoffDelay(1, noJitter)).toBe(1000);
-    expect(backoffDelay(3, noJitter)).toBe(4000);
-    expect(backoffDelay(20, noJitter)).toBe(15000);
+describe('backoffDelay (plan 16.13.4: 1-30 s with jitter)', () => {
+  it('never goes below 1 s, even with zero jitter', () => {
+    for (let a = 0; a < 40; a += 1) expect(backoffDelay(a, () => 0)).toBeGreaterThanOrEqual(1000);
   });
-  it('applies full jitter within [0, cap]', () => {
-    expect(backoffDelay(2, () => 0)).toBe(0);
-    expect(backoffDelay(2, () => 0.5)).toBe(1000);
+  it('grows exponentially from 1 s and caps at 30 s', () => {
+    const max = () => 1;
+    expect(backoffDelay(0, max)).toBe(1000);
+    expect(backoffDelay(1, max)).toBe(2000);
+    expect(backoffDelay(3, max)).toBe(8000);
+    expect(backoffDelay(5, max)).toBe(30000);
+    expect(backoffDelay(50, max)).toBe(30000);
+  });
+  it('applies jitter inside [1 s, ceiling]', () => {
+    expect(backoffDelay(3, () => 0.5)).toBe(4500);
+    expect(backoffDelay(20, () => 0.5)).toBe(15500);
+    for (let a = 0; a < 40; a += 1) expect(backoffDelay(a, Math.random)).toBeLessThanOrEqual(30000);
   });
 });
 
