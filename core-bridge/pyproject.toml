@@ -29,3 +29,6 @@ markers = [
     "l3a: L3a invoke, credentials, reconcile, bridge store",
     "pg: needs real Postgres 16 (PULSO_TEST_PG_DSN)",
 ]
+
+[tool.setuptools.package-data]
+pulso_core_runtime = ["facts/schemas/*.json"]

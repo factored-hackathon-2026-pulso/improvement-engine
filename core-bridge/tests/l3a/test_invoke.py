@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from pulso_core_runtime.invoke.context import ContextMissing, InvocationRegistry, current_context
+from pulso_core_runtime.invoke.context import ContextError, InvocationRegistry, current_binding
 from pulso_core_runtime.invoke.core_client import CoreResponse
 from pulso_core_runtime.invoke.projection import FactSpec, WhitelistProjector
 from pulso_core_runtime.invoke.service import InvokeSettings
@@ -47,7 +47,8 @@ async def test_happy_path_receipt_pin_and_context_cleanup(dsn: str) -> None:
     assert call["key"] == key() and call["body"] == {"agent": "pulso-scout@1.0.0", "subject": None,
                                                      "input": {"q": "x"}}
     assert call["principal"] == "pulso-bot:t1:task:scout"
-    assert len(reg) == 0  # context removed on terminal
+    with pytest.raises(ContextError):
+        reg.lookup(r["task_binding_ref"])  # context removed on terminal
     again = await svc.invoke("t1", key(), body())  # replay of a terminal receipt: stored, no Core call
     assert again.status == 200 and again.body["state"] == "terminal_ok" and len(core.start_calls) == 1
 
@@ -167,13 +168,13 @@ async def test_32_concurrent_invokes_do_not_cross_context(dsn: str) -> None:
         part = bearer.split(".")[1]
         payload = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
         await asyncio.sleep(random.random() * 0.05)
-        ctx = reg.resolve(payload["attrs"])  # attr channel
-        cv = current_context()
-        assert cv is not None and cv.task_binding_ref == ctx.task_binding_ref  # ContextVar agrees (same task)
+        ctx = reg.lookup(payload["attrs"]["task_binding_ref"])  # attr channel
+        assert (ctx.tenant_id, ctx.job_id) == (payload["attrs"]["tenant"], payload["attrs"]["job"])
+        assert current_binding() == ctx.binding_ref  # ContextVar agrees (same task)
         seen[b["input"]["job"]] = (ctx.tenant_id, ctx.job_id)
         with ThreadPoolExecutor(1) as pool:  # a worker thread: attr channel works, a bare ContextVar would not
-            via_attrs = pool.submit(reg.resolve, payload["attrs"]).result()
-            via_var = pool.submit(current_context).result()
+            via_attrs = pool.submit(reg.lookup, payload["attrs"]["task_binding_ref"]).result()
+            via_var = pool.submit(current_binding).result()
         assert via_attrs.job_id == ctx.job_id and via_var is None
         return await orig(bearer, k, b)
 
@@ -182,5 +183,5 @@ async def test_32_concurrent_invokes_do_not_cross_context(dsn: str) -> None:
     outs = await asyncio.gather(*(svc.invoke("t1", key(job=j), body(job=j, input={"job": j})) for j in jobs))
     assert all(o.body["state"] == "terminal_ok" for o in outs), [o.body for o in outs if o.body["state"] != "terminal_ok"][:2]
     assert seen == {j: ("t1", j) for j in jobs}
-    with pytest.raises(ContextMissing):
-        reg.resolve({"task_binding_ref": "nope"})
+    with pytest.raises(ContextError):
+        reg.lookup("nope")

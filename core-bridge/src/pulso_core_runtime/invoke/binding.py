@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 from pulso_core_runtime.internal.auth import sign_service_jwt
-from pulso_core_runtime.invoke.context import ContextMismatch, ContextMissing, InvocationRegistry
+from pulso_core_runtime.invoke.context import ContextError, InvocationRegistry
 from pulso_core_runtime.store.receipts import ReceiptStore
 
 BINDING_PATH = "/internal/v1/core-task-bindings"
@@ -46,28 +46,33 @@ class BindingService:
 
     def bind(self, *, run_id: str, principal_attrs: dict[str, str]) -> BindResult:
         try:
-            ctx = self._registry.resolve(principal_attrs)
-        except (ContextMissing, ContextMismatch) as exc:
+            ref = principal_attrs.get("task_binding_ref")
+            if not ref:
+                raise ContextError("pulso:context_missing")
+            ctx = self._registry.lookup(ref)
+            if (principal_attrs.get("tenant"), principal_attrs.get("job")) != (ctx.tenant_id, ctx.job_id):
+                raise ContextError("pulso:context_mismatch")
+        except ContextError as exc:
             return BindResult(False, exc.code)
         body = {"schema_version": "1", "tenant_id": ctx.tenant_id, "job_id": ctx.job_id,
-                "command_key": ctx.idempotency_key, "request_digest": ctx.request_digest, "attempt": ctx.attempt,
+                "command_key": ctx.command_key, "request_digest": ctx.request_digest, "attempt": ctx.attempt,
                 "core_run_id": run_id, "bridge_instance_id": self._instance,
-                "task_binding_ref": ctx.task_binding_ref}
+                "task_binding_ref": ctx.binding_ref}
         resp: httpx.Response | None = None
         for attempt in (1, 2):  # one retry on network error only
             try:
                 with httpx.Client(transport=self._transport, timeout=self._timeout) as client:
                     resp = client.post(self._url, json=body, headers={
-                        "Authorization": f"Bearer {self._token()}", "Idempotency-Key": ctx.idempotency_key})
+                        "Authorization": f"Bearer {self._token()}", "Idempotency-Key": ctx.command_key})
                 break
             except httpx.TransportError:
                 resp = None
         if resp is None:
             return self._unproven(ctx)
         if resp.status_code == 200:
-            moved = self._store.transition(ctx.tenant_id, ctx.idempotency_key, "binding_confirmed", core_run_id=run_id)
+            moved = self._store.transition(ctx.tenant_id, ctx.command_key, "binding_confirmed", core_run_id=run_id)
             if moved is None:
-                current = self._store.get(ctx.tenant_id, ctx.idempotency_key)
+                current = self._store.get(ctx.tenant_id, ctx.command_key)
                 if current is None or current.state != "binding_confirmed":
                     return BindResult(False, "pulso:binding_cas_lost")
             fact = STAGE_FACTS.get(ctx.stage)
@@ -78,5 +83,5 @@ class BindingService:
 
     def _unproven(self, ctx: Any) -> BindResult:
         """Timeout / 5xx: absence of effect is not proven -> receipt `manual_reconcile`, tools stay denied."""
-        self._store.transition(ctx.tenant_id, ctx.idempotency_key, "manual_reconcile", reason="binding_unproven")
+        self._store.transition(ctx.tenant_id, ctx.command_key, "manual_reconcile", reason="binding_unproven")
         return BindResult(False, "pulso:binding_failed", effect_unproven=True)

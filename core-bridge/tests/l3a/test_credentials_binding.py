@@ -99,7 +99,7 @@ def bound(pg: PgDbs) -> Any:
     store.begin(tenant_id="t1", key="cmd1", digest="d", stage="writer", job_id="j1", attempt=1, release_id="r",
                 task_binding_ref="ref1", principal_id="p")
     store.transition("t1", "cmd1", "sent")
-    reg.register(InvocationContext("t1", "j1", "writer", 1, "g", "ref1", "r", "cmd1", "d", NOW + timedelta(days=9999)))
+    reg.register(InvocationContext("t1", "j1", "writer", 1, "ref1", "cmd1", "d", "b1", NOW + timedelta(days=9999)))
     attrs = {"tenant": "t1", "job": "j1", "task_binding_ref": "ref1"}
     return store, reg, attrs
 

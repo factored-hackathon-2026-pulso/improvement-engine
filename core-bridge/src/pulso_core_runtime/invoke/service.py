@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from pulso_core_runtime.credentials.issuer import PrincipalSigner, bot_principal
 from pulso_core_runtime.invoke import errors
-from pulso_core_runtime.invoke.context import InvocationContext, InvocationRegistry, bind_current, reset_current
+from pulso_core_runtime.invoke.context import InvocationContext, InvocationRegistry, use_binding
 from pulso_core_runtime.invoke.core_client import CoreResponse, CoreRuns
 from pulso_core_runtime.invoke.errors import BridgeError
 from pulso_core_runtime.invoke.models import (
@@ -39,6 +39,7 @@ NON_TERMINAL_REENTRY = frozenset({"sent", "binding_confirmed", "unknown", "manua
 @dataclass
 class InvokeSettings:
     max_inflight: int = 8
+    bridge_instance_id: str = "bridge-1"
     principal_ttl: timedelta = timedelta(minutes=15)
     context_ttl: timedelta = timedelta(minutes=20)
     prepared_stale: timedelta = timedelta(seconds=30)
@@ -203,12 +204,18 @@ class InvokeService:
                                                  exp=exp))
         # 6. frozen context registered, then `sent` committed BEFORE the call
         ctx = InvocationContext(
-            tenant_id=tenant, job_id=inv.job_id, stage=inv.stage, attempt=inv.attempt, grant_ref=inv.lab_grant_ref,
-            task_binding_ref=ref, pin_release_id=inv.release_id, idempotency_key=key, request_digest=digest,
-            expires_at=now + self._settings.context_ttl, budget=tuple(sorted((inv.budget or {}).items())),
-            cutoff=inv.cutoff, deadline=inv.deadline)
-        self._registry.register(ctx)
-        await asyncio.to_thread(self._store.save_context, ref, tenant, inv.job_id, key, ctx.as_json(), ctx.expires_at)
+            tenant_id=tenant, job_id=inv.job_id, stage=inv.stage, attempt=inv.attempt, binding_ref=ref,
+            command_key=key, request_digest=digest, bridge_instance_id=self._settings.bridge_instance_id,
+            expires_at=now + self._settings.context_ttl)
+        try:
+            self._registry.register(ctx)
+        except ValueError:  # same key re-entering after a lost CAS: keep the first frozen context
+            pass
+        extra = {"grant_ref": inv.lab_grant_ref, "pin_release_id": inv.release_id, "budget": inv.budget,
+                 "cutoff": inv.cutoff, "deadline": inv.deadline, "expires_at": ctx.expires_at.isoformat()}
+        await asyncio.to_thread(self._store.save_context, ref, tenant, inv.job_id, key,
+                                {"tenant_id": tenant, "job_id": inv.job_id, "stage": inv.stage,
+                                 "attempt": inv.attempt, **extra}, ctx.expires_at)
         sent = await asyncio.to_thread(self._store.transition, tenant, key, "sent")
         if sent is None:  # lost the CAS: someone else owns this key
             self._registry.remove(ref)
@@ -216,24 +223,22 @@ class InvokeService:
             assert current is not None
             return await self._reenter(current)
 
-        token = bind_current(ctx)
         try:
-            # 7. Core through the full M9 route
-            body: dict[str, Any] = {"agent": f"{inv.agent_id}@{inv.agent_version}", "subject": None,
-                                    "input": inv.input}
-            if inv.lang:
-                body["lang"] = inv.lang
-            try:
-                resp = await self._core.start_run(bearer, key, body)
-            except Exception:  # 11. timeout / disconnect / anything after `sent` -> unknown
-                return await self._mark_unknown(tenant, key, "core_call_failed")
-            return await self._after_response(inv, key, ref, resp)
+            with use_binding(ref):
+                # 7. Core through the full M9 route
+                body: dict[str, Any] = {"agent": f"{inv.agent_id}@{inv.agent_version}", "subject": None,
+                                        "input": inv.input}
+                if inv.lang:
+                    body["lang"] = inv.lang
+                try:
+                    resp = await self._core.start_run(bearer, key, body)
+                except Exception:  # 11. timeout / disconnect / anything after `sent` -> unknown
+                    return await self._mark_unknown(tenant, key, "core_call_failed")
+                return await self._after_response(inv, key, ref, resp)
         except BridgeError:
             raise
         except Exception:
             return await self._mark_unknown(tenant, key, "post_send_exception")
-        finally:
-            reset_current(token)
 
     async def _mark_unknown(self, tenant: str, key: str, reason: str) -> InvokeOutcome:
         moved = await asyncio.to_thread(self._store.transition, tenant, key, "unknown", reason=reason)
@@ -277,7 +282,11 @@ class InvokeService:
                                         run_id=run_id or None, http=409)
         outcome = str(data.get("outcome"))
         if outcome not in ("completed", "failed"):
-            return await self._terminal(inv, key, ref, "manual_reconcile", "unexpected_outcome", run_id=run_id)
+            # Core committed a terminal run that is neither completed nor failed (e.g. escalated): known and not
+            # a success, so the stage fails closed with the Core outcome recorded; no facts are promoted.
+            return await self._terminal(inv, key, ref, "terminal_failed", "unexpected_outcome", run_id=run_id,
+                                        outcome=outcome, receipt={"core_outcome": outcome,
+                                                                  "core_status": data.get("status")})
         current = await asyncio.to_thread(self._store.get, inv.tenant_id, key)
         if current is not None and current.state == "manual_reconcile":
             return InvokeOutcome(202, _state_body(current))  # binding unproven: stays for reconcile
@@ -287,7 +296,8 @@ class InvokeService:
             try:
                 run = await asyncio.to_thread(self._runs.load_run, run_id)
                 envelope = await asyncio.to_thread(
-                    self._projector.project, inv.stage, run_id, run, status=str(data.get("status")), outcome=outcome)
+                    self._projector.project, inv.stage, run_id, run, status=str(data.get("status")), outcome=outcome,
+                    binding_ref=ref)
             except BridgeError as exc:
                 return await self._terminal(inv, key, ref, "terminal_failed", exc.code.removeprefix("pulso:"),
                                             run_id=run_id, outcome=outcome, http=exc.status)

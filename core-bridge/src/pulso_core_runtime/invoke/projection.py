@@ -24,7 +24,8 @@ class FactSpec:
 
 
 class FactProjector(Protocol):
-    def project(self, stage: str, core_run_id: str, run: Any | None, *, status: str, outcome: str) -> dict[str, Any]:
+    def project(self, stage: str, core_run_id: str, run: Any | None, *, status: str, outcome: str,
+                binding_ref: str | None = None) -> dict[str, Any]:
         ...
 
 
@@ -44,14 +45,16 @@ def _has_noninteger_number(value: Any) -> bool:
 def _fact_parts(fact: Any) -> tuple[Any, str]:
     if isinstance(fact, Mapping):
         return fact.get("value"), str(fact.get("source_kind", "tool"))
-    return fact.value, str(fact.source.kind)
+    source = getattr(fact, "source", None)
+    return getattr(fact, "value", None), str(getattr(source, "kind", "agent"))
 
 
 class WhitelistProjector:
     def __init__(self, whitelist: Mapping[str, Mapping[str, FactSpec]]) -> None:
         self._whitelist = whitelist
 
-    def project(self, stage: str, core_run_id: str, run: Any | None, *, status: str, outcome: str) -> dict[str, Any]:
+    def project(self, stage: str, core_run_id: str, run: Any | None, *, status: str, outcome: str,
+                binding_ref: str | None = None) -> dict[str, Any]:
         if run is None:
             raise BridgeError("pulso:run_not_found", 404)
         specs = self._whitelist.get(stage, {})
@@ -76,3 +79,37 @@ class WhitelistProjector:
         digest = hashlib.sha256(canonical_bytes({k: v["digest"] for k, v in sorted(facts.items())})).hexdigest()
         return {"schema_version": "1", "core_run_id": core_run_id, "status": status, "outcome": outcome,
                 "facts": facts, "output_digest": digest}
+
+
+_FACT_STATUS = {"pulso:output_missing": 422, "pulso:output_too_large": 413, "pulso:fact_schema_violation": 422}
+
+
+class CatalogProjector:
+    """Adapter over L3b `facts.whitelist` (stage whitelist, strict schemas, canaries, writer composition)."""
+
+    def __init__(self, canaries: Any = (), contexts: Any = None) -> None:
+        self._canaries, self._contexts = tuple(canaries), contexts
+
+    def project(self, stage: str, core_run_id: str, run: Any | None, *, status: str, outcome: str,
+                binding_ref: str | None = None) -> dict[str, Any]:
+        from pulso_core_runtime.facts.whitelist import FactError, compose_writer_receipts, project_result
+        from pulso_core_runtime.stages.catalog import CATALOG
+
+        if run is None:
+            raise BridgeError("pulso:run_not_found", 404)
+        try:
+            receipts = None
+            call_log = None
+            if self._contexts is not None and binding_ref:
+                try:
+                    call_log = self._contexts.seen_artifacts(binding_ref)  # ArtifactRefs in the call log
+                except Exception:
+                    call_log = None  # context already removed: evidence refs cannot be proven
+            if CATALOG[stage].projection and outcome == "completed":
+                actions = [a.model_dump(mode="json") if hasattr(a, "model_dump") else a for a in run.actions]
+                receipts = compose_writer_receipts(run.facts, actions)
+            return project_result(stage, core_run_id=core_run_id, status=status, outcome=outcome,
+                                  run_facts=run.facts, canaries=self._canaries, call_log_refs=call_log,
+                                  writer_receipts=receipts)
+        except FactError as exc:
+            raise BridgeError(exc.code, _FACT_STATUS.get(exc.code, 422)) from None

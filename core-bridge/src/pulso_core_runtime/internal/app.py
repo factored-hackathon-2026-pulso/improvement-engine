@@ -54,9 +54,12 @@ def _trace_id(request: Request) -> str:
 
 
 def build_internal_app(verifier: ServiceJwtVerifier, *, version_info: Callable[[], dict[str, Any]],
-                       handlers: dict[str, Callable[[Request, Claims], Any]] | None = None) -> FastAPI:
+                       handlers: dict[str, Callable[[Request, Claims], Any]] | None = None,
+                       l3: Any | None = None) -> FastAPI:
     app = FastAPI(title="pulso-internal", docs_url=None, redoc_url=None, openapi_url=None)
     handlers = dict(handlers or {})
+    if l3 is not None:  # L3a/L3b composition (`invoke.wiring.build_l3`): invoke, read, credentials
+        handlers.update(l3.handlers)
     handlers.setdefault("GET /version", lambda request, claims: version_info())
 
     @app.exception_handler(StarletteHTTPException)

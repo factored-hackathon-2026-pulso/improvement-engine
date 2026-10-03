@@ -88,12 +88,14 @@ class Reconciler:
                 return self._move(receipt, "terminal_failed", RELEASE_DRIFT.removeprefix("pulso:"),
                                   core_run_id=run_id)
             if outcome not in ("completed", "failed"):
-                return self._move(receipt, "manual_reconcile", "unexpected_outcome", core_run_id=run_id)
+                return self._move(receipt, "terminal_failed", "unexpected_outcome", core_run_id=run_id,
+                                  outcome=outcome, receipt={"core_outcome": outcome})
             envelope = None
             if self._projector is not None:
                 try:
                     envelope = self._projector.project(receipt.stage, run_id, self._runs.load_run(run_id),
-                                                       status=str(_text(_get(result, "status"))), outcome=outcome)
+                                                       status=str(_text(_get(result, "status"))), outcome=outcome,
+                                                       binding_ref=receipt.task_binding_ref)
                 except BridgeError as exc:
                     return self._move(receipt, "terminal_failed", exc.code.removeprefix("pulso:"),
                                       core_run_id=run_id, outcome=outcome)
