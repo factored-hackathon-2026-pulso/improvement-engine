@@ -1,0 +1,910 @@
+{
+ "analysis": {
+  "alternatives": [
+   {
+    "expected_abandoned": 1415,
+    "id": "alt-0",
+    "kind": "do_nothing",
+    "risk": "none new",
+    "summary": "Keep the current retry policy"
+   },
+   {
+    "expected_abandoned": 1029,
+    "id": "alt-1",
+    "kind": "proposed_change",
+    "risk": "guard exposure 0.0025",
+    "summary": "max_retries 2 -> 3 (flow:transfer_limit)"
+   }
+  ],
+  "attempts": [
+   {
+    "candidate": {
+     "from_retries": 2,
+     "id": "cand-1",
+     "max_retries": 5,
+     "revision_of": null,
+     "scope": "all_flows",
+     "step": "otp_verify"
+    },
+    "improvement": {
+     "exposure": 0.00387,
+     "guard_max_exposure": 0.0035,
+     "lift": 0.0855,
+     "lift_lo": 0.07937,
+     "reason_code": "guard_breach",
+     "status": "fail"
+    },
+    "native_proxy": {
+     "note": "structural validity (the real native evaluation is reported separately)",
+     "status": "pass"
+    }
+   },
+   {
+    "candidate": {
+     "from_retries": 2,
+     "id": "cand-2",
+     "max_retries": 3,
+     "reason": "guard_breach",
+     "revision_of": "cand-1",
+     "scope": "flow:transfer_limit",
+     "step": "otp_verify"
+    },
+    "improvement": {
+     "exposure": 0.0025,
+     "guard_max_exposure": 0.0035,
+     "lift": 0.04825,
+     "lift_lo": 0.04355,
+     "reason_code": null,
+     "status": "pass"
+    },
+    "native_proxy": {
+     "note": "structural validity (the real native evaluation is reported separately)",
+     "status": "pass"
+    }
+   }
+  ],
+  "scout": {
+   "hypotheses": [
+    {
+     "abandoned": 596,
+     "baseline_rate": 0.1769,
+     "dim": "step",
+     "excess": 0.5153,
+     "excess_lo": 0.4834,
+     "flow": "transfer_limit",
+     "key": "transfer_limit/otp_verify",
+     "n": 861,
+     "query_ids": [
+      "q-flow-step",
+      "q-overall"
+     ],
+     "rate": 0.6922,
+     "value": "otp_verify"
+    },
+    {
+     "abandoned": 130,
+     "baseline_rate": 0.1769,
+     "dim": "step",
+     "excess": 0.2159,
+     "excess_lo": 0.1626,
+     "flow": "card_replacement",
+     "key": "card_replacement/otp_verify",
+     "n": 331,
+     "query_ids": [
+      "q-flow-step",
+      "q-overall"
+     ],
+     "rate": 0.3927,
+     "value": "otp_verify"
+    },
+    {
+     "abandoned": 317,
+     "baseline_rate": 0.1769,
+     "dim": "device",
+     "excess": 0.1572,
+     "excess_lo": 0.126,
+     "flow": "transfer_limit",
+     "key": "transfer_limit/web",
+     "n": 949,
+     "query_ids": [
+      "q-flow-device",
+      "q-overall"
+     ],
+     "rate": 0.334,
+     "value": "web"
+    },
+    {
+     "abandoned": 416,
+     "baseline_rate": 0.1769,
+     "dim": "device",
+     "excess": 0.1144,
+     "excess_lo": 0.0894,
+     "flow": "transfer_limit",
+     "key": "transfer_limit/mobile",
+     "n": 1428,
+     "query_ids": [
+      "q-flow-device",
+      "q-overall"
+     ],
+     "rate": 0.2913,
+     "value": "mobile"
+    },
+    {
+     "abandoned": 336,
+     "baseline_rate": 0.1769,
+     "dim": "device",
+     "excess": 0.0531,
+     "excess_lo": 0.03,
+     "flow": "card_replacement",
+     "key": "card_replacement/mobile",
+     "n": 1461,
+     "query_ids": [
+      "q-flow-device",
+      "q-overall"
+     ],
+     "rate": 0.23,
+     "value": "mobile"
+    }
+   ],
+   "queries": [
+    {
+     "columns": [
+      "n",
+      "ab"
+     ],
+     "id": "q-overall",
+     "params": [],
+     "rows": [
+      [
+       8000,
+       1415
+      ]
+     ],
+     "rows_digest": "f26192dd6b11426121c58e0f238ddb0e3f4d75db832a5bf43284699049180324",
+     "sql": "select count(*) as n, sum(outcome = 'abandoned') as ab from sessions"
+    },
+    {
+     "columns": [
+      "flow",
+      "step",
+      "n",
+      "ab"
+     ],
+     "id": "q-flow-step",
+     "params": [],
+     "rows": [
+      [
+       "address_change",
+       "confirm",
+       1458,
+       111
+      ],
+      [
+       "address_change",
+       "identify",
+       50,
+       0
+      ],
+      [
+       "address_change",
+       "otp_verify",
+       110,
+       11
+      ],
+      [
+       "card_replacement",
+       "confirm",
+       1955,
+       258
+      ],
+      [
+       "card_replacement",
+       "identify",
+       123,
+       44
+      ],
+      [
+       "card_replacement",
+       "otp_verify",
+       331,
+       130
+      ],
+      [
+       "statement_request",
+       "confirm",
+       1554,
+       124
+      ],
+      [
+       "statement_request",
+       "identify",
+       42,
+       4
+      ],
+      [
+       "transfer_limit",
+       "confirm",
+       1476,
+       133
+      ],
+      [
+       "transfer_limit",
+       "identify",
+       40,
+       4
+      ],
+      [
+       "transfer_limit",
+       "otp_verify",
+       861,
+       596
+      ]
+     ],
+     "rows_digest": "364177e86c4589b4ae2e4028c6815a1467c3e4a96945e7cc1499d0fc63159e35",
+     "sql": "select flow, step, count(*) as n, sum(outcome = 'abandoned') as ab from sessions group by flow, step"
+    },
+    {
+     "columns": [
+      "flow",
+      "device",
+      "n",
+      "ab"
+     ],
+     "id": "q-flow-device",
+     "params": [],
+     "rows": [
+      [
+       "address_change",
+       "mobile",
+       997,
+       80
+      ],
+      [
+       "address_change",
+       "web",
+       621,
+       42
+      ],
+      [
+       "card_replacement",
+       "mobile",
+       1461,
+       336
+      ],
+      [
+       "card_replacement",
+       "web",
+       948,
+       96
+      ],
+      [
+       "statement_request",
+       "mobile",
+       953,
+       72
+      ],
+      [
+       "statement_request",
+       "web",
+       643,
+       56
+      ],
+      [
+       "transfer_limit",
+       "mobile",
+       1428,
+       416
+      ],
+      [
+       "transfer_limit",
+       "web",
+       949,
+       317
+      ]
+     ],
+     "rows_digest": "e8576fee8db3ec63f5cdc40fe89cf13867be0465b628ed3e5c6a307bb5085feb",
+     "sql": "select flow, device, count(*) as n, sum(outcome = 'abandoned') as ab from sessions group by flow, device"
+    }
+   ]
+  },
+  "verify": {
+   "assessments": [
+    {
+     "counterevidence": [],
+     "key": "transfer_limit/otp_verify",
+     "limitations": [
+      "synthetic dataset; observational, no randomisation"
+     ],
+     "pooled_diff": 0.5775,
+     "pooled_lo": 0.5458,
+     "query_id": "q-verify-transfer_limit-otp_verify",
+     "verdict": "supported",
+     "weeks_observed": 8,
+     "weeks_positive": 8
+    },
+    {
+     "counterevidence": [
+      "effect present in 4 of 7 weeks only; not a stable lever"
+     ],
+     "key": "card_replacement/otp_verify",
+     "limitations": [
+      "synthetic dataset; observational, no randomisation"
+     ],
+     "pooled_diff": 0.2252,
+     "pooled_lo": 0.1719,
+     "query_id": "q-verify-card_replacement-otp_verify",
+     "verdict": "refuted",
+     "weeks_observed": 7,
+     "weeks_positive": 4
+    },
+    {
+     "counterevidence": [],
+     "key": "transfer_limit/web",
+     "limitations": [
+      "synthetic dataset; observational, no randomisation"
+     ],
+     "pooled_diff": 0.1783,
+     "pooled_lo": 0.1471,
+     "query_id": "q-verify-transfer_limit-web",
+     "verdict": "supported",
+     "weeks_observed": 8,
+     "weeks_positive": 8
+    },
+    {
+     "counterevidence": [],
+     "key": "transfer_limit/mobile",
+     "limitations": [
+      "synthetic dataset; observational, no randomisation"
+     ],
+     "pooled_diff": 0.1393,
+     "pooled_lo": 0.1142,
+     "query_id": "q-verify-transfer_limit-mobile",
+     "verdict": "supported",
+     "weeks_observed": 8,
+     "weeks_positive": 8
+    },
+    {
+     "counterevidence": [
+      "effect present in 2 of 8 weeks only; not a stable lever"
+     ],
+     "key": "card_replacement/mobile",
+     "limitations": [
+      "synthetic dataset; observational, no randomisation"
+     ],
+     "pooled_diff": 0.065,
+     "pooled_lo": 0.0416,
+     "query_id": "q-verify-card_replacement-mobile",
+     "verdict": "refuted",
+     "weeks_observed": 8,
+     "weeks_positive": 2
+    }
+   ],
+   "queries": [
+    {
+     "columns": [
+      "week",
+      "n_in",
+      "ab_in",
+      "n_out",
+      "ab_out"
+     ],
+     "id": "q-verify-transfer_limit-otp_verify",
+     "params": [
+      "transfer_limit",
+      "otp_verify",
+      "transfer_limit",
+      "otp_verify",
+      "transfer_limit",
+      "otp_verify",
+      "transfer_limit",
+      "otp_verify"
+     ],
+     "rows": [
+      [
+       1,
+       115,
+       73,
+       897,
+       84
+      ],
+      [
+       2,
+       105,
+       76,
+       883,
+       63
+      ],
+      [
+       3,
+       110,
+       77,
+       855,
+       160
+      ],
+      [
+       4,
+       110,
+       72,
+       920,
+       171
+      ],
+      [
+       5,
+       110,
+       77,
+       878,
+       75
+      ],
+      [
+       6,
+       98,
+       67,
+       885,
+       78
+      ],
+      [
+       7,
+       101,
+       70,
+       902,
+       109
+      ],
+      [
+       8,
+       112,
+       84,
+       919,
+       79
+      ]
+     ],
+     "rows_digest": "5f9554de8ef513e5617569e8bb260911748aa5f2b3af3d396e451220bd5f7c22",
+     "sql": "select week, sum(flow = ? and step = ?) as n_in, sum(flow = ? and step = ? and outcome = 'abandoned') as ab_in, sum(not (flow = ? and step = ?)) as n_out, sum(not (flow = ? and step = ?) and outcome = 'abandoned') as ab_out from sessions group by week order by week"
+    },
+    {
+     "columns": [
+      "week",
+      "n_in",
+      "ab_in",
+      "n_out",
+      "ab_out"
+     ],
+     "id": "q-verify-card_replacement-otp_verify",
+     "params": [
+      "card_replacement",
+      "otp_verify",
+      "card_replacement",
+      "otp_verify",
+      "card_replacement",
+      "otp_verify",
+      "card_replacement",
+      "otp_verify"
+     ],
+     "rows": [
+      [
+       1,
+       22,
+       4,
+       990,
+       153
+      ],
+      [
+       2,
+       29,
+       2,
+       959,
+       137
+      ],
+      [
+       3,
+       88,
+       51,
+       877,
+       186
+      ],
+      [
+       4,
+       98,
+       62,
+       932,
+       181
+      ],
+      [
+       5,
+       24,
+       3,
+       964,
+       149
+      ],
+      [
+       6,
+       18,
+       3,
+       965,
+       142
+      ],
+      [
+       7,
+       23,
+       5,
+       980,
+       174
+      ],
+      [
+       8,
+       29,
+       0,
+       1002,
+       163
+      ]
+     ],
+     "rows_digest": "ce88c2fac397670a5e241afc5e47c6e0fd29b5449823f64e55c291abd5c694ec",
+     "sql": "select week, sum(flow = ? and step = ?) as n_in, sum(flow = ? and step = ? and outcome = 'abandoned') as ab_in, sum(not (flow = ? and step = ?)) as n_out, sum(not (flow = ? and step = ?) and outcome = 'abandoned') as ab_out from sessions group by week order by week"
+    },
+    {
+     "columns": [
+      "week",
+      "n_in",
+      "ab_in",
+      "n_out",
+      "ab_out"
+     ],
+     "id": "q-verify-transfer_limit-web",
+     "params": [
+      "transfer_limit",
+      "web",
+      "transfer_limit",
+      "web",
+      "transfer_limit",
+      "web",
+      "transfer_limit",
+      "web"
+     ],
+     "rows": [
+      [
+       1,
+       114,
+       34,
+       898,
+       123
+      ],
+      [
+       2,
+       109,
+       48,
+       879,
+       91
+      ],
+      [
+       3,
+       127,
+       38,
+       838,
+       199
+      ],
+      [
+       4,
+       122,
+       32,
+       908,
+       211
+      ],
+      [
+       5,
+       121,
+       39,
+       867,
+       113
+      ],
+      [
+       6,
+       104,
+       33,
+       879,
+       112
+      ],
+      [
+       7,
+       129,
+       43,
+       874,
+       136
+      ],
+      [
+       8,
+       123,
+       50,
+       908,
+       113
+      ]
+     ],
+     "rows_digest": "32382305553f61c14863f04bd3de8b0b97ef99cfb757e4d4e5ba8e5081b670a7",
+     "sql": "select week, sum(flow = ? and device = ?) as n_in, sum(flow = ? and device = ? and outcome = 'abandoned') as ab_in, sum(not (flow = ? and device = ?)) as n_out, sum(not (flow = ? and device = ?) and outcome = 'abandoned') as ab_out from sessions group by week order by week"
+    },
+    {
+     "columns": [
+      "week",
+      "n_in",
+      "ab_in",
+      "n_out",
+      "ab_out"
+     ],
+     "id": "q-verify-transfer_limit-mobile",
+     "params": [
+      "transfer_limit",
+      "mobile",
+      "transfer_limit",
+      "mobile",
+      "transfer_limit",
+      "mobile",
+      "transfer_limit",
+      "mobile"
+     ],
+     "rows": [
+      [
+       1,
+       194,
+       58,
+       818,
+       99
+      ],
+      [
+       2,
+       171,
+       44,
+       817,
+       95
+      ],
+      [
+       3,
+       181,
+       54,
+       784,
+       183
+      ],
+      [
+       4,
+       175,
+       50,
+       855,
+       193
+      ],
+      [
+       5,
+       176,
+       56,
+       812,
+       96
+      ],
+      [
+       6,
+       176,
+       48,
+       807,
+       97
+      ],
+      [
+       7,
+       182,
+       52,
+       821,
+       127
+      ],
+      [
+       8,
+       173,
+       54,
+       858,
+       109
+      ]
+     ],
+     "rows_digest": "b690d1ebad389b3d27aefce0e49009492b7ac2faa7f273653088a4c7d10d944a",
+     "sql": "select week, sum(flow = ? and device = ?) as n_in, sum(flow = ? and device = ? and outcome = 'abandoned') as ab_in, sum(not (flow = ? and device = ?)) as n_out, sum(not (flow = ? and device = ?) and outcome = 'abandoned') as ab_out from sessions group by week order by week"
+    },
+    {
+     "columns": [
+      "week",
+      "n_in",
+      "ab_in",
+      "n_out",
+      "ab_out"
+     ],
+     "id": "q-verify-card_replacement-mobile",
+     "params": [
+      "card_replacement",
+      "mobile",
+      "card_replacement",
+      "mobile",
+      "card_replacement",
+      "mobile",
+      "card_replacement",
+      "mobile"
+     ],
+     "rows": [
+      [
+       1,
+       180,
+       16,
+       832,
+       141
+      ],
+      [
+       2,
+       170,
+       14,
+       818,
+       125
+      ],
+      [
+       3,
+       155,
+       103,
+       810,
+       134
+      ],
+      [
+       4,
+       182,
+       122,
+       848,
+       121
+      ],
+      [
+       5,
+       196,
+       20,
+       792,
+       132
+      ],
+      [
+       6,
+       189,
+       17,
+       794,
+       128
+      ],
+      [
+       7,
+       201,
+       32,
+       802,
+       147
+      ],
+      [
+       8,
+       188,
+       12,
+       843,
+       151
+      ]
+     ],
+     "rows_digest": "959c084d8120bd92f8e04cd8b9b26bae2159a198b82e52cff7f356385fa4a3e9",
+     "sql": "select week, sum(flow = ? and device = ?) as n_in, sum(flow = ? and device = ? and outcome = 'abandoned') as ab_in, sum(not (flow = ? and device = ?)) as n_out, sum(not (flow = ? and device = ?) and outcome = 'abandoned') as ab_out from sessions group by week order by week"
+    }
+   ]
+  }
+ },
+ "core": {
+  "attempts": [
+   {
+    "candidate_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "candidate_id": "cand-1",
+    "native": {
+     "eval_run_ref": "evr-1",
+     "report_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "verdict": "pass"
+    },
+    "proposal_id": "prop-core-1",
+    "write_receipts": [
+     {
+      "op": "create_proposal",
+      "verified": true
+     },
+     {
+      "op": "put_draft",
+      "verified": true
+     },
+     {
+      "op": "freeze",
+      "verified": true
+     },
+     {
+      "op": "evaluate",
+      "verified": true
+     }
+    ]
+   },
+   {
+    "candidate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "candidate_id": "cand-2",
+    "native": {
+     "eval_run_ref": "evr-2",
+     "report_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "verdict": "pass"
+    },
+    "proposal_id": "prop-core-2",
+    "write_receipts": [
+     {
+      "op": "create_proposal",
+      "verified": true
+     },
+     {
+      "op": "put_draft",
+      "verified": true
+     },
+     {
+      "op": "freeze",
+      "verified": true
+     },
+     {
+      "op": "evaluate",
+      "verified": true
+     }
+    ]
+   }
+  ],
+  "design": {
+   "core_run_id": "run-design",
+   "release_id": "rel-sample",
+   "state": "terminal_ok"
+  },
+  "scout": {
+   "core_run_id": "run-scout",
+   "release_id": "rel-sample",
+   "state": "terminal_ok"
+  },
+  "verifier": {
+   "core_run_id": "run-verifier",
+   "release_id": "rel-sample",
+   "state": "terminal_ok"
+  }
+ },
+ "dataset": {
+  "rows": 8000,
+  "seed": 20260101
+ },
+ "doubles": [
+  {
+   "id": "stand_in_engine",
+   "until": "Rust engine HTTP API exists",
+   "what": "Codex engine stand-in (e2e-core codex_standin): drives the REAL Core runtime; not the Rust engine"
+  },
+  {
+   "id": "scripted_llm",
+   "what": "scripted llm-gateway double: tool calls/outputs are scripted from data-derived analysis, no real model"
+  },
+  {
+   "id": "fixture_api",
+   "what": "debug-console fixture API/SSE server fed from translated results; not the Rust control API"
+  },
+  {
+   "id": "lab_query_rows",
+   "what": "the e2e-fixtures lab double returns fixed rows for lab_query; the data-derived SQL results come from the demo's local sqlite dataset (recorded SQL and digests)"
+  },
+  {
+   "id": "improvement_judge",
+   "what": "demo's data-derived mechanism_proxy judge and reviser; stand-in for the Codex improvement judge"
+  },
+  {
+   "id": "human_decision",
+   "what": "approve/publish hook not connected: pending until local-identity is wired"
+  }
+ ],
+ "exporter": {
+  "audit_events": 42,
+  "verification_receipts": [
+   {
+    "chain_head_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "check_result": {
+     "broken_at": null,
+     "ok": true,
+     "reason": null
+    },
+    "run_id": "run-scout"
+   }
+  ]
+ },
+ "generated_at": "2026-01-01T00:00:00Z",
+ "namespace": "golden",
+ "schema": "pulso-demo-results/1",
+ "tenant": "tenant-local"
+}

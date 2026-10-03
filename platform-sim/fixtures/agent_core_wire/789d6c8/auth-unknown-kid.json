@@ -1,0 +1,36 @@
+{
+  "case": "auth-unknown-kid",
+  "steps": [
+    {
+      "code": "credentials_invalid",
+      "content_type": "application/problem+json",
+      "headers": {},
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/releases/{base_release}",
+      "scalars": {
+        "status": 401,
+        "title": "Credenciales inv\u00e1lidas"
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 401,
+      "title": "Credenciales inv\u00e1lidas",
+      "trace_id_present": true,
+      "type": "urn:agentcore:problem:credentials_invalid"
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AcceptedSlot": {
+      "additionalProperties": false,
+      "description": "One slot of the input contract: its type and whether the packet must carry it.",
+      "properties": {
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "decimal",
+            "date",
+            "boolean"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "AcceptedSlot",
+      "type": "object"
+    },
+    "DirectoryEntry": {
+      "additionalProperties": false,
+      "description": "One specialist as the directory lists it: its active release, card and contract.",
+      "properties": {
+        "accepts": {
+          "$ref": "#/$defs/TransferContract"
+        },
+        "agent_id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Agent Id",
+          "type": "string"
+        },
+        "examples": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Examples",
+          "type": "array"
+        },
+        "release_id": {
+          "minLength": 1,
+          "title": "Release Id",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "supported_locales": {
+          "items": {
+            "pattern": "^[a-z]{2}$",
+            "type": "string"
+          },
+          "title": "Supported Locales",
+          "type": "array"
+        }
+      },
+      "required": [
+        "agent_id",
+        "release_id",
+        "summary",
+        "accepts",
+        "supported_locales"
+      ],
+      "title": "DirectoryEntry",
+      "type": "object"
+    },
+    "TransferContract": {
+      "additionalProperties": false,
+      "description": "The slots a specialist accepts in a transfer packet (spec §3.1, D6).",
+      "properties": {
+        "slots": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AcceptedSlot"
+          },
+          "title": "Slots",
+          "type": "object"
+        }
+      },
+      "title": "TransferContract",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The directory as one run read it: filtered for its principal, with the hash of the full directory.",
+  "properties": {
+    "directory": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Directory",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/DirectoryEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "directory",
+    "hash"
+  ],
+  "title": "DirectorySnapshot",
+  "type": "object"
+}

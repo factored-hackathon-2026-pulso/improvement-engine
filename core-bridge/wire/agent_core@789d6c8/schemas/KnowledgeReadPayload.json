@@ -1,0 +1,106 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "FilteredPage": {
+      "additionalProperties": false,
+      "description": "Una página pedida que M12 no entregó, y por qué (nunca lleva su contenido).",
+      "properties": {
+        "reason": {
+          "enum": [
+            "audience",
+            "not_approved",
+            "expired",
+            "not_yet_valid",
+            "lang",
+            "snapshot",
+            "view"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "reason"
+      ],
+      "title": "FilteredPage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `knowledge_read` (vista audit, M12 §6). Solo referencias y motivos, nunca texto.\n\n`result` es la rama del nodo. `refs` son las páginas entregadas; `filtered_out`, las que el servicio\ndevolvió y M12 retuvo; `missing`, las que el servicio no devolvió. `reason` distingue las causas que el\nesquema del nodo no separa: fuente caída, sin snapshot o `navigate` sin ejecutar.",
+  "properties": {
+    "filtered_out": {
+      "items": {
+        "$ref": "#/$defs/FilteredPage"
+      },
+      "title": "Filtered Out",
+      "type": "array"
+    },
+    "missing": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing",
+      "type": "array"
+    },
+    "node_id": {
+      "pattern": "^[a-z0-9][a-z0-9_]*$",
+      "title": "Node Id",
+      "type": "string"
+    },
+    "purpose": {
+      "enum": [
+        "customer_answer",
+        "advisor_view",
+        "agent_guidance"
+      ],
+      "title": "Purpose",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "source_unavailable",
+            "navigate_unavailable",
+            "no_snapshot"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Refs",
+      "type": "array"
+    },
+    "result": {
+      "enum": [
+        "ok",
+        "not_found",
+        "denied"
+      ],
+      "title": "Result",
+      "type": "string"
+    }
+  },
+  "required": [
+    "node_id",
+    "purpose",
+    "result"
+  ],
+  "title": "KnowledgeReadPayload",
+  "type": "object"
+}

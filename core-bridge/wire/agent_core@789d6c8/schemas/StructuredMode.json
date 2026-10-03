@@ -1,0 +1,10 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Modo de salida estructurada de un modelo: nativo o por prompt (M0 §2.4).",
+  "enum": [
+    "native",
+    "prompted"
+  ],
+  "title": "StructuredMode",
+  "type": "string"
+}

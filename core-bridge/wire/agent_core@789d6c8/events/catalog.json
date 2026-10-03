@@ -1,0 +1,15 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "schema": "OutboundEvent.json",
+  "spec_version": 1,
+  "types": [
+    "run.started",
+    "run.closed",
+    "run.transferred",
+    "handoff.created",
+    "handoff.resolved",
+    "release.published",
+    "release.promoted",
+    "release.revoked"
+  ]
+}

@@ -1,0 +1,6 @@
+id: p/resumen_radicado
+version: 1.0.0
+locales:
+  es: "Redacta un mensaje breve para el cliente que confirme que su disputa fue radicada. No repitas cifras."
+  pt: "Redija uma mensagem breve para o cliente confirmando que sua contestação foi registrada. Não repita números."
+model_profile: perfil-generacion@1

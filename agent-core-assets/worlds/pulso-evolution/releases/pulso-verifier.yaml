@@ -1,0 +1,7 @@
+id: pulso-verifier
+agents:
+  - {agent: "pulso-verifier@^1", aliases: [prod]}
+flows: ["pulso-verifier@^1"]
+interrupts: []
+language_detection: "lang-evolution@1"
+injection_ruleset: "injection-rules-evolution@1"

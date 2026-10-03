@@ -1,0 +1,80 @@
+{
+  "case": "envelope-draft-bad-json-types",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "candidate_hash",
+        "created_by",
+        "origin",
+        "proposal_id",
+        "rev",
+        "state",
+        "title",
+        "updated_at"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
+        "origin": "manual",
+        "rev": 0,
+        "state": "draft",
+        "title": "t"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "candidate_hash": "null",
+        "created_by": "scalar",
+        "origin": "scalar",
+        "proposal_id": "scalar",
+        "rev": "scalar",
+        "state": "scalar",
+        "title": "scalar",
+        "updated_at": "scalar"
+      },
+      "status": 201,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": "invalid_request",
+      "content_type": "application/problem+json",
+      "headers": {},
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "PUT",
+      "path": "/v1/registry/proposals/{pid}/draft",
+      "scalars": {
+        "status": 422,
+        "title": "Solicitud inv\u00e1lida"
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 422,
+      "title": "Solicitud inv\u00e1lida",
+      "trace_id_present": true,
+      "type": "urn:agentcore:problem:invalid_request"
+    }
+  ]
+}

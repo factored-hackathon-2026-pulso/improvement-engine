@@ -1,0 +1,36 @@
+[project]
+name = "pulso-core-bridge"
+version = "0.1.0"
+description = "Pulso wire snapshot of the pinned agent-core, registry mock and parity suite (L1)."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "anyio>=4",
+    "cryptography>=43",
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "jsonschema>=4.23",
+    "psycopg>=3.2",
+    "pydantic>=2.9,<3",
+    "referencing>=0.35",
+    "pyyaml>=6.0.2,<7",
+    "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "../platform-sim/tests"]
+pythonpath = [".", "src", "../platform-sim", "../platform-sim/tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "wire: L1a wire snapshot and golden vectors",
+    "parity: registry-wire-contract (mock / a2 / real)",
+    "runtime: L2 composed runtime (preflight, factories, pin, internal API)",
+    "l3a: L3a invoke, credentials, reconcile, bridge store",
+    "integration: composed runtime (main._compose) on real PG16 with real Core",
+    "pg: needs real Postgres 16 (PULSO_TEST_PG_DSN)",
+]
+
+[tool.setuptools.package-data]
+pulso_core_runtime = ["facts/schemas/*.json"]

@@ -1,0 +1,12 @@
+# Jev decision model for the evolution stages. Generic routing signal only; it carries no case knowledge.
+id: jev-evolution-route
+version: 1.0.0
+output_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    route: {enum: [proceed, insufficient_input]}
+calibrated_fields: [route]
+input_view: [facts.binding.value.briefing_ref]
+providers: [{provider: jev}]
+calibration: {method: none}

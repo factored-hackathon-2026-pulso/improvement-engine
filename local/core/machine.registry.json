@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "owner": "claude",
+  "podman": "C:\\Users\\alexg\\AppData\\Local\\Programs\\Podman\\podman.exe",
+  "note": "Only machines owned by Team Claude. pulso-codex / pulso-codex-root belong to Codex and must never appear here (plan 17.9.1).",
+  "machines": [
+    { "name": "pulso-dev", "connection": "pulso-dev", "rootless": true, "machine": "pulso-dev",
+      "uri": "ssh://user@127.0.0.1:64015/run/user/1000/podman/podman.sock", "cgroup_limits": false },
+    { "name": "pulso-dev-root", "connection": "pulso-dev-root", "rootless": false, "machine": "pulso-dev",
+      "uri": "ssh://root@127.0.0.1:64015/run/podman/podman.sock", "cgroup_limits": false }
+  ],
+  "default_machine": "pulso-dev"
+}

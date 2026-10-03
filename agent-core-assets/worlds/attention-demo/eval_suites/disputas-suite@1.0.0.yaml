@@ -1,0 +1,55 @@
+# Contract fixture / demo double (V3 §31.9.4): scenario `resuelto` is translated from
+# testing/registry_demo.py::demo_suite at the pinned SHA; the two added scenarios give the yardstick variance.
+id: disputas-suite
+version: 1.0.0
+agent_id: atencion
+repetitions: 1
+scenarios:
+  - id: resuelto
+    principal: {id: cust-001, attrs: {country: CO}}
+    steps:
+      - {op: start}
+      - {op: turn, text: "no reconozco un cargo de ciento veinte dólares"}
+      - {op: confirm, answer: "yes"}
+    seed:
+      tools:
+        buscar_transacciones:
+          - result:
+              - {transaction_id: tx-1, amount: "120.50", currency: USD}
+              - {transaction_id: tx-2, amount: "30.00", currency: USD}
+        seleccionar:
+          - result: {transaction_id: tx-1, amount: "120.50", currency: USD}
+        convertir_moneda:
+          - result: "120.50"
+        radicar_pqr:
+          - result: {status: Open, id: pqr-demo-1}
+        obtener_pqr:
+          - result: {status: Open, id: pqr-demo-1}
+    expect: {outcome: resolved, actions_verified: [radicar_pqr], escalated: false}
+  - id: escalado_por_monto
+    principal: {id: cust-002, attrs: {country: CO}}
+    steps:
+      - {op: start}
+      - {op: turn, text: "no reconozco un cargo de seiscientos dólares en una tienda"}
+    seed:
+      tools:
+        buscar_transacciones:
+          - result:
+              - {transaction_id: tx-9, amount: "600.00", currency: USD}
+        seleccionar:
+          - result: {transaction_id: tx-9, amount: "600.00", currency: USD}
+        convertir_moneda:
+          - result: "600.00"
+    expect: {outcome: escalated, escalated: true}
+  - id: sin_candidatas
+    # Deliberately failing against the stock script: no candidate transaction is found, so the dispute cannot
+    # resolve. It gives the yardstick a non-trivial failing scenario.
+    principal: {id: cust-003, attrs: {country: CO}}
+    steps:
+      - {op: start}
+      - {op: turn, text: "no reconozco un cargo"}
+    seed:
+      tools:
+        buscar_transacciones:
+          - result: []
+    expect: {outcome: resolved, escalated: false}

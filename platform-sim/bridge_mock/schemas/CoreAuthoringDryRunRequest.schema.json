@@ -1,0 +1,59 @@
+{
+  "$id": "CoreAuthoringDryRunRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "base_release_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "changes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "object"
+          },
+          "docs": {
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "content",
+          "docs"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "agent_id",
+    "base_release_id",
+    "changes"
+  ],
+  "title": "CoreAuthoringDryRunRequest",
+  "type": "object"
+}

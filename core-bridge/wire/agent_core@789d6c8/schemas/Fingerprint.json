@@ -1,0 +1,27 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Huella con clave (ADR 0008): `value = HMAC-SHA256(k[kid], JCS(dato))`.",
+  "properties": {
+    "alg": {
+      "const": "HMAC-SHA256",
+      "title": "Alg",
+      "type": "string"
+    },
+    "kid": {
+      "title": "Kid",
+      "type": "string"
+    },
+    "value": {
+      "title": "Value",
+      "type": "string"
+    }
+  },
+  "required": [
+    "alg",
+    "kid",
+    "value"
+  ],
+  "title": "Fingerprint",
+  "type": "object"
+}

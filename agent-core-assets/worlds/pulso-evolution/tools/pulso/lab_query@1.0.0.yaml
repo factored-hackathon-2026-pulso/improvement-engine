@@ -1,0 +1,7 @@
+id: pulso/lab_query
+version: 1.0.0
+risk_class: compute
+min_auth_level: session
+idempotent: true
+description: "Runs a read-only SQL query over the authorised lab session and returns a bounded page of rows."
+args_schema: {type: object, additionalProperties: false, required: [sql], properties: {sql: {type: string}}}

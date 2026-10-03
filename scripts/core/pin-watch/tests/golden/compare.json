@@ -1,0 +1,25 @@
+{
+  "status": "ahead",
+  "ahead_by": 3,
+  "total_commits": 3,
+  "commits": [
+    {"sha": "aaaaaaa1111111111111111111111111111111aa", "commit": {"message": "feat(api): add /v1/things route\n\nbody", "author": {"name": "dev", "date": "2026-10-01T00:00:00Z"}}},
+    {"sha": "bbbbbbb2222222222222222222222222222222bb", "commit": {"message": "chore: docs", "author": {"name": "dev", "date": "2026-10-02T00:00:00Z"}}},
+    {"sha": "ccccccc3333333333333333333333333333333cc", "commit": {"message": "feat(db): migration", "author": {"name": "dev", "date": "2026-10-03T00:00:00Z"}}}
+  ],
+  "files": [
+    {"filename": "contracts/VERSION", "status": "modified", "patch": "@@ -1 +1 @@\n-1.3.0\n+1.4.0"},
+    {"filename": "contracts/openapi.json", "status": "modified", "patch": "@@ -1 +1 @@\n-x\n+y"},
+    {"filename": "contracts/schemas/Foo.schema.json", "status": "added", "patch": "+{}"},
+    {"filename": "agent_core/registry/service.py", "status": "modified", "patch": "@@\n-    def get_alias(self, a):\n+    def get_alias(self, a, b):"},
+    {"filename": "agent_core/composition/serve.py", "status": "modified", "patch": "@@\n-def build_api_deps(ports, registry_service, telemetry, build_sha):\n+def build_api_deps(ports, registry_service, telemetry, build_sha, extra):\n+    flag = env.get(\"AGENTCORE_NEW_FLAG\")"},
+    {"filename": "agent_core/api/routes.py", "status": "modified", "patch": "@@\n+@router.get(\"/v1/things\")\n+async def things(): ..."},
+    {"filename": "agent_core/api/problems.py", "status": "modified", "patch": "@@\n+PROBLEM_X = \"agent_core:new_problem\"  # problem code"},
+    {"filename": "agent_core/identity/keys.py", "status": "modified", "patch": "@@\n+x = 1"},
+    {"filename": "agent_core/cli.py", "status": "modified", "patch": "@@\n+x = 1"},
+    {"filename": "Dockerfile", "status": "modified", "patch": "@@\n+RUN true"},
+    {"filename": "migrations/0007_things.sql", "status": "added", "patch": "+create table things();"},
+    {"filename": "docs/adr/0042-things.md", "status": "added", "patch": "+# ADR"},
+    {"filename": "tests/test_things.py", "status": "added", "patch": "+def test(): ..."}
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "InvalidationReason": {
+      "description": "Motivos por los que se invalida o cancela una acción (M0 §2.6).",
+      "enum": [
+        "cancel",
+        "abandoned",
+        "interrupt",
+        "escalated",
+        "token_expired",
+        "max_attempts",
+        "denied_by_user",
+        "args_changed"
+      ],
+      "title": "InvalidationReason",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `action_cancelled` (vista audit, M0 §2.10).",
+  "properties": {
+    "action_id": {
+      "title": "Action Id",
+      "type": "string"
+    },
+    "reason": {
+      "$ref": "#/$defs/InvalidationReason"
+    }
+  },
+  "required": [
+    "action_id",
+    "reason"
+  ],
+  "title": "ActionCancelledPayload",
+  "type": "object"
+}

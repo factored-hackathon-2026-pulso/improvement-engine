@@ -1,0 +1,43 @@
+{
+  "case": "read-entity-slash-id",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "content",
+        "content_hash",
+        "created_at",
+        "created_by",
+        "docs",
+        "ref"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/entities/template/t/aclarar?version=1.0.0",
+      "scalars": {
+        "created_by": "root"
+      },
+      "shape": {
+        "content": "<opaque>",
+        "content_hash": "scalar",
+        "created_at": "scalar",
+        "created_by": "scalar",
+        "docs": {
+          "changelog": "scalar",
+          "description": "scalar",
+          "rationale": "scalar"
+        },
+        "ref": {
+          "id": "scalar",
+          "kind": "scalar",
+          "version": "scalar"
+        }
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}

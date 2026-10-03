@@ -1,0 +1,31 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Payload del evento `action_verified` (vista audit, M0 §2.10).",
+  "properties": {
+    "action_id": {
+      "title": "Action Id",
+      "type": "string"
+    },
+    "readback_call_id": {
+      "title": "Readback Call Id",
+      "type": "string"
+    },
+    "result": {
+      "enum": [
+        "verified",
+        "failed",
+        "unavailable"
+      ],
+      "title": "Result",
+      "type": "string"
+    }
+  },
+  "required": [
+    "action_id",
+    "result",
+    "readback_call_id"
+  ],
+  "title": "ActionVerifiedPayload",
+  "type": "object"
+}

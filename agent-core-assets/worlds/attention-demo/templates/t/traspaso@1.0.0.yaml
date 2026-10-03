@@ -1,0 +1,5 @@
+id: t/traspaso
+version: 1.0.0
+locales:
+  es: "Te paso con un asesor."
+  pt: "Vou transferir para um atendente."

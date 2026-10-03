@@ -1,0 +1,497 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EvalReport": {
+      "additionalProperties": false,
+      "description": "What the approver sees: verdict, each gate item separately, the measurements, the result of each run,\nthe judge's notes (informative) and what the proposal loosens in the yardstick.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/GateItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "judge_notes": {
+          "items": {
+            "$ref": "#/$defs/JudgeNote"
+          },
+          "title": "Judge Notes",
+          "type": "array"
+        },
+        "results": {
+          "items": {
+            "$ref": "#/$defs/ScenarioResult"
+          },
+          "title": "Results",
+          "type": "array"
+        },
+        "runs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GateRuns"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "verdict": {
+          "enum": [
+            "pass",
+            "fail",
+            "failed_infra"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        },
+        "yardstick_changes": {
+          "items": {
+            "$ref": "#/$defs/YardstickChange"
+          },
+          "title": "Yardstick Changes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "verdict"
+      ],
+      "title": "EvalReport",
+      "type": "object"
+    },
+    "GateItem": {
+      "additionalProperties": false,
+      "description": "One element of the verdict: a metric, a scenario (`scenario/<id>`) or a platform guardrail.\n\n`noise_margin` is the tolerance against the base (old yardstick); `floor` is the floor (new yardstick\nand platform: a minimum if higher is better and a maximum if lower is better). There is no composite\nscore.",
+      "properties": {
+        "base_value": {
+          "anyOf": [
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Value"
+        },
+        "floor": {
+          "anyOf": [
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Floor"
+        },
+        "metric_id": {
+          "title": "Metric Id",
+          "type": "string"
+        },
+        "noise_margin": {
+          "anyOf": [
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Noise Margin"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "phase": {
+          "enum": [
+            "base_yardstick",
+            "new_yardstick",
+            "platform"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "enum": [
+                "guardrail",
+                "gate",
+                "monitor"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "metric_id",
+        "phase",
+        "passed"
+      ],
+      "title": "GateItem",
+      "type": "object"
+    },
+    "GateRuns": {
+      "additionalProperties": false,
+      "description": "The gate's runs. The two old-yardstick runs exist only if the base recorded its suite.",
+      "properties": {
+        "base_on_old": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SuiteMeasurement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cand_on_new": {
+          "$ref": "#/$defs/SuiteMeasurement"
+        },
+        "cand_on_old": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SuiteMeasurement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "cand_on_new"
+      ],
+      "title": "GateRuns",
+      "type": "object"
+    },
+    "JudgeNote": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "enum": [
+            "candidate",
+            "base"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "note": {
+          "title": "Note",
+          "type": "string"
+        },
+        "scenario_id": {
+          "title": "Scenario Id",
+          "type": "string"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        }
+      },
+      "required": [
+        "scenario_id",
+        "label",
+        "note"
+      ],
+      "title": "JudgeNote",
+      "type": "object"
+    },
+    "RunScore": {
+      "additionalProperties": false,
+      "properties": {
+        "escalated": {
+          "default": false,
+          "title": "Escalated",
+          "type": "boolean"
+        },
+        "failures": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Failures",
+          "type": "array"
+        },
+        "guardrails": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Guardrails",
+          "type": "object"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outcome"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "passed",
+        "guardrails"
+      ],
+      "title": "RunScore",
+      "type": "object"
+    },
+    "ScenarioResult": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "enum": [
+            "candidate",
+            "base"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "repetition": {
+          "title": "Repetition",
+          "type": "integer"
+        },
+        "run": {
+          "enum": [
+            "base_on_old",
+            "cand_on_old",
+            "cand_on_new"
+          ],
+          "title": "Run",
+          "type": "string"
+        },
+        "scenario_id": {
+          "title": "Scenario Id",
+          "type": "string"
+        },
+        "score": {
+          "$ref": "#/$defs/RunScore"
+        }
+      },
+      "required": [
+        "scenario_id",
+        "label",
+        "run",
+        "repetition",
+        "score"
+      ],
+      "title": "ScenarioResult",
+      "type": "object"
+    },
+    "SuiteMeasurement": {
+      "additionalProperties": false,
+      "description": "What running a suite on a release measured: a value per metric (including `platform_*`) and whether\neach scenario passed. A missing key means \"not measured\", and the gate counts it as a failure.",
+      "properties": {
+        "metrics": {
+          "additionalProperties": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "type": "string"
+          },
+          "title": "Metrics",
+          "type": "object"
+        },
+        "scenarios": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Scenarios",
+          "type": "object"
+        },
+        "status": {
+          "default": "ok",
+          "enum": [
+            "ok",
+            "failed_infra"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "SuiteMeasurement",
+      "type": "object"
+    },
+    "VersionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "version"
+      ],
+      "title": "VersionRef",
+      "type": "object"
+    },
+    "YardstickChange": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/YardstickChangeKind"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "message"
+      ],
+      "title": "YardstickChange",
+      "type": "object"
+    },
+    "YardstickChangeKind": {
+      "enum": [
+        "metric_removed",
+        "role_degraded",
+        "metric_changed",
+        "threshold_removed",
+        "floor_loosened",
+        "noise_widened",
+        "scenario_removed",
+        "scenario_changed",
+        "repetitions_lowered"
+      ],
+      "title": "YardstickChangeKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "base_release_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Base Release Id"
+    },
+    "candidate_hash": {
+      "title": "Candidate Hash",
+      "type": "string"
+    },
+    "eval_run_id": {
+      "title": "Eval Run Id",
+      "type": "string"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "report": {
+      "$ref": "#/$defs/EvalReport"
+    },
+    "suite": {
+      "$ref": "#/$defs/VersionRef"
+    },
+    "verdict": {
+      "enum": [
+        "pass",
+        "fail",
+        "failed_infra"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "required": [
+    "eval_run_id",
+    "proposal_id",
+    "candidate_hash",
+    "base_release_id",
+    "suite",
+    "verdict",
+    "report",
+    "at"
+  ],
+  "title": "EvalRun",
+  "type": "object"
+}

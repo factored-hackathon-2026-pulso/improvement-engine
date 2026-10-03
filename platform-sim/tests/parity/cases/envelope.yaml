@@ -1,0 +1,31 @@
+# problem+json envelope, request validation (M9 handler), unknown fields.
+- {id: envelope-unknown-route, rule: problem_json, steps: [{method: GET, path: /v1/registry/nope, as: bot}]}
+- {id: envelope-method-not-allowed, rule: problem_json, steps: [{method: DELETE, path: /v1/registry/proposals, as: bot}]}
+- id: envelope-create-missing-title
+  rule: problem_json
+  steps: [{method: POST, path: /v1/registry/proposals, json: {agent_id: atencion}}]
+- id: envelope-create-bad-origin
+  rule: problem_json
+  steps: [{method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t, origin: nope}}]
+- id: envelope-create-ignores-unknown-top-level-field
+  rule: unknown_fields
+  steps: [{method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t, surprise: 1}}]
+- id: envelope-draft-forbids-unknown-field-in-change
+  rule: unknown_fields
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: /v1/registry/proposals/{pid}/draft
+      json:
+        expected_rev: 0
+        changes: [{kind: template, surprise: 1, docs: {description: d, rationale: r, changelog: c}, content: {id: t/x, version: 1.0.0}}]
+- id: envelope-draft-ignores-unknown-top-level-field
+  rule: unknown_fields
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {expected_rev: 0, changes: [], surprise: 1}}
+- id: envelope-draft-bad-json-types
+  rule: problem_json
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {expected_rev: "zero", changes: []}}

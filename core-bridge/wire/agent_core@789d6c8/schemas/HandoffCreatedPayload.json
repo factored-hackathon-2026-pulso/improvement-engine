@@ -1,0 +1,49 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Evento saliente (outbox, no va a la cadena).",
+  "properties": {
+    "handoff_ref": {
+      "title": "Handoff Ref",
+      "type": "string"
+    },
+    "language": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Language",
+      "type": "string"
+    },
+    "priority": {
+      "title": "Priority",
+      "type": "string"
+    },
+    "reason_code": {
+      "title": "Reason Code",
+      "type": "string"
+    },
+    "reportable_attrs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Reportable Attrs",
+      "type": "object"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "target_queue": {
+      "title": "Target Queue",
+      "type": "string"
+    }
+  },
+  "required": [
+    "handoff_ref",
+    "run_id",
+    "target_queue",
+    "priority",
+    "reason_code",
+    "language"
+  ],
+  "title": "HandoffCreatedPayload",
+  "type": "object"
+}

@@ -1,0 +1,27 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Acción de una interrupción que escala a una cola (M0 §2.4).",
+  "properties": {
+    "priority": {
+      "title": "Priority",
+      "type": "string"
+    },
+    "target_queue": {
+      "title": "Target Queue",
+      "type": "string"
+    },
+    "type": {
+      "const": "escalate",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "target_queue",
+    "priority"
+  ],
+  "title": "EscalateAction",
+  "type": "object"
+}

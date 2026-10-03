@@ -1,0 +1,25 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Payload del evento `action_confirmed` (vista audit, M0 §2.10).",
+  "properties": {
+    "action_id": {
+      "title": "Action Id",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "understand",
+        "button"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "action_id",
+    "source"
+  ],
+  "title": "ActionConfirmedPayload",
+  "type": "object"
+}

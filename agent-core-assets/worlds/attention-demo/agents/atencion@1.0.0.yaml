@@ -1,0 +1,23 @@
+id: atencion
+version: 1.0.0
+mode: conversational
+entry_flow: disputa-cargo@1
+invocable_by: [customer]
+min_auth_level: session
+subject_kinds: [customer]
+supported_locales: [es, pt]
+default_locale: es
+tools_allowed: [buscar_transacciones@1, seleccionar@1, convertir_moneda@1, radicar_pqr@1, obtener_pqr@1]
+budgets: {max_nodes_per_turn: 40, max_model_calls_per_turn: 3, max_tokens_per_run: 20000, max_cost_per_run: 0.50, max_wall_ms_per_turn: 8000}
+templates:
+  clarify: t/aclarar
+  abstain: t/abstencion
+  handoff: t/traspaso
+  pending_ack: t/acuse
+  pending_offer: t/oferta
+  unsupported_language: t/idioma_no_soportado
+  input_too_large: t/mensaje_largo
+understand: understand-turno@1
+max_clarifications: 2
+on_clarify_exhausted: escalate
+default_target_queue: general

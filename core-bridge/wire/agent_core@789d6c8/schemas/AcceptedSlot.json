@@ -1,0 +1,28 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "One slot of the input contract: its type and whether the packet must carry it.",
+  "properties": {
+    "required": {
+      "default": false,
+      "title": "Required",
+      "type": "boolean"
+    },
+    "type": {
+      "enum": [
+        "string",
+        "integer",
+        "decimal",
+        "date",
+        "boolean"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type"
+  ],
+  "title": "AcceptedSlot",
+  "type": "object"
+}

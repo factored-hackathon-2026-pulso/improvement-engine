@@ -1,0 +1,72 @@
+{
+  "case": "read-release",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "entities",
+        "eval_suite_refs",
+        "injection_ruleset",
+        "interrupts",
+        "knowledge_snapshot",
+        "language_detection",
+        "max_input_chars",
+        "proposal_id",
+        "published_at",
+        "published_by",
+        "release_id",
+        "status"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/releases/{base_release}",
+      "scalars": {
+        "agent_id": "atencion",
+        "injection_ruleset.id": "injection-rules",
+        "interrupt_ids": [
+          "fraude"
+        ],
+        "language_detection.id": "lang-es-pt",
+        "max_input_chars": 4000,
+        "published_by": "root",
+        "release_id": "rel-98130317a1003849",
+        "status": "active"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "null",
+        "entities": [
+          "[][\"changed_vs_base\", \"content_hash\", \"docs\", \"ref\"]"
+        ],
+        "eval_suite_refs": [
+          "[]"
+        ],
+        "injection_ruleset": {
+          "id": "scalar",
+          "version": "scalar"
+        },
+        "interrupts": [
+          "[][\"action\", \"id\", \"priority\", \"signal_policy\"]"
+        ],
+        "knowledge_snapshot": "null",
+        "language_detection": {
+          "id": "scalar",
+          "version": "scalar"
+        },
+        "max_input_chars": "scalar",
+        "proposal_id": "null",
+        "published_at": "scalar",
+        "published_by": "scalar",
+        "release_id": "scalar",
+        "status": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}

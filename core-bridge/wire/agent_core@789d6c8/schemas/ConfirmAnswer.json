@@ -1,0 +1,25 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Respuesta del usuario (sí/no) a una confirmación, con su token (M0 §2.8).",
+  "properties": {
+    "answer": {
+      "enum": [
+        "yes",
+        "no"
+      ],
+      "title": "Answer",
+      "type": "string"
+    },
+    "token": {
+      "title": "Token",
+      "type": "string"
+    }
+  },
+  "required": [
+    "token",
+    "answer"
+  ],
+  "title": "ConfirmAnswer",
+  "type": "object"
+}

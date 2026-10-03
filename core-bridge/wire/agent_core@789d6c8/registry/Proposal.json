@@ -1,0 +1,99 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Origin": {
+      "enum": [
+        "manual",
+        "builder_chat",
+        "auto_detect",
+        "import"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "ProposalState": {
+      "enum": [
+        "draft",
+        "candidate",
+        "evaluated",
+        "approved",
+        "published"
+      ],
+      "title": "ProposalState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "base_release_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Base Release Id"
+    },
+    "candidate_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Hash"
+    },
+    "created_by": {
+      "title": "Created By",
+      "type": "string"
+    },
+    "origin": {
+      "$ref": "#/$defs/Origin"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "rev": {
+      "default": 0,
+      "title": "Rev",
+      "type": "integer"
+    },
+    "state": {
+      "$ref": "#/$defs/ProposalState"
+    },
+    "title": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "agent_id",
+    "origin",
+    "state",
+    "base_release_id",
+    "title",
+    "created_by",
+    "updated_at"
+  ],
+  "title": "Proposal",
+  "type": "object"
+}

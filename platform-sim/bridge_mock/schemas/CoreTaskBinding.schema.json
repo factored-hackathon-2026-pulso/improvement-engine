@@ -1,0 +1,62 @@
+{
+  "$id": "CoreTaskBinding.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attempt": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "bridge_instance_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "command_key": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "core_run_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "job_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "request_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "task_binding_ref": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "job_id",
+    "command_key",
+    "request_digest",
+    "attempt",
+    "core_run_id",
+    "bridge_instance_id",
+    "task_binding_ref"
+  ],
+  "title": "CoreTaskBinding",
+  "type": "object"
+}

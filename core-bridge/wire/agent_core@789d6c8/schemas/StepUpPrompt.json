@@ -1,0 +1,32 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Solicitud de elevar el nivel de autenticación (M0 §2.8).",
+  "properties": {
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "required_level": {
+      "$ref": "#/$defs/AuthLevel"
+    }
+  },
+  "required": [
+    "required_level",
+    "reason"
+  ],
+  "title": "StepUpPrompt",
+  "type": "object"
+}

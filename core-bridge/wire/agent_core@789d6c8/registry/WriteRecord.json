@@ -1,0 +1,79 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Lo que devuelve `get_write` (el readback de las tools `write_draft` del constructor).",
+  "properties": {
+    "on_behalf_of": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "On Behalf Of"
+    },
+    "op": {
+      "enum": [
+        "create_proposal",
+        "put_draft",
+        "freeze",
+        "reopen",
+        "evaluate"
+      ],
+      "title": "Op",
+      "type": "string"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "request_hash": {
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "rev_after": {
+      "title": "Rev After",
+      "type": "integer"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "enum": [
+            "pass",
+            "fail",
+            "failed_infra"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Verdict"
+    }
+  },
+  "required": [
+    "op",
+    "proposal_id",
+    "rev_after",
+    "request_hash"
+  ],
+  "title": "WriteRecord",
+  "type": "object"
+}

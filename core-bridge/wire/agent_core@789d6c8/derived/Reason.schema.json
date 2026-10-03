@@ -1,0 +1,13 @@
+{
+  "properties": {
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "title": "_Reason",
+  "type": "object"
+}

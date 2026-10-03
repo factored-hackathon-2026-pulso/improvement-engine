@@ -1,0 +1,119 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "ChangedRef": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "$ref": "#/$defs/VersionRef"
+        },
+        "before": {
+          "$ref": "#/$defs/VersionRef"
+        },
+        "docs": {
+          "$ref": "#/$defs/VersionDocs"
+        }
+      },
+      "required": [
+        "before",
+        "after",
+        "docs"
+      ],
+      "title": "ChangedRef",
+      "type": "object"
+    },
+    "VersionDocs": {
+      "additionalProperties": false,
+      "properties": {
+        "changelog": {
+          "maxLength": 8000,
+          "title": "Changelog",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 4000,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "rationale",
+        "changelog"
+      ],
+      "title": "VersionDocs",
+      "type": "object"
+    },
+    "VersionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "version"
+      ],
+      "title": "VersionRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "a": {
+      "title": "A",
+      "type": "string"
+    },
+    "added": {
+      "items": {
+        "$ref": "#/$defs/VersionRef"
+      },
+      "title": "Added",
+      "type": "array"
+    },
+    "b": {
+      "title": "B",
+      "type": "string"
+    },
+    "changed": {
+      "items": {
+        "$ref": "#/$defs/ChangedRef"
+      },
+      "title": "Changed",
+      "type": "array"
+    },
+    "removed": {
+      "items": {
+        "$ref": "#/$defs/VersionRef"
+      },
+      "title": "Removed",
+      "type": "array"
+    }
+  },
+  "required": [
+    "a",
+    "b",
+    "added",
+    "removed",
+    "changed"
+  ],
+  "title": "ReleaseDiff",
+  "type": "object"
+}

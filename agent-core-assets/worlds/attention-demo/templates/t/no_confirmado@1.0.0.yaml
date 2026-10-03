@@ -1,0 +1,5 @@
+id: t/no_confirmado
+version: 1.0.0
+locales:
+  es: "No registré la disputa."
+  pt: "Não registrei a contestação."

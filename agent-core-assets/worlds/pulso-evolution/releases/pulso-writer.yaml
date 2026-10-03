@@ -1,0 +1,7 @@
+id: pulso-writer
+agents:
+  - {agent: "pulso-writer@^1", aliases: [prod]}
+flows: ["pulso-writer@^1"]
+interrupts: []
+language_detection: "lang-evolution@1"
+injection_ruleset: "injection-rules-evolution@1"

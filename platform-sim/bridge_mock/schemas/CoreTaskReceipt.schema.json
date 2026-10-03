@@ -1,0 +1,120 @@
+{
+  "$id": "CoreTaskReceipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attempt": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "bridge_instance_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "core_run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "idempotency_key": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "job_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "completed",
+        "failed",
+        null
+      ]
+    },
+    "release_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "request_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "result": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "ReadRunResult.schema.json"
+        }
+      ]
+    },
+    "runtime_profile": {
+      "const": "contract_mock"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "scout",
+        "verifier",
+        "builder_design",
+        "writer"
+      ]
+    },
+    "state": {
+      "enum": [
+        "prepared",
+        "sent",
+        "binding_confirmed",
+        "terminal_ok",
+        "terminal_failed",
+        "unknown",
+        "manual_reconcile"
+      ]
+    },
+    "tenant_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "trace_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "job_id",
+    "stage",
+    "attempt",
+    "idempotency_key",
+    "request_digest",
+    "state",
+    "core_run_id",
+    "bridge_instance_id",
+    "release_id",
+    "outcome",
+    "result",
+    "error_code",
+    "runtime_profile",
+    "trace_id"
+  ],
+  "title": "CoreTaskReceipt",
+  "type": "object"
+}

@@ -1,0 +1,5 @@
+id: t/resumen_pqr
+version: 1.0.0
+locales:
+  es: "Voy a radicar la disputa del cargo. ¿Confirmas?"
+  pt: "Vou registrar a contestação. Confirma?"

@@ -1,0 +1,185 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "MetricExpr": {
+      "additionalProperties": false,
+      "description": "Deterministic metric over events: event, filter, aggregation, window and grouping.",
+      "properties": {
+        "aggregation": {
+          "enum": [
+            "count",
+            "sum",
+            "avg",
+            "percentile",
+            "rate"
+          ],
+          "title": "Aggregation",
+          "type": "string"
+        },
+        "denominator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricExpr"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "event": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Event",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "group_by": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Group By",
+          "type": "array"
+        },
+        "percentile": {
+          "anyOf": [
+            {
+              "maximum": 99,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Percentile"
+        },
+        "where": {
+          "items": {
+            "$ref": "#/$defs/Predicate"
+          },
+          "maxItems": 8,
+          "title": "Where",
+          "type": "array"
+        },
+        "window": {
+          "anyOf": [
+            {
+              "enum": [
+                "scenario",
+                "run"
+              ],
+              "type": "string"
+            },
+            {
+              "format": "duration",
+              "type": "string"
+            }
+          ],
+          "title": "Window"
+        }
+      },
+      "required": [
+        "event",
+        "aggregation",
+        "window"
+      ],
+      "title": "MetricExpr",
+      "type": "object"
+    },
+    "Predicate": {
+      "additionalProperties": false,
+      "description": "Filter on a field of the event catalog.",
+      "properties": {
+        "field": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "ne",
+            "in",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "title": "Predicate",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/MetricExpr"
+}

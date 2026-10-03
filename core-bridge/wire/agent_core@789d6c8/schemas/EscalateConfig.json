@@ -1,0 +1,69 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "description": "Configuración del nodo `escalate` (M0 §2.5).",
+  "properties": {
+    "priority_expr": {
+      "$ref": "#/$defs/JsonValue",
+      "default": null
+    },
+    "reason_code": {
+      "title": "Reason Code",
+      "type": "string"
+    },
+    "target_queue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Queue"
+    }
+  },
+  "required": [
+    "reason_code"
+  ],
+  "title": "EscalateConfig",
+  "type": "object"
+}

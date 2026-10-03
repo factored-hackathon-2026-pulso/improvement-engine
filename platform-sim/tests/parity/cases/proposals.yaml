@@ -1,0 +1,149 @@
+# Proposal lifecycle: create / draft / validate / freeze / reopen, CAS, limits.
+- id: proposal-create-ok
+  rule: states
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, origin: auto_detect, title: t}}
+- id: proposal-create-unknown-agent
+  rule: states
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: no-existe, title: t}}
+- id: proposal-create-bad-agent-id
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: "Bad Id", title: t}}
+- id: proposal-title-200-ok
+  rule: limits
+  steps: [{method: POST, path: /v1/registry/proposals, json: {$title: {length: 200}}}]
+- id: proposal-title-201-rejected
+  rule: limits
+  steps: [{method: POST, path: /v1/registry/proposals, json: {$title: {length: 201}}}]
+- id: proposal-get-detail
+  rule: states
+  steps:
+    - use: golden_frozen
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: proposal-get-unknown
+  rule: errors
+  steps: [{method: GET, path: /v1/registry/proposals/proposal-9999}]
+- id: draft-put-golden
+  rule: states
+  steps: [{use: golden_draft}]
+- id: draft-put-stale-rev
+  rule: cas
+  steps:
+    - {use: golden_draft}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$golden_draft: {expected_rev: 0}}}
+- id: draft-put-unknown-proposal
+  rule: errors
+  steps: [{method: PUT, path: /v1/registry/proposals/proposal-9999/draft, json: {expected_rev: 0, changes: []}}]
+- id: draft-put-after-freeze-is-illegal
+  rule: states
+  steps:
+    - {use: golden_frozen}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$golden_draft: {expected_rev: 1}}}
+- id: draft-put-bot-without-constructor-role
+  rule: roles
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", as: approver_only, json: {expected_rev: 0, changes: []}}
+- id: limit-changes-50-ok
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$bulk_templates: {count: 50}}}
+- id: limit-changes-51-rejected
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$bulk_templates: {count: 51}}}
+- id: limit-entity-bytes-exact-ok
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$entity_bytes: {size: 262144}}}
+- id: limit-entity-bytes-plus-one-rejected
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$entity_bytes: {size: 262145}}}
+- id: validate-golden
+  rule: states
+  steps:
+    - {use: golden_draft}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: validate-empty-draft
+  rule: states
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: validate-version-not-greater-than-base
+  rule: gates
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: /v1/registry/proposals/{pid}/draft
+      json:
+        expected_rev: 0
+        changes:
+          - kind: template
+            docs: {description: d, rationale: r, changelog: c}
+            content: {id: t/aclarar, version: 1.0.0, locales: {es: "otra", pt: "outra"}, reads: []}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: validate-version-lower-than-base
+  rule: gates
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: /v1/registry/proposals/{pid}/draft
+      json:
+        expected_rev: 0
+        changes:
+          - kind: template
+            docs: {description: d, rationale: r, changelog: c}
+            content: {id: t/aclarar, version: 0.9.0, locales: {es: "otra", pt: "outra"}, reads: []}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: validate-unknown-entity-kind
+  rule: errors
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: /v1/registry/proposals/{pid}/draft
+      json:
+        expected_rev: 0
+        changes:
+          - kind: gadget
+            docs: {description: d, rationale: r, changelog: c}
+            content: {id: g, version: 1.0.0}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: freeze-golden
+  rule: states
+  steps: [{use: golden_frozen}]
+- id: freeze-twice-is-illegal
+  rule: states
+  steps:
+    - {use: golden_frozen}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze"}
+- id: freeze-invalid-candidate
+  rule: gates
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: /v1/registry/proposals/{pid}/draft
+      json:
+        expected_rev: 0
+        changes:
+          - kind: template
+            docs: {description: d, rationale: r, changelog: c}
+            content: {id: t/aclarar, version: 1.0.0, locales: {es: "otra", pt: "outra"}, reads: []}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze"}
+- id: reopen-from-candidate
+  rule: states
+  steps:
+    - {use: golden_frozen}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/reopen"}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: reopen-from-draft-is-illegal
+  rule: states
+  steps:
+    - {use: golden_draft}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/reopen"}

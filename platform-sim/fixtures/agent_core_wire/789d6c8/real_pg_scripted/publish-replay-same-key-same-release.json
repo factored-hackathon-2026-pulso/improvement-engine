@@ -1,0 +1,363 @@
+{
+  "case": "publish-replay-same-key-same-release",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "candidate_hash",
+        "created_by",
+        "origin",
+        "proposal_id",
+        "rev",
+        "state",
+        "title",
+        "updated_at"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
+        "origin": "manual",
+        "rev": 0,
+        "state": "draft",
+        "title": "golden"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "candidate_hash": "null",
+        "created_by": "scalar",
+        "origin": "scalar",
+        "proposal_id": "scalar",
+        "rev": "scalar",
+        "state": "scalar",
+        "title": "scalar",
+        "updated_at": "scalar"
+      },
+      "status": 201,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "candidate_hash",
+        "created_by",
+        "origin",
+        "proposal_id",
+        "rev",
+        "state",
+        "title",
+        "updated_at"
+      ],
+      "method": "PUT",
+      "path": "/v1/registry/proposals/{pid}/draft",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
+        "origin": "manual",
+        "rev": 1,
+        "state": "draft",
+        "title": "golden"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "candidate_hash": "null",
+        "created_by": "scalar",
+        "origin": "scalar",
+        "proposal_id": "scalar",
+        "rev": "scalar",
+        "state": "scalar",
+        "title": "scalar",
+        "updated_at": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "auto_bumped",
+        "candidate_hash",
+        "violations"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/validate",
+      "scalars": {
+        "violation_paths": [],
+        "violation_rules": []
+      },
+      "shape": {
+        "auto_bumped": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "candidate_hash": "scalar",
+        "violations": [
+          "[]"
+        ]
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "auto_bumped",
+        "candidate_hash",
+        "new_versions",
+        "proposal_id",
+        "release_id_preview"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/freeze",
+      "scalars": {},
+      "shape": {
+        "auto_bumped": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "candidate_hash": "scalar",
+        "new_versions": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "proposal_id": "scalar",
+        "release_id_preview": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "detail",
+        "items",
+        "judge_notes",
+        "results",
+        "runs",
+        "verdict",
+        "yardstick_changes"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/evaluate",
+      "scalars": {
+        "verdict": "pass"
+      },
+      "shape": {
+        "detail": "scalar",
+        "items": [
+          "[]"
+        ],
+        "judge_notes": [
+          "[]"
+        ],
+        "results": [
+          "[]"
+        ],
+        "runs": "null",
+        "verdict": "scalar",
+        "yardstick_changes": [
+          "[]"
+        ]
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "actor",
+        "at",
+        "candidate_hash",
+        "decision",
+        "proposal_id",
+        "reason",
+        "yardstick_loosened"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/approve",
+      "scalars": {
+        "actor": "ana",
+        "decision": "approved"
+      },
+      "shape": {
+        "actor": "scalar",
+        "at": "scalar",
+        "candidate_hash": "scalar",
+        "decision": "scalar",
+        "proposal_id": "scalar",
+        "reason": "null",
+        "yardstick_loosened": [
+          "[]"
+        ]
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "entities",
+        "eval_suite_refs",
+        "injection_ruleset",
+        "interrupts",
+        "knowledge_snapshot",
+        "language_detection",
+        "max_input_chars",
+        "proposal_id",
+        "published_at",
+        "published_by",
+        "release_id",
+        "status"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/publish",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "injection_ruleset.id": "injection-rules",
+        "interrupt_ids": [
+          "fraude"
+        ],
+        "language_detection.id": "lang-es-pt",
+        "max_input_chars": 4000,
+        "published_by": "ana",
+        "release_id": "<release_id>",
+        "status": "active"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "entities": [
+          "[][\"changed_vs_base\", \"content_hash\", \"docs\", \"ref\"]"
+        ],
+        "eval_suite_refs": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "injection_ruleset": {
+          "id": "scalar",
+          "version": "scalar"
+        },
+        "interrupts": [
+          "[][\"action\", \"id\", \"priority\", \"signal_policy\"]"
+        ],
+        "knowledge_snapshot": "null",
+        "language_detection": {
+          "id": "scalar",
+          "version": "scalar"
+        },
+        "max_input_chars": "scalar",
+        "proposal_id": "scalar",
+        "published_at": "scalar",
+        "published_by": "scalar",
+        "release_id": "scalar",
+        "status": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "entities",
+        "eval_suite_refs",
+        "injection_ruleset",
+        "interrupts",
+        "knowledge_snapshot",
+        "language_detection",
+        "max_input_chars",
+        "proposal_id",
+        "published_at",
+        "published_by",
+        "release_id",
+        "status"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/publish",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "injection_ruleset.id": "injection-rules",
+        "interrupt_ids": [
+          "fraude"
+        ],
+        "language_detection.id": "lang-es-pt",
+        "max_input_chars": 4000,
+        "published_by": "ana",
+        "release_id": "<release_id>",
+        "status": "active"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "entities": [
+          "[][\"changed_vs_base\", \"content_hash\", \"docs\", \"ref\"]"
+        ],
+        "eval_suite_refs": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "injection_ruleset": {
+          "id": "scalar",
+          "version": "scalar"
+        },
+        "interrupts": [
+          "[][\"action\", \"id\", \"priority\", \"signal_policy\"]"
+        ],
+        "knowledge_snapshot": "null",
+        "language_detection": {
+          "id": "scalar",
+          "version": "scalar"
+        },
+        "max_input_chars": "scalar",
+        "proposal_id": "scalar",
+        "published_at": "scalar",
+        "published_by": "scalar",
+        "release_id": "scalar",
+        "status": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}

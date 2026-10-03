@@ -1,0 +1,53 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "TransferPacketSpec": {
+      "additionalProperties": false,
+      "description": "What the transfer node sends: a literal reason and the names of validated slots (ADR 0021 D7).",
+      "properties": {
+        "reason": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Reason",
+          "type": "string"
+        },
+        "slots": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Slots",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "TransferPacketSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`target_from` is a `decisions.<save_as>.choice` path; `directory_from` the fact of `directory/list`.",
+  "properties": {
+    "directory_from": {
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "title": "Directory From",
+      "type": "string"
+    },
+    "packet": {
+      "$ref": "#/$defs/TransferPacketSpec"
+    },
+    "target_from": {
+      "pattern": "^decisions\\.[a-z][a-z0-9_]*\\.choice$",
+      "title": "Target From",
+      "type": "string"
+    }
+  },
+  "required": [
+    "target_from",
+    "directory_from",
+    "packet"
+  ],
+  "title": "TransferConfig",
+  "type": "object"
+}

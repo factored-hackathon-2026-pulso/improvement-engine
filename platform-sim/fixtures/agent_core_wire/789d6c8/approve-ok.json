@@ -1,0 +1,311 @@
+{
+  "case": "approve-ok",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "candidate_hash",
+        "created_by",
+        "origin",
+        "proposal_id",
+        "rev",
+        "state",
+        "title",
+        "updated_at"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
+        "origin": "manual",
+        "rev": 0,
+        "state": "draft",
+        "title": "golden"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "candidate_hash": "null",
+        "created_by": "scalar",
+        "origin": "scalar",
+        "proposal_id": "scalar",
+        "rev": "scalar",
+        "state": "scalar",
+        "title": "scalar",
+        "updated_at": "scalar"
+      },
+      "status": 201,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "candidate_hash",
+        "created_by",
+        "origin",
+        "proposal_id",
+        "rev",
+        "state",
+        "title",
+        "updated_at"
+      ],
+      "method": "PUT",
+      "path": "/v1/registry/proposals/{pid}/draft",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
+        "origin": "manual",
+        "rev": 1,
+        "state": "draft",
+        "title": "golden"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "candidate_hash": "null",
+        "created_by": "scalar",
+        "origin": "scalar",
+        "proposal_id": "scalar",
+        "rev": "scalar",
+        "state": "scalar",
+        "title": "scalar",
+        "updated_at": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "auto_bumped",
+        "candidate_hash",
+        "violations"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/validate",
+      "scalars": {
+        "violation_paths": [],
+        "violation_rules": []
+      },
+      "shape": {
+        "auto_bumped": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "candidate_hash": "scalar",
+        "violations": [
+          "[]"
+        ]
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "auto_bumped",
+        "candidate_hash",
+        "new_versions",
+        "proposal_id",
+        "release_id_preview"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/freeze",
+      "scalars": {},
+      "shape": {
+        "auto_bumped": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "candidate_hash": "scalar",
+        "new_versions": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "proposal_id": "scalar",
+        "release_id_preview": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "detail",
+        "items",
+        "judge_notes",
+        "results",
+        "runs",
+        "verdict",
+        "yardstick_changes"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/evaluate",
+      "scalars": {
+        "verdict": "pass"
+      },
+      "shape": {
+        "detail": "scalar",
+        "items": [
+          "[]"
+        ],
+        "judge_notes": [
+          "[]"
+        ],
+        "results": [
+          "[]"
+        ],
+        "runs": "null",
+        "verdict": "scalar",
+        "yardstick_changes": [
+          "[]"
+        ]
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "actor",
+        "at",
+        "candidate_hash",
+        "decision",
+        "proposal_id",
+        "reason",
+        "yardstick_loosened"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/approve",
+      "scalars": {
+        "actor": "ana",
+        "decision": "approved"
+      },
+      "shape": {
+        "actor": "scalar",
+        "at": "scalar",
+        "candidate_hash": "scalar",
+        "decision": "scalar",
+        "proposal_id": "scalar",
+        "reason": "null",
+        "yardstick_loosened": [
+          "[]"
+        ]
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "changes",
+        "last_eval",
+        "proposal",
+        "review"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/proposals/{pid}",
+      "scalars": {
+        "proposal.agent_id": "atencion",
+        "proposal.base_release_id": "rel-98130317a1003849",
+        "proposal.created_by": "constructor-bot",
+        "proposal.origin": "manual",
+        "proposal.rev": 1,
+        "proposal.state": "approved",
+        "proposal.title": "golden"
+      },
+      "shape": {
+        "changes": [
+          "[][\"content\", \"docs\", \"kind\"]"
+        ],
+        "last_eval": {
+          "at": "scalar",
+          "base_release_id": "scalar",
+          "candidate_hash": "scalar",
+          "eval_run_id": "scalar",
+          "proposal_id": "scalar",
+          "report": [
+            "detail",
+            "items",
+            "judge_notes",
+            "results",
+            "runs",
+            "verdict",
+            "yardstick_changes"
+          ],
+          "suite": [
+            "id",
+            "kind",
+            "version"
+          ],
+          "verdict": "scalar"
+        },
+        "proposal": {
+          "agent_id": "scalar",
+          "base_release_id": "scalar",
+          "candidate_hash": "scalar",
+          "created_by": "scalar",
+          "origin": "scalar",
+          "proposal_id": "scalar",
+          "rev": "scalar",
+          "state": "scalar",
+          "title": "scalar",
+          "updated_at": "scalar"
+        },
+        "review": {
+          "functional_changes": [
+            "[]{\"content\": \"<opaque>\", \"docs\": {\"changelog\": \"scalar\", \"description\": \"scalar\", \"rationale\": \"scalar\"}, \"kind\": \"scalar\"}"
+          ],
+          "gate": [
+            "[]"
+          ],
+          "suite": [
+            "id",
+            "kind",
+            "version"
+          ],
+          "suite_changes": [
+            "[]{\"content\": \"<opaque>\", \"docs\": {\"changelog\": \"scalar\", \"description\": \"scalar\", \"rationale\": \"scalar\"}, \"kind\": \"scalar\"}"
+          ],
+          "yardstick_loosened": [
+            "[]"
+          ]
+        }
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}

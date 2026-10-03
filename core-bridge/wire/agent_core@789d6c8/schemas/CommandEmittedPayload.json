@@ -1,0 +1,92 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Command": {
+      "description": "Comandos de Understand (spec general §4.4).",
+      "enum": [
+        "start_flow",
+        "continue",
+        "affirm",
+        "deny",
+        "clarify",
+        "cancel",
+        "handoff",
+        "out_of_scope",
+        "interrupt"
+      ],
+      "title": "Command",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `command_emitted` (vista audit, M0 §2.10).",
+  "properties": {
+    "above_threshold": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "title": "Above Threshold",
+      "type": "object"
+    },
+    "additional_flows": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Additional Flows",
+      "type": "array"
+    },
+    "command": {
+      "$ref": "#/$defs/Command"
+    },
+    "decision_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decision Id"
+    },
+    "flow": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Flow"
+    },
+    "interrupt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Interrupt"
+    },
+    "source": {
+      "enum": [
+        "understand",
+        "button"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "command",
+    "source"
+  ],
+  "title": "CommandEmittedPayload",
+  "type": "object"
+}

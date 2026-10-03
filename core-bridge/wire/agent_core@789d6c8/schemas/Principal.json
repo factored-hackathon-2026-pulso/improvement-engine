@@ -1,0 +1,107 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AuthInfo": {
+      "additionalProperties": false,
+      "description": "Nivel de autenticación de un principal y el instante en que lo obtuvo (ADR 0010).",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/AuthLevel"
+        },
+        "simulated": {
+          "default": false,
+          "title": "Simulated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "level",
+        "at"
+      ],
+      "title": "AuthInfo",
+      "type": "object"
+    },
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    },
+    "PrincipalType": {
+      "description": "Tipo de principal que invoca el motor (ADR 0006, M0 §2.3).",
+      "enum": [
+        "customer",
+        "advisor",
+        "service",
+        "builder"
+      ],
+      "title": "PrincipalType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Quien invoca, ya verificado por M9. Snapshot sin credencial ni secretos.",
+  "properties": {
+    "attrs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Attrs",
+      "type": "object"
+    },
+    "auth": {
+      "$ref": "#/$defs/AuthInfo"
+    },
+    "exp": {
+      "format": "date-time",
+      "title": "Exp",
+      "type": "string"
+    },
+    "id": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Id"
+    },
+    "roles": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Roles",
+      "type": "array"
+    },
+    "scopes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Scopes",
+      "type": "array"
+    },
+    "type": {
+      "$ref": "#/$defs/PrincipalType"
+    }
+  },
+  "required": [
+    "type",
+    "auth",
+    "exp"
+  ],
+  "title": "Principal",
+  "type": "object"
+}

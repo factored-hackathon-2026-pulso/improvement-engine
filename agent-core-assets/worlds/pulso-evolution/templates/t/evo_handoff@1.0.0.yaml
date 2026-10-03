@@ -1,0 +1,4 @@
+id: t/evo_handoff
+version: 1.0.0
+locales:
+  en: "Stage notice: handoff."

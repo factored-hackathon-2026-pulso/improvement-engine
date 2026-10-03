@@ -1,0 +1,26 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "`token_map` cifrado (lo produce M7). Base64.",
+  "properties": {
+    "ciphertext": {
+      "title": "Ciphertext",
+      "type": "string"
+    },
+    "kid": {
+      "title": "Kid",
+      "type": "string"
+    },
+    "nonce": {
+      "title": "Nonce",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kid",
+    "nonce",
+    "ciphertext"
+  ],
+  "title": "EncryptedBlob",
+  "type": "object"
+}

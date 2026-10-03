@@ -1,0 +1,33 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Una cita a una página: `ruta@snapshot#ancla` (el ancla es opcional).",
+  "properties": {
+    "anchor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Anchor"
+    },
+    "path": {
+      "title": "Path",
+      "type": "string"
+    },
+    "snapshot": {
+      "title": "Snapshot",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path",
+    "snapshot"
+  ],
+  "title": "PageRef",
+  "type": "object"
+}

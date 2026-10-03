@@ -1,0 +1,26 @@
+args_schema:
+  additionalProperties: false
+  properties:
+    agent_id:
+      type: string
+    origin:
+      enum:
+      - builder_chat
+      - auto_detect
+      type: string
+    title:
+      type: string
+  required:
+  - agent_id
+  - origin
+  - title
+  type: object
+confirmation_ttl: PT5M
+description: Crea una propuesta de cambio en el registry (borrador).
+id: registry/create_proposal
+idempotent: true
+min_auth_level: session
+readback_by: idempotency_key
+risk_class: write_draft
+untrusted_fields: []
+version: 1.0.0

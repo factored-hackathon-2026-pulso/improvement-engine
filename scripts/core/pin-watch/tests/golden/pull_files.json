@@ -1,0 +1,1 @@
+[{"filename": "agent_core/api/routes.py", "status": "modified", "patch": "@@\n+@router.post(\"/v1/x\")\n+async def x(): ..."}]

@@ -1,0 +1,36 @@
+{
+  "case": "draft-put-unknown-proposal",
+  "steps": [
+    {
+      "code": "not_found",
+      "content_type": "application/problem+json",
+      "headers": {},
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "PUT",
+      "path": "/v1/registry/proposals/proposal-9999/draft",
+      "scalars": {
+        "status": 404,
+        "title": "not_found"
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 404,
+      "title": "not_found",
+      "trace_id_present": true,
+      "type": "urn:agentcore:registry:not_found"
+    }
+  ]
+}

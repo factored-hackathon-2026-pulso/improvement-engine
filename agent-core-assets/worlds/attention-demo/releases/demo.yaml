@@ -1,0 +1,8 @@
+id: demo
+agents:
+  - {agent: "atencion@^1", aliases: [prod]}
+flows: ["disputa-cargo@^1"]
+interrupts:
+  - {id: fraude, priority: 100, action: {type: escalate, target_queue: fraude, priority: critical}}
+language_detection: "lang-es-pt@1"
+injection_ruleset: "injection-rules@1"

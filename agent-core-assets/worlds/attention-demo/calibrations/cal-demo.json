@@ -1,0 +1,25 @@
+{
+  "calibrators": {},
+  "limitations": [],
+  "method": "isotonic",
+  "metrics": {},
+  "run_id": "cal-demo",
+  "split_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target": {
+    "command": {
+      "metric": "precision",
+      "value": 0.9
+    }
+  },
+  "thresholds": {
+    "command,affirm,jev,es": 0.5,
+    "command,continue,jev,es": 0.5,
+    "command,deny,jev,es": 0.5,
+    "command,interrupt,jev,es": 0.5,
+    "command,out_of_scope,jev,es": 0.5,
+    "command,start_flow,jev,es": 0.5,
+    "flow,disputa-cargo,jev,es": 0.5,
+    "interrupt,fraude,jev,es": 0.5,
+    "match,unica,classifier,es": 0.5
+  }
+}

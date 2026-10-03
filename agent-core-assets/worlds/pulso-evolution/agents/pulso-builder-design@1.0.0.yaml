@@ -1,0 +1,22 @@
+id: pulso-builder-design
+version: 1.0.0
+mode: task
+entry_flow: pulso-builder-design@1
+invocable_by: [builder]
+min_auth_level: session
+subject_kinds: []
+supported_locales: [en]
+default_locale: en
+tools_allowed: [pulso/bind_context@1, pulso/artifact_get@1, pulso/wiki_read@1, pulso/lab_query@1]
+budgets: {max_nodes_per_turn: 40, max_model_calls_per_turn: 16, max_tokens_per_run: 120000, max_cost_per_run: 5.00, max_wall_ms_per_turn: 900000}
+templates:
+  clarify: t/evo_clarify
+  abstain: t/evo_abstain
+  handoff: t/evo_handoff
+  pending_ack: t/evo_pending_ack
+  pending_offer: t/evo_pending_offer
+  unsupported_language: t/evo_unsupported_language
+  input_too_large: t/evo_input_too_large
+max_clarifications: 0
+on_clarify_exhausted: end
+default_target_queue: pulso-evolution

@@ -1,0 +1,7 @@
+id: pulso-scout
+agents:
+  - {agent: "pulso-scout@^1", aliases: [prod]}
+flows: ["pulso-scout@^1"]
+interrupts: []
+language_detection: "lang-evolution@1"
+injection_ruleset: "injection-rules-evolution@1"

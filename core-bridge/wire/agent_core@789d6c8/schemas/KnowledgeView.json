@@ -1,0 +1,30 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Qué puede leer un principal para un `purpose` (lo calcula `AuthzPort.knowledge_view`).\n\nEl servicio de conocimiento filtra con ella y M12 vuelve a filtrar (doble filtro, ADR 0015).",
+  "properties": {
+    "approved_only": {
+      "title": "Approved Only",
+      "type": "boolean"
+    },
+    "audiences": {
+      "items": {
+        "enum": [
+          "public",
+          "internal",
+          "agent_only"
+        ],
+        "type": "string"
+      },
+      "title": "Audiences",
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "audiences",
+    "approved_only"
+  ],
+  "title": "KnowledgeView",
+  "type": "object"
+}

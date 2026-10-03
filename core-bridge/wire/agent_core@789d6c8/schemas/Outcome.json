@@ -1,0 +1,17 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Resultado final de un run (M0 §2.7).",
+  "enum": [
+    "resolved",
+    "abstained",
+    "cancelled",
+    "clarify_exhausted",
+    "completed",
+    "failed",
+    "abandoned",
+    "escalated",
+    "transferred"
+  ],
+  "title": "Outcome",
+  "type": "string"
+}

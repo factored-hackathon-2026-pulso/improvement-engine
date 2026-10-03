@@ -1,0 +1,17 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Comandos de Understand (spec general §4.4).",
+  "enum": [
+    "start_flow",
+    "continue",
+    "affirm",
+    "deny",
+    "clarify",
+    "cancel",
+    "handoff",
+    "out_of_scope",
+    "interrupt"
+  ],
+  "title": "Command",
+  "type": "string"
+}

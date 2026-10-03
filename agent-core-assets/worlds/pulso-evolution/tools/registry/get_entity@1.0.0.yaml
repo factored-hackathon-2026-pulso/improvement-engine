@@ -1,0 +1,21 @@
+args_schema:
+  additionalProperties: false
+  properties:
+    entity_id:
+      type: string
+    kind:
+      type: string
+    version:
+      type: string
+  required:
+  - kind
+  - entity_id
+  type: object
+confirmation_ttl: PT5M
+description: Lee una versión de una entidad del registry.
+id: registry/get_entity
+idempotent: true
+min_auth_level: session
+risk_class: read
+untrusted_fields: []
+version: 1.0.0

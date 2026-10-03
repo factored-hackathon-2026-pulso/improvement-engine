@@ -1,0 +1,40 @@
+{
+  "$id": "AliasState.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "alias": {
+      "enum": [
+        "staging",
+        "prod"
+      ]
+    },
+    "release_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runtime_profile": {
+      "const": "contract_mock"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "agent_id",
+    "alias",
+    "release_id",
+    "runtime_profile"
+  ],
+  "title": "AliasState",
+  "type": "object"
+}

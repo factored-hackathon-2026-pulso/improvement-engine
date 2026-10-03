@@ -1,0 +1,33 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Production alert threshold. It is not the gate threshold.",
+  "properties": {
+    "breach_when": {
+      "enum": [
+        "above",
+        "below"
+      ],
+      "title": "Breach When",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Value"
+    }
+  },
+  "required": [
+    "breach_when",
+    "value"
+  ],
+  "title": "AlertThreshold",
+  "type": "object"
+}

@@ -1,0 +1,110 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Entrada de un snapshot de conocimiento: metadatos y hash del contenido, no el texto (ADR 0015, 0017).\n\nEl texto vive en el `BlobStore` del registry, direccionado por `hash`.",
+  "properties": {
+    "approved_by": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved By"
+    },
+    "audience": {
+      "enum": [
+        "public",
+        "internal",
+        "agent_only"
+      ],
+      "title": "Audience",
+      "type": "string"
+    },
+    "hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Hash",
+      "type": "string"
+    },
+    "lang": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Lang",
+      "type": "string"
+    },
+    "path": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$",
+      "title": "Path",
+      "type": "string"
+    },
+    "source_refs": {
+      "items": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Source Refs",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "approved"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "translation_of": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Translation Of"
+    },
+    "valid_from": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Valid From"
+    },
+    "valid_to": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Valid To"
+    }
+  },
+  "required": [
+    "path",
+    "hash",
+    "audience",
+    "status",
+    "lang"
+  ],
+  "title": "KnowledgePage",
+  "type": "object"
+}

@@ -1,0 +1,79 @@
+id: pulso-builder-design
+version: 1.0.0
+priority: 50
+nodes:
+  - {id: bind, type: tool, config: {tool: pulso/bind_context@1, args: {}, save_as: binding},
+     next: {ok: read_inputs, error: esc_binding, timeout: esc_binding, denied: esc_binding}}
+  - {id: read_inputs, type: tool, config: {tool: pulso/artifact_get@1, args: {artifact_ref: facts.binding.value.design_input_ref}, save_as: design_input},
+     next: {ok: design, error: esc_read, timeout: esc_read, denied: esc_read}}
+  - id: design
+    type: agent
+    config:
+      tools_allowed: [pulso/wiki_read@1, pulso/lab_query@1]
+      max_steps: 16
+      prompt_ref: p/builder_design_task@1
+      goal: "Produce a change specification for the sealed design input."
+      save_as: pulso_change_spec
+      input_view: [facts.design_input.value]
+      output_schema:
+        type: object
+        additionalProperties: false
+        required:
+        - schema_version
+        - change_spec
+        - rationale
+        - evidence_refs
+        - alternatives
+        properties:
+          schema_version:
+            type: string
+            enum:
+            - '1'
+          change_spec:
+            type: object
+          rationale:
+            type: string
+          evidence_refs:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+              - id
+              - digest
+              - media_type
+              properties:
+                id:
+                  type: string
+                digest:
+                  type: string
+                media_type:
+                  type: string
+          alternatives:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+              - id
+              - kind
+              - summary
+              properties:
+                id:
+                  type: string
+                kind:
+                  type: string
+                  enum:
+                  - do_nothing
+                  - proposed_change
+                summary:
+                  type: string
+                limitations:
+                  type: array
+                  items:
+                    type: string
+    next: {answered: done, gave_up: esc_gave_up}
+  - {id: done, type: end, config: {outcome: completed}}
+  - {id: esc_binding, type: escalate, config: {reason_code: auth_insufficient}}
+  - {id: esc_read, type: escalate, config: {reason_code: tool_failure}}
+  - {id: esc_gave_up, type: escalate, config: {reason_code: low_confidence}}

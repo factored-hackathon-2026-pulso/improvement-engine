@@ -1,0 +1,103 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EscalateConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `escalate` (M0 §2.5).",
+      "properties": {
+        "priority_expr": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "reason_code": {
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "target_queue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Queue"
+        }
+      },
+      "required": [
+        "reason_code"
+      ],
+      "title": "EscalateConfig",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "description": "Nodo `escalate` de un flow (M0 §2.5).",
+  "properties": {
+    "config": {
+      "$ref": "#/$defs/EscalateConfig"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "next": {
+      "additionalProperties": {
+        "pattern": "^[a-z0-9][a-z0-9_]*$",
+        "type": "string"
+      },
+      "title": "Next",
+      "type": "object"
+    },
+    "type": {
+      "const": "escalate",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "config"
+  ],
+  "title": "EscalateNode",
+  "type": "object"
+}

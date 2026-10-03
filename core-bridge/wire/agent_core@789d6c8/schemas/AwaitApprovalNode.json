@@ -1,0 +1,122 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Approver": {
+      "additionalProperties": false,
+      "description": "Aprobador de un nodo `await_approval` (M0 §2.5).",
+      "properties": {
+        "principal_type": {
+          "$ref": "#/$defs/PrincipalType"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "principal_type"
+      ],
+      "title": "Approver",
+      "type": "object"
+    },
+    "AwaitApprovalConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `await_approval` (M0 §2.5).",
+      "properties": {
+        "approver": {
+          "$ref": "#/$defs/Approver"
+        },
+        "summary_template": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "timeout": {
+          "format": "duration",
+          "title": "Timeout",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approver",
+        "summary_template",
+        "timeout"
+      ],
+      "title": "AwaitApprovalConfig",
+      "type": "object"
+    },
+    "PrincipalType": {
+      "description": "Tipo de principal que invoca el motor (ADR 0006, M0 §2.3).",
+      "enum": [
+        "customer",
+        "advisor",
+        "service",
+        "builder"
+      ],
+      "title": "PrincipalType",
+      "type": "string"
+    },
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Nodo `await_approval` de un flow (M0 §2.5).",
+  "properties": {
+    "config": {
+      "$ref": "#/$defs/AwaitApprovalConfig"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "next": {
+      "additionalProperties": {
+        "pattern": "^[a-z0-9][a-z0-9_]*$",
+        "type": "string"
+      },
+      "title": "Next",
+      "type": "object"
+    },
+    "type": {
+      "const": "await_approval",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "config"
+  ],
+  "title": "AwaitApprovalNode",
+  "type": "object"
+}

@@ -1,0 +1,36 @@
+{
+  "case": "read-lineage-needs-constructor",
+  "steps": [
+    {
+      "code": "forbidden_role",
+      "content_type": "application/problem+json",
+      "headers": {},
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/runs/run-0001/lineage",
+      "scalars": {
+        "status": 403,
+        "title": "forbidden_role"
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 403,
+      "title": "forbidden_role",
+      "trace_id_present": true,
+      "type": "urn:agentcore:registry:forbidden_role"
+    }
+  ]
+}

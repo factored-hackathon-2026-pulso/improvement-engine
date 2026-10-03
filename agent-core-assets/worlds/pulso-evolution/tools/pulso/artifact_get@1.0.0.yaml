@@ -1,0 +1,7 @@
+id: pulso/artifact_get
+version: 1.0.0
+risk_class: read
+min_auth_level: session
+idempotent: true
+description: "Fetches a sealed artifact by reference."
+args_schema: {type: object, additionalProperties: false, required: [artifact_ref], properties: {artifact_ref: {type: string}}}

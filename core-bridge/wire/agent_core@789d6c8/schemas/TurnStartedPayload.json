@@ -1,0 +1,166 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "GuardsOutput": {
+      "additionalProperties": false,
+      "description": "Salida de los guardarraíles de entrada (idioma, inyección, tamaño) de un turno (M0 §2.10).",
+      "properties": {
+        "injection": {
+          "$ref": "#/$defs/InjectionGuard"
+        },
+        "lang": {
+          "$ref": "#/$defs/LangGuard"
+        },
+        "size_ok": {
+          "title": "Size Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "lang",
+        "injection",
+        "size_ok"
+      ],
+      "title": "GuardsOutput",
+      "type": "object"
+    },
+    "InjectionGuard": {
+      "additionalProperties": false,
+      "description": "Resultado del detector de inyección: señales y versión del ruleset (M0 §2.10).",
+      "properties": {
+        "flagged": {
+          "title": "Flagged",
+          "type": "boolean"
+        },
+        "ruleset": {
+          "title": "Ruleset",
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Signals",
+          "type": "array"
+        }
+      },
+      "required": [
+        "flagged",
+        "ruleset"
+      ],
+      "title": "InjectionGuard",
+      "type": "object"
+    },
+    "LangGuard": {
+      "additionalProperties": false,
+      "description": "Resultado de la detección de idioma del turno (M0 §2.10).",
+      "properties": {
+        "decision": {
+          "enum": [
+            "kept",
+            "switched",
+            "short",
+            "undetermined",
+            "unsupported"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "detector": {
+          "title": "Detector",
+          "type": "string"
+        },
+        "letters": {
+          "minimum": 0,
+          "title": "Letters",
+          "type": "integer"
+        },
+        "locale": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Locale",
+          "type": "string"
+        },
+        "locale_prior": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Locale Prior"
+        },
+        "top2": {
+          "items": {
+            "$ref": "#/$defs/LangScore"
+          },
+          "title": "Top2",
+          "type": "array"
+        }
+      },
+      "required": [
+        "detector",
+        "letters",
+        "top2",
+        "decision",
+        "locale"
+      ],
+      "title": "LangGuard",
+      "type": "object"
+    },
+    "LangScore": {
+      "additionalProperties": false,
+      "description": "Idioma candidato con su puntuación.",
+      "properties": {
+        "lang": {
+          "title": "Lang",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lang",
+        "score"
+      ],
+      "title": "LangScore",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `turn_started` (vista audit, M0 §2.10).",
+  "properties": {
+    "client_turn_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Client Turn Id"
+    },
+    "guards": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GuardsOutput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "TurnStartedPayload",
+  "type": "object"
+}

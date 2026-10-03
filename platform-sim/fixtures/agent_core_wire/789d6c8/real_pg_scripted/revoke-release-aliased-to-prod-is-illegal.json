@@ -1,0 +1,36 @@
+{
+  "case": "revoke-release-aliased-to-prod-is-illegal",
+  "steps": [
+    {
+      "code": "illegal_transition",
+      "content_type": "application/problem+json",
+      "headers": {},
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/releases/{base_release}/revoke",
+      "scalars": {
+        "status": 409,
+        "title": "illegal_transition"
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 409,
+      "title": "illegal_transition",
+      "trace_id_present": true,
+      "type": "urn:agentcore:registry:illegal_transition"
+    }
+  ]
+}

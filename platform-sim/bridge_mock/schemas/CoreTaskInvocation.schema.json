@@ -1,0 +1,136 @@
+{
+  "$id": "CoreTaskInvocation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "agent_version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "type": "string"
+    },
+    "attempt": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "budget_ref": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "config_ref": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "cutoff": {
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(\\.\\d+)?Z$",
+      "type": "string"
+    },
+    "deadline": {
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(\\.\\d+)?Z$",
+      "type": "string"
+    },
+    "information_partition": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "input": {
+      "type": "object"
+    },
+    "input_refs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "digest",
+          "media_type"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "job_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lab_grant_ref": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "memory_snapshot_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "release_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "request_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "scout",
+        "verifier",
+        "builder_design",
+        "writer"
+      ]
+    },
+    "tenant_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "job_id",
+    "stage",
+    "attempt",
+    "agent_id",
+    "agent_version",
+    "release_id",
+    "input",
+    "input_refs",
+    "config_ref",
+    "lab_grant_ref",
+    "memory_snapshot_ref",
+    "information_partition",
+    "cutoff",
+    "deadline",
+    "budget_ref",
+    "request_digest"
+  ],
+  "title": "CoreTaskInvocation",
+  "type": "object"
+}

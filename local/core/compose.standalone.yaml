@@ -1,0 +1,17 @@
+# Standalone overlay: host publication only, 127.0.0.1 with derived+probed ports (never fixed 5432/8000).
+# Port variables are set by start.ps1 (Resolve-PortPlan); the defaults below only keep `config` renderable.
+services:
+  core-postgres:
+    ports:
+      - {host_ip: 127.0.0.1, target: 5432, published: "${PORT_POSTGRES:-18990}", protocol: tcp}
+  core-runtime:
+    ports:
+      - {host_ip: 127.0.0.1, target: 8000, published: "${PORT_RUNTIME:-18991}", protocol: tcp}
+  core-exporter:
+    ports:
+      - {host_ip: 127.0.0.1, target: 8082, published: "${PORT_EXPORTER:-18992}", protocol: tcp}
+  platform-sim:
+    ports:
+      - {host_ip: 127.0.0.1, target: 8601, published: "${PORT_SIM_REGISTRY:-18993}", protocol: tcp}
+      - {host_ip: 127.0.0.1, target: 8611, published: "${PORT_SIM_BRIDGE:-18994}", protocol: tcp}
+      - {host_ip: 127.0.0.1, target: 8621, published: "${PORT_SIM_INGEST:-18995}", protocol: tcp}

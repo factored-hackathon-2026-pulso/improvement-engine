@@ -1,0 +1,29 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "properties": {
+    "changelog": {
+      "maxLength": 8000,
+      "title": "Changelog",
+      "type": "string"
+    },
+    "description": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "rationale": {
+      "maxLength": 4000,
+      "title": "Rationale",
+      "type": "string"
+    }
+  },
+  "required": [
+    "description",
+    "rationale",
+    "changelog"
+  ],
+  "title": "VersionDocs",
+  "type": "object"
+}

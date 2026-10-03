@@ -1,0 +1,108 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "Fingerprint": {
+      "additionalProperties": false,
+      "description": "Huella con clave (ADR 0008): `value = HMAC-SHA256(k[kid], JCS(dato))`.",
+      "properties": {
+        "alg": {
+          "const": "HMAC-SHA256",
+          "title": "Alg",
+          "type": "string"
+        },
+        "kid": {
+          "title": "Kid",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alg",
+        "kid",
+        "value"
+      ],
+      "title": "Fingerprint",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload of `run_transferred` (audit view, ADR 0021 P1): packet fingerprint only.",
+  "properties": {
+    "candidates": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "directory": {
+      "title": "Directory",
+      "type": "string"
+    },
+    "directory_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Directory Hash",
+      "type": "string"
+    },
+    "packet_fp": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "to_agent": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "to_release_id": {
+      "title": "To Release Id",
+      "type": "string"
+    },
+    "to_run_id": {
+      "title": "To Run Id",
+      "type": "string"
+    },
+    "transfer_id": {
+      "title": "Transfer Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "transfer_id",
+    "to_agent",
+    "to_release_id",
+    "to_run_id",
+    "reason",
+    "packet_fp",
+    "directory",
+    "directory_hash",
+    "candidates"
+  ],
+  "title": "RunTransferredPayload",
+  "type": "object"
+}

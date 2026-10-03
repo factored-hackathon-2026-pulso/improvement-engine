@@ -1,0 +1,49 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Presupuestos duros de un agente por turno y por run (M0 §2.4).",
+  "properties": {
+    "max_cost_per_run": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Max Cost Per Run"
+    },
+    "max_model_calls_per_turn": {
+      "exclusiveMinimum": 0,
+      "title": "Max Model Calls Per Turn",
+      "type": "integer"
+    },
+    "max_nodes_per_turn": {
+      "exclusiveMinimum": 0,
+      "title": "Max Nodes Per Turn",
+      "type": "integer"
+    },
+    "max_tokens_per_run": {
+      "exclusiveMinimum": 0,
+      "title": "Max Tokens Per Run",
+      "type": "integer"
+    },
+    "max_wall_ms_per_turn": {
+      "exclusiveMinimum": 0,
+      "title": "Max Wall Ms Per Turn",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "max_nodes_per_turn",
+    "max_model_calls_per_turn",
+    "max_tokens_per_run",
+    "max_cost_per_run",
+    "max_wall_ms_per_turn"
+  ],
+  "title": "Budgets",
+  "type": "object"
+}

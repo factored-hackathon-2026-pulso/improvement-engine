@@ -1,0 +1,100 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AuditContext": {
+      "additionalProperties": false,
+      "description": "Quién pidió la escritura (ADR 0019 §4): el run y su principal, solo para auditoría, nunca permisos.",
+      "properties": {
+        "on_behalf_of": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "On Behalf Of",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "on_behalf_of"
+      ],
+      "title": "AuditContext",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Una escritura del constructor con clave de idempotencia (ADR 0007 §5). Una sola vez por clave.",
+  "properties": {
+    "audit": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuditContext"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "op": {
+      "enum": [
+        "create_proposal",
+        "put_draft",
+        "freeze",
+        "reopen",
+        "evaluate"
+      ],
+      "title": "Op",
+      "type": "string"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "request_hash": {
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "result_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result Ref"
+    },
+    "rev_after": {
+      "title": "Rev After",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "op",
+    "proposal_id",
+    "rev_after",
+    "request_hash",
+    "created_at"
+  ],
+  "title": "DraftWrite",
+  "type": "object"
+}

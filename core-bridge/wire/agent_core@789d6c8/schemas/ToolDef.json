@@ -1,0 +1,174 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "RiskClass": {
+      "description": "Clase de riesgo de una tool; determina si escribe y qué confirmación exige (M0 §2.4).\n\n`write_draft` es la escritura confinada a un borrador del registry: va sin `confirm` (ADR 0019).",
+      "enum": [
+        "read",
+        "compute",
+        "write_draft",
+        "write_reversible",
+        "write_irreversible",
+        "money_movement"
+      ],
+      "title": "RiskClass",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Definición versionada de una tool: riesgo, nivel de autenticación e idempotencia (M0 §2.4).",
+  "properties": {
+    "args_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Args Schema"
+    },
+    "confirmation_ttl": {
+      "default": "PT5M",
+      "format": "duration",
+      "title": "Confirmation Ttl",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "idempotent": {
+      "title": "Idempotent",
+      "type": "boolean"
+    },
+    "max_auth_age": {
+      "anyOf": [
+        {
+          "format": "duration",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Auth Age"
+    },
+    "min_auth_level": {
+      "$ref": "#/$defs/AuthLevel"
+    },
+    "readback_by": {
+      "anyOf": [
+        {
+          "const": "idempotency_key",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Readback By"
+    },
+    "risk_class": {
+      "$ref": "#/$defs/RiskClass"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source"
+    },
+    "untrusted_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Untrusted Fields",
+      "type": "array"
+    },
+    "version": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "risk_class",
+    "min_auth_level",
+    "idempotent"
+  ],
+  "title": "ToolDef",
+  "type": "object"
+}

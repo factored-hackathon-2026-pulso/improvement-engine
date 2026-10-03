@@ -1,0 +1,343 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EntityKind": {
+      "description": "Clases de entidad del registro (M0 §2.4).",
+      "enum": [
+        "agent",
+        "flow",
+        "decision_model",
+        "policy",
+        "template",
+        "prompt",
+        "tool",
+        "language_detection",
+        "injection_ruleset",
+        "model_profile",
+        "knowledge_snapshot"
+      ],
+      "title": "EntityKind",
+      "type": "string"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "EscalateAction": {
+      "additionalProperties": false,
+      "description": "Acción de una interrupción que escala a una cola (M0 §2.4).",
+      "properties": {
+        "priority": {
+          "title": "Priority",
+          "type": "string"
+        },
+        "target_queue": {
+          "title": "Target Queue",
+          "type": "string"
+        },
+        "type": {
+          "const": "escalate",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "target_queue",
+        "priority"
+      ],
+      "title": "EscalateAction",
+      "type": "object"
+    },
+    "Interrupt": {
+      "additionalProperties": false,
+      "description": "Interrupción de una release: prioridad y acción (escalar o iniciar un flow) (M0 §2.4).",
+      "properties": {
+        "action": {
+          "discriminator": {
+            "mapping": {
+              "escalate": "#/$defs/EscalateAction",
+              "start_flow": "#/$defs/StartFlowAction"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EscalateAction"
+            },
+            {
+              "$ref": "#/$defs/StartFlowAction"
+            }
+          ],
+          "title": "Action"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "priority": {
+          "title": "Priority",
+          "type": "integer"
+        },
+        "signal_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RefSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "priority",
+        "action"
+      ],
+      "title": "Interrupt",
+      "type": "object"
+    },
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    },
+    "Release": {
+      "additionalProperties": false,
+      "description": "Conjunto inmutable de versiones exactas de entidades que forman un despliegue (M0 §2.4).",
+      "properties": {
+        "entities": {
+          "additionalProperties": {
+            "patternProperties": {
+              "^[a-z0-9][a-z0-9_/-]*$": {
+                "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/EntityKind"
+          },
+          "title": "Entities",
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "injection_ruleset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntityRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "interrupts": {
+          "items": {
+            "$ref": "#/$defs/Interrupt"
+          },
+          "title": "Interrupts",
+          "type": "array"
+        },
+        "knowledge_snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntityRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "language_detection": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "max_input_chars": {
+          "default": 4000,
+          "exclusiveMinimum": 0,
+          "title": "Max Input Chars",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "revoked"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "language_detection"
+      ],
+      "title": "Release",
+      "type": "object"
+    },
+    "StartFlowAction": {
+      "additionalProperties": false,
+      "description": "Acción de una interrupción que inicia un flow (M0 §2.4).",
+      "properties": {
+        "flow": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "type": {
+          "const": "start_flow",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "flow"
+      ],
+      "title": "StartFlowAction",
+      "type": "object"
+    },
+    "VersionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "version"
+      ],
+      "title": "VersionRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "agent_version": {
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "base_release_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Base Release Id"
+    },
+    "eval_suite_refs": {
+      "items": {
+        "$ref": "#/$defs/VersionRef"
+      },
+      "title": "Eval Suite Refs",
+      "type": "array"
+    },
+    "proposal_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Proposal Id"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "published_by": {
+      "title": "Published By",
+      "type": "string"
+    },
+    "release": {
+      "$ref": "#/$defs/Release"
+    },
+    "release_hash": {
+      "title": "Release Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "release",
+    "release_hash",
+    "agent_id",
+    "agent_version",
+    "base_release_id",
+    "proposal_id",
+    "published_by",
+    "published_at"
+  ],
+  "title": "StoredRelease",
+  "type": "object"
+}

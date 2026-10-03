@@ -1,0 +1,25 @@
+# Fragment for the local Core compose (integrator merges it; project name pulso-claude-<group>).
+# Local profile ONLY: never include this file in a remote/staging/prod manifest.
+services:
+  human-issuer:
+    image: pulso-local-identity:${PULSO_LOCAL_IDENTITY_TAG:?build local-identity first}
+    read_only: true
+    user: "10002"
+    environment:
+      LOCAL_IDENTITY_PROFILE: local
+      LOCAL_IDENTITY_SERVICE_KEYS: /run/secrets/human-issuer/human-issuer-service-keys.json
+      LOCAL_IDENTITY_SESSION_SIGNER: /run/secrets/human-issuer/session-signer.json
+      LOCAL_IDENTITY_HUMAN_STAFF_SIGNER: /run/secrets/human-issuer/human-staff-signer.json
+      LOCAL_IDENTITY_IDENTITIES: /run/secrets/human-issuer/identities.json
+      LOCAL_IDENTITY_BOT_PUBLIC_KEYS: /run/secrets/human-issuer/bot-public-keys.json
+      LOCAL_IDENTITY_REPLAY_DB: /var/lib/local-identity/replay.sqlite3
+    volumes:
+      - ${PULSO_SECRETS_DIR:?}/human-issuer:/run/secrets/human-issuer:ro
+      - human-issuer-replay:/var/lib/local-identity
+    networks:
+      core:
+        aliases: [human-issuer]
+    expose: ["8083"]   # internal only; no `ports:` (never reachable from the host or the browser proxy)
+    restart: "no"
+volumes:
+  human-issuer-replay: {}

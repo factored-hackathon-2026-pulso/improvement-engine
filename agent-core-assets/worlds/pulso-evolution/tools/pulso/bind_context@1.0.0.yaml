@@ -1,0 +1,7 @@
+id: pulso/bind_context
+version: 1.0.0
+risk_class: read
+min_auth_level: session
+idempotent: true
+description: "Confirms the invocation binding with the control plane. Takes no arguments."
+args_schema: {type: object, additionalProperties: false, properties: {}}

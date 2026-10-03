@@ -1,0 +1,9 @@
+id: pulso-evolution-structured
+version: 1.0.0
+endpoint_alias: pulso-evolution-llm
+model: external-reasoning-model
+temperature: 0
+max_tokens: 4000
+timeout_s: 60
+structured: prompted
+price: {input_per_mtok: 1, output_per_mtok: 4, source: placeholder rate card for local runs; replace with the contracted rate, as_of: 2026-10-02}

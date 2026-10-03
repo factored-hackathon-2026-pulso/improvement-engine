@@ -1,0 +1,4 @@
+id: t/evo_pending_offer
+version: 1.0.0
+locales:
+  en: "Stage notice: pending_offer."

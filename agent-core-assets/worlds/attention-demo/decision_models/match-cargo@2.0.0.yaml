@@ -1,0 +1,13 @@
+id: match-cargo
+version: 2.0.0
+output_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    match: {enum: [unica, ninguna, varias]}
+    transaction: {type: string}
+calibrated_fields: [match]
+input_view: [slots.descripcion_cargo, facts.candidatas.value]
+providers: [{provider: classifier, config: {artifact: sintetico}}]
+calibration: {method: none}
+thresholds_from: cal-demo

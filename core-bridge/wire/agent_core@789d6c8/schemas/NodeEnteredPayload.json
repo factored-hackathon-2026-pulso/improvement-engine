@@ -1,0 +1,61 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `node_entered` (vista audit, M0 §2.10).",
+  "properties": {
+    "flow": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "node_id": {
+      "pattern": "^[a-z0-9][a-z0-9_]*$",
+      "title": "Node Id",
+      "type": "string"
+    },
+    "node_type": {
+      "title": "Node Type",
+      "type": "string"
+    },
+    "resume_kind": {
+      "enum": [
+        "slot_answer",
+        "confirm_answer",
+        "step_up_retry",
+        "none"
+      ],
+      "title": "Resume Kind",
+      "type": "string"
+    }
+  },
+  "required": [
+    "flow",
+    "node_id",
+    "node_type",
+    "resume_kind"
+  ],
+  "title": "NodeEnteredPayload",
+  "type": "object"
+}

@@ -1,0 +1,11 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+  "enum": [
+    "anonymous",
+    "session",
+    "step_up"
+  ],
+  "title": "AuthLevel",
+  "type": "string"
+}

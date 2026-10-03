@@ -1,0 +1,10 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Propósito de una clave: huella o cifrado del `token_map` (M0 §2.9).",
+  "enum": [
+    "fingerprint",
+    "token_map"
+  ],
+  "title": "KeyPurpose",
+  "type": "string"
+}

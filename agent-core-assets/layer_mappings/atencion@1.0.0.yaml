@@ -1,0 +1,12 @@
+# LayerMapping (V3 §31.6.3). Immutable per version; an event without a matching rule is layer=unknown.
+version: 1.0.0
+agent_id: atencion
+default: unknown
+rules:
+  - {match: {node_type: rule}, layer: tree, evidence_event: rule_evaluated}
+  - {match: {node_type: tool}, layer: tree, evidence_event: tool_called}
+  - {match: {node_type: verify}, layer: tree, evidence_event: action_verified}
+  - {match: {node_type: decide, provider: classifier}, layer: classifier, evidence_event: decision_made}
+  - {match: {node_type: decide, provider: jev}, layer: ai1, evidence_event: decision_made}
+  - {match: {node_type: respond}, layer: ai2, evidence_event: response_emitted}
+  - {match: {node_type: escalate}, layer: human, evidence_event: escalated}

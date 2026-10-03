@@ -1,0 +1,1000 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "HandoffCreatedData": {
+      "additionalProperties": false,
+      "properties": {
+        "handoff_ref": {
+          "title": "Handoff Ref",
+          "type": "string"
+        },
+        "language": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "priority": {
+          "title": "Priority",
+          "type": "string"
+        },
+        "reason_code": {
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "target_queue": {
+          "title": "Target Queue",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handoff_ref",
+        "target_queue",
+        "priority",
+        "reason_code",
+        "language"
+      ],
+      "title": "HandoffCreatedData",
+      "type": "object"
+    },
+    "HandoffCreatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/HandoffCreatedData"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Id"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "source": {
+          "const": "engine",
+          "default": "engine",
+          "title": "Source",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Spec Version",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "handoff.created",
+          "default": "handoff.created",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "data"
+      ],
+      "title": "HandoffCreatedEvent",
+      "type": "object"
+    },
+    "HandoffResolvedData": {
+      "additionalProperties": false,
+      "properties": {
+        "handoff_quality": {
+          "enum": [
+            "useful",
+            "incomplete",
+            "unnecessary"
+          ],
+          "title": "Handoff Quality",
+          "type": "string"
+        },
+        "handoff_ref": {
+          "title": "Handoff Ref",
+          "type": "string"
+        },
+        "reader_type": {
+          "$ref": "#/$defs/PrincipalType"
+        }
+      },
+      "required": [
+        "handoff_ref",
+        "handoff_quality",
+        "reader_type"
+      ],
+      "title": "HandoffResolvedData",
+      "type": "object"
+    },
+    "HandoffResolvedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/HandoffResolvedData"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Id"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "source": {
+          "const": "engine",
+          "default": "engine",
+          "title": "Source",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Spec Version",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "handoff.resolved",
+          "default": "handoff.resolved",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "data"
+      ],
+      "title": "HandoffResolvedEvent",
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "Resultado final de un run (M0 §2.7).",
+      "enum": [
+        "resolved",
+        "abstained",
+        "cancelled",
+        "clarify_exhausted",
+        "completed",
+        "failed",
+        "abandoned",
+        "escalated",
+        "transferred"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "PrincipalType": {
+      "description": "Tipo de principal que invoca el motor (ADR 0006, M0 §2.3).",
+      "enum": [
+        "customer",
+        "advisor",
+        "service",
+        "builder"
+      ],
+      "title": "PrincipalType",
+      "type": "string"
+    },
+    "ReleaseData": {
+      "additionalProperties": false,
+      "description": "Sin actor ni motivo (personas, texto libre). Tampoco el agente: el evento del registry no lo guarda.",
+      "properties": {
+        "proposal_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proposal Id"
+        },
+        "release_id": {
+          "title": "Release Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "release_id"
+      ],
+      "title": "ReleaseData",
+      "type": "object"
+    },
+    "ReleasePromotedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ReleaseData"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Id"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "source": {
+          "const": "registry",
+          "default": "registry",
+          "title": "Source",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Spec Version",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "release.promoted",
+          "default": "release.promoted",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "data"
+      ],
+      "title": "ReleasePromotedEvent",
+      "type": "object"
+    },
+    "ReleasePublishedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ReleaseData"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Id"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "source": {
+          "const": "registry",
+          "default": "registry",
+          "title": "Source",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Spec Version",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "release.published",
+          "default": "release.published",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "data"
+      ],
+      "title": "ReleasePublishedEvent",
+      "type": "object"
+    },
+    "ReleaseRevokedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ReleaseData"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Id"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "source": {
+          "const": "registry",
+          "default": "registry",
+          "title": "Source",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Spec Version",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "release.revoked",
+          "default": "release.revoked",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "data"
+      ],
+      "title": "ReleaseRevokedEvent",
+      "type": "object"
+    },
+    "RunClosedData": {
+      "additionalProperties": false,
+      "properties": {
+        "closed_by": {
+          "enum": [
+            "flow",
+            "abandonment",
+            "escalation",
+            "revocation",
+            "transfer"
+          ],
+          "title": "Closed By",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/Outcome"
+        }
+      },
+      "required": [
+        "outcome",
+        "closed_by"
+      ],
+      "title": "RunClosedData",
+      "type": "object"
+    },
+    "RunClosedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/RunClosedData"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Id"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "source": {
+          "const": "engine",
+          "default": "engine",
+          "title": "Source",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Spec Version",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "run.closed",
+          "default": "run.closed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "data"
+      ],
+      "title": "RunClosedEvent",
+      "type": "object"
+    },
+    "RunStartedData": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "locale": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Locale",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "conversational",
+            "task"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "principal_type": {
+          "$ref": "#/$defs/PrincipalType"
+        },
+        "subject_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Kind"
+        }
+      },
+      "required": [
+        "agent",
+        "mode",
+        "principal_type",
+        "locale"
+      ],
+      "title": "RunStartedData",
+      "type": "object"
+    },
+    "RunStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/RunStartedData"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Id"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "source": {
+          "const": "engine",
+          "default": "engine",
+          "title": "Source",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Spec Version",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "run.started",
+          "default": "run.started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "data"
+      ],
+      "title": "RunStartedEvent",
+      "type": "object"
+    },
+    "RunTransferredData": {
+      "additionalProperties": false,
+      "properties": {
+        "to_agent": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "to_release_id": {
+          "title": "To Release Id",
+          "type": "string"
+        },
+        "to_run_id": {
+          "title": "To Run Id",
+          "type": "string"
+        },
+        "transfer_id": {
+          "title": "Transfer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transfer_id",
+        "to_agent",
+        "to_release_id",
+        "to_run_id"
+      ],
+      "title": "RunTransferredData",
+      "type": "object"
+    },
+    "RunTransferredEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/RunTransferredData"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "release_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Id"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "source": {
+          "const": "engine",
+          "default": "engine",
+          "title": "Source",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Spec Version",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "run.transferred",
+          "default": "run.transferred",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "data"
+      ],
+      "title": "RunTransferredEvent",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "handoff.created": "#/$defs/HandoffCreatedEvent",
+      "handoff.resolved": "#/$defs/HandoffResolvedEvent",
+      "release.promoted": "#/$defs/ReleasePromotedEvent",
+      "release.published": "#/$defs/ReleasePublishedEvent",
+      "release.revoked": "#/$defs/ReleaseRevokedEvent",
+      "run.closed": "#/$defs/RunClosedEvent",
+      "run.started": "#/$defs/RunStartedEvent",
+      "run.transferred": "#/$defs/RunTransferredEvent"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/RunStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/RunClosedEvent"
+    },
+    {
+      "$ref": "#/$defs/RunTransferredEvent"
+    },
+    {
+      "$ref": "#/$defs/HandoffCreatedEvent"
+    },
+    {
+      "$ref": "#/$defs/HandoffResolvedEvent"
+    },
+    {
+      "$ref": "#/$defs/ReleasePublishedEvent"
+    },
+    {
+      "$ref": "#/$defs/ReleasePromotedEvent"
+    },
+    {
+      "$ref": "#/$defs/ReleaseRevokedEvent"
+    }
+  ]
+}

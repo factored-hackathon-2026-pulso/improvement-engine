@@ -1,0 +1,85 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "LangScore": {
+      "additionalProperties": false,
+      "description": "Idioma candidato con su puntuación.",
+      "properties": {
+        "lang": {
+          "title": "Lang",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lang",
+        "score"
+      ],
+      "title": "LangScore",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Resultado de la detección de idioma del turno (M0 §2.10).",
+  "properties": {
+    "decision": {
+      "enum": [
+        "kept",
+        "switched",
+        "short",
+        "undetermined",
+        "unsupported"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "detector": {
+      "title": "Detector",
+      "type": "string"
+    },
+    "letters": {
+      "minimum": 0,
+      "title": "Letters",
+      "type": "integer"
+    },
+    "locale": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Locale",
+      "type": "string"
+    },
+    "locale_prior": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Locale Prior"
+    },
+    "top2": {
+      "items": {
+        "$ref": "#/$defs/LangScore"
+      },
+      "title": "Top2",
+      "type": "array"
+    }
+  },
+  "required": [
+    "detector",
+    "letters",
+    "top2",
+    "decision",
+    "locale"
+  ],
+  "title": "LangGuard",
+  "type": "object"
+}

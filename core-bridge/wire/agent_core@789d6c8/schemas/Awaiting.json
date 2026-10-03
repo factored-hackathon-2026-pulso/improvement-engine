@@ -1,0 +1,13 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Qué espera el run del usuario en el siguiente turno (M0 §2.7).",
+  "enum": [
+    "none",
+    "slot",
+    "confirmation",
+    "step_up",
+    "input"
+  ],
+  "title": "Awaiting",
+  "type": "string"
+}

@@ -1,0 +1,16 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Motivos por los que se invalida o cancela una acción (M0 §2.6).",
+  "enum": [
+    "cancel",
+    "abandoned",
+    "interrupt",
+    "escalated",
+    "token_expired",
+    "max_attempts",
+    "denied_by_user",
+    "args_changed"
+  ],
+  "title": "InvalidationReason",
+  "type": "string"
+}

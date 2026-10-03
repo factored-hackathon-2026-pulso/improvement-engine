@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "VersionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "version"
+      ],
+      "title": "VersionRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "auto_bumped": {
+      "items": {
+        "$ref": "#/$defs/VersionRef"
+      },
+      "title": "Auto Bumped",
+      "type": "array"
+    },
+    "candidate_hash": {
+      "title": "Candidate Hash",
+      "type": "string"
+    },
+    "new_versions": {
+      "items": {
+        "$ref": "#/$defs/VersionRef"
+      },
+      "title": "New Versions",
+      "type": "array"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "release_id_preview": {
+      "title": "Release Id Preview",
+      "type": "string"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "candidate_hash",
+    "release_id_preview",
+    "new_versions",
+    "auto_bumped"
+  ],
+  "title": "CandidateView",
+  "type": "object"
+}

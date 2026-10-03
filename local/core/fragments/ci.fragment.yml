@@ -1,0 +1,112 @@
+  # Core bridge CI jobs (plan 17.3.8). Delivered as a fragment: the owner of .github/workflows/ci.yml applies it.
+  # `core-bridge/scripts/ci.ps1 -Job <name>` is the single entry; jobs never inline their own commands. The job names
+  # below are exactly the ValidateSet of ci.ps1 (checked by local/core/tests/Fragments.Tests.ps1).
+  core-rust:
+    name: Core rust verify
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job rust
+  core-contract-drift:
+    name: Core contract drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job contract-drift
+  core-mock-wire:
+    name: Core mock wire
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job mock-wire
+  core-a2-wire:
+    name: Core a2 wire (in-process)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job a2-wire
+  core-real-wire:
+    name: Core real wire
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job real-wire -AllowSkipReal
+  core-lint:
+    name: Core lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job lint
+  core-core-bridge:
+    name: Core bridge suite (PG16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-throwaway
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PULSO_TEST_PG_ADMIN: postgresql://postgres:ci-throwaway@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job core-bridge
+  core-platform-sim:
+    name: Core platform-sim suites (PG16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-throwaway
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PULSO_TEST_PG_ADMIN: postgresql://postgres:ci-throwaway@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job platform-sim
+  core-agent-core-assets:
+    name: Core agent-core-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job agent-core-assets
+  core-modules-scan:
+    name: Core no testing modules scan (PG16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-throwaway
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PULSO_TEST_PG_ADMIN: postgresql://postgres:ci-throwaway@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job modules-scan

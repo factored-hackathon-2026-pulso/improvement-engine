@@ -1,0 +1,48 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Outcome": {
+      "description": "Resultado final de un run (M0 §2.7).",
+      "enum": [
+        "resolved",
+        "abstained",
+        "cancelled",
+        "clarify_exhausted",
+        "completed",
+        "failed",
+        "abandoned",
+        "escalated",
+        "transferred"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Configuración del nodo `end` (M0 §2.5).",
+  "properties": {
+    "outcome": {
+      "$ref": "#/$defs/Outcome"
+    },
+    "output_map": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Map"
+    }
+  },
+  "required": [
+    "outcome"
+  ],
+  "title": "EndConfig",
+  "type": "object"
+}

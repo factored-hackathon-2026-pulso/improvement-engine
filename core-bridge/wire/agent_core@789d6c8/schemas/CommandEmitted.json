@@ -1,0 +1,196 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Command": {
+      "description": "Comandos de Understand (spec general §4.4).",
+      "enum": [
+        "start_flow",
+        "continue",
+        "affirm",
+        "deny",
+        "clarify",
+        "cancel",
+        "handoff",
+        "out_of_scope",
+        "interrupt"
+      ],
+      "title": "Command",
+      "type": "string"
+    },
+    "CommandEmittedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `command_emitted` (vista audit, M0 §2.10).",
+      "properties": {
+        "above_threshold": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Above Threshold",
+          "type": "object"
+        },
+        "additional_flows": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Additional Flows",
+          "type": "array"
+        },
+        "command": {
+          "$ref": "#/$defs/Command"
+        },
+        "decision_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decision Id"
+        },
+        "flow": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flow"
+        },
+        "interrupt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interrupt"
+        },
+        "source": {
+          "enum": [
+            "understand",
+            "button"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "source"
+      ],
+      "title": "CommandEmittedPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Evento `command_emitted` de la cadena de auditoría (M0 §2.10).",
+  "properties": {
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "hash": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hash"
+    },
+    "payload": {
+      "$ref": "#/$defs/CommandEmittedPayload"
+    },
+    "prev_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prev Hash"
+    },
+    "release": {
+      "title": "Release",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "seq": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Seq"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "turn_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Turn Id"
+    },
+    "type": {
+      "const": "command_emitted",
+      "default": "command_emitted",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "run_id",
+    "release",
+    "ts",
+    "payload"
+  ],
+  "title": "CommandEmitted",
+  "type": "object"
+}

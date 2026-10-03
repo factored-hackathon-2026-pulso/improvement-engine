@@ -1,0 +1,24 @@
+  # OpenTelemetry collector for the Core runtime (agent_core.composition.observability reads OTEL_* by name).
+  # Config is passed by environment (--config=env:), no mounted file and no credentials.
+  otel-collector:
+    # TBV: tag only; the owner pins the digest when applying (not resolved from this machine, no registry pull was made).
+    image: docker.io/otel/opentelemetry-collector:0.108.0
+    command: ["--config=env:OTEL_COLLECTOR_CONFIG"]
+    environment:
+      OTEL_COLLECTOR_CONFIG: |
+        receivers:
+          otlp:
+            protocols:
+              http:
+                endpoint: 0.0.0.0:4318
+        exporters:
+          debug:
+            verbosity: basic
+        service:
+          pipelines:
+            traces:
+              receivers: [otlp]
+              exporters: [debug]
+    labels:
+      com.pulso.team: claude
+      com.pulso.role: observability

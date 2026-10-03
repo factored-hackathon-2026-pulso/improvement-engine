@@ -1,0 +1,209 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "LabelScore": {
+      "additionalProperties": false,
+      "description": "Etiqueta con su probabilidad (top-k de una decisión).",
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "p": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "P",
+          "type": "number"
+        }
+      },
+      "required": [
+        "label",
+        "p"
+      ],
+      "title": "LabelScore",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `decision_made` (vista audit, M0 §2.10).",
+  "properties": {
+    "above_threshold": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "title": "Above Threshold",
+      "type": "object"
+    },
+    "cost_usd": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Cost Usd"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "fallback_depth": {
+      "minimum": 0,
+      "title": "Fallback Depth",
+      "type": "integer"
+    },
+    "latency_ms": {
+      "minimum": 0,
+      "title": "Latency Ms",
+      "type": "integer"
+    },
+    "locale": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Locale",
+      "type": "string"
+    },
+    "model": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "p_cal": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "P Cal",
+      "type": "object"
+    },
+    "p_raw": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "P Raw",
+      "type": "object"
+    },
+    "provider_used": {
+      "title": "Provider Used",
+      "type": "string"
+    },
+    "tokens": {
+      "minimum": 0,
+      "title": "Tokens",
+      "type": "integer"
+    },
+    "top_k": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/LabelScore"
+        },
+        "type": "array"
+      },
+      "title": "Top K",
+      "type": "object"
+    },
+    "value": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Value",
+      "type": "object"
+    }
+  },
+  "required": [
+    "decision_id",
+    "model",
+    "provider_used",
+    "model_version",
+    "fallback_depth",
+    "value",
+    "p_cal",
+    "p_raw",
+    "above_threshold",
+    "latency_ms",
+    "tokens",
+    "cost_usd",
+    "locale"
+  ],
+  "title": "DecisionMadePayload",
+  "type": "object"
+}

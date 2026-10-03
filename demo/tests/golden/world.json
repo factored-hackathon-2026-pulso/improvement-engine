@@ -1,0 +1,768 @@
+{
+ "commands": {},
+ "decision": {
+  "available_commands": [
+   "approve",
+   "reject"
+  ],
+  "decision_id": "dec-1",
+  "needs_step_up": true,
+  "revision": 1,
+  "stepped_up": false
+ },
+ "demo": {
+  "alternatives": [
+   {
+    "expected_abandoned": 1415,
+    "id": "alt-0",
+    "kind": "do_nothing",
+    "risk": "none new",
+    "summary": "Keep the current retry policy"
+   },
+   {
+    "expected_abandoned": 1029,
+    "id": "alt-1",
+    "kind": "proposed_change",
+    "risk": "guard exposure 0.0025",
+    "summary": "max_retries 2 -> 3 (flow:transfer_limit)"
+   }
+  ],
+  "attempts": [
+   {
+    "attempt": 1,
+    "candidate_id": "cand-1",
+    "improvement": {
+     "exposure": 0.00387,
+     "guard_max_exposure": 0.0035,
+     "lift": 0.0855,
+     "lift_lo": 0.07937,
+     "reason_code": "guard_breach",
+     "status": "fail"
+    },
+    "max_retries": 5,
+    "native": "pass",
+    "native_reason": null,
+    "revision_of": null,
+    "scope": "all_flows"
+   },
+   {
+    "attempt": 2,
+    "candidate_id": "cand-2",
+    "improvement": {
+     "exposure": 0.0025,
+     "guard_max_exposure": 0.0035,
+     "lift": 0.04825,
+     "lift_lo": 0.04355,
+     "reason_code": null,
+     "status": "pass"
+    },
+    "max_retries": 3,
+    "native": "pass",
+    "native_reason": null,
+    "revision_of": "cand-1",
+    "scope": "flow:transfer_limit"
+   }
+  ],
+  "core": {
+   "attempts": [
+    {
+     "candidate_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "proposal_id": "prop-core-1"
+    },
+    {
+     "candidate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "proposal_id": "prop-core-2"
+    }
+   ],
+   "scout_run": "run-scout"
+  },
+  "decision_hook": "pending",
+  "doubles": [
+   "stand_in_engine",
+   "scripted_llm",
+   "fixture_api",
+   "lab_query_rows",
+   "improvement_judge",
+   "human_decision"
+  ],
+  "doubles_detail": [
+   {
+    "id": "stand_in_engine",
+    "until": "Rust engine HTTP API exists",
+    "what": "Codex engine stand-in (e2e-core codex_standin): drives the REAL Core runtime; not the Rust engine"
+   },
+   {
+    "id": "scripted_llm",
+    "what": "scripted llm-gateway double: tool calls/outputs are scripted from data-derived analysis, no real model"
+   },
+   {
+    "id": "fixture_api",
+    "what": "debug-console fixture API/SSE server fed from translated results; not the Rust control API"
+   },
+   {
+    "id": "lab_query_rows",
+    "what": "the e2e-fixtures lab double returns fixed rows for lab_query; the data-derived SQL results come from the demo's local sqlite dataset (recorded SQL and digests)"
+   },
+   {
+    "id": "improvement_judge",
+    "what": "demo's data-derived mechanism_proxy judge and reviser; stand-in for the Codex improvement judge"
+   },
+   {
+    "id": "human_decision",
+    "what": "approve/publish hook not connected: pending until local-identity is wired"
+   }
+  ],
+  "exporter": {
+   "audit_events": 42,
+   "chain_receipts_ok": true
+  },
+  "mode": "stand_in",
+  "namespace": "golden",
+  "runtime_profile": "real_local_core_standin"
+ },
+ "diff": {
+  "lines": [
+   {
+    "op": "ctx",
+    "text": "# business view of the change spec (stand-in builder)"
+   },
+   {
+    "op": "ctx",
+    "text": "retry_policy:   # scope: flow:transfer_limit"
+   },
+   {
+    "op": "del",
+    "text": "  max_retries: 2"
+   },
+   {
+    "op": "add",
+    "text": "  max_retries: 3"
+   },
+   {
+    "op": "ctx",
+    "text": "  step: otp_verify"
+   },
+   {
+    "op": "ctx",
+    "text": "# Core entities written by the writer (real receipts)"
+   },
+   {
+    "op": "add",
+    "text": "  create_proposal: verified"
+   },
+   {
+    "op": "add",
+    "text": "  put_draft: verified"
+   },
+   {
+    "op": "add",
+    "text": "  freeze: verified"
+   },
+   {
+    "op": "add",
+    "text": "  evaluate: verified"
+   },
+   {
+    "op": "ctx",
+    "text": "  proposal prop-core-2 candidate_hash cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+   }
+  ],
+  "proposal_id": "prop-1"
+ },
+ "events": {
+  "run-demo": [
+   {
+    "entity_ref": {
+     "id": "signals",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000001",
+    "kind": "node_status_changed",
+    "projection_revision": 1,
+    "run_id": "run-demo",
+    "sequence": 1
+   },
+   {
+    "entity_ref": {
+     "id": "scout",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000002",
+    "kind": "node_status_changed",
+    "projection_revision": 2,
+    "run_id": "run-demo",
+    "sequence": 2
+   },
+   {
+    "entity_ref": {
+     "id": "verify",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000003",
+    "kind": "node_status_changed",
+    "projection_revision": 3,
+    "run_id": "run-demo",
+    "sequence": 3
+   },
+   {
+    "entity_ref": {
+     "id": "opportunity",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000004",
+    "kind": "node_status_changed",
+    "projection_revision": 4,
+    "run_id": "run-demo",
+    "sequence": 4
+   },
+   {
+    "entity_ref": {
+     "id": "change",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000005",
+    "kind": "node_status_changed",
+    "projection_revision": 5,
+    "run_id": "run-demo",
+    "sequence": 5
+   },
+   {
+    "entity_ref": {
+     "id": "evaluate_1",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000006",
+    "kind": "node_status_changed",
+    "projection_revision": 6,
+    "run_id": "run-demo",
+    "sequence": 6
+   },
+   {
+    "entity_ref": {
+     "id": "revise",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000007",
+    "kind": "node_status_changed",
+    "projection_revision": 7,
+    "run_id": "run-demo",
+    "sequence": 7
+   },
+   {
+    "entity_ref": {
+     "id": "evaluate_2",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000008",
+    "kind": "node_status_changed",
+    "projection_revision": 8,
+    "run_id": "run-demo",
+    "sequence": 8
+   },
+   {
+    "entity_ref": {
+     "id": "decision",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000009",
+    "kind": "node_status_changed",
+    "projection_revision": 9,
+    "run_id": "run-demo",
+    "sequence": 9
+   },
+   {
+    "entity_ref": {
+     "id": "observation",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000010",
+    "kind": "node_status_changed",
+    "projection_revision": 10,
+    "run_id": "run-demo",
+    "sequence": 10
+   }
+  ],
+  "run-demo-refuted": [
+   {
+    "entity_ref": {
+     "id": "scout",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000001",
+    "kind": "node_status_changed",
+    "projection_revision": 1,
+    "run_id": "run-demo-refuted",
+    "sequence": 1
+   },
+   {
+    "entity_ref": {
+     "id": "hypothesis",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000002",
+    "kind": "node_status_changed",
+    "projection_revision": 2,
+    "run_id": "run-demo-refuted",
+    "sequence": 2
+   },
+   {
+    "entity_ref": {
+     "id": "verify",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000003",
+    "kind": "node_status_changed",
+    "projection_revision": 3,
+    "run_id": "run-demo-refuted",
+    "sequence": 3
+   },
+   {
+    "entity_ref": {
+     "id": "decision",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000004",
+    "kind": "node_status_changed",
+    "projection_revision": 4,
+    "run_id": "run-demo-refuted",
+    "sequence": 4
+   }
+  ],
+  "run-demo-successor": []
+ },
+ "gates": {
+  "combined": {
+   "decision": "needs_human",
+   "reason_code": "human_decision_pending"
+  },
+  "improvement": {
+   "attempt": 2,
+   "checked_at": "2026-01-01T00:00:00Z",
+   "exposure": 0.0025,
+   "guard_max_exposure": 0.0035,
+   "lift": 0.04825,
+   "lift_lo": 0.04355,
+   "reason_code": null,
+   "receipt_refs": [],
+   "status": "pass"
+  },
+  "native": {
+   "attempt": 2,
+   "checked_at": "2026-01-01T00:00:00Z",
+   "reason_code": null,
+   "report_ref": {
+    "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "id": "evr-2",
+    "media_type": "application/json"
+   },
+   "status": "pass"
+  }
+ },
+ "investigation": {
+  "run-demo": {
+   "evidence": [
+    {
+     "available_at": "2026-01-01T00:00:00Z",
+     "evidence_ref": {
+      "digest": "364177e86c4589b4ae2e4028c6815a1467c3e4a96945e7cc1499d0fc63159e35",
+      "id": "q-flow-step",
+      "media_type": "application/json"
+     },
+     "level": null,
+     "relation": "supports",
+     "source_kind": "sandbox_evaluated",
+     "summary": "Measured through SQL: transfer_limit / otp_verify: abandonment 69.2% vs 17.7% baseline (n=861, excess lower bound 48.3%)",
+     "validation": "reproducible"
+    },
+    {
+     "available_at": "2026-01-01T00:00:00Z",
+     "evidence_ref": {
+      "digest": "5f9554de8ef513e5617569e8bb260911748aa5f2b3af3d396e451220bd5f7c22",
+      "id": "q-verify-transfer_limit-otp_verify",
+      "media_type": "application/json"
+     },
+     "level": null,
+     "relation": "supports",
+     "source_kind": "sandbox_evaluated",
+     "summary": "Verifier (separate agent): effect positive in 8 of 8 weeks, pooled diff +0.578",
+     "validation": "reproducible"
+    },
+    {
+     "available_at": "2026-01-01T00:00:00Z",
+     "evidence_ref": {
+      "digest": "ce88c2fac397670a5e241afc5e47c6e0fd29b5449823f64e55c291abd5c694ec",
+      "id": "q-verify-card_replacement-otp_verify",
+      "media_type": "application/json"
+     },
+     "level": null,
+     "relation": "contradicts",
+     "source_kind": "sandbox_evaluated",
+     "summary": "Competing hypothesis card_replacement/otp_verify refuted: effect present in 4 of 7 weeks only; not a stable lever",
+     "validation": "reproducible"
+    },
+    {
+     "available_at": "2026-01-01T00:00:00Z",
+     "evidence_ref": {
+      "digest": "959c084d8120bd92f8e04cd8b9b26bae2159a198b82e52cff7f356385fa4a3e9",
+      "id": "q-verify-card_replacement-mobile",
+      "media_type": "application/json"
+     },
+     "level": null,
+     "relation": "contradicts",
+     "source_kind": "sandbox_evaluated",
+     "summary": "Competing hypothesis card_replacement/mobile refuted: effect present in 2 of 8 weeks only; not a stable lever",
+     "validation": "reproducible"
+    },
+    {
+     "available_at": "2026-01-01T00:00:00Z",
+     "evidence_ref": {
+      "digest": "0000000000000000000000000000000000000000000000000000000000000001",
+      "id": "limits-synthetic",
+      "media_type": "application/json"
+     },
+     "level": null,
+     "relation": "limits",
+     "source_kind": "synthetic",
+     "summary": "Synthetic bank dataset; observational; mechanism_proxy only, no causal SLA claim",
+     "validation": "unverified"
+    }
+   ],
+   "hypothesis": "transfer_limit / otp_verify: abandonment 69.2% vs 17.7% baseline (n=861, excess lower bound 48.3%)",
+   "verifier": "supported"
+  },
+  "run-demo-refuted": {
+   "evidence": [
+    {
+     "available_at": "2026-01-01T00:00:00Z",
+     "evidence_ref": {
+      "digest": "e8576fee8db3ec63f5cdc40fe89cf13867be0465b628ed3e5c6a307bb5085feb",
+      "id": "q-flow-device",
+      "media_type": "application/json"
+     },
+     "level": null,
+     "relation": "supports",
+     "source_kind": "sandbox_evaluated",
+     "summary": "Pooled rate looked elevated: card_replacement / otp_verify: abandonment 39.3% vs 17.7% baseline (n=331, excess lower bound 16.3%)",
+     "validation": "reproducible"
+    },
+    {
+     "available_at": "2026-01-01T00:00:00Z",
+     "evidence_ref": {
+      "digest": "ce88c2fac397670a5e241afc5e47c6e0fd29b5449823f64e55c291abd5c694ec",
+      "id": "q-verify-card_replacement-otp_verify",
+      "media_type": "application/json"
+     },
+     "level": null,
+     "relation": "contradicts",
+     "source_kind": "sandbox_evaluated",
+     "summary": "effect present in 4 of 7 weeks only; not a stable lever",
+     "validation": "reproducible"
+    }
+   ],
+   "hypothesis": "card_replacement / otp_verify: abandonment 39.3% vs 17.7% baseline (n=331, excess lower bound 16.3%)",
+   "verifier": "refuted"
+  }
+ },
+ "memory": [
+  {
+   "memory_id": "mem-transfer_limit-otp_verify",
+   "revoked": false,
+   "status": "proposed",
+   "title": "transfer_limit/otp_verify: supported (proposed, not published)"
+  },
+  {
+   "memory_id": "mem-card_replacement-otp_verify",
+   "revoked": false,
+   "status": "proposed",
+   "title": "card_replacement/otp_verify: refuted (proposed, not published)"
+  },
+  {
+   "memory_id": "mem-transfer_limit-web",
+   "revoked": false,
+   "status": "proposed",
+   "title": "transfer_limit/web: supported (proposed, not published)"
+  },
+  {
+   "memory_id": "mem-transfer_limit-mobile",
+   "revoked": false,
+   "status": "proposed",
+   "title": "transfer_limit/mobile: supported (proposed, not published)"
+  },
+  {
+   "memory_id": "mem-card_replacement-mobile",
+   "revoked": false,
+   "status": "proposed",
+   "title": "card_replacement/mobile: refuted (proposed, not published)"
+  }
+ ],
+ "runs": {
+  "run-demo": {
+   "nodes": [
+    {
+     "depends_on": [],
+     "job_ref": null,
+     "label": "Measure signal families",
+     "node_id": "signals",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "scout",
+     "status": "complete",
+     "trace_id": "53a0a0e453a0a0e453a0a0e453a0a0e4"
+    },
+    {
+     "depends_on": [
+      "signals"
+     ],
+     "job_ref": null,
+     "label": "Scout (SQL/wiki)",
+     "node_id": "scout",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "scout",
+     "status": "complete",
+     "trace_id": "12752b5712752b5712752b5712752b57"
+    },
+    {
+     "depends_on": [
+      "scout"
+     ],
+     "job_ref": null,
+     "label": "Independent verifier",
+     "node_id": "verify",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "verifier",
+     "status": "complete",
+     "trace_id": "416c2740416c2740416c2740416c2740"
+    },
+    {
+     "depends_on": [
+      "verify"
+     ],
+     "job_ref": null,
+     "label": "Prioritise opportunity",
+     "node_id": "opportunity",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "hypothesis",
+     "status": "complete",
+     "trace_id": "e8d66c6ce8d66c6ce8d66c6ce8d66c6c"
+    },
+    {
+     "depends_on": [
+      "opportunity"
+     ],
+     "job_ref": null,
+     "label": "Concrete change (builder + writer)",
+     "node_id": "change",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "proposal",
+     "status": "complete",
+     "trace_id": "2122b2772122b2772122b2772122b277"
+    },
+    {
+     "depends_on": [
+      "change"
+     ],
+     "job_ref": null,
+     "label": "Evaluate candidate 1",
+     "node_id": "evaluate_1",
+     "node_kind": "material_step",
+     "reason_code": "guard_breach",
+     "stage": "evaluation",
+     "status": "dead",
+     "trace_id": "456cd952456cd952456cd952456cd952"
+    },
+    {
+     "depends_on": [
+      "evaluate_1"
+     ],
+     "job_ref": null,
+     "label": "Automatic revision",
+     "node_id": "revise",
+     "node_kind": "material_step",
+     "reason_code": "proposal_revised",
+     "stage": "proposal",
+     "status": "complete",
+     "trace_id": "3a9a97bf3a9a97bf3a9a97bf3a9a97bf"
+    },
+    {
+     "depends_on": [
+      "revise"
+     ],
+     "job_ref": null,
+     "label": "Evaluate revised candidate",
+     "node_id": "evaluate_2",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "evaluation",
+     "status": "complete",
+     "trace_id": "456cd953456cd953456cd953456cd953"
+    },
+    {
+     "depends_on": [
+      "evaluate_2"
+     ],
+     "job_ref": null,
+     "label": "Human decision (hook)",
+     "node_id": "decision",
+     "node_kind": "material_step",
+     "reason_code": "human_decision_pending",
+     "stage": "decision",
+     "status": "waiting_dependency",
+     "trace_id": "2f9738e32f9738e32f9738e32f9738e3"
+    },
+    {
+     "depends_on": [
+      "decision"
+     ],
+     "job_ref": null,
+     "label": "Approve",
+     "node_id": "approve",
+     "node_kind": "material_step",
+     "reason_code": "awaiting_human_authority",
+     "stage": "decision",
+     "status": "planned",
+     "trace_id": "a7e33d66a7e33d66a7e33d66a7e33d66"
+    },
+    {
+     "depends_on": [
+      "approve"
+     ],
+     "job_ref": null,
+     "label": "Publish to staging",
+     "node_id": "publish",
+     "node_kind": "material_step",
+     "reason_code": "awaiting_human_authority",
+     "stage": "publish",
+     "status": "planned",
+     "trace_id": "c920d728c920d728c920d728c920d728"
+    },
+    {
+     "depends_on": [
+      "publish"
+     ],
+     "job_ref": null,
+     "label": "Release / expose",
+     "node_id": "release",
+     "node_kind": "material_step",
+     "reason_code": "awaiting_human_authority",
+     "stage": "release",
+     "status": "planned",
+     "trace_id": "18296220182962201829622018296220"
+    },
+    {
+     "depends_on": [
+      "evaluate_2"
+     ],
+     "job_ref": null,
+     "label": "Exported observations",
+     "node_id": "observation",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "observation",
+     "status": "complete",
+     "trace_id": "3d265dc53d265dc53d265dc53d265dc5"
+    },
+    {
+     "depends_on": [
+      "observation"
+     ],
+     "job_ref": null,
+     "label": "Memory update",
+     "node_id": "memory",
+     "node_kind": "material_step",
+     "reason_code": "not_run_in_stand_in",
+     "stage": "memory",
+     "status": "planned",
+     "trace_id": "320e5bc8320e5bc8320e5bc8320e5bc8"
+    }
+   ],
+   "origin": "scheduled",
+   "revision": 10,
+   "run_id": "run-demo",
+   "state": "running",
+   "title": "Undirected discovery run (Core stand-in)"
+  },
+  "run-demo-refuted": {
+   "nodes": [
+    {
+     "depends_on": [],
+     "job_ref": null,
+     "label": "Scout (SQL/wiki)",
+     "node_id": "scout",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "scout",
+     "status": "complete",
+     "trace_id": "12752b5712752b5712752b5712752b57"
+    },
+    {
+     "depends_on": [
+      "scout"
+     ],
+     "job_ref": null,
+     "label": "Form hypothesis",
+     "node_id": "hypothesis",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "hypothesis",
+     "status": "complete",
+     "trace_id": "92a1fce392a1fce392a1fce392a1fce3"
+    },
+    {
+     "depends_on": [
+      "hypothesis"
+     ],
+     "job_ref": null,
+     "label": "Independent verifier",
+     "node_id": "verify",
+     "node_kind": "material_step",
+     "reason_code": "verifier_refuted",
+     "stage": "verifier",
+     "status": "complete",
+     "trace_id": "416c2740416c2740416c2740416c2740"
+    },
+    {
+     "depends_on": [
+      "verify"
+     ],
+     "job_ref": null,
+     "label": "Do nothing",
+     "node_id": "decision",
+     "node_kind": "material_step",
+     "reason_code": null,
+     "stage": "decision",
+     "status": "complete",
+     "trace_id": "2f9738e32f9738e32f9738e32f9738e3"
+    }
+   ],
+   "origin": "scheduled",
+   "revision": 4,
+   "run_id": "run-demo-refuted",
+   "state": "completed",
+   "title": "Refuted hypothesis kept visible: card_replacement/otp_verify"
+  },
+  "run-demo-successor": {
+   "nodes": [
+    {
+     "depends_on": [],
+     "job_ref": null,
+     "label": "Scout (SQL/wiki)",
+     "node_id": "scout",
+     "node_kind": "material_step",
+     "reason_code": "successor_not_started_by_stand_in",
+     "stage": "scout",
+     "status": "planned",
+     "trace_id": "12752b5712752b5712752b5712752b57"
+    }
+   ],
+   "origin": "observation",
+   "revision": 0,
+   "run_id": "run-demo-successor",
+   "state": "planned",
+   "title": "Successor investigation (planned; not started by the stand-in)"
+  }
+ }
+}

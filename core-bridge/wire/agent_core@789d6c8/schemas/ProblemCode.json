@@ -1,0 +1,25 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Códigos de problema estables que expone la API (M0 §2.11).",
+  "enum": [
+    "credentials_invalid",
+    "principal_expired",
+    "subject_forbidden",
+    "agent_forbidden",
+    "version_pin_forbidden",
+    "delegation_expired",
+    "delegation_mismatch",
+    "principal_mismatch",
+    "not_found",
+    "turn_in_progress",
+    "handoff_already_resolved",
+    "idempotency_conflict",
+    "run_closed",
+    "invalid_request",
+    "rate_limited",
+    "cost_budget_exceeded",
+    "internal_error"
+  ],
+  "title": "ProblemCode",
+  "type": "string"
+}

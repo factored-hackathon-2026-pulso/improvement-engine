@@ -1,0 +1,660 @@
+{
+  "atencion": {
+    "agent_version": "1.0.0",
+    "entities": [
+      {
+        "content_hash": "f94fef3588265b627d184932f0a774ac8e37f4be5d343c9bd39d3ddfb7ef1add",
+        "id": "atencion",
+        "kind": "agent",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "e3f2936729678f764e5e24cf26fb65b02e9d8c4043f68592dd6a003b73e6e75d",
+        "id": "match-cargo",
+        "kind": "decision_model",
+        "version": "2.0.0"
+      },
+      {
+        "content_hash": "011cdc30f5e4a0763f7b0920faeb187689d4d56bc7daa8a575474ced1729ec0b",
+        "id": "understand-turno",
+        "kind": "decision_model",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "6b5b579464f54370d2eed81b5c1a460c6a3ab270c0c8244fe17ed0a80d953b11",
+        "id": "disputa-cargo",
+        "kind": "flow",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "172c1c4c0a20480fff9d2221e1df155bd5765b3a87e2d5591d42ba5ef82e361f",
+        "id": "injection-rules",
+        "kind": "injection_ruleset",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "819529d6716a28ce54252f7975958b38790c7d05b4fe972516020d0a4e674d6c",
+        "id": "lang-es-pt",
+        "kind": "language_detection",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "d685c8c3161a94542e3337a8c5950a3d90bdc9ea180b8a09805311219d7a4129",
+        "id": "perfil-generacion",
+        "kind": "model_profile",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "e67997e2d2a2356ad1d1e4fd6733a7c33b4754a8a54054c43e15fe897f37b6bf",
+        "id": "escalamiento-disputa-monto",
+        "kind": "policy",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "26389427d9931d33d38fb69d86959b0c95e162664fd964f8f898b38cda50d639",
+        "id": "p/resumen_radicado",
+        "kind": "prompt",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "cc0289873212eaaa029239618c0e10a037f8656892c8a677364f79338f763705",
+        "id": "t/abstencion",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "56206672b53310b8c4cb1c30bd33bcee1d6abfbfd89cbe470d2fd658fd248179",
+        "id": "t/aclarar",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "543147ce52f54cea888536f6296a1b957ee0c9ccbddc5ca43c9555c07430b968",
+        "id": "t/aclarar_cargo",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "9061fefb66a06575d9941f7b2dcd83efa5765ed1c5954e07b1d86e74a05d0fce",
+        "id": "t/acuse",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "63a73d2237109534ada31082b64486dda7c498b5a7d5fb19659594ccfc6f3ef5",
+        "id": "t/idioma_no_soportado",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "93427eb0c1696c0e9fad0a9eb60ed950c2928d2813c7e6e4a939f3fd22d1020f",
+        "id": "t/mensaje_largo",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "19eb7f8d529389961ff1ed14ec66283cd303128435d41dfe78623b2071abf754",
+        "id": "t/no_confirmado",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "cdcd2ac3f37ecbb0fd3cf052764980d36276cdd602f9b216b31e3b77e43e8eab",
+        "id": "t/oferta",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "d916ce88da49e354d7f9cc89247da6bc7167a2fabfab9b1b6399a0baaa944def",
+        "id": "t/pedir_cargo",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b9a7fed3a2be46a9fb33e8890216e1876f1d5923bfb3ad571c93c0841f498dff",
+        "id": "t/pqr_radicado",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "9895ee51f07535ed517dd468d6168387cb5248139b4587be6c8595f91d7baf5c",
+        "id": "t/resumen_pqr",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "aa993133401ef31c971efdd2a0c3a74881663df95299dabd83bb700c4c04a481",
+        "id": "t/traspaso",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "a7e05d1d46c07c8add95eba12f6fc200e973dad31b659dd7c800b35948903deb",
+        "id": "buscar_transacciones",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "3b0addb9f12b20cd58beda0958a04ebb397ad62f8a0f82f5e6760f7f9953a86b",
+        "id": "convertir_moneda",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "72446b11c64d7eccc6f6e22244f7a0aa983be10a844d12eeac534d37e326d27b",
+        "id": "obtener_pqr",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "e0f54302e353c787b15a1e738147ede6b7c5eeeab1c06fd39a94694c220d810f",
+        "id": "radicar_pqr",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "087dc355351dd0b082f72996af259de5748a16c13f0d4a3d95e5b270c0faba36",
+        "id": "seleccionar",
+        "kind": "tool",
+        "version": "1.0.0"
+      }
+    ],
+    "eval_suites": [
+      {
+        "content_hash": "a04cc7f07ee5cbbe0e25e4f7c5cff65541472a921bd148fd8aa5b65a4b54aa92",
+        "id": "disputas-suite",
+        "version": "1.0.0"
+      }
+    ],
+    "release_hash": "98130317a10038497cb752062500d056425c7be0225452e28a606ac9a1ed8549",
+    "release_id": "rel-98130317a1003849"
+  },
+  "pulso-builder-design": {
+    "agent_version": "1.0.0",
+    "entities": [
+      {
+        "content_hash": "6f7964adb8503e8544e523161a8512ec16d45b8389a763ac6f01f78780852f60",
+        "id": "pulso-builder-design",
+        "kind": "agent",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "ee3d549c8db72b784a43e20167188806696a280ac1de9a5416b3c379a7b7c43e",
+        "id": "pulso-builder-design",
+        "kind": "flow",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "d6ac12b03c6448749a01eebbc5070610ecbc4058ad73fe3c9e96e1d4168da48f",
+        "id": "injection-rules-evolution",
+        "kind": "injection_ruleset",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "74664bcb379639dd72eac5c0834521e7e62a3c84c0d5f0618bcec481a38d1912",
+        "id": "lang-evolution",
+        "kind": "language_detection",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b0878c7ff9ce4460f08e3837645c66e1f7bf71bff0eb33ac3a68a4f1f950ef8c",
+        "id": "pulso-evolution-structured",
+        "kind": "model_profile",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "8d51e57b4c577834aa89f6b4a906e2fd00212768777912568e12d9600684ec5a",
+        "id": "p/builder_design_task",
+        "kind": "prompt",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b216c1ca585a9c38395bd3ea14451bc176265d82e7c9ea37817926b5f477e1dc",
+        "id": "t/evo_abstain",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "511610181c06c3a04284be8edf31ba73f06e7508e6d787c54019a533e8746f1f",
+        "id": "t/evo_clarify",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "39d2beb9eb0a2d18301b7b4db9f21ef556c75683d86dbbeb46adfc338403a110",
+        "id": "t/evo_handoff",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "ebe5880eb1d22ffae7f5810d3b0b60776311fed30de5c9977cd8a7cb58804b6d",
+        "id": "t/evo_input_too_large",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "72223431a40a433ffc492ecf64f2edb72393b3beeab38f3c15b35386553b2ab6",
+        "id": "t/evo_pending_ack",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b0a5f2acfa29410e662aca5f9630bbdde987c65a92ca503635d2d4a817a6c90f",
+        "id": "t/evo_pending_offer",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "987e0224066d9cb7ca7f80bc2de6eaa2af1dc716bfd7c366258c6ec2194dc677",
+        "id": "t/evo_unsupported_language",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "dfb5302d2b7878b1083171d69738c449c031778d23af7e25f946ebc874d62067",
+        "id": "pulso/artifact_get",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "daba9a79ef2da80f29b9235507c3fb0399ab4c66b57de821d91d9fb72d3863aa",
+        "id": "pulso/bind_context",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "c96b80d5a90760f5cff8341ca314a14967736d622d4b812bdbe7c42431564000",
+        "id": "pulso/lab_query",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "3ab8c28fd66a6536d84b5ac0b1f899d601fbec276c2a3b07585784bc841c10a4",
+        "id": "pulso/wiki_read",
+        "kind": "tool",
+        "version": "1.0.0"
+      }
+    ],
+    "eval_suites": [],
+    "release_hash": "5f152bbf73ea31b406b7b2205b94cf314b8689822059ba0c4e56be9da0fca24e",
+    "release_id": "rel-5f152bbf73ea31b4"
+  },
+  "pulso-scout": {
+    "agent_version": "1.0.0",
+    "entities": [
+      {
+        "content_hash": "e1447e9d078ec1b362cb6a31620a402ec03bd7049571afa07fcafc41e710e6b7",
+        "id": "pulso-scout",
+        "kind": "agent",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "8b6cc31694101fcc439c752b249a9394d10b62fee5fe13805b94f9f85eb789b9",
+        "id": "pulso-scout",
+        "kind": "flow",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "d6ac12b03c6448749a01eebbc5070610ecbc4058ad73fe3c9e96e1d4168da48f",
+        "id": "injection-rules-evolution",
+        "kind": "injection_ruleset",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "74664bcb379639dd72eac5c0834521e7e62a3c84c0d5f0618bcec481a38d1912",
+        "id": "lang-evolution",
+        "kind": "language_detection",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b0878c7ff9ce4460f08e3837645c66e1f7bf71bff0eb33ac3a68a4f1f950ef8c",
+        "id": "pulso-evolution-structured",
+        "kind": "model_profile",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "405c44ba4486d7669fc1f34526924c05830cd6fea5ae8db7c08ea36856952e8f",
+        "id": "p/scout_task",
+        "kind": "prompt",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b216c1ca585a9c38395bd3ea14451bc176265d82e7c9ea37817926b5f477e1dc",
+        "id": "t/evo_abstain",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "511610181c06c3a04284be8edf31ba73f06e7508e6d787c54019a533e8746f1f",
+        "id": "t/evo_clarify",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "39d2beb9eb0a2d18301b7b4db9f21ef556c75683d86dbbeb46adfc338403a110",
+        "id": "t/evo_handoff",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "ebe5880eb1d22ffae7f5810d3b0b60776311fed30de5c9977cd8a7cb58804b6d",
+        "id": "t/evo_input_too_large",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "72223431a40a433ffc492ecf64f2edb72393b3beeab38f3c15b35386553b2ab6",
+        "id": "t/evo_pending_ack",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b0a5f2acfa29410e662aca5f9630bbdde987c65a92ca503635d2d4a817a6c90f",
+        "id": "t/evo_pending_offer",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "987e0224066d9cb7ca7f80bc2de6eaa2af1dc716bfd7c366258c6ec2194dc677",
+        "id": "t/evo_unsupported_language",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "daba9a79ef2da80f29b9235507c3fb0399ab4c66b57de821d91d9fb72d3863aa",
+        "id": "pulso/bind_context",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "c96b80d5a90760f5cff8341ca314a14967736d622d4b812bdbe7c42431564000",
+        "id": "pulso/lab_query",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "f0be9676a0a64d01bf4bb0917fd6879afbeb740edf32004ccf6684294dd9d8fb",
+        "id": "pulso/wiki_explore",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "3ab8c28fd66a6536d84b5ac0b1f899d601fbec276c2a3b07585784bc841c10a4",
+        "id": "pulso/wiki_read",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "42b17182a497a54879b16cd0c7ba9ee0fceb73c905393b71ddc2aa0df3ba9c89",
+        "id": "pulso/wiki_transform",
+        "kind": "tool",
+        "version": "1.0.0"
+      }
+    ],
+    "eval_suites": [
+      {
+        "content_hash": "57ae54ccbc81139bc245e52400202b7db50149171055d5a5fd65e7fe09547b7e",
+        "id": "pulso-smoke",
+        "version": "1.0.0"
+      }
+    ],
+    "release_hash": "1cddd55d1fe8f19fdf75b7933a2b7eeca6a4d6684c6936ef6cbea9d2d441205e",
+    "release_id": "rel-1cddd55d1fe8f19f"
+  },
+  "pulso-verifier": {
+    "agent_version": "1.0.0",
+    "entities": [
+      {
+        "content_hash": "d4066fef7e8ddb0ac836222cfa55c65ddaa1186c78230caf54a6993ac03ce68c",
+        "id": "pulso-verifier",
+        "kind": "agent",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "aefad65e79ae060a2019b5a59a620fbe59294bce56c406f70f441db5b6571186",
+        "id": "pulso-verifier",
+        "kind": "flow",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "d6ac12b03c6448749a01eebbc5070610ecbc4058ad73fe3c9e96e1d4168da48f",
+        "id": "injection-rules-evolution",
+        "kind": "injection_ruleset",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "74664bcb379639dd72eac5c0834521e7e62a3c84c0d5f0618bcec481a38d1912",
+        "id": "lang-evolution",
+        "kind": "language_detection",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b0878c7ff9ce4460f08e3837645c66e1f7bf71bff0eb33ac3a68a4f1f950ef8c",
+        "id": "pulso-evolution-structured",
+        "kind": "model_profile",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "9967757abd94c0ae8807ddfe3a45e0ff9b6ab15200fbc379c3bbfc9155d0679e",
+        "id": "p/verifier_task",
+        "kind": "prompt",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b216c1ca585a9c38395bd3ea14451bc176265d82e7c9ea37817926b5f477e1dc",
+        "id": "t/evo_abstain",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "511610181c06c3a04284be8edf31ba73f06e7508e6d787c54019a533e8746f1f",
+        "id": "t/evo_clarify",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "39d2beb9eb0a2d18301b7b4db9f21ef556c75683d86dbbeb46adfc338403a110",
+        "id": "t/evo_handoff",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "ebe5880eb1d22ffae7f5810d3b0b60776311fed30de5c9977cd8a7cb58804b6d",
+        "id": "t/evo_input_too_large",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "72223431a40a433ffc492ecf64f2edb72393b3beeab38f3c15b35386553b2ab6",
+        "id": "t/evo_pending_ack",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b0a5f2acfa29410e662aca5f9630bbdde987c65a92ca503635d2d4a817a6c90f",
+        "id": "t/evo_pending_offer",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "987e0224066d9cb7ca7f80bc2de6eaa2af1dc716bfd7c366258c6ec2194dc677",
+        "id": "t/evo_unsupported_language",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "dfb5302d2b7878b1083171d69738c449c031778d23af7e25f946ebc874d62067",
+        "id": "pulso/artifact_get",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "daba9a79ef2da80f29b9235507c3fb0399ab4c66b57de821d91d9fb72d3863aa",
+        "id": "pulso/bind_context",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "c96b80d5a90760f5cff8341ca314a14967736d622d4b812bdbe7c42431564000",
+        "id": "pulso/lab_query",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "f0be9676a0a64d01bf4bb0917fd6879afbeb740edf32004ccf6684294dd9d8fb",
+        "id": "pulso/wiki_explore",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "3ab8c28fd66a6536d84b5ac0b1f899d601fbec276c2a3b07585784bc841c10a4",
+        "id": "pulso/wiki_read",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "42b17182a497a54879b16cd0c7ba9ee0fceb73c905393b71ddc2aa0df3ba9c89",
+        "id": "pulso/wiki_transform",
+        "kind": "tool",
+        "version": "1.0.0"
+      }
+    ],
+    "eval_suites": [],
+    "release_hash": "db71ae5ed04c6131ffc4db76a80785e861e95bd85ddab020a52cdffb45eb6210",
+    "release_id": "rel-db71ae5ed04c6131"
+  },
+  "pulso-writer": {
+    "agent_version": "1.0.0",
+    "entities": [
+      {
+        "content_hash": "f9946430f9a456b74a40097dc4472994be1555130b6f22bc3725e3527146f324",
+        "id": "pulso-writer",
+        "kind": "agent",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "bb8d6a3f199a1f2c10df167772c0afe6e6a4adaf8e8358518148aa6185126d09",
+        "id": "pulso-writer",
+        "kind": "flow",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "d6ac12b03c6448749a01eebbc5070610ecbc4058ad73fe3c9e96e1d4168da48f",
+        "id": "injection-rules-evolution",
+        "kind": "injection_ruleset",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "74664bcb379639dd72eac5c0834521e7e62a3c84c0d5f0618bcec481a38d1912",
+        "id": "lang-evolution",
+        "kind": "language_detection",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b216c1ca585a9c38395bd3ea14451bc176265d82e7c9ea37817926b5f477e1dc",
+        "id": "t/evo_abstain",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "511610181c06c3a04284be8edf31ba73f06e7508e6d787c54019a533e8746f1f",
+        "id": "t/evo_clarify",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "39d2beb9eb0a2d18301b7b4db9f21ef556c75683d86dbbeb46adfc338403a110",
+        "id": "t/evo_handoff",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "ebe5880eb1d22ffae7f5810d3b0b60776311fed30de5c9977cd8a7cb58804b6d",
+        "id": "t/evo_input_too_large",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "72223431a40a433ffc492ecf64f2edb72393b3beeab38f3c15b35386553b2ab6",
+        "id": "t/evo_pending_ack",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b0a5f2acfa29410e662aca5f9630bbdde987c65a92ca503635d2d4a817a6c90f",
+        "id": "t/evo_pending_offer",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "987e0224066d9cb7ca7f80bc2de6eaa2af1dc716bfd7c366258c6ec2194dc677",
+        "id": "t/evo_unsupported_language",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "dfb5302d2b7878b1083171d69738c449c031778d23af7e25f946ebc874d62067",
+        "id": "pulso/artifact_get",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "daba9a79ef2da80f29b9235507c3fb0399ab4c66b57de821d91d9fb72d3863aa",
+        "id": "pulso/bind_context",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "b53091e2e22108355e163bc4f746592f2bd7edd740da024c1a6b82584eb1514b",
+        "id": "registry/create_proposal",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "6d0c9121dada1f30717eae847a993c668f63d4c7ac9c6a06f5418404425de855",
+        "id": "registry/evaluate",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "1de926e441cddd7db3eeab1a4c002ba1721290fdd65db1a6953a55c195505f1d",
+        "id": "registry/freeze",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "56e2d70bcaaed4b9dde39302b3007aa3de933a338ba0ec1d454dafb01b87f20e",
+        "id": "registry/get_proposal",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "c192da2f7d3894deb22e48cabb78bf558f47242e2c2f1e57c3d374c61b5ad0fc",
+        "id": "registry/get_write",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "f621ba19f404f30bf6abab46e76675a26c431c536caa4edf786ea5c9275afa5d",
+        "id": "registry/put_draft",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "450f64a722188335137d8ea97296daf1783d28558b7281393609b5913bfdf57a",
+        "id": "registry/reopen",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "5b588bd3750f5afc000a267cff391b8f3f4cb5897a110ef684f9ad7810bbdbd9",
+        "id": "registry/validate",
+        "kind": "tool",
+        "version": "1.0.0"
+      }
+    ],
+    "eval_suites": [],
+    "release_hash": "bf3f06148962dabb63f9998ce88697e8117d8bc13cd326e7202ff780a7beaa80",
+    "release_id": "rel-bf3f06148962dabb"
+  }
+}

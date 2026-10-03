@@ -1,0 +1,5 @@
+id: escalamiento-disputa-monto
+version: 1.0.0
+owner: riesgo
+expr: {">": [{var: facts.monto_usd.value}, 500]}
+rationale: "Disputas sobre montos altos requieren revisión humana (política sintética)."

@@ -1,0 +1,1209 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Action": {
+      "additionalProperties": false,
+      "description": "Acción de escritura propuesta al usuario, con su token de confirmación y ciclo de vida (M0 §2.6).",
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Args",
+          "type": "object"
+        },
+        "args_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Args Hash",
+          "type": "string"
+        },
+        "cancel_reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InvalidationReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confirm_node_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirm Node Id"
+        },
+        "confirmation_token_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirmation Token Hash"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "flow": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "idempotency_key": {
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/ActionState"
+        },
+        "token_exp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Exp"
+        },
+        "tool": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "write_node_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Write Node Id"
+        }
+      },
+      "required": [
+        "action_id",
+        "flow",
+        "tool",
+        "args",
+        "args_hash",
+        "state",
+        "idempotency_key",
+        "created_at"
+      ],
+      "title": "Action",
+      "type": "object"
+    },
+    "ActionState": {
+      "description": "Estados del ciclo de vida de una `Action` (M0 §2.6).",
+      "enum": [
+        "proposed",
+        "confirmed",
+        "executing",
+        "executed",
+        "uncertain",
+        "denied",
+        "verified",
+        "failed",
+        "cancelled"
+      ],
+      "title": "ActionState",
+      "type": "string"
+    },
+    "ActiveFlow": {
+      "additionalProperties": false,
+      "description": "Flow activo del run: nodo actual y slots locales (M0 §2.6).",
+      "properties": {
+        "flow": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "local_slots": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Local Slots",
+          "type": "object"
+        },
+        "node_id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Node Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flow",
+        "node_id"
+      ],
+      "title": "ActiveFlow",
+      "type": "object"
+    },
+    "AuthInfo": {
+      "additionalProperties": false,
+      "description": "Nivel de autenticación de un principal y el instante en que lo obtuvo (ADR 0010).",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/AuthLevel"
+        },
+        "simulated": {
+          "default": false,
+          "title": "Simulated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "level",
+        "at"
+      ],
+      "title": "AuthInfo",
+      "type": "object"
+    },
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    },
+    "Awaiting": {
+      "description": "Qué espera el run del usuario en el siguiente turno (M0 §2.7).",
+      "enum": [
+        "none",
+        "slot",
+        "confirmation",
+        "step_up",
+        "input"
+      ],
+      "title": "Awaiting",
+      "type": "string"
+    },
+    "BudgetsUsed": {
+      "additionalProperties": false,
+      "description": "Consumo acumulado de presupuestos del run y del turno (M0 §2.6).",
+      "properties": {
+        "run_cost": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Run Cost"
+        },
+        "run_tokens": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Run Tokens",
+          "type": "integer"
+        },
+        "turn_model_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Turn Model Calls",
+          "type": "integer"
+        },
+        "turn_nodes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Turn Nodes",
+          "type": "integer"
+        },
+        "turn_started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Started At"
+        },
+        "turn_understand_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Turn Understand Calls",
+          "type": "integer"
+        }
+      },
+      "title": "BudgetsUsed",
+      "type": "object"
+    },
+    "Decision": {
+      "additionalProperties": false,
+      "description": "Resultado guardado de una decisión (`decide`): valor, probabilidades y proveedor (M0 §2.6).",
+      "properties": {
+        "decision_id": {
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "model_version": {
+          "title": "Model Version",
+          "type": "string"
+        },
+        "p_cal": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "P Cal",
+          "type": "object"
+        },
+        "provider_used": {
+          "title": "Provider Used",
+          "type": "string"
+        },
+        "value": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Value",
+          "type": "object"
+        }
+      },
+      "required": [
+        "decision_id",
+        "value",
+        "p_cal",
+        "provider_used",
+        "model_version"
+      ],
+      "title": "Decision",
+      "type": "object"
+    },
+    "EncryptedBlob": {
+      "additionalProperties": false,
+      "description": "`token_map` cifrado (lo produce M7). Base64.",
+      "properties": {
+        "ciphertext": {
+          "title": "Ciphertext",
+          "type": "string"
+        },
+        "kid": {
+          "title": "Kid",
+          "type": "string"
+        },
+        "nonce": {
+          "title": "Nonce",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kid",
+        "nonce",
+        "ciphertext"
+      ],
+      "title": "EncryptedBlob",
+      "type": "object"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "Fact": {
+      "additionalProperties": false,
+      "description": "Hecho verificado con su origen (tool, compute, identidad o conocimiento); vista `full` (M0 §2.6).",
+      "properties": {
+        "fact_id": {
+          "title": "Fact Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/FactSource"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "fact_id",
+        "value",
+        "source",
+        "ts"
+      ],
+      "title": "Fact",
+      "type": "object"
+    },
+    "FactSource": {
+      "additionalProperties": false,
+      "description": "Origen de un hecho: tipo, referencia y entradas (M0 §2.6).",
+      "properties": {
+        "inputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "tool",
+            "compute",
+            "identity",
+            "knowledge",
+            "agent"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "FactSource",
+      "type": "object"
+    },
+    "InvalidationReason": {
+      "description": "Motivos por los que se invalida o cancela una acción (M0 §2.6).",
+      "enum": [
+        "cancel",
+        "abandoned",
+        "interrupt",
+        "escalated",
+        "token_expired",
+        "max_attempts",
+        "denied_by_user",
+        "args_changed"
+      ],
+      "title": "InvalidationReason",
+      "type": "string"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "OnBehalfOf": {
+      "additionalProperties": false,
+      "description": "Delegación firmada por el emisor de asignaciones, atada al asesor `grantee` (ADR 0006).",
+      "properties": {
+        "exp": {
+          "format": "date-time",
+          "title": "Exp",
+          "type": "string"
+        },
+        "grant_ref": {
+          "minLength": 1,
+          "title": "Grant Ref",
+          "type": "string"
+        },
+        "grantee": {
+          "$ref": "#/$defs/PrincipalKey"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Scopes",
+          "type": "array"
+        },
+        "subject": {
+          "$ref": "#/$defs/SubjectRef"
+        }
+      },
+      "required": [
+        "subject",
+        "grant_ref",
+        "grantee",
+        "exp"
+      ],
+      "title": "OnBehalfOf",
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "Resultado final de un run (M0 §2.7).",
+      "enum": [
+        "resolved",
+        "abstained",
+        "cancelled",
+        "clarify_exhausted",
+        "completed",
+        "failed",
+        "abandoned",
+        "escalated",
+        "transferred"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "PageMeta": {
+      "additionalProperties": false,
+      "description": "Metadatos de una página de conocimiento compatible con OKF (ADR 0015).",
+      "properties": {
+        "anchor": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor"
+        },
+        "approved_by": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approved By"
+        },
+        "audience": {
+          "enum": [
+            "public",
+            "internal",
+            "agent_only"
+          ],
+          "title": "Audience",
+          "type": "string"
+        },
+        "lang": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Lang",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$",
+          "title": "Path",
+          "type": "string"
+        },
+        "snapshot": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./@-]{0,127}$",
+          "title": "Snapshot",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "approved"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "translation_of": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translation Of"
+        },
+        "type": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "valid_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid From"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        }
+      },
+      "required": [
+        "path",
+        "snapshot",
+        "type",
+        "audience",
+        "status",
+        "lang"
+      ],
+      "title": "PageMeta",
+      "type": "object"
+    },
+    "PageView": {
+      "additionalProperties": false,
+      "description": "Una página (o una sección) ya proyectada a la vista `model` (M7). Se guarda en `RunState.pages`.\n\n`ref` es `ruta@snapshot#ancla` y coincide con `meta`. El contenido es el de la vista `model`: nunca lleva\nPII en claro, y si la página viene de una fuente externa llega envuelto como `untrusted_text`.",
+      "properties": {
+        "content_model": {
+          "title": "Content Model",
+          "type": "string"
+        },
+        "meta": {
+          "$ref": "#/$defs/PageMeta"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "meta",
+        "content_model"
+      ],
+      "title": "PageView",
+      "type": "object"
+    },
+    "PendingIntent": {
+      "additionalProperties": false,
+      "description": "Intención mencionada por el usuario que queda en cola tras el flow activo (M0 §2.6).",
+      "properties": {
+        "flow": {
+          "title": "Flow",
+          "type": "string"
+        },
+        "mention_order": {
+          "minimum": 0,
+          "title": "Mention Order",
+          "type": "integer"
+        },
+        "priority": {
+          "title": "Priority",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "flow",
+        "priority",
+        "mention_order"
+      ],
+      "title": "PendingIntent",
+      "type": "object"
+    },
+    "Principal": {
+      "additionalProperties": false,
+      "description": "Quien invoca, ya verificado por M9. Snapshot sin credencial ni secretos.",
+      "properties": {
+        "attrs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Attrs",
+          "type": "object"
+        },
+        "auth": {
+          "$ref": "#/$defs/AuthInfo"
+        },
+        "exp": {
+          "format": "date-time",
+          "title": "Exp",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Scopes",
+          "type": "array"
+        },
+        "type": {
+          "$ref": "#/$defs/PrincipalType"
+        }
+      },
+      "required": [
+        "type",
+        "auth",
+        "exp"
+      ],
+      "title": "Principal",
+      "type": "object"
+    },
+    "PrincipalKey": {
+      "additionalProperties": false,
+      "description": "Identidad comparable de un principal (tipo e id), sin credenciales (M0 §2.3).",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "type": {
+          "$ref": "#/$defs/PrincipalType"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "PrincipalKey",
+      "type": "object"
+    },
+    "PrincipalType": {
+      "description": "Tipo de principal que invoca el motor (ADR 0006, M0 §2.3).",
+      "enum": [
+        "customer",
+        "advisor",
+        "service",
+        "builder"
+      ],
+      "title": "PrincipalType",
+      "type": "string"
+    },
+    "RunOrigin": {
+      "additionalProperties": false,
+      "description": "Why a run exists when another run transferred to it (spec §3.3, P2, P5).",
+      "properties": {
+        "depth": {
+          "exclusiveMinimum": 0,
+          "title": "Depth",
+          "type": "integer"
+        },
+        "from_agent": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "from_event_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "From Event Hash",
+          "type": "string"
+        },
+        "from_release_id": {
+          "title": "From Release Id",
+          "type": "string"
+        },
+        "from_run_id": {
+          "title": "From Run Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "transfer",
+          "title": "Kind",
+          "type": "string"
+        },
+        "transfer_id": {
+          "title": "Transfer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "transfer_id",
+        "from_run_id",
+        "from_agent",
+        "from_release_id",
+        "from_event_hash",
+        "depth"
+      ],
+      "title": "RunOrigin",
+      "type": "object"
+    },
+    "Slot": {
+      "additionalProperties": false,
+      "description": "Valor de un slot recolectado, `claimed` o `validated`, y el turno de origen (M0 §2.6).",
+      "properties": {
+        "source_turn": {
+          "minimum": 0,
+          "title": "Source Turn",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "claimed",
+            "validated"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "value",
+        "status",
+        "source_turn"
+      ],
+      "title": "Slot",
+      "type": "object"
+    },
+    "SubjectRef": {
+      "additionalProperties": false,
+      "description": "Referencia al sujeto de un run (tipo y referencia opaca) (M0 §2.3).",
+      "properties": {
+        "kind": {
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "minLength": 1,
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "SubjectRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Estado completo de un run; se actualiza con `model_copy(update=...)` y se revalida (M0 §2.6).",
+  "properties": {
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/Action"
+      },
+      "title": "Actions",
+      "type": "array"
+    },
+    "active_flow": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActiveFlow"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "agent": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "awaiting": {
+      "$ref": "#/$defs/Awaiting",
+      "default": "none"
+    },
+    "awaiting_node_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Awaiting Node Id"
+    },
+    "budgets_used": {
+      "$ref": "#/$defs/BudgetsUsed"
+    },
+    "clarifications_used": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Clarifications Used",
+      "type": "integer"
+    },
+    "closed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Closed At"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "decisions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Decision"
+      },
+      "title": "Decisions",
+      "type": "object"
+    },
+    "degraded_turns": {
+      "items": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "title": "Degraded Turns",
+      "type": "array"
+    },
+    "facts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Fact"
+      },
+      "title": "Facts",
+      "type": "object"
+    },
+    "handoff_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Handoff Ref"
+    },
+    "inactive_after": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Inactive After"
+    },
+    "last_activity_at": {
+      "format": "date-time",
+      "title": "Last Activity At",
+      "type": "string"
+    },
+    "locale": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Locale",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "conversational",
+        "task"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "node_attempts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "title": "Node Attempts",
+      "type": "object"
+    },
+    "on_behalf_of": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OnBehalfOf"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "open_questions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Open Questions",
+      "type": "array"
+    },
+    "origin": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunOrigin"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Outcome"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "pages": {
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*$": {
+          "items": {
+            "$ref": "#/$defs/PageView"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Pages",
+      "type": "object"
+    },
+    "pending_intents": {
+      "items": {
+        "$ref": "#/$defs/PendingIntent"
+      },
+      "title": "Pending Intents",
+      "type": "array"
+    },
+    "pending_offer": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pending Offer"
+    },
+    "principal": {
+      "$ref": "#/$defs/Principal"
+    },
+    "release": {
+      "title": "Release",
+      "type": "string"
+    },
+    "repair_turns_used": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Repair Turns Used",
+      "type": "integer"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "slots": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Slot"
+      },
+      "title": "Slots",
+      "type": "object"
+    },
+    "state_version": {
+      "default": 0,
+      "minimum": 0,
+      "title": "State Version",
+      "type": "integer"
+    },
+    "status": {
+      "default": "open",
+      "enum": [
+        "open",
+        "closed",
+        "escalated"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "subject": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SubjectRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "token_map": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EncryptedBlob"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "turn_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Turn Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "run_id",
+    "release",
+    "agent",
+    "principal",
+    "mode",
+    "locale",
+    "created_at",
+    "last_activity_at"
+  ],
+  "title": "RunState",
+  "type": "object"
+}

@@ -1,0 +1,35 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Origen de un hecho: tipo, referencia y entradas (M0 §2.6).",
+  "properties": {
+    "inputs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Inputs",
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "tool",
+        "compute",
+        "identity",
+        "knowledge",
+        "agent"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "ref": {
+      "title": "Ref",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "ref"
+  ],
+  "title": "FactSource",
+  "type": "object"
+}

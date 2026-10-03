@@ -1,0 +1,169 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "CalibrationRef": {
+      "additionalProperties": false,
+      "description": "Método de calibración de un modelo de decisión y la corrida que lo produjo (M0 §2.4).",
+      "properties": {
+        "method": {
+          "enum": [
+            "none",
+            "isotonic",
+            "platt",
+            "temperature"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run"
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "title": "CalibrationRef",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ProviderSpec": {
+      "additionalProperties": false,
+      "description": "Proveedor de una decisión (jev, classifier, llm_structured o rule) y su configuración.",
+      "properties": {
+        "config": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Config",
+          "type": "object"
+        },
+        "provider": {
+          "enum": [
+            "jev",
+            "classifier",
+            "llm_structured",
+            "rule"
+          ],
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "ProviderSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Definición de un modelo de decisión: esquema de salida, proveedores y calibración (M0 §2.4).",
+  "properties": {
+    "calibrated_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Calibrated Fields",
+      "type": "array"
+    },
+    "calibration": {
+      "$ref": "#/$defs/CalibrationRef"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "input_view": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Input View",
+      "type": "array"
+    },
+    "output_schema": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Output Schema",
+      "type": "object"
+    },
+    "providers": {
+      "items": {
+        "$ref": "#/$defs/ProviderSpec"
+      },
+      "minItems": 1,
+      "title": "Providers",
+      "type": "array"
+    },
+    "thresholds_from": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Thresholds From"
+    },
+    "version": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "output_schema",
+    "calibrated_fields",
+    "providers",
+    "calibration"
+  ],
+  "title": "DecisionModelDef",
+  "type": "object"
+}

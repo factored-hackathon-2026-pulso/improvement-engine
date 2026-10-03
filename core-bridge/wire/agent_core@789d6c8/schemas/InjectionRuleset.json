@@ -1,0 +1,65 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "InjectionRule": {
+      "additionalProperties": false,
+      "description": "Regla de detección de inyección: regex o frase literal (M0 §2.4).",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "regex",
+            "phrase"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "pattern": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "pattern",
+        "kind"
+      ],
+      "title": "InjectionRule",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Conjunto versionado de reglas de detección de inyección (M0 §2.4).",
+  "properties": {
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/InjectionRule"
+      },
+      "title": "Rules",
+      "type": "array"
+    },
+    "version": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "rules"
+  ],
+  "title": "InjectionRuleset",
+  "type": "object"
+}

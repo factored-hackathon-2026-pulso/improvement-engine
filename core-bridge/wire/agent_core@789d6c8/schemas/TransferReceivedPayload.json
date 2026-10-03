@@ -1,0 +1,56 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Fingerprint": {
+      "additionalProperties": false,
+      "description": "Huella con clave (ADR 0008): `value = HMAC-SHA256(k[kid], JCS(dato))`.",
+      "properties": {
+        "alg": {
+          "const": "HMAC-SHA256",
+          "title": "Alg",
+          "type": "string"
+        },
+        "kid": {
+          "title": "Kid",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alg",
+        "kid",
+        "value"
+      ],
+      "title": "Fingerprint",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload of `transfer_received` (audit view).",
+  "properties": {
+    "accepted_slots": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Accepted Slots",
+      "type": "array"
+    },
+    "packet_fp": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "transfer_id": {
+      "title": "Transfer Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "transfer_id",
+    "accepted_slots",
+    "packet_fp"
+  ],
+  "title": "TransferReceivedPayload",
+  "type": "object"
+}

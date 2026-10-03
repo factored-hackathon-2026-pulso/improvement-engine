@@ -1,0 +1,67 @@
+{
+  "$id": "CoreAuthoringDryRun.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "candidate_hash": {
+      "oneOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "proposal_created": {
+      "const": false
+    },
+    "runtime_profile": {
+      "const": "contract_mock"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "violations": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule",
+          "path",
+          "message"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "valid",
+    "candidate_hash",
+    "violations",
+    "proposal_created",
+    "runtime_profile"
+  ],
+  "title": "CoreAuthoringDryRun",
+  "type": "object"
+}

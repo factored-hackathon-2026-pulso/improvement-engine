@@ -1,0 +1,59 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Consumo acumulado de presupuestos del run y del turno (M0 §2.6).",
+  "properties": {
+    "run_cost": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0",
+      "title": "Run Cost"
+    },
+    "run_tokens": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Run Tokens",
+      "type": "integer"
+    },
+    "turn_model_calls": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Turn Model Calls",
+      "type": "integer"
+    },
+    "turn_nodes": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Turn Nodes",
+      "type": "integer"
+    },
+    "turn_started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Turn Started At"
+    },
+    "turn_understand_calls": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Turn Understand Calls",
+      "type": "integer"
+    }
+  },
+  "title": "BudgetsUsed",
+  "type": "object"
+}

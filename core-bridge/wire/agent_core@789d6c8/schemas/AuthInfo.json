@@ -1,0 +1,38 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Nivel de autenticación de un principal y el instante en que lo obtuvo (ADR 0010).",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "level": {
+      "$ref": "#/$defs/AuthLevel"
+    },
+    "simulated": {
+      "default": false,
+      "title": "Simulated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "level",
+    "at"
+  ],
+  "title": "AuthInfo",
+  "type": "object"
+}

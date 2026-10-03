@@ -1,0 +1,18 @@
+{
+  "properties": {
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "release_id": {
+      "title": "Release Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "release_id"
+  ],
+  "title": "_Promote",
+  "type": "object"
+}

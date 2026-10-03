@@ -1,0 +1,14 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Estado del resultado de una tool (M0 §2.8).",
+  "enum": [
+    "ok",
+    "error",
+    "timeout",
+    "denied",
+    "uncertain",
+    "step_up_required"
+  ],
+  "title": "ToolStatus",
+  "type": "string"
+}

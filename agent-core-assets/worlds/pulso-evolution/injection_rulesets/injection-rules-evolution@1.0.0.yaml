@@ -1,0 +1,6 @@
+id: injection-rules-evolution
+version: 1.0.0
+rules:
+  - {id: ignore-instructions-en, kind: regex, pattern: "\b(ignore|forget|disregard)\b.{0,30}\b(instructions|rules|guidelines)\b"}
+  - {id: role-override-en, kind: regex, pattern: "\b(you are now|act as|pretend to be)\b"}
+  - {id: system-prompt, kind: phrase, pattern: "system prompt"}

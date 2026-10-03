@@ -1,0 +1,77 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Filter on a field of the event catalog.",
+  "properties": {
+    "field": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Field",
+      "type": "string"
+    },
+    "op": {
+      "enum": [
+        "eq",
+        "ne",
+        "in",
+        "lt",
+        "le",
+        "gt",
+        "ge"
+      ],
+      "title": "Op",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      ],
+      "title": "Value"
+    }
+  },
+  "required": [
+    "field",
+    "op",
+    "value"
+  ],
+  "title": "Predicate",
+  "type": "object"
+}
