@@ -1,0 +1,42 @@
+[project]
+name = "pulso-local-identity"
+version = "0.1.0"
+description = "Sandbox-only local human issuer (session assertions + Core human Principal JWS). Never remote."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "cryptography>=43",
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "pydantic>=2.9,<3",
+    "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.7", "mypy>=1.13"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+markers = [
+    "proof: needs the pinned agent-core checkout (and PULSO_TEST_PG_ADMIN for the real Postgres 16 proof)",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+mypy_path = "src"
