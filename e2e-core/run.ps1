@@ -44,10 +44,22 @@ try {
     # The runtime and the exporter read these URLs from compose interpolation; both point at the fixtures double.
     $env:PULSO_CONTROL_API_URL = 'http://e2e-fixtures:8700'
     $env:PULSO_LAB_BROKER_URL = 'http://e2e-fixtures:8700'
-    & pwsh -NoProfile -File (Join-Path $core 'start.ps1') -Namespace $Namespace -Profile real_local -Image $base
-    if ($LASTEXITCODE -ne 0) { throw "start.ps1 failed (exit $LASTEXITCODE)" }
+    # The runtime's llm_gateway readiness probe reaches the scripted gateway double while it starts, so the fixtures
+    # container must come up as soon as the keys volume exists (platform-sim mounts it), while start.ps1 is still running.
+    $startProc = Start-Process pwsh -ArgumentList @('-NoProfile', '-File', (Join-Path $core 'start.ps1'), '-Namespace', $Namespace, '-Profile', 'real_local', '-Image', $base) -PassThru -NoNewWindow
+    $project = "pulso-$Namespace"
+    $deadline = (Get-Date).AddSeconds(300); $simUp = $false
+    while ((Get-Date) -lt $deadline -and -not $startProc.HasExited -and -not $simUp) {
+        $h = (& $podman --connection pulso-dev inspect "$project-platform-sim-1" --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>$null) -join ''
+        if ($h.Trim() -eq 'healthy') { $simUp = $true } else { Start-Sleep -Seconds 2 }
+    }
+    if (-not $simUp) { $startProc.WaitForExit(); throw "platform-sim never became healthy (start.ps1 exit $($startProc.ExitCode))" }
     & $py -m codex_standin.stack fixtures --ns $Namespace --dir $dir
     if ($LASTEXITCODE -ne 0) { throw 'fixtures start failed' }
+    $startProc.WaitForExit()
+    if ($startProc.ExitCode -ne 0) { throw "start.ps1 failed (exit $($startProc.ExitCode))" }
+    & $py -m codex_standin.stack finish --ns $Namespace --dir $dir
+    if ($LASTEXITCODE -ne 0) { throw 'stack finish failed' }
     $env:E2E_ENV_FILE = Join-Path $dir 'e2e-env.json'
     $env:E2E_KEYS_FILE = Join-Path $dir 'e2e-keys.json'
     $env:E2E_REPORT = Join-Path $out 'e2e-report.json'

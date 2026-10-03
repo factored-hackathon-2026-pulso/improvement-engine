@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 import time
 from collections import defaultdict
@@ -398,11 +399,17 @@ def create_app(world: World, ingest: FastAPI | None = None) -> FastAPI:
         return JSONResponse({"state": "closed", "final_state_ref": f"final:{sid}"})
 
     # ---- scripted llm-gateway service (the model double): POST /llm/v1/generate (agent-core HttpLLMGateway) ----
+
     @app.post("/llm/v1/generate")
     async def generate(request: Request) -> JSONResponse:
-        if not request.headers.get("authorization", "").startswith("Bearer "):
-            return _err(401, "unauthorized")
-        body = json.loads(await request.body() or b"{}")
+        expected = os.environ.get("E2E_GATEWAY_TOKEN")  # the stack's generated consumer token (set when the double starts)
+        auth = request.headers.get("authorization", "")
+        if not auth.startswith("Bearer ") or (expected and auth != f"Bearer {expected}"):
+            return JSONResponse({"error": {"kind": "unauthorized", "message": "bad token"}}, status_code=401)
+        raw = await request.body()
+        if not raw.strip():  # the runtime's readiness probe: valid token + empty body = 400, no model call (gateway semantics)
+            return JSONResponse({"error": {"kind": "bad_request", "message": "empty body"}}, status_code=400)
+        body = json.loads(raw)
         system = str(body.get("prompt", ""))  # the registry prompt text (carries the stage marker)
         user = json.dumps(body.get("inputs", {}), sort_keys=True)
         with world.lock:

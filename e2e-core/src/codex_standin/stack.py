@@ -92,7 +92,7 @@ def prepare(ns: str, out: Path) -> dict[str, Any]:
 
 
 def read_volume_file(ns: str, name: str) -> str:
-    return podman("exec", f"{project(ns)}-core-runtime-1", "cat", f"/run/pulso-keys/{name}")
+    return podman("exec", f"{project(ns)}-platform-sim-1", "cat", f"/run/pulso-keys/{name}")
 
 
 def build_verify_keys(cb: dict[str, Any], service: dict[str, Any], trust: dict[str, Any]) -> dict[str, Any]:
@@ -113,7 +113,6 @@ def verify_keys(ns: str) -> dict[str, Any]:
 
 
 def start_fixtures(ns: str, ctx_dir: Path) -> dict[str, Any]:
-    st = state_of(ns)
     keys = json.loads((ctx_dir / "e2e-keys.json").read_text(encoding="ascii"))
     # the control-api -> core-bridge seed is the stack's own (core-keygen); stand-ins read it, nothing is generated here
     keys["service_seed"] = read_volume_file(ns, "control-api-core-bridge.key").strip()
@@ -127,7 +126,7 @@ def start_fixtures(ns: str, ctx_dir: Path) -> dict[str, Any]:
            "--cgroups=disabled", "--pids-limit=0", "--label", "com.pulso.team=claude", "--label",
            f"com.pulso.namespace={ns}", "--label", "com.pulso.role=double", "--label",
            "com.pulso.piece=e2e-fixtures", "-p", f"127.0.0.1:{port}:{FIXTURE_PORT}",
-           "-e", "PYTHONPATH=/opt/e2e:/sim:/opt/pulso/lib", "-e", f"E2E_PORT={FIXTURE_PORT}",
+           "-e", "PYTHONPATH=/opt/e2e:/sim:/opt/pulso/lib", "-e", f"E2E_PORT={FIXTURE_PORT}", "-e", "E2E_GATEWAY_TOKEN=" + secret_of(ns, "AGENTCORE_LLM_GATEWAY_TOKEN"),
            "-e", "E2E_VERIFY_KEYS=" + json.dumps(verify_keys(ns), separators=(",", ":")),
            "--entrypoint", json.dumps(["python", "-m", "codex_standin.serve"]), sim_image)
     stage = Path(tempfile.mkdtemp(prefix="e2e-stage-"))
@@ -141,8 +140,17 @@ def start_fixtures(ns: str, ctx_dir: Path) -> dict[str, Any]:
         shutil.rmtree(stage, ignore_errors=True)
     podman("start", name)
     info = {"container": name, "host_port": port, "url": f"http://127.0.0.1:{port}", "internal_url": fixtures_url(),
-            "namespace": ns, "connection": CONNECTION, "ports": st["ports"], "image": st["image"],
-            "expected_image_digest": st["expected_image_digest"], "project": project(ns)}
+            "namespace": ns, "connection": CONNECTION, "project": project(ns)}
+    (ctx_dir / "e2e-fixtures.json").write_text(json.dumps(info), encoding="ascii")
+    return info
+
+
+def finish_env(ns: str, ctx_dir: Path) -> dict[str, Any]:
+    """After start.ps1 completed (state.json exists): merge the stack state into the driver's env file. The fixtures
+    double must already be up while the runtime starts (its llm_gateway readiness probe reaches it), hence two steps."""
+    st = state_of(ns)
+    info = json.loads((ctx_dir / "e2e-fixtures.json").read_text(encoding="ascii"))
+    info.update({"ports": st["ports"], "image": st["image"], "expected_image_digest": st["expected_image_digest"]})
     (ctx_dir / "e2e-env.json").write_text(json.dumps(info), encoding="ascii")
     return info
 
@@ -162,7 +170,7 @@ def cleanup(ns: str, ctx_dir: Path | None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["prepare", "fixtures", "cleanup"])
+    ap.add_argument("cmd", choices=["prepare", "fixtures", "finish", "cleanup"])
     ap.add_argument("--ns", default="")
     ap.add_argument("--dir", default="")
     ap.add_argument("--base", default="")
@@ -176,6 +184,9 @@ def main(argv: list[str] | None = None) -> int:
     elif a.cmd == "fixtures":
         assert d is not None
         print(json.dumps(start_fixtures(a.ns, d)))
+    elif a.cmd == "finish":
+        assert d is not None
+        print(json.dumps(finish_env(a.ns, d)))
     else:
         cleanup(a.ns, d)
         print("cleaned")
