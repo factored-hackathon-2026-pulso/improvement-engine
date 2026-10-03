@@ -16,7 +16,7 @@
     "control of eval/clock is in-process (Harness); the served app has no /_sim"
   ],
   "failed": [],
-  "fixtures_digest": "0b16b15f57b37830d5c9428a065c2316c64a8b897a653e523972b645d33e7e0f",
+  "fixtures_digest": "6fafa4139304ee2002f60020b3f3ebeb3ba9e7a8cd32ab0616d5d1cc9525dafb",
   "label": "real_local_scripted",
   "mock_only": [
     "sim-info-contract"

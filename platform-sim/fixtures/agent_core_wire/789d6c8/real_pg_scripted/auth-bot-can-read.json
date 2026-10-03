@@ -25,7 +25,14 @@
       "path": "/v1/registry/releases/{base_release}",
       "scalars": {
         "agent_id": "atencion",
+        "injection_ruleset.id": "injection-rules",
+        "interrupt_ids": [
+          "fraude"
+        ],
+        "language_detection.id": "lang-es-pt",
+        "max_input_chars": 4000,
         "published_by": "root",
+        "release_id": "rel-98130317a1003849",
         "status": "active"
       },
       "shape": {

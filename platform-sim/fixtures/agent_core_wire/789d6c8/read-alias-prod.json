@@ -16,6 +16,7 @@
       "scalars": {
         "agent_id": "atencion",
         "alias": "prod",
+        "release_id": "rel-98130317a1003849",
         "status": "active"
       },
       "shape": {

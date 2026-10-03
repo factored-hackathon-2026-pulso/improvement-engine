@@ -28,7 +28,8 @@ WIRE = Path(__file__).resolve().parents[3] / "core-bridge" / "wire" / f"agent_co
 GOLDEN_DRAFT = WIRE / "golden" / "golden_draft_disputa.json"
 
 STABLE_SCALARS = {"state", "rev", "verdict", "status", "origin", "decision", "alias", "changed_vs_base", "title",
-                  "agent_id", "created_by", "actor", "reason", "base_release_id", "released_by", "published_by"}
+                  "agent_id", "created_by", "actor", "reason", "base_release_id", "released_by", "published_by",
+                  "release_id"}
 CHECKED_HEADERS = ("www-authenticate", "retry-after", "cache-control", "allow", "location")
 OPAQUE_KEYS = {"content", "args", "locales", "seed", "scenarios", "steps"}  # user content: not part of the shape
 _REL = re.compile(r"rel-[0-9a-f]{16}")
@@ -219,6 +220,14 @@ def _scalars(body: Any, only_rules: list[str] | None = None) -> dict[str, Any]:
                 # Release ids are hashes of Core's normalised entities (not reproducible by a mock): only the seeded
                 # base release is stable; any other `rel-<hex16>` is masked.
                 found[k] = "<release_id>" if isinstance(v, str) and _REL.fullmatch(v) and v != BASE_RELEASE_ID else v
+        # N-03 `ReleaseDetail` settings and N-02 alias targets: values, not just shapes (depth-2 shapes hide them).
+        if isinstance(body.get("max_input_chars"), int):
+            found["max_input_chars"] = body["max_input_chars"]
+        for key in ("language_detection", "injection_ruleset"):
+            if isinstance(body.get(key), dict) and isinstance(body[key].get("id"), str):
+                found[f"{key}.id"] = body[key]["id"]
+        if isinstance(body.get("interrupts"), list):
+            found["interrupt_ids"] = sorted(str(i.get("id")) for i in body["interrupts"] if isinstance(i, dict))
         if isinstance(body.get("proposal"), dict):
             for k, v in _scalars(body["proposal"]).items():
                 found[f"proposal.{k}"] = v

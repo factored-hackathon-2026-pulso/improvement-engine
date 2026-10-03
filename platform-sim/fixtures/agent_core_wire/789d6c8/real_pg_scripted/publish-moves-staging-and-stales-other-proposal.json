@@ -441,7 +441,14 @@
       "scalars": {
         "agent_id": "atencion",
         "base_release_id": "rel-98130317a1003849",
+        "injection_ruleset.id": "injection-rules",
+        "interrupt_ids": [
+          "fraude"
+        ],
+        "language_detection.id": "lang-es-pt",
+        "max_input_chars": 4000,
         "published_by": "ana",
+        "release_id": "<release_id>",
         "status": "active"
       },
       "shape": {
