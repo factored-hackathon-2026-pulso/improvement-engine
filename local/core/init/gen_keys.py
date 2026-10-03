@@ -2,7 +2,9 @@
 
 Idempotent: existing key files are kept (a second run changes nothing). Files (names, not values, are documented):
   identity.json / staff.json         public keys the runtime verifies (formats of agent_core.adapters.identity_keys)
-  bridge-{identity,staff,callback}.json   the bridge's private signers (credentials.issuer.load_signer format)
+  bridge-{identity,staff,callback,executor}.json   the bridge's private signers (credentials.issuer.load_signer format);
+                                     the executor key (A03 iii, executor -> lab-broker) is a distinct keypair, never the callback key
+  lab-broker-trust.json              PUBLIC half of the executor key, in the fixture-key format of the lab-broker double
   service.json                       public service keys (internal.auth.load_service_keys format)
   exporter-control-api.key / exporter-lab-broker.key   exporter private seeds (b64url, one line)
 Runs as root inside the image, then hands ownership to the runtime uid (10001).
@@ -33,9 +35,9 @@ def new_pair() -> tuple[str, str]:
     return b64u(seed), b64u(pub)
 
 
-def write(path: Path, text: str) -> None:
+def write(path: Path, text: str, mode: int = 0o640) -> None:
     path.write_text(text, encoding="ascii")
-    os.chmod(path, 0o640)
+    os.chmod(path, mode)
     os.chown(path, UID, UID)
 
 
@@ -46,7 +48,7 @@ def main(out: Path) -> int:
         print("core-keygen: keys already present, nothing written")
         return 0
     signers: dict[str, tuple[str, str, str]] = {}
-    for name in ("bridge-identity", "bridge-staff", "bridge-callback"):
+    for name in ("bridge-identity", "bridge-staff", "bridge-callback", "bridge-executor"):
         seed, pub = new_pair()
         kid = f"{name}-local"
         signers[name] = (kid, seed, pub)
@@ -55,6 +57,8 @@ def main(out: Path) -> int:
         "principal_keys": {signers["bridge-identity"][0]: signers["bridge-identity"][2]},
         "delegation_keys": {signers["bridge-callback"][0]: signers["bridge-callback"][2]}}))
     write(out / "staff.json", json.dumps({"principal_keys": {signers["bridge-staff"][0]: signers["bridge-staff"][2]}}))
+    ex_kid, _, ex_pub = signers["bridge-executor"]
+    write(out / "lab-broker-trust.json", json.dumps({"keys": {ex_kid: {"iss": "core-bridge", "aud": "lab-broker", "key": ex_pub}}}), 0o644)  # public only
     service: dict[str, dict[str, str]] = {}
     for aud in ("control-api", "lab-broker"):
         seed, pub = new_pair()

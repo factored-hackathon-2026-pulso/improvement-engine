@@ -116,3 +116,21 @@ Describe 'evidence' {
         @(Merge-Doubles -Runtime @('x: stand-in') -Containers @('platform-sim')).Count | Should Be 2
     }
 }
+
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) '..\lib\keys.ps1')
+Describe 'executor key verdict' {
+    It 'passes only for a distinct executor key trusted by the lab-broker' {
+        (Get-ExecutorKeyVerdict '{"executor_present":true,"callback_present":true,"distinct":true,"trusted_by_lab_broker":true}').status | Should Be 'pass'
+    }
+    It 'fails closed when missing, equal to the callback key, untrusted or unparsable' {
+        (Get-ExecutorKeyVerdict '{"executor_present":false,"distinct":false,"trusted_by_lab_broker":false}').status | Should Be 'fail'
+        (Get-ExecutorKeyVerdict '{"executor_present":true,"distinct":false,"trusted_by_lab_broker":true}').detail | Should Match 'callback'
+        (Get-ExecutorKeyVerdict '{"executor_present":true,"distinct":true,"trusted_by_lab_broker":false}').detail | Should Match 'trust'
+        (Get-ExecutorKeyVerdict 'garbage').status | Should Be 'fail'
+    }
+    It 'probe args are python -c with no key values' {
+        $a = Get-ExecutorKeyProbeArgs
+        $a[0] | Should Be 'python'
+        $a[2] | Should Not Match '"key": "'
+    }
+}

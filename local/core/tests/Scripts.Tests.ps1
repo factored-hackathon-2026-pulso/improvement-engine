@@ -74,6 +74,14 @@ Describe 'reset.ps1' {
     }
 }
 
+Describe 'doctor executor key check' {
+    It 'reports bridge_executor_key (skipped without engine)' {
+        $r = Invoke-Script 'doctor.core.ps1' @('-Json', '-SkipEngine')
+        $c = @($r.out | ConvertFrom-Json) | Where-Object check -eq 'bridge_executor_key'
+        $c.status | Should Be 'skipped'
+    }
+}
+
 Describe 'doctor.core.ps1 -Json' {
     It 'emits an array of {check,status,code,detail}' {
         $r = Invoke-Script 'doctor.core.ps1' @('-Json', '-SkipEngine')

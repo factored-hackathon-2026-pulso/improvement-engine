@@ -12,7 +12,7 @@ param([Parameter(Mandatory)][string]$Namespace, [string]$BaseUrl, [string]$Token
       [string]$ReportPath, [string]$Machine = 'pulso-dev', [switch]$SkipSeedCheck, [switch]$SkipExporter,
       [string]$ExpectedImageDigest)
 $ErrorActionPreference = 'Stop'
-foreach ($f in 'errors', 'machine', 'namespace', 'evidence', 'runner') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
+foreach ($f in 'errors', 'machine', 'namespace', 'evidence', 'runner', 'keys') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
 $started = [DateTime]::UtcNow
 $suites = New-Object System.Collections.Generic.List[object]
 $commands = New-Object System.Collections.Generic.List[string]
@@ -60,6 +60,11 @@ try {
     if ($SkipSeedCheck -or -not $Exec) { Add-Check 'seed_verification' 'not_run' 'no engine access in this mode' } else {
         $q = (Invoke-Podman -Connection $conn exec "$project-core-postgres-1" psql -U postgres -d core_runtime -Atc "select count(*) from pulso_seed_state") -join ''
         Add-Check 'seed_verification' $(if ([int]$q.Trim() -ge 1) { 'pass' } else { 'fail' }) "pulso_seed_state rows=$($q.Trim())"
+    }
+    # 4b. executor key (A03 iii): present, distinct from the callback key, trusted by the lab-broker double
+    if (-not $Exec) { Add-Check 'executor_key' 'not_run' 'no engine access in this mode' } else {
+        $ek = Get-ExecutorKeyVerdict -ProbeOutput ((Invoke-Podman -Connection $conn exec "$project-core-runtime-1" @(Get-ExecutorKeyProbeArgs)) -join '')
+        Add-Check 'executor_key' $ek.status $ek.detail
     }
     # 5. scripted task: needs the L3 task route plus a model/broker; never claimed
     Add-Check 'scripted_task' 'not_run' 'no scripted task fixture: core-tasks/invoke needs L3 wiring and a broker double with a model script'

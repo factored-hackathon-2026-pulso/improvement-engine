@@ -25,6 +25,22 @@ Describe 'verify-fragments.ps1' {
     }
 }
 
+Describe 'ci.fragment.yml' {
+    It 'is the full job set of core-bridge/scripts/ci.ps1 and every job calls that script' {
+        $ci = Get-Content (Join-Path $repo 'core-bridge\scripts\ci.ps1') -Raw
+        $set = [regex]::Match($ci, "ValidateSet\(([^)]*)\)").Groups[1].Value
+        $jobs = @([regex]::Matches($set, "'([a-z0-9-]+)'") | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne 'all' })
+        $frag = Get-Content (Join-Path $core 'fragments\ci.fragment.yml') -Raw
+        $called = @([regex]::Matches($frag, 'core-bridge/scripts/ci\.ps1 -Job ([a-z0-9-]+)') | ForEach-Object { $_.Groups[1].Value })
+        ($called | Sort-Object) -join ',' | Should Be (($jobs | Sort-Object) -join ',')
+        $frag | Should Not Match 'test\.ps1'
+    }
+    It 'passes -PostgresAdmin to PG jobs from a postgres service and does not inline commands' {
+        $frag = Get-Content (Join-Path $core 'fragments\ci.fragment.yml') -Raw
+        $frag | Should Match 'PULSO_TEST_PG_ADMIN'
+    }
+}
+
 Describe 'verify-fragments rejection of unsafe patch entries' {
     It 'rejects a target or fragment path that escapes the repository or is not allowlisted' {
         $bad = Join-Path $env:TEMP 'pulso-bad-patch.json'

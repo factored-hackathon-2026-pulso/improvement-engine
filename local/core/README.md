@@ -13,9 +13,9 @@ names are validated (`machine.registry.json`, namespaces prefixed `claude-`).
 | `compose.standalone.yaml` | overlay that publishes loopback ports derived and probed by `start.ps1` (never fixed 5432/8000). |
 | `start.ps1`, `stop.ps1`, `reset.ps1`, `smoke.ps1`, `doctor.core.ps1` | lifecycle, honest smoke report, diagnostics (`-Json`). |
 | `lib/` | `errors`, `machine`, `namespace`, `ports`, `secrets`, `memory`, `evidence`, `runner` (see ADR `core-bridge/docs/adr/0006`). |
-| `init/` | roles/DB SQL, exporter and eval grants, seed state, `gen_keys.py`, `seed_assets.py`, `probe_version.py`, `synth_chain.py`. |
+| `init/` | roles/DB SQL, exporter and eval grants, seed state, `gen_keys.py` (bridge identity/staff/callback/**executor** signers + `lab-broker-trust.json`), `seed_assets.py`, `probe_version.py`, `synth_chain.py`. |
 | `profiles/*.env.example` | placeholders only; real values are generated into git-ignored `local/.secrets/<ns>/`. |
-| `fragments/` | `ci.fragment.yml` (jobs `contract-drift`, `mock-wire`, `a2-wire`, `real-wire`), `otel-collector.yaml`, `include.fragment.yaml`, declarative `patch.json` for Codex-owned files. |
+| `fragments/` | `ci.fragment.yml` (one job per `core-bridge/scripts/ci.ps1 -Job`: rust, contract-drift, mock-wire, a2-wire, real-wire, lint, core-bridge, platform-sim, agent-core-assets, modules-scan), `otel-collector.yaml`, `include.fragment.yaml`, declarative `patch.json` for Codex-owned files. |
 | `manifests/local-service-manifest.json` | generated from the compose model (`gen-manifest.ps1`). |
 | `doubles/` | `Dockerfile` and `run_doubles.py`: registry mock, bridge mock and ingest fixture in one container (doubles). |
 | `tests/` | Pester (`*.Tests.ps1`) and `test_seed_assets.py`. |
@@ -38,6 +38,16 @@ unavailable, 8 runtime cgroup unavailable, 9 seed failed, 10 demo doubles active
 image digest equals the expected one and `/readyz` passes; otherwise `evidence_target_unproven`. Steps that cannot run are
 `not_run` with a reason, never `pass`. In `real_local` the broker, control-api and ingest are **doubles** (`platform-sim`).
 
+## Executor key (A03 iii)
+
+The runtime requires a separate executor keypair (`PULSO_BRIDGE_EXECUTOR_SIGNER`, default `bridge-executor.json`) and fails
+closed at startup if it is missing or equals the callback key. `core-keygen` writes it with a distinct kid and also writes
+`lab-broker-trust.json` (its PUBLIC half, `iss=core-bridge`, `aud=lab-broker`), which `platform-sim` (the lab-broker double)
+mounts read-only and lists in `/_sim/info` (`lab_broker_trusted_kids`). `doctor.core.ps1` (`bridge_executor_key`) and
+`smoke.ps1 -Exec` (`executor_key`) verify presence, distinctness and trust without printing key material. Keys are
+generated into the `core-keys` volume only, so `reset.ps1` rotates them. The image entrypoints are exactly
+`runtime | exporter | migrate | agentcore`; seeding is the `core-seed` job (`python /init/seed_assets.py`).
+
 ## Podman cgroup workaround
 
 `pulso-dev` cannot start containers with default cgroup handling (`pids` controller). Services carry
@@ -45,8 +55,8 @@ image digest equals the expected one and `/readyz` passes; otherwise `evidence_t
 
 ## Tests
 
-    Invoke-Pester local/core/tests            # Pester 5
-    python -m pytest local/core/tests/test_seed_assets.py
+    Invoke-Pester local/core/tests            # Pester 3.4
+    python -m pytest local/core/tests         # test_seed_assets.py, test_gen_keys.py
 
 ## Known gaps
 

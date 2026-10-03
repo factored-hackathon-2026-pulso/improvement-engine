@@ -25,7 +25,7 @@
       "op": "add_job",
       "anchor": "jobs",
       "fragment_path": "local/core/fragments/ci.fragment.yml",
-      "fragment_sha256": "90dfdcdc111e7834a6685cde5773f661934d60d7fc6be4ea5c5c0bdacddc6ce1",
+      "fragment_sha256": "e3a30af39b0146f611004b3a00ac21495dcbca80d78df9c06785e2482e19fbc7",
       "requires_owner_ack": true,
       "note": "jobs call core-bridge/scripts/ci.ps1 -Job <name> (script owned by the bridge package)"
     }

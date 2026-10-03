@@ -10,6 +10,32 @@ function Get-Model {
 }
 $m = Get-Model
 
+Describe 'image entrypoints' {
+    It 'uses only runtime|exporter|migrate|agentcore as image commands (seed/bootstrap/sweep were removed)' {
+        foreach ($n in $m.services.PSObject.Properties.Name) {
+            $s = $m.services.$n
+            if ($s.image -like '*pulso-*' -and -not $s.entrypoint) { ($s.command[0] -in 'runtime', 'exporter', 'migrate', 'agentcore') | Should Be $true }
+            if ($s.entrypoint) { ($s.entrypoint[0] -in 'python', 'sh') | Should Be $true }
+        }
+    }
+}
+
+Describe 'executor key (A03 iii)' {
+    It 'points the runtime at a separate executor signer file on the read-only keys volume' {
+        $e = $m.services.'core-runtime'.environment
+        $e.PULSO_BRIDGE_EXECUTOR_SIGNER | Should Be '/run/pulso-keys/bridge-executor.json'
+        $e.PULSO_BRIDGE_CALLBACK_SIGNER | Should Be '/run/pulso-keys/bridge-callback.json'
+        ($e.PULSO_BRIDGE_EXECUTOR_SIGNER -ne $e.PULSO_BRIDGE_CALLBACK_SIGNER) | Should Be $true
+    }
+    It 'mounts the keys volume read-only into the lab-broker double and passes the public trust file name' {
+        $v = @($m.services.'platform-sim'.volumes | Where-Object { $_.target -eq '/run/pulso-keys' })
+        $v.Count | Should Be 1
+        $v[0].read_only | Should Be $true
+        $m.services.'platform-sim'.environment.SIM_LAB_BROKER_TRUST | Should Be '/run/pulso-keys/lab-broker-trust.json'
+        $m.services.'platform-sim'.depends_on.'core-keygen'.condition | Should Be 'service_completed_successfully'
+    }
+}
+
 Describe 'compose model' {
     It 'renders (docker-compose config)' { $m | Should Not BeNullOrEmpty }
     It 'has no container_name anywhere' {

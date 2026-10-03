@@ -156,6 +156,9 @@ services:
       PULSO_TENANT_ID: ${PULSO_TENANT_ID:-tenant-local}
       PULSO_IMAGE_DIGEST: ${PULSO_IMAGE_DIGEST:-unknown}
       PULSO_KEYS_DIR: /run/pulso-keys
+      PULSO_BRIDGE_CALLBACK_SIGNER: /run/pulso-keys/bridge-callback.json
+      # A03 iii: required, must be a different keypair than the callback key (startup fails closed otherwise).
+      PULSO_BRIDGE_EXECUTOR_SIGNER: /run/pulso-keys/bridge-executor.json
       AGENTCORE_KEYS_FINGERPRINT: ${AGENTCORE_KEYS_FINGERPRINT:-}
       AGENTCORE_KEYS_TOKEN_MAP: ${AGENTCORE_KEYS_TOKEN_MAP:-}
       AGENTCORE_JEV_API_KEY: ${AGENTCORE_JEV_API_KEY:-}
@@ -223,6 +226,12 @@ services:
       SIM_REGISTRY_PORT: "8601"
       SIM_BRIDGE_PORT: "8611"
       SIM_INGEST_PORT: "8621"
+      # public half of the bridge executor key (lab-broker side of A03 iii); no private material is mounted writable
+      SIM_LAB_BROKER_TRUST: /run/pulso-keys/lab-broker-trust.json
+    volumes:
+      - core-keys:/run/pulso-keys:ro
+    depends_on:
+      core-keygen: {condition: service_completed_successfully}
     mem_limit: 192m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8621/_sim/info', timeout=3).status == 200 else 1)"]

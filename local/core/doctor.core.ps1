@@ -10,7 +10,7 @@
 param([switch]$Json, [switch]$SkipEngine, [string]$Machine = 'pulso-dev', [string]$Namespace,
       [string]$Checkout = 'D:\.codex\factored\references\agent-core', [string]$Profile = 'real_local')
 $ErrorActionPreference = 'Stop'
-foreach ($f in 'errors', 'machine', 'namespace', 'ports', 'runner', 'memory') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
+foreach ($f in 'errors', 'machine', 'namespace', 'ports', 'runner', 'memory', 'keys') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
 $PinSha = '86a767474042a566a0dbd6ed23588959f27ebdb3'
 $checks = New-Object System.Collections.Generic.List[object]
 function Add-C([string]$check, [string]$status, $code, [string]$detail) { $checks.Add([pscustomobject]@{ check = $check; status = $status; code = $code; detail = $detail }) }
@@ -44,7 +44,7 @@ else { Add-C 'toolchain' 'fail' 'core_toolchain_missing' ("missing: " + ($missin
 
 # engine checks
 $engine = @('port_conflict', 'insufficient_memory', 'runtime_cgroup_unavailable', 'core_postgres_unavailable', 'core_migrate_failed',
-            'core_not_ready', 'core_demo_doubles_active', 'core_unreachable_from_stack')
+            'core_not_ready', 'core_demo_doubles_active', 'core_unreachable_from_stack', 'bridge_executor_key')
 if ($SkipEngine -or -not $conn) {
     foreach ($e in $engine) { Add-C $e 'skipped' $e 'engine not contacted' }
 } else {
@@ -69,11 +69,16 @@ if ($SkipEngine -or -not $conn) {
             try { $v = Invoke-RestMethod "http://127.0.0.1:$($st.ports.runtime)/_sim/info" -TimeoutSec 3; $demo = $true } catch {}
             Add-C 'core_demo_doubles_active' $(if ($demo) { 'warn' } else { 'pass' }) $(if ($demo) { 'core_demo_doubles_active' } else { $null }) $(if ($demo) { '/_sim/info answered on the Core URL' } else { 'no /_sim/info on the Core URL' })
         } else { Add-C 'core_demo_doubles_active' 'skipped' 'core_demo_doubles_active' 'no state file' }
+        $ek = $null
+        if ($rt -and $rt.status -eq 'running') {
+            try { $ek = Get-ExecutorKeyVerdict -ProbeOutput ((Invoke-Podman -Connection $conn exec "$project-core-runtime-1" @(Get-ExecutorKeyProbeArgs)) -join '') } catch { $ek = [pscustomobject]@{ status = 'fail'; detail = 'executor key probe failed to run' } }
+        } else { $ek = [pscustomobject]@{ status = 'fail'; detail = 'runtime container not running (fails closed without bridge-executor.json)' } }
+        Add-C 'bridge_executor_key' $ek.status $(if ($ek.status -eq 'pass') { $null } else { 'core_not_ready' }) $ek.detail
         Add-C 'port_conflict' 'pass' $null 'ports were probed at start'
         Add-C 'runtime_cgroup_unavailable' 'pass' $null 'workaround encoded (--cgroups=disabled)'
         Add-C 'core_unreachable_from_stack' 'skipped' 'core_unreachable_from_stack' 'needs the Pulso assembly network (Codex)'
     } else {
-        foreach ($e in 'port_conflict', 'runtime_cgroup_unavailable', 'core_postgres_unavailable', 'core_migrate_failed', 'core_not_ready', 'core_demo_doubles_active', 'core_unreachable_from_stack') {
+        foreach ($e in 'bridge_executor_key', 'port_conflict', 'runtime_cgroup_unavailable', 'core_postgres_unavailable', 'core_migrate_failed', 'core_not_ready', 'core_demo_doubles_active', 'core_unreachable_from_stack') {
             Add-C $e 'skipped' $e 'no -Namespace given'
         }
     }

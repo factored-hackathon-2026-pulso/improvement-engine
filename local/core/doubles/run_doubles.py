@@ -7,9 +7,20 @@ answers GET /_sim/info so that evidence code can detect a double (the real runti
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 
 import uvicorn
+
+
+def _trusted_kids() -> list[str]:
+    """kids of the bridge executor public keys the lab-broker double trusts (file from core-keygen; empty if absent)."""
+    path = os.environ.get("SIM_LAB_BROKER_TRUST", "")
+    try:
+        with open(path, encoding="ascii") as fh:
+            return sorted(json.load(fh)["keys"])
+    except (OSError, ValueError, KeyError):
+        return []
 
 
 def _apps() -> list[tuple[object, int, str]]:
@@ -21,7 +32,8 @@ def _apps() -> list[tuple[object, int, str]]:
 
     @ing.get("/_sim/info")
     def _info() -> dict[str, object]:  # pragma: no cover - trivial
-        return {"double": True, "pieces": ["registry_mock", "bridge_mock", "ingest_fixture"]}
+        return {"double": True, "pieces": ["registry_mock", "bridge_mock", "ingest_fixture"],
+                "lab_broker_trusted_kids": _trusted_kids()}
 
     reg, brg = registry(), bridge()
     for app in (reg, brg):
