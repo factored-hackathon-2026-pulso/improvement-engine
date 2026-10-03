@@ -60,6 +60,11 @@ jobs:
           PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test
           PULSO_ALLOW_DESTRUCTIVE_TEST_DB: "1"
         run: cargo +1.98.1 test --locked -p improvement-engine-core --test postgres_run_events -- --ignored
+      - name: Run isolated U24 V2 tenant-scoped sequence timeline test
+        env:
+          PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test
+          PULSO_ALLOW_DESTRUCTIVE_TEST_DB: "1"
+        run: cargo +1.98.1 test --locked -p improvement-engine-core --lib run_timeline_v2::tests::authenticated_scope_sequence_pagination_and_sanitization_use_real_postgres -- --ignored
       - name: Run isolated P4 temporal memory receipt test
         env:
           PULSO_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/pulso_test

@@ -75,3 +75,14 @@ memoria, exportaciones ni comandos de operador. Esos detalles exigen los
 contratos/productores correspondientes y no se inventan a partir de la
 actividad U07. El browser futuro consumirá este adaptador desde `control-api`;
 nunca obtendrá acceso directo al dataset, PG/S3 o SQL arbitrario.
+
+## V2 durable sequence follow-up
+
+The legacy U07 activity adapter above remains an independent in-memory
+contract. U24's new sequence-native durable read is recorded in ADR 0005 and
+journal 0053; it composes the same authenticated viewer authority with a
+tenant/run-scoped PostgreSQL reader and a `run_ref + after_sequence` cursor.
+It still does not provide HTTP, SSO, browser UI, SSE, graph/detail queries or
+operator commands. The real PostgreSQL integration test is pending the CI
+ephemeral database gate; it was not locally executed because Windows could not
+bind a disposable PostgreSQL port.

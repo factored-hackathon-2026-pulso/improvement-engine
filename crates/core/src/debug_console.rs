@@ -14,6 +14,9 @@ use crate::run_activity::{
     InMemoryCursorRegistry, ListRunActivityRequest, RunActivityError, RunActivityHandler,
     RunActivityReadModel,
 };
+use crate::run_timeline_v2::{
+    RunTimelinePage, RunTimelineReadError, RunTimelineReadPort, RunTimelineRequest,
+};
 
 /// A UI-ready, safe projection of one material run transition.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -137,6 +140,7 @@ pub enum DebugTimelineStatus {
     NotFound,
     Gone,
     Conflict,
+    Unavailable,
 }
 
 /// Transport-neutral response consumed by the engineering console.
@@ -189,7 +193,97 @@ impl DebugTimelineResponse {
             (DebugTimelineStatus::Conflict, _) => {
                 "Timeline request conflicts with current state.".to_owned()
             }
+            (DebugTimelineStatus::Unavailable, _) => {
+                "Timeline is temporarily unavailable.".to_owned()
+            }
             (DebugTimelineStatus::Ok, None) => "Timeline request cannot be processed.".to_owned(),
+        }
+    }
+}
+
+/// V2 debug response over the durable run/sequence ledger. This contract is
+/// distinct from `DebugTimelineResponse`, whose continuation is U07 legacy.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct DebugRunTimelineResponseV2 {
+    status: DebugTimelineStatus,
+    page: Option<RunTimelinePage>,
+}
+
+impl DebugRunTimelineResponseV2 {
+    #[must_use]
+    pub(crate) fn status(&self) -> DebugTimelineStatus {
+        self.status
+    }
+    #[must_use]
+    pub(crate) fn page(&self) -> Option<&RunTimelinePage> {
+        self.page.as_ref()
+    }
+}
+
+/// Untrusted U24 V2 read request. Deliberately contains no tenant selector.
+///
+/// ```compile_fail
+/// use improvement_engine_core::debug_console::DebugRunTimelineRequestV2;
+/// let _ = DebugRunTimelineRequestV2::new("00000000-0000-7000-8000-000000000002", 0, 10);
+/// ```
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct DebugRunTimelineRequestV2(RunTimelineRequest);
+
+impl DebugRunTimelineRequestV2 {
+    pub(crate) fn new(
+        run_ref: impl Into<String>,
+        after_sequence: i64,
+        page_size: usize,
+    ) -> Result<Self, ()> {
+        RunTimelineRequest::new(run_ref, after_sequence, page_size)
+            .map(Self)
+            .map_err(|_| ())
+    }
+}
+
+/// Authenticated and read-only U24 V2 composer over `pulso_run_events`.
+/// Authentication is delegated through the same one-call issuer capability
+/// as the existing U24 boundary; the tenant comes only from `DebugViewer`.
+pub(crate) struct DebugConsoleV2Api<Reader, Identity> {
+    reader: Reader,
+    identity: Identity,
+}
+
+impl<Reader: RunTimelineReadPort, Identity: DebugIdentityPort> DebugConsoleV2Api<Reader, Identity> {
+    pub(crate) fn new(reader: Reader, identity: Identity) -> Self {
+        Self { reader, identity }
+    }
+
+    pub(crate) fn read_events(
+        &mut self,
+        authentication: DebugAuthenticationRequest,
+        request: DebugRunTimelineRequestV2,
+    ) -> DebugRunTimelineResponseV2 {
+        let issuer = DebugViewerIssuer { _private: () };
+        let viewer = match self.identity.authenticate(authentication, &issuer) {
+            Ok(viewer) => viewer,
+            Err(_) => {
+                return DebugRunTimelineResponseV2 {
+                    status: DebugTimelineStatus::BadRequest,
+                    page: None,
+                };
+            }
+        };
+        match self.reader.read_page(&viewer.tenant, &request.0) {
+            Ok(page) => DebugRunTimelineResponseV2 {
+                status: DebugTimelineStatus::Ok,
+                page: Some(page),
+            },
+            Err(RunTimelineReadError::Storage(_) | RunTimelineReadError::InvalidStoredSequence) => {
+                DebugRunTimelineResponseV2 {
+                    status: DebugTimelineStatus::Unavailable,
+                    page: None,
+                }
+            }
+            Err(RunTimelineReadError::RunNotFound) => DebugRunTimelineResponseV2 {
+                status: DebugTimelineStatus::NotFound,
+                page: None,
+            },
         }
     }
 }
@@ -572,5 +666,70 @@ mod tests {
             response.accessible_status_summary(),
             "Timeline request cannot be processed."
         );
+    }
+
+    #[test]
+    fn v2_composer_derives_tenant_from_authenticated_viewer_and_maps_storage_errors_safely() {
+        use crate::run_timeline_v2::{
+            RunTimelinePage, RunTimelineReadError, RunTimelineReadPort, RunTimelineRequest,
+        };
+
+        struct RecordingReader(Option<String>);
+        impl RunTimelineReadPort for RecordingReader {
+            fn read_page(
+                &mut self,
+                tenant: &AuthenticatedTenant,
+                _: &RunTimelineRequest,
+            ) -> Result<RunTimelinePage, RunTimelineReadError> {
+                self.0 = Some(tenant.tenant_id().to_owned());
+                Err(RunTimelineReadError::InvalidStoredSequence)
+            }
+        }
+
+        let mut api = DebugConsoleV2Api::new(RecordingReader(None), SessionIdentity);
+        let request =
+            DebugRunTimelineRequestV2::new("00000000-0000-7000-8000-000000000002", 17, 20).unwrap();
+        let response = api.read_events(auth("session_b"), request);
+
+        assert_eq!(response.status(), DebugTimelineStatus::Unavailable);
+        assert!(response.page().is_none());
+        assert_eq!(api.reader.0.as_deref(), Some("tenant_b"));
+    }
+
+    #[test]
+    fn v2_composer_denial_does_not_touch_the_read_port() {
+        use crate::run_timeline_v2::{
+            RunTimelinePage, RunTimelineReadError, RunTimelineReadPort, RunTimelineRequest,
+        };
+
+        struct RecordingReader(bool);
+        impl RunTimelineReadPort for RecordingReader {
+            fn read_page(
+                &mut self,
+                _: &AuthenticatedTenant,
+                _: &RunTimelineRequest,
+            ) -> Result<RunTimelinePage, RunTimelineReadError> {
+                self.0 = true;
+                Err(RunTimelineReadError::InvalidStoredSequence)
+            }
+        }
+        struct Denied;
+        impl DebugIdentityPort for Denied {
+            fn authenticate(
+                &mut self,
+                _: DebugAuthenticationRequest,
+                _: &DebugViewerIssuer,
+            ) -> Result<DebugViewer, DebugAuthenticationError> {
+                Err(DebugAuthenticationError::Denied)
+            }
+        }
+
+        let mut api = DebugConsoleV2Api::new(RecordingReader(false), Denied);
+        let response = api.read_events(
+            auth("session_a"),
+            DebugRunTimelineRequestV2::new("00000000-0000-7000-8000-000000000002", 0, 10).unwrap(),
+        );
+        assert_eq!(response.status(), DebugTimelineStatus::BadRequest);
+        assert!(!api.reader.0);
     }
 }

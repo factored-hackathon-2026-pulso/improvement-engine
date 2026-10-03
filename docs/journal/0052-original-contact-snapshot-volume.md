@@ -114,3 +114,18 @@ passed twice after the test-only correction (1 passed, 10 filtered each run).
 - Repeat-contact analysis needs an approved privacy-preserving identity join;
   PQR requires a canonical source contract and reliable temporal semantics.
 - No real-data values or prevalence claims are made from the synthetic tests.
+
+## Follow-up: privacy assertion sentinels
+
+The PR #68 Linux workspace check exposed a flaky assertion in
+`original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories`:
+the forbidden row IDs `c-1` and `a-1` were short enough to occur by chance in
+serialized UUIDs. The failure was in the test sentinel, not the projection:
+the serializer contains generated provenance IDs, while the production
+projection emits only safe category counts. The fixture now uses unique,
+long sentinel interaction/customer/agent IDs across all seven rows and checks
+all of them, plus its email and timestamps. A local run of the prior test
+passed, consistent with an intermittent false positive. After the correction,
+the focused regression and all 12 source-adapter integration tests passed;
+source-adapters all-target Clippy (`-D warnings`), workspace fmt check and
+`git diff --check` also passed. The corrected test will be validated in PR CI.

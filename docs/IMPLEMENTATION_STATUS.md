@@ -258,8 +258,18 @@ green unit test as proof that a broader product flow is complete.
   unsafe or unknown identity observations, and neither executes nor releases.
 - U24: read-only technical timeline boundary. The internal debug composition
   derives its tenant only from an authenticated, opaque viewer capability and
-  reads U07 activity through safe statuses and accessible summaries. It is not
-  yet a browser, HTTP, SSO or streaming-control-plane implementation.
+  reads legacy U07 activity through safe statuses and accessible summaries.
+  The cumulative branch now adds a distinct V2 read adapter/composer over
+  `pulso_run_events`, using `run_ref + after_sequence`, tenant-derived SQL
+  scope, a 1..100 page bound, and a version-1 closed allowlist that maps
+  unknown stored event vocabulary to `other`. The V2 request cannot select a tenant; the
+  composer remains read-only and maps cross-tenant/missing runs to one safe
+  `NotFound`. Its ignored, in-crate PostgreSQL integration test is present but
+  the real-DB gate remains pending CI because local Windows PostgreSQL cannot
+  bind a port. The reader stays `pub(crate)`; any future cross-crate endpoint
+  must accept auth-issued context rather than a tenant string.
+  This does not implement browser, HTTP, SSO, streaming, graph, or operator
+  control-plane features.
 - U35: final eligibility gate. It is a deterministic, side-effect-free check
   over a supported U14 report, a mechanism-proxy U16 bridge and its U20 plan;
   it can only mark a proposal eligible and never asserts an outcome or causes

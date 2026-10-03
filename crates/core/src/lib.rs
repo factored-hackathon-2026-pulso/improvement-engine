@@ -47,6 +47,7 @@ pub mod quota_grant;
 pub mod run_activity;
 pub mod run_config;
 pub mod run_fork;
+pub(crate) mod run_timeline_v2;
 pub mod sandbox;
 pub mod source_validation;
 pub mod wiki_scratch;
