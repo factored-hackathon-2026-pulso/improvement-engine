@@ -5,21 +5,35 @@ nodes:
   - {id: bind, type: tool, config: {tool: pulso/bind_context@1, args: {}, save_as: binding},
      next: {ok: fetch_plan, error: esc_binding, timeout: esc_binding, denied: esc_binding}}
   - {id: fetch_plan, type: tool, config: {tool: pulso/artifact_get@1, args: {artifact_ref: slots.draft_plan_ref}, save_as: draft_plan},
-     next: {ok: create, error: esc_read, timeout: esc_read, denied: esc_read}}
+     next: {ok: chk_proposal, error: esc_read, timeout: esc_read, denied: esc_read}}
+  - {id: chk_proposal, type: rule, config: {expr: {"==": [{var: slots.proposal_id}, null]}}, next: {true: create, false: load_proposal}}
+  - {id: load_proposal, type: tool, config: {tool: registry/get_proposal@1, args: {proposal_id: slots.proposal_id}, save_as: proposal},
+     next: {ok: chk_base, error: esc_read, timeout: esc_read, denied: esc_denied}}
   - {id: create, type: tool, config: {draft: true, tool: registry/create_proposal@1, args: {agent_id: facts.draft_plan.value.agent_id, origin: builder_chat, title: facts.draft_plan.value.title}, save_as: proposal},
      next: {ok: verify_create, uncertain: verify_create, denied: esc_denied}}
   - {id: verify_create, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "create_proposal"]}, save_as: created},
-     next: {verified: put, failed: esc_verify}}
+     next: {verified: chk_base, failed: esc_verify}}
+  - {id: chk_base, type: rule, config: {expr: {"==": [{var: facts.proposal.value.base_release_id}, {var: slots.base_release_id}]}}, next: {true: put, false: esc_base_mismatch}}
   - {id: put, type: tool, config: {draft: true, tool: registry/put_draft@1, args: {proposal_id: facts.proposal.value.proposal_id, expected_rev: facts.proposal.value.rev, changes: facts.draft_plan.value.changes}, save_as: drafted},
      next: {ok: verify_put, uncertain: verify_put, denied: esc_denied}}
   - {id: verify_put, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "put_draft"]}, save_as: put_verified},
-     next: {verified: freeze, failed: esc_verify}}
+     next: {verified: validate, failed: esc_verify}}
+  - {id: validate, type: tool, config: {tool: registry/validate@1, args: {proposal_id: facts.proposal.value.proposal_id}, save_as: validation},
+     next: {ok: chk_valid, error: esc_read, timeout: esc_read, denied: esc_denied}}
+  - {id: chk_valid, type: rule, config: {expr: {"==": [{var: facts.validation.value.valid}, true]}}, next: {true: freeze, false: esc_invalid}}
   - {id: freeze, type: tool, config: {draft: true, tool: registry/freeze@1, args: {proposal_id: facts.proposal.value.proposal_id}, save_as: frozen},
      next: {ok: verify_freeze, uncertain: verify_freeze, denied: esc_denied}}
   - {id: verify_freeze, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "freeze"]}, save_as: freeze_verified},
+     next: {verified: chk_evaluate, failed: esc_verify}}
+  - {id: chk_evaluate, type: rule, config: {expr: {"==": [{var: slots.evaluate_enabled}, true]}}, next: {true: evaluate, false: done}}
+  - {id: evaluate, type: tool, config: {draft: true, tool: registry/evaluate@1, args: {proposal_id: facts.proposal.value.proposal_id, suite_id: slots.evaluation_suite_id, suite_version: slots.evaluation_suite_version}, save_as: evaluation},
+     next: {ok: verify_evaluate, uncertain: verify_evaluate, denied: esc_denied}}
+  - {id: verify_evaluate, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "evaluate"]}, save_as: evaluate_verified},
      next: {verified: done, failed: esc_verify}}
   - {id: done, type: end, config: {outcome: completed}}
   - {id: esc_binding, type: escalate, config: {reason_code: auth_insufficient}}
   - {id: esc_read, type: escalate, config: {reason_code: tool_failure}}
   - {id: esc_denied, type: escalate, config: {reason_code: auth_insufficient}}
   - {id: esc_verify, type: escalate, config: {reason_code: verification_failed}}
+  - {id: esc_base_mismatch, type: escalate, config: {reason_code: verification_failed}}
+  - {id: esc_invalid, type: escalate, config: {reason_code: verification_failed}}

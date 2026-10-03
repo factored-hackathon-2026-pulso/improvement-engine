@@ -527,13 +527,13 @@
     "agent_version": "1.0.0",
     "entities": [
       {
-        "content_hash": "140606fde496a905a0c6c5120c177cdc1bb37e7c0b39e4ea5622972addfb4325",
+        "content_hash": "241c87b939c16363d9ca9925826897861b98ce94078232a8b7e0d6342b73d12d",
         "id": "pulso-writer",
         "kind": "agent",
         "version": "1.0.0"
       },
       {
-        "content_hash": "deae6f0f95cf257b875b3b645589f1dcdfb163e9a9c81f713e71b5d306cadfdc",
+        "content_hash": "5ae1f7ec116c21d784abfaabe38773809d15fd28deee547552fe478d73c4ff47",
         "id": "pulso-writer",
         "kind": "flow",
         "version": "1.0.0"
@@ -611,8 +611,20 @@
         "version": "1.0.0"
       },
       {
+        "content_hash": "6d0c9121dada1f30717eae847a993c668f63d4c7ac9c6a06f5418404425de855",
+        "id": "registry/evaluate",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
         "content_hash": "1de926e441cddd7db3eeab1a4c002ba1721290fdd65db1a6953a55c195505f1d",
         "id": "registry/freeze",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "56e2d70bcaaed4b9dde39302b3007aa3de933a338ba0ec1d454dafb01b87f20e",
+        "id": "registry/get_proposal",
         "kind": "tool",
         "version": "1.0.0"
       },
@@ -627,10 +639,16 @@
         "id": "registry/put_draft",
         "kind": "tool",
         "version": "1.0.0"
+      },
+      {
+        "content_hash": "5b588bd3750f5afc000a267cff391b8f3f4cb5897a110ef684f9ad7810bbdbd9",
+        "id": "registry/validate",
+        "kind": "tool",
+        "version": "1.0.0"
       }
     ],
     "eval_suites": [],
-    "release_hash": "fe0a03ecbfb0bd344052814ed2f0e9a0f00f781fcf234679c2a40869a31f6676",
-    "release_id": "rel-fe0a03ecbfb0bd34"
+    "release_hash": "738b23c6cde590d07c9ece861a796b43c18219ce173245b0aa7fd6c150460cb1",
+    "release_id": "rel-738b23c6cde590d0"
   }
 }
