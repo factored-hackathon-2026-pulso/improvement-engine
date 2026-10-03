@@ -81,14 +81,14 @@ def run(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = No
 
 def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Callable[..., None] | None,
              resolve: Callable[..., Any] | None) -> int:
+    from agent_core.adapters.system_clock import SystemClock
+    from agent_core.api.app import create_app
+    from agent_core.api.limits import RateLimitConfig
     from agent_core.composition.observability import ObservabilityConfigError, setup_observability
     from agent_core.composition.serve import GATEWAY_TRACER, build_api_deps
     from agent_core.composition.serve_ports import ServeConfigError, resolve_ports
     from agent_core.composition.serve_registry import build_registry_service_for_serve
     from agent_core.composition.telemetry import OtelTurnTelemetry
-    from agent_core.adapters.system_clock import SystemClock
-    from agent_core.api.app import create_app
-    from agent_core.api.limits import RateLimitConfig
 
     from pulso_core_runtime.ids import PulsoIds
     from pulso_core_runtime.internal.app import build_internal_app
@@ -115,7 +115,8 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
                 print(f"  - pulso:runtime_config_invalid: {problem}", file=err)
             return EXIT_CONFIG
         dsn = env.get("AGENTCORE_REGISTRY_DSN", "")
-        key_paths = [args.identity_keys, args.staff_keys, Path(env.get("PULSO_SERVICE_KEYS", f"{KEYS_DIR}/service.json"))]
+        service_path = Path(env.get("PULSO_SERVICE_KEYS", f"{KEYS_DIR}/service.json"))
+        key_paths = [args.identity_keys, args.staff_keys, service_path]
         try:
             service_keys = load_service_keys(key_paths[2])
         except ValueError as exc:
