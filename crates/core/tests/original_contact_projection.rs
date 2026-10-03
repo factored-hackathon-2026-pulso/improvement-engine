@@ -45,9 +45,10 @@ fn projection_binds_manifest_filters_after_cutoff_and_marks_sample_partial() {
             .sum::<u64>(),
         0
     );
-    assert_eq!(projection.suppressed_count, 1);
     assert!(!format!("{projection:?}").contains("private"));
     assert!(!format!("{projection:?}").contains("id-1"));
+    assert!(!format!("{projection:?}").contains("rejected_rows"));
+    assert!(!format!("{projection:?}").contains("suppressed_count"));
 }
 
 #[test]
@@ -85,7 +86,7 @@ fn missing_channel_is_not_collapsed_into_other() {
 }
 
 #[test]
-fn public_projection_manifest_rejects_k_below_privacy_floor() {
+fn public_projection_manifest_uses_the_fixed_versioned_k_policy() {
     let bytes = b"interaction_date,reason_category,channel\n2026-04-03T00:00:00Z,Queja,Phone\n";
     let inventory = vec![ManifestPartition::new("p".into(), digest(bytes))];
     let (mut repository, source_ref) = stored_snapshot(
@@ -95,23 +96,17 @@ fn public_projection_manifest_rejects_k_below_privacy_floor() {
         bytes,
     );
 
-    for minimum_cell_count in [0, 1, 4] {
-        assert!(
-            ProjectionManifest::new(
-                &mut repository,
-                source_ref.clone(),
-                ProjectionTable::Contacts,
-                inventory.clone(),
-                ProjectionCoverage::Partial,
-                ProjectionPolicy {
-                    version: 1,
-                    minimum_cell_count,
-                },
-            )
-            .is_err(),
-            "public manifests must reject k={minimum_cell_count}"
-        );
-    }
+    assert!(
+        ProjectionManifest::new(
+            &mut repository,
+            source_ref,
+            ProjectionTable::Contacts,
+            inventory,
+            ProjectionCoverage::Partial,
+            ProjectionPolicy::v1(),
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -121,13 +116,11 @@ fn descriptive_projection_is_unsupported_when_no_row_has_grouping_values() {
         ProjectionTable::Contacts,
         &[('p', bytes)],
         ProjectionCoverage::Partial,
-        5,
     );
     let projection =
         project_contacts_descriptive(&manifest, [CsvPartition::new("p", Cursor::new(bytes))])
             .unwrap();
 
-    assert_eq!(projection.rejected_rows, 5);
     assert_eq!(projection.aggregates.len(), 0);
     assert_eq!(
         projection.status,
@@ -144,7 +137,7 @@ fn pii_like_category_is_projected_only_as_unclassified_enum() {
         ProjectionTable::Contacts,
         &[('p', bytes)],
         ProjectionCoverage::Partial,
-        5,
+        1,
     );
     let projection =
         project_contacts(&manifest, [CsvPartition::new("p", Cursor::new(bytes))]).unwrap();
@@ -166,7 +159,6 @@ fn per_metric_denominators_retain_missing_values_and_k_policy_suppresses_small_c
     );
     let projection =
         project_contacts(&manifest, [CsvPartition::new("p", Cursor::new(bytes))]).unwrap();
-    assert_eq!(projection.suppressed_count, 1);
     assert_eq!(projection.aggregates.len(), 1);
     let cell = &projection.aggregates[0];
     assert_eq!(cell.contact_count, 5);
@@ -205,7 +197,7 @@ fn complaint_metrics_keep_known_denominators_and_elapsed_calendar_time() {
         ProjectionTable::Complaints,
         &[('p', bytes)],
         ProjectionCoverage::Partial,
-        5,
+        1,
     );
     let projection =
         project_complaints(&manifest, [CsvPartition::new("p", Cursor::new(bytes))]).unwrap();
@@ -329,10 +321,7 @@ fn projection_manifest_rejects_an_unrelated_source_reference() {
             ProjectionTable::Contacts,
             inventory,
             ProjectionCoverage::Partial,
-            ProjectionPolicy {
-                version: 1,
-                minimum_cell_count: 5
-            },
+            ProjectionPolicy::v1(),
         )
         .is_err()
     );
@@ -360,10 +349,7 @@ fn projection_manifest_rejects_partitions_not_bound_by_source_table_seal() {
                 digest(different_partition)
             )],
             ProjectionCoverage::Partial,
-            ProjectionPolicy {
-                version: 1,
-                minimum_cell_count: 5
-            },
+            ProjectionPolicy::v1(),
         )
         .is_err()
     );
@@ -387,10 +373,7 @@ fn projection_manifest_rejects_partitioned_source_without_explicit_inventory_sea
             ProjectionTable::Contacts,
             inventory,
             ProjectionCoverage::Partial,
-            ProjectionPolicy {
-                version: 1,
-                minimum_cell_count: 5
-            },
+            ProjectionPolicy::v1(),
         )
         .is_err()
     );
@@ -440,10 +423,7 @@ fn source_file_digest_and_partition_inventory_are_verified_as_distinct_seals() {
         ProjectionTable::Contacts,
         inventory,
         ProjectionCoverage::Partial,
-        ProjectionPolicy {
-            version: 1,
-            minimum_cell_count: 5,
-        },
+        ProjectionPolicy::v1(),
     )
     .unwrap();
     let projection = project_contacts(
@@ -456,7 +436,6 @@ fn source_file_digest_and_partition_inventory_are_verified_as_distinct_seals() {
     .unwrap();
     assert_eq!(projection.status, SupportStatus::Supported);
     assert!(projection.aggregates.is_empty());
-    assert_eq!(projection.suppressed_count, 1);
 }
 
 #[test]
@@ -477,10 +456,7 @@ fn projection_rejects_csv_header_not_committed_by_source_table_seal() {
         ProjectionTable::Contacts,
         inventory,
         ProjectionCoverage::Partial,
-        ProjectionPolicy {
-            version: 1,
-            minimum_cell_count: 5,
-        },
+        ProjectionPolicy::v1(),
     )
     .unwrap();
     assert_eq!(
@@ -505,16 +481,12 @@ fn projection_preserves_second_precision_at_cutoff() {
         ProjectionTable::Contacts,
         inventory,
         ProjectionCoverage::Partial,
-        ProjectionPolicy {
-            version: 1,
-            minimum_cell_count: 5,
-        },
+        ProjectionPolicy::v1(),
     )
     .unwrap();
     let projection =
         project_contacts(&manifest, [CsvPartition::new("p", Cursor::new(bytes))]).unwrap();
     assert!(projection.aggregates.is_empty());
-    assert_eq!(projection.suppressed_count, 1);
 }
 
 #[test]
@@ -531,17 +503,14 @@ fn projection_manifest_rejects_cutoffs_without_supported_utc_second_semantics() 
             ProjectionTable::Contacts,
             inventory,
             ProjectionCoverage::Partial,
-            ProjectionPolicy {
-                version: 1,
-                minimum_cell_count: 5
-            },
+            ProjectionPolicy::v1(),
         )
         .is_err()
     );
 }
 
 #[test]
-fn contact_projection_counts_invalid_or_missing_dates_as_rejected_rows() {
+fn contact_projection_omits_invalid_or_missing_dates_from_utc_aggregates() {
     let bytes = b"interaction_date,reason_category,channel\nnot-a-date,Queja,Phone\n,Queja,Phone\n2026-04-03T00:00:00Zgarbage,Queja,Phone\n2026-04-03T00:00:00Z,Queja,Phone\n";
     let manifest = plan(
         ProjectionTable::Contacts,
@@ -551,9 +520,7 @@ fn contact_projection_counts_invalid_or_missing_dates_as_rejected_rows() {
     );
     let projection =
         project_contacts(&manifest, [CsvPartition::new("p", Cursor::new(bytes))]).unwrap();
-    assert_eq!(projection.rejected_rows, 3);
     assert!(projection.aggregates.is_empty());
-    assert_eq!(projection.suppressed_count, 1);
 }
 
 #[test]
@@ -567,7 +534,6 @@ fn naive_timestamp_is_unsupported_and_never_coerced_to_utc() {
     );
     let projection =
         project_contacts(&manifest, [CsvPartition::new("p", Cursor::new(bytes))]).unwrap();
-    assert_eq!(projection.rejected_rows, 1);
     assert_eq!(
         projection.status,
         SupportStatus::Unsupported {
@@ -584,7 +550,6 @@ fn snapshot_descriptive_contacts_use_literal_wall_clock_month_without_as_of_cuto
         ProjectionTable::Contacts,
         &[('p', bytes)],
         ProjectionCoverage::Partial,
-        5,
     );
     let projection =
         project_contacts_descriptive(&manifest, [CsvPartition::new("p", Cursor::new(bytes))])
@@ -607,6 +572,8 @@ fn snapshot_descriptive_contacts_use_literal_wall_clock_month_without_as_of_cuto
         10
     );
     assert!(!format!("{projection:?}").contains("observed_cutoff"));
+    assert!(!format!("{projection:?}").contains("rejected_rows"));
+    assert!(!format!("{projection:?}").contains("suppressed_count"));
 }
 
 #[test]
@@ -616,7 +583,6 @@ fn snapshot_descriptive_complaints_expose_only_final_extract_outcomes() {
         ProjectionTable::Complaints,
         &[('p', bytes)],
         ProjectionCoverage::Partial,
-        5,
     );
     let projection =
         project_complaints_descriptive(&manifest, [CsvPartition::new("p", Cursor::new(bytes))])
@@ -649,16 +615,13 @@ fn snapshot_descriptive_contacts_reject_offsets_fractional_and_impossible_clocks
         ProjectionTable::Contacts,
         &[('p', bytes)],
         ProjectionCoverage::Partial,
-        1,
     );
     let projection =
         project_contacts_descriptive(&manifest, [CsvPartition::new("p", Cursor::new(bytes))])
             .unwrap();
 
     assert_eq!(projection.status, SupportStatus::Supported);
-    assert_eq!(projection.rejected_rows, 3);
     assert!(projection.aggregates.is_empty());
-    assert_eq!(projection.suppressed_count, 1);
 }
 
 #[test]
@@ -674,7 +637,6 @@ fn snapshot_descriptive_manifest_digest_is_separate_from_utc_as_of_manifest() {
         ProjectionTable::Contacts,
         &[('p', bytes)],
         ProjectionCoverage::Partial,
-        1,
     );
     let utc_projection =
         project_contacts(&utc_manifest, [CsvPartition::new("p", Cursor::new(bytes))]).unwrap();
@@ -697,7 +659,6 @@ fn snapshot_descriptive_projection_still_requires_the_exact_sealed_partition_set
         ProjectionTable::Contacts,
         &[('p', bytes)],
         ProjectionCoverage::Partial,
-        1,
     );
     assert_eq!(
         project_contacts_descriptive::<Cursor<&[u8]>>(&manifest, std::iter::empty()).unwrap_err(),
@@ -745,20 +706,12 @@ fn local_original_contacts_and_complaints_smoke_aggregates_only() {
         let utc_rows = rows
             .iter()
             .map(|(id, bytes)| CsvPartition::new(id.clone(), Cursor::new(bytes.as_slice())));
-        let (status, rejected, cells) = if projector {
+        let (status, cells) = if projector {
             let projection = project_contacts(&manifest, utc_rows).unwrap();
-            (
-                projection.status,
-                projection.rejected_rows,
-                projection.aggregates.len(),
-            )
+            (projection.status, projection.aggregates.len())
         } else {
             let projection = project_complaints(&manifest, utc_rows).unwrap();
-            (
-                projection.status,
-                projection.rejected_rows,
-                projection.aggregates.len(),
-            )
+            (projection.status, projection.aggregates.len())
         };
         assert_eq!(
             status,
@@ -768,44 +721,37 @@ fn local_original_contacts_and_complaints_smoke_aggregates_only() {
             "source timestamp semantics unexpectedly became supported in {subdir}"
         );
         assert_eq!(cells, 0, "unsupported source emitted aggregate cells");
-        assert!(rejected > 0, "unsupported timestamp rows were not counted");
         println!(
-            "{subdir}: partitions={partition_count}, rejected_rows={rejected}, aggregate_cells={cells}, coverage=partial"
+            "{subdir}: partitions={partition_count}, aggregate_cells={cells}, coverage=partial"
         );
         let descriptive_rows = rows
             .into_iter()
             .map(|(id, bytes)| CsvPartition::new(id, Cursor::new(bytes)));
-        let (descriptive_status, descriptive_rejected, descriptive_cells, included, suppressed) =
-            if projector {
-                let projection =
-                    project_contacts_descriptive(&descriptive_manifest, descriptive_rows).unwrap();
-                (
-                    projection.status,
-                    projection.rejected_rows,
-                    projection.aggregates.len(),
-                    projection
-                        .aggregates
-                        .iter()
-                        .map(|cell| cell.contact_count)
-                        .sum::<u64>(),
-                    projection.suppressed_count,
-                )
-            } else {
-                let projection =
-                    project_complaints_descriptive(&descriptive_manifest, descriptive_rows)
-                        .unwrap();
-                (
-                    projection.status,
-                    projection.rejected_rows,
-                    projection.aggregates.len(),
-                    projection
-                        .aggregates
-                        .iter()
-                        .map(|cell| cell.complaint_count)
-                        .sum::<u64>(),
-                    projection.suppressed_count,
-                )
-            };
+        let (descriptive_status, descriptive_cells, included) = if projector {
+            let projection =
+                project_contacts_descriptive(&descriptive_manifest, descriptive_rows).unwrap();
+            (
+                projection.status,
+                projection.aggregates.len(),
+                projection
+                    .aggregates
+                    .iter()
+                    .map(|cell| cell.contact_count)
+                    .sum::<u64>(),
+            )
+        } else {
+            let projection =
+                project_complaints_descriptive(&descriptive_manifest, descriptive_rows).unwrap();
+            (
+                projection.status,
+                projection.aggregates.len(),
+                projection
+                    .aggregates
+                    .iter()
+                    .map(|cell| cell.complaint_count)
+                    .sum::<u64>(),
+            )
+        };
         assert_eq!(
             descriptive_status,
             SupportStatus::Supported,
@@ -816,7 +762,7 @@ fn local_original_contacts_and_complaints_smoke_aggregates_only() {
             "no disclosure-safe aggregate cells survived in {subdir}"
         );
         println!(
-            "{subdir}: descriptive_aggregate_rows={included}, rejected_rows={descriptive_rejected}, visible_cells={descriptive_cells}, suppressed_cells={suppressed}, coverage=partial"
+            "{subdir}: descriptive_aggregate_rows={included}, visible_cells={descriptive_cells}, coverage=partial"
         );
     }
 }
@@ -851,10 +797,7 @@ fn smoke_plan(
         table,
         partitions.to_vec(),
         ProjectionCoverage::Partial,
-        ProjectionPolicy {
-            version: 1,
-            minimum_cell_count: 5,
-        },
+        ProjectionPolicy::v1(),
     )
     .unwrap()
 }
@@ -872,10 +815,6 @@ fn descriptive_smoke_plan(
         table,
         partitions.to_vec(),
         ProjectionCoverage::Partial,
-        ProjectionPolicy {
-            version: 1,
-            minimum_cell_count: 5,
-        },
     )
     .unwrap()
 }
@@ -884,7 +823,6 @@ fn descriptive_plan(
     table: ProjectionTable,
     partitions: &[(char, &[u8])],
     coverage: ProjectionCoverage,
-    minimum_cell_count: u64,
 ) -> SnapshotDescriptiveManifest {
     let header_source = partitions
         .first()
@@ -896,25 +834,15 @@ fn descriptive_plan(
         .collect::<Vec<_>>();
     let (mut repository, source_ref) =
         stored_snapshot(table, "2026-09-01T00:00:00Z", &inventory, header_source);
-    SnapshotDescriptiveManifest::new(
-        &mut repository,
-        source_ref,
-        table,
-        inventory,
-        coverage,
-        ProjectionPolicy {
-            version: 1,
-            minimum_cell_count: minimum_cell_count.max(5),
-        },
-    )
-    .unwrap()
+    SnapshotDescriptiveManifest::new(&mut repository, source_ref, table, inventory, coverage)
+        .unwrap()
 }
 
 fn plan(
     table: ProjectionTable,
     partitions: &[(char, &[u8])],
     coverage: ProjectionCoverage,
-    minimum_cell_count: u64,
+    _minimum_cell_count: u64,
 ) -> ProjectionManifest {
     let header_source = partitions
         .first()
@@ -932,10 +860,7 @@ fn plan(
         table,
         inventory,
         coverage,
-        ProjectionPolicy {
-            version: 1,
-            minimum_cell_count: minimum_cell_count.max(5),
-        },
+        ProjectionPolicy::v1(),
     )
     .unwrap()
 }
