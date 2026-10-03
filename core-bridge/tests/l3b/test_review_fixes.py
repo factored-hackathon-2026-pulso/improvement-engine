@@ -71,3 +71,12 @@ def test_writer_can_reopen_and_receipt_carries_it() -> None:
     out = wl.compose_writer_receipts(facts, [{"tool": {"id": "registry/reopen"}, "idempotency_key": "k",
                                                "state": "done"}])
     assert [r["op"] for r in out["write_receipts"]] == ["reopen"] and out["state"] == "confirmed"
+
+
+@pytest.mark.parametrize("ref", ["abc\n", "a\nb", "ñ", "a b", "", "x" * 201])
+def test_eval_ref_rejects_trailing_newline_and_non_ascii(ref: str) -> None:
+    from pulso_core_runtime.tools.builder import _EVAL_REF, eval_key
+
+    assert _EVAL_REF.match(ref) is None  # `$` accepted a trailing newline; the full-match form does not
+    with pytest.raises(ValueError):
+        eval_key(ref)

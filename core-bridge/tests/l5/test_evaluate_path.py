@@ -154,7 +154,8 @@ def test_fail_keeps_409_body_report_survives_and_replay_is_identical(pg) -> None
     assert detail.last_eval is None and detail.proposal.state.value == "draft"  # the upstream gap
     rows = w.rt.reports.list_for(pid)
     assert len(rows) == 1 and rows[0].gate_failed and rows[0].verdict == "fail"
-    assert rows[0].report == first.value.payload  # bridge copy == the 409 body
+    assert {k: v for k, v in rows[0].report.items() if k != "pulso_evidence"} == first.value.payload
+    assert rows[0].report["pulso_evidence"]["closed_early"] is False  # bridge copy == 409 body + evidence
     jobs = w.storage.jobs
     with pytest.raises(RegistryError) as second:
         w.evaluate(pid)
@@ -289,6 +290,11 @@ def test_crash_after_consume_leaves_unknown_and_blocks_a_second_run(pg) -> None:
     pid, chash = w.frozen_proposal()
     w.admit(pid, chash)
     assert w.rt.admissions.transition("ctx-1", "admitted", "consumed")
+    with pytest.raises(AdmissionDenied) as live:  # within the deadline it may still be running: no mutation
+        w.evaluate(pid)
+    assert live.value.code == "evaluation_in_progress"
+    assert w.rt.admissions.get("ctx-1").state == "consumed"  # type: ignore[union-attr]
+    w.clock_now += timedelta(hours=2)  # past the deadline no run can still be live: uncertain prior execution
     with pytest.raises(AdmissionDenied) as e:
         w.evaluate(pid)
     assert e.value.code == "evaluation_unknown" and w.storage.jobs == 0

@@ -101,7 +101,7 @@ def test_native_arm_on_published_release_completes_and_replays_by_key(pg) -> Non
     r = runner(w)
     row = r.run(req(), tenant_id="t1")
     rep = row.report or {}
-    assert rep["status"] == "completed" and rep["execution_id"] == execution_id_for("k1")
+    assert rep["status"] == "completed" and rep["execution_id"] == execution_id_for("k1", "t1")
     assert rep["event_refs"] and rep["oracle_ref"] == "oracle-opaque" and rep["cost_known"] is True
     assert rep["target_commitment"] and rep["effect_receipts"] == []
     jobs = w.storage.jobs
@@ -110,8 +110,8 @@ def test_native_arm_on_published_release_completes_and_replays_by_key(pg) -> Non
     with pytest.raises(ArmDenied) as conflict:
         r.run(req(seed=8), tenant_id="t1")  # same key, other digest
     assert conflict.value.code == "idempotency_conflict" and conflict.value.status == 409
-    assert r.read(execution_id_for("k1")).report == rep  # type: ignore[union-attr]
-    assert r.read_by_key("k1").report == rep  # type: ignore[union-attr]
+    assert r.read(execution_id_for("k1", "t1"), tenant_id="t1").report == rep  # type: ignore[union-attr]
+    assert r.read_by_key("k1", tenant_id="t1").report == rep  # type: ignore[union-attr]
 
 
 def test_frozen_candidate_runs_without_publication_and_prod_never_resolves_it(pg) -> None:  # type: ignore[no-untyped-def]
@@ -167,7 +167,7 @@ def test_broker_mismatch_is_403_and_does_zero_work(pg) -> None:  # type: ignore[
     with pytest.raises(ArmDenied) as e:
         r.run(req(), tenant_id="t1")
     assert e.value.status == 403 and w.storage.jobs == 0
-    assert r.read_by_key("k1").status == "failed_infra"  # type: ignore[union-attr]
+    assert r.read_by_key("k1", tenant_id="t1").status == "failed_infra"  # type: ignore[union-attr]
 
 
 def test_request_is_extra_forbid_so_no_gold_or_oracle_rides_along(pg) -> None:  # type: ignore[no-untyped-def]
@@ -225,10 +225,10 @@ def test_timeout_after_send_is_unknown_and_restart_does_not_rerun(pg) -> None:  
     assert rep["status"] == "unknown"
     # simulate a bridge killed mid-arm: row left `running`, then a restarted runner (fresh in-flight set)
     store = PgArmStore(pg.runtime)
-    store.begin(execution_id_for("k-killed"), "k-killed", "dg")
+    store.begin(execution_id_for("k-killed", "t1"), "t1|k-killed", "dg")
     jobs = w.storage.jobs
     restarted = runner(w, FakeBank(), store=store)
-    assert restarted.read_by_key("k-killed").status == "unknown"  # type: ignore[union-attr]
+    assert restarted.read_by_key("k-killed", tenant_id="t1").status == "unknown"  # type: ignore[union-attr]
     with pytest.raises(ArmDenied):  # other digest on the same key: conflict, never a run
         restarted.run(req("k-killed"), tenant_id="t1")
     assert w.storage.jobs == jobs

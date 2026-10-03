@@ -17,7 +17,7 @@ import psycopg
 
 from pulso_core_runtime.evaluation.report import ensure_eval_schema
 
-CONTEXT_REF_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,200}$")
+CONTEXT_REF_RE = re.compile(r"[A-Za-z0-9_.:-]{1,200}")
 EVAL_KEY_PREFIX = "pulso-eval:"
 AdmissionState = Literal["admitted", "consumed", "expired", "unknown"]
 
@@ -204,7 +204,11 @@ class AdmissionGate:
         if adm.state == "unknown":
             raise AdmissionDenied("evaluation_unknown", 409)
         if adm.state == "consumed":
-            # consumed without a stored result: uncertain prior execution (crash or still running)
+            # Consumed and no stored result. Within the deadline the first run may still be in flight: deny
+            # WITHOUT touching the state, so its reset/finish still succeeds. Past the deadline the run cannot
+            # still be live (the budget meter enforces it), so a missing result means an uncertain execution.
+            if self._now() < adm.deadline:
+                raise AdmissionDenied("evaluation_in_progress", 409)
             self._store.transition(ref, "consumed", "unknown")
             raise AdmissionDenied("evaluation_unknown", 409)
         if adm.state != "admitted":
@@ -224,7 +228,7 @@ class AdmissionGate:
         if not allowed:
             raise AdmissionDenied("broker_denied", 403)
         if not self._store.transition(ref, "admitted", "consumed"):
-            raise AdmissionDenied("evaluation_unknown", 409)  # lost the CAS to a concurrent call
+            raise AdmissionDenied("evaluation_in_progress", 409)  # lost the CAS to a concurrent call
         return replace(adm, state="consumed")
 
     def mark_unknown(self, ref: str) -> None:

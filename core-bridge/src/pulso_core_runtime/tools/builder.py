@@ -38,7 +38,7 @@ from pulso_core_runtime.tools.context import (
 
 WRITE_PREFIX = "pulso-w:"
 EVAL_PREFIX = "pulso-eval:"
-_EVAL_REF = re.compile(r"^[A-Za-z0-9_.:-]{1,200}$")
+_EVAL_REF = re.compile(r"[A-Za-z0-9_.:-]{1,200}\Z")  # `\Z`: a trailing newline is not a ref (call sites use .match)
 
 WRITE_MODE_TOOLS = frozenset({"registry/create_proposal", "registry/put_draft", "registry/freeze",
                               "registry/reopen", "registry/validate", "registry/get_proposal",

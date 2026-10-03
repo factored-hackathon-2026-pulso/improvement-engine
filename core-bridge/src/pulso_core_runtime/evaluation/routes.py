@@ -100,7 +100,9 @@ def build_handlers(deps: EvaluationDeps) -> dict[str, Callable[[Request, Claims]
 
     async def arm_read(request: Request, claims: Claims) -> JSONResponse:
         params = request.path_params
-        row = deps.arms.read_by_key(params["key"]) if "key" in params else deps.arms.read(params["arm_id"])
+        tenant = _tenant(claims)
+        row = (deps.arms.read_by_key(params["key"], tenant_id=tenant) if "key" in params
+               else deps.arms.read(params["arm_id"], tenant_id=tenant))
         if row is None:
             return _err("pulso:not_found", 404)
         return JSONResponse(row.report or {"execution_id": row.execution_id, "status": row.status})
@@ -141,8 +143,12 @@ def _admit_sync(deps: EvaluationDeps, body: AdmissionRequest, tenant: str, job_i
                     body.candidate_hash, body.suite_id, body.suite_version, body.suite_digest,
                     body.evaluation_attempt, body.budget_ref, body.deadline, body.request_digest)
     stored, created = rt.admissions.create(adm)
-    if not created and (stored.request_digest, stored.tenant_id) != (adm.request_digest, tenant):
-        raise AdmissionDenied("idempotency_conflict", 409)
+    if not created and (stored.request_digest, stored.tenant_id, stored.job_id, stored.binding_ref,
+                        stored.proposal_id, stored.candidate_hash, stored.suite_id, stored.suite_version,
+                        stored.suite_digest, stored.evaluation_attempt, stored.budget_ref) != (
+            adm.request_digest, tenant, adm.job_id, adm.binding_ref, adm.proposal_id, adm.candidate_hash,
+            adm.suite_id, adm.suite_version, adm.suite_digest, adm.evaluation_attempt, adm.budget_ref):
+        raise AdmissionDenied("idempotency_conflict", 409)  # a replay must be the very same admission
     return JSONResponse({"schema_version": "1", "evaluation_context_ref": stored.evaluation_context_ref,
                          "state": stored.state}, status_code=201 if created else 200)
 

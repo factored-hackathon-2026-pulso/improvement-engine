@@ -64,8 +64,13 @@ class BudgetPort(Protocol):
     def resolve(self, budget_ref: str, tenant_id: str) -> BudgetLimits | None: ...
 
 
-def execution_id_for(key: str) -> str:
-    return "arm-" + hashlib.sha256(key.encode()).hexdigest()[:32]
+def scoped_key(key: str, tenant_id: str) -> str:
+    """Single-flight key stored per tenant: `|` is outside the idempotency-key charset, so no collisions."""
+    return f"{tenant_id}|{key}"
+
+
+def execution_id_for(key: str, tenant_id: str) -> str:
+    return "arm-" + hashlib.sha256(scoped_key(key, tenant_id).encode()).hexdigest()[:32]
 
 
 class ArmDenied(Exception):
@@ -102,12 +107,17 @@ class ArmRunner:
             return fresh
         return row
 
-    def read(self, execution_id: str) -> ArmRow | None:
-        row = self.store.get(execution_id)
+    @staticmethod
+    def _owned(row: ArmRow | None, tenant_id: str) -> ArmRow | None:
+        """A row of another tenant looks exactly like a missing one (no cross-tenant read, no existence oracle)."""
+        return row if row is not None and row.idempotency_key.startswith(f"{tenant_id}|") else None
+
+    def read(self, execution_id: str, *, tenant_id: str) -> ArmRow | None:
+        row = self._owned(self.store.get(execution_id), tenant_id)
         return None if row is None else self._settle(row)
 
-    def read_by_key(self, key: str) -> ArmRow | None:
-        row = self.store.get_by_key(key)
+    def read_by_key(self, key: str, *, tenant_id: str) -> ArmRow | None:
+        row = self._owned(self.store.get_by_key(scoped_key(key, tenant_id)), tenant_id)
         return None if row is None else self._settle(row)
 
     # -- the eight steps ----------------------------------------------------------------------------------
@@ -117,15 +127,19 @@ class ArmRunner:
             req = ArmRequest.model_validate(raw)  # step 1: extra=forbid (no gold/oracle fields can ride along)
         except pydantic.ValidationError as exc:
             raise ArmDenied("invalid_request", 422) from exc
-        if req.mode == "native" and req.seed_manifest_ref:
+        if req.mode == "native" and req.seed_manifest_ref is not None:  # even "": any bank pointer is a mix
             raise ArmDenied("mixed_world_rejected", 409)  # native never receives a bank client
         if req.mode != "native" and (self.sandbox is None or not req.seed_manifest_ref):
             raise ArmDenied("sandbox_required", 409)
         if not valid_context_ref(req.idempotency_key):
             raise ArmDenied("idempotency_key_invalid", 422)
+        if req.supersedes_execution_id is not None:
+            old = self.read(req.supersedes_execution_id, tenant_id=tenant_id)
+            if old is None or old.status != "unknown":
+                raise ArmDenied("supersedes_invalid", 409)  # only a reconciled `unknown` arm can be re-run
         digest = digest_of(req.model_dump(mode="json"))
-        execution_id = execution_id_for(req.idempotency_key)  # allocated BEFORE any effect
-        row, created = self.store.begin(execution_id, req.idempotency_key, digest)
+        execution_id = execution_id_for(req.idempotency_key, tenant_id)  # allocated BEFORE any effect
+        row, created = self.store.begin(execution_id, scoped_key(req.idempotency_key, tenant_id), digest)
         if not created:
             if row.request_digest != digest:
                 raise ArmDenied("idempotency_conflict", 409)
@@ -172,6 +186,8 @@ class ArmRunner:
             base["target_commitment"] = loaded.commitment
         except TargetError as exc:
             return done("failed_infra", reason=exc.code, detail=exc.reason)
+        except Exception:  # store/transport failure while loading: infrastructure, never a 500
+            return done("failed_infra", reason="target_load_failed")
         try:  # step 4: scenarios for the harness only (no gold, no oracle)
             sealed = self.artifacts.artifact_get(req.scenario_manifest_ref, tenant_id)
             scenarios = [Scenario.model_validate(s) for s in sealed["scenarios"]]
@@ -179,6 +195,8 @@ class ArmRunner:
                        for sid, e in sealed.get("entries", {}).items()}
         except Exception:
             return done("failed_infra", reason="manifest_missing")
+        if not scenarios:
+            return done("failed_infra", reason="manifest_empty")  # zero scenarios run is no evidence at all
         budget = self.budgets.resolve(req.budget_ref, tenant_id)
         if budget is None:
             return done("failed_infra", reason="budget_unknown")
@@ -195,11 +213,14 @@ class ArmRunner:
             extra["evaluation_binding_ref"] = req.binding_ref
         if req.mode != "native":
             extra["manifest"] = entries
-        harness = self.composition.harness(req.mode, execution_id=execution_id, arm=req.arm, meter=meter,
-                                           tenant_id=tenant_id, **extra)
+        if (req.mode == "native") != (adapter is None) or (req.mode == "native" and type(sandbox) is not LocalSandbox):
+            return done("failed_infra", reason="mixed_world_rejected")  # defence in depth: native has no bank client
         status: ArmStatus = "completed"
         reason: str | None = None
+        harness: Any = None
         try:  # step 6: under the evaluation semaphore
+            harness = self.composition.harness(req.mode, execution_id=execution_id, arm=req.arm, meter=meter,
+                                               tenant_id=tenant_id, **extra)
             with self.gate.slot():
                 for scenario in scenarios:
                     handle = sandbox.provision(scenario.seed, loaded.eval_target)
@@ -213,10 +234,16 @@ class ArmRunner:
             status, reason = "failed_infra", str(exc)[:80] or type(exc).__name__
         except (SchemaError, pydantic.ValidationError):
             status, reason = "candidate_failed", "schema_violation"  # target hash verified: candidate-side fault
+        except Exception as exc:  # never a 500; an effect on the bank may have happened -> `unknown`
+            effect = adapter is not None and bool(adapter.receipts or adapter.unresolved)
+            status, reason = ("unknown" if effect else "failed_infra"), f"unexpected:{type(exc).__name__}"
         if adapter is not None and adapter.unresolved and status == "completed":
             status, reason = "unknown", "action_without_readback"
+        runs = harness.runs if harness is not None else []
+        early = [f"audit:{r.run_id}" for r in runs if r.closed_early]
         out: dict[str, Any] = {  # step 7
-            "event_refs": [f"audit:{r.run_id}" for r in harness.runs],
+            "closed_early": bool(early), "closed_early_runs": early,  # explicit evidence, never a silent pass
+            "event_refs": [f"audit:{r.run_id}" for r in runs],
             "effect_receipts": list(adapter.receipts) if adapter else [],
             "final_state_ref": adapter.final_state_refs[-1] if adapter and adapter.final_state_refs else None,
             "initial_state_digest": adapter.initial_state_digests[0] if adapter and adapter.initial_state_digests

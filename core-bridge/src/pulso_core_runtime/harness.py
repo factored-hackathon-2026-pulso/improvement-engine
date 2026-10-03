@@ -73,6 +73,7 @@ class RunRecord:
     repetition: int
     key: str
     run_id: str
+    closed_early: bool = False  # a later step hit `run_closed`: explicit evidence, never a silent pass
 
 
 class _ProbingGateway:
@@ -176,18 +177,18 @@ class PulsoScenarioHarness:
         arm = self._arm or target.label
         key = run_key(self._execution_id, scenario.id, arm, repetition, self._nonce)
         try:
-            run_id, events = self._run(target, agent_id, scenario, tools, entry, key)
+            run_id, events, closed_early = self._run(target, agent_id, scenario, tools, entry, key)
         except HarnessUnavailable:
             raise
         except (OSError, TimeoutError, psycopg.Error) as exc:
             raise HarnessUnavailable("infra_" + type(exc).__name__) from None
         with self._lock:
             self.runs.append(RunRecord(self._execution_id, self._mode, target.label, arm, scenario.id,
-                                       repetition, key, run_id))
+                                       repetition, key, run_id, closed_early))
         return events
 
     def _run(self, target: EvalTarget, agent_id: str, scenario: Scenario, tools: Any,
-             entry: ManifestEntry | None, key: str) -> tuple[str, list[EngineEvent]]:
+             entry: ManifestEntry | None, key: str) -> tuple[str, list[EngineEvent], bool]:
         storage = self._storage()
         probe = _ProbingGateway(self._gateway)
         provider_failures: list[str] = []
@@ -202,6 +203,7 @@ class PulsoScenarioHarness:
         run_id: str | None = None
         session_id: str | None = None
         token: str | None = None
+        closed_early = False
         for n, step in enumerate(scenario.steps):
             principal = self._principal(scenario, step.auth, entry)
             if step.op == "start":
@@ -225,6 +227,7 @@ class PulsoScenarioHarness:
                         confirm=confirm))
                 except EngineError as exc:
                     if exc.code is ProblemCode.run_closed:
+                        closed_early = True  # recorded on the RunRecord and surfaced in the reports
                         break  # the candidate closed the run early (e.g. escalated): events are the evidence
                     raise
             token = turn.confirmation.token if turn is not None and turn.confirmation is not None else None
@@ -236,7 +239,7 @@ class PulsoScenarioHarness:
             raise HarnessUnavailable("decision_provider_failed")
         if run_id is None:
             raise HarnessUnavailable("no_run_started")
-        return run_id, storage.audit.read(run_id)
+        return run_id, storage.audit.read(run_id), closed_early
 
 
 class EvalAuthz:

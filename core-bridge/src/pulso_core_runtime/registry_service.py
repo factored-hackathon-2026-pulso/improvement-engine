@@ -39,6 +39,7 @@ from pulso_core_runtime.evaluation.admission import (
     valid_context_ref,
 )
 from pulso_core_runtime.evaluation.budget import BudgetLimits
+from pulso_core_runtime.evaluation.digests import native_evaluate_digest
 from pulso_core_runtime.evaluation.native import BoundEvaluator, EvalComposition, EvaluationGate, PulsoEvalPort
 from pulso_core_runtime.evaluation.report import ReportStore, StoredReport, digest_of
 
@@ -105,10 +106,20 @@ class EvaluationRuntime:
             write = tx.get_draft_write(key)
         return None if write is None else write.result_ref
 
+    @staticmethod
+    def _evidence(bound: BoundEvaluator) -> dict[str, Any] | None:
+        """Early close is evidence, never a silent pass. `None` on a replay (no harness ran this time)."""
+        if bound.harness is None:
+            return None
+        early = [r.run_id for r in bound.harness.runs if r.closed_early]
+        return {"closed_early": bool(early), "closed_early_runs": [f"audit:{r}" for r in early],
+                "runs": len(bound.harness.runs)}
+
     def _persist(self, proposal_id: str, ref: str, key: str, report: dict[str, Any], verdict: str,
-                 gate_failed: bool) -> StoredReport:
+                 gate_failed: bool, evidence: dict[str, Any] | None = None) -> StoredReport:
         run_id = self._stored_run_id(key)
-        return self.reports.put(proposal_id, run_id or f"synthetic:{ref}", run_id, verdict, gate_failed, report)
+        body = report if evidence is None else {**report, "pulso_evidence": evidence}
+        return self.reports.put(proposal_id, run_id or f"synthetic:{ref}", run_id, verdict, gate_failed, body)
 
     # --- the Flow path ----------------------------------------------------------------------------------
 
@@ -125,9 +136,9 @@ class EvaluationRuntime:
         fresh = ProposalView(proposal_id, detail.proposal.state.value, detail.proposal.candidate_hash,
                              self._suite_digest(proposal_id, adm_probe.suite_id, adm_probe.suite_version))
         replay = self.service.get_write(key) is not None
-        digest = digest_of({"proposal_id": proposal_id, "candidate_hash": adm_probe.candidate_hash,
-                            "suite_id": adm_probe.suite_id, "suite_version": adm_probe.suite_version,
-                            "suite_digest": adm_probe.suite_digest, "evaluation_context_ref": ref})
+        digest = native_evaluate_digest(
+            proposal_id=proposal_id, evaluation_context_ref=ref, candidate_hash=adm_probe.candidate_hash,
+            suite_id=adm_probe.suite_id, suite_version=adm_probe.suite_version, suite_digest=adm_probe.suite_digest)
         adm: Admission = self.gate.begin(ctx, proposal_id, fresh, replay_exists=replay,
                                          suite_id=adm_probe.suite_id, suite_version=adm_probe.suite_version,
                                          native_payload_digest=digest)
@@ -146,7 +157,8 @@ class EvaluationRuntime:
                                     idempotency_key=key, audit=audit)
         except RegistryError as exc:
             if exc.code is RegistryErrorCode.gate_failed:
-                stored = self._persist(proposal_id, ref, key, exc.payload, "fail", True)  # type: ignore[arg-type]
+                stored = self._persist(proposal_id, ref, key, exc.payload, "fail", True,  # type: ignore[arg-type]
+                                       self._evidence(bound))  # the 409 body itself stays untouched
                 exc.pulso_report_digest = stored.report_digest  # type: ignore[attr-defined]
                 exc.pulso_eval_run_ref = stored.eval_run_id  # type: ignore[attr-defined]
                 raise
@@ -156,8 +168,8 @@ class EvaluationRuntime:
             self._settle_after_error(ref, key, bound)
             raise
         data = report.model_dump(mode="json")
-        stored = self._persist(proposal_id, ref, key, data, report.verdict, False)
-        return EvaluateOutcome(report.verdict, stored.eval_run_id, stored.report_digest, replay, data)
+        stored = self._persist(proposal_id, ref, key, data, report.verdict, False, self._evidence(bound))
+        return EvaluateOutcome(report.verdict, stored.eval_run_id, stored.report_digest, replay, stored.report)
 
     def _settle_after_error(self, ref: str, key: str, bound: BoundEvaluator) -> None:
         if self._stored_run_id(key) is not None:
