@@ -279,3 +279,74 @@ def test_writer_flow_reads_inputs_from_bind_facts_end_to_end(composed: Composed)
     assert [o for o in ops if o.startswith("registry/")][:3] == [
         "registry/create_proposal", "registry/put_draft", "registry/freeze"]
     assert "native_evaluate" not in ops  # evaluate_enabled=false: the Flow ended at `chk_evaluate`
+
+
+def _plan(composed: Composed, name: str, title: str) -> tuple[str, list[dict[str, Any]]]:
+    changes = _changes()
+    plan = {"agent_id": "atencion", "title": title, "changes": changes}
+    from agent_core.domain.json import canonical_bytes
+    digest = hashlib.sha256(canonical_bytes(plan)).hexdigest()
+    composed.loop.backend.artifacts[name] = {
+        "schema_version": "1", "artifact": {"id": name, "digest": digest, "media_type": "application/json"},
+        "encoding": "json", "content": plan, "byte_length": len(canonical_bytes(plan))}
+    return name, changes
+
+
+@pytest.mark.skipif(not WORLD.is_dir(), reason="agent-core-assets world absent")
+def test_evaluate_only_invocation_over_http_reaches_native_report_and_never_reopens(composed: Composed) -> None:
+    """First RED of the evaluate-only Flow branch (plan 17.3.3 / A04): write run (create/put/freeze) through the
+    invoke route, admission, then an evaluate-only invocation of the SAME `pulso-writer@1.0.0` for the frozen proposal
+    must run `registry/evaluate` (evaluate -> verify -> end), never `registry/reopen`."""
+    plan_ref, changes = _plan(composed, "plan-eo", "pulso-key:eo")
+    wkey = idem_key("t1", "j1", "writer", 1, "weo")
+    wr = composed.client.post("/internal/v1/core-tasks/invoke", headers={
+        **composed.headers("core_task_invoke"), "Idempotency-Key": wkey}, json=body(
+        stage="writer", agent_id="pulso-writer", agent_version="1.0.0", release_id=composed.release_ids["writer"],
+        logical="weo", memory_snapshot_ref=None,
+        input={"draft_plan_ref": plan_ref, "proposal_id": None, "base_release_id": "rel-demo",
+               "evaluate_enabled": False},
+        registry_mutation_commitment={
+            "mode": "write", "base_release_id": "rel-demo", "create_agent_id": "atencion",
+            "create_origin": "builder_chat", "create_title": "pulso-key:eo",
+            "put_draft_digest": put_draft_digest(None, None, changes), "operations": list(OPS)})).json()
+    assert wr["state"] == "terminal_ok", wr
+    with psycopg.connect(composed.pg.runtime) as conn:
+        row = conn.execute("select proposal_id, proposal_json::json->>'candidate_hash' from reg_proposals "
+                           "order by (proposal_json::json->>'rev')::int desc limit 1").fetchone()
+    pid, chash = row  # type: ignore[misc]
+    assert chash
+    suite = EvalSuite.model_validate(changes[1]["content"])
+    ekey = idem_key("t1", "j2", "writer", 1, "eoeval")
+    # the binding ref of an invocation is sha256(tenant|Idempotency-Key): Codex admits against it before dispatch
+    from pulso_core_runtime.invoke.models import sha256_text
+    adm = composed.client.post("/internal/v1/evaluation/admissions", headers=composed.headers(
+        "evaluation_admit", job_id="j2"), json={
+        "schema_version": "1", "evaluation_context_ref": "ctx-eo", "binding_ref": sha256_text(f"t1|{ekey}"),
+        "proposal_id": pid, "candidate_hash": chash, "suite_id": "disputas-suite", "suite_version": "1.0.0",
+        "suite_digest": content_hash(suite), "evaluation_attempt": 1, "budget_ref": "bud-1",
+        "deadline": (datetime.now(UTC) + timedelta(hours=1)).isoformat(), "request_digest": "d" * 64})
+    assert adm.status_code == 201, adm.text
+    runs0 = _eval_runs(composed)
+    n_before = len(composed.loop.backend.bodies)
+    er = composed.client.post("/internal/v1/core-tasks/invoke", headers={
+        **composed.headers("core_task_invoke", job_id="j2"), "Idempotency-Key": ekey}, json=body(
+        stage="writer", agent_id="pulso-writer", agent_version="1.0.0", release_id=composed.release_ids["writer"],
+        logical="eoeval", job="j2", memory_snapshot_ref=None,
+        input={"draft_plan_ref": plan_ref, "proposal_id": pid, "base_release_id": "rel-demo",
+               "evaluate_enabled": True, "evaluation_suite_id": "disputas-suite", "evaluation_suite_version": "1.0.0"},
+        registry_mutation_commitment={
+            "mode": "evaluate_only", "proposal_id": pid, "base_release_id": "rel-demo", "evaluate_enabled": True,
+            "evaluation_context_ref": "ctx-eo", "operations": []})).json()
+    ops = [b["operation"] for b in composed.loop.backend.bodies[n_before:] if b and "operation" in b]
+    assert er["state"] == "terminal_ok", (er, ops)
+    assert "registry/reopen" not in ops and "native_evaluate" in ops
+    assert _eval_runs(composed) > runs0
+    got = composed.client.get(f"/internal/v1/core-tasks/{er['core_run_id']}",
+                              headers=composed.headers("core_task_read", job_id="j2"))
+    assert got.status_code == 200, got.text
+    rec = got.json()
+    receipts = rec["result"]["facts"]["pulso_writer_receipts"]["value"] if "result" in rec else rec
+    assert receipts["proposal_id"] == pid and receipts["candidate_hash"] == chash and receipts["state"] == "confirmed"
+    native = receipts["native_evaluation"]
+    assert native["verdict"] == "pass" and native["eval_run_ref"] and len(native["report_digest"]) == 64
+    assert [w["op"] for w in receipts["write_receipts"]] == ["evaluate"]

@@ -261,10 +261,14 @@ def compose_writer_receipts(run_facts: Mapping[str, Any], actions: list[Mapping[
     state = "confirmed" if receipts and not unresolved else "unknown"
     native = None
     if isinstance(evaluation, dict) and evaluation.get("verdict") is not None:
+        # The bridge's stored report wins; otherwise the executor's own `registry/evaluate` result (tool-origin,
+        # never agent-origin) already carries the run ref and digest (evaluate-only invocation, plan A04 (b)).
         report = evaluation_report or {}
-        native = {"verdict": evaluation["verdict"], "eval_run_ref": report.get("eval_run_ref"),
-                  "report_digest": report.get("report_digest")}
+        native = {"verdict": evaluation["verdict"],
+                  "eval_run_ref": report.get("eval_run_ref", evaluation.get("eval_run_ref")),
+                  "report_digest": report.get("report_digest", evaluation.get("report_digest"))}
     pid = (proposal or {}).get("proposal_id") if isinstance(proposal, dict) else None
     return {"schema_version": "1", "proposal_id": pid or "", "rev": _nonneg_int(proposal.get("rev")) if isinstance(proposal, dict) else 0,
-            "candidate_hash": frozen.get("candidate_hash") if isinstance(frozen, dict) else None,
+            "candidate_hash": (frozen.get("candidate_hash") if isinstance(frozen, dict)
+                               else proposal.get("candidate_hash") if isinstance(proposal, dict) else None),
             "native_evaluation": native, "write_receipts": receipts, "state": state}

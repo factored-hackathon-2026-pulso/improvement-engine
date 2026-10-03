@@ -154,3 +154,23 @@ def test_strict_is_stricter_than_core_for_the_same_document() -> None:
     loose = {"schema_version": "1", "hypotheses": []}
     assert Draft202012Validator(CATALOG["scout"].core_output_schema).is_valid(loose)
     assert not Draft202012Validator(wl.strict_schema("pulso_hypotheses")).is_valid(loose)
+
+
+def test_evaluate_only_receipts_carry_native_report_and_candidate_hash_from_tool_facts() -> None:
+    """Evaluate-only run: no create/put/freeze facts. The candidate hash comes from the (tool-origin) proposal
+    fact and the native report refs from the executor's evaluate result; a stored report still wins."""
+    def fact(v: Any) -> SimpleNamespace:
+        return SimpleNamespace(value=v, source=SimpleNamespace(kind="tool"))
+
+    digest = "a" * 64
+    facts = {"proposal": fact({"proposal_id": "p1", "rev": 3, "candidate_hash": "sha256-abc"}),
+             "evaluation": fact({"verdict": "pass", "eval_run_ref": "run-1", "report_digest": digest}),
+             "evaluate_verified": fact({"op": "evaluate", "rev_after": 3, "request_hash": "h"})}
+    actions = [{"tool": {"id": "registry/evaluate"}, "state": "verified", "idempotency_key": "k"}]
+    out = compose_writer_receipts(facts, actions)
+    assert out["candidate_hash"] == "sha256-abc" and out["state"] == "confirmed"
+    assert out["native_evaluation"] == {"verdict": "pass", "eval_run_ref": "run-1", "report_digest": digest}
+    assert [r["op"] for r in out["write_receipts"]] == ["evaluate"]
+    wl.validate_fact("pulso_writer_receipts", out)
+    stored = compose_writer_receipts(facts, actions, evaluation_report={"eval_run_ref": "run-2", "report_digest": "b" * 64})
+    assert stored["native_evaluation"]["eval_run_ref"] == "run-2"

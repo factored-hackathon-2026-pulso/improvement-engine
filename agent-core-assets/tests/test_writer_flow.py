@@ -54,8 +54,8 @@ def test_writer_validates_before_freeze() -> None:
 
 def test_writer_evaluates_only_when_enabled_after_freeze() -> None:
     nodes = _nodes()
-    enabled = [n for n in nodes.values() if n["type"] == "rule" and "evaluate_enabled" in yaml.safe_dump(n["config"])]
-    assert enabled
+    enabled = [nodes["chk_evaluate"]]
+    assert "evaluate_enabled" in yaml.safe_dump(enabled[0]["config"])
     nxt = enabled[0]["next"]
     assert nodes[nxt[True]]["config"]["tool"] == "registry/evaluate@1"
     assert nodes[nxt[False]]["type"] == "end"
@@ -68,3 +68,15 @@ def test_writer_agent_allowlist_matches_flow_tools_and_has_no_approve() -> None:
     used = set(_tools(_nodes()))
     assert used <= set(agent["tools_allowed"])
     assert not any(t.split("/")[1].startswith(("approve", "publish", "promote", "put_alias")) for t in agent["tools_allowed"])
+
+
+def test_writer_routes_frozen_proposal_with_evaluate_enabled_to_evaluate_before_reopen() -> None:
+    """Evaluate-only invocation (A04): a frozen proposal never reaches `reopen` when evaluate is enabled."""
+    nodes = _nodes()
+    frozen = nodes["chk_state"]["next"]
+    assert frozen[False] == "chk_eval_only" and nodes["chk_eval_only"]["type"] == "rule"
+    assert "facts.binding.value.evaluate_enabled" in yaml.safe_dump(nodes["chk_eval_only"]["config"])
+    nxt = nodes["chk_eval_only"]["next"]
+    assert nxt[True] == "evaluate" and nxt[False] == "reopen"
+    assert nodes["evaluate"]["next"]["ok"] == "verify_evaluate" and nodes["verify_evaluate"]["next"]["verified"] == "done"
+    assert nodes["done"]["type"] == "end"
