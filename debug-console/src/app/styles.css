@@ -1,4 +1,4 @@
-body { font-family: system-ui, sans-serif; margin: 0; padding: 0 16px 24px; }
+body { color-scheme: light; background: #fff; color: #1a1a1a; font-family: system-ui, sans-serif; margin: 0; padding: 0 16px 24px; }
 .banner { position: sticky; top: 0; background: #fff3bf; border-bottom: 2px solid #b08900; padding: 6px 8px; font-weight: 600; }
 .banner.bad { background: #ffd6d6; border-color: #b00020; }
 .graph { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
@@ -31,3 +31,6 @@ body { font-family: system-ui, sans-serif; margin: 0; padding: 0 16px 24px; }
 .hyp[data-verdict="refuted"] { border-left: 6px solid #b00020; }
 .hyp[data-verdict="supported"] { border-left: 6px solid #1b7f3b; }
 table.alts { border-collapse: collapse; } table.alts th, table.alts td { border: 1px solid #555; padding: 4px 8px; text-align: left; }
+.node { color: #1a1a1a; max-width: 220px; }
+a { color: #0b3d91; }
+.banner.stand_in { font-size: .8rem; line-height: 1.25; padding: 4px 8px; }
