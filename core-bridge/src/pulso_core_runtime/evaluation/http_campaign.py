@@ -15,7 +15,7 @@ from typing import Any
 
 from agent_core.domain import Principal, dumps
 from agent_core.registry import RegistryError
-from agent_core.registry.http import _Problem, _problem
+from agent_core.registry.http import _Problem, problem_response
 from fastapi import FastAPI, Request, Response
 
 from pulso_core_runtime.evaluation.admission import AdmissionDenied, InvocationContext
@@ -61,7 +61,7 @@ def evaluation_admission_extension(runtime: EvaluationRuntime,
             except AdmissionDenied as exc:
                 return _denied(exc)
             except RegistryError as exc:
-                return _problem(request, exc)  # upstream outcome, unchanged
+                return problem_response(request, exc)  # upstream outcome, unchanged
             return Response(dumps(outcome.report), media_type="application/json")
 
     return install

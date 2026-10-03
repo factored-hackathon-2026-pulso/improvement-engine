@@ -16,13 +16,13 @@ from pulso_core_runtime.errors import PinDrift
 PIN_SYMBOLS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("agent_core.composition.serve_ports", "resolve_ports", "func", ("args", "env", "clock", "ids", "tracer")),
     ("agent_core.composition.serve_ports", "ServePorts", "dataclass",
-     ("clock", "ids", "registry", "releases", "doubles", "readiness", "registry_api", "directory")),
+     ("clock", "ids", "registry", "releases", "doubles", "readiness", "registry_api", "directory", "run_export")),
     ("agent_core.composition.serve_ports", "DemoContext", "dataclass", ("clock", "ids", "registry")),
-    ("agent_core.composition.serve", "build_api_deps", "func", ("ports", "registry_service", "telemetry")),
+    ("agent_core.composition.serve", "build_api_deps", "func", ("ports", "registry_service", "telemetry", "build_sha")),
     ("agent_core.api.app", "ApiDeps", "dataclass", ("limits", "extensions", "readiness")),
     ("agent_core.api.app", "create_app", "func", ("deps",)),
     ("agent_core.registry.http", "registry_extension", "func", ("service", "verifier", "clock")),
-    ("agent_core.registry", "RegistryService", "class", ()),
+    ("agent_core.registry", "RegistryService", "class", ("get_alias", "list_events")),  # N-02 / N-08 reads
     ("agent_core.registry", "ScenarioEvaluator", "class", ()),
     ("agent_core.registry", "LocalSandbox", "class", ()),
     ("agent_core.composition.evaluation", "EngineScenarioHarness", "class", ()),
@@ -38,6 +38,17 @@ PIN_SYMBOLS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("agent_core.composition.builder_tools", "BuilderToolExecutor", "class", ()),
     ("agent_core.adapters.identity_keys", "load_identity_verifier", "func",
      ("path", "grant_active", "delegation")),
+    # N-09: `resolve_ports` wraps the identity/staff key files in this verifier (`last_reload_error` is read by us).
+    ("agent_core.adapters.identity_keys", "ReloadingIdentityVerifier", "class", ("verify", "verify_delegation")),
+    # N-08: the HTTP export port; we null it by default (`PULSO_CORE_EXPORT_ENABLED`).
+    ("agent_core.ports.export", "RunExport", "class", ()),
+    ("agent_core.ports.export", "RunSummary", "class", ()),
+    # N-01/N-07: `release_settings` draft kind (a draft kind, not an EntityKind) and its content model.
+    ("agent_core.registry.models", "RELEASE_SETTINGS", "const", ()),
+    ("agent_core.registry.models", "ReleaseSettings", "class", ()),
+    # Registry HTTP problem+json used by our evaluation campaign route (public alias since N-08).
+    ("agent_core.registry.http", "problem_response", "func", ("request", "exc")),
+    ("agent_core.registry.http", "_Problem", "class", ()),
 )
 
 
@@ -52,10 +63,12 @@ def _check(module: str, name: str, kind: str, required: tuple[str, ...]) -> str 
         if not dataclasses.is_dataclass(obj):
             return f"{module}:{name} is not a dataclass"
         have = {f.name for f in dataclasses.fields(obj)}
-    else:
+    elif kind == "const":
         have = set()
+    else:
         if not inspect.isclass(obj):
             return f"{module}:{name} is not a class"
+        have = {n for n in required if hasattr(obj, n)}
     missing = sorted(set(required) - have)
     return f"{module}:{name} lacks {', '.join(missing)}" if missing else None
 

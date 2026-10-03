@@ -24,6 +24,13 @@ from pulso_core_runtime.factories import DEFAULT_PATHS, FACTORIES, FACTORY_NAMES
 DEMO_ENV = "AGENTCORE_ALLOW_DEMO"
 # Literal: `agent_core.composition.serve.GATEWAY_TRACER` was removed upstream (PR #26); the value is unchanged.
 LLM_GATEWAY_TRACER = "agent_core.adapters.llm"
+# N-09: Core re-reads the key files at most every N seconds (its own default is 5, applied silently when the arg is
+# absent). Explicit here so the value is a decision, not an accident; 0 disables.
+KEYS_RELOAD_ENV = "PULSO_KEYS_RELOAD_SECONDS"
+KEYS_RELOAD_DEFAULT = 5.0
+# N-08: Core mounts `/v1/export/*` whenever the store can export and a staff verifier exists (both true here). The
+# bridge's own PG exporter is the ingest path (outbox + exact event JSON), so the HTTP export stays OFF unless asked.
+EXPORT_ENV = "PULSO_CORE_EXPORT_ENABLED"
 KEYS_DIR = "/run/pulso-keys"
 # (env var, default file stem under KEYS_DIR): the bridge's own private signers (see `invoke.wiring.build_l3`).
 SIGNER_FILES: tuple[tuple[str, str], ...] = (
@@ -54,19 +61,40 @@ def factory_paths(env: Mapping[str, str]) -> dict[str, str]:
     return paths
 
 
+def keys_reload_seconds(env: Mapping[str, str]) -> float:
+    raw = env.get(KEYS_RELOAD_ENV, "").strip()
+    if not raw:
+        return KEYS_RELOAD_DEFAULT
+    try:
+        value = float(raw)
+    except ValueError:
+        raise RuntimeConfigError(KEYS_RELOAD_ENV, "must be a number of seconds") from None
+    if not 0 <= value < 86400:
+        raise RuntimeConfigError(KEYS_RELOAD_ENV, "must be between 0 (off) and 86400 seconds")
+    return value
+
+
+def export_enabled(env: Mapping[str, str]) -> bool:
+    return env.get(EXPORT_ENV, "").strip().lower() in {"1", "true", "yes"}
+
+
 def synthesise_args(env: Mapping[str, str], paths: Mapping[str, str]) -> argparse.Namespace:
     ns: dict[str, Any] = {attr: paths[name] for attr, name in FACTORIES}
     ns.update(
         host=env.get("PULSO_HOST", "0.0.0.0"), port=int(env.get("PULSO_PORT", "8000")), dsn=None,
         agents=None, registry_api=True, eval_dsn=None,
         identity_keys=Path(env.get("PULSO_IDENTITY_KEYS", f"{KEYS_DIR}/identity.json")),
-        staff_keys=Path(env.get("PULSO_STAFF_KEYS", f"{KEYS_DIR}/staff.json")))
+        staff_keys=Path(env.get("PULSO_STAFF_KEYS", f"{KEYS_DIR}/staff.json")),
+        keys_reload_seconds=keys_reload_seconds(env))
     return argparse.Namespace(**ns)
 
 
-def version_info(env: Mapping[str, str], doubles: list[str] | None = None) -> Callable[[], dict[str, Any]]:
+def version_info(env: Mapping[str, str], doubles: list[str] | None = None,
+                 ports: Any = None) -> Callable[[], dict[str, Any]]:
     def info() -> dict[str, Any]:
-        return {"agent_core_sha": PIN_SHA, "contracts_version": CONTRACTS_VERSION,
+        # Exception TYPE of the last failed key reload (N-09), never a message; None when healthy or reload is off.
+        reload_error = getattr(getattr(ports, "verifier", None), "last_reload_error", None)
+        return {"keys_reload_error": reload_error, "agent_core_sha": PIN_SHA, "contracts_version": CONTRACTS_VERSION,
                 "pulso_sha": env.get("PULSO_SHA", "unknown"), "image_digest": env.get("PULSO_IMAGE_DIGEST", "unknown"),
                 "runtime_profile": "agent_core_real",
                 "doubles": list(doubles if doubles is not None
@@ -179,7 +207,11 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
     except ObservabilityConfigError as exc:
         return _fail(err, *exc.problems)
     try:
-        args = synthesise_args(env, paths)
+        try:
+            args = synthesise_args(env, paths)
+        except RuntimeConfigError as exc:
+            print(f"pulso-core-runtime cannot start: {exc}", file=err)
+            return EXIT_CONFIG
         dsn = env.get("AGENTCORE_REGISTRY_DSN", "")
         eval_dsn = env.get("AGENTCORE_EVAL_DSN", "")
         service_path = Path(env.get("PULSO_SERVICE_KEYS", f"{KEYS_DIR}/service.json"))
@@ -244,13 +276,17 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         live = dataclasses.replace(
             ports, gateway=BindingGuardGateway(SpendMeteringGateway(ports.gateway, l3.registry, l3.store), l3.registry),
             providers={name: BindingGuardProvider(p, l3.registry) for name, p in ports.providers.items()})
-        deps = build_api_deps(live, registry_service=evaluation.service, telemetry=OtelTurnTelemetry())
+        if not export_enabled(env):
+            live = dataclasses.replace(live, run_export=None)  # N-08: no `/v1/export/*` unless explicitly enabled
+        # N-04: Core's own `/version` reports this build sha (ours at `/internal/v1/version` also carries digest+doubles).
+        deps = build_api_deps(live, registry_service=evaluation.service, telemetry=OtelTurnTelemetry(),
+                              build_sha=env.get("PULSO_CORE_SHA") or PIN_SHA)
         handlers: dict[str, Any] = {}
         register_evaluation(handlers, EvaluationDeps(evaluation, arms, broker, budgets))
         doubles = [f"{k}: {v}" for k, v in sorted({**stand_ins(env), **_wiring_stand_ins(budgets)}.items())]
         doubles += [f"core:{name}" for name in ports.doubles]
         verifier = ServiceJwtVerifier(service_keys, PgJtiStore(dsn))
-        internal = build_internal_app(verifier, version_info=version_info(env, doubles), handlers=handlers, l3=l3)
+        internal = build_internal_app(verifier, version_info=version_info(env, doubles, ports), handlers=handlers, l3=l3)
 
         def internal_extension(app: Any, authenticate: Any) -> None:
             app.mount("/internal/v1", internal)
