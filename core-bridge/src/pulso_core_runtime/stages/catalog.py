@@ -23,19 +23,29 @@ def _obj(required: list[str], properties: dict[str, Any]) -> dict[str, Any]:
     return {"type": "object", "additionalProperties": False, "required": required, "properties": properties}
 
 
+_ARTIFACT_REF = _obj(["id", "digest", "media_type"], {"id": _STR, "digest": _STR, "media_type": _STR})
+_REFS: dict[str, Any] = {"type": "array", "items": _ARTIFACT_REF}
+_VERDICT = {"type": "string", "enum": ["supported", "refuted", "inconclusive"]}
+_KIND = {"type": "string", "enum": ["do_nothing", "proposed_change"]}
+
+# Annex D.2 shapes. Core's `output_schema` has no minItems/pattern/contains: the strict schemas carry those.
 HYPOTHESES_CORE = _obj(["schema_version", "hypotheses"], {
     "schema_version": _V1,
     "hypotheses": {"type": "array", "items": _obj(
-        ["hypothesis_id", "statement", "evidence_refs"],
-        {"hypothesis_id": _STR, "statement": _STR, "evidence_refs": _STR_LIST})}})
-VERIFICATION_CORE = _obj(["schema_version", "verdicts"], {
+        ["id", "statement", "mechanism", "evidence_refs", "counterevidence_refs", "missing_evidence",
+         "next_queries"],
+        {"id": _STR, "statement": _STR, "mechanism": _STR, "evidence_refs": _REFS,
+         "counterevidence_refs": _REFS, "missing_evidence": _STR_LIST, "next_queries": _STR_LIST})}})
+VERIFICATION_CORE = _obj(["schema_version", "assessments"], {
     "schema_version": _V1,
-    "verdicts": {"type": "array", "items": _obj(
-        ["hypothesis_id", "verdict", "evidence_refs"],
-        {"hypothesis_id": _STR, "verdict": {"type": "string", "enum": ["supported", "refuted", "inconclusive"]},
-         "evidence_refs": _STR_LIST})}})
-CHANGE_SPEC_CORE = _obj(["schema_version", "change_spec"], {
-    "schema_version": _V1, "change_spec": {"type": "object"}})
+    "assessments": {"type": "array", "items": _obj(
+        ["hypothesis_id", "verdict", "evidence_refs", "counterevidence_refs", "limitations"],
+        {"hypothesis_id": _STR, "verdict": _VERDICT, "evidence_refs": _REFS, "counterevidence_refs": _REFS,
+         "limitations": _STR_LIST})}})
+CHANGE_SPEC_CORE = _obj(["schema_version", "change_spec", "rationale", "evidence_refs", "alternatives"], {
+    "schema_version": _V1, "change_spec": {"type": "object"}, "rationale": _STR, "evidence_refs": _REFS,
+    "alternatives": {"type": "array", "items": _obj(
+        ["id", "kind", "summary"], {"id": _STR, "kind": _KIND, "summary": _STR, "limitations": _STR_LIST})}})
 
 
 @dataclass(frozen=True)

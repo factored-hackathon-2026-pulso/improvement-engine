@@ -103,16 +103,43 @@ def _walk_numbers(value: Any) -> None:
             _walk_numbers(v)
 
 
-def _collect_refs(value: Any, out: list[str]) -> None:
+EVIDENCE_KEYS = ("evidence_refs", "counterevidence_refs")
+EVIDENCE_FACTS = ("pulso_hypotheses", "pulso_verification", "pulso_change_spec")
+
+
+def _collect_refs(value: Any, out: list[Mapping[str, Any]]) -> None:
+    """Every ArtifactRef under `evidence_refs`/`counterevidence_refs` (D.2); non-object entries are kept so that
+    a bare string or wiki path is rejected rather than silently skipped."""
     if isinstance(value, dict):
         for k, v in value.items():
-            if k == "evidence_refs" and isinstance(v, list):
-                out.extend(x for x in v if isinstance(x, str))
+            if k in EVIDENCE_KEYS and isinstance(v, list):
+                out.extend(x if isinstance(x, Mapping) else {"id": x} for x in v)
             else:
                 _collect_refs(v, out)
     elif isinstance(value, list):
         for v in value:
             _collect_refs(v, out)
+
+
+def _norm_digest(value: Any) -> Any:
+    return value.removeprefix("sha256:") if isinstance(value, str) else value
+
+
+def _ref_in_call_log(ref: Mapping[str, Any], log: Collection[str]) -> bool:
+    """`log` is `{artifact_id: {digest, media_type}}` (`InvocationRegistry.seen_artifacts`): the ref must name an
+    artifact the invocation really fetched/produced, with the same digest and media type where those are known.
+    A plain collection of ids (legacy) checks the id only."""
+    rid = ref.get("id")
+    if not isinstance(rid, str) or rid not in log:
+        return False
+    if not isinstance(log, Mapping):
+        return True
+    known = log[rid] or {}
+    for field in ("digest", "media_type"):
+        have = _norm_digest(known.get(field)) if field == "digest" else known.get(field)
+        if have is not None and have != _norm_digest(ref.get(field)):
+            return False
+    return True
 
 
 def _string_leaves(value: Any) -> list[str]:
@@ -146,19 +173,26 @@ def validate_fact(name: str, value: Any, *, canaries: Collection[str] = (),
     text = raw.decode("utf-8")
     if any(c and (c in text or any(c in leaf for leaf in _string_leaves(value))) for c in canaries):
         raise FactError("pulso:canary_detected", name)
-    if call_log_refs is not None and name in ("pulso_hypotheses", "pulso_verification"):
-        refs: list[str] = []
+    if call_log_refs is not None and name in EVIDENCE_FACTS:
+        refs: list[Mapping[str, Any]] = []
         _collect_refs(value, refs)
-        if any(r not in call_log_refs for r in refs):
+        if not all(_ref_in_call_log(r, call_log_refs) for r in refs):
             raise FactError("pulso:fact_schema_violation", "evidence_ref not in the invocation call log")
     return hashlib.sha256(raw).hexdigest()
 
 
+_ABSENT = object()
+
+
 def _fact_parts(fact: Any) -> tuple[Any, str]:
+    """`(value, source_kind)`; `value` is `_ABSENT` for a fact that lacks one (never a KeyError/AttributeError).
+    A missing source is never promoted: it reads as `agent`."""
     if isinstance(fact, Mapping):
-        source = fact.get("source") or {}
-        return fact["value"], str(source.get("kind", "agent")) if isinstance(source, Mapping) else "agent"
-    return fact.value, str(fact.source.kind)
+        source = fact.get("source")
+        kind = source.get("kind") if isinstance(source, Mapping) else None
+        return fact.get("value", _ABSENT), str(kind or "agent")
+    source = getattr(fact, "source", None)
+    return getattr(fact, "value", _ABSENT), str(getattr(source, "kind", None) or "agent")
 
 
 def project_result(stage: str, *, core_run_id: str, status: str, outcome: str | None,
@@ -176,9 +210,9 @@ def project_result(stage: str, *, core_run_id: str, status: str, outcome: str | 
             digest = validate_fact(spec.fact, writer_receipts, canaries=canaries)
             facts[spec.fact] = {"value": writer_receipts, "source_kind": "compute", "digest": digest}
         else:
-            if spec.fact not in run_facts:
+            value, source_kind = _fact_parts(run_facts.get(spec.fact))
+            if value is _ABSENT or value is None:
                 raise FactError("pulso:output_missing", spec.fact)
-            value, source_kind = _fact_parts(run_facts[spec.fact])
             digest = validate_fact(spec.fact, value, canaries=canaries, call_log_refs=call_log_refs)
             facts[spec.fact] = {"value": value, "source_kind": source_kind, "digest": digest}
     envelope = {"schema_version": "1", "core_run_id": core_run_id, "status": status, "outcome": outcome,
@@ -187,6 +221,10 @@ def project_result(stage: str, *, core_run_id: str, status: str, outcome: str | 
     if len(canonical_bytes(envelope)) > MAX_RESULT_BYTES:
         raise FactError("pulso:output_too_large", "result")
     return envelope
+
+
+def _nonneg_int(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
 
 def _tool_id(action: Mapping[str, Any]) -> str:
@@ -201,7 +239,8 @@ def compose_writer_receipts(run_facts: Mapping[str, Any], actions: list[Mapping[
     (`{eval_run_ref, report_digest}`, from the bridge's `eval_reports` store) completes `native_evaluation`."""
 
     def value(name: str) -> Any:
-        return _fact_parts(run_facts[name])[0] if name in run_facts else None
+        got = _fact_parts(run_facts.get(name))[0]
+        return None if got is _ABSENT else got
 
     proposal, frozen, evaluation = value("proposal"), value("frozen"), value("evaluation")
     verified_ops = {v.get("op"): v for v in (value(n) for n in ("created", "reopen_verified", "put_verified",
@@ -213,7 +252,7 @@ def compose_writer_receipts(run_facts: Mapping[str, Any], actions: list[Mapping[
             continue
         key = next((str(a.get("idempotency_key")) for a in actions if _tool_id(a) == f"registry/{op}"), "")
         receipts.append({"op": op, "key_digest": hashlib.sha256(key.encode()).hexdigest(),
-                         "rev_after": int(rec.get("rev_after", 0)), "request_hash": str(rec.get("request_hash", "")),
+                         "rev_after": _nonneg_int(rec.get("rev_after")), "request_hash": str(rec.get("request_hash", "")),
                          "verified": True})
     # unknown whenever any action is executing|uncertain without a verified readback for its op
     verified = set(verified_ops)
@@ -226,7 +265,6 @@ def compose_writer_receipts(run_facts: Mapping[str, Any], actions: list[Mapping[
         native = {"verdict": evaluation["verdict"], "eval_run_ref": report.get("eval_run_ref"),
                   "report_digest": report.get("report_digest")}
     pid = (proposal or {}).get("proposal_id") if isinstance(proposal, dict) else None
-    return {"schema_version": "1", "proposal_id": pid or "", "rev": int((proposal or {}).get("rev", 0))
-            if isinstance(proposal, dict) else 0,
+    return {"schema_version": "1", "proposal_id": pid or "", "rev": _nonneg_int(proposal.get("rev")) if isinstance(proposal, dict) else 0,
             "candidate_hash": frozen.get("candidate_hash") if isinstance(frozen, dict) else None,
             "native_evaluation": native, "write_receipts": receipts, "state": state}

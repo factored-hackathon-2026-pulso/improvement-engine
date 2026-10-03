@@ -39,6 +39,10 @@ def artifact_get(deps: Deps, ic: InvocationContext, args: Args, run_id: str) -> 
     if _HEX64.match(declared) and _digest_of(body) != declared:
         return err("pulso:artifact_digest_mismatch")
     deps.contexts.record_refs(ic.binding_ref, [artifact_ref, str(meta.get("id", ""))])
-    return ok({"artifact": {"id": meta.get("id"), "digest": meta.get("digest"),
+    digest = str(meta.get("digest", "")).removeprefix("sha256:") or None
+    media = meta.get("media_type") if isinstance(meta.get("media_type"), str) else None
+    for rid in {artifact_ref, str(meta.get("id", ""))}:
+        deps.contexts.record_artifact(ic.binding_ref, rid, digest=digest, media_type=media)
+    return ok({"artifact": {"id": meta.get("id"), "digest": digest,
                             "media_type": meta.get("media_type")},
                "encoding": body.get("encoding"), "content": body["content"], "byte_length": byte_length})

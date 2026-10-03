@@ -18,19 +18,74 @@ nodes:
       output_schema:
         type: object
         additionalProperties: false
-        required: [schema_version, hypotheses]
+        required:
+        - schema_version
+        - hypotheses
         properties:
-          schema_version: {type: string, enum: ["1"]}
+          schema_version:
+            type: string
+            enum:
+            - '1'
           hypotheses:
             type: array
             items:
               type: object
               additionalProperties: false
-              required: [hypothesis_id, statement, evidence_refs]
+              required:
+              - id
+              - statement
+              - mechanism
+              - evidence_refs
+              - counterevidence_refs
+              - missing_evidence
+              - next_queries
               properties:
-                hypothesis_id: {type: string}
-                statement: {type: string}
-                evidence_refs: {type: array, items: {type: string}}
+                id:
+                  type: string
+                statement:
+                  type: string
+                mechanism:
+                  type: string
+                evidence_refs:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required:
+                    - id
+                    - digest
+                    - media_type
+                    properties:
+                      id:
+                        type: string
+                      digest:
+                        type: string
+                      media_type:
+                        type: string
+                counterevidence_refs:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required:
+                    - id
+                    - digest
+                    - media_type
+                    properties:
+                      id:
+                        type: string
+                      digest:
+                        type: string
+                      media_type:
+                        type: string
+                missing_evidence:
+                  type: array
+                  items:
+                    type: string
+                next_queries:
+                  type: array
+                  items:
+                    type: string
     next: {answered: done, gave_up: esc_gave_up}
   - {id: done, type: end, config: {outcome: completed}}
   - {id: esc_binding, type: escalate, config: {reason_code: auth_insufficient}}

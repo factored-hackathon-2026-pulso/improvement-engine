@@ -18,10 +18,60 @@ nodes:
       output_schema:
         type: object
         additionalProperties: false
-        required: [schema_version, change_spec]
+        required:
+        - schema_version
+        - change_spec
+        - rationale
+        - evidence_refs
+        - alternatives
         properties:
-          schema_version: {type: string, enum: ["1"]}
-          change_spec: {type: object}
+          schema_version:
+            type: string
+            enum:
+            - '1'
+          change_spec:
+            type: object
+          rationale:
+            type: string
+          evidence_refs:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+              - id
+              - digest
+              - media_type
+              properties:
+                id:
+                  type: string
+                digest:
+                  type: string
+                media_type:
+                  type: string
+          alternatives:
+            type: array
+            items:
+              type: object
+              additionalProperties: false
+              required:
+              - id
+              - kind
+              - summary
+              properties:
+                id:
+                  type: string
+                kind:
+                  type: string
+                  enum:
+                  - do_nothing
+                  - proposed_change
+                summary:
+                  type: string
+                limitations:
+                  type: array
+                  items:
+                    type: string
     next: {answered: done, gave_up: esc_gave_up}
   - {id: done, type: end, config: {outcome: completed}}
   - {id: esc_binding, type: escalate, config: {reason_code: auth_insufficient}}

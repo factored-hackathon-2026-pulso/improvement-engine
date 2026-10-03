@@ -57,11 +57,14 @@ def test_relaxation_check_detects_a_tightened_core_schema() -> None:
     strict = wl.strict_schema("pulso_verification")
     core = copy.deepcopy(CATALOG["verifier"].core_output_schema)
     assert core is not None
-    core["properties"]["verdicts"]["items"]["properties"]["verdict"]["enum"] = ["supported"]
+    core["properties"]["assessments"]["items"]["properties"]["verdict"]["enum"] = ["supported"]
     assert not wl.is_relaxation(core, strict)
 
 
-H = {"schema_version": "1", "hypotheses": [{"hypothesis_id": "h1", "statement": "s", "evidence_refs": ["art:1"]}]}
+REF = {"id": "art:1", "digest": "c" * 64, "media_type": "application/json"}
+H = {"schema_version": "1", "hypotheses": [{
+    "id": "h1", "statement": "s", "mechanism": "m", "evidence_refs": [REF], "counterevidence_refs": [],
+    "missing_evidence": [], "next_queries": []}]}
 
 
 def _facts(value: Any, kind: str = "agent") -> dict[str, Any]:
@@ -101,7 +104,8 @@ def test_schema_violations_floats_and_unknown_keys_rejected() -> None:
 
 
 def test_fact_and_result_caps() -> None:
-    big = {"schema_version": "1", "change_spec": {"k": "x" * (130 * 1024)}}
+    big = {"schema_version": "1", "change_spec": {"k": "x" * (130 * 1024)}, "rationale": "r", "evidence_refs": [REF],
+           "alternatives": [{"id": "n", "kind": "do_nothing", "summary": "keep"}]}
     with pytest.raises(FactError) as e:
         wl.validate_fact("pulso_change_spec", big)
     assert e.value.code == "pulso:output_too_large"
@@ -112,9 +116,9 @@ def test_canary_scan_and_call_log_evidence() -> None:
         _project({**H, "hypotheses": [{**H["hypotheses"][0], "statement": "leak CANARY-123 here"}]},
                  canaries=["CANARY-123"])
     assert e.value.code == "pulso:canary_detected"
-    _project(H, call_log_refs={"art:1"})
+    _project(H, call_log_refs={"art:1": {"digest": "c" * 64, "media_type": "application/json"}})
     with pytest.raises(FactError):
-        _project(H, call_log_refs={"art:other"})
+        _project(H, call_log_refs={"art:other": {"digest": "c" * 64, "media_type": "application/json"}})
 
 
 def test_writer_receipts_projection_unknown_when_action_uncertain_without_readback() -> None:

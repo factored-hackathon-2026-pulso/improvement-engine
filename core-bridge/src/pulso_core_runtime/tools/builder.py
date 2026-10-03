@@ -215,8 +215,11 @@ class ProtectedBuilderToolExecutor:
     def _remember_key(self, ic: InvocationContext, engine_key: str, derived: str) -> None:
         self._contexts.remember_in_map(ic.binding_ref, _DERIVED, engine_key, derived)
 
-    def _derive(self, ic: InvocationContext, engine_key: str) -> str:
-        ordinal = self._contexts.ordinal(ic.binding_ref, engine_key)
+    def _derive(self, ic: InvocationContext, engine_key: str, op: str) -> str | None:
+        operations = ic.commitment.operations if ic.commitment else ()
+        ordinal = self._contexts.ordinal(ic.binding_ref, engine_key, op, operations)
+        if ordinal is None:
+            return None  # write not (or no longer) in the committed operation array
         derived = write_key(ic.command_key, ic.stage, ordinal)
         self._remember_key(ic, engine_key, derived)
         return derived
@@ -224,7 +227,8 @@ class ProtectedBuilderToolExecutor:
     @staticmethod
     def _own_keys(ic: InvocationContext) -> frozenset[str]:
         """Keys this command can have produced (crash recovery reads them without the in-memory map)."""
-        keys = {write_key(ic.command_key, ic.stage, n) for n in range(_MAX_ORDINALS)}
+        committed = ic.commitment.operations if ic.commitment else ()
+        keys = {write_key(ic.command_key, ic.stage, n) for n in range(len(committed) or _MAX_ORDINALS)}
         ref = ic.evaluation_context_ref
         if ref is not None and _EVAL_REF.match(ref):
             keys.add(eval_key(ref))
@@ -240,7 +244,9 @@ class ProtectedBuilderToolExecutor:
                 return self._result(_denied("pulso:write_without_key"))
             if tool.id == "registry/create_proposal" and                     self._contexts.claim(ic.binding_ref, "create_engine_key", engine_key) != engine_key:
                 return self._result(_denied("commitment_mismatch"))  # one proposal per invocation
-            derived = self._derive(ic, engine_key)
+            derived = self._derive(ic, engine_key, tool.id.removeprefix("registry/"))
+            if derived is None:
+                return self._result(_denied("commitment_mismatch"))
         elif tool.id == "registry/get_write":
             requested = args.get("idempotency_key")
             mapping = self._contexts.recall(ic.binding_ref, _DERIVED, {})

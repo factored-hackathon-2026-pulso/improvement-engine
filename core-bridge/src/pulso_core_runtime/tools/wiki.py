@@ -18,9 +18,10 @@ def wiki_read(deps: Deps, ic: InvocationContext, args: Args, run_id: str) -> Out
     if ic.memory_snapshot_ref is None:
         return err("pulso:no_memory_snapshot")
     body = deps.broker.wiki_read(ic.binding_ref, ic.memory_snapshot_ref, [text_arg(args, "path")])
+    # Wiki paths are never evidence (D.2): only the artifact ids a page cites are remembered.
     refs: list[str] = []
     for e in body.get("entries", []):
-        refs += [str(e.get("path", "")), *[str(r) for r in e.get("evidence_refs", [])]]
+        refs += [str(r) for r in e.get("evidence_refs", [])]
     deps.contexts.record_refs(ic.binding_ref, refs)
     return ok({"entries": body.get("entries", []), "base_digest": body.get("base_digest")})
 

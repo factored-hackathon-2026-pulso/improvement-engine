@@ -38,7 +38,10 @@ def test_get_write_cannot_read_a_foreign_key() -> None:
 
 @pytest.mark.parametrize("canary", ['say "hi"', "line1\nline2", r"backslash"])
 def test_canary_with_json_escapable_chars_is_detected(canary: str) -> None:
-    value: dict[str, Any] = {"schema_version": "1", "change_spec": {"note": f"x {canary} y"}}
+    value: dict[str, Any] = {
+        "schema_version": "1", "change_spec": {"note": f"x {canary} y"}, "rationale": "r",
+        "evidence_refs": [{"id": "a1", "digest": "a" * 64, "media_type": "application/json"}],
+        "alternatives": [{"id": "n", "kind": "do_nothing", "summary": "keep"}]}
     with pytest.raises(wl.FactError) as e:
         wl.validate_fact("pulso_change_spec", value, canaries=[canary])
     assert e.value.code == "pulso:canary_detected"

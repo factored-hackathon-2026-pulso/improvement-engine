@@ -63,6 +63,9 @@ def shape_result(deps: Deps, ic: InvocationContext, page: dict[str, Any], query_
             containers[cls] = {"columns": [{"name": columns[i]["name"], "type": columns[i].get("type")} for i in idx],
                                "rows": [[r[i] for i in idx] for r in rows]}
     deps.contexts.record_refs(ic.binding_ref, [str(page.get("receipt_ref") or ""), str(query_ref or "")])
+    for rid in (page.get("receipt_ref"), query_ref):
+        if isinstance(rid, str):
+            deps.contexts.record_artifact(ic.binding_ref, rid)  # digest/media type unknown: id-only check
     return ok({"containers": containers, "row_count": len(rows),
                "truncated": bool(page.get("truncated")) or clipped,
                "next_cursor": None if clipped else page.get("next_cursor"),
@@ -89,6 +92,8 @@ def lab_query(deps: Deps, ic: InvocationContext, args: Args, run_id: str) -> Out
         return err(f"pulso:lab_query_failed:{state.get('reason_code') or 'unknown'}")
     deps.contexts.record_refs(ic.binding_ref, [str(state.get("receipt_ref") or ""), str(state["result_ref"])])
     page = deps.broker.lab_result(ic.binding_ref, str(state["result_ref"]))
+    if isinstance(page.get("result_digest"), str):
+        deps.contexts.record_artifact(ic.binding_ref, str(state["result_ref"]), digest=page["result_digest"])
     return shape_result(deps, ic, page, query_ref)
 
 

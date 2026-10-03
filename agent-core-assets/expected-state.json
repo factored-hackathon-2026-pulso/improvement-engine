@@ -179,7 +179,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "70002debac6f25984da9e28b88442f96e8e4903a8638faf3f90d36dc7dbcec5b",
+        "content_hash": "befc272aea64857ae7666eb3a6e0cb65622919b6693e6c5de7b811de4b44087a",
         "id": "pulso-builder-design",
         "kind": "flow",
         "version": "1.0.0"
@@ -203,7 +203,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "0e00eea55129db00fdc8f2dad2c5e5a42d48712b01c02d2bab0b5e9850c251fd",
+        "content_hash": "8d51e57b4c577834aa89f6b4a906e2fd00212768777912568e12d9600684ec5a",
         "id": "p/builder_design_task",
         "kind": "prompt",
         "version": "1.0.0"
@@ -289,7 +289,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "689d86daa21b57f3cb93e1f9571e7157c412a44a98f1655d0728248c4efdfe60",
+        "content_hash": "1b797ed723e38893660389e105e934018ed6fa18a232f94db9ba0ff13581e26b",
         "id": "pulso-scout",
         "kind": "flow",
         "version": "1.0.0"
@@ -313,7 +313,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "8f65caa0e805dec01e8fba93f93539835574e6449c8659457203375135ceb22d",
+        "content_hash": "405c44ba4486d7669fc1f34526924c05830cd6fea5ae8db7c08ea36856952e8f",
         "id": "p/scout_task",
         "kind": "prompt",
         "version": "1.0.0"
@@ -411,7 +411,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "1f97043ac580281de856e6290a78c596ced490d001df1f9e7da9ba344a996803",
+        "content_hash": "70959eb0e8496cd36d25ba26c4bb511121608bd9c1131db096eed82bc878e9f2",
         "id": "pulso-verifier",
         "kind": "flow",
         "version": "1.0.0"
@@ -435,7 +435,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "07e3f9d22e41d8674efa5beb8507614c38b788577bcee2060db8b64675727adc",
+        "content_hash": "9967757abd94c0ae8807ddfe3a45e0ff9b6ab15200fbc379c3bbfc9155d0679e",
         "id": "p/verifier_task",
         "kind": "prompt",
         "version": "1.0.0"

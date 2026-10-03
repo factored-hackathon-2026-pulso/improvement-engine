@@ -50,6 +50,9 @@ class RegistryMutationCommitment:
     create_title: str | None = None
     # put_draft commitment: sha256 hex of JCS({proposal_id, expected_rev, changes})
     put_draft_digest: str | None = None
+    # Committed non-evaluate write operations in order (plan 16.16.1): a write's key ordinal is its index here.
+    # Empty = legacy first-seen ordinals (kept only for commitments sealed without an array).
+    operations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ class _Entry:
     session: dict[str, Any] | None = None
     ordinals: dict[str, int] = field(default_factory=dict)
     seen_refs: set[str] = field(default_factory=set)
+    artifacts: dict[str, dict[str, str | None]] = field(default_factory=dict)
     scratch: dict[str, Any] = field(default_factory=dict)
     auth_cache: dict[tuple[Any, ...], datetime] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -160,13 +164,23 @@ class InvocationRegistry:
         with entry.lock:
             entry.session = session
 
-    def ordinal(self, binding_ref: str, engine_key: str) -> int:
-        """Stable position of a write action within the invocation (same engine key -> same ordinal)."""
+    def ordinal(self, binding_ref: str, engine_key: str, op: str | None = None,
+                operations: tuple[str, ...] = ()) -> int | None:
+        """Ordinal of a write (same engine key -> same ordinal). With a committed `operations` array it is the
+        index of the lowest not-yet-used slot holding `op` (None when the commitment has no such slot left);
+        without one, the first-seen position."""
         entry = self._entry(binding_ref)
         with entry.lock:
-            if engine_key not in entry.ordinals:
+            if engine_key in entry.ordinals:
+                return entry.ordinals[engine_key]
+            if not operations:
                 entry.ordinals[engine_key] = len(entry.ordinals)
-            return entry.ordinals[engine_key]
+                return entry.ordinals[engine_key]
+            used = set(entry.ordinals.values())
+            free = next((i for i, o in enumerate(operations) if o == op and i not in used), None)
+            if free is not None:
+                entry.ordinals[engine_key] = free
+            return free
 
     def ordinal_of(self, binding_ref: str, engine_key: str) -> int | None:
         entry = self._entry(binding_ref)
@@ -199,6 +213,21 @@ class InvocationRegistry:
         entry = self._entry(binding_ref)
         with entry.lock:
             entry.seen_refs.update(r for r in refs if r)
+
+    def record_artifact(self, binding_ref: str, artifact_id: str, *, digest: str | None = None,
+                        media_type: str | None = None) -> None:
+        """An artifact the invocation really fetched/produced (the only valid evidence: D.2 ArtifactRef)."""
+        if not artifact_id:
+            return
+        entry = self._entry(binding_ref)
+        with entry.lock:
+            entry.artifacts[artifact_id] = {"digest": digest.removeprefix("sha256:") if digest else None,
+                                            "media_type": media_type}
+
+    def seen_artifacts(self, binding_ref: str) -> dict[str, dict[str, str | None]]:
+        entry = self._entry(binding_ref)
+        with entry.lock:
+            return {k: dict(v) for k, v in entry.artifacts.items()}
 
     def seen_refs(self, binding_ref: str) -> frozenset[str]:
         entry = self._entry(binding_ref)

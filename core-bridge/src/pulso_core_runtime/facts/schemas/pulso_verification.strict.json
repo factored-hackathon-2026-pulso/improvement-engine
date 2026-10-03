@@ -3,26 +3,156 @@
   "$id": "urn:pulso:fact:pulso_verification:1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "verdicts"],
+  "required": [
+    "schema_version",
+    "assessments"
+  ],
   "properties": {
-    "schema_version": {"type": "string", "enum": ["1"]},
-    "verdicts": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ]
+    },
+    "assessments": {
       "type": "array",
       "minItems": 1,
       "maxItems": 50,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["hypothesis_id", "verdict", "evidence_refs"],
+        "required": [
+          "hypothesis_id",
+          "verdict",
+          "evidence_refs",
+          "counterevidence_refs",
+          "limitations"
+        ],
         "properties": {
-          "hypothesis_id": {"type": "string", "minLength": 1, "maxLength": 128},
-          "verdict": {"type": "string", "enum": ["supported", "refuted", "inconclusive"]},
+          "hypothesis_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "refuted",
+              "inconclusive"
+            ]
+          },
           "evidence_refs": {
             "type": "array",
+            "minItems": 0,
             "maxItems": 50,
-            "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$"}
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "digest",
+                "media_type"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$"
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "media_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            }
+          },
+          "counterevidence_refs": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "digest",
+                "media_type"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$"
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "media_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 2000
+            }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "verdict": {
+                  "const": "supported"
+                }
+              },
+              "required": [
+                "verdict"
+              ]
+            },
+            "then": {
+              "properties": {
+                "evidence_refs": {
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "verdict": {
+                  "const": "refuted"
+                }
+              },
+              "required": [
+                "verdict"
+              ]
+            },
+            "then": {
+              "properties": {
+                "counterevidence_refs": {
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }
