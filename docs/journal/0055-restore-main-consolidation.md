@@ -41,7 +41,10 @@ weakening the identifier/field privacy assertions.
 - Windows Pester 3.4.0 wrappers: 15 passed.
 - Independent adversarial review: no remaining blockers; timestamp privacy
   assertions cover all seven fixture rows.
-- Clippy and the six isolated real-PostgreSQL CI gates: in progress at publication.
+- Clippy with and without `test-support`, all targets, warnings denied: passed.
+- All six isolated real-PostgreSQL CI gates: passed (artifact immutability/CAS,
+  model-attempt recovery, observation RLS, run-event atomicity/concurrency,
+  authenticated V2 timeline and temporal memory receipts).
 
 Main becomes the verified baseline only after the PR is merged and its
 main-branch workflow is green. Final gate results will be recorded before merge.
