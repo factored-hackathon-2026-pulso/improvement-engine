@@ -17,7 +17,9 @@ SCHEMA = """create table sessions(session_id integer primary key, flow text, ste
   retries_allowed integer, retry_exhausted integer, extra_needed integer, risky integer, outcome text, week integer)"""
 
 
-def build(n: int = 8000, seed: int = 20260101, plant: bool = True) -> sqlite3.Connection:
+def build(n: int = 8000, seed: int = 20260101, plant: bool = True, post: bool = False) -> sqlite3.Connection:
+    """`post=True` is the scripted SECOND batch of observations (after the staged change): the OTP exhaustion in transfer_limit is largely
+    gone and a different, new pattern appears (address_change on web). Batch 1 (post=False) is unchanged."""
     rnd = random.Random(seed)
     conn = sqlite3.connect(":memory:")
     conn.execute(SCHEMA)
@@ -33,9 +35,11 @@ def build(n: int = 8000, seed: int = 20260101, plant: bool = True) -> sqlite3.Co
         # out of retries; card_replacement looks bad only because it is mostly mobile (device mix, not the flow).
         p_abandon = base + (0.55 if device == "mobile" and flow == "card_replacement" and week in (3, 4) else 0.0)
         step, exhausted, extra, risky = steps[-1], 0, 0, int(rnd.random() < 0.06)
-        if plant and flow == "transfer_limit" and rnd.random() < 0.34:
+        if plant and flow == "transfer_limit" and rnd.random() < (0.003 if post else 0.34):
             step, exhausted, extra = "otp_verify", 1, rnd.choices([1, 2, 3, 5], weights=[5, 3, 1, 1])[0]
             p_abandon = 0.78
+        elif post and flow == "address_change" and device == "web" and rnd.random() < 0.45:
+            step, p_abandon = "confirm", 0.72
         elif rnd.random() < p_abandon * 0.5 and "otp_verify" in steps:
             step = "otp_verify"
         elif rnd.random() < p_abandon:

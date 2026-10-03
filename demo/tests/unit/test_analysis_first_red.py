@@ -42,3 +42,20 @@ def test_alternatives_always_include_do_nothing_with_a_measured_cost():
     alts = analysis.alternatives(dataset.build(), analysis.first_candidate())
     kinds = [a["kind"] for a in alts]
     assert "do_nothing" in kinds and next(a for a in alts if a["kind"] == "do_nothing")["expected_abandoned"] > 0
+
+
+def test_second_batch_contradicts_the_old_claim_and_starts_a_new_investigation():
+    """Step 10: batch 2 no longer shows transfer_limit/otp_verify (measured by SQL) and surfaces a hypothesis the memory never had."""
+    conn1 = dataset.build()
+    sc1 = analysis.scout(conn1)
+    ver1 = analysis.verify(conn1, sc1["hypotheses"])
+    obs = analysis.observe(dataset.build(seed=20260102, post=True), sc1["hypotheses"], ver1)
+    by = {u["key"]: u for u in obs["memory_updates"]}
+    assert by["transfer_limit/otp_verify"]["status"] == "contradicted"
+    assert by["transfer_limit/otp_verify"]["rate_after"] < 0.5 * by["transfer_limit/otp_verify"]["rate_before"]
+    assert obs["successor_target"]["key"].startswith("address_change") and obs["successor_target"]["verdict"] == "supported"
+    assert all(h["key"] != "transfer_limit/otp_verify" for h in obs["new_hypotheses"])
+
+
+def test_batch_one_is_unchanged_by_the_second_batch_option():
+    assert analysis.scout(dataset.build())["hypotheses"][0]["key"] == "transfer_limit/otp_verify"

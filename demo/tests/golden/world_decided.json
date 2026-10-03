@@ -1,14 +1,12 @@
 {
  "commands": {},
  "decision": {
-  "available_commands": [
-   "approve",
-   "reject"
-  ],
+  "available_commands": [],
   "decision_id": "dec-1",
   "needs_step_up": true,
   "revision": 1,
-  "stepped_up": false
+  "state": "staging_confirmed",
+  "stepped_up": true
  },
  "demo": {
   "alternatives": [
@@ -76,7 +74,53 @@
    ],
    "scout_run": "run-scout"
   },
-  "decision_hook": "pending",
+  "decision_hook": "staging_confirmed",
+  "decision_timeline": [
+   {
+    "at": "2026-01-01T00:00:00Z",
+    "candidate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "command_ref": "cmd-approve",
+    "event": "decision_requested",
+    "intention_id": "int-approve",
+    "operation": "approve",
+    "prod_alias": "rel-base",
+    "proposal_rev": 3,
+    "staging_alias": "rel-base"
+   },
+   {
+    "at": "2026-01-01T00:00:01Z",
+    "decision": "approve",
+    "event": "human_decided",
+    "mode": "scripted",
+    "simulated": true
+   },
+   {
+    "at": "2026-01-01T00:00:02Z",
+    "candidate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "event": "approved",
+    "intention_id": "int-approve",
+    "operation": "approve",
+    "prod_alias": "rel-base",
+    "published": false,
+    "staging_alias": "rel-base"
+   },
+   {
+    "at": "2026-01-01T00:00:03Z",
+    "event": "published",
+    "intention_id": "int-publish",
+    "operation": "publish",
+    "release_id": "rel-new",
+    "staging_confirmed": false
+   },
+   {
+    "at": "2026-01-01T00:00:04Z",
+    "event": "staging_confirmed",
+    "prod_alias": "rel-base",
+    "prod_unchanged": true,
+    "release_id": "rel-new",
+    "staging_alias": "rel-new"
+   }
+  ],
   "doubles": [
    "stand_in_engine",
    "scripted_llm",
@@ -116,9 +160,105 @@
    "audit_events": 42,
    "chain_receipts_ok": true
   },
+  "human": {
+   "actor": "local-supervisor",
+   "candidate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+   "error": null,
+   "mode": "scripted",
+   "prod_alias": "rel-base",
+   "promoted": false,
+   "proposal_id": "prop-core-2",
+   "reason": "scripted",
+   "release_id": "rel-new",
+   "simulated_human": true,
+   "stage": "staging_confirmed",
+   "staging_alias": "rel-new"
+  },
   "mode": "stand_in",
   "namespace": "golden",
-  "runtime_profile": "real_local_core_standin"
+  "runtime_profile": "real_local_core_standin",
+  "successor": {
+   "batch": 2,
+   "core": {
+    "core_run_id": "run-successor-scout",
+    "state": "terminal_ok"
+   },
+   "exporter": {
+    "batches_after": 5,
+    "batches_before": 3,
+    "verification_ok": true
+   },
+   "memory_updates": [
+    {
+     "key": "transfer_limit/otp_verify",
+     "n_after": 187,
+     "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)",
+     "prior_verdict": "supported",
+     "query_id": "q-recheck-transfer_limit-otp_verify",
+     "rate_after": 0.0963,
+     "rate_before": 0.6922,
+     "status": "contradicted"
+    },
+    {
+     "key": "transfer_limit/web",
+     "n_after": 922,
+     "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)",
+     "prior_verdict": "supported",
+     "query_id": "q-recheck-transfer_limit-web",
+     "rate_after": 0.0824,
+     "rate_before": 0.334,
+     "status": "contradicted"
+    },
+    {
+     "key": "transfer_limit/mobile",
+     "n_after": 1434,
+     "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)",
+     "prior_verdict": "supported",
+     "query_id": "q-recheck-transfer_limit-mobile",
+     "rate_after": 0.0921,
+     "rate_before": 0.2913,
+     "status": "contradicted"
+    }
+   ],
+   "new_hypotheses": [
+    {
+     "abandoned": 257,
+     "baseline_rate": 0.1304,
+     "dim": "device",
+     "excess": 0.2638,
+     "excess_lo": 0.2256,
+     "flow": "address_change",
+     "key": "address_change/web",
+     "n": 652,
+     "query_ids": [
+      "q-flow-device",
+      "q-overall"
+     ],
+     "rate": 0.3942,
+     "value": "web",
+     "verdict": "supported",
+     "verify_query_id": "q-verify-address_change-web"
+    },
+    {
+     "abandoned": 312,
+     "baseline_rate": 0.1304,
+     "dim": "step",
+     "excess": 0.0807,
+     "excess_lo": 0.0586,
+     "flow": "address_change",
+     "key": "address_change/confirm",
+     "n": 1478,
+     "query_ids": [
+      "q-flow-step",
+      "q-overall"
+     ],
+     "rate": 0.2111,
+     "value": "confirm",
+     "verdict": "supported",
+     "verify_query_id": "q-verify-address_change-confirm"
+    }
+   ]
+  }
  },
  "diff": {
   "lines": [
@@ -272,7 +412,7 @@
    },
    {
     "entity_ref": {
-     "id": "observation",
+     "id": "approve",
      "kind": "node"
     },
     "event_id": "00000000-0000-4000-8000-000000000010",
@@ -280,6 +420,50 @@
     "projection_revision": 10,
     "run_id": "run-demo",
     "sequence": 10
+   },
+   {
+    "entity_ref": {
+     "id": "publish",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000011",
+    "kind": "node_status_changed",
+    "projection_revision": 11,
+    "run_id": "run-demo",
+    "sequence": 11
+   },
+   {
+    "entity_ref": {
+     "id": "release",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000012",
+    "kind": "node_status_changed",
+    "projection_revision": 12,
+    "run_id": "run-demo",
+    "sequence": 12
+   },
+   {
+    "entity_ref": {
+     "id": "observation",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000013",
+    "kind": "node_status_changed",
+    "projection_revision": 13,
+    "run_id": "run-demo",
+    "sequence": 13
+   },
+   {
+    "entity_ref": {
+     "id": "memory",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000014",
+    "kind": "node_status_changed",
+    "projection_revision": 14,
+    "run_id": "run-demo",
+    "sequence": 14
    }
   ],
   "run-demo-refuted": [
@@ -328,7 +512,30 @@
     "sequence": 4
    }
   ],
-  "run-demo-successor": []
+  "run-demo-successor": [
+   {
+    "entity_ref": {
+     "id": "scout",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000001",
+    "kind": "node_status_changed",
+    "projection_revision": 1,
+    "run_id": "run-demo-successor",
+    "sequence": 1
+   },
+   {
+    "entity_ref": {
+     "id": "verify",
+     "kind": "node"
+    },
+    "event_id": "00000000-0000-4000-8000-000000000002",
+    "kind": "node_status_changed",
+    "projection_revision": 2,
+    "run_id": "run-demo-successor",
+    "sequence": 2
+   }
+  ]
  },
  "gates": {
   "combined": {
@@ -558,38 +765,77 @@
    ],
    "hypothesis": "card_replacement / otp_verify: abandonment 39.3% vs 17.7% baseline (n=331, excess lower bound 16.3%)",
    "verifier": "refuted"
+  },
+  "run-demo-successor": {
+   "evidence": [
+    {
+     "available_at": "2026-01-01T00:00:00Z",
+     "evidence_ref": {
+      "digest": "068e7f470f60e8b1ef678b0c6409cf4718f4367d0ae0ab0882bc1b5c7ebcd425",
+      "id": "q-overall",
+      "media_type": "application/json"
+     },
+     "level": null,
+     "relation": "supports",
+     "source_kind": "synthetic",
+     "summary": "Batch 2 observation (scripted, stand-in): address_change / web: abandonment 39.4% vs 13.0% baseline (n=652, excess lower bound 22.6%)",
+     "validation": "unverified"
+    }
+   ],
+   "hypotheses": [
+    {
+     "evidence_refs": [],
+     "hypothesis_id": "hyp-address_change-web",
+     "statement": "address_change / web: abandonment 39.4% vs 13.0% baseline (n=652, excess lower bound 22.6%)",
+     "verdict": "inconclusive"
+    }
+   ],
+   "hypothesis": "address_change / web: abandonment 39.4% vs 13.0% baseline (n=652, excess lower bound 22.6%)",
+   "verifier": "pending"
   }
  },
  "memory": [
   {
    "memory_id": "mem-transfer_limit-otp_verify",
    "revoked": false,
-   "status": "proposed",
-   "title": "transfer_limit/otp_verify: supported (proposed, not published)"
+   "status": "contradicted",
+   "title": "transfer_limit/otp_verify: supported in batch 1, CONTRADICTED by batch 2 (abandonment 69.2% -> 9.6%; not attributed to the staged change) [stand-in engine]"
   },
   {
    "memory_id": "mem-card_replacement-otp_verify",
    "revoked": false,
-   "status": "proposed",
-   "title": "card_replacement/otp_verify: refuted (proposed, not published)"
+   "status": "published",
+   "title": "card_replacement/otp_verify: refuted (published by stand-in engine)"
   },
   {
    "memory_id": "mem-transfer_limit-web",
    "revoked": false,
-   "status": "proposed",
-   "title": "transfer_limit/web: supported (proposed, not published)"
+   "status": "contradicted",
+   "title": "transfer_limit/web: supported in batch 1, CONTRADICTED by batch 2 (abandonment 33.4% -> 8.2%; not attributed to the staged change) [stand-in engine]"
   },
   {
    "memory_id": "mem-transfer_limit-mobile",
    "revoked": false,
-   "status": "proposed",
-   "title": "transfer_limit/mobile: supported (proposed, not published)"
+   "status": "contradicted",
+   "title": "transfer_limit/mobile: supported in batch 1, CONTRADICTED by batch 2 (abandonment 29.1% -> 9.2%; not attributed to the staged change) [stand-in engine]"
   },
   {
    "memory_id": "mem-card_replacement-mobile",
    "revoked": false,
-   "status": "proposed",
-   "title": "card_replacement/mobile: refuted (proposed, not published)"
+   "status": "published",
+   "title": "card_replacement/mobile: refuted (published by stand-in engine)"
+  },
+  {
+   "memory_id": "mem-address_change-web-b2",
+   "revoked": false,
+   "status": "published",
+   "title": "address_change/web: new in batch 2, supported by the batch-2 verifier (published by stand-in engine; investigation started)"
+  },
+  {
+   "memory_id": "mem-address_change-confirm-b2",
+   "revoked": false,
+   "status": "published",
+   "title": "address_change/confirm: new in batch 2, supported by the batch-2 verifier (published by stand-in engine; investigation started)"
   }
  ],
  "runs": {
@@ -705,9 +951,9 @@
      "label": "Human decision (hook)",
      "node_id": "decision",
      "node_kind": "material_step",
-     "reason_code": "human_decision_pending",
+     "reason_code": "human_decided_simulated",
      "stage": "decision",
-     "status": "waiting_dependency",
+     "status": "complete",
      "trace_id": "2f9738e32f9738e32f9738e32f9738e3"
     },
     {
@@ -718,9 +964,9 @@
      "label": "Approve",
      "node_id": "approve",
      "node_kind": "material_step",
-     "reason_code": "awaiting_human_authority",
+     "reason_code": "approved_operation_hash_fixed",
      "stage": "decision",
-     "status": "planned",
+     "status": "complete",
      "trace_id": "a7e33d66a7e33d66a7e33d66a7e33d66"
     },
     {
@@ -731,9 +977,9 @@
      "label": "Publish to staging",
      "node_id": "publish",
      "node_kind": "material_step",
-     "reason_code": "awaiting_human_authority",
+     "reason_code": "published_staging_alias_confirmed",
      "stage": "publish",
-     "status": "planned",
+     "status": "complete",
      "trace_id": "c920d728c920d728c920d728c920d728"
     },
     {
@@ -744,9 +990,9 @@
      "label": "Release / expose",
      "node_id": "release",
      "node_kind": "material_step",
-     "reason_code": "awaiting_human_authority",
+     "reason_code": "staging_confirmed_prod_unchanged",
      "stage": "release",
-     "status": "planned",
+     "status": "waiting_dependency",
      "trace_id": "18296220182962201829622018296220"
     },
     {
@@ -770,14 +1016,14 @@
      "label": "Memory update",
      "node_id": "memory",
      "node_kind": "material_step",
-     "reason_code": "not_run_in_stand_in",
+     "reason_code": "memory_published_by_stand_in",
      "stage": "memory",
-     "status": "planned",
+     "status": "complete",
      "trace_id": "320e5bc8320e5bc8320e5bc8320e5bc8"
     }
    ],
    "origin": "scheduled",
-   "revision": 10,
+   "revision": 14,
    "run_id": "run-demo",
    "state": "running",
    "title": "Undirected discovery run (Core stand-in)"
@@ -849,17 +1095,30 @@
      "label": "Scout (SQL/wiki)",
      "node_id": "scout",
      "node_kind": "material_step",
-     "reason_code": "successor_not_started_by_stand_in",
+     "reason_code": "second_batch_scout",
      "stage": "scout",
-     "status": "planned",
+     "status": "complete",
      "trace_id": "12752b5712752b5712752b5712752b57"
+    },
+    {
+     "depends_on": [
+      "scout"
+     ],
+     "job_ref": null,
+     "label": "Independent verifier",
+     "node_id": "verify",
+     "node_kind": "material_step",
+     "reason_code": "successor_investigation_started",
+     "stage": "verifier",
+     "status": "running",
+     "trace_id": "416c2740416c2740416c2740416c2740"
     }
    ],
    "origin": "observation",
-   "revision": 0,
+   "revision": 2,
    "run_id": "run-demo-successor",
-   "state": "planned",
-   "title": "Successor investigation (planned; not started by the stand-in)"
+   "state": "running",
+   "title": "Successor investigation started by the stand-in engine: address_change/web"
   }
  }
 }

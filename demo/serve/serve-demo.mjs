@@ -1,3 +1,4 @@
+// DEPRECATED: use FIXTURE_WORLD_FILE=demo/out/world.json node debug-console/fixture-server/server.mjs (see demo/README.md).
 // Serves the debug-console fixture API/SSE with the demo world (no console file is modified).
 // usage: node demo/serve/serve-demo.mjs <world.json> [replay-world.json]   (env FIXTURE_PORT, default 4010)
 // It rewrites a COPY of debug-console/fixture-server/server.mjs (3 anchored replacements, fails loudly if the console drifted).

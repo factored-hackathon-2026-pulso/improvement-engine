@@ -9,7 +9,7 @@
   console fixture API/SSE on the produced world (Ctrl+C to stop). The honest label is in demo-report.json (doubles[]).
 #>
 [CmdletBinding()]
-param([switch]$Offline, [switch]$Serve, [switch]$Keep, [string]$Namespace, [string]$BaseImage, [int]$Port = 4010)
+param([switch]$Offline, [switch]$Serve, [switch]$Keep, [string]$Namespace, [string]$BaseImage, [int]$Port = 4010, [ValidateSet('scripted','manual')][string]$HumanMode = 'scripted', [switch]$Promote)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = (Resolve-Path (Join-Path $here '..')).Path
@@ -21,7 +21,7 @@ $py = Join-Path $env:TEMP "pulso-wire-venv-$pin7\Scripts\python.exe"
 if (-not (Test-Path $py)) { Write-Error "pulso:demo_toolchain_missing: pinned venv %TEMP%\pulso-wire-venv-$pin7 not found"; exit 3 }
 $out = Join-Path $here 'out'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
-$env:PYTHONPATH = (Join-Path $here 'src') + ';' + (Join-Path $root 'e2e-core\src') + ';' + (Join-Path $root 'core-bridge\src') + ';' + (Join-Path $root 'e2e-core\tests\live')
+$env:PYTHONPATH = (Join-Path $here 'src') + ';' + (Join-Path $root 'e2e-core\src') + ';' + (Join-Path $root 'core-bridge\src') + ';' + (Join-Path $root 'e2e-core\tests\live') + ';' + (Join-Path $root 'local-identitysrc')
 $exit = 1
 Push-Location $here
 try {
@@ -33,7 +33,7 @@ $e2eDir = $null
 $ns = $null
 try {
     if ($Offline) {
-        & $py -m pulso_demo.driver --out $out --offline
+        & $py -m pulso_demo.driver --out $out --offline --human-mode $HumanMode @(if ($Promote) { '--promote' })
         $exit = $LASTEXITCODE
     } else {
         if (-not $Namespace) { $Namespace = 'claude-demo-' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
@@ -70,7 +70,7 @@ try {
         $env:E2E_ENV_FILE = Join-Path $e2eDir 'e2e-env.json'
         $env:E2E_KEYS_FILE = Join-Path $e2eDir 'e2e-keys.json'
         $env:DEMO_NAMESPACE = $ns
-        & $py -m pulso_demo.driver --out $out --namespace $ns
+        & $py -m pulso_demo.driver --out $out --namespace $ns --human-mode $HumanMode @(if ($Promote) { '--promote' })
         $exit = $LASTEXITCODE
     }
 } catch {
@@ -91,7 +91,8 @@ if (Test-Path (Join-Path $out 'world.json')) {
     Write-Output "demo: wrote $out\demo-report.json and world.json (see demo/README.md to watch it in the console)"
     if ($Serve) {
         $env:FIXTURE_PORT = "$Port"
-        node (Join-Path $here 'serve\serve-demo.mjs') (Join-Path $out 'world.json') (Join-Path $out 'replay.json')
+        $env:FIXTURE_WORLD_FILE = (Join-Path $out 'world.json')
+        node (Join-Path $root 'debug-consoleixture-server\server.mjs')
     }
 }
 exit $exit

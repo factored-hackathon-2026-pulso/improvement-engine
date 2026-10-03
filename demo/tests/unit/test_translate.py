@@ -92,3 +92,97 @@ def test_failed_design_stage_marks_change_unknown_with_a_reason(results):
     r["core"]["design"]["state"] = "terminal_failed"
     n = nodes(translate.build_world(r))
     assert n["change"]["status"] == "unknown" and n["change"]["reason_code"] == "core_design_failed"
+
+
+# ----------------------------------------------------------------------------------------------- steps 8-10 (decision + successor)
+def decided(results, stage="staging_confirmed", **over):
+    r = copy.deepcopy(results)
+    r["decision"] = {"mode": "scripted", "simulated_human": True, "actor": "local-supervisor", "stage": stage, "proposal_id": "prop-core-2",
+                     "candidate_hash": "c" * 64, "release_id": "rel-new" if stage in ("staging_confirmed", "promoted", "published_unconfirmed") else None,
+                     "staging_alias": "rel-new" if stage in ("staging_confirmed", "promoted") else "rel-base",
+                     "prod_alias": "rel-new" if stage == "promoted" else "rel-base", "promoted": stage == "promoted", "error": None, "reason": None,
+                     "trail": [{"event": "decision_requested", "operation": "approve", "candidate_hash": "c" * 64, "intention_id": "int-1"},
+                               {"event": "approved", "intention_id": "int-1", "published": False},
+                               {"event": "published", "release_id": "rel-new"},
+                               {"event": "staging_confirmed", "release_id": "rel-new", "staging_alias": "rel-new", "prod_alias": "rel-base"}], **over}
+    return r
+
+
+def test_golden_decided_world_is_exactly_reproduced():
+    res = json.loads((GOLDEN / "results_decided.json").read_text("utf-8"))
+    assert translate.build_world(res) == json.loads((GOLDEN / "world_decided.json").read_text("utf-8"))
+
+
+def test_requested_state_is_waiting_for_the_human_and_nothing_downstream_moved(results):
+    n = nodes(translate.build_world(decided(results, "requested")))
+    assert (n["decision"]["status"], n["decision"]["reason_code"]) == ("waiting_dependency", "human_decision_pending")
+    assert all(n[k]["status"] == "planned" for k in ("approve", "publish", "release"))
+
+
+def test_approved_is_not_published(results):
+    n = nodes(translate.build_world(decided(results, "approved_not_published")))
+    assert n["approve"]["status"] == "complete" and n["decision"]["status"] == "complete"
+    assert (n["publish"]["status"], n["publish"]["reason_code"]) == ("waiting_dependency", "approved_not_published")
+    assert n["release"]["status"] == "planned"
+
+
+def test_staging_confirmed_never_marks_prod_exposure_and_carries_receipt_refs(results):
+    w = translate.build_world(decided(results))
+    n = nodes(w)
+    assert n["publish"]["status"] == "complete" and n["release"]["status"] == "waiting_dependency"
+    assert n["release"]["reason_code"] == "staging_confirmed_prod_unchanged"
+    h = w["demo"]["human"]
+    assert h["release_id"] == "rel-new" and h["staging_alias"] == "rel-new" and h["prod_alias"] == "rel-base" and h["simulated_human"] is True
+    assert [e["event"] for e in w["demo"]["decision_timeline"]] == ["decision_requested", "approved", "published", "staging_confirmed"]
+    assert w["demo"]["decision_hook"] == "staging_confirmed" and w["decision"]["available_commands"] == []
+
+
+def test_only_an_explicit_promote_completes_the_release_node(results):
+    n = nodes(translate.build_world(decided(results, "promoted")))
+    assert n["release"]["status"] == "complete" and n["release"]["reason_code"] == "promoted_to_prod_explicit"
+
+
+def test_unconfirmed_staging_is_unknown_and_rejection_is_dead(results):
+    assert nodes(translate.build_world(decided(results, "published_unconfirmed")))["publish"]["status"] == "unknown"
+    n = nodes(translate.build_world(decided(results, "rejected")))
+    assert n["decision"]["status"] == "dead" and n["approve"]["status"] == "planned"
+
+
+def test_decision_never_applies_when_the_gates_did_not_pass(results):
+    r = decided(results)
+    r["core"]["attempts"][1]["native"] = None
+    n = nodes(translate.build_world(r))
+    assert n["decision"]["status"] == "planned" and n["approve"]["status"] == "planned"
+
+
+def test_second_batch_publishes_memory_contradicts_and_starts_a_successor_investigation():
+    res = json.loads((GOLDEN / "results_decided.json").read_text("utf-8"))
+    w = translate.build_world(res)
+    mem = {m["memory_id"]: m for m in w["memory"]}
+    assert any(m["status"] == "contradicted" and "transfer_limit" in m["title"] for m in mem.values())
+    assert any(m["status"] == "published" for m in mem.values())
+    succ = w["runs"][translate.SUCCESSOR]
+    assert succ["state"] == "running" and succ["origin"] == "observation" and "stand-in" in succ["title"].lower()
+    assert nodes(w)["memory"]["status"] == "complete" and nodes(w)["memory"]["reason_code"] == "memory_published_by_stand_in"
+    assert w["investigation"][translate.SUCCESSOR]["verifier"] == "pending"
+    assert "address_change" in w["investigation"][translate.SUCCESSOR]["hypothesis"]
+
+
+def test_memory_stays_proposed_when_staging_was_not_confirmed(results):
+    w = translate.build_world(decided(results, "approved_not_published"))
+    assert {m["status"] for m in w["memory"]} == {"proposed"}
+
+
+def test_world_exposes_structured_hypotheses_and_gates_by_run(results):
+    w = translate.build_world(results)
+    hs = w["investigation"]["run-demo"]["hypotheses"]
+    assert {h["verdict"] for h in hs} >= {"supported", "refuted"} and all(h["hypothesis_id"] and h["statement"] for h in hs)
+    assert [h["verdict"] for h in w["investigation"]["run-demo-refuted"]["hypotheses"]] == ["refuted"]
+    att = w["gates_by_run"]["run-demo"]["attempts"]
+    assert w["gates_by_run"]["run-demo"]["proposal_id"] == "prop-core-2"
+    assert [(a["native_pass"], a["improvement_pass"], a["reason"], a["revision_of"]) for a in att] == [(True, False, "guard_breach", None), (True, True, None, "cand-1")]
+
+
+def test_successor_hypothesis_is_inconclusive_not_verified():
+    w = translate.build_world(json.loads((GOLDEN / "results_decided.json").read_text("utf-8")))
+    assert w["investigation"][translate.SUCCESSOR]["hypotheses"][0]["verdict"] == "inconclusive"

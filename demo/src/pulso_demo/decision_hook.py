@@ -1,13 +1,15 @@
-"""Human decision hook (CLEARLY MARKED STUB). Approve/publish is an authority operation owned by local-identity (built by another
-agent). The demo only defines the interface; the default implementation never approves: the run stays at `human_decision_pending`.
+"""Decision hook: the seam between the demo driver and the human authority (plan steps 8-9).
 
-Wiring contract: `local-identity` supplies an object with `decide(DecisionRequest) -> DecisionResult`; the demo driver calls it once
-after the second evaluation passes, and the translator would then mark approve/publish from REAL receipts only."""
+`DecisionHook.decide(DecisionRequest) -> DecisionResult` is called once, after the revised candidate passed BOTH gates. Implementations:
+* `PendingHook` never decides anything (the run stays at `human_decision_pending`);
+* `human_flow.FlowHook` runs the approval flow (durable intention -> human gate -> command-authorization JWS from the local human issuer
+  -> Core registry approve -> publish -> staging alias read). `DecisionResult.detail` carries the receipt trail (ids and hashes only,
+  never a credential)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, Protocol
+from dataclasses import dataclass, field
+from typing import Any, Literal, Protocol
 
 
 @dataclass(frozen=True)
@@ -21,7 +23,8 @@ class DecisionRequest:
 @dataclass(frozen=True)
 class DecisionResult:
     state: Literal["pending", "approved", "rejected"]
-    receipt_ref: str | None = None  # signed local-identity receipt; None while pending
+    receipt_ref: str | None = None  # release id once published; None while pending
+    detail: dict[str, Any] = field(default_factory=dict)  # stage, trail, aliases, mode, simulated_human (see human_flow)
 
 
 class DecisionHook(Protocol):
@@ -29,7 +32,7 @@ class DecisionHook(Protocol):
 
 
 class PendingHook:
-    """TODO(local-identity): replace with the signed-approval adapter. This stand-in never decides anything."""
+    """Never decides anything: the human step stays pending."""
 
     def decide(self, request: DecisionRequest) -> DecisionResult:
-        return DecisionResult(state="pending")
+        return DecisionResult(state="pending", detail={"stage": "requested", "trail": [], "mode": "none", "simulated_human": False})

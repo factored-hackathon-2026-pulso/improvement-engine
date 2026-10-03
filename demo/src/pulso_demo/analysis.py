@@ -134,3 +134,32 @@ def alternatives(conn: sqlite3.Connection, cand: dict[str, Any]) -> list[dict[st
     return [{"id": "alt-0", "kind": "do_nothing", "summary": "Keep the current retry policy", "expected_abandoned": base, "risk": "none new"},
             {"id": "alt-1", "kind": "proposed_change", "summary": f"max_retries {cand['from_retries']} -> {cand['max_retries']} ({cand['scope']})",
              "expected_abandoned": base - s["rescued"], "risk": f"guard exposure {s['exposure']:.4f}"}]
+
+
+def observe(conn: sqlite3.Connection, prior_hypotheses: list[dict[str, Any]], prior_verify: dict[str, Any]) -> dict[str, Any]:
+    """Step 10 (stand-in engine): a SECOND batch of observations arrives. Re-run scout/verifier on it, then compare with the memory claims
+    the first round produced: a supported claim that the new data no longer shows is CONTRADICTED (rate re-measured by SQL, no causal
+    attribution to the staged change), and a hypothesis the memory does not know starts a successor investigation."""
+    sc = scout(conn)
+    ver = verify(conn, sc["hypotheses"])
+    post_keys = {h["key"] for h in sc["hypotheses"]}
+    prior_keys = {h["key"] for h in prior_hypotheses}
+    prior_verdict = {a["key"]: a["verdict"] for a in prior_verify["assessments"]}
+    queries: list[dict[str, Any]] = []
+    updates = []
+    for h in prior_hypotheses:
+        if prior_verdict.get(h["key"]) != "supported":
+            continue
+        col = "step" if h["dim"] == "step" else "device"
+        q = run_query(conn, f"q-recheck-{h['key'].replace('/', '-')}",
+                      f"select count(*) as n, sum(outcome = 'abandoned') as ab from sessions where flow = ? and {col} = ?", (h["flow"], h["value"]))
+        queries.append(q)
+        n, ab = q["rows"][0]
+        after = (ab or 0) / n if n else 0.0
+        updates.append({"key": h["key"], "prior_verdict": "supported", "rate_before": h["rate"], "rate_after": round(after, 4), "n_after": n,
+                        "status": "still_observed" if h["key"] in post_keys else "contradicted", "query_id": q["id"],
+                        "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)"})
+    assess = {a["key"]: a for a in ver["assessments"]}
+    new = [{**h, "verdict": assess[h["key"]]["verdict"], "verify_query_id": assess[h["key"]]["query_id"]} for h in sc["hypotheses"] if h["key"] not in prior_keys]
+    return {"scout": sc, "verify": ver, "recheck_queries": queries, "memory_updates": updates, "new_hypotheses": new,
+            "successor_target": next((h for h in new if h["verdict"] == "supported"), None)}
