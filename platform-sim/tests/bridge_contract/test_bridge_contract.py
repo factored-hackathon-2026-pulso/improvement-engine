@@ -48,6 +48,7 @@ def test_sim_info_is_labelled(bridge) -> None:
 
 
 def test_alias_response_carries_the_label(bridge) -> None:
+    bridge.sim("aliases", agent_id="pulso-writer", alias="staging", release_id="rel-mock-0001")
     r = bridge.c.get("/internal/v1/core-state/aliases/pulso-writer/staging", headers=bridge.headers("state_read"))
     assert r.json()["runtime_profile"] == "contract_mock"
 
@@ -311,11 +312,24 @@ def test_alias_state(bridge) -> None:
     bridge.sim("aliases", agent_id="pulso-writer", alias="staging", release_id="rel-mock-0001")
     r = bridge.c.get("/internal/v1/core-state/aliases/pulso-writer/staging", headers=bridge.headers("state_read"))
     validate("AliasState", r.json())
-    assert r.json()["release_id"] == "rel-mock-0001"
-    other = bridge.c.get("/internal/v1/core-state/aliases/pulso-writer/prod", headers=bridge.headers("state_read"))
-    assert other.json()["release_id"] is None
+    body = r.json()
+    assert body["release_id"] == "rel-mock-0001" and body["status"] == "active" and body["source"] == "core_store"
+    assert body["observed_at"].endswith("Z")
+    # parity with the real runtime: an alias that points nowhere is the typed `alias_unknown`, never a null 200
+    err(bridge.c.get("/internal/v1/core-state/aliases/pulso-writer/prod", headers=bridge.headers("state_read")),
+        404, "alias_unknown")
+    err(bridge.c.get("/internal/v1/core-state/aliases/nobody/staging", headers=bridge.headers("state_read")),
+        404, "alias_unknown")
     err(bridge.c.get("/internal/v1/core-state/aliases/pulso-writer/canary", headers=bridge.headers("state_read")),
-        404, "not_found")
+        400, "invalid_request")
+
+
+def test_alias_status_follows_the_release_status(bridge) -> None:
+    bridge.sim("releases", release_id="rel-mock-bad", status="revoked", agents={})
+    bridge.sim("aliases", agent_id="pulso-writer", alias="staging", release_id="rel-mock-bad")
+    r = bridge.c.get("/internal/v1/core-state/aliases/pulso-writer/staging", headers=bridge.headers("state_read"))
+    validate("AliasState", r.json())
+    assert r.json()["status"] == "revoked"
 
 
 def _dry(bridge, changes, tenant="tenant-a"):
@@ -333,16 +347,40 @@ def _change(i=0, version="1.1.0"):
 def test_dry_run_validates_without_creating_a_proposal(bridge) -> None:
     ok = _dry(bridge, [_change()])
     validate("CoreAuthoringDryRun", ok.json())
-    assert ok.json()["valid"] is True and ok.json()["candidate_hash"] and ok.json()["proposal_created"] is False
+    out = ok.json()
+    assert out["valid"] is True and out["candidate_hash"] and out["proposal_created"] is False
+    assert out["release_id_preview"] == "rel-" + out["candidate_hash"][:16] and len(out["release_hash"]) == 64
+    assert out["new_versions"] == [{"kind": "template", "id": "t/x0", "version": "1.1.0"}]
+    assert out["auto_bumped"] == [] and list(out["content_hashes"]) == ["template:t/x0@1.1.0"]
     bad = _dry(bridge, [_change(i) for i in range(51)])
     validate("CoreAuthoringDryRun", bad.json())
     assert bad.json()["valid"] is False and bad.json()["violations"][0]["rule"] == "REG-LIMIT"
-    assert bad.json()["candidate_hash"] is None
+    assert bad.json()["candidate_hash"] is None and bad.json()["release_id_preview"] is None
+    assert set(bad.json()["violations"][0]) == {"rule", "path", "flow", "node_id", "message"}
     assert bridge.effects()["registry_writes"] == 0
 
 
 def test_dry_run_is_deterministic(bridge) -> None:
     assert _dry(bridge, [_change()]).json() == _dry(bridge, [_change()]).json()
+
+
+def test_dry_run_binds_the_request_digest(bridge) -> None:
+    body = {"schema_version": "1", "tenant_id": "tenant-a", "agent_id": "atencion",
+            "base_release_id": "rel-98130317a1003849", "changes": [_change()]}
+    digest = service_jws.request_digest(body)
+    r = bridge.c.post("/internal/v1/core-authoring/dry-run", json=body, headers=bridge.headers("authoring_dry_run"))
+    assert r.json()["request_digest"] == digest
+    r = bridge.c.post("/internal/v1/core-authoring/dry-run", json={**body, "request_digest": digest},
+                      headers=bridge.headers("authoring_dry_run"))
+    assert r.status_code == 200
+    r = bridge.c.post("/internal/v1/core-authoring/dry-run", json={**body, "request_digest": "0" * 64},
+                      headers=bridge.headers("authoring_dry_run"))
+    assert err(r, 400, "invalid_request")["details"] == {"fields": ["request_digest"]}
+
+
+def test_dry_run_denies_release_settings(bridge) -> None:
+    settings = {"kind": "release_settings", "docs": _change()["docs"], "content": {"interrupts": []}}
+    err(_dry(bridge, [_change(), settings]), 422, "release_settings_not_allowed")
 
 
 def test_dry_run_rejects_unknown_fields(bridge) -> None:

@@ -3,6 +3,29 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "auto_bumped": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "candidate_hash": {
       "oneOf": [
         {
@@ -14,11 +37,70 @@
         }
       ]
     },
+    "content_hashes": {
+      "additionalProperties": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "new_versions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "proposal_created": {
       "const": false
     },
+    "release_hash": {
+      "oneOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "release_id_preview": {
+      "oneOf": [
+        {
+          "pattern": "^rel-[0-9a-f]{16}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "request_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
     "runtime_profile": {
-      "const": "contract_mock"
+      "enum": [
+        "contract_mock",
+        "agent_core_real"
+      ]
     },
     "schema_version": {
       "const": "1",
@@ -31,8 +113,20 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "flow": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "message": {
             "type": "string"
+          },
+          "node_id": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "path": {
             "type": [
@@ -47,6 +141,8 @@
         "required": [
           "rule",
           "path",
+          "flow",
+          "node_id",
           "message"
         ],
         "type": "object"
@@ -55,12 +151,18 @@
     }
   },
   "required": [
+    "auto_bumped",
+    "candidate_hash",
+    "content_hashes",
+    "new_versions",
+    "proposal_created",
+    "release_hash",
+    "release_id_preview",
+    "request_digest",
+    "runtime_profile",
     "schema_version",
     "valid",
-    "candidate_hash",
-    "violations",
-    "proposal_created",
-    "runtime_profile"
+    "violations"
   ],
   "title": "CoreAuthoringDryRun",
   "type": "object"

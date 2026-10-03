@@ -193,6 +193,9 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         SpendMeteringGateway,
         StaticBudgetResolver,
     )
+    from pulso_core_runtime.authoring.routes import AuthoringDeps
+    from pulso_core_runtime.authoring.routes import register as register_authoring
+    from pulso_core_runtime.authoring.service import AuthoringService
     from pulso_core_runtime.evaluation.arms import ArmRunner
     from pulso_core_runtime.evaluation.broker_clients import (
         BrokerArtifactPort,
@@ -320,6 +323,9 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
                               build_sha=env.get("PULSO_CORE_SHA") or PIN_SHA)
         handlers: dict[str, Any] = {}
         register_evaluation(handlers, EvaluationDeps(evaluation, arms, broker, budgets))
+        # CAP-08 alias reads and CAP-16 L2 dry-run: pure reads over the same store/service Core uses (no quota).
+        register_authoring(handlers, AuthoringDeps(AuthoringService(
+            ports.registry_api.store, evaluation.service, runtime_profile="agent_core_real")))
         doubles = [f"{k}: {v}" for k, v in sorted({**stand_ins(env), **_wiring_stand_ins(budgets)}.items())]
         doubles += llm_doubles(llm_cfg)
         doubles += [f"core:{name}" for name in ports.doubles]
