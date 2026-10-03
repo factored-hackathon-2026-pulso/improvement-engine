@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -265,9 +266,12 @@ def _dig(body: Any, dotted: str) -> Any:
     return body
 
 
-def run_case(client: httpx.Client, case: Case, *, sim: bool) -> CaseResult:
+def run_case(client: httpx.Client, case: Case, *, sim: bool, reset: Callable[[], None] | None = None) -> CaseResult:
+    """`reset` isolates cases on a target without `/_sim` (the real server): the harness, not the served app, resets."""
     if sim:
         client.post("/_sim/reset").raise_for_status()
+    elif reset is not None:
+        reset()
     env: dict[str, Any] = {"base_release": BASE_RELEASE_ID, "agent": AGENT_ID}
     result = CaseResult(case.id)
     for step in case.steps:
@@ -301,6 +305,11 @@ def run_case(client: httpx.Client, case: Case, *, sim: bool) -> CaseResult:
                 except (KeyError, IndexError, ValueError, TypeError):
                     env[name] = "UNSAVED"
     return result
+
+
+def fixtures_dir(target: str = "a2") -> Path:
+    """a2 (and mock-only) fixtures live in the pin dir; real_local recordings in `<pin>/real/`."""
+    return FIXTURES / "real" if target == "real" else FIXTURES
 
 
 def fixture_path(case_id: str) -> Path:
