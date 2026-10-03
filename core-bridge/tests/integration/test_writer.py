@@ -72,13 +72,20 @@ def _write_flow(c: Composed) -> tuple[str, str, str]:
     return pid, frozen.result_full["candidate_hash"], content_hash(suite)
 
 
+def _ref(pid: str, chash: str, n: str) -> str:
+    """Annex D.4: the bridge derives the admission ref (tenant t1, job-<n>, binding bind-<n>, attempt 1)."""
+    from pulso_core_runtime.evaluation.admission import derive_context_ref
+    return derive_context_ref("t1", f"job-{n}", f"bind-{n}", pid, chash, 1)
+
+
 def _admit(c: Composed, pid: str, chash: str, sdigest: str, ref: str, n: str) -> Any:
+    assert ref == _ref(pid, chash, n)
     return c.client.post("/internal/v1/evaluation/admissions", headers=c.headers(
         "evaluation_admit", job_id=f"job-{n}"), json={
-        "schema_version": "1", "evaluation_context_ref": ref, "binding_ref": f"bind-{n}", "proposal_id": pid,
+        "schema_version": "1", "binding_ref": f"bind-{n}", "proposal_id": pid,
         "candidate_hash": chash, "suite_id": "disputas-suite", "suite_version": "1.0.0", "suite_digest": sdigest,
         "evaluation_attempt": 1, "budget_ref": "bud-1",
-        "deadline": (datetime.now(UTC) + timedelta(hours=1)).isoformat(), "request_digest": "d" * 64})
+        "deadline": (datetime.now(UTC) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"), "request_digest": "d" * 64})
 
 
 def _eval_only(c: Composed, pid: str, ref: str, n: str) -> InvocationContext:
@@ -96,9 +103,10 @@ def test_writer_create_put_freeze_then_native_evaluate_end_to_end(composed: Comp
     pid, chash, sdigest = _write_flow(composed)
     runs_before = _eval_runs(composed)
     assert runs_before == 0
-    adm = _admit(composed, pid, chash, sdigest, "ctx-w-1", "w2")
-    assert adm.status_code == 201, adm.text
-    ic = _eval_only(composed, pid, "ctx-w-1", "w2")
+    ref = _ref(pid, chash, "w2")
+    adm = _admit(composed, pid, chash, sdigest, ref, "w2")
+    assert adm.status_code == 201 and adm.json()["evaluation_context_ref"] == ref, adm.text
+    ic = _eval_only(composed, pid, ref, "w2")
     # evaluate-only denies every mutator at the executor
     blocked = _call(composed, ic, "registry/create_proposal",
                     {"agent_id": "atencion", "origin": "builder_chat", "title": "x"}, "eng-9")
@@ -123,7 +131,7 @@ def test_writer_create_put_freeze_then_native_evaluate_end_to_end(composed: Comp
               if r.url.path.endswith("/authorizations/check") and b and b["operation"] == "native_evaluate"]
     assert len(native) >= 2 and len(set(native)) == 1, native
     # the evaluate key is the admission-derived one
-    assert eval_key("ctx-w-1") == "pulso-eval:ctx-w-1"
+    assert eval_key(ref) == f"pulso-eval:{ref}"
     r = composed.client.get("/internal/v1/version", headers=composed.headers("version_probe"))
     assert r.status_code == 200
 
@@ -172,8 +180,9 @@ def test_concurrency_gate_serialises_evaluations(composed: Composed) -> None:
         prepared = []
         for n in ("c1", "c2"):
             pid, chash, sd = _write_flow_n(composed, n)
-            assert _admit(composed, pid, chash, sd, f"ctx-{n}", f"e{n}").status_code == 201
-            prepared.append((pid, _eval_only(composed, pid, f"ctx-{n}", f"e{n}")))
+            ref = _ref(pid, chash, f"e{n}")
+            assert _admit(composed, pid, chash, sd, ref, f"e{n}").status_code == 201
+            prepared.append((pid, _eval_only(composed, pid, ref, f"e{n}")))
 
         def run(pid: str, ic: InvocationContext, n: int) -> None:
             results.append(_call(composed, ic, "registry/evaluate",
@@ -319,12 +328,14 @@ def test_evaluate_only_invocation_over_http_reaches_native_report_and_never_reop
     ekey = idem_key("t1", "j2", "writer", 1, "eoeval")
     # the binding ref of an invocation is sha256(tenant|Idempotency-Key): Codex admits against it before dispatch
     from pulso_core_runtime.invoke.models import sha256_text
+    from pulso_core_runtime.evaluation.admission import derive_context_ref
+    eo_ref = derive_context_ref("t1", "j2", sha256_text(f"t1|{ekey}"), pid, chash, 1)
     adm = composed.client.post("/internal/v1/evaluation/admissions", headers=composed.headers(
         "evaluation_admit", job_id="j2"), json={
-        "schema_version": "1", "evaluation_context_ref": "ctx-eo", "binding_ref": sha256_text(f"t1|{ekey}"),
+        "schema_version": "1", "binding_ref": sha256_text(f"t1|{ekey}"),
         "proposal_id": pid, "candidate_hash": chash, "suite_id": "disputas-suite", "suite_version": "1.0.0",
         "suite_digest": content_hash(suite), "evaluation_attempt": 1, "budget_ref": "bud-1",
-        "deadline": (datetime.now(UTC) + timedelta(hours=1)).isoformat(), "request_digest": "d" * 64})
+        "deadline": (datetime.now(UTC) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"), "request_digest": "d" * 64})
     assert adm.status_code == 201, adm.text
     runs0 = _eval_runs(composed)
     n_before = len(composed.loop.backend.bodies)
@@ -336,7 +347,7 @@ def test_evaluate_only_invocation_over_http_reaches_native_report_and_never_reop
                "evaluate_enabled": True, "evaluation_suite_id": "disputas-suite", "evaluation_suite_version": "1.0.0"},
         registry_mutation_commitment={
             "mode": "evaluate_only", "proposal_id": pid, "base_release_id": "rel-demo", "evaluate_enabled": True,
-            "evaluation_context_ref": "ctx-eo", "operations": []})).json()
+            "evaluation_context_ref": eo_ref, "operations": []})).json()
     ops = [b["operation"] for b in composed.loop.backend.bodies[n_before:] if b and "operation" in b]
     assert er["state"] == "terminal_ok", (er, ops)
     assert "registry/reopen" not in ops and "native_evaluate" in ops

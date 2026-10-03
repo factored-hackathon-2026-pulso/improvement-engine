@@ -380,7 +380,7 @@
         ]
       },
       "pulso:evaluation_context_invalid": {
-        "doc": "evaluation_context_ref outside [A-Za-z0-9_.:-]{1,200}.",
+        "doc": "An explicit evaluation_context_ref that is not the server-derived one (or outside [A-Za-z0-9_.:-]{1,200}).",
         "retryable": false,
         "routes": [
           "admit_evaluation"
@@ -492,7 +492,7 @@
         ]
       },
       "pulso:mixed_world_rejected": {
-        "doc": "native mode with a bank pointer.",
+        "doc": "evolution_task/native with a `sandbox_session_ref` (a bank pointer).",
         "retryable": false,
         "routes": [
           "run_arm"
@@ -618,7 +618,7 @@
         ]
       },
       "pulso:sandbox_required": {
-        "doc": "task mode without a sandbox / seed_manifest_ref.",
+        "doc": "stateful/task mode without a sandbox bank or `sandbox_session_ref`.",
         "retryable": false,
         "routes": [
           "run_arm"
@@ -720,18 +720,23 @@
   },
   "idempotency": {
     "admissions": {
+      "derivation": {
+        "evaluation_context_ref": "'evc-' + sha256_hex('{tenant_id}|{job_id}|{binding_ref}|{proposal_id}|{candidate_hash}|{evaluation_attempt}')[:40]",
+        "explicit_value": "optional; accepted only when equal to the derived ref (else 422 pulso:evaluation_context_invalid)",
+        "job_id": "the `job_id` claim of the token"
+      },
       "first": "201",
-      "key": "body.evaluation_context_ref",
+      "key": "Idempotency-Key header (validated [A-Za-z0-9_.:-]{1,200}, optional); the admission is identified by the derived ref below, so a replay is the same admission",
       "replay": "200 same body; 409 pulso:idempotency_conflict when any bound field differs"
     },
     "arms": {
       "execution_id": "'arm-' + sha256_hex('{tenant_id}|{idempotency_key}')[:32]",
-      "key": "body.idempotency_key (the Idempotency-Key header is not read by the runtime)",
+      "key": "Idempotency-Key header or body.idempotency_key; both present must be equal (else 422 pulso:invalid_request details.fields=[Idempotency-Key]); neither -> 422",
       "readback": [
         "GET /evaluation/arms/{execution_id}",
         "GET /evaluation/arms/by-key/{key}"
       ],
-      "replay": "200 stored report; other body -> 409 pulso:idempotency_conflict"
+      "replay": "200 stored report; other body -> 409 pulso:idempotency_conflict (alias and annex spellings of the same request share one digest)"
     },
     "invoke": {
       "formula": "sha256_hex('{tenant_id}|{job_id}|{stage}|{attempt}|{logical_key}')",

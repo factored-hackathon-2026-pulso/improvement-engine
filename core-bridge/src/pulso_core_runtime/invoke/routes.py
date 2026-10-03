@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from pulso_core_runtime.credentials.issuer import CredentialIssuer
 from pulso_core_runtime.internal.auth import Claims
@@ -33,9 +33,10 @@ def _respond(status: int, body: dict[str, Any], trace: str) -> JSONResponse:
 
 class CredentialRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    tenant_id: str
-    role: str
-    purpose: str
+    schema_version: Literal["1"] | None = None  # annex D.1 spelling; V3 31.5.10 body is `{tenant_id, role, purpose}`
+    tenant_id: str = Field(min_length=1, max_length=128)
+    role: str = Field(min_length=1, max_length=64)
+    purpose: str = Field(min_length=1, max_length=64)
 
 
 def make_handlers(service: InvokeService, issuer: CredentialIssuer | None = None) -> dict[str, Handler]:

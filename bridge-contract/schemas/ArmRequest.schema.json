@@ -2,10 +2,31 @@
   "$id": "ArmRequest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "execution_profile"
+      ]
+    },
+    {
+      "required": [
+        "mode"
+      ]
+    }
+  ],
   "description": "D.4 arm request (generated from evaluation.arms.ArmRequest).",
   "properties": {
     "agent_id": {
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "deprecated": true
     },
     "arm": {
       "maxLength": 64,
@@ -38,17 +59,47 @@
       "minLength": 1,
       "type": "string"
     },
+    "deadline": {
+      "default": null,
+      "description": "UTC RFC3339 with a literal Z (annex D.1)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z$",
+      "type": "string"
+    },
+    "execution_profile": {
+      "anyOf": [
+        {
+          "enum": [
+            "attention_stateful_complementary",
+            "evolution_task"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "idempotency_key": {
       "pattern": "^[A-Za-z0-9_.:-]{1,200}$",
       "type": "string"
     },
     "mode": {
-      "enum": [
-        "native",
-        "task_builder",
-        "stateful_attention"
+      "anyOf": [
+        {
+          "enum": [
+            "native",
+            "task_builder",
+            "stateful_attention"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
       ],
-      "type": "string"
+      "default": null,
+      "deprecated": true
     },
     "oracle_ref": {
       "anyOf": [
@@ -64,6 +115,17 @@
     "repetition": {
       "minimum": 0,
       "type": "integer"
+    },
+    "sandbox_session_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "scenario_manifest_ref": {
       "type": "string"
@@ -92,7 +154,8 @@
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "deprecated": true
     },
     "supersedes_execution_id": {
       "anyOf": [
@@ -122,18 +185,20 @@
     }
   },
   "required": [
-    "idempotency_key",
     "binding_ref",
     "case_ref",
     "arm",
     "repetition",
     "seed",
-    "mode",
-    "agent_id",
     "target",
     "scenario_manifest_ref",
     "budget_ref"
   ],
   "title": "ArmRequest",
-  "type": "object"
+  "type": "object",
+  "x-deprecated-aliases": {
+    "agent_id": "derived from the target",
+    "mode": "execution_profile (attention_stateful_complementary=stateful_attention, evolution_task=native; task_builder has no annex profile)",
+    "seed_manifest_ref": "sandbox_session_ref"
+  }
 }

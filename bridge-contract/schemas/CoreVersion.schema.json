@@ -8,6 +8,9 @@
       "pattern": "^[0-9a-f]{40}$",
       "type": "string"
     },
+    "bridge_instance_id": {
+      "type": "string"
+    },
     "contracts_version": {
       "type": "string"
     },
@@ -34,9 +37,15 @@
     },
     "runtime_profile": {
       "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
     }
   },
   "required": [
+    "schema_version",
+    "bridge_instance_id",
     "agent_core_sha",
     "contracts_version",
     "pulso_sha",

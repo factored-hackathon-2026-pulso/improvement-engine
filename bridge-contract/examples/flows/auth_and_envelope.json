@@ -27,6 +27,7 @@
       "response": {
         "body": {
           "agent_core_sha": "894fa65575d83420523f33ec1c6919b8965f7ebe",
+          "bridge_instance_id": "bridge-1",
           "contracts_version": "1.3.0",
           "doubles": [
             "calibration: calibrations directory absent (live decision path blocked)",
@@ -39,7 +40,8 @@
           "image_digest": "unknown",
           "keys_reload_error": null,
           "pulso_sha": "integ",
-          "runtime_profile": "agent_core_real"
+          "runtime_profile": "agent_core_real",
+          "schema_version": "1"
         },
         "content_type": "application/json",
         "schema": "CoreVersion",
@@ -256,6 +258,7 @@
       "response": {
         "body": {
           "agent_core_sha": "894fa65575d83420523f33ec1c6919b8965f7ebe",
+          "bridge_instance_id": "bridge-1",
           "contracts_version": "1.3.0",
           "doubles": [
             "calibration: calibrations directory absent (live decision path blocked)",
@@ -268,7 +271,8 @@
           "image_digest": "unknown",
           "keys_reload_error": null,
           "pulso_sha": "integ",
-          "runtime_profile": "agent_core_real"
+          "runtime_profile": "agent_core_real",
+          "schema_version": "1"
         },
         "content_type": "application/json",
         "schema": "CoreVersion",

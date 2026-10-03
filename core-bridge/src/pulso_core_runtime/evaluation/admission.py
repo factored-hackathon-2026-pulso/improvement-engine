@@ -6,6 +6,7 @@ uncertain prior execution, blocks any new run; a retry needs a new admission wit
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import threading
@@ -25,6 +26,15 @@ AdmissionState = Literal["admitted", "consumed", "expired", "unknown"]
 def valid_context_ref(ref: object) -> bool:
     """<= 200 ASCII chars from [A-Za-z0-9_.:-]; never truncated or normalised (`fullmatch`, no trailing \\n)."""
     return isinstance(ref, str) and CONTEXT_REF_RE.fullmatch(ref) is not None and ref.isascii()
+
+
+def derive_context_ref(tenant_id: str, job_id: str, binding_ref: str, proposal_id: str, candidate_hash: str,
+                       evaluation_attempt: int) -> str:
+    """Annex D.4: the bridge, not the client, names an admission. `evc-` + the first 40 hex of
+    `sha256('{tenant}|{job}|{binding}|{proposal}|{candidate_hash}|{attempt}')`; deterministic, so a replayed
+    admission is the same admission and Rust can compute it before dispatch."""
+    raw = "|".join([tenant_id, job_id, binding_ref, proposal_id, candidate_hash, str(evaluation_attempt)])
+    return "evc-" + hashlib.sha256(raw.encode()).hexdigest()[:40]
 
 
 def eval_key(ref: str) -> str:

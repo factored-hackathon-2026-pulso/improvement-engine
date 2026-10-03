@@ -21,14 +21,14 @@ from typing import Any
 import pytest
 
 from conformance.conftest import assert_valid
-from conformance.kit import idempotency_key
+from conformance.kit import evaluation_context_ref, idempotency_key
 from conformance.worlds import World
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 FIXED_TRACE = "0123456789abcdef0123456789abcdef"
-VOLATILE = {"trace_id", "request_digest", "output_digest", "input_commitment", "key_digest", "request_hash", "core_run_id", "proposal_id", "candidate_hash", "eval_run_ref", "report_digest", "jws", "exp", "deadline",
+VOLATILE = {"evaluation_context_ref", "trace_id", "request_digest", "output_digest", "input_commitment", "key_digest", "request_hash", "core_run_id", "proposal_id", "candidate_hash", "eval_run_ref", "report_digest", "jws", "exp", "deadline",
             "observed_at", "idempotency_key_digest"}
 
 
@@ -249,18 +249,22 @@ def flow_writer_evaluation(ex: Exchange) -> dict[str, Any]:
     ejob, elogical = "job-golden-eval", "golden-eval-1"
     ekey = idempotency_key(w.tenant, ejob, "writer", 1, elogical)
     bref = hashlib.sha256(f"{w.tenant}|{ekey}".encode()).hexdigest()
-    adm = {"schema_version": "1", "evaluation_context_ref": "ctx-golden", "binding_ref": bref, **cand,
+    adm = {"schema_version": "1", "binding_ref": bref, **cand,
            "suite_id": plan["suite_id"], "suite_version": plan["suite_version"], "suite_digest": plan["suite_digest"],
            "evaluation_attempt": 1, "budget_ref": w.budget_ref, "deadline": iso(), "request_digest": "d" * 64}
+    ref = evaluation_context_ref(w.tenant, ejob, bref, cand["proposal_id"], cand["candidate_hash"], 1)
     ex.call("admission_created", "POST", "/evaluation/admissions", purpose="evaluation_admit", body=adm, job_id=ejob,
             status=201, schema="EvaluationAdmission", doc="First admission: 201 state=admitted.")
     ex.call("admission_replay", "POST", "/evaluation/admissions", purpose="evaluation_admit", body=adm, job_id=ejob,
             status=200, schema="EvaluationAdmission", doc="Identical replay: 200, same body.")
     ex.call("admission_conflict", "POST", "/evaluation/admissions", purpose="evaluation_admit",
-            body={**adm, "evaluation_attempt": 2}, job_id=ejob, status=409,
-            doc="Same context ref, different bound field: 409 pulso:idempotency_conflict.")
+            body={**adm, "request_digest": "e" * 64}, job_id=ejob, status=409,
+            doc="Same derived context ref, different request digest: 409 pulso:idempotency_conflict.")
+    ex.call("admission_explicit_ref_equal", "POST", "/evaluation/admissions", purpose="evaluation_admit",
+            body={**adm, "evaluation_context_ref": ref}, job_id=ejob, status=200, schema="EvaluationAdmission",
+            doc="A deprecated explicit ref equal to the derived one is accepted (replay).")
     ex.call("admission_stale_candidate", "POST", "/evaluation/admissions", purpose="evaluation_admit",
-            body={**adm, "evaluation_context_ref": "ctx-golden-stale", "candidate_hash": "0" * 64}, job_id=ejob, status=409)
+            body={**adm, "candidate_hash": "0" * 64}, job_id=ejob, status=409)
     ex.call("admission_bad_context_ref", "POST", "/evaluation/admissions", purpose="evaluation_admit",
             body={**adm, "evaluation_context_ref": "has space"}, job_id=ejob, status=422)
     eb = w.invocation("writer", ejob, elogical, input={
@@ -269,7 +273,7 @@ def flow_writer_evaluation(ex: Exchange) -> dict[str, Any]:
         "evaluation_suite_id": plan["suite_id"], "evaluation_suite_version": plan["suite_version"]},
         registry_mutation_commitment={"mode": "evaluate_only", "proposal_id": cand["proposal_id"],
                                       "base_release_id": plan["base_release_id"], "evaluate_enabled": True,
-                                      "evaluation_context_ref": "ctx-golden", "operations": []})
+                                      "evaluation_context_ref": ref, "operations": []})
     er = ex.call("invoke_evaluate_only", "POST", "/core-tasks/invoke", purpose="core_task_invoke", body=eb, key=ekey,
                  job_id=ejob, status=200, schema="CoreTaskReceipt",
                  doc="Evaluate-only writer under the admission: native evaluation report digest in the fact.")

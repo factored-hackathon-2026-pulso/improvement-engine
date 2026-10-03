@@ -20,7 +20,8 @@
       "type": "string"
     },
     "deadline": {
-      "format": "date-time",
+      "description": "UTC RFC3339 with a literal Z (annex D.1)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z$",
       "type": "string"
     },
     "evaluation_attempt": {
@@ -28,6 +29,8 @@
       "type": "integer"
     },
     "evaluation_context_ref": {
+      "deprecated": true,
+      "description": "Deprecated (ADR 0011): the bridge derives the ref; an explicit value is accepted only when equal to it, else 422 pulso:evaluation_context_invalid. See contract.json idempotency.admissions.derivation.",
       "pattern": "^[A-Za-z0-9_.:-]{1,200}$",
       "type": "string"
     },
@@ -37,8 +40,7 @@
       "type": "string"
     },
     "request_digest": {
-      "maxLength": 128,
-      "minLength": 1,
+      "pattern": "^[0-9a-f]{64}$",
       "type": "string"
     },
     "schema_version": {
@@ -62,7 +64,6 @@
     }
   },
   "required": [
-    "evaluation_context_ref",
     "binding_ref",
     "proposal_id",
     "candidate_hash",

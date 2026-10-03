@@ -18,7 +18,7 @@ from typing import Any
 import pydantic
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from pulso_core_runtime.evaluation.admission import (
@@ -26,11 +26,13 @@ from pulso_core_runtime.evaluation.admission import (
     AdmissionDenied,
     BrokerPort,
     ProposalView,
+    derive_context_ref,
     valid_context_ref,
 )
 from pulso_core_runtime.evaluation.arms import ArmDenied, ArmRunner
 from pulso_core_runtime.evaluation.report import digest_of
 from pulso_core_runtime.internal.auth import Claims
+from pulso_core_runtime.timefmt import parse_z_timestamp
 from pulso_core_runtime.registry_service import BudgetResolver, EvaluationRuntime
 
 
@@ -38,7 +40,7 @@ class AdmissionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: str = "1"
-    evaluation_context_ref: str
+    evaluation_context_ref: str | None = None  # deprecated: derived server-side; accepted only when equal
     binding_ref: str = Field(min_length=1, max_length=200)
     proposal_id: str = Field(min_length=1, max_length=200)
     candidate_hash: str = Field(min_length=1, max_length=128)
@@ -47,8 +49,14 @@ class AdmissionRequest(BaseModel):
     suite_digest: str = Field(min_length=1, max_length=128)
     evaluation_attempt: int = Field(ge=1)
     budget_ref: str = Field(min_length=1, max_length=200)
-    deadline: datetime
-    request_digest: str = Field(min_length=1, max_length=128)
+    deadline: str
+    request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("deadline")
+    @classmethod
+    def _deadline_is_z(cls, v: str) -> str:
+        parse_z_timestamp(v)
+        return v
 
 
 @dataclass
@@ -77,11 +85,17 @@ def build_handlers(deps: EvaluationDeps) -> dict[str, Callable[[Request, Claims]
             body = AdmissionRequest.model_validate(await request.json())
         except (pydantic.ValidationError, ValueError):
             return _err("pulso:invalid_request", 422)
-        if not valid_context_ref(body.evaluation_context_ref):
-            return _err("pulso:evaluation_context_invalid", 422)
+        key = request.headers.get("idempotency-key")
+        if key is not None and not valid_context_ref(key):
+            return _err("pulso:invalid_request", 422, details={"fields": ["Idempotency-Key"]})
         job_id = str(claims.raw.get("job_id", ""))
         if not tenant or not job_id:
             return _err("pulso:auth_denied", 403)
+        derived = derive_context_ref(tenant, job_id, body.binding_ref, body.proposal_id, body.candidate_hash,
+                                     body.evaluation_attempt)
+        if body.evaluation_context_ref is not None and body.evaluation_context_ref != derived:
+            return _err("pulso:evaluation_context_invalid", 422)  # client-chosen refs are not annex D.4
+        body = body.model_copy(update={"evaluation_context_ref": derived})
         try:
             return await run_in_threadpool(_admit_sync, deps, body, tenant, job_id)
         except AdmissionDenied as exc:
@@ -92,6 +106,12 @@ def build_handlers(deps: EvaluationDeps) -> dict[str, Callable[[Request, Claims]
             raw = await request.json()
         except ValueError:
             return _err("pulso:invalid_request", 422)
+        header = request.headers.get("idempotency-key")
+        if header is not None:  # annex D.4: the key travels in the header; a body key must agree
+            if not valid_context_ref(header) or not isinstance(raw, dict) or (
+                    raw.get("idempotency_key") is not None and raw["idempotency_key"] != header):
+                return _err("pulso:invalid_request", 422, details={"fields": ["Idempotency-Key"]})
+            raw = {**raw, "idempotency_key": header}
         try:
             row = await run_in_threadpool(deps.arms.run, raw, tenant_id=_tenant(claims))
         except ArmDenied as exc:
@@ -125,7 +145,7 @@ def _admit_sync(deps: EvaluationDeps, body: AdmissionRequest, tenant: str, job_i
         allowed = False
     if not allowed:
         raise AdmissionDenied("broker_denied", 403)
-    if body.deadline <= deps.now():
+    if parse_z_timestamp(body.deadline) <= deps.now():
         raise AdmissionDenied("admission_expired", 409)
     if deps.budgets.resolve(body.budget_ref, tenant) is None:
         raise AdmissionDenied("budget_unknown", 403)
@@ -139,9 +159,9 @@ def _admit_sync(deps: EvaluationDeps, body: AdmissionRequest, tenant: str, job_i
         raise AdmissionDenied("candidate_changed", 409)
     if fresh.suite_digest != body.suite_digest:
         raise AdmissionDenied("suite_mismatch", 409)
-    adm = Admission(body.evaluation_context_ref, tenant, job_id, body.binding_ref, body.proposal_id,
+    adm = Admission(str(body.evaluation_context_ref), tenant, job_id, body.binding_ref, body.proposal_id,
                     body.candidate_hash, body.suite_id, body.suite_version, body.suite_digest,
-                    body.evaluation_attempt, body.budget_ref, body.deadline, body.request_digest)
+                    body.evaluation_attempt, body.budget_ref, parse_z_timestamp(body.deadline), body.request_digest)
     stored, created = rt.admissions.create(adm)
     if not created and (stored.request_digest, stored.tenant_id, stored.job_id, stored.binding_ref,
                         stored.proposal_id, stored.candidate_hash, stored.suite_id, stored.suite_version,

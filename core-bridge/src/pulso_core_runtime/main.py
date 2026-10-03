@@ -99,7 +99,8 @@ def version_info(env: Mapping[str, str], doubles: list[str] | None = None,
     def info() -> dict[str, Any]:
         # Exception TYPE of the last failed key reload (N-09), never a message; None when healthy or reload is off.
         reload_error = getattr(getattr(ports, "verifier", None), "last_reload_error", None)
-        return {"keys_reload_error": reload_error, "agent_core_sha": PIN_SHA, "contracts_version": CONTRACTS_VERSION,
+        return {"schema_version": "1", "bridge_instance_id": env.get("PULSO_BRIDGE_INSTANCE", "bridge-1"),
+                "keys_reload_error": reload_error, "agent_core_sha": PIN_SHA, "contracts_version": CONTRACTS_VERSION,
                 "pulso_sha": env.get("PULSO_SHA", "unknown"), "image_digest": env.get("PULSO_IMAGE_DIGEST", "unknown"),
                 "runtime_profile": "agent_core_real",
                 "doubles": list(doubles if doubles is not None

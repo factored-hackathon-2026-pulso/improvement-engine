@@ -52,6 +52,12 @@ def idempotency_key(tenant: str, job: str, stage: str, attempt: int, logical_key
     return sha256_hex(f"{tenant}|{job}|{stage}|{attempt}|{logical_key}")
 
 
+def evaluation_context_ref(tenant: str, job: str, binding: str, proposal_id: str, candidate_hash: str,
+                           attempt: int) -> str:
+    """contract.json idempotency.admissions.derivation: the ref the bridge derives (annex D.4)."""
+    return "evc-" + sha256_hex(f"{tenant}|{job}|{binding}|{proposal_id}|{candidate_hash}|{attempt}")[:40]
+
+
 def binding_ref(tenant: str, key: str) -> str:
     return sha256_hex(f"{tenant}|{key}")
 

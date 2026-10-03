@@ -123,9 +123,6 @@
       ]
     },
     "CoreCredentialIssueRequest": {
-      "only_in_mock": [
-        "schema_version"
-      ],
       "required_only_in_mock": [
         "schema_version"
       ]
@@ -214,16 +211,8 @@
         "doubles",
         "keys_reload_error"
       ],
-      "only_in_mock": [
-        "bridge_instance_id",
-        "schema_version"
-      ],
       "required_only_in_contract": [
         "doubles"
-      ],
-      "required_only_in_mock": [
-        "bridge_instance_id",
-        "schema_version"
       ]
     },
     "ErrorEnvelope": {},
