@@ -1,0 +1,344 @@
+{
+  "$id": "CoreTaskInvocation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "scout"
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "agent_id": {
+            "const": "pulso-scout"
+          },
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "briefing_ref": {}
+            },
+            "type": "object"
+          },
+          "registry_mutation_commitment": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "verifier"
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "agent_id": {
+            "const": "pulso-verifier"
+          },
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "hypotheses_ref": {}
+            },
+            "type": "object"
+          },
+          "registry_mutation_commitment": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "builder_design"
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "agent_id": {
+            "const": "pulso-builder-design"
+          },
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "design_input_ref": {}
+            },
+            "type": "object"
+          },
+          "registry_mutation_commitment": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "const": "writer"
+          }
+        },
+        "required": [
+          "stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "agent_id": {
+            "const": "pulso-writer"
+          },
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "base_release_id": {},
+              "draft_plan_ref": {},
+              "evaluate_enabled": {},
+              "evaluation_suite_id": {},
+              "evaluation_suite_version": {},
+              "proposal_id": {}
+            },
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "description": "CAP-25 invocation (generated from invoke.models.CoreTaskInvocation).",
+  "properties": {
+    "agent_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "agent_version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "type": "string"
+    },
+    "attempt": {
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "budget": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "closure_digest": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "credentials": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "cutoff": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "deadline": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "extract_manifest_ref": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "input": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "input_artifact_refs": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "job_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lab_grant_ref": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lang": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "logical_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "memory_snapshot_ref": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "pulso_run_ref": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "registry_mutation_commitment": {
+      "default": null,
+      "oneOf": [
+        {
+          "$ref": "RegistryMutationCommitment.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "release_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "request_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "pattern": "^1$",
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "scout",
+        "verifier",
+        "builder_design",
+        "writer"
+      ],
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "trace": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "pulso_run_ref",
+    "job_id",
+    "stage",
+    "attempt",
+    "agent_id",
+    "agent_version",
+    "release_id",
+    "lab_grant_ref",
+    "logical_key"
+  ],
+  "title": "CoreTaskInvocation",
+  "type": "object",
+  "x-digest-excluded": [
+    "request_digest",
+    "credentials",
+    "trace"
+  ],
+  "x-max-input-bytes": 262144
+}

@@ -1,0 +1,116 @@
+{
+  "$id": "Fact_pulso_change_spec.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "D.2 fact `pulso_change_spec` of stage `builder_design` (facts/schemas/pulso_change_spec.strict.json).",
+  "properties": {
+    "alternatives": {
+      "contains": {
+        "properties": {
+          "kind": {
+            "const": "do_nothing"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "do_nothing",
+              "proposed_change"
+            ],
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "type": "array"
+    },
+    "change_spec": {
+      "maxProperties": 64,
+      "minProperties": 1,
+      "type": "object"
+    },
+    "evidence_refs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$",
+            "type": "string"
+          },
+          "media_type": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "digest",
+          "media_type"
+        ],
+        "type": "object"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array"
+    },
+    "rationale": {
+      "maxLength": 8000,
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "enum": [
+        "1"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "change_spec",
+    "rationale",
+    "evidence_refs",
+    "alternatives"
+  ],
+  "title": "Fact_pulso_change_spec",
+  "type": "object"
+}

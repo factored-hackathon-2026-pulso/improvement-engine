@@ -1,0 +1,134 @@
+{
+  "$id": "RegistryMutationCommitment.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Codex-sealed writer commitment (D.2 writer row, CL-0002/CX-0007, CLQ-10). Not a separate annex-D field:\nit travels inside the digested `CoreTaskInvocation` body, so the same-key/other-body check also covers it.\n`operations` is the ordered list of committed non-evaluate writes; a write's key ordinal is its index.",
+  "properties": {
+    "base_release_id": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "create_agent_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "create_origin": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "create_title": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "evaluate_enabled": {
+      "default": false,
+      "type": "boolean"
+    },
+    "evaluation_context_ref": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "expected_rev": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "mode": {
+      "enum": [
+        "write",
+        "evaluate_only"
+      ],
+      "type": "string"
+    },
+    "operations": {
+      "items": {
+        "enum": [
+          "create_proposal",
+          "put_draft",
+          "validate",
+          "freeze",
+          "reopen"
+        ],
+        "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+    },
+    "proposal_id": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "put_draft_digest": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "mode"
+  ],
+  "title": "RegistryMutationCommitment",
+  "type": "object"
+}

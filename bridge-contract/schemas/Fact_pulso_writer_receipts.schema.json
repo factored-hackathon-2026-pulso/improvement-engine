@@ -1,0 +1,131 @@
+{
+  "$id": "Fact_pulso_writer_receipts.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "D.2 fact `pulso_writer_receipts` of stage `writer` (facts/schemas/pulso_writer_receipts.strict.json).",
+  "properties": {
+    "candidate_hash": {
+      "pattern": "^[A-Za-z0-9:_-]{1,128}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "native_evaluation": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "eval_run_ref": {
+              "maxLength": 200,
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "report_digest": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verdict": {
+              "enum": [
+                "pass",
+                "fail",
+                "failed_infra"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "verdict",
+            "eval_run_ref",
+            "report_digest"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "proposal_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "rev": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schema_version": {
+      "enum": [
+        "1"
+      ],
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "confirmed",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "write_receipts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "key_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "create_proposal",
+              "put_draft",
+              "freeze",
+              "reopen",
+              "evaluate"
+            ],
+            "type": "string"
+          },
+          "request_hash": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rev_after": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "op",
+          "key_digest",
+          "rev_after",
+          "request_hash",
+          "verified"
+        ],
+        "type": "object"
+      },
+      "maxItems": 16,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "rev",
+    "candidate_hash",
+    "native_evaluation",
+    "write_receipts",
+    "state"
+  ],
+  "title": "Fact_pulso_writer_receipts",
+  "type": "object"
+}

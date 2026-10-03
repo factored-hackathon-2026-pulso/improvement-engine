@@ -1,0 +1,817 @@
+{
+  "contract_revision": "pulso-two-teams-1",
+  "description": "Scout invocation: receipt state machine, replay, conflict, read, refusals.",
+  "flow": "invoke_scout",
+  "steps": [
+    {
+      "case": "invoke_scout_ok",
+      "description": "Scout stage, terminal_ok, one whitelisted fact (pulso_hypotheses).",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "wiki/briefing.md"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-scout-1",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "scout",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "dbe68ddd4321eac7f2d87367e6782484a65f7a1477172556517de1df4846753f",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "core_run_id": "<core_run_id#1>",
+          "outcome": "completed",
+          "reason": "completed",
+          "receipt": {
+            "audit_refs": [],
+            "budget": {
+              "known": true
+            },
+            "core_run_id": "<core_run_id#1>",
+            "idempotency_key_digest": "<idempotency_key_digest#1>",
+            "input_commitment": "<input_commitment#1>",
+            "outcome": "completed",
+            "output_digest": "<output_digest#1>",
+            "output_refs": [],
+            "release_id": "<release:scout>",
+            "request_digest": "<request_digest#1>",
+            "schema_version": "1",
+            "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd",
+            "trace_id": "<trace_id#1>"
+          },
+          "result": {
+            "core_run_id": "<core_run_id#1>",
+            "facts": {
+              "pulso_hypotheses": {
+                "digest": "<output_digest#2>",
+                "source_kind": "agent",
+                "value": {
+                  "hypotheses": [
+                    {
+                      "counterevidence_refs": [],
+                      "evidence_refs": [
+                        {
+                          "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                          "id": "res-1",
+                          "media_type": "application/json"
+                        }
+                      ],
+                      "id": "h1",
+                      "mechanism": "onboarding gap",
+                      "missing_evidence": [
+                        "cohort split"
+                      ],
+                      "next_queries": [],
+                      "statement": "retention dips on day 7"
+                    }
+                  ],
+                  "schema_version": "1"
+                }
+              }
+            },
+            "outcome": "completed",
+            "output_digest": "<output_digest#1>",
+            "schema_version": "1",
+            "status": "closed"
+          },
+          "schema_version": "1",
+          "state": "terminal_ok",
+          "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd"
+        },
+        "content_type": "application/json",
+        "schema": "CoreTaskReceipt",
+        "status": 200
+      }
+    },
+    {
+      "case": "invoke_scout_replay",
+      "description": "Same key + body: the stored receipt, no new run.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "wiki/briefing.md"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-scout-1",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "scout",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "dbe68ddd4321eac7f2d87367e6782484a65f7a1477172556517de1df4846753f",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "core_run_id": "<core_run_id#1>",
+          "outcome": "completed",
+          "reason": "completed",
+          "receipt": {
+            "audit_refs": [],
+            "budget": {
+              "known": true
+            },
+            "core_run_id": "<core_run_id#1>",
+            "idempotency_key_digest": "<idempotency_key_digest#1>",
+            "input_commitment": "<input_commitment#1>",
+            "outcome": "completed",
+            "output_digest": "<output_digest#1>",
+            "output_refs": [],
+            "release_id": "<release:scout>",
+            "request_digest": "<request_digest#1>",
+            "schema_version": "1",
+            "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd",
+            "trace_id": "<trace_id#1>"
+          },
+          "result": {
+            "core_run_id": "<core_run_id#1>",
+            "facts": {
+              "pulso_hypotheses": {
+                "digest": "<output_digest#2>",
+                "source_kind": "agent",
+                "value": {
+                  "hypotheses": [
+                    {
+                      "counterevidence_refs": [],
+                      "evidence_refs": [
+                        {
+                          "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                          "id": "res-1",
+                          "media_type": "application/json"
+                        }
+                      ],
+                      "id": "h1",
+                      "mechanism": "onboarding gap",
+                      "missing_evidence": [
+                        "cohort split"
+                      ],
+                      "next_queries": [],
+                      "statement": "retention dips on day 7"
+                    }
+                  ],
+                  "schema_version": "1"
+                }
+              }
+            },
+            "outcome": "completed",
+            "output_digest": "<output_digest#1>",
+            "schema_version": "1",
+            "status": "closed"
+          },
+          "schema_version": "1",
+          "state": "terminal_ok",
+          "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd"
+        },
+        "content_type": "application/json",
+        "schema": "CoreTaskReceipt",
+        "status": 200
+      }
+    },
+    {
+      "case": "invoke_digest_conflict",
+      "description": "Same Idempotency-Key, different body.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "wiki/other.md"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-scout-1",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "scout",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "dbe68ddd4321eac7f2d87367e6782484a65f7a1477172556517de1df4846753f",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:digest_conflict",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 409
+      }
+    },
+    {
+      "case": "read_task_ok",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_read",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-tasks/<core_run_id#1>"
+      },
+      "response": {
+        "body": {
+          "core_run_id": "<core_run_id#1>",
+          "outcome": "completed",
+          "reason": "completed",
+          "receipt": {
+            "audit_refs": [],
+            "budget": {
+              "known": true
+            },
+            "core_run_id": "<core_run_id#1>",
+            "idempotency_key_digest": "<idempotency_key_digest#1>",
+            "input_commitment": "<input_commitment#1>",
+            "outcome": "completed",
+            "output_digest": "<output_digest#1>",
+            "output_refs": [],
+            "release_id": "<release:scout>",
+            "request_digest": "<request_digest#1>",
+            "schema_version": "1",
+            "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd",
+            "trace_id": "<trace_id#1>"
+          },
+          "result": {
+            "core_run_id": "<core_run_id#1>",
+            "facts": {
+              "pulso_hypotheses": {
+                "digest": "<output_digest#2>",
+                "source_kind": "agent",
+                "value": {
+                  "hypotheses": [
+                    {
+                      "counterevidence_refs": [],
+                      "evidence_refs": [
+                        {
+                          "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                          "id": "res-1",
+                          "media_type": "application/json"
+                        }
+                      ],
+                      "id": "h1",
+                      "mechanism": "onboarding gap",
+                      "missing_evidence": [
+                        "cohort split"
+                      ],
+                      "next_queries": [],
+                      "statement": "retention dips on day 7"
+                    }
+                  ],
+                  "schema_version": "1"
+                }
+              }
+            },
+            "outcome": "completed",
+            "output_digest": "<output_digest#1>",
+            "schema_version": "1",
+            "status": "closed"
+          },
+          "schema_version": "1",
+          "state": "terminal_ok",
+          "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd"
+        },
+        "content_type": "application/json",
+        "schema": "CoreTaskReceipt",
+        "status": 200
+      }
+    },
+    {
+      "case": "read_task_foreign_tenant",
+      "description": "A foreign tenant's run is indistinguishable from missing.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_read",
+          "tenant_id": "t2",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-tasks/<core_run_id#1>"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:not_found",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 404
+      }
+    },
+    {
+      "case": "read_task_unknown",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_read",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-tasks/run-does-not-exist"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:not_found",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 404
+      }
+    },
+    {
+      "case": "invoke_release_unavailable",
+      "description": "Release pin cannot be proven: 409 pulso:release_pin_unavailable, receipt terminal_failed.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "wiki/briefing.md"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-scout-2",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "rel-does-not-exist",
+          "schema_version": "1",
+          "stage": "scout",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "7ed14e70037825a62f5ba38385f2d4c746e3f1905a2c7e30ad474d6e7b21f1fd",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:release_pin_unavailable",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 409
+      }
+    },
+    {
+      "case": "invoke_unknown_stage",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "wiki/briefing.md"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-invoke_unknown_stage",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "nope",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "723c9304ffec4b2b7bc2455eb8dd63cf0a132054355983b638fe76819f0530ce",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:stage_unknown",
+          "details": {
+            "stage": "nope"
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 400
+      }
+    },
+    {
+      "case": "invoke_stage_agent_mismatch",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-writer",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "wiki/briefing.md"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-invoke_stage_agent_mismatch",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "scout",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "f3397c7f1f99ada0941823381df264cfa396bf07ade46bcf88cb6a317107373d",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:stage_agent_mismatch",
+          "details": {
+            "agent_id": "pulso-writer",
+            "stage": "scout"
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 422
+      }
+    },
+    {
+      "case": "invoke_unknown_input_slot",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "a",
+            "zzz": 1
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-invoke_unknown_input_slot",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "scout",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "2a9c6fd0fb7de9db270a196385fdb944cf2e9c977267b5b1040f25a801222c96",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:unknown_input_slot",
+          "details": {
+            "slots": [
+              "zzz"
+            ]
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 400
+      }
+    },
+    {
+      "case": "invoke_unknown_field",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "wiki/briefing.md"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-invoke_unknown_field",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "scout",
+          "surprise": 1,
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "250e6960650f5cb52cb5e1fdb70f8d3f8a36d23f32f1d6691fc1080e6d9d2904",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:invalid_request",
+          "details": {
+            "fields": [
+              "surprise"
+            ]
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 422
+      }
+    },
+    {
+      "case": "invoke_wrong_idempotency_key",
+      "description": "Idempotency-Key must equal the published formula.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "wiki/briefing.md"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-scout-1",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "scout",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "not-the-formula",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:invalid_request",
+          "details": {
+            "fields": [
+              "Idempotency-Key"
+            ]
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 422
+      }
+    },
+    {
+      "case": "invoke_input_too_large",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-scout",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-scout",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "extract_manifest_ref": "ex-1",
+          "input": {
+            "briefing_ref": "<string len=262200 sha256=3bd52e08>"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-scout",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-big",
+          "memory_snapshot_ref": "mem-1",
+          "pulso_run_ref": "pr-job-golden-scout",
+          "release_id": "<release:scout>",
+          "schema_version": "1",
+          "stage": "scout",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "d48e7f121b1801eb77325be82cb8a323b81e85765e05134c43bd3519c1700708",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:input_too_large",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 413
+      }
+    }
+  ]
+}

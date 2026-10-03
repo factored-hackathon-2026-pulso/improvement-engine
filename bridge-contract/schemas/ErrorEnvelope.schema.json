@@ -1,0 +1,91 @@
+{
+  "$id": "ErrorEnvelope.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Annex D.1 private error envelope (DR-34); `code` is a closed list. Core problem+json never appears here.",
+  "properties": {
+    "code": {
+      "enum": [
+        "pulso:admission_attempt_mismatch",
+        "pulso:admission_cross_tenant",
+        "pulso:admission_expired",
+        "pulso:admission_missing",
+        "pulso:admission_not_admitted",
+        "pulso:admission_proposal_mismatch",
+        "pulso:auth_denied",
+        "pulso:auth_invalid",
+        "pulso:binding_not_confirmed",
+        "pulso:bridge_busy",
+        "pulso:broker_denied",
+        "pulso:budget_unknown",
+        "pulso:canary_detected",
+        "pulso:candidate_changed",
+        "pulso:core_unavailable",
+        "pulso:credential_not_issuable",
+        "pulso:credential_signing_unavailable",
+        "pulso:digest_conflict",
+        "pulso:evaluate_disabled",
+        "pulso:evaluation_attempt_exists",
+        "pulso:evaluation_context_invalid",
+        "pulso:evaluation_context_missing",
+        "pulso:evaluation_in_progress",
+        "pulso:evaluation_unknown",
+        "pulso:fact_schema_violation",
+        "pulso:http_error",
+        "pulso:idempotency_conflict",
+        "pulso:idempotency_key_invalid",
+        "pulso:input_too_large",
+        "pulso:internal_error",
+        "pulso:invalid_request",
+        "pulso:mixed_world_rejected",
+        "pulso:not_found",
+        "pulso:not_implemented",
+        "pulso:output_missing",
+        "pulso:output_too_large",
+        "pulso:payload_too_large",
+        "pulso:proposal_not_found",
+        "pulso:release_drift",
+        "pulso:release_pin_unavailable",
+        "pulso:release_revoked",
+        "pulso:run_not_found",
+        "pulso:sandbox_required",
+        "pulso:stage_agent_mismatch",
+        "pulso:stage_unknown",
+        "pulso:suite_mismatch",
+        "pulso:supersedes_invalid",
+        "pulso:task_in_progress",
+        "pulso:task_unknown",
+        "pulso:tenant_mismatch",
+        "pulso:unknown_input_slot",
+        "pulso:alias_unknown",
+        "pulso:base_release_unknown",
+        "pulso:compile_violation",
+        "pulso:dry_run_unavailable",
+        "pulso:release_settings_not_allowed"
+      ],
+      "type": "string"
+    },
+    "details": {
+      "type": "object"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "code",
+    "retryable",
+    "trace_id",
+    "details"
+  ],
+  "title": "ErrorEnvelope",
+  "type": "object"
+}

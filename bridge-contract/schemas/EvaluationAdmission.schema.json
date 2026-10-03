@@ -1,0 +1,31 @@
+{
+  "$id": "EvaluationAdmission.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "201 on first admission, 200 on an identical replay.",
+  "properties": {
+    "evaluation_context_ref": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "admitted",
+        "consumed",
+        "expired",
+        "unknown"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "evaluation_context_ref",
+    "state"
+  ],
+  "title": "EvaluationAdmission",
+  "type": "object"
+}

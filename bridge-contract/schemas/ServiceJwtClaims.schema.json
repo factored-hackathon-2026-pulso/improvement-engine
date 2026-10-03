@@ -1,0 +1,50 @@
+{
+  "$id": "ServiceJwtClaims.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Rust -> bridge JWT payload (A03 class i). No `scope`. `tenant_id` is optional only on version_probe; `job_id` is required by evaluation_admit.",
+  "properties": {
+    "aud": {
+      "const": "core-bridge"
+    },
+    "exp": {
+      "type": "integer"
+    },
+    "iat": {
+      "type": "integer"
+    },
+    "iss": {
+      "const": "control-api"
+    },
+    "job_id": {
+      "type": "string"
+    },
+    "jti": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "sub": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "tenant_id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "iss",
+    "aud",
+    "sub",
+    "tenant_id",
+    "purpose",
+    "iat",
+    "exp",
+    "jti"
+  ],
+  "title": "ServiceJwtClaims",
+  "type": "object"
+}

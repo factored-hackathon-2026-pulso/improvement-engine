@@ -1,0 +1,79 @@
+{
+  "$id": "ObservationBatch.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "POST /internal/v1/platform/observations body; `batch_digest` = sha256(JCS(body without it)); ACK only after commit.",
+  "properties": {
+    "batch_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "pulso-observations-2"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "cut_ref": {
+      "type": "null"
+    },
+    "events": {
+      "items": {
+        "$ref": "ObservationEvent.schema.json"
+      },
+      "type": "array"
+    },
+    "expected_cursor_revision": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "from_seq": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "partition": {
+      "type": "string"
+    },
+    "scan_mode": {
+      "enum": [
+        "fast_poll",
+        "rescan"
+      ]
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "to_seq": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "verification_receipts": {
+      "type": "array"
+    }
+  },
+  "required": [
+    "contract_version",
+    "source_id",
+    "tenant_id",
+    "partition",
+    "scan_mode",
+    "expected_cursor_revision",
+    "from_seq",
+    "to_seq",
+    "cursor",
+    "cut_ref",
+    "events",
+    "verification_receipts"
+  ],
+  "title": "ObservationBatch",
+  "type": "object"
+}

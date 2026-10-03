@@ -1,0 +1,1000 @@
+{
+  "arm_reasons": [
+    "broker_denied",
+    "commitment_mismatch",
+    "closure_invalid",
+    "unknown_target_kind",
+    "release_not_active",
+    "proposal_not_frozen",
+    "proposal_mismatch",
+    "draft_plan_digest_mismatch",
+    "base_release_missing",
+    "candidate_invalid",
+    "candidate_hash_mismatch",
+    "target_load_failed",
+    "manifest_missing",
+    "manifest_empty",
+    "budget_unknown",
+    "mixed_world_rejected",
+    "sandbox_timeout_after_send",
+    "schema_violation",
+    "action_without_readback",
+    "interrupted",
+    "runner_error"
+  ],
+  "auth": {
+    "purposes": [
+      "alias_read",
+      "authoring_dry_run",
+      "core_task_invoke",
+      "core_task_read",
+      "credential_issue",
+      "evaluation_admit",
+      "evaluation_arm_read",
+      "evaluation_arm_run",
+      "version_probe"
+    ],
+    "reason_status": {
+      "*": 401,
+      "purpose_denied": 403,
+      "tenant_required": 403
+    },
+    "reasons": [
+      "missing_token",
+      "malformed",
+      "bad_header",
+      "unknown_kid",
+      "bad_signature",
+      "key_binding",
+      "wrong_audience",
+      "missing_claims",
+      "expired",
+      "ttl_too_long",
+      "tenant_required",
+      "purpose_denied",
+      "jti_replayed"
+    ],
+    "tenant_exempt_purposes": [
+      "version_probe"
+    ],
+    "token": {
+      "alg": "EdDSA (verifier-fixed, never from payload)",
+      "aud": "core-bridge",
+      "claims_optional": [
+        "job_id"
+      ],
+      "claims_required": [
+        "iss",
+        "aud",
+        "sub",
+        "tenant_id",
+        "purpose",
+        "iat",
+        "exp",
+        "jti"
+      ],
+      "header_exact_keys": [
+        "alg",
+        "kid",
+        "typ"
+      ],
+      "iss": "control-api",
+      "jti": "receiver-owned durable replay store; (iss, jti) consumed atomically AFTER all other checks pass (a rejected token never burns its jti); every HTTP attempt uses a fresh jti",
+      "key_binding": "each kid is bound to exactly one (iss, aud)",
+      "max_exp_skew_seconds": 30,
+      "max_ttl_seconds": 300,
+      "scope_claim": "absent (class i has no scope)",
+      "typ": "JWT"
+    }
+  },
+  "base_path": "/internal/v1",
+  "contract_revision": "pulso-two-teams-1",
+  "credential_policy": [
+    {
+      "purpose": "core_task",
+      "role": "constructor",
+      "signer": "identity"
+    },
+    {
+      "purpose": "registry_write",
+      "role": "constructor",
+      "signer": "staff"
+    }
+  ],
+  "error_codes": {
+    "non_wire": {
+      "pulso:adapter_missing": "startup",
+      "pulso:artifact_digest_mismatch": "tool",
+      "pulso:artifact_final_locked": "tool",
+      "pulso:artifact_malformed": "tool",
+      "pulso:artifact_too_large": "tool",
+      "pulso:authorization_denied": "tool",
+      "pulso:binding_cas_lost": "tool",
+      "pulso:binding_failed": "receipt_reason",
+      "pulso:binding_unconfirmed": "receipt_reason",
+      "pulso:broker_": "tool",
+      "pulso:broker_timeout": "tool",
+      "pulso:broker_unavailable": "tool",
+      "pulso:commitment_mismatch": "tool",
+      "pulso:context_mismatch": "tool",
+      "pulso:context_missing": "tool",
+      "pulso:demo_double_in_real_mode": "startup",
+      "pulso:eval_db_misconfigured": "startup",
+      "pulso:eval_db_not_isolated": "startup",
+      "pulso:eval_db_unreachable": "startup",
+      "pulso:evaluation": "tool",
+      "pulso:evaluation_context_ref_invalid": "tool",
+      "pulso:evaluation_exception": "tool",
+      "pulso:evaluation_gate_unavailable": "tool",
+      "pulso:executor_exception": "tool",
+      "pulso:exporter_overprivileged": "exporter",
+      "pulso:lab_query_failed": "tool",
+      "pulso:lab_query_timeout": "tool",
+      "pulso:lab_query_unknown": "tool",
+      "pulso:no_extract_manifest": "tool",
+      "pulso:no_memory_snapshot": "tool",
+      "pulso:pin_symbol_drift": "startup",
+      "pulso:release_settings_not_allowed": "tool",
+      "pulso:runtime_config_invalid": "startup",
+      "pulso:schema_drift": "exporter",
+      "pulso:tool_internal_error": "tool",
+      "pulso:write_without_key": "tool"
+    },
+    "wire": {
+      "pulso:admission_attempt_mismatch": {
+        "doc": "Attempt differs.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:admission_cross_tenant": {
+        "doc": "Other tenant's admission.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:admission_expired": {
+        "doc": "deadline <= now.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:admission_missing": {
+        "doc": "No such admission.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:admission_not_admitted": {
+        "doc": "Admission is consumed/expired.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:admission_proposal_mismatch": {
+        "doc": "Proposal differs.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:alias_unknown": {
+        "doc": "Alias not set for the agent.",
+        "pending": true,
+        "retryable": false,
+        "routes": [
+          "read_alias"
+        ],
+        "status": [
+          404
+        ]
+      },
+      "pulso:auth_denied": {
+        "doc": "Valid token, wrong purpose or missing tenant claim (`details.reason`); also admissions without a `job_id` claim.",
+        "retryable": false,
+        "routes": [
+          "*"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:auth_invalid": {
+        "doc": "Missing/malformed/expired/unknown-kid/bad-signature/replayed token; `details.reason` is a closed reason (see auth.reasons).",
+        "retryable": false,
+        "routes": [
+          "*"
+        ],
+        "status": [
+          401
+        ]
+      },
+      "pulso:base_release_unknown": {
+        "doc": "base_release_id does not exist for the agent.",
+        "pending": true,
+        "retryable": false,
+        "routes": [
+          "authoring_dry_run"
+        ],
+        "status": [
+          404
+        ]
+      },
+      "pulso:binding_not_confirmed": {
+        "doc": "Binding not confirmed.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:bridge_busy": {
+        "doc": "In-flight cap reached; nothing was sent, the same key retries cleanly.",
+        "retryable": true,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          429
+        ]
+      },
+      "pulso:broker_denied": {
+        "doc": "Lab broker authorization check refused or failed (fail closed).",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation",
+          "run_arm"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:budget_unknown": {
+        "doc": "budget_ref not resolvable.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:canary_detected": {
+        "doc": "A configured canary string appeared in a fact.",
+        "retryable": false,
+        "routes": [
+          "invoke",
+          "read_task"
+        ],
+        "status": [
+          422
+        ]
+      },
+      "pulso:candidate_changed": {
+        "doc": "Proposal is not `candidate` or its candidate_hash moved.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:compile_violation": {
+        "doc": "Dry-run `violations` non-empty: HTTP 200 with violations is NOT success.",
+        "pending": true,
+        "retryable": false,
+        "routes": [
+          "authoring_dry_run"
+        ],
+        "status": [
+          200
+        ]
+      },
+      "pulso:core_unavailable": {
+        "doc": "Core not reachable.",
+        "retryable": true,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          503
+        ]
+      },
+      "pulso:credential_not_issuable": {
+        "doc": "(purpose, role) pair is not in POLICY (humans/approval roles never).",
+        "retryable": false,
+        "routes": [
+          "issue_credential"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:credential_signing_unavailable": {
+        "doc": "Signer missing or signing failed.",
+        "retryable": true,
+        "routes": [
+          "issue_credential"
+        ],
+        "status": [
+          503
+        ]
+      },
+      "pulso:digest_conflict": {
+        "doc": "Same Idempotency-Key, different request digest.",
+        "retryable": false,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:dry_run_unavailable": {
+        "doc": "The dry-run engine is unavailable.",
+        "pending": true,
+        "retryable": true,
+        "routes": [
+          "authoring_dry_run"
+        ],
+        "status": [
+          503
+        ]
+      },
+      "pulso:evaluate_disabled": {
+        "doc": "evaluate_enabled=false.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:evaluation_attempt_exists": {
+        "doc": "(tenant, proposal, candidate, attempt) already admitted under another ref.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:evaluation_context_invalid": {
+        "doc": "evaluation_context_ref outside [A-Za-z0-9_.:-]{1,200}.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          422
+        ]
+      },
+      "pulso:evaluation_context_missing": {
+        "doc": "No context ref.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:evaluation_in_progress": {
+        "doc": "A prior evaluation for the same admission is still running.",
+        "retryable": true,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:evaluation_unknown": {
+        "doc": "A prior evaluation outcome is unknown: reconcile, never start a new one.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:fact_schema_violation": {
+        "doc": "Fact fails its strict schema, has a non-integer JSON number, or cites an evidence ref that is not in the invocation call log.",
+        "retryable": false,
+        "routes": [
+          "invoke",
+          "read_task"
+        ],
+        "status": [
+          422
+        ]
+      },
+      "pulso:http_error": {
+        "doc": "Other framework-level HTTP error (e.g. method not allowed).",
+        "retryable": false,
+        "routes": [
+          "*"
+        ],
+        "status": [
+          405
+        ]
+      },
+      "pulso:idempotency_conflict": {
+        "doc": "Same key (context ref / arm key) with a different body.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation",
+          "run_arm"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:idempotency_key_invalid": {
+        "doc": "Arm key outside [A-Za-z0-9_.:-]{1,200}.",
+        "retryable": false,
+        "routes": [
+          "run_arm"
+        ],
+        "status": [
+          422
+        ]
+      },
+      "pulso:input_too_large": {
+        "doc": "JCS(input + input_artifact_refs) > MAX_INPUT_BYTES.",
+        "retryable": false,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          413
+        ]
+      },
+      "pulso:internal_error": {
+        "doc": "Unhandled bridge error.",
+        "retryable": true,
+        "routes": [
+          "*"
+        ],
+        "status": [
+          500
+        ]
+      },
+      "pulso:invalid_request": {
+        "doc": "Body/params fail the DTO; `details.fields` lists offending paths (names only).",
+        "retryable": false,
+        "routes": [
+          "*"
+        ],
+        "status": [
+          422
+        ]
+      },
+      "pulso:mixed_world_rejected": {
+        "doc": "native mode with a bank pointer.",
+        "retryable": false,
+        "routes": [
+          "run_arm"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:not_found": {
+        "doc": "Unknown path or a ref that is not visible to the caller's tenant (no existence oracle).",
+        "retryable": false,
+        "routes": [
+          "read_task",
+          "run_arm",
+          "read_arm",
+          "*"
+        ],
+        "status": [
+          404
+        ]
+      },
+      "pulso:not_implemented": {
+        "doc": "Route authenticated but no handler is wired (pending routes).",
+        "retryable": false,
+        "routes": [
+          "*"
+        ],
+        "status": [
+          501
+        ]
+      },
+      "pulso:output_missing": {
+        "doc": "Completed run without the required stage fact.",
+        "retryable": false,
+        "routes": [
+          "invoke",
+          "read_task"
+        ],
+        "status": [
+          422
+        ]
+      },
+      "pulso:output_too_large": {
+        "doc": "A fact > FACT_CAP or the whole result > RESULT_CAP.",
+        "retryable": false,
+        "routes": [
+          "invoke",
+          "read_task"
+        ],
+        "status": [
+          413
+        ]
+      },
+      "pulso:payload_too_large": {
+        "doc": "Body > MAX_BODY_BYTES (declared length or actual bytes).",
+        "retryable": false,
+        "routes": [
+          "*"
+        ],
+        "status": [
+          413
+        ]
+      },
+      "pulso:proposal_not_found": {
+        "doc": "Unknown proposal.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          404
+        ]
+      },
+      "pulso:release_drift": {
+        "doc": "Release drifted from the pin.",
+        "retryable": false,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:release_pin_unavailable": {
+        "doc": "Release missing / not active / agent version or closure digest differs.",
+        "retryable": false,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:release_revoked": {
+        "doc": "Release revoked.",
+        "retryable": false,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:release_settings_not_allowed": {
+        "doc": "A change targets release_settings (default deny, CAP-23).",
+        "pending": true,
+        "retryable": false,
+        "routes": [
+          "authoring_dry_run"
+        ],
+        "status": [
+          422
+        ]
+      },
+      "pulso:run_not_found": {
+        "doc": "Core run not found.",
+        "retryable": false,
+        "routes": [
+          "read_task",
+          "invoke"
+        ],
+        "status": [
+          404
+        ]
+      },
+      "pulso:sandbox_required": {
+        "doc": "task mode without a sandbox / seed_manifest_ref.",
+        "retryable": false,
+        "routes": [
+          "run_arm"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:stage_agent_mismatch": {
+        "doc": "agent_id is not the stage's catalogue agent; zero effects.",
+        "retryable": false,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          422
+        ]
+      },
+      "pulso:stage_unknown": {
+        "doc": "stage not in STAGES.",
+        "retryable": false,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          400
+        ]
+      },
+      "pulso:suite_mismatch": {
+        "doc": "suite_digest differs from the bridge's own.",
+        "retryable": false,
+        "routes": [
+          "admit_evaluation"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:supersedes_invalid": {
+        "doc": "supersedes_execution_id is not a reconciled `unknown` arm.",
+        "retryable": false,
+        "routes": [
+          "run_arm"
+        ],
+        "status": [
+          409
+        ]
+      },
+      "pulso:task_in_progress": {
+        "doc": "Carried as `code` inside a 200 CoreTaskReceipt body (non-terminal state).",
+        "retryable": false,
+        "routes": [
+          "read_task"
+        ],
+        "status": [
+          200
+        ]
+      },
+      "pulso:task_unknown": {
+        "doc": "Carried as `code` inside a 200 CoreTaskReceipt body (state=unknown).",
+        "retryable": false,
+        "routes": [
+          "read_task"
+        ],
+        "status": [
+          200
+        ]
+      },
+      "pulso:tenant_mismatch": {
+        "doc": "Verified tenant claim outside the deployment tenant set, or body tenant != claim.",
+        "retryable": false,
+        "routes": [
+          "*"
+        ],
+        "status": [
+          403
+        ]
+      },
+      "pulso:unknown_input_slot": {
+        "doc": "`input` has a key the stage does not declare (`details.slots`).",
+        "retryable": false,
+        "routes": [
+          "invoke"
+        ],
+        "status": [
+          400
+        ]
+      }
+    }
+  },
+  "exporter": {
+    "audience": "control-api",
+    "contract_version": "pulso-observations-2",
+    "note": "producer side only; Rust implements the receiver",
+    "scopes": [
+      "binding",
+      "observations"
+    ]
+  },
+  "idempotency": {
+    "admissions": {
+      "first": "201",
+      "key": "body.evaluation_context_ref",
+      "replay": "200 same body; 409 pulso:idempotency_conflict when any bound field differs"
+    },
+    "arms": {
+      "execution_id": "'arm-' + sha256_hex('{tenant_id}|{idempotency_key}')[:32]",
+      "key": "body.idempotency_key (the Idempotency-Key header is not read by the runtime)",
+      "readback": [
+        "GET /evaluation/arms/{execution_id}",
+        "GET /evaluation/arms/by-key/{key}"
+      ],
+      "replay": "200 stored report; other body -> 409 pulso:idempotency_conflict"
+    },
+    "invoke": {
+      "formula": "sha256_hex('{tenant_id}|{job_id}|{stage}|{attempt}|{logical_key}')",
+      "header": "Idempotency-Key",
+      "request_digest": "sha256_hex(JCS(body minus request_digest, credentials, trace))",
+      "same_key_other_digest": "409 pulso:digest_conflict",
+      "same_key_same_digest": "replay: stored receipt (200 terminal / 202 non-terminal), no second Core run",
+      "task_binding_ref": "sha256_hex('{tenant_id}|{idempotency_key}')",
+      "wrong_header": "422 pulso:invalid_request details.fields=[Idempotency-Key]"
+    }
+  },
+  "limits": {
+    "credential_max_ttl_seconds": 900,
+    "default_max_inflight": 8,
+    "fact_cap_bytes": 131072,
+    "max_body_bytes": 1048576,
+    "max_input_bytes": 262144,
+    "result_cap_bytes": 262144
+  },
+  "pin": {
+    "agent_core_sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51",
+    "contracts_version": "1.3.0"
+  },
+  "receipt_reasons": [
+    "completed",
+    "run_failed",
+    "unexpected_outcome",
+    "core_call_failed",
+    "post_send_exception",
+    "projection_failed",
+    "binding_unconfirmed",
+    "binding_unproven",
+    "core_idempotency_conflict",
+    "core_http_*",
+    "core_rejected_*",
+    "release_drift",
+    "release_pin_unavailable",
+    "release_revoked",
+    "output_missing",
+    "output_too_large",
+    "fact_schema_violation",
+    "canary_detected"
+  ],
+  "receipt_state_machine": {
+    "http": {
+      "non_terminal": 202,
+      "note": "a timeout after `sent` is `unknown`, never `failed`; `unknown` never licenses repeating the effect",
+      "terminal": 200
+    },
+    "states": [
+      "prepared",
+      "sent",
+      "binding_confirmed",
+      "terminal_ok",
+      "terminal_failed",
+      "unknown",
+      "manual_reconcile"
+    ],
+    "terminal": [
+      "terminal_failed",
+      "terminal_ok"
+    ],
+    "transitions": {
+      "binding_confirmed": [
+        "sent"
+      ],
+      "manual_reconcile": [
+        "binding_confirmed",
+        "manual_reconcile",
+        "prepared",
+        "sent",
+        "unknown"
+      ],
+      "sent": [
+        "prepared"
+      ],
+      "terminal_failed": [
+        "binding_confirmed",
+        "manual_reconcile",
+        "prepared",
+        "sent",
+        "unknown"
+      ],
+      "terminal_ok": [
+        "binding_confirmed",
+        "manual_reconcile",
+        "sent",
+        "unknown"
+      ],
+      "unknown": [
+        "binding_confirmed",
+        "sent",
+        "unknown"
+      ]
+    }
+  },
+  "routes": [
+    {
+      "audience": "core-bridge",
+      "id": "authoring_dry_run",
+      "method": "POST",
+      "path": "/core-authoring/dry-run",
+      "purposes": [
+        "authoring_dry_run"
+      ],
+      "tenant_required": true,
+      "x-status": "pending-implementation"
+    },
+    {
+      "audience": "core-bridge",
+      "id": "issue_credential",
+      "method": "POST",
+      "path": "/core-credentials/issue",
+      "purposes": [
+        "credential_issue"
+      ],
+      "tenant_required": true
+    },
+    {
+      "audience": "core-bridge",
+      "id": "read_alias",
+      "method": "GET",
+      "path": "/core-state/aliases/{agent_id}/{alias}",
+      "purposes": [
+        "alias_read"
+      ],
+      "tenant_required": true,
+      "x-status": "pending-implementation"
+    },
+    {
+      "audience": "core-bridge",
+      "id": "invoke",
+      "method": "POST",
+      "path": "/core-tasks/invoke",
+      "purposes": [
+        "core_task_invoke"
+      ],
+      "tenant_required": true
+    },
+    {
+      "audience": "core-bridge",
+      "id": "read_task",
+      "method": "GET",
+      "path": "/core-tasks/{task_id}",
+      "purposes": [
+        "core_task_read"
+      ],
+      "tenant_required": true
+    },
+    {
+      "audience": "core-bridge",
+      "id": "admit_evaluation",
+      "method": "POST",
+      "path": "/evaluation/admissions",
+      "purposes": [
+        "evaluation_admit"
+      ],
+      "tenant_required": true
+    },
+    {
+      "audience": "core-bridge",
+      "id": "read_arm",
+      "method": "GET",
+      "path": "/evaluation/arms/by-key/{key}",
+      "purposes": [
+        "evaluation_arm_read"
+      ],
+      "tenant_required": true
+    },
+    {
+      "audience": "core-bridge",
+      "id": "run_arm",
+      "method": "POST",
+      "path": "/evaluation/arms/run",
+      "purposes": [
+        "evaluation_arm_run"
+      ],
+      "tenant_required": true
+    },
+    {
+      "audience": "core-bridge",
+      "id": "read_arm",
+      "method": "GET",
+      "path": "/evaluation/arms/{arm_id}",
+      "purposes": [
+        "evaluation_arm_read"
+      ],
+      "tenant_required": true
+    },
+    {
+      "audience": "core-bridge",
+      "id": "run_arm",
+      "method": "POST",
+      "path": "/evaluation/arms/{arm_id}/run",
+      "purposes": [
+        "evaluation_arm_run"
+      ],
+      "tenant_required": true
+    },
+    {
+      "audience": "core-bridge",
+      "id": "version",
+      "method": "GET",
+      "path": "/version",
+      "purposes": [
+        "version_probe"
+      ],
+      "tenant_required": false
+    }
+  ],
+  "schema_version": "1",
+  "stage_order": [
+    "scout",
+    "verifier",
+    "builder_design",
+    "writer"
+  ],
+  "stages": {
+    "builder_design": {
+      "agent_id": "pulso-builder-design",
+      "fact": "pulso_change_spec",
+      "input_slots": [
+        "design_input_ref"
+      ],
+      "writer_commitment": false
+    },
+    "scout": {
+      "agent_id": "pulso-scout",
+      "fact": "pulso_hypotheses",
+      "input_slots": [
+        "briefing_ref"
+      ],
+      "writer_commitment": false
+    },
+    "verifier": {
+      "agent_id": "pulso-verifier",
+      "fact": "pulso_verification",
+      "input_slots": [
+        "hypotheses_ref"
+      ],
+      "writer_commitment": false
+    },
+    "writer": {
+      "agent_id": "pulso-writer",
+      "fact": "pulso_writer_receipts",
+      "input_slots": [
+        "draft_plan_ref",
+        "proposal_id",
+        "base_release_id",
+        "evaluate_enabled",
+        "evaluation_suite_id",
+        "evaluation_suite_version"
+      ],
+      "writer_commitment": true
+    }
+  }
+}

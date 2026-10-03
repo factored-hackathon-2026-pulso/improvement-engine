@@ -1,0 +1,82 @@
+{
+  "$id": "CoreAuthoringDryRunRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "PENDING (x-status): V3 CAP-16 L2 request (generated from authoring.service.DryRunRequest). More than 50 changes / 262144 canonical bytes per entity is a REG-LIMIT violation in the response, not a 4xx.",
+  "properties": {
+    "agent_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "base_release_id": {
+      "anyOf": [
+        {
+          "maxLength": 255,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "changes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "docs": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "content",
+          "docs"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "request_digest": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "agent_id",
+    "base_release_id",
+    "changes"
+  ],
+  "title": "CoreAuthoringDryRunRequest",
+  "type": "object",
+  "x-status": "pending-implementation"
+}
