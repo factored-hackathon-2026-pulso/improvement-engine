@@ -7,6 +7,7 @@ values: never log, persist, or hand them to a browser."""
 
 from __future__ import annotations
 
+import hmac
 import json
 import uuid
 from collections.abc import Callable
@@ -190,14 +191,24 @@ def assert_bound(
     operation: str,
     target: dict[str, Any],
     challenge_ref: str,
+    now: datetime | None = None,
 ) -> None:
-    """Port-side check (Codex `HumanAuthorizationPort` / stand-in): recompute the binding digest from the durable
-    intention and compare it with the signed attrs. Core only checks role, `auth.level` and `exp`; it ignores
-    these attrs, so this is what prevents replaying an approval for another operation, hash or revision. The
-    signature itself is verified by Core's verifier, not here."""
+    """Port-side binding check (Codex `HumanAuthorizationPort` / stand-in).
+
+    WHERE ENFORCEMENT MUST LIVE: Core verifies the signature, `auth.level`, role and `exp` of the Principal and
+    IGNORES every other attr, so Core alone cannot tell "approve prop-1@3" from "publish prop-2@9". The port MUST,
+    in this order and on the exact bytes it then sends to Core: (1) load its durable intention and atomically
+    transition it to consumed (single use; the Principal has no jti and is replayable for its 60 s lifetime),
+    (2) call this function with values taken from that intention, never from the request, (3) pass `now` so a
+    stale credential is refused locally, (4) dispatch to Core with this same JWS. Skipping (2) lets an approval
+    for one operation/hash/revision be replayed against another.
+
+    Recomputes the binding digest from the intention and requires every signed attr, the actor, the step-up level,
+    the simulated marker, the role required by the operation and (when `now` is given) `exp` to agree. The
+    signature is verified by Core's verifier, not here: this function trusts nothing it cannot recompute."""
     from pydantic import ValidationError
 
-    from local_identity.principal import CommandRequest, binding_digest, binding_of
+    from local_identity.principal import POLICY, CommandRequest, binding_digest, binding_of
 
     try:
         payload = json.loads(b64url_decode(authorization_jws.split(".")[1]))
@@ -212,14 +223,35 @@ def assert_bound(
                 "nonce": "x" * 16,
             }
         )
-        attrs = payload["attrs"]
+        attrs, auth, roles = payload["attrs"], payload["auth"], payload["roles"]
+        policy = POLICY[operation]
+        if policy[0] != req.target.kind or not (
+            isinstance(attrs, dict) and isinstance(auth, dict) and isinstance(roles, list)
+        ):
+            raise ValueError
         expected = binding_digest(binding_of(req))
-    except (IndexError, KeyError, TypeError, ValueError, ValidationError):
+        expected_attrs = {
+            "actor": "human",
+            "tenant": tenant_id,
+            "command_ref": command_ref,
+            "operation": operation,
+            "challenge_ref": challenge_ref,
+            "target_kind": req.target.kind,
+            **{k: str(v) for k, v in req.target.model_dump(mode="json", exclude={"kind"}).items()},
+        }
+        exp = datetime.fromisoformat(payload["exp"]) if now is not None else None
+    except (IndexError, KeyError, TypeError, ValueError, ValidationError, AttributeError):
         raise BindingMismatch("malformed") from None
     if (
-        attrs.get("binding_digest") != expected
+        not isinstance(attrs.get("binding_digest"), str)
+        or not hmac.compare_digest(attrs["binding_digest"].encode(), expected.encode())
         or payload.get("id") != actor_ref
-        or attrs.get("tenant") != tenant_id
-        or attrs.get("operation") != operation
+        or any(attrs.get(k) != v for k, v in expected_attrs.items())
+        or auth.get("level") != "step_up"
+        or auth.get("simulated") is not True
+        or policy[1] not in roles
+        or (operation == "revoke") != ("admin" in roles)
     ):
         raise BindingMismatch("binding_digest")
+    if now is not None and exp is not None and now >= exp:
+        raise BindingMismatch("expired")

@@ -39,8 +39,8 @@ tenant), `pulso:actor_not_allowed` 403, `pulso:role_not_allowed` 403, `pulso:non
 
 ## Local-only guards (exit 2 `local_identity:*`)
 
-`profile_not_local` (`LOCAL_IDENTITY_PROFILE` must be exactly `local`), `remote_environment` (AWS/ECS markers or
-`PULSO_ENV` staging/prod), `kid_not_local` (human kid must start `local-sim-human-`, session kid `local-sim-session-`),
+`profile_not_local` (`LOCAL_IDENTITY_PROFILE` must be exactly `local`), `remote_environment` (AWS/ECS/Lambda/Kubernetes/Cloud Run/Azure markers, or `PULSO_ENV` not in the allowlist
+`''/local/dev/development/test`), `kid_not_local` (human kid must start `local-sim-human-`, session kid `local-sim-session-`),
 `key_reuse` (human staff key must differ from session/service keys and from `LOCAL_IDENTITY_BOT_PUBLIC_KEYS`),
 `service_keys_invalid` (every key bound to `aud=human-issuer`), `identities_invalid` (bot-shaped ids, unknown roles,
 `actor!=human` refused), `config_invalid`. Actor/role comes from the server allowlist (`identities.json`), never from the
@@ -55,7 +55,7 @@ or `auth.simulated=true` appears in remote configuration (terraform/infra/deploy
 (`{"principal_keys": {kid: pub}}`: **add the human kid to Core's `staff.json` public set**, public only),
 `identities.json`. Env: `LOCAL_IDENTITY_PROFILE=local`, `_SERVICE_KEYS`, `_SESSION_SIGNER`, `_HUMAN_STAFF_SIGNER`,
 `_IDENTITIES`, optional `_REPLAY_DB`, `_BOT_PUBLIC_KEYS`, `_CLOCK_SKEW_S` (<=60), `_STEP_UP_TTL_S` (<=120),
-`_SESSION_TTL_S` (<=60), `_PORT` (8083).
+`_SESSION_TTL_S` (<=60), `_PORT` (8083), `_HOST` (default 127.0.0.1; the image sets 0.0.0.0, and does NOT bake `LOCAL_IDENTITY_PROFILE`: compose must set it).
 
 ## Client (stand-in / adapter)
 
@@ -98,3 +98,13 @@ secrets mounted read-only from the ignored secret dir, replay DB on a named volu
 importable and a Postgres 16 admin DSN: run with the pinned venv, `PULSO_TEST_PG_ADMIN=postgresql://...` (skipped otherwise):
 bot cannot approve (`forbidden_role`), human session-level JWS gets `step_up_required`, issued JWS -> approve -> publish
 (staging moves, prod does not) -> promote (prod moves), admin-only revoke, nonce/jti/expiry/hash replays rejected.
+
+## HumanAuthorizationPort contract (where binding enforcement MUST live)
+
+Core checks only signature, `auth.level=step_up`, role and `exp`; it ignores the binding attrs and the Principal has no
+`jti`. Therefore the Codex port, not Core, must: (1) atomically consume its durable intention (single use; the JWS is
+replayable for its lifetime otherwise), (2) call `assert_bound(jws, ..., now=<clock>)` with values read from that
+intention (never from the request), (3) send the same JWS bytes to Core. `assert_bound` recomputes the digest, requires
+every signed attr/actor/step-up/simulated/required role (`admin` iff `revoke`) and `exp` to agree. Contract tests:
+`tests/test_review_hardening.py`. The Core staff public-key fragment must be merged only into the local Core's staff set.
+The replay DB defaults to `:memory:` when `_REPLAY_DB` is unset (not durable across restarts): set it outside tests.

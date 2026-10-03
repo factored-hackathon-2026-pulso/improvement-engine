@@ -14,8 +14,19 @@ from local_identity import CALLER_AUDIENCE, HUMAN_KID_PREFIX, SESSION_KID_PREFIX
 from local_identity.keys import KeyFileError, Signer, b64url_decode, load_signer
 
 HUMAN_ROLES = frozenset({"constructor", "aprobador", "admin"})
-REMOTE_ENV_MARKERS = ("AWS_EXECUTION_ENV", "ECS_CONTAINER_METADATA_URI", "ECS_CONTAINER_METADATA_URI_V4")
-REMOTE_PULSO_ENVS = frozenset({"staging", "stage", "prod", "production", "remote"})
+REMOTE_ENV_MARKERS = (
+    "AWS_EXECUTION_ENV",
+    "AWS_LAMBDA_FUNCTION_NAME",
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+    "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    "ECS_CONTAINER_METADATA_URI",
+    "ECS_CONTAINER_METADATA_URI_V4",
+    "KUBERNETES_SERVICE_HOST",
+    "K_SERVICE",
+    "WEBSITE_SITE_NAME",
+)
+# Allowlist, not denylist: any other PULSO_ENV value (staging, qa, preprod, ...) is treated as non-local.
+LOCAL_PULSO_ENVS = frozenset({"", "local", "dev", "development", "test"})
 _BOT_SHAPED = re.compile(r"^(pulso-|builder:|bot[:_-])", re.IGNORECASE)
 _ACTOR = re.compile(r"^[A-Za-z0-9._:\-]{1,200}$")
 MAX_SKEW_S = 60
@@ -56,7 +67,7 @@ class Config:
     step_up_ttl_s: int = 60
     session_ttl_s: int = 60
     nonce_retention_s: int = 900
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8083
     extra: Mapping[str, str] = field(default_factory=dict)
 
@@ -137,7 +148,7 @@ def _bot_public_keys(path: Path) -> set[bytes]:
 def load_config(env: Mapping[str, str]) -> Config:
     if env.get("LOCAL_IDENTITY_PROFILE") != "local":
         raise ConfigError("local_identity:profile_not_local", "LOCAL_IDENTITY_PROFILE must be exactly 'local'")
-    if any(env.get(m) for m in REMOTE_ENV_MARKERS) or env.get("PULSO_ENV", "").lower() in REMOTE_PULSO_ENVS:
+    if any(env.get(m) for m in REMOTE_ENV_MARKERS) or env.get("PULSO_ENV", "").strip().lower() not in LOCAL_PULSO_ENVS:
         raise ConfigError("local_identity:remote_environment", "remote runtime indicators present")
     service_keys = _service_keys(_path(env, "LOCAL_IDENTITY_SERVICE_KEYS"))
     try:
@@ -164,6 +175,6 @@ def load_config(env: Mapping[str, str]) -> Config:
         clock_skew_s=_int(env, "LOCAL_IDENTITY_CLOCK_SKEW_S", MAX_SKEW_S, MAX_SKEW_S),
         step_up_ttl_s=_int(env, "LOCAL_IDENTITY_STEP_UP_TTL_S", 60, MAX_STEP_UP_TTL_S),
         session_ttl_s=_int(env, "LOCAL_IDENTITY_SESSION_TTL_S", 60, MAX_SESSION_TTL_S),
-        host=env.get("LOCAL_IDENTITY_HOST", "0.0.0.0"),
+        host=env.get("LOCAL_IDENTITY_HOST") or "127.0.0.1",
         port=_int(env, "LOCAL_IDENTITY_PORT", 8083, 65535),
     )

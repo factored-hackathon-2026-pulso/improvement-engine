@@ -1,5 +1,6 @@
 # pulso-local-identity: sandbox-only human issuer (plan 16.13.2 / 17.3.2, DR-08). Never pushed to a remote registry,
 # never referenced by staging/prod configuration (contract scan: local_identity.contract).
+# The image deliberately does NOT bake the local profile switch: the operator (compose) must opt in explicitly.
 #   podman build -t pulso-local-identity:<sha7> local-identity
 FROM docker.io/library/python:3.12-slim AS builder
 ARG UV_VERSION=0.7.22
@@ -11,7 +12,7 @@ RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requiremen
  && pip wheel --no-cache-dir --wheel-dir /wheelhouse -r /tmp/requirements.txt
 
 FROM docker.io/library/python:3.12-slim AS runtime
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 LOCAL_IDENTITY_PROFILE=local \
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 LOCAL_IDENTITY_HOST=0.0.0.0 \
     LOCAL_IDENTITY_REPLAY_DB=/var/lib/local-identity/replay.sqlite3
 COPY --from=builder /wheelhouse /wheelhouse
 RUN pip install --no-cache-dir --no-index --find-links /wheelhouse /wheelhouse/*.whl \

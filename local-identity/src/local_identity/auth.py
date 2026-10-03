@@ -39,7 +39,12 @@ class Claims:
 
 
 def _number(value: Any) -> bool:
-    return not isinstance(value, bool) and isinstance(value, int | float) and math.isfinite(value)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:  # ints beyond float range
+        return False
 
 
 class ServiceJwtVerifier:
@@ -85,7 +90,10 @@ class ServiceJwtVerifier:
             or not isinstance(iss, str)
         ):
             raise AuthError("missing_claims")
-        exp, iat = float(exp_raw), float(iat_raw)  # type: ignore[arg-type]
+        try:
+            exp, iat = float(exp_raw), float(iat_raw)  # type: ignore[arg-type]
+        except OverflowError:
+            raise AuthError("missing_claims") from None
         now = self._now().timestamp()
         if now >= exp + self._skew:
             raise AuthError("expired")

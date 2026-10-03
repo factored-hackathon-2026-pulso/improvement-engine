@@ -8,6 +8,7 @@ hash/revision before dispatch."""
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -54,7 +55,9 @@ class Denied(Exception):
 
 def _trace_id(request: Request) -> str:
     parts = request.headers.get("traceparent", "").split("-")
-    return parts[1] if len(parts) == 4 and len(parts[1]) == 32 else uuid.uuid4().hex
+    if len(parts) == 4 and re.fullmatch(r"[0-9a-f]{32}", parts[1]):
+        return parts[1]
+    return uuid.uuid4().hex
 
 
 def build_app(
@@ -168,9 +171,14 @@ def build_app(
                 trace_id=trace,
                 details={"reason": exc.reason},
             )
-        raw = await request.body()
-        if len(raw) > MAX_BODY_BYTES:
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
             return envelope("pulso:payload_too_large", status=413, trace_id=trace)
+        raw = b""
+        async for chunk in request.stream():  # capped read: never buffer an unbounded body
+            raw += chunk
+            if len(raw) > MAX_BODY_BYTES:
+                return envelope("pulso:payload_too_large", status=413, trace_id=trace)
         try:
             req = model.model_validate_json(raw)
         except ValidationError as exc:
