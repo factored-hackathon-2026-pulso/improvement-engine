@@ -1,23 +1,31 @@
 {
-  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
   "$defs": {
-    "EntityKind": {
-      "description": "Clases de entidad del registro (M0 §2.4).",
-      "enum": [
-        "agent",
-        "flow",
-        "decision_model",
-        "policy",
-        "template",
-        "prompt",
-        "tool",
-        "language_detection",
-        "injection_ruleset",
-        "model_profile",
-        "knowledge_snapshot"
+    "EntityInRelease": {
+      "additionalProperties": false,
+      "properties": {
+        "changed_vs_base": {
+          "title": "Changed Vs Base",
+          "type": "boolean"
+        },
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "docs": {
+          "$ref": "#/$defs/VersionDocs"
+        },
+        "ref": {
+          "$ref": "#/$defs/VersionRef"
+        }
+      },
+      "required": [
+        "ref",
+        "content_hash",
+        "docs",
+        "changed_vs_base"
       ],
-      "title": "EntityKind",
-      "type": "string"
+      "title": "EntityInRelease",
+      "type": "object"
     },
     "EntityRef": {
       "additionalProperties": false,
@@ -94,6 +102,11 @@
           "title": "Id",
           "type": "string"
         },
+        "locked": {
+          "default": false,
+          "title": "Locked",
+          "type": "boolean"
+        },
         "priority": {
           "title": "Priority",
           "type": "integer"
@@ -147,86 +160,6 @@
       "title": "RefSpec",
       "type": "object"
     },
-    "Release": {
-      "additionalProperties": false,
-      "description": "Conjunto inmutable de versiones exactas de entidades que forman un despliegue (M0 §2.4).",
-      "properties": {
-        "entities": {
-          "additionalProperties": {
-            "patternProperties": {
-              "^[a-z0-9][a-z0-9_/-]*$": {
-                "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
-                "type": "string"
-              }
-            },
-            "type": "object"
-          },
-          "propertyNames": {
-            "$ref": "#/$defs/EntityKind"
-          },
-          "title": "Entities",
-          "type": "object"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "injection_ruleset": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/EntityRef"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "interrupts": {
-          "items": {
-            "$ref": "#/$defs/Interrupt"
-          },
-          "title": "Interrupts",
-          "type": "array"
-        },
-        "knowledge_snapshot": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/EntityRef"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "language_detection": {
-          "$ref": "#/$defs/EntityRef"
-        },
-        "max_input_chars": {
-          "default": 4000,
-          "exclusiveMinimum": 0,
-          "title": "Max Input Chars",
-          "type": "integer"
-        },
-        "status": {
-          "enum": [
-            "active",
-            "revoked"
-          ],
-          "title": "Status",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "status",
-        "language_detection"
-      ],
-      "title": "Release",
-      "type": "object"
-    },
     "StartFlowAction": {
       "additionalProperties": false,
       "description": "Acción de una interrupción que inicia un flow (M0 §2.4).",
@@ -245,6 +178,34 @@
         "flow"
       ],
       "title": "StartFlowAction",
+      "type": "object"
+    },
+    "VersionDocs": {
+      "additionalProperties": false,
+      "properties": {
+        "changelog": {
+          "maxLength": 8000,
+          "title": "Changelog",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 4000,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "rationale",
+        "changelog"
+      ],
+      "title": "VersionDocs",
       "type": "object"
     },
     "VersionRef": {
@@ -278,10 +239,6 @@
       "title": "Agent Id",
       "type": "string"
     },
-    "agent_version": {
-      "title": "Agent Version",
-      "type": "string"
-    },
     "base_release_id": {
       "anyOf": [
         {
@@ -293,12 +250,55 @@
       ],
       "title": "Base Release Id"
     },
+    "entities": {
+      "items": {
+        "$ref": "#/$defs/EntityInRelease"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
     "eval_suite_refs": {
       "items": {
         "$ref": "#/$defs/VersionRef"
       },
       "title": "Eval Suite Refs",
       "type": "array"
+    },
+    "injection_ruleset": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EntityRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "interrupts": {
+      "items": {
+        "$ref": "#/$defs/Interrupt"
+      },
+      "title": "Interrupts",
+      "type": "array"
+    },
+    "knowledge_snapshot": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Knowledge Snapshot"
+    },
+    "language_detection": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "max_input_chars": {
+      "title": "Max Input Chars",
+      "type": "integer"
     },
     "proposal_id": {
       "anyOf": [
@@ -320,24 +320,32 @@
       "title": "Published By",
       "type": "string"
     },
-    "release": {
-      "$ref": "#/$defs/Release"
+    "release_id": {
+      "title": "Release Id",
+      "type": "string"
     },
-    "release_hash": {
-      "title": "Release Hash",
+    "status": {
+      "enum": [
+        "active",
+        "revoked"
+      ],
+      "title": "Status",
       "type": "string"
     }
   },
   "required": [
-    "release",
-    "release_hash",
+    "release_id",
+    "status",
     "agent_id",
-    "agent_version",
-    "base_release_id",
+    "entities",
+    "knowledge_snapshot",
     "proposal_id",
+    "base_release_id",
     "published_by",
-    "published_at"
+    "published_at",
+    "language_detection",
+    "max_input_chars"
   ],
-  "title": "StoredRelease",
+  "title": "ReleaseDetail",
   "type": "object"
 }

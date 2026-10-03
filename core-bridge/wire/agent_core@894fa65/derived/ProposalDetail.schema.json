@@ -18,6 +18,13 @@
           "title": "Gate",
           "type": "array"
         },
+        "release_changes": {
+          "items": {
+            "$ref": "#/$defs/ReleaseSettingChange"
+          },
+          "title": "Release Changes",
+          "type": "array"
+        },
         "suite": {
           "$ref": "#/$defs/VersionRef"
         },
@@ -511,6 +518,29 @@
       ],
       "title": "ProposalState",
       "type": "string"
+    },
+    "ReleaseSettingChange": {
+      "additionalProperties": false,
+      "description": "Un campo de nivel release que la propuesta cambia, contra la release base (N-07): el aprobador ve el\nantes y el después en vez de solo el borrador.",
+      "properties": {
+        "after": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "before": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "before",
+        "after"
+      ],
+      "title": "ReleaseSettingChange",
+      "type": "object"
     },
     "RunScore": {
       "additionalProperties": false,

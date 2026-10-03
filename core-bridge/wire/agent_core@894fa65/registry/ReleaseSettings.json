@@ -1,46 +1,6 @@
 {
   "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
   "$defs": {
-    "EntityKind": {
-      "description": "Clases de entidad del registro (M0 §2.4).",
-      "enum": [
-        "agent",
-        "flow",
-        "decision_model",
-        "policy",
-        "template",
-        "prompt",
-        "tool",
-        "language_detection",
-        "injection_ruleset",
-        "model_profile",
-        "knowledge_snapshot"
-      ],
-      "title": "EntityKind",
-      "type": "string"
-    },
-    "EntityRef": {
-      "additionalProperties": false,
-      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
-      "properties": {
-        "id": {
-          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
-          "title": "Id",
-          "type": "string"
-        },
-        "version": {
-          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
-          "title": "Version",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "version"
-      ],
-      "title": "EntityRef",
-      "type": "object"
-    },
     "EscalateAction": {
       "additionalProperties": false,
       "description": "Acción de una interrupción que escala a una cola (M0 §2.4).",
@@ -93,6 +53,11 @@
           "pattern": "^[a-z0-9][a-z0-9_/-]*$",
           "title": "Id",
           "type": "string"
+        },
+        "locked": {
+          "default": false,
+          "title": "Locked",
+          "type": "boolean"
         },
         "priority": {
           "title": "Priority",
@@ -169,81 +134,62 @@
     }
   },
   "additionalProperties": false,
-  "description": "Conjunto inmutable de versiones exactas de entidades que forman un despliegue (M0 §2.4).",
+  "description": "Contenido del borrador `release_settings`. Un campo omitido conserva el valor de la base; no hay forma\nde quitar el `injection_ruleset` ni la detección de idioma, solo de cambiarlos por otros del registry.",
   "properties": {
-    "entities": {
-      "additionalProperties": {
-        "patternProperties": {
-          "^[a-z0-9][a-z0-9_/-]*$": {
-            "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "propertyNames": {
-        "$ref": "#/$defs/EntityKind"
-      },
-      "title": "Entities",
-      "type": "object"
-    },
-    "id": {
-      "minLength": 1,
-      "title": "Id",
-      "type": "string"
-    },
     "injection_ruleset": {
       "anyOf": [
         {
-          "$ref": "#/$defs/EntityRef"
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Injection Ruleset"
     },
     "interrupts": {
-      "items": {
-        "$ref": "#/$defs/Interrupt"
-      },
-      "title": "Interrupts",
-      "type": "array"
-    },
-    "knowledge_snapshot": {
       "anyOf": [
         {
-          "$ref": "#/$defs/EntityRef"
+          "items": {
+            "$ref": "#/$defs/Interrupt"
+          },
+          "type": "array"
         },
         {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Interrupts"
     },
     "language_detection": {
-      "$ref": "#/$defs/EntityRef"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language Detection"
     },
     "max_input_chars": {
-      "default": 4000,
-      "exclusiveMinimum": 0,
-      "title": "Max Input Chars",
-      "type": "integer"
-    },
-    "status": {
-      "enum": [
-        "active",
-        "revoked"
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
       ],
-      "title": "Status",
-      "type": "string"
+      "default": null,
+      "title": "Max Input Chars"
     }
   },
-  "required": [
-    "id",
-    "status",
-    "language_detection"
-  ],
-  "title": "Release",
+  "title": "ReleaseSettings",
   "type": "object"
 }

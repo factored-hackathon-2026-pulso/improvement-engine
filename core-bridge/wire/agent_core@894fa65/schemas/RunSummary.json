@@ -47,6 +47,10 @@
       "title": "Created At",
       "type": "string"
     },
+    "cursor": {
+      "title": "Cursor",
+      "type": "integer"
+    },
     "locale": {
       "title": "Locale",
       "type": "string"
@@ -100,6 +104,7 @@
   },
   "required": [
     "run_seq",
+    "cursor",
     "run_id",
     "session_id",
     "release",

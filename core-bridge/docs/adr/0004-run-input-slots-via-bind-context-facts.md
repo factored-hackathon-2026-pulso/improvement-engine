@@ -31,3 +31,7 @@ refs resolved by the broker). If a later Core pin validates run-input slots, thi
 is answered. Upstream documents the `claimed` state as design (spec `motor-de-decision-design`, ADR 0005: slots are not
 calibrated, always enter as `claimed` and never become facts by themselves), and the bump left it unchanged. Core-side
 validation of run-input slots is therefore NOT to be expected; `bind_context` facts remain the correct pattern.
+
+Update (agent-core 894fa65, ADR 0009): Core now offers opt-in `Agent.input_schema` for task agents (inputs stored as `validated`,
+AG-04 rejects flows reading unvalidated slots), so the sentence above is outdated for agents that declare it. Ours do not, and
+`bind_context` stays because it carries the binding gate (facts exist only after the binding is confirmed).

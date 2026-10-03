@@ -24,8 +24,6 @@ from agent_core.registry.models import Origin  # noqa: E402
 from agent_core.registry.service import RegistryService  # noqa: E402
 from registry_mock.real_app import FixedPassEval, _admin  # noqa: E402
 
-BASE = "rel-98130317a1003849"
-
 
 def service(dsn: str) -> RegistryService:
     store = PgRegistryStore(lambda: psycopg.connect(dsn, autocommit=False))
@@ -57,7 +55,8 @@ def main() -> None:
         out["releases"] = [r.release_id for r in service(dsn).import_seed(_admin(), seed)]
     elif action == "exercise":
         svc = service(dsn)
-        detail = svc.get_release(BASE).model_dump(mode="json")
+        base = svc.get_alias("atencion", "prod").release_id  # the seeded release id moves with every pin (Interrupt.locked in 894fa65)
+        detail = svc.get_release(base).model_dump(mode="json")
         p = svc.create_proposal(_admin(), "atencion", Origin.manual, "expand-contract smoke")
         out.update(release_id=detail["release_id"], status=detail["status"], entities=len(detail["entities"]),
                    proposal_state=str(p.state.value))

@@ -33,8 +33,10 @@ def _run_ids(harness: PulsoScenarioHarness) -> list[str]:
     return [r.run_id for r in harness.runs]
 
 
-def test_stock_harness_replays_on_a_persistent_eval_db(pg) -> None:  # type: ignore[no-untyped-def]
-    """Documents the defect: same principal + scenario -> `start_run` returns the stored run."""
+def test_stock_harness_no_longer_replays_on_a_persistent_eval_db(pg) -> None:  # type: ignore[no-untyped-def]
+    """F-01 regression guard (fixed upstream in agent-core 894fa65, PR #29): the stock harness key now carries the
+    label (`eval-<eval_run id>-<label>-<scenario>`), so base and candidate get distinct runs. At 789d6c8 this was the
+    pinned defect (one replayed run for both). Our own harness stays (W1): it also seals input and meters budget."""
     stock = EngineScenarioHarness(**common_kwargs(pg.eval))
     cand, base = _targets()
     scenario = suite_with(1).scenarios[0]
@@ -43,7 +45,7 @@ def test_stock_harness_replays_on_a_persistent_eval_db(pg) -> None:  # type: ign
     for target in (cand, base):
         events = stock.run(target, "atencion", scenario, sandbox.tools(sandbox.provision(scenario.seed, target)))
         ids.append(events[0].run_id)
-    assert ids[0] == ids[1], "stock harness is expected to replay one run for base and candidate"
+    assert ids[0] != ids[1], "stock harness replays one run for base and candidate again (F-01 regressed)"
 
 
 def test_pulso_harness_gives_distinct_runs_per_label_and_repetition(pg) -> None:  # type: ignore[no-untyped-def]

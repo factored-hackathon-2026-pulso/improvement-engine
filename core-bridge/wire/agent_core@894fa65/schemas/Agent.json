@@ -574,6 +574,21 @@
       "title": "Inactivity Ttl",
       "type": "string"
     },
+    "input_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/AcceptedSlot"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input Schema"
+    },
     "invocable_by": {
       "items": {
         "$ref": "#/$defs/PrincipalType"

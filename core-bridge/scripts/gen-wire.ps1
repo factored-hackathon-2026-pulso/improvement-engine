@@ -11,11 +11,11 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Checkout = 'D:\.codex\factored\references\agent-core-789d6c8',
+    [string]$Checkout = 'D:\.codex\factored\references\agent-core-894fa65',
     [switch]$Check
 )
 $ErrorActionPreference = 'Stop'
-$PinSha = '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
+$PinSha = '894fa65575d83420523f33ec1c6919b8965f7ebe'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = Resolve-Path (Join-Path $here '..\..')
 $pinFile = Join-Path $repo 'contracts\agent_core\pin.json'

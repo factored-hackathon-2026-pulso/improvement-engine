@@ -5,6 +5,7 @@ documented doubles (FakeEvaluator, FakeClock, FakeIds) of this file."""
 
 from __future__ import annotations
 
+from pulso_core_runtime import PIN_SHA
 import json
 import time
 import uuid
@@ -96,7 +97,7 @@ def test_composed_app_ready_and_version(pg: PgDbs, keys: dict[str, Any]) -> None
     r = c.get("/internal/v1/version", headers={"Authorization": f"Bearer {_token(keys['svc'])}"})
     body = r.json()
     assert r.status_code == 200
-    assert body["agent_core_sha"] == "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
+    assert body["agent_core_sha"] == PIN_SHA
     assert body["contracts_version"] == "1.3.0" and body["pulso_sha"] == "abc1234"
     assert body["image_digest"] == "sha256:" + "a" * 64
     assert body["runtime_profile"] == "agent_core_real" and body["doubles"]

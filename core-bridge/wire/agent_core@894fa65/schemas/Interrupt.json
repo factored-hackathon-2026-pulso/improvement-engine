@@ -103,6 +103,11 @@
       "title": "Id",
       "type": "string"
     },
+    "locked": {
+      "default": false,
+      "title": "Locked",
+      "type": "boolean"
+    },
     "priority": {
       "title": "Priority",
       "type": "integer"

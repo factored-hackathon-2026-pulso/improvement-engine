@@ -64,7 +64,7 @@
     {
       "derived_by_pulso": true,
       "path": "derived/ProposalDetail.schema.json",
-      "sha256": "dd6e75e09b9919e7b6b6ce9339af9b7420047a1ad7512a09fc06f360e567d87e"
+      "sha256": "9991fbc3e6d0ea45ed0b4fcb5bf0c0e2a3ab77408a2f24febd885bb53b4ae219"
     },
     {
       "derived_by_pulso": true,
@@ -74,7 +74,7 @@
     {
       "derived_by_pulso": true,
       "path": "derived/ReleaseDetail.schema.json",
-      "sha256": "9d7fe423cf99d63922be47e753edc216d2906355c575cadc441917c5dd8fdf83"
+      "sha256": "39de67d01015f59a0a0a1dc09c38ebffc5f706767b8cd48aa0aa6a6d989ef5ee"
     },
     {
       "derived_by_pulso": true,
@@ -117,7 +117,7 @@
     {
       "derived_by_pulso": true,
       "path": "golden/hash_vectors.json",
-      "sha256": "35655ce6b62fe69970ca366a617ec6406613eb456ba4d4ba4c1e1d6a7d267438"
+      "sha256": "527dfdf4b2427a9e48ecfee4356095f8d02a194cf01c520568c32e1e53dbd9f0"
     },
     {
       "path": "openapi.json",
@@ -209,7 +209,7 @@
     },
     {
       "path": "registry/ReleaseDetail.json",
-      "sha256": "2b4dc0079cce7e620264cb30224e60c559035cf3b6ec6fc75c424d4518ae8310"
+      "sha256": "ae4a611fa942e9723c0e63cf8fc6a0cf4f62dc6283a3f4ae43eb58e664d538ca"
     },
     {
       "path": "registry/ReleaseDiff.json",
@@ -217,7 +217,7 @@
     },
     {
       "path": "registry/ReleaseSettings.json",
-      "sha256": "30580f1125ee5961e2138d575855f9e80d454931317c46767c51041706dd22fd"
+      "sha256": "4c5d893d67685e3e2447321a08d5874a60c42b5c7e2d7558b6e2a81a76c128b3"
     },
     {
       "path": "registry/RunLineage.json",
@@ -225,7 +225,7 @@
     },
     {
       "path": "registry/StoredRelease.json",
-      "sha256": "d72903fda39de05b89659c3e93e2358f401242b4f6a6096c9bd78a4796c7e6b8"
+      "sha256": "25ecab364c3ff3f08ecc78af87aed13c0278d4cad6a101242d63d63f51706252"
     },
     {
       "path": "registry/StoredVersion.json",
@@ -313,7 +313,7 @@
     },
     {
       "path": "schemas/Agent.json",
-      "sha256": "bcb09fe9be5156a307f498305b5f591fda9ac7b18a0f34d9b5b73e87ddeb1c35"
+      "sha256": "86c464d4cdb0f5e81f264be33446bb7aab5598d5cdb91ff8f90c11dfaddf21f6"
     },
     {
       "path": "schemas/AgentNode.json",
@@ -585,7 +585,7 @@
     },
     {
       "path": "schemas/Interrupt.json",
-      "sha256": "202101ccd2c2e8b39220f4083fb974921fdf1958a91d3371fabc3516e55f1cad"
+      "sha256": "8bdc233e180260829e8b6325eb4c1f31d907e46504b0d81958133cc06c55efae"
     },
     {
       "path": "schemas/InvalidationReason.json",
@@ -761,7 +761,7 @@
     },
     {
       "path": "schemas/Release.json",
-      "sha256": "9998961c22471acba39de69e3458ea368783e96e1d2dfa72faf6701316d7873e"
+      "sha256": "d185da369c18e8ac7ceca8767bb96e738359cdf2303387a58995da6dd79114b5"
     },
     {
       "path": "schemas/RespondConfig.json",
@@ -845,7 +845,7 @@
     },
     {
       "path": "schemas/RunSummary.json",
-      "sha256": "76002cfa963cf7f6a4f63197195e9aeb57838e90dac64d46eecb8c2f9e76dc1f"
+      "sha256": "7750590bfe57c2258e251d8452b607c43c23d4b40ce29937b6ccda686f26fbd3"
     },
     {
       "path": "schemas/RunTransferred.json",
@@ -1025,9 +1025,9 @@
     }
   ],
   "repo": "agent-core",
-  "sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51",
+  "sha": "894fa65575d83420523f33ec1c6919b8965f7ebe",
   "tool_versions": {
-    "agent_core_checkout_sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51",
+    "agent_core_checkout_sha": "894fa65575d83420523f33ec1c6919b8965f7ebe",
     "fastapi": "0.142.1",
     "pydantic": "2.13.5",
     "python": "3.12.10",
