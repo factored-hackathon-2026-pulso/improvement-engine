@@ -9,14 +9,24 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $ObservedCutoff,
 
-    [ValidateRange(1, 5000)]
-    [int] $ArranqueCases = 200,
+    [ValidateSet('e0', 'original')]
+    [string] $Source = 'e0',
+
+    [ValidateRange(0, 5000)]
+    [int] $ArranqueCases = 0,
 
     [ValidateRange(5, 5000)]
     [int] $MinimumRecurringQueryCases = 20
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($Source -eq 'original' -and (
+    $PSBoundParameters.ContainsKey('ArranqueCases') -or
+    $PSBoundParameters.ContainsKey('MinimumRecurringQueryCases')
+)) {
+    throw 'E0-only case-count options cannot be supplied for original source.'
+}
 
 function Get-FullDirectoryPath {
     param([Parameter(Mandatory = $true)][string] $Path)
@@ -166,6 +176,20 @@ if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot 'Cargo.toml') -PathT
     throw 'Could not locate the improvement-engine Rust workspace.'
 }
 
+$effectiveArranqueCases = $ArranqueCases
+if ($effectiveArranqueCases -eq 0) {
+    if ($Source -eq 'e0') {
+        $effectiveArranqueCases = 200
+    }
+    else {
+        $effectiveArranqueCases = 1
+    }
+}
+$effectiveArranqueCasesText = [Convert]::ToString(
+    $effectiveArranqueCases,
+    [System.Globalization.CultureInfo]::InvariantCulture
+)
+
 $cargoArguments = @(
     'run',
     '--locked',
@@ -179,7 +203,7 @@ $cargoArguments = @(
     '--mode',
     'local-simulation',
     '--source',
-    'e0',
+    $Source,
     '--input',
     $inputFullPath,
     '--output',
@@ -187,12 +211,16 @@ $cargoArguments = @(
     '--tenant-id',
     'pulso_local',
     '--observed-cutoff',
-    $ObservedCutoff,
-    '--arranque-cases',
-    $ArranqueCases.ToString([System.Globalization.CultureInfo]::InvariantCulture),
-    '--min-recurring-query-cases',
-    $MinimumRecurringQueryCases.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    $ObservedCutoff
 )
+if ($Source -eq 'e0') {
+    $cargoArguments += @(
+        '--arranque-cases',
+        $effectiveArranqueCasesText,
+        '--min-recurring-query-cases',
+        $MinimumRecurringQueryCases.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    )
+}
 
 Push-Location -LiteralPath $repositoryRoot
 try {
@@ -231,25 +259,39 @@ catch {
     throw 'The local runner produced an unreadable result; raw output is suppressed.'
 }
 
-$allowedRunStatuses = @('complete_simulated', 'complete_no_opportunity', 'unsupported_source')
+$allowedRunStatuses = if ($Source -eq 'e0') {
+    @('complete_simulated', 'complete_no_opportunity', 'unsupported_source')
+}
+else {
+    @('snapshot_descriptive_finding_ready', 'snapshot_projection_complete', 'unsupported_source')
+}
 Assert-AllowedValue -Value ([string] $result['terminal_status']) -Allowed $allowedRunStatuses
 Assert-AllowedValue -Value ([string] $result['formal_route']) -Allowed @('do_nothing')
+$expectedSourceKind = if ($Source -eq 'e0') { 'e0' } else { 'original_bank' }
+if ([string] $result['source_kind'] -ne $expectedSourceKind) {
+    throw 'Engine result source does not match the requested source; raw output is suppressed.'
+}
 $discoveryCases = Get-NonNegativeInteger -Object $result -Name 'discovery_case_count'
 $holdout = $result['e0_recurrence_holdout']
 $holdoutStatus = if ($null -ne $holdout) { [string] $holdout['status'] } else { '' }
-if ([string] $result['source_kind'] -eq 'e0') {
+if ($Source -eq 'e0') {
     if (($result.Keys -notcontains 'excluded_replay_case_count') -or ($null -ne $result['excluded_replay_case_count'])) {
         throw 'Engine result contains an unsafe E0 replay count; raw result values are suppressed.'
     }
     $excludedReplayCases = 'suppressed'
 }
 else {
-    Assert-AllowedValue -Value ([string] $result['source_kind']) -Allowed @('original_bank')
+    if ($null -ne $holdout) {
+        throw 'Original-bank runs must not report E0 recurrence holdout results.'
+    }
+    if (@($result['signals']).Count -gt 0 -or $null -ne $result['proposal']) {
+        throw 'Original-bank snapshot runs must not report E0 signals or executable proposals.'
+    }
     $excludedReplayCases = Get-NonNegativeInteger -Object $result -Name 'excluded_replay_case_count'
 }
 
 $metricLines = [System.Collections.Generic.List[string]]::new()
-if ($null -ne $result['signals']) {
+if ($Source -eq 'e0' -and $null -ne $result['signals']) {
     foreach ($metric in $result['signals']) {
         $metricId = [string] $metric['metric_id']
         Assert-AllowedValue -Value $metricId -Allowed @('e0_technical_error_rate', 'e0_tool_retry_case_rate', 'e0_recurring_copilot_query_cases')
@@ -261,12 +303,30 @@ if ($null -ne $result['signals']) {
 }
 
 $proposalSummary = 'none'
-if ($null -ne $result['proposal']) {
+if ($Source -eq 'e0' -and $null -ne $result['proposal']) {
     $proposalStatus = [string] $result['proposal']['status']
     $executionStatus = [string] $result['proposal']['execution_status']
     Assert-AllowedValue -Value $proposalStatus -Allowed @('simulated_unverified')
     Assert-AllowedValue -Value $executionStatus -Allowed @('not_executed')
     $proposalSummary = "status=$proposalStatus; execution=$executionStatus"
+}
+elseif ($Source -eq 'original') {
+    $snapshotEnvelope = $result['snapshot_descriptive_envelope']
+    if ($null -ne $snapshotEnvelope) {
+        Assert-AllowedValue -Value ([string] $snapshotEnvelope['agent_core_candidate']) -Allowed @('dependency_blocked_snapshot_semantics')
+        $finding = $snapshotEnvelope['finding']
+        Assert-AllowedValue -Value ([string] $finding['coverage']) -Allowed @('partial')
+        Assert-AllowedValue -Value ([string] $finding['temporal_basis']) -Allowed @('literal_source_wall_clock_month')
+        Assert-AllowedValue -Value ([string] $finding['value_semantics']) -Allowed @('final_extract_facts_only')
+        $snapshotProposal = $snapshotEnvelope['proposal']
+        Assert-AllowedValue -Value ([string] $snapshotProposal['status']) -Allowed @('simulated_unverified')
+        Assert-AllowedValue -Value ([string] $snapshotProposal['execution_status']) -Allowed @('not_executed')
+        Assert-AllowedValue -Value ([string] $snapshotProposal['formal_route']) -Allowed @('do_nothing')
+        if ($snapshotProposal['publication_eligible'] -ne $false) {
+            throw 'Original-bank snapshot draft must remain non-publishable.'
+        }
+        $proposalSummary = 'descriptive_status=simulated_unverified; execution=not_executed; publication_eligible=false; agent_core=dependency_blocked_snapshot_semantics'
+    }
 }
 
 $holdoutSummary = 'none'
@@ -293,17 +353,24 @@ if ($null -ne $holdout) {
     }
 }
 
+Write-Output "Source: $expectedSourceKind"
 Write-Output "Status: $($result['terminal_status'])"
-Write-Output "Cases: discovery=$discoveryCases; replay_excluded=$excludedReplayCases"
-Write-Output 'Metrics:'
-if ($metricLines.Count -eq 0) {
-    Write-Output '  none'
+if ($Source -eq 'e0') {
+    Write-Output "Cases: discovery=$discoveryCases; replay_excluded=$excludedReplayCases"
+    Write-Output 'Metrics:'
+    if ($metricLines.Count -eq 0) {
+        Write-Output '  none'
+    }
+    else {
+        foreach ($line in $metricLines) {
+            Write-Output $line
+        }
+    }
+    Write-Output "Proposal: $proposalSummary"
+    Write-Output "Holdout: $holdoutSummary"
 }
 else {
-    foreach ($line in $metricLines) {
-        Write-Output $line
-    }
+    Write-Output 'Scope: final-extract descriptive snapshot; partial coverage; no causal or outcome claim'
+    Write-Output "Descriptive draft: $proposalSummary"
 }
-Write-Output "Proposal: $proposalSummary"
-Write-Output "Holdout: $holdoutSummary"
 Write-Output "Formal route: $($result['formal_route'])"

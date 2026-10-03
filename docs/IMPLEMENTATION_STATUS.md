@@ -146,10 +146,15 @@ repairing the malformed/duplicated source privacy fixture. See journal 0055.
   per-run override is accepted, avoiding easy differencing across comparable
   runs. Policy version and threshold are sealed into the source manifest and
   revalidated at the core boundary. Synthetic CLI E2E verifies this boundary.
-- Windows local E0 convenience wrapper: scripts/run-local-e0-e2e.ps1 invokes
-  the opt-in local simulation with locked/offline Cargo, required UTC cutoff,
-  default Arranque/support settings and a fresh non-overlapping output path;
-  observed existing reparse-point components fail closed before Cargo runs.
+- Windows local snapshot wrappers: scripts/run-local-e0-e2e.ps1 now accepts
+  `e0` or `original`; scripts/run-local-snapshots-e2e.ps1 runs both sequentially
+  into separate `e0/` and `original/` output directories below one fresh root.
+  Both use the explicit local-simulation CLI with locked/offline Cargo and a
+  required UTC cutoff. E0 keeps its Arranque/support defaults; original uses a
+  distinct summary and accepts only a partial, final-extract descriptive draft
+  marked unverified, not executed, non-publishable and Agent-Core-blocked.
+  Existing output roots, input/output overlap and observed reparse-point paths
+  fail closed before Cargo runs.
   Mapped-drive/UNC alias equivalence and concurrent path mutation are outside
   this guarantee. It prints only allowlisted aggregate summaries, including
   post-selection holdout status and, only when support meets the privacy floor,

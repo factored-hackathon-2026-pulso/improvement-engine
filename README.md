@@ -47,6 +47,11 @@ podman compose --env-file local/.env -f local/compose.yaml up -d
 only verifies the Compose rendering when a real Podman backend is available.
 It does not certify PostgreSQL, S3, Agent Core, AWS or a deployed engine.
 
+To run the current snapshot-level local simulation against both the E0
+enrichment and original bank CSVs, see [the Windows local snapshot E2E guide](docs/local-e0-e2e-runner.md).
+Each source writes to a separate fresh output directory. These runs make no
+provider calls; original-bank findings remain descriptive and non-executable.
+
 Before pushing a feature branch, run the same safe Rust, Python and Windows
 Pester gates used by GitHub Actions:
 
