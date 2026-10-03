@@ -5,7 +5,8 @@
 # 32-byte value, fails closed (exit 2, `pulso:runtime_config_invalid` naming the variable, never a value) and then
 # unsets the seed variable so neither the child environment nor /proc/<pid>/environ carries it. File mode (the path
 # variable PULSO_EXPORTER_KEY_CONTROL_API pointing at a mounted file) is accepted when the seed variable is unset.
-# The exporter itself does not consume the key yet (it mints per-attempt JWTs in PL-L5); the contract is in place.
+# The exporter reads the key file and mints a fresh service JWT per HTTP attempt (PL-0009). The lab-broker audience key
+# (artifacts route) is OPTIONAL: PULSO_EXPORTER_KEY_LAB_BROKER_SEED is materialised/validated only when provided.
 set -eu
 
 exports="$(python - <<'PY'
@@ -20,8 +21,9 @@ def key32(text):
     return len(base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))) == 32
 
 
-# (content env var, path env var, default file name, validator)
-SPEC = [("PULSO_EXPORTER_KEY_CONTROL_API_SEED", "PULSO_EXPORTER_KEY_CONTROL_API", "exporter-control-api.key", key32)]
+# (content env var, path env var, default file name, validator, optional)
+SPEC = [("PULSO_EXPORTER_KEY_CONTROL_API_SEED", "PULSO_EXPORTER_KEY_CONTROL_API", "exporter-control-api.key", key32, False),
+        ("PULSO_EXPORTER_KEY_LAB_BROKER_SEED", "PULSO_EXPORTER_KEY_LAB_BROKER", "exporter-lab-broker.key", key32, True)]
 problems = []
 
 
@@ -37,7 +39,7 @@ def materialise(name, content):
     return path
 
 
-for var, path_var, name, valid in SPEC:
+for var, path_var, name, valid, optional in SPEC:
     content = E.get(var, "")
     if content.strip():
         try:
@@ -51,6 +53,8 @@ for var, path_var, name, valid in SPEC:
         except OSError:
             problems.append(f"{var} cannot be materialised under {KEYS_DIR}")
     else:
+        if optional and not E.get(path_var):
+            continue
         path = E.get(path_var) or os.path.join(KEYS_DIR, name)  # file mode
         try:
             with open(path, encoding="ascii") as fh:
@@ -67,5 +71,5 @@ PY
 while IFS='=' read -r k v; do [ -n "$k" ] && export "$k=$v"; done <<EOF2
 $exports
 EOF2
-unset PULSO_EXPORTER_KEY_CONTROL_API_SEED
+unset PULSO_EXPORTER_KEY_CONTROL_API_SEED PULSO_EXPORTER_KEY_LAB_BROKER_SEED
 exec python -m platform_exporter "$@"

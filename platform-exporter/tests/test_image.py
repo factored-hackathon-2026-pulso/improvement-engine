@@ -93,6 +93,11 @@ def test_names_the_infra_module_injects_are_known_to_the_image() -> None:
     assert SEED_VAR in ENTRYPOINT
 
 
+def test_entrypoint_materialises_the_optional_lab_broker_seed_but_only_the_control_api_key_is_required() -> None:
+    assert "PULSO_EXPORTER_KEY_LAB_BROKER_SEED" in ENTRYPOINT and "exporter-lab-broker.key" in ENTRYPOINT
+    assert "optional" in ENTRYPOINT.lower()
+
+
 # ---- container ----
 
 
@@ -159,3 +164,25 @@ def test_real_entrypoint_gets_past_key_materialisation_and_into_the_exporter() -
         assert r.returncode != 0, r.stderr[-400:]
     finally:
         _drop(vol)
+
+
+
+def _probe_script(extra_lines: str) -> str:
+    fake = ('#!/bin/sh\n[ "$1" = "-m" ] || exec /usr/local/bin/python "$@"\n'
+            'env | grep -c -e _SEED= || true\n' + extra_lines)
+    return (f"mkdir /tmp/b && printf '{fake}' > /tmp/b/python && chmod +x /tmp/b/python && "
+            "PATH=/tmp/b:$PATH exec /usr/local/bin/docker-entrypoint.sh")
+
+
+@needs_image
+def test_optional_lab_broker_seed_is_materialised_scrubbed_and_validated() -> None:
+    lab = "PULSO_EXPORTER_KEY_LAB_BROKER_SEED"
+    seed2 = _b64(b"\x0d" * 32)
+    probe = _probe_script("stat -c %%a /run/pulso-keys/exporter-lab-broker.key\n"
+                          "env | grep PULSO_EXPORTER_KEY_LAB_BROKER=\n")
+    r = _run(["-c", probe], entrypoint="sh", env={SEED_VAR: SEED, lab: seed2})
+    assert r.returncode == 0, (r.stdout, r.stderr)
+    assert r.stdout.split() == ["0", "400", "PULSO_EXPORTER_KEY_LAB_BROKER=/run/pulso-keys/exporter-lab-broker.key"]
+    assert seed2 not in r.stdout + r.stderr
+    bad = _run([], env={SEED_VAR: SEED, lab: _b64(b"short")})
+    assert bad.returncode == 2 and lab in bad.stderr and _b64(b"short") not in bad.stderr, bad.stderr[-300:]
