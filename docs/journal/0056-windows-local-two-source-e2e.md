@@ -67,3 +67,24 @@ The original-bank output remains a descriptive, partial-coverage snapshot
 finding; it is not an Agent Core candidate or executable proposal. E0 holdout
 is descriptive recurrence only. Neither output establishes causality, business
 lift, or production behavior.
+
+## Windows CI follow-up
+
+The first GitHub Actions run for PR #75 passed Ubuntu and the PostgreSQL
+artifact migration gate but failed in the Windows contract-fixture harness:
+`test_initializer_creates_an_ignored_secret_file_and_refuses_to_replace_it`
+hit its 15-second subprocess timeout while launching Windows PowerShell.
+The script's local behavior was correct; its bounded startup allowance was too
+low for a hosted Windows runner. The three initializer subprocess timeouts in
+`tests/test_local_compose_contract.py` are now 60 seconds. The focused local
+regression command `python -m unittest discover -s tests -p
+test_local_compose_contract.py -v` passed (2 passed, 1 container test skipped).
+After that change, `scripts/verify-local-ci.ps1` passed all 8 selected gates on
+Windows, including Rust format, Clippy, unit/integration/doc tests, Python
+contracts/fixtures, and Pester (15 E2E-wrapper tests + 5 CI-script tests).
+`git diff --check` passed. The hosted Windows job has not yet rerun against the
+fix; PR #75 remains unready until checks on the updated head are green.
+
+An independent read-only adversarial review found no issue: only the three
+PowerShell subprocess guards changed, all still fail with a bounded timeout,
+and the Podman Compose timeout and runtime behavior are unchanged.

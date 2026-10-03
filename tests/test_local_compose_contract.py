@@ -30,7 +30,7 @@ class LocalEnvironmentInitializationTest(unittest.TestCase):
             script = root / "scripts" / "init-local-env.ps1"
             script.parent.mkdir()
             shutil.copy2(INIT_LOCAL_ENV, script)
-            result = subprocess.run(["powershell", "-NoProfile", "-File", str(script)], capture_output=True, text=True, timeout=15, check=False)
+            result = subprocess.run(["powershell", "-NoProfile", "-File", str(script)], capture_output=True, text=True, timeout=60, check=False)
             exists = (root / "local" / ".env").is_file()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(exists)
@@ -38,9 +38,9 @@ class LocalEnvironmentInitializationTest(unittest.TestCase):
     def test_initializer_creates_an_ignored_secret_file_and_refuses_to_replace_it(self):
         with tempfile.TemporaryDirectory() as directory:
             environment_file = Path(directory) / ".env"
-            first = subprocess.run(["powershell", "-NoProfile", "-File", str(INIT_LOCAL_ENV), "-Path", str(environment_file)], capture_output=True, text=True, timeout=15, check=False)
+            first = subprocess.run(["powershell", "-NoProfile", "-File", str(INIT_LOCAL_ENV), "-Path", str(environment_file)], capture_output=True, text=True, timeout=60, check=False)
             contents = environment_file.read_text(encoding="utf-8")
-            second = subprocess.run(["powershell", "-NoProfile", "-File", str(INIT_LOCAL_ENV), "-Path", str(environment_file)], capture_output=True, text=True, timeout=15, check=False)
+            second = subprocess.run(["powershell", "-NoProfile", "-File", str(INIT_LOCAL_ENV), "-Path", str(environment_file)], capture_output=True, text=True, timeout=60, check=False)
         self.assertEqual(first.returncode, 0, first.stderr)
         self.assertIn("PULSO_POSTGRES_PASSWORD=", contents)
         self.assertNotIn(contents.split("PULSO_POSTGRES_PASSWORD=", 1)[1].splitlines()[0], first.stdout)
