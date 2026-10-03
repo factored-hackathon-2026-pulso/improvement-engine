@@ -9,12 +9,18 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-
 from pulso_core_runtime import PIN_SHA
 from pulso_core_runtime.internal.store import ensure_schema
 
 from .conftest import PgDbs
-from .test_pg_runtime import _compose, _env, _pub, _seed, _token, keys  # noqa: F401  (fixture re-export)
+from .test_pg_runtime import (  # noqa: F401  (fixture re-export)
+    _compose,
+    _env,
+    _pub,
+    _seed,
+    _token,
+    keys,
+)
 
 pytestmark = [pytest.mark.runtime, pytest.mark.pg]
 

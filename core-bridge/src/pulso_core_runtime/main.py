@@ -19,7 +19,12 @@ from pulso_core_runtime.errors import (
     DemoDoubleInRealMode,
     RuntimeConfigError,
 )
-from pulso_core_runtime.factories import DEFAULT_PATHS, FACTORIES, FACTORY_NAMES, stand_ins
+from pulso_core_runtime.factories import (
+    DEFAULT_PATHS,
+    FACTORIES,
+    FACTORY_NAMES,
+    stand_ins,
+)
 
 DEMO_ENV = "AGENTCORE_ALLOW_DEMO"
 # Literal: `agent_core.composition.serve.GATEWAY_TRACER` was removed upstream (PR #26); the value is unchanged.
@@ -173,7 +178,10 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
     from agent_core.adapters.system_clock import SystemClock
     from agent_core.api.app import create_app
     from agent_core.api.limits import RateLimitConfig
-    from agent_core.composition.observability import ObservabilityConfigError, setup_observability
+    from agent_core.composition.observability import (
+        ObservabilityConfigError,
+        setup_observability,
+    )
     from agent_core.composition.serve import build_api_deps
     from agent_core.composition.serve_ports import ServeConfigError, resolve_ports
     from agent_core.composition.telemetry import OtelTurnTelemetry
@@ -186,7 +194,10 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         StaticBudgetResolver,
     )
     from pulso_core_runtime.evaluation.arms import ArmRunner
-    from pulso_core_runtime.evaluation.broker_clients import BrokerArtifactPort, BrokerSandboxClient
+    from pulso_core_runtime.evaluation.broker_clients import (
+        BrokerArtifactPort,
+        BrokerSandboxClient,
+    )
     from pulso_core_runtime.evaluation.native import EvaluationGate
     from pulso_core_runtime.evaluation.report import PgArmStore, ensure_eval_schema
     from pulso_core_runtime.evaluation.routes import EvaluationDeps
@@ -196,12 +207,23 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
     from pulso_core_runtime.internal.app import build_internal_app
     from pulso_core_runtime.internal.auth import ServiceJwtVerifier, load_service_keys
     from pulso_core_runtime.internal.store import PgJtiStore, ensure_schema
-    from pulso_core_runtime.invoke.wiring import build_l3, install_tools, lab_broker_minter
+    from pulso_core_runtime.invoke.wiring import (
+        build_l3,
+        install_tools,
+        lab_broker_minter,
+    )
     from pulso_core_runtime.llm.config import llm_doubles, parse_llm_config
     from pulso_core_runtime.llm.probe import llm_gateway_check
     from pulso_core_runtime.pin import PinnedRegistryPort
-    from pulso_core_runtime.readiness import bridge_schema_check, factories_ok_check, key_files_check
-    from pulso_core_runtime.registry_service import FlowEvaluationGate, build_evaluation_runtime
+    from pulso_core_runtime.readiness import (
+        bridge_schema_check,
+        factories_ok_check,
+        key_files_check,
+    )
+    from pulso_core_runtime.registry_service import (
+        FlowEvaluationGate,
+        build_evaluation_runtime,
+    )
     from pulso_core_runtime.tools.factory import protected_builder_factory
     from pulso_core_runtime.tools.guard import BindingGuardGateway, BindingGuardProvider
 

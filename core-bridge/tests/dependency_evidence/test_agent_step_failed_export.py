@@ -22,7 +22,6 @@ from integration.conftest import SCOUT_OUTPUT, WORLD, Composed
 from integration.test_llm_stack import _wire_http_gateway
 from integration.test_scout import _post, _scout
 from llm.gateway_double import GatewayDouble, failure, ok, raising
-
 from pulso_core_runtime.exporter import (
     CoreReader,
     Exporter,

@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 from llm.gateway_double import GatewayDouble, ok
+from pulso_core_runtime.store.receipts import ReceiptStore
 
 from integration.conftest import SCOUT_OUTPUT, WORLD, Composed
 from integration.test_scout import _post, _scout
-from pulso_core_runtime.store.receipts import ReceiptStore
 
 pytestmark = [pytest.mark.integration, pytest.mark.pg]
 URL, TOKEN = "http://llm-gateway.test:8080", "tok-ok"

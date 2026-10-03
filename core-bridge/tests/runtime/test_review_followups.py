@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from pulso_core_runtime import PIN_SHA
 from pulso_core_runtime import main as runtime_main
 from pulso_core_runtime.llm.config import parse_llm_config

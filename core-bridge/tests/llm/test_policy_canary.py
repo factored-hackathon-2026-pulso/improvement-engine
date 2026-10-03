@@ -8,7 +8,6 @@ from types import SimpleNamespace
 
 import pytest
 from agent_core.domain.errors import GatewayError
-
 from pulso_core_runtime.llm.policy import ModelPolicy, StageModelPolicy
 
 from .test_metering_v2 import (  # noqa: F401

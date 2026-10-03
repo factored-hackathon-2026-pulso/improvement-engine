@@ -9,7 +9,6 @@ from typing import Any
 
 import httpx
 import pytest
-
 from pulso_core_runtime import main as runtime_main
 from pulso_core_runtime.llm.config import llm_doubles, parse_llm_config
 from pulso_core_runtime.llm.probe import GatewayProbe, llm_gateway_check
