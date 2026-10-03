@@ -52,7 +52,7 @@ describe('FIXTURE_WORLD_FILE', () => {
   it('alternatives (do nothing vs proposed change) come from world.demo and only for the evaluated run', async () => {
     const a = S.Alternatives.parse((await get(`${DEBUG}/runs/run-demo/alternatives`)).body);
     expect(a.items.map((i) => i.kind)).toEqual(['do_nothing', 'proposed_change']);
-    expect(a.items[0]!.expected_abandoned).toBeGreaterThan(a.items[1]!.expected_abandoned);
+    expect(a.items[0]!.expected_abandoned!).toBeGreaterThan(a.items[1]!.expected_abandoned!);
     expect(S.Alternatives.parse((await get(`${DEBUG}/runs/run-demo-refuted/alternatives`)).body).items).toEqual([]);
   });
   it('diff is per proposal id, never a hardcoded prop-1', async () => {
