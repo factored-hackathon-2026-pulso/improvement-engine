@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { z } from 'zod';
-import { api, setCsrf } from '../api/client';
+import { api, ApiError, loadConfig, onSessionExpired, setCsrf } from '../api/client';
 import type * as S from '../api/schemas';
 import { RunView } from '../features/RunView';
 import { MemoryView } from '../features/Panels';
-import { bannerLevel } from './banner';
+import { ModeBanner } from './ModeBanner';
+import { LiveRegionProvider, useAnnounce } from '../a11y/AnnounceContext';
 import { t } from '../i18n/es419';
 
 type Profile = z.infer<typeof S.Profile>;
 type Runs = z.infer<typeof S.RunList>;
+type SessionState = 'loading' | 'ok' | 'expired' | 'unavailable';
 
 function useHash() {
   const [h, setH] = useState(window.location.hash);
@@ -18,18 +20,6 @@ function useHash() {
     return () => window.removeEventListener('hashchange', f);
   }, []);
   return h;
-}
-
-function ModeBanner({ profile, simulated, provider }: { profile: Profile | null; simulated: boolean; provider: string }) {
-  const level = bannerLevel(provider, profile);
-  if (!profile) return <div className="banner bad" role="status" data-testid="mode-banner" data-level={level}>{t('banner.unverified')}</div>;
-  return (
-    <div className={level === 'unverified' ? 'banner bad' : 'banner'} data-testid="mode-banner" data-level={level}>
-      {t('banner.mode', { target: profile.target, profile: profile.runtime_profile, doubles: profile.doubles.join(', ') || t('banner.none') })}
-      {level === 'unverified' && ` · ${t('banner.unverified')}`}
-      {simulated && t('banner.simulated')}
-    </div>
-  );
 }
 
 function RunList() {
@@ -48,17 +38,27 @@ function RunList() {
   );
 }
 
-export function App() {
+function Shell() {
   const hash = useHash();
+  const announce = useAnnounce();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [simulated, setSimulated] = useState(false);
   const [provider, setProvider] = useState('unknown');
+  const [session, setSession] = useState<SessionState>('loading');
   useEffect(() => {
     // public/config.json is the only source of the client provider (read at runtime, not baked into the bundle).
-    fetch('/config.json', { cache: 'no-store' }).then((r) => r.json()).then((c: { provider?: unknown }) => setProvider(typeof c.provider === 'string' ? c.provider : 'unknown')).catch(() => setProvider('unknown'));
-    api.session().then((s) => { setCsrf(s.csrf_token); setSimulated(s.auth.simulated); }).catch(() => undefined);
+    void loadConfig().then((c) => setProvider(c.provider));
+    const off = onSessionExpired(() => setSession('expired'));
+    api.session()
+      .then((s) => { setCsrf(s.csrf_token); setSimulated(s.auth.simulated); setSession((cur) => (cur === 'expired' ? cur : 'ok')); })
+      .catch((e: unknown) => { setCsrf(''); setSession(e instanceof ApiError && e.status === 401 ? 'expired' : 'unavailable'); });
     api.profile().then(setProfile).catch(() => setProfile(null));
+    return off;
   }, []);
+  useEffect(() => {
+    if (session === 'expired') announce(t('session.expired'));
+    if (session === 'unavailable') announce(t('session.unavailable'));
+  }, [session, announce]);
 
   const [path = '', query = ''] = hash.replace(/^#/, '').split('?');
   const run = path.match(/^\/run\/([^/]+)$/);
@@ -66,6 +66,11 @@ export function App() {
   return (
     <>
       <ModeBanner profile={profile} simulated={simulated} provider={provider} />
+      {(session === 'expired' || session === 'unavailable') && (
+        <div className="banner bad" data-testid="session-banner" data-state={session}>
+          {t(session === 'expired' ? 'session.expired' : 'session.unavailable')}
+        </div>
+      )}
       <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a></nav>
       <main>
         {run?.[1]
@@ -77,4 +82,8 @@ export function App() {
       </main>
     </>
   );
+}
+
+export function App() {
+  return <LiveRegionProvider><Shell /></LiveRegionProvider>;
 }

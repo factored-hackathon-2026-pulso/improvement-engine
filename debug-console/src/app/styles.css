@@ -16,3 +16,6 @@ body { font-family: system-ui, sans-serif; margin: 0; padding: 0 16px 24px; }
 .add { background: #e6ffed; } .del { background: #ffeef0; } pre { margin: 0; }
 .cards { display: flex; gap: 12px; flex-wrap: wrap; } .card { border: 1px solid #555; padding: 8px; min-width: 200px; }
 :focus-visible { outline: 3px solid #0b5fff; outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.banner.warn { background: #ffe8b3; border-color: #8a5a00; }
+.panel-degraded { border-left: 6px solid #8a5a00; padding-left: 8px; }

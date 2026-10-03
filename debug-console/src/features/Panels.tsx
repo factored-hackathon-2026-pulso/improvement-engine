@@ -67,7 +67,7 @@ export function DiffView() {
   if (err) return <p>{t('diff.unavailable')}</p>;
   if (!v) return <p>{t('diff.loading')}</p>;
   return (
-    <section aria-label={t('diff.section')}>
+    <section aria-label={t('diff.section')} data-testid="diff">
       <h2>{t('diff.title')}</h2>
       <div role="group" aria-label={t('diff.lines')} tabIndex={0}>
         {v.lines.map((l, i) => (
@@ -88,6 +88,18 @@ export function MemoryView() {
       <ul>{v.items.map((m) => (
         <li key={m.memory_id} data-testid={`mem-${m.memory_id}`}>{m.revoked ? t('mem.revoked') : ''}{m.title} <small>[{m.status}]</small></li>
       ))}</ul>
+    </section>
+  );
+}
+
+/** F11: when trace ids are missing (collector down) the panel degrades visibly; the durable timeline stays the truth. */
+export function TracePanel({ nodes }: { nodes: { trace_id?: string | null }[] }) {
+  const missing = nodes.filter((n) => !n.trace_id).length;
+  const degraded = missing > 0;
+  return (
+    <section aria-label={t('trace.title')} data-testid="trace-panel" data-state={degraded ? 'degraded' : 'ok'} className={degraded ? 'panel-degraded' : undefined}>
+      <h2>{t('trace.title')}</h2>
+      <p>{degraded ? t('trace.degraded', { n: missing, total: nodes.length }) : t('trace.ok', { n: nodes.length })}</p>
     </section>
   );
 }

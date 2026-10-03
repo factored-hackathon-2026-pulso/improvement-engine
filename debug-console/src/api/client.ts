@@ -5,26 +5,49 @@ import { scrubAndReport } from '../security/clientScrubber';
 import { backoffDelay, classifyClose, parseGone, parseSseFrames, type CloseAction } from './reconnect';
 
 export const DEBUG = '/internal/v1/debug';
+export type Conflict = z.infer<typeof S.Conflict>;
 export class ApiError extends Error {
-  constructor(public status: number, public code: string) { super(code); }
+  constructor(public status: number, public code: string, public conflict: Conflict | null = null) { super(code); }
 }
 let csrf = '';
 export const setCsrf = (t: string) => { csrf = t; };
 
-async function request<T>(schema: z.ZodType<T>, path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init });
+const expiredListeners = new Set<() => void>();
+/** Any 401 (plain request or SSE) means the session is gone: subscribers flip the UI to session-expired. */
+export const onSessionExpired = (fn: () => void): (() => void) => {
+  expiredListeners.add(fn);
+  return () => { expiredListeners.delete(fn); };
+};
+const sessionGone = () => { csrf = ''; expiredListeners.forEach((fn) => fn()); };
+
+export interface ClientConfig { provider: string; sseHeartbeatMs: number }
+/** public/config.json is read at runtime; absent or invalid values fall back to safe defaults (provider "unknown"). */
+export async function loadConfig(): Promise<ClientConfig> {
+  try {
+    const c = (await (await fetch('/config.json', { cache: 'no-store' })).json()) as { provider?: unknown; sseHeartbeatMs?: unknown };
+    const hb = typeof c.sseHeartbeatMs === 'number' && c.sseHeartbeatMs >= 50 ? c.sseHeartbeatMs : 5000;
+    return { provider: typeof c.provider === 'string' ? c.provider : 'unknown', sseHeartbeatMs: hb };
+  } catch { return { provider: 'unknown', sseHeartbeatMs: 5000 }; }
+}
+
+async function request<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try { res = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init }); } catch { throw new ApiError(0, 'network_error'); }
   const body: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401) sessionGone();
     const p = S.Problem.safeParse(body);
-    throw new ApiError(res.status, p.success ? p.data.code : 'unrecognised_error');
+    throw new ApiError(res.status, p.success ? p.data.code : 'unrecognised_error', p.success ? (p.data.conflict ?? null) : null);
   }
   return schema.parse(scrubAndReport(body, path.split('?')[0] ?? path));
 }
-const post = <T,>(schema: z.ZodType<T>, path: string, body: unknown, key?: string) =>
-  request(schema, path, {
+const post = <T,>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, path: string, body: unknown, key?: string) => {
+  if (!csrf) return Promise.reject(new ApiError(0, 'csrf_missing')); // never send a mutation with an empty token
+  return request(schema, path, {
     method: 'POST', body: JSON.stringify(body),
     headers: { 'content-type': 'application/json', 'x-csrf-token': csrf, ...(key ? { 'idempotency-key': key } : {}) },
   });
+};
 
 export const api = {
   session: () => request(S.Session, '/api/v1/auth/session'),
@@ -39,8 +62,8 @@ export const api = {
   diff: () => request(S.Diff, `${DEBUG}/proposals/prop-1/diff`),
   memory: () => request(S.Memory, `${DEBUG}/memory`),
   decision: () => request(S.Decision, `${DEBUG}/decisions/dec-1`),
-  respond: (note: string, key: string) =>
-    post(S.Accepted, `${DEBUG}/decisions/dec-1/responses`, { response: 'approve', note }, key),
+  respond: (note: string, key: string, expectedRevision: number) =>
+    post(S.Accepted, `${DEBUG}/decisions/dec-1/responses`, { expected_revision: expectedRevision, response: 'approve', note }, key),
   command: (path: string) => request(S.CommandStatus, path),
 };
 
@@ -112,6 +135,7 @@ export function streamEvents(runId: string, h: StreamHandlers, opts: StreamOptio
       }
       if (ctl.signal.aborted) return;
       const action = classifyClose(status);
+      if (action === 'session_expired') sessionGone();
       if (action === 'session_expired' || action === 'forbidden') return h.onFatal(action);
       if (action === 'resnapshot') {
         opened = false; h.onResnapshot({ recoveryCursor }); gone += 1;

@@ -26,6 +26,8 @@ export const Envelope = z.object({
 });
 export const GraphNode = z.object({
   node_id: str, label: str, stage: str, status: str, depends_on: z.array(str), reason_code: str.nullable(), node_kind: str,
+  // 32 lowercase hex or null. Missing/invalid is treated as "no trace" (degraded trace panel), never trusted.
+  trace_id: z.unknown().transform((v): string | null => (typeof v === 'string' && /^[0-9a-f]{32}$/.test(v) ? v : null)),
 });
 export const Graph = Envelope.extend({ nodes: z.array(GraphNode) });
 export const RunList = Envelope.extend({
@@ -46,13 +48,16 @@ export const Diff = proposal('Diff', Envelope.extend({ lines: z.array(z.object({
 export const Memory = proposal('Memory', Envelope.extend({
   items: z.array(z.object({ memory_id: str, title: str, status: str, revoked: z.boolean() })),
 }));
-export const Decision = proposal('Decision', Envelope.extend({ needs_step_up: z.boolean() }));
+export const Decision = proposal('Decision', Envelope.extend({ needs_step_up: z.boolean(), domain_revision: z.number().int().nonnegative() }));
 export const Session = proposal('Session', z.object({
   principal: str, tenant_id: str, scopes: z.array(str), expires_at: str, csrf_token: str,
   auth: z.object({ simulated: z.boolean(), level: str, auth_at: str }),
 }));
 export const Profile = proposal('Profile', z.object({ target: str, runtime_profile: str, doubles: z.array(str), pin: str.nullable() }));
-export const Problem = z.object({ code: str, message: str, correlation_id: str, retryable: z.boolean() });
+export const Conflict = z.object({ expected_revision: z.number().int(), current_revision: z.number().int(), diff_ref: z.unknown().nullable() });
+export const Problem = z.object({
+  code: str, message: str, correlation_id: str, retryable: z.boolean(), conflict: Conflict.nullable().optional().catch(null),
+});
 export const Accepted = z.object({ command_ref: EntityRef, status_url: str });
 export const CommandStatus = z.object({ state: str });
 export const DebugEventSchema = z.object({
