@@ -1,0 +1,39 @@
+{
+  "case": "read-entity-latest",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "keys": [
+        "content",
+        "content_hash",
+        "created_at",
+        "created_by",
+        "docs",
+        "ref"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/entities/flow/disputa-cargo",
+      "scalars": {},
+      "shape": {
+        "content": "<opaque>",
+        "content_hash": "scalar",
+        "created_at": "scalar",
+        "created_by": "scalar",
+        "docs": {
+          "changelog": "scalar",
+          "description": "scalar",
+          "rationale": "scalar"
+        },
+        "ref": {
+          "id": "scalar",
+          "kind": "scalar",
+          "version": "scalar"
+        }
+      },
+      "status": 200,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}

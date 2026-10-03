@@ -1,0 +1,50 @@
+# GET routes and quotas (injectable clock: mock/a2 only, never wall time).
+- {id: read-release, rule: reads, steps: [{method: GET, path: "/v1/registry/releases/{base_release}"}]}
+- {id: read-release-unknown, rule: errors, steps: [{method: GET, path: /v1/registry/releases/rel-0000000000000000}]}
+- {id: read-diff-same-release, rule: reads, steps: [{method: GET, path: "/v1/registry/releases/{base_release}/diff/{base_release}"}]}
+- {id: read-diff-unknown, rule: errors, steps: [{method: GET, path: "/v1/registry/releases/{base_release}/diff/rel-0000000000000000"}]}
+- {id: read-entity-with-version, rule: reads, steps: [{method: GET, path: "/v1/registry/entities/flow/disputa-cargo?version=1.0.0"}]}
+- {id: read-entity-latest, rule: reads, steps: [{method: GET, path: /v1/registry/entities/flow/disputa-cargo}]}
+- {id: read-entity-slash-id, rule: reads, steps: [{method: GET, path: "/v1/registry/entities/template/t/aclarar?version=1.0.0"}]}
+- {id: read-entity-unknown-kind, rule: errors, steps: [{method: GET, path: /v1/registry/entities/gadget/x}]}
+- {id: read-entity-unknown-id, rule: errors, steps: [{method: GET, path: /v1/registry/entities/flow/no-existe}]}
+- {id: read-entity-unknown-version, rule: errors, steps: [{method: GET, path: "/v1/registry/entities/flow/disputa-cargo?version=9.9.9"}]}
+- {id: read-lineage-unknown-run, rule: errors, steps: [{method: GET, path: /v1/registry/runs/run-0001/lineage}]}
+- {id: read-lineage-needs-constructor, rule: roles, steps: [{method: GET, path: /v1/registry/runs/run-0001/lineage, as: approver_only}]}
+- id: read-after-publish-release-and-diff
+  rule: reads
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: GET, path: "/v1/registry/releases/{rel2}"}
+    - {method: GET, path: "/v1/registry/releases/{base_release}/diff/{rel2}"}
+    - {method: GET, path: "/v1/registry/entities/flow/disputa-cargo?version=1.1.0"}
+- id: quota-auto-detect-proposals-10-then-11th
+  rule: quotas
+  requires_sim: true
+  steps:
+    - {method: POST, path: /v1/registry/proposals, repeat: 10, json: {agent_id: atencion, origin: auto_detect, title: "p{n}"}}
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, origin: auto_detect, title: "p11"}}
+- id: quota-window-is-rolling-24h
+  rule: quotas
+  requires_sim: true
+  steps:
+    - {method: POST, path: /v1/registry/proposals, repeat: 10, json: {agent_id: atencion, origin: auto_detect, title: "p{n}"}}
+    - {sim: {advance: 86401}, method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, origin: auto_detect, title: "later"}}
+- id: quota-manual-proposals-are-not-limited
+  rule: quotas
+  requires_sim: true
+  steps:
+    - {method: POST, path: /v1/registry/proposals, repeat: 11, json: {agent_id: atencion, origin: manual, title: "m{n}"}}
+- id: quota-evals-20-then-21st
+  rule: quotas
+  requires_sim: true
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, origin: auto_detect, title: golden}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$golden_draft: {expected_rev: 0}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze"}
+    - sim: {eval: [failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra, failed_infra]}
+      method: POST
+      path: /v1/registry/proposals/{pid}/evaluate
+      repeat: 21
+      json: {suite_id: disputas-suite}

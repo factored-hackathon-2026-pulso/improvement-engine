@@ -1,0 +1,20 @@
+# V3 section 31.10.1 rows: Auth, problem+json. All paths GET unless stated. Actors are minted by registry_mock.jws.
+- {id: auth-missing-bearer, rule: auth, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: none}]}
+- {id: auth-bad-signature, rule: auth, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: bad_signature}]}
+- {id: auth-wrong-typ, rule: auth, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: wrong_typ}]}
+- {id: auth-unknown-kid, rule: auth, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: unknown_kid}]}
+- {id: auth-extra-header-key, rule: auth, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: extra_header_key}]}
+- {id: auth-alg-none, rule: auth, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: alg_none}]}
+- {id: auth-garbage-token, rule: auth, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: garbage}]}
+- {id: auth-expired-principal, rule: auth, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: expired}]}
+- id: auth-missing-bearer-on-write
+  rule: auth
+  steps:
+    - {method: POST, path: /v1/registry/proposals, as: none, json: {agent_id: atencion, title: t}}
+- {id: auth-customer-is-forbidden, rule: roles, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: customer}]}
+- {id: auth-advisor-is-forbidden, rule: roles, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: advisor}]}
+- {id: auth-bot-can-read, rule: roles, steps: [{method: GET, path: "/v1/registry/releases/{base_release}", as: bot}]}
+- id: auth-header-without-scheme
+  rule: auth
+  steps:
+    - {method: GET, path: "/v1/registry/releases/{base_release}", as: none, headers: {Authorization: "Basic abc"}}

@@ -1,0 +1,33 @@
+{
+  "case": "read-entity-unknown-version",
+  "steps": [
+    {
+      "code": "not_found",
+      "content_type": "application/problem+json",
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/entities/flow/disputa-cargo?version=9.9.9",
+      "scalars": {
+        "status": 404
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 404,
+      "trace_id_present": true,
+      "type": "urn:agentcore:registry:not_found"
+    }
+  ]
+}

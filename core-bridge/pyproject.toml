@@ -18,7 +18,7 @@ dev = ["pytest>=8.3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "../platform-sim/tests"]
-pythonpath = [".", "../platform-sim"]
+pythonpath = [".", "../platform-sim", "../platform-sim/tests"]
 addopts = "-q --strict-markers"
 markers = [
     "wire: L1a wire snapshot and golden vectors",

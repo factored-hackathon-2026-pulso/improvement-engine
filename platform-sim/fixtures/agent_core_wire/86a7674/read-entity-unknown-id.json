@@ -1,0 +1,33 @@
+{
+  "case": "read-entity-unknown-id",
+  "steps": [
+    {
+      "code": "not_found",
+      "content_type": "application/problem+json",
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/entities/flow/no-existe",
+      "scalars": {
+        "status": 404
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 404,
+      "trace_id_present": true,
+      "type": "urn:agentcore:registry:not_found"
+    }
+  ]
+}

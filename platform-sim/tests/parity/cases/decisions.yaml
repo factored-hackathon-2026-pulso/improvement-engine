@@ -1,0 +1,224 @@
+# evaluate / approve / reject / publish / promote / revoke. `requires_sim`: needs the programmable EvalPort
+# (/_sim/eval), which exists on mock and a2 only; skipped (and reported) on TARGET=real.
+- id: evaluate-pass
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_evaluated}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: evaluate-before-freeze-is-illegal
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_draft}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/evaluate", json: {suite_id: disputas-suite}}
+- id: evaluate-fail-returns-to-draft
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_frozen}
+    - {sim: {eval: [fail]}, method: POST, path: "/v1/registry/proposals/{pid}/evaluate", json: {suite_id: disputas-suite}}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: evaluate-failed-infra-keeps-candidate
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_frozen}
+    - {sim: {eval: [failed_infra]}, method: POST, path: "/v1/registry/proposals/{pid}/evaluate", json: {suite_id: disputas-suite}}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: evaluate-timeout-is-failed-infra
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_frozen}
+    - {sim: {eval: [timeout]}, method: POST, path: "/v1/registry/proposals/{pid}/evaluate", json: {suite_id: disputas-suite}}
+- id: evaluate-unknown-suite
+  rule: errors
+  requires_sim: true
+  steps:
+    - {use: golden_frozen}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/evaluate", json: {suite_id: no-existe}}
+- id: evaluate-missing-suite-id
+  rule: problem_json
+  steps:
+    - {use: golden_frozen}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/evaluate", json: {}}
+- id: approve-before-evaluation-is-illegal
+  rule: states
+  steps:
+    - {use: golden_frozen}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/approve", as: human, json: {candidate_hash: "{ch}"}}
+- id: approve-wrong-hash
+  rule: cas
+  requires_sim: true
+  steps:
+    - {use: golden_evaluated}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/approve", as: human, json: {candidate_hash: "deadbeef"}}
+- id: approve-bot-is-forbidden
+  rule: roles
+  requires_sim: true
+  steps:
+    - {use: golden_evaluated}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/approve", as: bot, json: {candidate_hash: "{ch}"}}
+- id: approve-bot-with-aprobador-role-is-forbidden
+  rule: roles
+  requires_sim: true
+  steps:
+    - {use: golden_evaluated}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/approve", as: bot_aprobador, json: {candidate_hash: "{ch}"}}
+- id: approve-needs-step-up
+  rule: roles
+  requires_sim: true
+  steps:
+    - {use: golden_evaluated}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/approve", as: human_session, json: {candidate_hash: "{ch}"}}
+- id: approve-ok
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_approved}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: approve-twice-is-illegal
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_approved}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/approve", as: human, json: {candidate_hash: "{ch}"}}
+- id: reopen-from-approved-invalidates
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_approved}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/reopen"}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", as: human, headers: {Idempotency-Key: k-reopen}}
+- id: reject-ok
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_evaluated}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/reject", as: human, json: {reason: "no"}}
+- id: reject-bot-is-forbidden
+  rule: roles
+  requires_sim: true
+  steps:
+    - {use: golden_evaluated}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/reject", as: bot, json: {reason: "no"}}
+- id: publish-missing-idempotency-key
+  rule: idempotency
+  requires_sim: true
+  steps:
+    - {use: golden_approved}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", as: human}
+- id: publish-not-approved-is-illegal
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_evaluated}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", as: human, headers: {Idempotency-Key: k1}}
+- id: publish-bot-is-forbidden
+  rule: roles
+  requires_sim: true
+  steps:
+    - {use: golden_approved}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", as: bot, headers: {Idempotency-Key: k1}}
+- id: publish-ok
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: publish-replay-same-key-same-release
+  rule: idempotency
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", as: human, headers: {Idempotency-Key: "k-{pid}"}}
+- id: publish-same-key-other-proposal
+  rule: idempotency
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: other}, save: {pid2: proposal_id}}
+    - {method: POST, path: "/v1/registry/proposals/{pid2}/publish", as: human, headers: {Idempotency-Key: "k-{pid}"}}
+- id: publish-draft-is-illegal
+  rule: states
+  steps:
+    - {use: golden_draft}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", as: human, headers: {Idempotency-Key: k1}}
+- id: promote-staging-ok
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: POST, path: /v1/registry/aliases/atencion/staging, as: human, json: {release_id: "{rel2}", reason: "ship"}}
+- id: promote-prod-ok
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: POST, path: /v1/registry/aliases/atencion/prod, as: human, json: {release_id: "{rel2}"}}
+- id: promote-bad-alias
+  rule: errors
+  steps:
+    - {method: POST, path: /v1/registry/aliases/atencion/dev, as: human, json: {release_id: "{base_release}"}}
+- id: promote-unknown-release
+  rule: errors
+  steps:
+    - {method: POST, path: /v1/registry/aliases/atencion/staging, as: human, json: {release_id: rel-0000000000000000}}
+- id: promote-bot-is-forbidden
+  rule: roles
+  steps:
+    - {method: POST, path: /v1/registry/aliases/atencion/staging, as: bot, json: {release_id: "{base_release}"}}
+- id: promote-needs-step-up
+  rule: roles
+  steps:
+    - {method: POST, path: /v1/registry/aliases/atencion/staging, as: human_session, json: {release_id: "{base_release}"}}
+- id: promote-missing-release-id
+  rule: problem_json
+  steps:
+    - {method: POST, path: /v1/registry/aliases/atencion/staging, as: human, json: {}}
+- id: revoke-human-without-admin-is-forbidden
+  rule: roles
+  steps:
+    - {method: POST, path: "/v1/registry/releases/{base_release}/revoke", as: human, json: {reason: x}}
+- id: revoke-unknown-release
+  rule: errors
+  steps:
+    - {method: POST, path: /v1/registry/releases/rel-0000000000000000/revoke, as: admin, json: {reason: x}}
+- id: revoke-release-aliased-to-prod-is-illegal
+  rule: states
+  steps:
+    - {method: POST, path: "/v1/registry/releases/{base_release}/revoke", as: admin, json: {reason: x}}
+- id: revoke-admin-ok-and-twice
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: POST, path: "/v1/registry/releases/{rel2}/revoke", as: admin, json: {reason: x}}
+    - {method: POST, path: "/v1/registry/releases/{rel2}/revoke", as: admin, json: {reason: x}}
+    - {method: GET, path: "/v1/registry/releases/{rel2}"}
+- id: promote-revoked-release-is-illegal
+  rule: states
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: POST, path: "/v1/registry/releases/{rel2}/revoke", as: admin, json: {reason: x}}
+    - {method: POST, path: /v1/registry/aliases/atencion/staging, as: human, json: {release_id: "{rel2}"}}
+- id: publish-moves-staging-and-stales-other-proposal
+  rule: cas
+  requires_sim: true
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: early}, save: {pid0: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid0}/draft", json: {$golden_draft: {expected_rev: 0}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid0}/freeze", save: {ch0: candidate_hash}}
+    - {method: POST, path: "/v1/registry/proposals/{pid0}/evaluate", json: {suite_id: disputas-suite}}
+    - {method: POST, path: "/v1/registry/proposals/{pid0}/approve", as: human, json: {candidate_hash: "{ch0}"}}
+    - {use: golden_published}
+    - {method: POST, path: "/v1/registry/proposals/{pid0}/publish", as: human, headers: {Idempotency-Key: k-stale}}
+    - {method: GET, path: "/v1/registry/proposals/{pid0}"}
+- id: freeze-unreferenced-new-entity-is-invalid
+  rule: gates
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$one_template: {expected_rev: 0}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze"}

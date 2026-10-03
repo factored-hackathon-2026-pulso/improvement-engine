@@ -1,0 +1,71 @@
+{
+  "case": "envelope-draft-forbids-unknown-field-in-change",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "candidate_hash",
+        "created_by",
+        "origin",
+        "proposal_id",
+        "rev",
+        "state",
+        "title",
+        "updated_at"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals",
+      "scalars": {
+        "origin": "manual",
+        "rev": 0,
+        "state": "draft"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "candidate_hash": "null",
+        "created_by": "scalar",
+        "origin": "scalar",
+        "proposal_id": "scalar",
+        "rev": "scalar",
+        "state": "scalar",
+        "title": "scalar",
+        "updated_at": "scalar"
+      },
+      "status": 201,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": "invalid_request",
+      "content_type": "application/problem+json",
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "PUT",
+      "path": "/v1/registry/proposals/{pid}/draft",
+      "scalars": {
+        "status": 422
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 422,
+      "trace_id_present": true,
+      "type": "urn:agentcore:problem:invalid_request"
+    }
+  ]
+}

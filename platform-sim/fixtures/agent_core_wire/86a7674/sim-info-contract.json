@@ -1,0 +1,27 @@
+{
+  "case": "sim-info-contract",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "keys": [
+        "contract_version",
+        "fixtures_digest",
+        "level",
+        "pinned_sha"
+      ],
+      "method": "GET",
+      "path": "/_sim/info",
+      "scalars": {},
+      "shape": {
+        "contract_version": "scalar",
+        "fixtures_digest": "scalar",
+        "level": "scalar",
+        "pinned_sha": "scalar"
+      },
+      "status": 200,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}

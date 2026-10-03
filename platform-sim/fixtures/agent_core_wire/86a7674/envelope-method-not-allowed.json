@@ -1,0 +1,33 @@
+{
+  "case": "envelope-method-not-allowed",
+  "steps": [
+    {
+      "code": "invalid_request",
+      "content_type": "application/problem+json",
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type"
+      ],
+      "method": "DELETE",
+      "path": "/v1/registry/proposals",
+      "scalars": {
+        "status": 405
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar"
+      },
+      "status": 405,
+      "trace_id_present": true,
+      "type": "urn:agentcore:problem:invalid_request"
+    }
+  ]
+}

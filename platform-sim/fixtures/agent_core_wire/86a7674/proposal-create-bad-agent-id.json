@@ -1,0 +1,40 @@
+{
+  "case": "proposal-create-bad-agent-id",
+  "steps": [
+    {
+      "code": "validation_failed",
+      "content_type": "application/problem+json",
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type",
+        "violations"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals",
+      "scalars": {
+        "status": 422,
+        "violation_rules": [
+          "REG-PROPOSAL"
+        ]
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar",
+        "violations": [
+          "[][\"flow\", \"message\", \"node_id\", \"path\", \"rule\"]"
+        ]
+      },
+      "status": 422,
+      "trace_id_present": true,
+      "type": "urn:agentcore:registry:validation_failed"
+    }
+  ]
+}

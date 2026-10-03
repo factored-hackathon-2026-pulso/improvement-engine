@@ -1,0 +1,7 @@
+# Cases that exist only on the mock. Each needs a written justification (V3 31.10.3).
+- id: sim-info-contract
+  rule: sim_channel
+  applies_to: mock_only
+  justification: "The /_sim channel is absent from the real server by design; the mock must still expose pinned_sha, contract_version, fixtures_digest."
+  steps:
+    - {method: GET, path: /_sim/info, as: none}

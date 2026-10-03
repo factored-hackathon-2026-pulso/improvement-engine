@@ -1,0 +1,35 @@
+{
+  "case": "read-diff-same-release",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "keys": [
+        "a",
+        "added",
+        "b",
+        "changed",
+        "removed"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/releases/{base_release}/diff/{base_release}",
+      "scalars": {},
+      "shape": {
+        "a": "scalar",
+        "added": [
+          "[]"
+        ],
+        "b": "scalar",
+        "changed": [
+          "[]"
+        ],
+        "removed": [
+          "[]"
+        ]
+      },
+      "status": 200,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}

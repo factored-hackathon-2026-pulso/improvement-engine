@@ -44,8 +44,8 @@ class ScriptedEval:
     def run(self, request: EvalRequest) -> EvalReport:
         self.calls += 1
         verdict = self.script.pop(0) if self.script else "pass"
-        if verdict == "timeout":
-            raise TimeoutError("scripted timeout")
+        if verdict == "timeout":  # a harness timeout never counts as pass or fail
+            return EvalReport(verdict="failed_infra", detail="contract_fixture: timeout")
         return EvalReport(verdict=verdict, detail="contract_fixture")  # type: ignore[arg-type]
 
 

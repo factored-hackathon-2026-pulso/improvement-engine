@@ -1,0 +1,35 @@
+{
+  "case": "promote-bad-alias",
+  "steps": [
+    {
+      "code": "validation_failed",
+      "content_type": "application/problem+json",
+      "keys": [
+        "code",
+        "detail",
+        "status",
+        "title",
+        "trace_id",
+        "type",
+        "violations"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/aliases/atencion/dev",
+      "scalars": {
+        "status": 422
+      },
+      "shape": {
+        "code": "scalar",
+        "detail": "scalar",
+        "status": "scalar",
+        "title": "scalar",
+        "trace_id": "scalar",
+        "type": "scalar",
+        "violations": "null"
+      },
+      "status": 422,
+      "trace_id_present": true,
+      "type": "urn:agentcore:registry:validation_failed"
+    }
+  ]
+}

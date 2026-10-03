@@ -1,0 +1,45 @@
+{
+  "case": "read-release",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "entities",
+        "eval_suite_refs",
+        "knowledge_snapshot",
+        "proposal_id",
+        "published_at",
+        "published_by",
+        "release_id",
+        "status"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/releases/{base_release}",
+      "scalars": {
+        "status": "active"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "null",
+        "entities": [
+          "[][\"changed_vs_base\", \"content_hash\", \"docs\", \"ref\"]"
+        ],
+        "eval_suite_refs": [
+          "[]"
+        ],
+        "knowledge_snapshot": "null",
+        "proposal_id": "null",
+        "published_at": "scalar",
+        "published_by": "scalar",
+        "release_id": "scalar",
+        "status": "scalar"
+      },
+      "status": 200,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}
