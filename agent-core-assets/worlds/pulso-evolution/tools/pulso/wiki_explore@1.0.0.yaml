@@ -1,0 +1,7 @@
+id: pulso/wiki_explore
+version: 1.0.0
+risk_class: compute
+min_auth_level: session
+idempotent: true
+description: "Lists or searches wiki pages inside the authorised perimeter."
+args_schema: {type: object, additionalProperties: false, required: [query], properties: {query: {type: string}}}

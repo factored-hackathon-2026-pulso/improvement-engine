@@ -1,0 +1,27 @@
+# Independent smoke suite: exercises only the guard paths of a stage (tool failure routes to escalation).
+# It carries no finding, no hypothesis and no expected research conclusion.
+id: pulso-smoke
+version: 1.0.0
+agent_id: pulso-scout
+repetitions: 1
+scenarios:
+  - id: briefing_unreadable
+    principal: {id: stage-smoke, attrs: {purpose: smoke}}
+    steps:
+      - {op: start}
+    seed:
+      tools:
+        pulso/bind_context:
+          - result: {ok: true}
+        pulso/wiki_read:
+          - {status: error, error: unavailable}
+    expect: {outcome: escalated, escalated: true}
+  - id: binding_denied
+    principal: {id: stage-smoke, attrs: {purpose: smoke}}
+    steps:
+      - {op: start}
+    seed:
+      tools:
+        pulso/bind_context:
+          - {status: denied, error: binding_conflict}
+    expect: {outcome: escalated, escalated: true}

@@ -1,0 +1,5 @@
+id: t/aclarar_cargo
+version: 1.0.0
+locales:
+  es: "No encontré ese cargo. ¿Puedes darme más detalles?"
+  pt: "Não encontrei essa cobrança. Pode dar mais detalhes?"

@@ -1,0 +1,19 @@
+args_schema:
+  additionalProperties: false
+  properties:
+    entity_id:
+      type: string
+    kind:
+      type: string
+  required:
+  - kind
+  - entity_id
+  type: object
+confirmation_ttl: PT5M
+description: Lista las versiones de una entidad del registry.
+id: registry/list_versions
+idempotent: true
+min_auth_level: session
+risk_class: read
+untrusted_fields: []
+version: 1.0.0

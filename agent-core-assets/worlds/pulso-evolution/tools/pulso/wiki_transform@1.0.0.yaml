@@ -1,0 +1,7 @@
+id: pulso/wiki_transform
+version: 1.0.0
+risk_class: compute
+min_auth_level: session
+idempotent: true
+description: "Applies a deterministic transform to wiki or query output."
+args_schema: {type: object, additionalProperties: false, required: [source_ref, transform], properties: {source_ref: {type: string}, transform: {type: string}}}

@@ -1,0 +1,7 @@
+id: pulso/wiki_read
+version: 1.0.0
+risk_class: read
+min_auth_level: session
+idempotent: true
+description: "Reads one page of the authorised wiki."
+args_schema: {type: object, additionalProperties: false, required: [path], properties: {path: {type: string}}}

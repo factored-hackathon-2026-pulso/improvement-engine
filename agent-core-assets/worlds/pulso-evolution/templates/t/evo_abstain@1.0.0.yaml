@@ -1,0 +1,4 @@
+id: t/evo_abstain
+version: 1.0.0
+locales:
+  en: "Stage notice: abstain."

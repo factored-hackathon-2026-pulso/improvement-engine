@@ -1,0 +1,4 @@
+id: t/evo_unsupported_language
+version: 1.0.0
+locales:
+  en: "Stage notice: unsupported_language."

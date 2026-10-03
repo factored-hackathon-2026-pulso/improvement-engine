@@ -1,0 +1,11 @@
+id: understand-turno
+version: 1.0.0
+output_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    command: {type: string}
+calibrated_fields: [command, flow, interrupt]
+providers: [{provider: jev}]
+calibration: {method: none}
+thresholds_from: cal-demo

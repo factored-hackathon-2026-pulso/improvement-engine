@@ -1,0 +1,5 @@
+id: t/pqr_radicado
+version: 1.0.0
+locales:
+  es: "Radicamos tu disputa con el número {{ facts.pqr_verificada.value.id }}."
+  pt: "Registramos sua contestação com o número {{ facts.pqr_verificada.value.id }}."

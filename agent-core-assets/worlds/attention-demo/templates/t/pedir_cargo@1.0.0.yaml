@@ -1,0 +1,5 @@
+id: t/pedir_cargo
+version: 1.0.0
+locales:
+  es: "¿Qué cargo quieres disputar?"
+  pt: "Qual cobrança você quer contestar?"

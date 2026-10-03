@@ -1,0 +1,6 @@
+id: radicar_pqr
+version: 1.0.0
+risk_class: write_reversible
+min_auth_level: step_up
+idempotent: true
+readback_by: idempotency_key

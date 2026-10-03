@@ -1,0 +1,22 @@
+args_schema:
+  additionalProperties: false
+  properties:
+    proposal_id:
+      type: string
+    suite_id:
+      type: string
+    suite_version:
+      type: string
+  required:
+  - proposal_id
+  - suite_id
+  type: object
+confirmation_ttl: PT5M
+description: Evalúa la candidata de la propuesta contra una suite.
+id: registry/evaluate
+idempotent: true
+min_auth_level: session
+readback_by: idempotency_key
+risk_class: write_draft
+untrusted_fields: []
+version: 1.0.0

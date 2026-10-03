@@ -1,0 +1,5 @@
+id: convertir_moneda
+version: 1.0.0
+risk_class: compute
+min_auth_level: session
+idempotent: true

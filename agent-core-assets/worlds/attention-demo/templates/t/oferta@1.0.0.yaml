@@ -1,0 +1,5 @@
+id: t/oferta
+version: 1.0.0
+locales:
+  es: "¿Seguimos con lo pendiente?"
+  pt: "Seguimos com o pendente?"

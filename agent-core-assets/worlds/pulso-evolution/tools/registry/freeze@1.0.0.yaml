@@ -1,0 +1,17 @@
+args_schema:
+  additionalProperties: false
+  properties:
+    proposal_id:
+      type: string
+  required:
+  - proposal_id
+  type: object
+confirmation_ttl: PT5M
+description: Congela la propuesta y arma la candidata.
+id: registry/freeze
+idempotent: true
+min_auth_level: session
+readback_by: idempotency_key
+risk_class: write_draft
+untrusted_fields: []
+version: 1.0.0

@@ -1,0 +1,13 @@
+id: injection-rules
+version: 1.0.0
+rules:
+  - {id: ignore-instructions-es, kind: regex, pattern: "\\b(ignora|olvida|descarta)\\b.{0,30}\\b(instrucciones|indicaciones|reglas)\\b"}
+  - {id: ignore-instructions-pt, kind: regex, pattern: "\\b(ignore|esque[cç]a|descarte)\\b.{0,30}\\b(instru[cç][õo]es|regras)\\b"}
+  - {id: ignore-instructions-en, kind: regex, pattern: "\\b(ignore|forget|disregard)\\b.{0,30}\\b(instructions|rules|guidelines)\\b"}
+  - {id: role-override-es, kind: regex, pattern: "\\b(eres|ahora eres|actúa como|finge ser)\\b.{0,20}\\b(ahora|un|una)\\b"}
+  - {id: role-override-pt, kind: regex, pattern: "\\b(você agora é|voce agora e|finja ser|aja como)\\b"}
+  - {id: role-override-en, kind: regex, pattern: "\\b(you are now|act as|pretend to be)\\b"}
+  - {id: system-prompt, kind: phrase, pattern: "system prompt"}
+  - {id: reveal-prompt-es, kind: phrase, pattern: "muestra tu prompt"}
+  - {id: fake-delimiter, kind: regex, pattern: "</?\\s*datos_no_confiables"}
+  - {id: fake-token, kind: regex, pattern: "⟦[a-z]{1,12}:[0-9]+⟧"}

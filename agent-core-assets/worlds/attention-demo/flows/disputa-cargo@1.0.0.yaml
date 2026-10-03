@@ -1,0 +1,30 @@
+id: disputa-cargo
+version: 1.0.0
+priority: 50
+nodes:
+  - {id: pedir_cargo, type: collect, config: {slot: descripcion_cargo, prompt_ref: t/pedir_cargo, max_attempts: 2},
+     next: {ok: buscar_tx, max_attempts: esc_sin_datos}}
+  - {id: buscar_tx, type: tool, config: {tool: buscar_transacciones@1, args: {texto: slots.descripcion_cargo}, save_as: candidatas},
+     next: {ok: coincide, error: esc_tool, timeout: esc_tool, denied: esc_tool}}
+  - {id: coincide, type: decide, config: {model: match-cargo@2, branch_on: match, save_as: coincide},
+     next: {unica: elegir, ninguna: aclarar, varias: aclarar, low_confidence: aclarar}}
+  - {id: elegir, type: tool, config: {tool: seleccionar@1, args: {lista: facts.candidatas.value, id: decisions.coincide.transaction}, save_as: transaccion_elegida},
+     next: {ok: a_usd, error: esc_tool, timeout: esc_tool, denied: esc_tool}}
+  - {id: a_usd, type: tool, config: {tool: convertir_moneda@1, args: {monto: facts.transaccion_elegida.value.amount, moneda: facts.transaccion_elegida.value.currency, destino: USD}, save_as: monto_usd},
+     next: {ok: umbral, error: esc_tool, timeout: esc_tool, denied: esc_tool}}
+  - {id: umbral, type: rule, config: {policy: escalamiento-disputa-monto@1}, next: {true: esc_monto, false: confirmar}}
+  - {id: confirmar, type: confirm, config: {action: {tool: radicar_pqr@1, args: {transaction_id: facts.transaccion_elegida.value.transaction_id, descripcion: slots.descripcion_cargo}}, summary_template: t/resumen_pqr},
+     next: {yes: radicar, no: fin_cancelado, unclear: confirmar, max_attempts: no_confirmado}}
+  - {id: radicar, type: tool, config: {action_from: confirmar, save_as: pqr}, next: {ok: verificar, uncertain: verificar, denied: esc_tool}}
+  - {id: verificar, type: verify, config: {readback: obtener_pqr@1, by: idempotency_key, predicate: {"==": [{var: readback.status}, "Open"]}, save_as: pqr_verificada},
+     next: {verified: responder_ok, failed: esc_verif}}
+  - {id: responder_ok, type: respond, config: {generate: {prompt_ref: p/resumen_radicado@1, allowed_facts: [facts.pqr_verificada], fallback_template_ref: t/pqr_radicado@1}, claims: [confirmar]}, next: {next: fin}}
+  - {id: fin, type: end, config: {outcome: resolved}}
+  - {id: aclarar, type: respond, config: {template_ref: t/aclarar_cargo, await: true}, next: {next: pedir_cargo}}
+  - {id: no_confirmado, type: respond, config: {template_ref: t/no_confirmado}, next: {next: fin_abstenido}}
+  - {id: fin_abstenido, type: end, config: {outcome: abstained}}
+  - {id: fin_cancelado, type: end, config: {outcome: cancelled}}
+  - {id: esc_sin_datos, type: escalate, config: {reason_code: low_confidence}}
+  - {id: esc_tool, type: escalate, config: {reason_code: tool_failure}}
+  - {id: esc_monto, type: escalate, config: {reason_code: "policy:escalamiento-disputa-monto", target_queue: disputas}}
+  - {id: esc_verif, type: escalate, config: {reason_code: verification_failed}}
