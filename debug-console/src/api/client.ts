@@ -19,15 +19,21 @@ export const onSessionExpired = (fn: () => void): (() => void) => {
   return () => { expiredListeners.delete(fn); };
 };
 const sessionGone = () => { csrf = ''; expiredListeners.forEach((fn) => fn()); };
+/** Used by the DebugApi providers so a 401 from the port flips the same session-expired state. */
+export const reportSessionExpired = sessionGone;
 
-export interface ClientConfig { provider: string; sseHeartbeatMs: number }
+export type DataProvider = 'http' | 'fixture' | 'stand-in';
+export interface ClientConfig { provider: string; sseHeartbeatMs: number; dataProvider: DataProvider; apiBase: string }
 /** public/config.json is read at runtime; absent or invalid values fall back to safe defaults (provider "unknown"). */
 export async function loadConfig(): Promise<ClientConfig> {
   try {
-    const c = (await (await fetch('/config.json', { cache: 'no-store' })).json()) as { provider?: unknown; sseHeartbeatMs?: unknown };
+    const c = (await (await fetch('/config.json', { cache: 'no-store' })).json()) as { provider?: unknown; sseHeartbeatMs?: unknown; dataProvider?: unknown; apiBase?: unknown };
     const hb = typeof c.sseHeartbeatMs === 'number' && c.sseHeartbeatMs >= 50 ? c.sseHeartbeatMs : 5000;
-    return { provider: typeof c.provider === 'string' ? c.provider : 'unknown', sseHeartbeatMs: hb };
-  } catch { return { provider: 'unknown', sseHeartbeatMs: 5000 }; }
+    // dataProvider selects the DebugApi provider (http | fixture | stand-in); anything else falls back to http, the real transport.
+    const dataProvider: DataProvider = c.dataProvider === 'fixture' || c.dataProvider === 'stand-in' ? c.dataProvider : 'http';
+    const apiBase = typeof c.apiBase === 'string' && /^(https?:\/\/[^/]+)?$/.test(c.apiBase) ? c.apiBase : '';
+    return { provider: typeof c.provider === 'string' ? c.provider : 'unknown', sseHeartbeatMs: hb, dataProvider, apiBase };
+  } catch { return { provider: 'unknown', sseHeartbeatMs: 5000, dataProvider: 'http', apiBase: '' }; }
 }
 
 async function request<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, path: string, init?: RequestInit): Promise<T> {

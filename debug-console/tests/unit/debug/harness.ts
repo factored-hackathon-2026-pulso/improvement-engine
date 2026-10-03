@@ -27,6 +27,7 @@ function serve(backend: Backend): Promise<{ base: string; close: () => Promise<v
       });
       void backend.handle(request).then(async (r) => {
         res.writeHead(r.status, Object.fromEntries(r.headers.entries()));
+        res.flushHeaders();
         if (!r.body) { res.end(); return; }
         const reader = r.body.getReader();
         try { for (;;) { const { value, done } = await reader.read(); if (done) break; res.write(value); } } catch { /* client gone */ }

@@ -46,3 +46,30 @@ describe('ProviderDeclaration', () => {
     expect((await screen.findByTestId('provider-declaration')).getAttribute('data-provider')).toBe('unverified');
   });
 });
+
+describe('provider selection is configuration (public/config.json dataProvider)', () => {
+  const stubConfig = (cfg: object) => {
+    const f = vi.fn(async (url: string) => (url === '/config.json' ? new Response(JSON.stringify(cfg), { status: 200 }) : new Response('{}', { status: 404 })));
+    vi.stubGlobal('fetch', f);
+    return f;
+  };
+  it('stand-in: the run list and the declaration come in-process, with no debug request on the network', async () => {
+    const f = stubConfig({ provider: 'fixture', dataProvider: 'stand-in', sseHeartbeatMs: 5000 });
+    const { App } = await import('../../src/app/App');
+    render(<App />);
+    expect((await screen.findByTestId('provider-declaration')).getAttribute('data-provider')).toBe('stand-in');
+    expect((await screen.findAllByRole('link', { name: /run/i })).length).toBeGreaterThan(0);
+    expect(f.mock.calls.map((c) => String(c[0])).filter((u) => u.includes('/internal/') || u.includes('/api/v1/'))).toEqual([]);
+    expect(screen.getByTestId('mode-banner').getAttribute('data-level')).toBe('stand_in');
+  });
+  it('an unknown dataProvider value falls back to http (the real transport), never to a demo', async () => {
+    const { loadConfig } = await import('../../src/api/client');
+    stubConfig({ dataProvider: 'bogus' });
+    expect((await loadConfig()).dataProvider).toBe('http');
+    stubConfig({ dataProvider: 'fixture', apiBase: 'https://control.internal.example' });
+    const c = await loadConfig();
+    expect([c.dataProvider, c.apiBase]).toEqual(['fixture', 'https://control.internal.example']);
+    stubConfig({ apiBase: 'javascript:alert(1)' });
+    expect((await loadConfig()).apiBase).toBe('');
+  });
+});
