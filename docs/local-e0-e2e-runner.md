@@ -1,8 +1,9 @@
-# Windows local E0 E2E runner
+# Windows local snapshot E2E runner
 
-The PowerShell wrapper runs the engine's explicit local-simulation mode against
-an E0 package on disk. It is intended for repeatable local checks, not business
-evaluation or release.
+The PowerShell wrappers run the engine's explicit `local-simulation` mode on
+local E0 and original-bank snapshots. They make no Agent Core, model-provider,
+or network calls. They are repeatable local checks, not business evaluation or
+release evidence.
 
 ## Prerequisites
 
@@ -12,17 +13,33 @@ evaluation or release.
   with --locked --offline, so the command does not fetch crates.
 - A local E0 package containing the expected datos/ and contratos/ layout.
 
-## Run
+## Run both sources
 
-From the repository root:
+From the repository root, provide both immutable input directories, one fresh
+output root, and a UTC whole-second cutoff:
 
-    pwsh -NoProfile -File .\scripts\run-local-e0-e2e.ps1 -InputPath 'D:\.codex\factored\pulso_muestra_e0' -OutputPath '.\output\e0-run-2026-10-02-a' -ObservedCutoff '2026-10-02T18:00:00Z'
+    pwsh -NoProfile -File .\scripts\run-local-snapshots-e2e.ps1 -E0InputPath 'D:\.codex\factored\pulso_muestra_e0' -OriginalInputPath 'D:\.codex\factored\data' -OutputRoot '.\output\snapshot-runs-2026-10-03-a' -ObservedCutoff '2026-10-03T04:00:00Z'
 
-InputPath, OutputPath, and ObservedCutoff are required. The cutoff must
-be UTC with whole-second precision. Defaults are 200 Arranque cases and a
-20-case recurrence-support floor. Override them explicitly when needed:
+The wrapper runs E0 first and original history second. It writes each run under
+separate `e0/` and `original/` directories below `OutputRoot`; each contains its
+own immutable `result.json` and `events.ndjson`. The root must not already exist
+and must not overlap either input. If either run fails after the root is created,
+existing derived artifacts are preserved; use a new root for a retry.
 
-    pwsh -NoProfile -File .\scripts\run-local-e0-e2e.ps1 -InputPath 'D:\data\e0-package' -OutputPath '.\output\e0-run-custom' -ObservedCutoff '2026-10-02T18:00:00Z' -ArranqueCases 200 -MinimumRecurringQueryCases 20
+Defaults are 200 Arranque cases and a 20-case recurrence-support floor for E0.
+The original snapshot path does not accept or use those E0-only settings.
+`ObservedCutoff` is required and must be UTC with whole-second precision.
+
+## Run one source
+
+The single-source wrapper remains available when only one dataset is needed.
+For E0:
+
+    pwsh -NoProfile -File .\scripts\run-local-e0-e2e.ps1 -InputPath 'D:\.codex\factored\pulso_muestra_e0' -OutputPath '.\output\e0-run-2026-10-03-a' -ObservedCutoff '2026-10-03T04:00:00Z' -ArranqueCases 200 -MinimumRecurringQueryCases 20
+
+For the original bank snapshot:
+
+    pwsh -NoProfile -File .\scripts\run-local-e0-e2e.ps1 -Source original -InputPath 'D:\.codex\factored\data' -OutputPath '.\output\original-run-2026-10-03-a' -ObservedCutoff '2026-10-03T04:00:00Z'
 
 The output path must not exist, must not overlap the input tree, and neither
 path may traverse an existing junction, symlink, or other reparse point in the
@@ -51,11 +68,6 @@ during the wrapper's preflight checks.
 
 ## Original-bank snapshot-only discovery
 
-The E0 PowerShell wrapper does not accept the original-bank source. For a local
-original-bank run, invoke the binary directly with a fresh output directory:
-
-    cargo +1.98.1 run --locked --offline -p improvement-engine-runner -- local-sim --mode local-simulation --source original --input 'D:\data\bank-extract' --output '.\output\original-run-2026-10-02-a' --tenant-id pulso_local --observed-cutoff '2026-10-02T18:00:00Z' --arranque-cases 1
-
 The original contact adapter emits a second, distinct projection for
 descriptive final-extract facts. It groups only rows with a valid literal
 source timestamp month and usable reason/channel codes. The `k` denominator is
@@ -79,6 +91,14 @@ or improvement. Agent Core/U13 currently has no offline snapshot-candidate
 contract; an output adapter requires a future contract extension. The top-level
 run may still carry its required invocation cutoff as run metadata, but that
 cutoff is not evidence for the snapshot-only finding or proposal.
+
+The wrapper labels this output as a descriptive draft only when it verifies the
+source-specific envelope: partial coverage, literal source wall-clock month,
+final-extract facts, `simulated_unverified`, `not_executed`,
+`publication_eligible=false`, and the dependency-blocked Agent Core marker. It
+rejects an original result that contains E0 signals, holdout output, or an
+executable proposal field. If there is no envelope, the summary reports no
+descriptive draft; it does not infer that the bank has no opportunity.
 
 ## Output and safety
 
@@ -132,16 +152,16 @@ Core request. The observed query recurrence is descriptive only. It is not
 evidence of customer friction, causality, holdout efficacy, business lift, or
 production behavior.
 
-## Test
+## Tests
 
-Run with Pester 3.4.0 installed:
+Run the Windows wrapper contract tests with Pester 3.4.0 installed:
 
     Invoke-Pester -Path .\tests\run-local-e0-e2e.Tests.ps1
 
 The Windows CI job requires the exact Pester 3.4.0 module to already be
 available and does not install or upgrade it. The tests use a temporary local
-cargo shim to verify argument construction, safe summary filtering, mandatory
-cutoff, output/input isolation (including input and output junction paths),
-no-overwrite, and sanitized failure behavior. They do not build Rust or prove
-the E0 package is valid. For a real run, use the command above against the
-local package.
+Cargo shim to verify both source dispatches, separate output directories,
+source-specific summary validation, mandatory cutoff, input/output isolation
+(including junctions), no-overwrite, and sanitized failure behavior. They do
+not build Rust or prove either input package is valid. For real local runs, use
+the commands above against the datasets.

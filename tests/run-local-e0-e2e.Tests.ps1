@@ -26,21 +26,31 @@ Describe 'run-local-e0-e2e.ps1' {
         $scriptPath = Join-Path $PSScriptRoot '..\scripts\run-local-e0-e2e.ps1'
         $script:fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('pulso-e0-script-test-' + [guid]::NewGuid().ToString('N'))
         $script:inputRoot = Join-Path $script:fixtureRoot 'input'
+        $script:originalInputRoot = Join-Path $script:fixtureRoot 'original-input'
         $script:outputRoot = Join-Path $script:fixtureRoot 'runs'
         $script:fakeBin = Join-Path $script:fixtureRoot 'bin'
-        New-Item -ItemType Directory -Path $script:inputRoot, $script:fakeBin -Force | Out-Null
+        New-Item -ItemType Directory -Path $script:inputRoot, $script:originalInputRoot, $script:fakeBin -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:inputRoot 'sentinel.txt') -Value 'input must remain unchanged'
 
         $cargoShim = @'
 @echo off
 setlocal EnableExtensions
-if defined PULSO_E2E_TEST_ARGS_FILE echo %*>"%PULSO_E2E_TEST_ARGS_FILE%"
+if defined PULSO_E2E_TEST_ARGS_FILE (
+  if "%PULSO_E2E_TEST_APPEND_ARGS%"=="1" (echo %*>>"%PULSO_E2E_TEST_ARGS_FILE%") else echo %*>"%PULSO_E2E_TEST_ARGS_FILE%"
+)
 if "%PULSO_E2E_TEST_FAIL%"=="1" exit /b 7
 set "output="
+set "source="
 :parse
 if "%~1"=="" goto write
 if "%~1"=="--output" (
   set "output=%~2"
+  shift
+  shift
+  goto parse
+)
+if "%~1"=="--source" (
+  set "source=%~2"
   shift
   shift
   goto parse
@@ -51,6 +61,14 @@ goto parse
 if not defined output exit /b 90
 if not exist "%output%" mkdir "%output%"
 mkdir "%output%\fixture-run"
+if "%source%"=="original" (
+  if "%PULSO_E2E_TEST_JSON_MODE%"=="unsafe_original_candidate" (
+    > "%output%\fixture-run\result.json" echo {"terminal_status":"snapshot_descriptive_finding_ready","source_kind":"original_bank","discovery_case_count":0,"excluded_replay_case_count":0,"signals":[],"proposal":{"status":"simulated_unverified","execution_status":"not_executed"},"snapshot_descriptive_envelope":{"agent_core_candidate":"dependency_blocked_snapshot_semantics","finding":{"coverage":"partial","temporal_basis":"literal_source_wall_clock_month","value_semantics":"final_extract_facts_only"},"proposal":{"status":"simulated_unverified","execution_status":"not_executed","publication_eligible":false,"formal_route":"do_nothing"}},"formal_route":"do_nothing","e0_recurrence_holdout":null}
+    exit /b 0
+  )
+  > "%output%\fixture-run\result.json" echo {"terminal_status":"snapshot_descriptive_finding_ready","source_kind":"original_bank","discovery_case_count":0,"excluded_replay_case_count":0,"signals":[],"proposal":null,"snapshot_descriptive_envelope":{"agent_core_candidate":"dependency_blocked_snapshot_semantics","finding":{"coverage":"partial","temporal_basis":"literal_source_wall_clock_month","value_semantics":"final_extract_facts_only"},"proposal":{"status":"simulated_unverified","execution_status":"not_executed","publication_eligible":false,"formal_route":"do_nothing"}},"formal_route":"do_nothing","e0_recurrence_holdout":null}
+  exit /b 0
+)
 if "%PULSO_E2E_TEST_JSON_MODE%"=="missing_holdout" (
   > "%output%\fixture-run\result.json" echo {"terminal_status":"complete_simulated","source_kind":"e0","discovery_case_count":200,"excluded_replay_case_count":null,"signals":[],"proposal":null,"formal_route":"do_nothing"}
   exit /b 0
@@ -81,6 +99,7 @@ exit /b 0
         $env:PULSO_E2E_TEST_ARGS_FILE = $script:argsLog
         Remove-Item Env:PULSO_E2E_TEST_FAIL -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
+        Remove-Item Env:PULSO_E2E_TEST_APPEND_ARGS -ErrorAction SilentlyContinue
     }
 
     AfterAll {
@@ -88,6 +107,7 @@ exit /b 0
         Remove-Item Env:PULSO_E2E_TEST_ARGS_FILE -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_FAIL -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
+        Remove-Item Env:PULSO_E2E_TEST_APPEND_ARGS -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $script:fixtureRoot) {
             Remove-Item -LiteralPath $script:fixtureRoot -Recurse -Force
         }
@@ -117,6 +137,161 @@ exit /b 0
         Assert-True (Test-Path -LiteralPath $script:inputRoot) 'Input directory was removed.'
         if ((Get-Content -LiteralPath (Join-Path $script:inputRoot 'sentinel.txt') -Raw).Trim() -ne 'input must remain unchanged') {
             throw 'Input file was modified.'
+        }
+    }
+
+    It 'runs an original-bank snapshot through the public wrapper without calling a provider' {
+        $originalOutput = Join-Path $script:fixtureRoot 'original-output'
+        $output = & $scriptPath -Source original -InputPath $script:inputRoot -OutputPath $originalOutput -ObservedCutoff '2026-10-02T18:00:00Z'
+        $text = $output -join [Environment]::NewLine
+        Assert-Contains $text 'Source: original_bank'
+        Assert-Contains $text 'Descriptive draft: descriptive_status=simulated_unverified; execution=not_executed; publication_eligible=false; agent_core=dependency_blocked_snapshot_semantics'
+        Assert-DoesNotContain $text 'DO_NOT_PRINT_THIS|pulso-e0-script-test'
+
+        $args = Get-Content -LiteralPath $script:argsLog -Raw
+        Assert-Contains $args 'local-sim.*--mode local-simulation.*--source original'
+        Assert-DoesNotContain $args '--arranque-cases'
+        Assert-DoesNotContain $args '--min-recurring-query-cases'
+
+        $env:PULSO_E2E_TEST_JSON_MODE = 'unsafe_original_candidate'
+        $unsafeOutput = Join-Path $script:fixtureRoot 'unsafe-original-output'
+        $unsafeRejected = $false
+        $unsafeMessage = ''
+        try {
+            $null = & $scriptPath -Source original -InputPath $script:originalInputRoot -OutputPath $unsafeOutput -ObservedCutoff '2026-10-02T18:00:00Z'
+        }
+        catch {
+            $unsafeRejected = $true
+            $unsafeMessage = $_.Exception.Message
+        }
+        finally {
+            Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
+        }
+        Assert-True $unsafeRejected 'The original-bank wrapper accepted an executable-looking proposal field.'
+        Assert-DoesNotContain $unsafeMessage 'DO_NOT_PRINT_THIS|candidate|hypothesis'
+    }
+
+    It 'rejects explicitly supplied E0-only options for original source before invoking Cargo' {
+        $incompatibleArguments = @(
+            @{ Name = 'ArranqueCases'; Value = 50 },
+            @{ Name = 'MinimumRecurringQueryCases'; Value = 25 }
+        )
+        foreach ($incompatibleArgument in $incompatibleArguments) {
+            Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
+            $thrown = $false
+            $arguments = @{
+                Source = 'original'
+                InputPath = $script:originalInputRoot
+                OutputPath = Join-Path $script:fixtureRoot ('original-with-' + $incompatibleArgument.Name)
+                ObservedCutoff = '2026-10-02T18:00:00Z'
+            }
+            $arguments[$incompatibleArgument.Name] = $incompatibleArgument.Value
+            try {
+                & $scriptPath @arguments | Out-Null
+            }
+            catch {
+                $thrown = $true
+            }
+
+            Assert-True $thrown "An explicitly supplied E0-only option '$($incompatibleArgument.Name)' was silently ignored for original source."
+            Assert-True (-not (Test-Path -LiteralPath $script:argsLog)) "Cargo ran despite incompatible E0-only option '$($incompatibleArgument.Name)'."
+        }
+    }
+
+    It 'runs E0 and original-bank snapshots into separate fresh outputs with source-specific summaries' {
+        $combinedScript = Join-Path $PSScriptRoot '..\scripts\run-local-snapshots-e2e.ps1'
+        $outputRoot = Join-Path $script:fixtureRoot 'both-sources-output'
+        Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
+        $env:PULSO_E2E_TEST_APPEND_ARGS = '1'
+        try {
+            $output = & $combinedScript `
+                -E0InputPath $script:inputRoot `
+                -OriginalInputPath $script:originalInputRoot `
+                -OutputRoot $outputRoot `
+                -ObservedCutoff '2026-10-02T18:00:00Z'
+            $text = $output -join [Environment]::NewLine
+            Assert-Contains $text '=== E0 source run ==='
+            Assert-Contains $text 'Source: e0'
+            Assert-Contains $text '=== Original-bank source run ==='
+            Assert-Contains $text 'Source: original_bank'
+            Assert-Contains $text 'dependency_blocked_snapshot_semantics'
+            Assert-Contains $text 'Both local-simulation source runs completed'
+            Assert-DoesNotContain $text 'pulso-e0-script-test|DO_NOT_PRINT_THIS'
+
+            $e0Result = @(Get-ChildItem -LiteralPath (Join-Path $outputRoot 'e0') -Filter 'result.json' -Recurse)
+            $originalResult = @(Get-ChildItem -LiteralPath (Join-Path $outputRoot 'original') -Filter 'result.json' -Recurse)
+            Assert-True ($e0Result.Count -eq 1) 'E0 result was not written to its dedicated output directory.'
+            Assert-True ($originalResult.Count -eq 1) 'Original-bank result was not written to its dedicated output directory.'
+
+            $args = Get-Content -LiteralPath $script:argsLog -Raw
+            Assert-Contains $args '--offline.*--source e0'
+            Assert-Contains $args '--offline.*--source original'
+            Assert-Contains $args 'local-sim.*--mode local-simulation'
+            Assert-DoesNotContain $args 'openrouter|https?://|provider'
+        }
+        finally {
+            Remove-Item Env:PULSO_E2E_TEST_APPEND_ARGS -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'rejects an existing combined output root before invoking Cargo' {
+        $combinedScript = Join-Path $PSScriptRoot '..\scripts\run-local-snapshots-e2e.ps1'
+        $existingRoot = Join-Path $script:fixtureRoot 'existing-both-sources-output'
+        New-Item -ItemType Directory -Path $existingRoot -Force | Out-Null
+        $sentinel = Join-Path $existingRoot 'keep.txt'
+        Set-Content -LiteralPath $sentinel -Value 'do not overwrite'
+        Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
+
+        $thrown = $false
+        try {
+            & $combinedScript `
+                -E0InputPath $script:inputRoot `
+                -OriginalInputPath $script:originalInputRoot `
+                -OutputRoot $existingRoot `
+                -ObservedCutoff '2026-10-02T18:00:00Z' | Out-Null
+        }
+        catch {
+            $thrown = $true
+        }
+        Assert-True $thrown 'An existing combined output root was accepted.'
+        Assert-True ((Get-Content -LiteralPath $sentinel -Raw).Trim() -eq 'do not overwrite') 'Existing output was modified.'
+        Assert-True (-not (Test-Path -LiteralPath $script:argsLog)) 'Cargo ran despite the existing output root.'
+    }
+
+    It 'rejects a combined output root through a junction before creating source outputs' {
+        $combinedScript = Join-Path $PSScriptRoot '..\scripts\run-local-snapshots-e2e.ps1'
+        $junction = Join-Path ([System.IO.Path]::GetTempPath()) ('pulso-both-sources-junction-' + [guid]::NewGuid().ToString('N'))
+        $junctionCreated = $false
+        try {
+            New-Item -ItemType Junction -Path $junction -Target $script:inputRoot -ErrorAction Stop | Out-Null
+            $junctionCreated = $true
+        }
+        catch {
+            throw 'Could not create a temporary Windows junction; the combined-output alias regression cannot be exercised.'
+        }
+
+        try {
+            Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
+            $aliasedOutput = Join-Path $junction 'combined-output'
+            $thrown = $false
+            try {
+                & $combinedScript `
+                    -E0InputPath $script:inputRoot `
+                    -OriginalInputPath $script:originalInputRoot `
+                    -OutputRoot $aliasedOutput `
+                    -ObservedCutoff '2026-10-02T18:00:00Z' | Out-Null
+            }
+            catch {
+                $thrown = $true
+            }
+            Assert-True $thrown 'The combined wrapper accepted an output root through an input junction.'
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $script:inputRoot 'combined-output'))) 'The aliased output root contaminated the input.'
+            Assert-True (-not (Test-Path -LiteralPath $script:argsLog)) 'Cargo ran before the combined output alias was rejected.'
+        }
+        finally {
+            if ($junctionCreated -and (Test-Path -LiteralPath $junction)) {
+                [System.IO.Directory]::Delete($junction, $false)
+            }
         }
     }
 
