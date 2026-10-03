@@ -51,7 +51,7 @@ def _text(value: Any) -> Any:
 class Reconciler:
     def __init__(self, *, store: ReceiptStore, runs: RunReader, writes: WriteProbe | None = None,
                  bindings: BindingLookup | None = None, projector: FactProjector | None = None,
-                 commitment_check: Callable[[Receipt, dict[str, Any]], bool] | None = None,
+                 commitment_check: Callable[[Receipt, str, dict[str, Any]], bool] | None = None,
                  expected_writes: Callable[[Receipt], Sequence[str]] = lambda r: ()) -> None:
         self._store, self._runs, self._writes, self._bindings = store, runs, writes, bindings
         self._projector, self._check, self._expected = projector, commitment_check, expected_writes
@@ -130,7 +130,7 @@ class Reconciler:
                 return self._move(receipt, "unknown", "get_write_unavailable", core_run_id=run_id)
             if found is not None:
                 present.append(key)
-                if self._check is not None and not self._check(receipt, found):
+                if self._check is None or not self._check(receipt, key, found):  # no verifier == unverifiable
                     return self._move(receipt, "manual_reconcile", "commitment_mismatch", core_run_id=run_id,
                                       adopted=present)
         if present:

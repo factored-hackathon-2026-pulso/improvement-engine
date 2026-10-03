@@ -75,6 +75,16 @@ def _commitment(dto: Any) -> Any:
         operations=tuple(dto.operations))
 
 
+def _commitment_json(c: Any) -> dict[str, Any] | None:
+    if c is None:
+        return None
+    return {"mode": c.mode, "proposal_id": c.proposal_id, "expected_rev": c.expected_rev,
+            "base_release_id": c.base_release_id, "evaluate_enabled": c.evaluate_enabled,
+            "evaluation_context_ref": c.evaluation_context_ref, "create_agent_id": c.create_agent_id,
+            "create_origin": c.create_origin, "create_title": c.create_title,
+            "put_draft_digest": c.put_draft_digest, "operations": list(c.operations)}
+
+
 def error_body(exc: BridgeError, trace_id: str = "") -> dict[str, Any]:
     return {"schema_version": "1", "code": exc.code, "retryable": exc.retryable, "trace_id": trace_id,
             "details": exc.details}
@@ -231,7 +241,7 @@ class InvokeService:
             command_key=key, request_digest=digest, bridge_instance_id=self._settings.bridge_instance_id,
             expires_at=now + self._settings.context_ttl,
             memory_snapshot_ref=inv.memory_snapshot_ref, extract_manifest_ref=inv.extract_manifest_ref,
-            commitment=_commitment(inv.registry_mutation_commitment))
+            commitment=_commitment(inv.registry_mutation_commitment), inputs=dict(inv.input))
         try:
             self._registry.register(ctx)
         except ValueError:  # same key re-entering after a lost CAS: keep the first frozen context
@@ -242,7 +252,9 @@ class InvokeService:
                                 {"tenant_id": tenant, "job_id": inv.job_id, "stage": inv.stage,
                                  "attempt": inv.attempt, **extra,
                                  "operations": list(ctx.commitment.operations) if ctx.commitment else [],
-                                 "evaluation_context_ref": ctx.evaluation_context_ref}, ctx.expires_at)
+                                 "evaluation_context_ref": ctx.evaluation_context_ref,
+                                 # the sealed commitment, so a crashed writer's adopted writes can be verified
+                                 "commitment": _commitment_json(ctx.commitment)}, ctx.expires_at)
         sent = await asyncio.to_thread(self._store.transition, tenant, key, "sent")
         if sent is None:  # lost the CAS: someone else owns this key
             self._registry.remove(ref)

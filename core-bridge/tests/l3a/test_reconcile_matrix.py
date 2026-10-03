@@ -135,7 +135,7 @@ def test_write_executed_with_lost_commit_is_adopted_and_verified(store: ReceiptS
     writes = Writes(present={"w-create": {"proposal_id": "p1"}})
     verified: list[Any] = []
     rec = _rec(store, Runs(), writes, Bindings({("t", "k"): {"core_run_id": "run-7"}}),
-               commitment_check=lambda r, w: verified.append(w) or True)
+               commitment_check=lambda r, k, w: verified.append(w) or True)
     res = rec.reconcile(_sent(store))
     assert res.state == "manual_reconcile" and res.adopted_writes == ["w-create"] and verified
     assert res.proven_no_effect is False
@@ -143,7 +143,7 @@ def test_write_executed_with_lost_commit_is_adopted_and_verified(store: ReceiptS
 
 def test_adopted_write_that_breaks_the_commitment_is_flagged(store: ReceiptStore) -> None:
     rec = _rec(store, Runs(), Writes(present={"w-put": {"x": 1}}), Bindings({("t", "k"): {"core_run_id": "r"}}),
-               commitment_check=lambda r, w: False)
+               commitment_check=lambda r, k, w: False)
     assert rec.reconcile(_sent(store)).reason == "commitment_mismatch"
 
 
@@ -177,3 +177,12 @@ def test_adopted_result_with_projection_missing_fact_fails_the_stage(store: Rece
     runs = Runs(stored={("p", "k"): ("h", RESULT)}, runs={"run-7": FakeRunState("run-7")})
     res = _rec(store, runs, Writes(), Bindings(), projector=proj).reconcile(_sent(store, "binding_confirmed"))
     assert res.state == "terminal_failed" and res.reason == "output_missing"
+
+
+def test_adopted_write_without_a_commitment_check_is_never_trusted(store: ReceiptStore) -> None:
+    """No verifier wired == unverifiable == `commitment_mismatch` (fail closed), never a silent adoption."""
+    rec = _rec(store, Runs(), Writes(present={"w-create": {"op": "create_proposal"}}),
+               Bindings({("t", "k"): {"core_run_id": "r"}}))
+    res = rec.reconcile(_sent(store))
+    assert (res.state, res.reason) == ("manual_reconcile", "commitment_mismatch")
+    assert res.adopted_writes == ["w-create"]
