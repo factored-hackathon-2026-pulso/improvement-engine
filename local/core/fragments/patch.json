@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "delivered_by": "claude",
+  "entries": [
+    {
+      "target": "local/compose.yaml",
+      "op": "add_service",
+      "anchor": "name",
+      "fragment_path": "local/core/fragments/include.fragment.yaml",
+      "fragment_sha256": "91c65ba8e758152de31c8c2b5c18af69e469120c900be2b39d08aa7a53bbc635",
+      "requires_owner_ack": true,
+      "note": "include: the Core stack under the same project-name rule; also make core-egress non-internal (CLQ-34, TBV)"
+    },
+    {
+      "target": "local/compose.yaml",
+      "op": "add_service",
+      "anchor": "services",
+      "fragment_path": "local/core/fragments/otel-collector.yaml",
+      "fragment_sha256": "9e0d7067b42640b9c729c2e351392339f3cb1458011030595bf3062ff4bdc181",
+      "requires_owner_ack": true,
+      "note": "optional OTel collector; owner pins the image digest"
+    },
+    {
+      "target": ".github/workflows/ci.yml",
+      "op": "add_job",
+      "anchor": "jobs",
+      "fragment_path": "local/core/fragments/ci.fragment.yml",
+      "fragment_sha256": "90dfdcdc111e7834a6685cde5773f661934d60d7fc6be4ea5c5c0bdacddc6ce1",
+      "requires_owner_ack": true,
+      "note": "jobs call core-bridge/scripts/ci.ps1 -Job <name> (script owned by the bridge package)"
+    }
+  ]
+}

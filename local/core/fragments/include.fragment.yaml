@@ -1,0 +1,3 @@
+include:
+  - path: ./core/compose.core.yaml
+    env_file: ./core/profiles/real_local.env.example

@@ -1,0 +1,248 @@
+# Core stack model (plan 17.3.8 / 17.9.4). INCLUDABLE: carries no host ports, no top-level project name and no secret
+# values (names only, interpolated from the env file generated into the git-ignored local/.secrets/<ns>/).
+#
+# Podman cgroup workaround (pulso-dev): on this WSL machine the `pids` cgroup controller is not delegated, so a plain
+# `compose up` fails with "crun: controller `pids` is not available" (verified, rootless and rootful). Compose cannot
+# express `--cgroups=disabled`, so every service carries runner labels (com.pulso.runner.cgroups=disabled,
+# com.pulso.runner.pids_limit=0) and local/core/lib/runner.ps1 renders the model (`docker-compose config`) and creates the
+# containers with `podman create --cgroups=disabled --pids-limit=0`. (Labels, not `x-*` keys: `compose config` drops
+# extension keys.) A consumer with a cgroup-capable machine can ignore the labels. `mem_limit` is declared but only
+# enforced where the memory controller works (doctor: memory_limit_unenforced).
+#
+# com.pulso.runner.copy = JSON [{src,dest}]: files copied into the created container before start (a remote engine cannot
+# bind-mount Windows paths). src is relative to local/core, or to the repo root with the `repo:` prefix.
+name: ${PULSO_PROJECT:-pulso-claude-dev}
+
+x-runner: &runner
+  com.pulso.runner.cgroups: disabled
+  com.pulso.runner.pids_limit: "0"
+
+x-labels: &labels
+  com.pulso.team: claude
+  com.pulso.namespace: ${PULSO_NS:-claude-dev}
+
+x-runtime-image: &runtime-image ${PULSO_CORE_IMAGE:-localhost/pulso-core-runtime:unset}
+x-sim-image: &sim-image ${PULSO_SIM_IMAGE:-localhost/pulso-platform-sim:unset}
+
+x-admin-dsn: &admin-dsn postgresql://postgres:${POSTGRES_PASSWORD:-unset}@core-postgres:5432/core_runtime
+x-app-dsn: &app-dsn postgresql://core_app:${CORE_APP_PASSWORD:-unset}@core-postgres:5432/core_runtime
+x-eval-dsn: &eval-dsn postgresql://core_eval_app:${CORE_EVAL_APP_PASSWORD:-unset}@core-postgres:5432/core_eval
+x-export-dsn: &export-dsn postgresql://exporter_ro:${EXPORTER_RO_PASSWORD:-unset}@core-postgres:5432/core_runtime
+
+services:
+  core-postgres:
+    image: docker.io/library/postgres@sha256:a85daf0dbd5e79586e850e3fe4b21b796799828ad015ce2166aeb98cc24da61c
+    profiles: [real_local, fixture]
+    # shared_buffers/max_connections per plan 17.3.8 resources table.
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=40"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-unset}
+      POSTGRES_DB: core_runtime
+      CORE_APP_PASSWORD: ${CORE_APP_PASSWORD:-unset}
+      CORE_EVAL_APP_PASSWORD: ${CORE_EVAL_APP_PASSWORD:-unset}
+      EXPORTER_RO_PASSWORD: ${EXPORTER_RO_PASSWORD:-unset}
+    volumes:
+      - core-pgdata:/var/lib/postgresql/data
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d core_runtime && psql -U postgres -d core_runtime -Atc \"select 1 from pg_database where datname='core_eval'\" | grep -q 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    labels:
+      <<: [*labels, *runner]
+      com.pulso.runner.copy: '[{"src":"init/00-roles-and-dbs.sh","dest":"/docker-entrypoint-initdb.d/00-roles-and-dbs.sh"},{"src":"init/00-roles-and-dbs.sql","dest":"/opt/pulso-init/00-roles-and-dbs.sql"}]'
+    networks:
+      core-net:
+        aliases: [postgres-core, core-postgres]
+
+  core-migrate:
+    image: *runtime-image
+    profiles: [real_local, fixture]
+    command: ["migrate", "--app-role", "core_app"]
+    environment:
+      AGENTCORE_REGISTRY_DSN: *admin-dsn
+      AGENTCORE_EVAL_DSN: postgresql://postgres:${POSTGRES_PASSWORD:-unset}@core-postgres:5432/core_eval
+    depends_on:
+      core-postgres: {condition: service_healthy}
+    mem_limit: 256m
+    restart: "no"
+    labels: {<<: [*labels, *runner]}
+    networks: [core-net]
+
+  core-grants:
+    image: docker.io/library/postgres@sha256:a85daf0dbd5e79586e850e3fe4b21b796799828ad015ce2166aeb98cc24da61c
+    profiles: [real_local, fixture]
+    entrypoint: ["sh", "-c", "psql \"$$CORE_ADMIN_DSN\" -v ON_ERROR_STOP=1 -f /init/10-exporter-grants.sql -f /init/20-seed-state.sql && psql \"$$CORE_EVAL_ADMIN_DSN\" -v ON_ERROR_STOP=1 -f /init/15-eval-grants.sql"]
+    environment:
+      CORE_ADMIN_DSN: *admin-dsn
+      CORE_EVAL_ADMIN_DSN: postgresql://postgres:${POSTGRES_PASSWORD:-unset}@core-postgres:5432/core_eval
+    depends_on:
+      core-migrate: {condition: service_completed_successfully}
+    mem_limit: 256m
+    restart: "no"
+    labels:
+      <<: [*labels, *runner]
+      com.pulso.runner.copy: '[{"src":"init/10-exporter-grants.sql","dest":"/init/10-exporter-grants.sql"},{"src":"init/15-eval-grants.sql","dest":"/init/15-eval-grants.sql"},{"src":"init/20-seed-state.sql","dest":"/init/20-seed-state.sql"}]'
+    networks: [core-net]
+
+  core-keygen:
+    image: *runtime-image
+    profiles: [real_local, fixture]
+    user: "0"
+    entrypoint: ["python", "/init/gen_keys.py"]
+    environment:
+      PULSO_KEYS_DIR: /run/pulso-keys
+      PULSO_TENANT_ID: ${PULSO_TENANT_ID:-tenant-local}
+    volumes:
+      - core-keys:/run/pulso-keys
+      - core-exporter-state:/var/lib/exporter
+    mem_limit: 256m
+    restart: "no"
+    labels:
+      <<: [*labels, *runner]
+      com.pulso.runner.copy: '[{"src":"init/gen_keys.py","dest":"/init/gen_keys.py"}]'
+    networks: [core-net]
+
+  core-seed:
+    image: *runtime-image
+    profiles: [real_local, fixture]
+    entrypoint: ["python", "/init/seed_assets.py"]
+    environment:
+      AGENTCORE_REGISTRY_DSN: *app-dsn
+      PULSO_ASSETS_DIR: /seed/agent-core-assets
+      PULSO_SEED_PRINCIPAL_KEYS: /run/pulso-keys/bridge-identity.json
+      PULSO_KEYS_DIR: /run/pulso-keys
+    volumes:
+      - core-keys:/run/pulso-keys:ro
+    depends_on:
+      core-grants: {condition: service_completed_successfully}
+      core-keygen: {condition: service_completed_successfully}
+    mem_limit: 256m
+    restart: "no"
+    labels:
+      <<: [*labels, *runner]
+      com.pulso.runner.copy: '[{"src":"init/seed_assets.py","dest":"/init/seed_assets.py"},{"src":"repo:agent-core-assets","dest":"/seed/agent-core-assets"}]'
+    networks: [core-net]
+
+  core-synth:
+    # fixture profile only: DOUBLE data producer (real hash chains through the pinned Core audit code, synthetic runs).
+    image: *runtime-image
+    profiles: [fixture]
+    entrypoint: ["python", "/init/synth_chain.py"]
+    environment:
+      AGENTCORE_REGISTRY_DSN: *app-dsn
+    depends_on:
+      core-seed: {condition: service_completed_successfully}
+    mem_limit: 256m
+    restart: "no"
+    labels:
+      <<: [*labels, *runner]
+      com.pulso.runner.copy: '[{"src":"init/synth_chain.py","dest":"/init/synth_chain.py"}]'
+      com.pulso.role: double
+    networks: [core-net]
+
+  core-runtime:
+    image: *runtime-image
+    profiles: [real_local]
+    command: ["runtime"]
+    environment:
+      AGENTCORE_REGISTRY_DSN: *app-dsn
+      AGENTCORE_EVAL_DSN: *eval-dsn
+      PULSO_LAB_BROKER_URL: ${PULSO_LAB_BROKER_URL:-http://platform-sim:8621}
+      PULSO_CONTROL_API_URL: ${PULSO_CONTROL_API_URL:-http://platform-sim:8621}
+      PULSO_TENANT_ID: ${PULSO_TENANT_ID:-tenant-local}
+      PULSO_IMAGE_DIGEST: ${PULSO_IMAGE_DIGEST:-unknown}
+      PULSO_KEYS_DIR: /run/pulso-keys
+      AGENTCORE_KEYS_FINGERPRINT: ${AGENTCORE_KEYS_FINGERPRINT:-}
+      AGENTCORE_KEYS_TOKEN_MAP: ${AGENTCORE_KEYS_TOKEN_MAP:-}
+      AGENTCORE_JEV_API_KEY: ${AGENTCORE_JEV_API_KEY:-}
+    volumes:
+      - core-keys:/run/pulso-keys:ro
+    depends_on:
+      core-seed: {condition: service_completed_successfully}
+      platform-sim: {condition: service_healthy}
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 4s
+      retries: 24
+      start_period: 10s
+    labels:
+      <<: [*labels, *runner]
+      com.pulso.runner.copy: '[{"src":"init/probe_version.py","dest":"/init/probe_version.py"}]'
+    networks:
+      core-net:
+        aliases: [pulso-core-runtime, core-runtime]
+
+  core-exporter:
+    image: *sim-image
+    profiles: [real_local, fixture]
+    command: ["exporter"]
+    environment:
+      CORE_EXPORT_DATABASE_URL: *export-dsn
+      PULSO_CONTROL_API_URL: ${PULSO_CONTROL_API_URL:-http://platform-sim:8621}
+      PULSO_SERVICE_KEY_REF: ${PULSO_SERVICE_KEY_REF:-file:/run/pulso-keys/exporter-control-api.key}
+      PULSO_TENANT_ID: ${PULSO_TENANT_ID:-tenant-local}
+      EXPECTED_RUNTIME_DB: core_runtime
+      EXPECTED_EVAL_DB: core_eval
+      PULSO_CORE_INSTANCE: ${PULSO_CORE_INSTANCE:-local}
+      PULSO_INGEST_BASE_URL: ${PULSO_CONTROL_API_URL:-http://platform-sim:8621}
+      PULSO_EXPORTER_BINDING_REF: ${PULSO_EXPORTER_BINDING_REF:-binding-local}
+      PULSO_EXPORTER_STATE_DIR: /var/lib/exporter
+      PULSO_EXPORTER_KEY_CONTROL_API: /run/pulso-keys/exporter-control-api.key
+      PULSO_EXPORTER_KEY_LAB_BROKER: /run/pulso-keys/exporter-lab-broker.key
+    volumes:
+      - core-keys:/run/pulso-keys:ro
+      - core-exporter-state:/var/lib/exporter
+    depends_on:
+      core-seed: {condition: service_completed_successfully}
+      platform-sim: {condition: service_healthy}
+      core-runtime: {condition: service_healthy, required: false}
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys; sys.exit(0 if os.path.exists('/var/lib/exporter/state.sqlite') else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    labels: {<<: [*labels, *runner]}
+    networks:
+      core-net:
+        aliases: [platform-exporter, core-exporter]
+
+  platform-sim:
+    # DOUBLE: registry mock + bridge mock + ingest fixture (broker/control-api semantics) in one process.
+    image: *sim-image
+    profiles: [real_local, fixture]
+    entrypoint: ["python", "/doubles/run_doubles.py"]
+    environment:
+      PYTHONPATH: /sim:/opt/pulso/lib
+      SIM_REGISTRY_PORT: "8601"
+      SIM_BRIDGE_PORT: "8611"
+      SIM_INGEST_PORT: "8621"
+    mem_limit: 192m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8621/_sim/info', timeout=3).status == 200 else 1)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+    labels:
+      <<: [*labels, *runner]
+      com.pulso.runner.copy: '[{"src":"repo:platform-sim","dest":"/sim"},{"src":"repo:core-bridge/wire","dest":"/core-bridge/wire"},{"src":"doubles/run_doubles.py","dest":"/doubles/run_doubles.py"}]'
+      com.pulso.role: double
+    networks:
+      core-net:
+        aliases: [platform-sim]
+
+networks:
+  # Non-internal on purpose (CLQ-34): host publication on `internal: true` networks is unproven on Podman.
+  core-net: {}
+
+volumes:
+  core-pgdata: {labels: *labels}
+  core-keys: {labels: *labels}
+  core-exporter-state: {labels: *labels}

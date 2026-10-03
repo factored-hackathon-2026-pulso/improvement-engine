@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "namespace": "<set at start>",
+  "services": [
+    {
+      "name": "core-exporter",
+      "dns": "platform-exporter",
+      "aliases": [
+        "platform-exporter",
+        "core-exporter"
+      ],
+      "entrypoint": "exporter",
+      "image_digest": null,
+      "image": "${PULSO_CORE_IMAGE}",
+      "internal_port": 8082,
+      "health_path": null,
+      "readiness_path": null,
+      "env_names": [
+        "CORE_EXPORT_DATABASE_URL",
+        "EXPECTED_EVAL_DB",
+        "EXPECTED_RUNTIME_DB",
+        "PULSO_CONTROL_API_URL",
+        "PULSO_CORE_INSTANCE",
+        "PULSO_EXPORTER_BINDING_REF",
+        "PULSO_EXPORTER_KEY_CONTROL_API",
+        "PULSO_EXPORTER_KEY_LAB_BROKER",
+        "PULSO_EXPORTER_STATE_DIR",
+        "PULSO_INGEST_BASE_URL",
+        "PULSO_SERVICE_KEY_REF",
+        "PULSO_TENANT_ID"
+      ],
+      "depends_on": [
+        "core-seed",
+        "platform-sim"
+      ],
+      "profiles": [
+        "real_local",
+        "fixture"
+      ],
+      "role": null
+    },
+    {
+      "name": "core-grants",
+      "dns": "core-grants",
+      "aliases": [],
+      "entrypoint": [
+        "sh",
+        "-c",
+        "psql \"$$CORE_ADMIN_DSN\" -v ON_ERROR_STOP=1 -f /init/10-exporter-grants.sql -f /init/20-seed-state.sql && psql \"$$CORE_EVAL_ADMIN_DSN\" -v ON_ERROR_STOP=1 -f /init/15-eval-grants.sql"
+      ],
+      "image_digest": "sha256:a85daf0dbd5e79586e850e3fe4b21b796799828ad015ce2166aeb98cc24da61c",
+      "image": "docker.io/library/postgres@sha256:a85daf0dbd5e79586e850e3fe4b21b796799828ad015ce2166aeb98cc24da61c",
+      "internal_port": null,
+      "health_path": null,
+      "readiness_path": null,
+      "env_names": [
+        "CORE_ADMIN_DSN",
+        "CORE_EVAL_ADMIN_DSN"
+      ],
+      "depends_on": [
+        "core-migrate"
+      ],
+      "profiles": [
+        "real_local",
+        "fixture"
+      ],
+      "role": null
+    },
+    {
+      "name": "core-keygen",
+      "dns": "core-keygen",
+      "aliases": [],
+      "entrypoint": [
+        "python",
+        "/init/gen_keys.py"
+      ],
+      "image_digest": null,
+      "image": "${PULSO_CORE_IMAGE}",
+      "internal_port": null,
+      "health_path": null,
+      "readiness_path": null,
+      "env_names": [
+        "PULSO_KEYS_DIR",
+        "PULSO_TENANT_ID"
+      ],
+      "depends_on": [],
+      "profiles": [
+        "real_local",
+        "fixture"
+      ],
+      "role": null
+    },
+    {
+      "name": "core-migrate",
+      "dns": "core-migrate",
+      "aliases": [],
+      "entrypoint": [
+        "migrate",
+        "--app-role",
+        "core_app"
+      ],
+      "image_digest": null,
+      "image": "${PULSO_CORE_IMAGE}",
+      "internal_port": null,
+      "health_path": null,
+      "readiness_path": null,
+      "env_names": [
+        "AGENTCORE_EVAL_DSN",
+        "AGENTCORE_REGISTRY_DSN"
+      ],
+      "depends_on": [
+        "core-postgres"
+      ],
+      "profiles": [
+        "real_local",
+        "fixture"
+      ],
+      "role": null
+    },
+    {
+      "name": "core-postgres",
+      "dns": "postgres-core",
+      "aliases": [
+        "postgres-core",
+        "core-postgres"
+      ],
+      "entrypoint": [
+        "postgres",
+        "-c",
+        "shared_buffers=64MB",
+        "-c",
+        "max_connections=40"
+      ],
+      "image_digest": "sha256:a85daf0dbd5e79586e850e3fe4b21b796799828ad015ce2166aeb98cc24da61c",
+      "image": "docker.io/library/postgres@sha256:a85daf0dbd5e79586e850e3fe4b21b796799828ad015ce2166aeb98cc24da61c",
+      "internal_port": 5432,
+      "health_path": null,
+      "readiness_path": null,
+      "env_names": [
+        "CORE_APP_PASSWORD",
+        "CORE_EVAL_APP_PASSWORD",
+        "EXPORTER_RO_PASSWORD",
+        "POSTGRES_DB",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_USER"
+      ],
+      "depends_on": [],
+      "profiles": [
+        "real_local",
+        "fixture"
+      ],
+      "role": null
+    },
+    {
+      "name": "core-runtime",
+      "dns": "pulso-core-runtime",
+      "aliases": [
+        "pulso-core-runtime",
+        "core-runtime"
+      ],
+      "entrypoint": "runtime",
+      "image_digest": null,
+      "image": "${PULSO_CORE_IMAGE}",
+      "internal_port": 8000,
+      "health_path": "/readyz",
+      "readiness_path": "/readyz",
+      "env_names": [
+        "AGENTCORE_EVAL_DSN",
+        "AGENTCORE_REGISTRY_DSN",
+        "PULSO_CONTROL_API_URL",
+        "PULSO_IMAGE_DIGEST",
+        "PULSO_KEYS_DIR",
+        "PULSO_LAB_BROKER_URL",
+        "PULSO_TENANT_ID"
+      ],
+      "depends_on": [
+        "core-seed",
+        "platform-sim"
+      ],
+      "profiles": [
+        "real_local"
+      ],
+      "role": null
+    },
+    {
+      "name": "core-seed",
+      "dns": "core-seed",
+      "aliases": [],
+      "entrypoint": [
+        "python",
+        "/init/seed_assets.py"
+      ],
+      "image_digest": null,
+      "image": "${PULSO_CORE_IMAGE}",
+      "internal_port": null,
+      "health_path": null,
+      "readiness_path": null,
+      "env_names": [
+        "AGENTCORE_REGISTRY_DSN",
+        "PULSO_ASSETS_DIR",
+        "PULSO_KEYS_DIR",
+        "PULSO_SEED_PRINCIPAL_KEYS"
+      ],
+      "depends_on": [
+        "core-grants",
+        "core-keygen"
+      ],
+      "profiles": [
+        "real_local",
+        "fixture"
+      ],
+      "role": null
+    },
+    {
+      "name": "core-synth",
+      "dns": "core-synth",
+      "aliases": [],
+      "entrypoint": [
+        "python",
+        "/init/synth_chain.py"
+      ],
+      "image_digest": null,
+      "image": "${PULSO_CORE_IMAGE}",
+      "internal_port": null,
+      "health_path": null,
+      "readiness_path": null,
+      "env_names": [
+        "AGENTCORE_REGISTRY_DSN"
+      ],
+      "depends_on": [
+        "core-seed"
+      ],
+      "profiles": [
+        "fixture"
+      ],
+      "role": "double"
+    },
+    {
+      "name": "platform-sim",
+      "dns": "platform-sim",
+      "aliases": [
+        "platform-sim"
+      ],
+      "entrypoint": [
+        "python",
+        "/doubles/run_doubles.py"
+      ],
+      "image_digest": null,
+      "image": "${PULSO_CORE_IMAGE}",
+      "internal_port": 8601,
+      "health_path": "/_sim/info",
+      "readiness_path": null,
+      "env_names": [
+        "PYTHONPATH",
+        "SIM_BRIDGE_PORT",
+        "SIM_INGEST_PORT",
+        "SIM_REGISTRY_PORT"
+      ],
+      "depends_on": [],
+      "profiles": [
+        "real_local",
+        "fixture"
+      ],
+      "role": "double"
+    }
+  ],
+  "migrate_commands": [
+    "agentcore migrate --app-role core_app  (env AGENTCORE_REGISTRY_DSN, AGENTCORE_EVAL_DSN: admin names, service core-migrate)"
+  ],
+  "seed_commands": [
+    "python /init/seed_assets.py  (service core-seed; idempotent via pulso_seed_state digest marker)"
+  ],
+  "limits_config_ref": "local/core/compose.core.yaml#services.*.mem_limit",
+  "notes": "Generated; do not edit. Contains env NAMES only. Doubles carry role=double."
+}

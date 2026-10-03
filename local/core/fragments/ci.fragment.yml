@@ -1,0 +1,30 @@
+  # Core bridge wire gates (plan 17.3.8). Delivered as a fragment: the owner of .github/workflows/ci.yml applies it.
+  # `core-bridge/scripts/ci.ps1` is the single entry; jobs never inline their own commands.
+  core-contract-drift:
+    name: Core contract drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job contract-drift
+  core-mock-wire:
+    name: Core mock wire
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job mock-wire
+  core-a2-wire:
+    name: Core a2 wire (in-process)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job a2-wire
+  core-real-wire:
+    name: Core real wire
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh core-bridge/scripts/ci.ps1 -Job real-wire
