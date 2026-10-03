@@ -1,0 +1,46 @@
+{
+  "$id": "CoreVersion.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agent_core_sha": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "bridge_instance_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "contracts_version": {
+      "type": "string"
+    },
+    "image_digest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pulso_sha": {
+      "type": "string"
+    },
+    "runtime_profile": {
+      "const": "contract_mock"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "agent_core_sha",
+    "contracts_version",
+    "pulso_sha",
+    "image_digest",
+    "bridge_instance_id",
+    "runtime_profile"
+  ],
+  "title": "CoreVersion",
+  "type": "object"
+}

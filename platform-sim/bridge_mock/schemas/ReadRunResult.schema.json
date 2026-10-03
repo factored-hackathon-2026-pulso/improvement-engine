@@ -1,0 +1,71 @@
+{
+  "$id": "ReadRunResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "core_run_id": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+    },
+    "facts": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "source_kind": {
+            "enum": [
+              "agent",
+              "tool"
+            ]
+          },
+          "value": {}
+        },
+        "required": [
+          "value",
+          "source_kind",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "type": "object"
+    },
+    "outcome": {
+      "enum": [
+        "completed",
+        "failed"
+      ]
+    },
+    "output_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "runtime_profile": {
+      "const": "contract_mock"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "core_run_id",
+    "status",
+    "outcome",
+    "facts",
+    "output_digest",
+    "runtime_profile"
+  ],
+  "title": "ReadRunResult",
+  "type": "object"
+}
