@@ -1,8 +1,9 @@
 // Pure, deterministic fixture world (L7). All data is synthetic; shapes follow plan 16.10 and
 // fields beyond it are consumer proposals (marked in the manifest, not on the wire here).
 export const T0 = '2026-01-01T00:00:00Z';
-export const node =(node_id, label, stage, status, depends_on = [], reason_code = null) => ({
-  node_id, label, stage, status, depends_on, reason_code, node_kind: 'material_step', job_ref: null,
+export const traceFor = (node_id) => Array.from(node_id).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(16).padStart(8, '0').repeat(4);
+export const node = (node_id, label, stage, status, depends_on = [], reason_code = null) => ({
+  node_id, label, stage, status, depends_on, reason_code, node_kind: 'material_step', job_ref: null, trace_id: traceFor(node_id),
 });
 
 export function baseWorld() {
@@ -70,7 +71,7 @@ export function baseWorld() {
       { memory_id: 'mem-1', title: 'Retry limit is not a lever', status: 'active', revoked: false },
       { memory_id: 'mem-2', title: 'Revoked claim', status: 'tombstone', revoked: true },
     ],
-    decision: { decision_id: 'dec-1', available_commands: ['approve', 'reject'], needs_step_up: true, stepped_up: false },
+    decision: { decision_id: 'dec-1', available_commands: ['approve', 'reject'], needs_step_up: true, stepped_up: false, revision: 1 },
     commands: {},
   };
 }

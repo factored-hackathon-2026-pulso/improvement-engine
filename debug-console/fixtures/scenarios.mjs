@@ -7,6 +7,7 @@ const mkEvents = (runId, n, nodeId) => Array.from({ length: n }, (_, i) => ({
   entity_ref: { kind: 'node', id: nodeId }, projection_revision: i + 1, kind: 'node_status_changed',
 }));
 const run = (run_id, title, state, revision, nodes) => ({ run_id, title, state, origin: 'scheduled', revision, nodes });
+const CANARY_ID = '123e4567-e89b-42d3-a456-426614174000';
 const POISON_JWS = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJlXzEyMzQ1';
 const evidence = (id, summary) => ({
   evidence_ref: { id, digest: 'a'.repeat(64), media_type: 'text/plain' }, relation: 'supports', summary,
@@ -91,6 +92,26 @@ export const SCENARIOS = {
       };
     },
   },
+  collector_down: {
+    fids: ['F11'], expect: { traceIds: 'null', durableEvents: 'intact' },
+    patch: (w) => {
+      only(w, { 'run-collector': run('run-collector', 'Collector down: durable timeline only', 'running', 2, [
+        node('scout', 'Scout sources', 'scout', 'complete'),
+        node('hypothesis', 'Form hypothesis', 'hypothesis', 'running', ['scout']),
+      ]) });
+      for (const n of w.runs['run-collector'].nodes) n.trace_id = null;
+    },
+  },
+  canary: {
+    fids: [], expect: { canary: 'CANARY_SECRET' },
+    patch: (w) => {
+      only(w, { 'run-canary': run('run-canary', 'Canary markers must never persist', 'completed', 1, [node('scout', 'Scout sources', 'scout', 'complete')]) });
+      w.investigation = { 'run-canary': {
+        hypothesis: `leaked CANARY_SECRET_${CANARY_ID} in a hypothesis`, verifier: 'unknown',
+        evidence: [evidence('c1', `summary with CANARY_SECRET_${CANARY_ID} and ${POISON_JWS}`)],
+      } };
+    },
+  },
   bot_vs_human: {
     fids: ['F25'], expect: { availableCommands: [] },
     patch: (w) => { w.decision.available_commands = []; w.decision.needs_step_up = false; },
@@ -112,9 +133,9 @@ export const SCENARIOS = {
 export const F_COVERAGE = {
   F01: 'scenario:empty', F02: 'scenario:default', F03: 'scenario:default', F04: 'scenario:positive', F05: 'scenario:default',
   F06: 'scenario:fail_revise', F07: 'scenario:failed_infra', F08: 'scenario:default', F09: 'scenario:default',
-  F10: 'scenario:default', F11: 'gap:collector_down_trace_panel_not_built', F12: 'scenario:cancel_requested', F13: 'scenario:cancel_confirmed',
+  F10: 'scenario:default', F11: 'scenario:collector_down', F12: 'scenario:cancel_requested', F13: 'scenario:cancel_confirmed',
   F14: 'control:deliver', F15: 'control:deliver', F16: 'control:deliver', F17: 'control:fault_gone', F18: 'control:cut',
-  F19: 'control:fault_unauthorized', F20: 'scenario:forbidden_cross_tenant', F21: 'gap:expected_revision_not_sent_by_client',
+  F19: 'control:fault_unauthorized', F20: 'scenario:forbidden_cross_tenant', F21: 'control:bump_decision',
   F22: 'scenario:default', F23: 'scenario:poison_notes', F24: 'scenario:large_run', F25: 'scenario:bot_vs_human',
 };
 

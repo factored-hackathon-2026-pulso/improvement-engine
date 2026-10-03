@@ -4,7 +4,11 @@ import { makeScenario } from '../fixtures/scenarios.mjs';
 
 let scenario = 'default';
 let world = makeScenario(scenario);
-let faults = { stream: null }; // 'gone' (410 once) | 'unauthorized' (401 until reset)
+const freshFaults = () => ({ stream: null, api: null, session: null, stepup: null });
+let faults = freshFaults(); // stream: 'gone' (410 once) | 'unauthorized'; api: 'unauthorized'; session|stepup: 'down' (503)
+const hb = { ms: 5000, muted: false }; // SSE heartbeat cadence; muted simulates a silent but connected stream
+// Opaque loopback-HTTP session cookie (plan 16.13.6): pulso_local_session, never __Host- over plain HTTP.
+const SESSION_COOKIE = `pulso_local_session=${randomUUID().replaceAll('-', '')}; HttpOnly; SameSite=Lax; Path=/`;
 const sseClients = new Set();
 const CSRF = 'fixture-csrf-token';
 const PORT = Number(process.env.FIXTURE_PORT ?? 4010);
@@ -16,8 +20,8 @@ const env = (entity_ref, rev, status, extra = {}) => ({
   next_automatic_action: null, available_commands: [], links: [],
   coverage: { status: 'complete', observed_count: null, expected_count: null, reason_code: null }, ...extra,
 });
-const send = (res, code, body) => {
-  res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+const send = (res, code, body, headers = {}) => {
+  res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
 };
 const problem = (res, code, status, extra = {}) => send(res, status, {
@@ -58,7 +62,8 @@ const server = http.createServer(async (req, res) => {
       try { world = makeScenario(next); scenario = next; } catch { return send(res, 400, { code: 'unknown_scenario' }); }
       for (const c of sseClients) c.res.end();
       sseClients.clear();
-      faults = { stream: null };
+      faults = freshFaults();
+      hb.ms = 5000; hb.muted = false;
       return send(res, 200, { ok: true, scenario });
     }
     if (p === '/__fixture/deliver') { // push existing log entries as raw SSE frames, in the given order (dup/reorder/gap)
@@ -78,9 +83,22 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/__fixture/fault') {
       const b = await readBody(req);
-      if (!b || !['gone', 'unauthorized', null].includes(b.stream ?? null)) return send(res, 400, { code: 'bad_fault' });
-      faults.stream = b.stream ?? null;
+      const allowed = { stream: ['gone', 'unauthorized'], api: ['unauthorized'], session: ['down'], stepup: ['down'] };
+      const ok = b && Object.keys(b).every((k) => k in allowed && (b[k] === null || allowed[k].includes(b[k])));
+      if (!ok) return send(res, 400, { code: 'bad_fault' });
+      for (const k of Object.keys(b)) faults[k] = b[k];
       return send(res, 200, { ok: true });
+    }
+    if (p === '/__fixture/heartbeat') {
+      const b = await readBody(req);
+      if (!b || (b.ms !== undefined && !(Number.isInteger(b.ms) && b.ms >= 50)) || (b.muted !== undefined && typeof b.muted !== 'boolean')) return send(res, 400, { code: 'bad_heartbeat' });
+      if (b.ms !== undefined) hb.ms = b.ms;
+      if (b.muted !== undefined) hb.muted = b.muted;
+      return send(res, 200, { ok: true, ...hb });
+    }
+    if (p === '/__fixture/bump_decision') { // another actor changed the decision target: its domain revision moves
+      world.decision.revision += 1;
+      return send(res, 200, { revision: world.decision.revision });
     }
     if (p === '/__fixture/cut') { // simulate a dropped transport / API restart: end every open stream
       for (const c of sseClients) c.res.end();
@@ -90,15 +108,18 @@ const server = http.createServer(async (req, res) => {
     if (p === '/__fixture/state') return send(res, 200, world);
     return send(res, 404, { code: 'not_found' });
   }
+  if (faults.api === 'unauthorized' && (p.startsWith(PREFIX) || p === '/api/v1/auth/step-up')) return problem(res, 'session_expired', 401);
   if (p === '/api/v1/auth/session') {
+    if (faults.session === 'down') return problem(res, 'dependency_unavailable', 503);
     return send(res, 200, {
       principal: 'fixture-human', tenant_id: 'tenant-fixture', scopes: ['debug/read', 'evolution/decide'],
       expires_at: '2099-01-01T00:00:00Z', csrf_token: CSRF,
       auth: { simulated: true, level: world.decision.stepped_up ? 'step_up' : 'basic', auth_at: '2026-01-01T00:00:00Z' },
-    });
+    }, { 'set-cookie': SESSION_COOKIE });
   }
   if (p === '/api/v1/auth/step-up' && m === 'POST') {
     if (req.headers['x-csrf-token'] !== CSRF) return problem(res, 'csrf_failed', 403);
+    if (faults.stepup === 'down') return problem(res, 'dependency_unavailable', 503);
     world.decision.stepped_up = true;
     return send(res, 200, { level: 'step_up' });
   }
@@ -128,7 +149,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (kind === 'gates') return send(res, 200, { ...env(ref, run.revision, 'ok'), ...world.gates });
     if (faults.stream === 'unauthorized') return problem(res, 'session_expired', 401);
-    if (faults.stream === 'gone') { faults.stream = null; return problem(res, 'cursor_purged', 410); }
+    if (faults.stream === 'gone') {
+      faults.stream = null; // 410 body per CLQ-24: Problem{code:cursor_expired, current_ref, recovery_after_sequence, snapshot_url}
+      return problem(res, 'cursor_expired', 410, {
+        current_ref: ref, recovery_after_sequence: world.events[run.run_id].length, snapshot_url: `${PREFIX}/runs/${run.run_id}/graph`,
+      });
+    }
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(': open\n\n');
     const resumeFrom = Number(req.headers['last-event-id'] ?? 0);
@@ -137,8 +163,8 @@ const server = http.createServer(async (req, res) => {
     }
     const c ={ res, runId: run.run_id };
     sseClients.add(c);
-    const hb = setInterval(() => res.write(': hb\n\n'), 5000);
-    req.on('close', () => { clearInterval(hb); sseClients.delete(c); });
+    const hbTimer = setInterval(() => { if (!hb.muted) res.write(': hb\n\n'); }, hb.ms);
+    req.on('close', () => { clearInterval(hbTimer); sseClients.delete(c); });
     return undefined;
   }
   if (p === `${PREFIX}/proposals/prop-1/diff`) {
@@ -148,7 +174,7 @@ const server = http.createServer(async (req, res) => {
   if (p === `${PREFIX}/decisions/dec-1`) {
     return send(res, 200, {
       ...env({ kind: 'decision', id: 'dec-1' }, 1, 'pending', { available_commands: world.decision.available_commands }),
-      needs_step_up: world.decision.needs_step_up && !world.decision.stepped_up,
+      needs_step_up: world.decision.needs_step_up && !world.decision.stepped_up, domain_revision: world.decision.revision,
     });
   }
   if (p === `${PREFIX}/decisions/dec-1/responses` && m === 'POST') {
@@ -158,6 +184,14 @@ const server = http.createServer(async (req, res) => {
     const b = await readBody(req);
     if (!b || typeof b.note !== 'string') {
       return problem(res, 'validation_error', 422, { field_errors: [{ field: 'note', code: 'must_be_string' }] });
+    }
+    if (!Number.isInteger(b.expected_revision)) {
+      return problem(res, 'validation_error', 422, { field_errors: [{ field: 'expected_revision', code: 'required_integer' }] });
+    }
+    if (b.expected_revision !== world.decision.revision) { // CAS on the decision's domain revision, never a silent overwrite
+      return problem(res, 'stale_revision', 409, {
+        conflict: { expected_revision: b.expected_revision, current_revision: world.decision.revision, diff_ref: null },
+      });
     }
     if (world.decision.needs_step_up && !world.decision.stepped_up) return problem(res, 'waiting_human_reauthentication', 403);
     const id = `cmd-${key}`;
