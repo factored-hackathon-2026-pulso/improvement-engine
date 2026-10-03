@@ -1,11 +1,12 @@
 // Pure helpers for the own SSE reader: backoff, close classification, frame parsing.
-export const BACKOFF_BASE_MS = 500;
-export const BACKOFF_CAP_MS = 15000;
+// Plan 16.13.4: backoff 1-30 s with jitter.
+export const BACKOFF_MIN_MS = 1000;
+export const BACKOFF_CAP_MS = 30000;
 
-/** Full-jitter exponential backoff. `random` is injected so tests need no timers. */
+/** Exponential ceiling (1 s, 2 s, 4 s ... 30 s) with jitter drawn from [1 s, ceiling]. `random` is injected so tests need no timers. */
 export const backoffDelay = (attempt: number, random: () => number = Math.random): number => {
-  const ceiling = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** attempt);
-  return Math.floor(ceiling * random());
+  const ceiling = Math.min(BACKOFF_CAP_MS, BACKOFF_MIN_MS * 2 ** Math.min(attempt, 30));
+  return BACKOFF_MIN_MS + Math.floor((ceiling - BACKOFF_MIN_MS) * random());
 };
 
 export type CloseAction = 'retry' | 'resnapshot' | 'session_expired' | 'forbidden';
