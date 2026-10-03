@@ -49,3 +49,14 @@ describe('App session handling', () => {
     expect(container.querySelectorAll('[aria-live],[role=status],[role=alert],[role=log]')).toHaveLength(1);
   });
 });
+
+describe("App sources route", () => {
+  it("#/sources renders the Sources view and the nav links to it", async () => {
+    stub(() => json(200, session));
+    window.location.hash = "#/sources";
+    render(<App />);
+    expect(await screen.findByTestId("sources-standin")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Fuentes" }).getAttribute("href")).toBe("#/sources");
+    window.location.hash = "";
+  });
+});

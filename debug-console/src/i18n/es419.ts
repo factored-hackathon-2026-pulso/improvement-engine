@@ -1,5 +1,7 @@
 // UI strings: es-419. Machine codes (status, reason_code, scenario ids) are shown verbatim, never translated.
+import { SOURCES_ES } from './sources';
 export const ES_419 = {
+  ...SOURCES_ES,
   'app.title': 'Consola de depuración de Pulso',
   'nav.label': 'Principal',
   'nav.runs': 'Ejecuciones',

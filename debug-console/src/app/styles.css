@@ -34,3 +34,11 @@ table.alts { border-collapse: collapse; } table.alts th, table.alts td { border:
 .node { color: #1a1a1a; max-width: 220px; }
 a { color: #0b3d91; }
 .banner.stand_in { font-size: .8rem; line-height: 1.25; padding: 4px 8px; }
+
+.source { border-top: 2px solid #555; margin-top: 16px; }
+.source code { background: #eef0f3; color: #1a1a1a; padding: 0 4px; border-radius: 3px; }
+.source small { color: #444; }
+.source dl > div { display: flex; gap: 12px; padding: 2px 0; } .source dt { min-width: 320px; } .source dd { margin: 0; font-weight: 600; }
+.source tr[data-status="unsupported"] td, .source tr[data-status="insufficient_human_evidence"] td { border-left: 6px solid #8a5a00; }
+.source tr[data-status="eligible"] td { border-left: 6px solid #1b7f3b; }
+.card[data-status] { border-left: 6px solid #8a5a00; list-style: none; }
