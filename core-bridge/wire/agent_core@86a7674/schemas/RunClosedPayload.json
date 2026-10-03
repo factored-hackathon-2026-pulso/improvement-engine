@@ -1,0 +1,45 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Outcome": {
+      "description": "Resultado final de un run (M0 §2.7).",
+      "enum": [
+        "resolved",
+        "abstained",
+        "cancelled",
+        "clarify_exhausted",
+        "completed",
+        "failed",
+        "abandoned",
+        "escalated",
+        "transferred"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `run_closed` (vista audit, M0 §2.10).",
+  "properties": {
+    "closed_by": {
+      "enum": [
+        "flow",
+        "abandonment",
+        "escalation",
+        "revocation",
+        "transfer"
+      ],
+      "title": "Closed By",
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/Outcome"
+    }
+  },
+  "required": [
+    "outcome",
+    "closed_by"
+  ],
+  "title": "RunClosedPayload",
+  "type": "object"
+}

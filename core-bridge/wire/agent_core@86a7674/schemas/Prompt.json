@@ -1,0 +1,78 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Prompt versionado por locale, con su perfil de modelo (M0 §2.4).",
+  "properties": {
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "locales": {
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z]{2}$": {
+          "type": "string"
+        }
+      },
+      "title": "Locales",
+      "type": "object"
+    },
+    "model_profile": {
+      "$ref": "#/$defs/RefSpec"
+    },
+    "reads": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Reads",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "version": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "locales",
+    "model_profile"
+  ],
+  "title": "Prompt",
+  "type": "object"
+}

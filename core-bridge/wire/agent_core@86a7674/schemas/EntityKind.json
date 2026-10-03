@@ -1,0 +1,19 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Clases de entidad del registro (M0 §2.4).",
+  "enum": [
+    "agent",
+    "flow",
+    "decision_model",
+    "policy",
+    "template",
+    "prompt",
+    "tool",
+    "language_detection",
+    "injection_ruleset",
+    "model_profile",
+    "knowledge_snapshot"
+  ],
+  "title": "EntityKind",
+  "type": "string"
+}

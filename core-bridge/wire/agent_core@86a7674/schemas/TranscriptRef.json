@@ -1,0 +1,48 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "Fingerprint": {
+      "additionalProperties": false,
+      "description": "Huella con clave (ADR 0008): `value = HMAC-SHA256(k[kid], JCS(dato))`.",
+      "properties": {
+        "alg": {
+          "const": "HMAC-SHA256",
+          "title": "Alg",
+          "type": "string"
+        },
+        "kid": {
+          "title": "Kid",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alg",
+        "kid",
+        "value"
+      ],
+      "title": "Fingerprint",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Referencia a una entrada del transcript, con su huella (M0 §2.8).",
+  "properties": {
+    "entry_id": {
+      "title": "Entry Id",
+      "type": "string"
+    },
+    "fingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    }
+  },
+  "required": [
+    "entry_id",
+    "fingerprint"
+  ],
+  "title": "TranscriptRef",
+  "type": "object"
+}

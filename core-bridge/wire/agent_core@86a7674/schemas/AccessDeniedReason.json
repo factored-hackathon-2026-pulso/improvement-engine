@@ -1,0 +1,15 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Motivos por los que se deniega un acceso (M0 §2.10).",
+  "enum": [
+    "principal_expired",
+    "delegation_expired",
+    "delegation_mismatch",
+    "principal_mismatch",
+    "subject_forbidden",
+    "agent_forbidden",
+    "tool_denied"
+  ],
+  "title": "AccessDeniedReason",
+  "type": "string"
+}

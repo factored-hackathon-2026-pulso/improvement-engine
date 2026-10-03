@@ -1,0 +1,34 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Método de calibración de un modelo de decisión y la corrida que lo produjo (M0 §2.4).",
+  "properties": {
+    "method": {
+      "enum": [
+        "none",
+        "isotonic",
+        "platt",
+        "temperature"
+      ],
+      "title": "Method",
+      "type": "string"
+    },
+    "run": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run"
+    }
+  },
+  "required": [
+    "method"
+  ],
+  "title": "CalibrationRef",
+  "type": "object"
+}

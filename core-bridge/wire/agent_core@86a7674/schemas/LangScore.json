@@ -1,0 +1,23 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Idioma candidato con su puntuación.",
+  "properties": {
+    "lang": {
+      "title": "Lang",
+      "type": "string"
+    },
+    "score": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Score",
+      "type": "number"
+    }
+  },
+  "required": [
+    "lang",
+    "score"
+  ],
+  "title": "LangScore",
+  "type": "object"
+}

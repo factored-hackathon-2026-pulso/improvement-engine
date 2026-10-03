@@ -1,0 +1,206 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "ActionState": {
+      "description": "Estados del ciclo de vida de una `Action` (M0 §2.6).",
+      "enum": [
+        "proposed",
+        "confirmed",
+        "executing",
+        "executed",
+        "uncertain",
+        "denied",
+        "verified",
+        "failed",
+        "cancelled"
+      ],
+      "title": "ActionState",
+      "type": "string"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "InvalidationReason": {
+      "description": "Motivos por los que se invalida o cancela una acción (M0 §2.6).",
+      "enum": [
+        "cancel",
+        "abandoned",
+        "interrupt",
+        "escalated",
+        "token_expired",
+        "max_attempts",
+        "denied_by_user",
+        "args_changed"
+      ],
+      "title": "InvalidationReason",
+      "type": "string"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "description": "Acción de escritura propuesta al usuario, con su token de confirmación y ciclo de vida (M0 §2.6).",
+  "properties": {
+    "action_id": {
+      "title": "Action Id",
+      "type": "string"
+    },
+    "args": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Args",
+      "type": "object"
+    },
+    "args_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Args Hash",
+      "type": "string"
+    },
+    "cancel_reason": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InvalidationReason"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "confirm_node_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confirm Node Id"
+    },
+    "confirmation_token_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confirmation Token Hash"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "flow": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/ActionState"
+    },
+    "token_exp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Token Exp"
+    },
+    "tool": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "write_node_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Write Node Id"
+    }
+  },
+  "required": [
+    "action_id",
+    "flow",
+    "tool",
+    "args",
+    "args_hash",
+    "state",
+    "idempotency_key",
+    "created_at"
+  ],
+  "title": "Action",
+  "type": "object"
+}

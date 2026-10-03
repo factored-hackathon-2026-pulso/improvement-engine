@@ -1,0 +1,14 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "description": "Clase de riesgo de una tool; determina si escribe y qué confirmación exige (M0 §2.4).\n\n`write_draft` es la escritura confinada a un borrador del registry: va sin `confirm` (ADR 0019).",
+  "enum": [
+    "read",
+    "compute",
+    "write_draft",
+    "write_reversible",
+    "write_irreversible",
+    "money_movement"
+  ],
+  "title": "RiskClass",
+  "type": "string"
+}

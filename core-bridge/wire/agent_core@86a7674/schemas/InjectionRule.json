@@ -1,0 +1,33 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Regla de detección de inyección: regex o frase literal (M0 §2.4).",
+  "properties": {
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "regex",
+        "phrase"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "pattern": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Pattern",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "pattern",
+    "kind"
+  ],
+  "title": "InjectionRule",
+  "type": "object"
+}

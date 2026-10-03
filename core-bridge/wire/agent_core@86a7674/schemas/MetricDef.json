@@ -1,0 +1,325 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AlertThreshold": {
+      "additionalProperties": false,
+      "description": "Production alert threshold. It is not the gate threshold.",
+      "properties": {
+        "breach_when": {
+          "enum": [
+            "above",
+            "below"
+          ],
+          "title": "Breach When",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "breach_when",
+        "value"
+      ],
+      "title": "AlertThreshold",
+      "type": "object"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "JudgeExpr": {
+      "additionalProperties": false,
+      "description": "Metric graded by an LLM judge: the only non-deterministic kind (ADR 0020).",
+      "properties": {
+        "judge_profile": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "rubric": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Rubric",
+          "type": "string"
+        },
+        "target_event": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Target Event",
+          "type": "string"
+        }
+      },
+      "required": [
+        "judge_profile",
+        "rubric",
+        "target_event"
+      ],
+      "title": "JudgeExpr",
+      "type": "object"
+    },
+    "MetricExpr": {
+      "additionalProperties": false,
+      "description": "Deterministic metric over events: event, filter, aggregation, window and grouping.",
+      "properties": {
+        "aggregation": {
+          "enum": [
+            "count",
+            "sum",
+            "avg",
+            "percentile",
+            "rate"
+          ],
+          "title": "Aggregation",
+          "type": "string"
+        },
+        "denominator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricExpr"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "event": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Event",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "group_by": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Group By",
+          "type": "array"
+        },
+        "percentile": {
+          "anyOf": [
+            {
+              "maximum": 99,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Percentile"
+        },
+        "where": {
+          "items": {
+            "$ref": "#/$defs/Predicate"
+          },
+          "maxItems": 8,
+          "title": "Where",
+          "type": "array"
+        },
+        "window": {
+          "anyOf": [
+            {
+              "enum": [
+                "scenario",
+                "run"
+              ],
+              "type": "string"
+            },
+            {
+              "format": "duration",
+              "type": "string"
+            }
+          ],
+          "title": "Window"
+        }
+      },
+      "required": [
+        "event",
+        "aggregation",
+        "window"
+      ],
+      "title": "MetricExpr",
+      "type": "object"
+    },
+    "Predicate": {
+      "additionalProperties": false,
+      "description": "Filter on a field of the event catalog.",
+      "properties": {
+        "field": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "ne",
+            "in",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "title": "Predicate",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One agent metric, with the role it plays in the gate and in production.",
+  "properties": {
+    "alert": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AlertThreshold"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "description": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "expr": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricExpr"
+        },
+        {
+          "$ref": "#/$defs/JudgeExpr"
+        }
+      ],
+      "title": "Expr"
+    },
+    "higher_is_better": {
+      "title": "Higher Is Better",
+      "type": "boolean"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "guardrail",
+        "gate",
+        "monitor"
+      ],
+      "title": "Role",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "description",
+    "role",
+    "higher_is_better",
+    "expr"
+  ],
+  "title": "MetricDef",
+  "type": "object"
+}

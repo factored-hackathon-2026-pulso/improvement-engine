@@ -1,0 +1,156 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "PageMeta": {
+      "additionalProperties": false,
+      "description": "Metadatos de una página de conocimiento compatible con OKF (ADR 0015).",
+      "properties": {
+        "anchor": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor"
+        },
+        "approved_by": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approved By"
+        },
+        "audience": {
+          "enum": [
+            "public",
+            "internal",
+            "agent_only"
+          ],
+          "title": "Audience",
+          "type": "string"
+        },
+        "lang": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Lang",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$",
+          "title": "Path",
+          "type": "string"
+        },
+        "snapshot": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./@-]{0,127}$",
+          "title": "Snapshot",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "approved"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "translation_of": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translation Of"
+        },
+        "type": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "valid_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid From"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        }
+      },
+      "required": [
+        "path",
+        "snapshot",
+        "type",
+        "audience",
+        "status",
+        "lang"
+      ],
+      "title": "PageMeta",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Una página (o una sección) ya proyectada a la vista `model` (M7). Se guarda en `RunState.pages`.\n\n`ref` es `ruta@snapshot#ancla` y coincide con `meta`. El contenido es el de la vista `model`: nunca lleva\nPII en claro, y si la página viene de una fuente externa llega envuelto como `untrusted_text`.",
+  "properties": {
+    "content_model": {
+      "title": "Content Model",
+      "type": "string"
+    },
+    "meta": {
+      "$ref": "#/$defs/PageMeta"
+    },
+    "ref": {
+      "title": "Ref",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "meta",
+    "content_model"
+  ],
+  "title": "PageView",
+  "type": "object"
+}

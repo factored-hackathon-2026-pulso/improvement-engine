@@ -1,0 +1,26 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "M2/M4 → M10.",
+  "properties": {
+    "priority": {
+      "title": "Priority",
+      "type": "string"
+    },
+    "reason_code": {
+      "title": "Reason Code",
+      "type": "string"
+    },
+    "target_queue": {
+      "title": "Target Queue",
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason_code",
+    "target_queue",
+    "priority"
+  ],
+  "title": "EscalationRequest",
+  "type": "object"
+}

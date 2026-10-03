@@ -1,0 +1,23 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Etiqueta con su probabilidad (top-k de una decisión).",
+  "properties": {
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "p": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "P",
+      "type": "number"
+    }
+  },
+  "required": [
+    "label",
+    "p"
+  ],
+  "title": "LabelScore",
+  "type": "object"
+}

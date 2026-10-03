@@ -1,0 +1,171 @@
+{
+  "$defs": {
+    "EntityInRelease": {
+      "additionalProperties": false,
+      "properties": {
+        "changed_vs_base": {
+          "title": "Changed Vs Base",
+          "type": "boolean"
+        },
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "docs": {
+          "$ref": "#/$defs/VersionDocs"
+        },
+        "ref": {
+          "$ref": "#/$defs/VersionRef"
+        }
+      },
+      "required": [
+        "ref",
+        "content_hash",
+        "docs",
+        "changed_vs_base"
+      ],
+      "title": "EntityInRelease",
+      "type": "object"
+    },
+    "VersionDocs": {
+      "additionalProperties": false,
+      "properties": {
+        "changelog": {
+          "maxLength": 8000,
+          "title": "Changelog",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 4000,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "rationale",
+        "changelog"
+      ],
+      "title": "VersionDocs",
+      "type": "object"
+    },
+    "VersionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "version"
+      ],
+      "title": "VersionRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "title": "Agent Id",
+      "type": "string"
+    },
+    "base_release_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Base Release Id"
+    },
+    "entities": {
+      "items": {
+        "$ref": "#/$defs/EntityInRelease"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "eval_suite_refs": {
+      "items": {
+        "$ref": "#/$defs/VersionRef"
+      },
+      "title": "Eval Suite Refs",
+      "type": "array"
+    },
+    "knowledge_snapshot": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Knowledge Snapshot"
+    },
+    "proposal_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Proposal Id"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "published_by": {
+      "title": "Published By",
+      "type": "string"
+    },
+    "release_id": {
+      "title": "Release Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "revoked"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "release_id",
+    "status",
+    "agent_id",
+    "entities",
+    "knowledge_snapshot",
+    "proposal_id",
+    "base_release_id",
+    "published_by",
+    "published_at"
+  ],
+  "title": "ReleaseDetail",
+  "type": "object"
+}

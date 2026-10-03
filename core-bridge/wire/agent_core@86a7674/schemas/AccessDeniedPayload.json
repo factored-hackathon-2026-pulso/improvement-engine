@@ -1,0 +1,64 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AccessDeniedReason": {
+      "description": "Motivos por los que se deniega un acceso (M0 §2.10).",
+      "enum": [
+        "principal_expired",
+        "delegation_expired",
+        "delegation_mismatch",
+        "principal_mismatch",
+        "subject_forbidden",
+        "agent_forbidden",
+        "tool_denied"
+      ],
+      "title": "AccessDeniedReason",
+      "type": "string"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `access_denied` (vista audit, M0 §2.10).",
+  "properties": {
+    "reason": {
+      "$ref": "#/$defs/AccessDeniedReason"
+    },
+    "tool": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EntityRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "title": "AccessDeniedPayload",
+  "type": "object"
+}

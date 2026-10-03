@@ -1,0 +1,31 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Mensaje al usuario: plantilla o generado, con su locale (M0 §2.8).",
+  "properties": {
+    "kind": {
+      "enum": [
+        "template",
+        "generated"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "locale": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Locale",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "text",
+    "locale"
+  ],
+  "title": "Message",
+  "type": "object"
+}

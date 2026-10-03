@@ -1,0 +1,243 @@
+"""Worker of gen-wire.ps1. Runs INSIDE the scratch venv built from the pinned agent-core checkout.
+
+Writes ONLY `<out>/` (the `agent_core@<sha7>` wire directory). Deterministic and fail-closed.
+Usage: python gen_wire.py --checkout <path> --out <dir> --expected-sha <sha>
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+from importlib import metadata
+from pathlib import Path
+
+PLATFORM_SIM = Path(__file__).resolve().parents[2] / "platform-sim"
+
+DERIVED = ["EvalSuite", "EntityDraft", "VersionDocs", "Proposal", "ValidationReport", "CandidateView",
+           "ReleaseDetail", "EntityVersion", "ReleaseDiff", "EvalReport", "ProposalDetail", "WriteRecord", "EvalRun"]
+BODY_MODELS = ["_Create", "_Draft", "_Evaluate", "_Approve", "_Promote", "_Reason"]
+
+
+def die(msg: str) -> None:
+    print(f"pulso:wire_gen_failed {msg}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def _keys_to_str(obj: object) -> object:
+    """YAML 1.1 turns bare true/false/yes/no keys into booleans; JSON keys are strings."""
+    if isinstance(obj, dict):
+        return {(str(k).lower() if isinstance(k, bool) else str(k)): _keys_to_str(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_keys_to_str(v) for v in obj]
+    return obj
+
+
+def dump(obj: object) -> bytes:
+    obj = _keys_to_str(obj)
+    return (json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False, default=str) + "\n").encode("utf-8")
+
+
+def sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def preflight(checkout: Path, expected: str) -> str:
+    head = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], capture_output=True,
+                          text=True).stdout.strip()
+    if head != expected:
+        die(f"checkout HEAD {head!r} != pin {expected}")
+    version = (checkout / "contracts" / "VERSION").read_text().strip()
+    if version != "1.3.0":
+        die(f"contracts/VERSION {version} != 1.3.0")
+    exe = Path(sys.executable).with_name("agentcore.exe")
+    if not exe.exists():
+        exe = Path(sys.executable).with_name("agentcore")
+    rc = subprocess.run([str(exe), "contracts", "--check"], cwd=checkout, capture_output=True).returncode
+    if rc != 0:
+        die("agentcore contracts --check failed")
+    return version
+
+
+def copy_bytes(checkout: Path, out: Path, files: list[dict]) -> None:
+    for sub in ("schemas", "events"):
+        base = checkout / "contracts" / sub
+        for src in sorted(base.rglob("*")):
+            if src.is_file():
+                rel = f"{sub}/{src.relative_to(base).as_posix()}"
+                (out / rel).parent.mkdir(parents=True, exist_ok=True)
+                data = src.read_bytes()
+                (out / rel).write_bytes(data)
+                files.append({"path": rel, "sha256": sha(data)})
+    data = (checkout / "contracts" / "openapi.json").read_bytes()
+    (out / "openapi.json").write_bytes(data)
+    files.append({"path": "openapi.json", "sha256": sha(data)})
+
+
+def derived(out: Path, files: list[dict], app) -> None:
+    from pydantic import TypeAdapter
+
+    from agent_core.registry import http as H
+    from agent_core.registry import models as M
+    from agent_core.registry import service as S
+    from agent_core.registry import suite as SU
+    from agent_core.registry.evaluation import report as R
+
+    pool = {}
+    for mod in (M, S, SU, R):
+        for name in DERIVED:
+            if hasattr(mod, name) and name not in pool:
+                pool[name] = getattr(mod, name)
+    for name in BODY_MODELS:
+        pool[name] = getattr(H, name)
+    missing = [n for n in DERIVED + BODY_MODELS if n not in pool]
+    if missing:
+        die(f"registry models not found: {missing}")
+    (out / "derived").mkdir(parents=True, exist_ok=True)
+    for name, model in sorted(pool.items()):
+        data = dump(TypeAdapter(model).json_schema(mode="validation", by_alias=True))
+        rel = f"derived/{name.lstrip('_')}.schema.json"
+        (out / rel).write_bytes(data)
+        files.append({"path": rel, "sha256": sha(data), "derived_by_pulso": True})
+    data = dump(app.openapi())
+    (out / "derived/registry_openapi.json").write_bytes(data)
+    files.append({"path": "derived/registry_openapi.json", "sha256": sha(data), "derived_by_pulso": True})
+
+
+def golden(out: Path, files: list[dict], checkout: Path, world, client) -> None:
+    import yaml
+
+    from agent_core.registry.entities import content_hash, decode_entity, encode_entity
+    from agent_core.registry.yaml_io import FOLDERS
+    from registry_mock import jws
+
+    seed = checkout / "tests" / "fixtures" / "registry-demo"
+    entities = []
+    rel_id = "rel-98130317a1003849"
+    with world.store.transaction() as tx:
+        stored_rel = tx.get_release(rel_id)
+        if stored_rel is None:
+            die("seeded release rel-98130317a1003849 missing")
+        for ref in sorted(tx.release_refs(rel_id), key=lambda r: (r.kind, r.id, r.version)):
+            sv = tx.get_version(ref)
+            entity = decode_entity(ref.kind, tx.blobs.get(sv.content_hash))
+            authored = yaml.safe_load((seed / FOLDERS[ref.kind] / f"{ref.id}@{ref.version}.yaml").read_bytes())
+            entities.append({
+                "ref": f"{ref.kind}:{ref.id}@{ref.version}",
+                "authored_json": authored,
+                "normalized_dump_json": entity.model_dump(mode="json", by_alias=True),
+                "canonical_bytes_hex": encode_entity(entity).hex(),
+                "content_hash": content_hash(entity),
+            })
+        release_hash = stored_rel.release_hash
+    flow = next(e for e in entities if e["ref"] == "flow:disputa-cargo@1.0.0")
+
+    draft = build_golden_draft(flow["normalized_dump_json"])
+    h = {"authorization": "Bearer " + jws.issue("bot")}
+    created = client.post("/v1/registry/proposals", json={"agent_id": "atencion", "origin": "auto_detect",
+                                                          "title": "Avisar antes de escalar por monto"}, headers=h)
+    pid = created.json()["proposal_id"]
+    put = client.put(f"/v1/registry/proposals/{pid}/draft", json=draft, headers=h)
+    val = client.post(f"/v1/registry/proposals/{pid}/validate", headers=h)
+    if put.status_code != 200 or val.status_code != 200:
+        die(f"golden draft rejected by a2: {put.status_code} {put.text[:300]} / {val.status_code} {val.text[:300]}")
+    freeze = client.post(f"/v1/registry/proposals/{pid}/freeze", headers=h).json()
+    vectors = {
+        "_note": "Recorded from the real RegistryService at the pinned SHA (a2 in-memory). Reproducible by gen-wire.",
+        "release_id": rel_id, "release_hash": release_hash, "entities": entities,
+        "candidate": {"candidate_hash": freeze["candidate_hash"],
+                      "release_id_preview": freeze["release_id_preview"], "validation": val.json(),
+                      "new_versions": freeze["new_versions"], "auto_bumped": freeze["auto_bumped"]},
+    }
+    (out / "golden").mkdir(parents=True, exist_ok=True)
+    for rel, obj in (("golden/hash_vectors.json", vectors), ("golden/golden_draft_disputa.json", draft)):
+        data = dump(obj)
+        (out / rel).write_bytes(data)
+        files.append({"path": rel, "sha256": sha(data), "derived_by_pulso": True})
+
+
+def build_golden_draft(flow: dict) -> dict:
+    """V3 section 31.4.12: umbral.true -> aviso_monto -> esc_monto, new template, new suite."""
+    flow = json.loads(json.dumps(flow))
+    flow["version"] = "1.1.0"
+    for node in flow["nodes"]:
+        if node["id"] == "umbral":
+            node["next"]["true"] = "aviso_monto"
+    flow["nodes"].append({"id": "aviso_monto", "next": {"next": "esc_monto"}, "type": "respond",
+                          "config": {"template_ref": {"id": "t/aviso_monto", "spec": "1.0.0"}, "generate": None,
+                                     "await": False, "claims": []}})
+    suite = {
+        "id": "disputas-suite", "version": "1.0.0", "agent_id": "atencion", "repetitions": 1, "thresholds": {},
+        "scenarios": [{
+            "id": "resuelto", "principal": {"id": "cust-001", "attrs": {"country": "CO"}},
+            "steps": [{"op": "start", "auth": "step_up"},
+                      {"op": "turn", "text": "no reconozco un cargo de ciento veinte dolares", "auth": "step_up"},
+                      {"op": "confirm", "answer": "yes", "auth": "step_up"}],
+            "seed": {"tools": {
+                "buscar_transacciones": [{"status": "ok", "result": [
+                    {"transaction_id": "tx-1", "amount": "120.50", "currency": "USD"},
+                    {"transaction_id": "tx-2", "amount": "30.00", "currency": "USD"}], "error": None}],
+                "seleccionar": [{"status": "ok", "result": {"transaction_id": "tx-1", "amount": "120.50",
+                                                           "currency": "USD"}, "error": None}],
+                "convertir_moneda": [{"status": "ok", "result": "120.50", "error": None}],
+                "radicar_pqr": [{"status": "ok", "result": {"status": "Open", "id": "pqr-demo-1"}, "error": None}],
+                "obtener_pqr": [{"status": "ok", "result": {"status": "Open", "id": "pqr-demo-1"}, "error": None}]}},
+            "expect": {"outcome": "resolved", "actions_verified": ["radicar_pqr"], "escalated": False}}]}
+    return {"expected_rev": 0, "changes": [
+        {"kind": "flow", "docs": {"description": "umbral.true pasa por aviso_monto antes de escalar",
+                                  "rationale": "opp-demo-1", "changelog": "umbral.true -> aviso_monto -> esc_monto"},
+         "content": flow},
+        {"kind": "template", "docs": {"description": "Aviso es/pt previo a escalamiento por monto",
+                                      "rationale": "opp-demo-1", "changelog": "Nuevo template"},
+         "content": {"id": "t/aviso_monto", "version": "1.0.0",
+                     "locales": {"es": "Por el monto, un especialista revisara tu disputa.",
+                                 "pt": "Pelo valor, um especialista vai revisar sua contestacao."}, "reads": []}},
+        {"kind": "eval_suite", "docs": {"description": "Suite baseline de disputas",
+                                        "rationale": "suite del mundo demo", "changelog": "Version inicial"},
+         "content": suite}]}
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--checkout", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--expected-sha", required=True)
+    a = ap.parse_args()
+    checkout, out = Path(a.checkout).resolve(), Path(a.out)
+    version = preflight(checkout, a.expected_sha)
+    if out.exists():
+        shutil.rmtree(out)
+    out.mkdir(parents=True)
+    sys.path.insert(0, str(PLATFORM_SIM))
+    sys.path.insert(0, str(checkout))
+    os.environ["PULSO_CORE_CHECKOUT"] = str(checkout)
+    from fastapi.testclient import TestClient
+
+    from registry_mock.a2_app import World, build_app
+
+    app = build_app(checkout)
+    files: list[dict] = []
+    copy_bytes(checkout, out, files)
+    derived(out, files, app)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/_sim/reset")
+        golden(out, files, checkout, World(checkout), client)
+    tools = {"python": platform.python_version(), "agent_core_checkout_sha": a.expected_sha}
+    for pkg in ("pydantic", "fastapi", "pyyaml", "rfc8785"):
+        try:
+            tools[pkg] = metadata.version(pkg)
+        except metadata.PackageNotFoundError:
+            pass
+    manifest = {"repo": "agent-core", "sha": a.expected_sha, "contract_version": version,
+                "files": sorted(files, key=lambda f: f["path"]), "tool_versions": tools}
+    (out / "MANIFEST.json").write_bytes(dump(manifest))
+    print(f"wire written: {out} ({len(files)} files; manifest_sha256={sha(dump(manifest))})")
+
+
+if __name__ == "__main__":
+    main()

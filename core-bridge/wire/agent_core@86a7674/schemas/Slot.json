@@ -1,0 +1,67 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "description": "Valor de un slot recolectado, `claimed` o `validated`, y el turno de origen (M0 §2.6).",
+  "properties": {
+    "source_turn": {
+      "minimum": 0,
+      "title": "Source Turn",
+      "type": "integer"
+    },
+    "status": {
+      "enum": [
+        "claimed",
+        "validated"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "value": {
+      "$ref": "#/$defs/JsonValue"
+    }
+  },
+  "required": [
+    "value",
+    "status",
+    "source_turn"
+  ],
+  "title": "Slot",
+  "type": "object"
+}

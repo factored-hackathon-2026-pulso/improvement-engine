@@ -1,0 +1,60 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Configuración del nodo `subflow` (M0 §2.5).",
+  "properties": {
+    "flow": {
+      "$ref": "#/$defs/RefSpec"
+    },
+    "map_in": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Map In",
+      "type": "object"
+    },
+    "map_out": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Map Out",
+      "type": "object"
+    }
+  },
+  "required": [
+    "flow"
+  ],
+  "title": "SubflowConfig",
+  "type": "object"
+}

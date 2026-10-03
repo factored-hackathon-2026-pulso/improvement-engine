@@ -1,0 +1,29 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Resultado del validador de respuestas (M8): fallas y regeneraciones (M0 §2.10).",
+  "properties": {
+    "failures": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Failures",
+      "type": "array"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "regenerations": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Regenerations",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "title": "ValidatorOutcome",
+  "type": "object"
+}

@@ -1,0 +1,4655 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AccessDenied": {
+      "additionalProperties": false,
+      "description": "Evento `access_denied` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/AccessDeniedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "access_denied",
+          "default": "access_denied",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "AccessDenied",
+      "type": "object"
+    },
+    "AccessDeniedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `access_denied` (vista audit, M0 §2.10).",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/AccessDeniedReason"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntityRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "AccessDeniedPayload",
+      "type": "object"
+    },
+    "AccessDeniedReason": {
+      "description": "Motivos por los que se deniega un acceso (M0 §2.10).",
+      "enum": [
+        "principal_expired",
+        "delegation_expired",
+        "delegation_mismatch",
+        "principal_mismatch",
+        "subject_forbidden",
+        "agent_forbidden",
+        "tool_denied"
+      ],
+      "title": "AccessDeniedReason",
+      "type": "string"
+    },
+    "ActionCancelled": {
+      "additionalProperties": false,
+      "description": "Evento `action_cancelled` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/ActionCancelledPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "action_cancelled",
+          "default": "action_cancelled",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "ActionCancelled",
+      "type": "object"
+    },
+    "ActionCancelledPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `action_cancelled` (vista audit, M0 §2.10).",
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/InvalidationReason"
+        }
+      },
+      "required": [
+        "action_id",
+        "reason"
+      ],
+      "title": "ActionCancelledPayload",
+      "type": "object"
+    },
+    "ActionConfirmed": {
+      "additionalProperties": false,
+      "description": "Evento `action_confirmed` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/ActionConfirmedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "action_confirmed",
+          "default": "action_confirmed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "ActionConfirmed",
+      "type": "object"
+    },
+    "ActionConfirmedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `action_confirmed` (vista audit, M0 §2.10).",
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "understand",
+            "button"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "source"
+      ],
+      "title": "ActionConfirmedPayload",
+      "type": "object"
+    },
+    "ActionDispatched": {
+      "additionalProperties": false,
+      "description": "Evento `action_dispatched` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/ActionDispatchedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "action_dispatched",
+          "default": "action_dispatched",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "ActionDispatched",
+      "type": "object"
+    },
+    "ActionDispatchedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `action_dispatched` (vista audit, M0 §2.10).",
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "args_fp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool": {
+          "$ref": "#/$defs/EntityRef"
+        }
+      },
+      "required": [
+        "action_id",
+        "tool"
+      ],
+      "title": "ActionDispatchedPayload",
+      "type": "object"
+    },
+    "ActionVerified": {
+      "additionalProperties": false,
+      "description": "Evento `action_verified` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/ActionVerifiedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "action_verified",
+          "default": "action_verified",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "ActionVerified",
+      "type": "object"
+    },
+    "ActionVerifiedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `action_verified` (vista audit, M0 §2.10).",
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "readback_call_id": {
+          "title": "Readback Call Id",
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "verified",
+            "failed",
+            "unavailable"
+          ],
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "result",
+        "readback_call_id"
+      ],
+      "title": "ActionVerifiedPayload",
+      "type": "object"
+    },
+    "AgentStep": {
+      "additionalProperties": false,
+      "description": "Evento `agent_step` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/AgentStepPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "agent_step",
+          "default": "agent_step",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "AgentStep",
+      "type": "object"
+    },
+    "AgentStepPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `agent_step` (vista audit, M0 §2.10, ADR 0019).\n\nUn paso del nodo `agent`. Los argumentos y el resultado de una tool van en su `tool_called` (`call_id`\nlos enlaza); el texto de la respuesta final solo como huella con clave, nunca razonamiento intermedio.\n`kind = \"failed\"`: el gateway falló en ese paso y el nodo terminó en `gave_up`.",
+      "properties": {
+        "call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Call Id"
+        },
+        "error_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GatewayErrorKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "enum": [
+            "tool",
+            "final",
+            "failed"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "node_id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "step": {
+          "exclusiveMinimum": 0,
+          "title": "Step",
+          "type": "integer"
+        },
+        "text_fp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntityRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "node_id",
+        "step",
+        "kind",
+        "latency_ms"
+      ],
+      "title": "AgentStepPayload",
+      "type": "object"
+    },
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    },
+    "Awaiting": {
+      "description": "Qué espera el run del usuario en el siguiente turno (M0 §2.7).",
+      "enum": [
+        "none",
+        "slot",
+        "confirmation",
+        "step_up",
+        "input"
+      ],
+      "title": "Awaiting",
+      "type": "string"
+    },
+    "Command": {
+      "description": "Comandos de Understand (spec general §4.4).",
+      "enum": [
+        "start_flow",
+        "continue",
+        "affirm",
+        "deny",
+        "clarify",
+        "cancel",
+        "handoff",
+        "out_of_scope",
+        "interrupt"
+      ],
+      "title": "Command",
+      "type": "string"
+    },
+    "CommandEmitted": {
+      "additionalProperties": false,
+      "description": "Evento `command_emitted` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/CommandEmittedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "command_emitted",
+          "default": "command_emitted",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "CommandEmitted",
+      "type": "object"
+    },
+    "CommandEmittedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `command_emitted` (vista audit, M0 §2.10).",
+      "properties": {
+        "above_threshold": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Above Threshold",
+          "type": "object"
+        },
+        "additional_flows": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Additional Flows",
+          "type": "array"
+        },
+        "command": {
+          "$ref": "#/$defs/Command"
+        },
+        "decision_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decision Id"
+        },
+        "flow": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flow"
+        },
+        "interrupt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interrupt"
+        },
+        "source": {
+          "enum": [
+            "understand",
+            "button"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "source"
+      ],
+      "title": "CommandEmittedPayload",
+      "type": "object"
+    },
+    "DecisionMade": {
+      "additionalProperties": false,
+      "description": "Evento `decision_made` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/DecisionMadePayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "decision_made",
+          "default": "decision_made",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "DecisionMade",
+      "type": "object"
+    },
+    "DecisionMadePayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `decision_made` (vista audit, M0 §2.10).",
+      "properties": {
+        "above_threshold": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Above Threshold",
+          "type": "object"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Cost Usd"
+        },
+        "decision_id": {
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "fallback_depth": {
+          "minimum": 0,
+          "title": "Fallback Depth",
+          "type": "integer"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "locale": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Locale",
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "model_version": {
+          "title": "Model Version",
+          "type": "string"
+        },
+        "p_cal": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "P Cal",
+          "type": "object"
+        },
+        "p_raw": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "P Raw",
+          "type": "object"
+        },
+        "provider_used": {
+          "title": "Provider Used",
+          "type": "string"
+        },
+        "tokens": {
+          "minimum": 0,
+          "title": "Tokens",
+          "type": "integer"
+        },
+        "top_k": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/LabelScore"
+            },
+            "type": "array"
+          },
+          "title": "Top K",
+          "type": "object"
+        },
+        "value": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Value",
+          "type": "object"
+        }
+      },
+      "required": [
+        "decision_id",
+        "model",
+        "provider_used",
+        "model_version",
+        "fallback_depth",
+        "value",
+        "p_cal",
+        "p_raw",
+        "above_threshold",
+        "latency_ms",
+        "tokens",
+        "cost_usd",
+        "locale"
+      ],
+      "title": "DecisionMadePayload",
+      "type": "object"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "Escalated": {
+      "additionalProperties": false,
+      "description": "Evento `escalated` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/EscalatedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "escalated",
+          "default": "escalated",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "Escalated",
+      "type": "object"
+    },
+    "EscalatedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `escalated` (vista audit, M0 §2.10).",
+      "properties": {
+        "handoff_ref": {
+          "title": "Handoff Ref",
+          "type": "string"
+        },
+        "priority": {
+          "title": "Priority",
+          "type": "string"
+        },
+        "reason_code": {
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "target_queue": {
+          "title": "Target Queue",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason_code",
+        "target_queue",
+        "priority",
+        "handoff_ref"
+      ],
+      "title": "EscalatedPayload",
+      "type": "object"
+    },
+    "ExpiryEvaluated": {
+      "additionalProperties": false,
+      "description": "Evento `expiry_evaluated` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/ExpiryEvaluatedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "expiry_evaluated",
+          "default": "expiry_evaluated",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "ExpiryEvaluated",
+      "type": "object"
+    },
+    "ExpiryEvaluatedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `expiry_evaluated` (vista audit, M0 §2.10).",
+      "properties": {
+        "expired": {
+          "title": "Expired",
+          "type": "boolean"
+        },
+        "last_activity_at": {
+          "format": "date-time",
+          "title": "Last Activity At",
+          "type": "string"
+        },
+        "now": {
+          "format": "date-time",
+          "title": "Now",
+          "type": "string"
+        },
+        "ttl": {
+          "format": "duration",
+          "title": "Ttl",
+          "type": "string"
+        }
+      },
+      "required": [
+        "now",
+        "last_activity_at",
+        "ttl",
+        "expired"
+      ],
+      "title": "ExpiryEvaluatedPayload",
+      "type": "object"
+    },
+    "FilteredPage": {
+      "additionalProperties": false,
+      "description": "Una página pedida que M12 no entregó, y por qué (nunca lleva su contenido).",
+      "properties": {
+        "reason": {
+          "enum": [
+            "audience",
+            "not_approved",
+            "expired",
+            "not_yet_valid",
+            "lang",
+            "snapshot",
+            "view"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "reason"
+      ],
+      "title": "FilteredPage",
+      "type": "object"
+    },
+    "Fingerprint": {
+      "additionalProperties": false,
+      "description": "Huella con clave (ADR 0008): `value = HMAC-SHA256(k[kid], JCS(dato))`.",
+      "properties": {
+        "alg": {
+          "const": "HMAC-SHA256",
+          "title": "Alg",
+          "type": "string"
+        },
+        "kid": {
+          "title": "Kid",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alg",
+        "kid",
+        "value"
+      ],
+      "title": "Fingerprint",
+      "type": "object"
+    },
+    "GatewayErrorKind": {
+      "description": "Clases de falla del gateway de LLM (M0 §2.11).",
+      "enum": [
+        "timeout",
+        "unavailable",
+        "rate_limited",
+        "invalid_output",
+        "refused"
+      ],
+      "title": "GatewayErrorKind",
+      "type": "string"
+    },
+    "GuardsOutput": {
+      "additionalProperties": false,
+      "description": "Salida de los guardarraíles de entrada (idioma, inyección, tamaño) de un turno (M0 §2.10).",
+      "properties": {
+        "injection": {
+          "$ref": "#/$defs/InjectionGuard"
+        },
+        "lang": {
+          "$ref": "#/$defs/LangGuard"
+        },
+        "size_ok": {
+          "title": "Size Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "lang",
+        "injection",
+        "size_ok"
+      ],
+      "title": "GuardsOutput",
+      "type": "object"
+    },
+    "HandoffResolved": {
+      "additionalProperties": false,
+      "description": "Evento `handoff_resolved` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/HandoffResolvedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "handoff_resolved",
+          "default": "handoff_resolved",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "HandoffResolved",
+      "type": "object"
+    },
+    "HandoffResolvedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `handoff_resolved` (vista audit, M0 §2.10).",
+      "properties": {
+        "handoff_quality": {
+          "enum": [
+            "useful",
+            "incomplete",
+            "unnecessary"
+          ],
+          "title": "Handoff Quality",
+          "type": "string"
+        },
+        "handoff_ref": {
+          "title": "Handoff Ref",
+          "type": "string"
+        },
+        "reader_type": {
+          "$ref": "#/$defs/PrincipalType"
+        },
+        "resolution_code": {
+          "title": "Resolution Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handoff_ref",
+        "resolution_code",
+        "handoff_quality",
+        "reader_type"
+      ],
+      "title": "HandoffResolvedPayload",
+      "type": "object"
+    },
+    "InjectionFlagged": {
+      "additionalProperties": false,
+      "description": "Evento `injection_flagged` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/InjectionFlaggedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "injection_flagged",
+          "default": "injection_flagged",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "InjectionFlagged",
+      "type": "object"
+    },
+    "InjectionFlaggedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `injection_flagged` (vista audit, M0 §2.10).",
+      "properties": {
+        "ruleset": {
+          "title": "Ruleset",
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "user_text",
+            "untrusted_field"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Signals",
+          "type": "array"
+        }
+      },
+      "required": [
+        "signals",
+        "ruleset",
+        "scope"
+      ],
+      "title": "InjectionFlaggedPayload",
+      "type": "object"
+    },
+    "InjectionGuard": {
+      "additionalProperties": false,
+      "description": "Resultado del detector de inyección: señales y versión del ruleset (M0 §2.10).",
+      "properties": {
+        "flagged": {
+          "title": "Flagged",
+          "type": "boolean"
+        },
+        "ruleset": {
+          "title": "Ruleset",
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Signals",
+          "type": "array"
+        }
+      },
+      "required": [
+        "flagged",
+        "ruleset"
+      ],
+      "title": "InjectionGuard",
+      "type": "object"
+    },
+    "InvalidationReason": {
+      "description": "Motivos por los que se invalida o cancela una acción (M0 §2.6).",
+      "enum": [
+        "cancel",
+        "abandoned",
+        "interrupt",
+        "escalated",
+        "token_expired",
+        "max_attempts",
+        "denied_by_user",
+        "args_changed"
+      ],
+      "title": "InvalidationReason",
+      "type": "string"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "KnowledgeRead": {
+      "additionalProperties": false,
+      "description": "Evento `knowledge_read` de la cadena de auditoría (M12 §6).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/KnowledgeReadPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "knowledge_read",
+          "default": "knowledge_read",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "KnowledgeRead",
+      "type": "object"
+    },
+    "KnowledgeReadPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `knowledge_read` (vista audit, M12 §6). Solo referencias y motivos, nunca texto.\n\n`result` es la rama del nodo. `refs` son las páginas entregadas; `filtered_out`, las que el servicio\ndevolvió y M12 retuvo; `missing`, las que el servicio no devolvió. `reason` distingue las causas que el\nesquema del nodo no separa: fuente caída, sin snapshot o `navigate` sin ejecutar.",
+      "properties": {
+        "filtered_out": {
+          "items": {
+            "$ref": "#/$defs/FilteredPage"
+          },
+          "title": "Filtered Out",
+          "type": "array"
+        },
+        "missing": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing",
+          "type": "array"
+        },
+        "node_id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "purpose": {
+          "enum": [
+            "customer_answer",
+            "advisor_view",
+            "agent_guidance"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "source_unavailable",
+                "navigate_unavailable",
+                "no_snapshot"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Refs",
+          "type": "array"
+        },
+        "result": {
+          "enum": [
+            "ok",
+            "not_found",
+            "denied"
+          ],
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_id",
+        "purpose",
+        "result"
+      ],
+      "title": "KnowledgeReadPayload",
+      "type": "object"
+    },
+    "LabelScore": {
+      "additionalProperties": false,
+      "description": "Etiqueta con su probabilidad (top-k de una decisión).",
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "p": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "P",
+          "type": "number"
+        }
+      },
+      "required": [
+        "label",
+        "p"
+      ],
+      "title": "LabelScore",
+      "type": "object"
+    },
+    "LangGuard": {
+      "additionalProperties": false,
+      "description": "Resultado de la detección de idioma del turno (M0 §2.10).",
+      "properties": {
+        "decision": {
+          "enum": [
+            "kept",
+            "switched",
+            "short",
+            "undetermined",
+            "unsupported"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "detector": {
+          "title": "Detector",
+          "type": "string"
+        },
+        "letters": {
+          "minimum": 0,
+          "title": "Letters",
+          "type": "integer"
+        },
+        "locale": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Locale",
+          "type": "string"
+        },
+        "locale_prior": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Locale Prior"
+        },
+        "top2": {
+          "items": {
+            "$ref": "#/$defs/LangScore"
+          },
+          "title": "Top2",
+          "type": "array"
+        }
+      },
+      "required": [
+        "detector",
+        "letters",
+        "top2",
+        "decision",
+        "locale"
+      ],
+      "title": "LangGuard",
+      "type": "object"
+    },
+    "LangScore": {
+      "additionalProperties": false,
+      "description": "Idioma candidato con su puntuación.",
+      "properties": {
+        "lang": {
+          "title": "Lang",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lang",
+        "score"
+      ],
+      "title": "LangScore",
+      "type": "object"
+    },
+    "LlmUsage": {
+      "additionalProperties": false,
+      "description": "Uso agregado del LLM en una respuesta: llamadas, latencia, tokens y costo (M0 §2.10).",
+      "properties": {
+        "calls": {
+          "minimum": 0,
+          "title": "Calls",
+          "type": "integer"
+        },
+        "cost_known": {
+          "title": "Cost Known",
+          "type": "boolean"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Cost Usd"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Models",
+          "type": "array"
+        },
+        "tokens_in": {
+          "minimum": 0,
+          "title": "Tokens In",
+          "type": "integer"
+        },
+        "tokens_out": {
+          "minimum": 0,
+          "title": "Tokens Out",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "calls",
+        "latency_ms",
+        "tokens_in",
+        "tokens_out",
+        "cost_usd",
+        "cost_known"
+      ],
+      "title": "LlmUsage",
+      "type": "object"
+    },
+    "NodeEntered": {
+      "additionalProperties": false,
+      "description": "Evento `node_entered` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/NodeEnteredPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "node_entered",
+          "default": "node_entered",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "NodeEntered",
+      "type": "object"
+    },
+    "NodeEnteredPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `node_entered` (vista audit, M0 §2.10).",
+      "properties": {
+        "flow": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "node_id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "node_type": {
+          "title": "Node Type",
+          "type": "string"
+        },
+        "resume_kind": {
+          "enum": [
+            "slot_answer",
+            "confirm_answer",
+            "step_up_retry",
+            "none"
+          ],
+          "title": "Resume Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flow",
+        "node_id",
+        "node_type",
+        "resume_kind"
+      ],
+      "title": "NodeEnteredPayload",
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "Resultado final de un run (M0 §2.7).",
+      "enum": [
+        "resolved",
+        "abstained",
+        "cancelled",
+        "clarify_exhausted",
+        "completed",
+        "failed",
+        "abandoned",
+        "escalated",
+        "transferred"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "PrincipalType": {
+      "description": "Tipo de principal que invoca el motor (ADR 0006, M0 §2.3).",
+      "enum": [
+        "customer",
+        "advisor",
+        "service",
+        "builder"
+      ],
+      "title": "PrincipalType",
+      "type": "string"
+    },
+    "ResponseEmitted": {
+      "additionalProperties": false,
+      "description": "Evento `response_emitted` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/ResponseEmittedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "response_emitted",
+          "default": "response_emitted",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "ResponseEmitted",
+      "type": "object"
+    },
+    "ResponseEmittedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `response_emitted` (vista audit, M0 §2.10).",
+      "properties": {
+        "claims": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "fallback_used": {
+          "title": "Fallback Used",
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "template",
+            "generated"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "llm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LlmUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node Id"
+        },
+        "transcript_fp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "validator": {
+          "$ref": "#/$defs/ValidatorOutcome"
+        }
+      },
+      "required": [
+        "kind",
+        "validator",
+        "fallback_used"
+      ],
+      "title": "ResponseEmittedPayload",
+      "type": "object"
+    },
+    "ResponseFailed": {
+      "additionalProperties": false,
+      "description": "Evento `response_failed` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/ResponseFailedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "response_failed",
+          "default": "response_failed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "ResponseFailed",
+      "type": "object"
+    },
+    "ResponseFailedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `response_failed` (vista audit, M0 §2.10): `respond(generate)` terminó en\n`EscalationRequest` y no hubo `response_emitted`. Deja auditado el uso del LLM de esa cadena.\nNunca lleva el texto de los borradores.",
+      "properties": {
+        "claims": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "llm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LlmUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node Id"
+        },
+        "reason_code": {
+          "const": "validation_failed",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "validator": {
+          "$ref": "#/$defs/ValidatorOutcome"
+        }
+      },
+      "required": [
+        "reason_code",
+        "validator"
+      ],
+      "title": "ResponseFailedPayload",
+      "type": "object"
+    },
+    "RuleEvaluated": {
+      "additionalProperties": false,
+      "description": "Evento `rule_evaluated` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/RuleEvaluatedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "rule_evaluated",
+          "default": "rule_evaluated",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "RuleEvaluated",
+      "type": "object"
+    },
+    "RuleEvaluatedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `rule_evaluated` (vista audit, M0 §2.10).",
+      "properties": {
+        "inputs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "node_id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntityRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "result": {
+          "title": "Result",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "node_id",
+        "inputs",
+        "result"
+      ],
+      "title": "RuleEvaluatedPayload",
+      "type": "object"
+    },
+    "RunClosed": {
+      "additionalProperties": false,
+      "description": "Evento `run_closed` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunClosedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "run_closed",
+          "default": "run_closed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "RunClosed",
+      "type": "object"
+    },
+    "RunClosedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `run_closed` (vista audit, M0 §2.10).",
+      "properties": {
+        "closed_by": {
+          "enum": [
+            "flow",
+            "abandonment",
+            "escalation",
+            "revocation",
+            "transfer"
+          ],
+          "title": "Closed By",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/Outcome"
+        }
+      },
+      "required": [
+        "outcome",
+        "closed_by"
+      ],
+      "title": "RunClosedPayload",
+      "type": "object"
+    },
+    "RunOrigin": {
+      "additionalProperties": false,
+      "description": "Why a run exists when another run transferred to it (spec §3.3, P2, P5).",
+      "properties": {
+        "depth": {
+          "exclusiveMinimum": 0,
+          "title": "Depth",
+          "type": "integer"
+        },
+        "from_agent": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "from_event_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "From Event Hash",
+          "type": "string"
+        },
+        "from_release_id": {
+          "title": "From Release Id",
+          "type": "string"
+        },
+        "from_run_id": {
+          "title": "From Run Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "transfer",
+          "title": "Kind",
+          "type": "string"
+        },
+        "transfer_id": {
+          "title": "Transfer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "transfer_id",
+        "from_run_id",
+        "from_agent",
+        "from_release_id",
+        "from_event_hash",
+        "depth"
+      ],
+      "title": "RunOrigin",
+      "type": "object"
+    },
+    "RunStarted": {
+      "additionalProperties": false,
+      "description": "Evento `run_started` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunStartedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "run_started",
+          "default": "run_started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "RunStarted",
+      "type": "object"
+    },
+    "RunStartedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `run_started` (vista audit, M0 §2.10).",
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "locale": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Locale",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "conversational",
+            "task"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "principal_type": {
+          "$ref": "#/$defs/PrincipalType"
+        },
+        "reportable_attrs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Reportable Attrs",
+          "type": "object"
+        },
+        "subject_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Kind"
+        }
+      },
+      "required": [
+        "agent",
+        "mode",
+        "principal_type",
+        "locale"
+      ],
+      "title": "RunStartedPayload",
+      "type": "object"
+    },
+    "RunTransferred": {
+      "additionalProperties": false,
+      "description": "Evento `run_transferred` de la cadena origen (ADR 0021).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunTransferredPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "run_transferred",
+          "default": "run_transferred",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "RunTransferred",
+      "type": "object"
+    },
+    "RunTransferredPayload": {
+      "additionalProperties": false,
+      "description": "Payload of `run_transferred` (audit view, ADR 0021 P1): packet fingerprint only.",
+      "properties": {
+        "candidates": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "directory": {
+          "title": "Directory",
+          "type": "string"
+        },
+        "directory_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Directory Hash",
+          "type": "string"
+        },
+        "packet_fp": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "to_agent": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "to_release_id": {
+          "title": "To Release Id",
+          "type": "string"
+        },
+        "to_run_id": {
+          "title": "To Run Id",
+          "type": "string"
+        },
+        "transfer_id": {
+          "title": "Transfer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transfer_id",
+        "to_agent",
+        "to_release_id",
+        "to_run_id",
+        "reason",
+        "packet_fp",
+        "directory",
+        "directory_hash",
+        "candidates"
+      ],
+      "title": "RunTransferredPayload",
+      "type": "object"
+    },
+    "StepUpRequested": {
+      "additionalProperties": false,
+      "description": "Evento `step_up_requested` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/StepUpRequestedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "step_up_requested",
+          "default": "step_up_requested",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "StepUpRequested",
+      "type": "object"
+    },
+    "StepUpRequestedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `step_up_requested` (vista audit, M0 §2.10).",
+      "properties": {
+        "attempt": {
+          "exclusiveMinimum": 0,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "node_id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "required_level": {
+          "$ref": "#/$defs/AuthLevel"
+        }
+      },
+      "required": [
+        "node_id",
+        "required_level",
+        "attempt"
+      ],
+      "title": "StepUpRequestedPayload",
+      "type": "object"
+    },
+    "ToolCalled": {
+      "additionalProperties": false,
+      "description": "Evento `tool_called` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/ToolCalledPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "tool_called",
+          "default": "tool_called",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "ToolCalled",
+      "type": "object"
+    },
+    "ToolCalledPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `tool_called` (vista audit, M0 §2.10).",
+      "properties": {
+        "action_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Id"
+        },
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Args",
+          "type": "object"
+        },
+        "attempt": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "node_id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "result_fp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "$ref": "#/$defs/ToolStatus"
+        },
+        "tool": {
+          "$ref": "#/$defs/EntityRef"
+        }
+      },
+      "required": [
+        "node_id",
+        "tool",
+        "call_id",
+        "status",
+        "args",
+        "latency_ms"
+      ],
+      "title": "ToolCalledPayload",
+      "type": "object"
+    },
+    "ToolStatus": {
+      "description": "Estado del resultado de una tool (M0 §2.8).",
+      "enum": [
+        "ok",
+        "error",
+        "timeout",
+        "denied",
+        "uncertain",
+        "step_up_required"
+      ],
+      "title": "ToolStatus",
+      "type": "string"
+    },
+    "TransferReceived": {
+      "additionalProperties": false,
+      "description": "Evento `transfer_received` de la cadena destino (ADR 0021).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/TransferReceivedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "transfer_received",
+          "default": "transfer_received",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "TransferReceived",
+      "type": "object"
+    },
+    "TransferReceivedPayload": {
+      "additionalProperties": false,
+      "description": "Payload of `transfer_received` (audit view).",
+      "properties": {
+        "accepted_slots": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Accepted Slots",
+          "type": "array"
+        },
+        "packet_fp": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "transfer_id": {
+          "title": "Transfer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transfer_id",
+        "accepted_slots",
+        "packet_fp"
+      ],
+      "title": "TransferReceivedPayload",
+      "type": "object"
+    },
+    "TransferRejected": {
+      "additionalProperties": false,
+      "description": "Evento `transfer_rejected` de la cadena origen (ADR 0021).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/TransferRejectedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "transfer_rejected",
+          "default": "transfer_rejected",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "TransferRejected",
+      "type": "object"
+    },
+    "TransferRejectedPayload": {
+      "additionalProperties": false,
+      "description": "Payload of `transfer_rejected` (audit view).",
+      "properties": {
+        "directory": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Directory"
+        },
+        "directory_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Directory Hash"
+        },
+        "reason_code": {
+          "enum": [
+            "not_in_directory",
+            "no_active_release",
+            "not_eligible",
+            "accepts_mismatch",
+            "transfer_limit",
+            "no_turn"
+          ],
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "to_agent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To Agent"
+        },
+        "transfer_id": {
+          "title": "Transfer Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transfer_id",
+        "reason_code"
+      ],
+      "title": "TransferRejectedPayload",
+      "type": "object"
+    },
+    "TurnCompleted": {
+      "additionalProperties": false,
+      "description": "Evento `turn_completed` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/TurnCompletedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "turn_completed",
+          "default": "turn_completed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "TurnCompleted",
+      "type": "object"
+    },
+    "TurnCompletedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `turn_completed` (vista audit, M0 §2.10).",
+      "properties": {
+        "awaiting": {
+          "$ref": "#/$defs/Awaiting"
+        },
+        "client_turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Turn Id"
+        },
+        "degraded": {
+          "title": "Degraded",
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "entry": {
+          "enum": [
+            "start_run",
+            "turn"
+          ],
+          "title": "Entry",
+          "type": "string"
+        },
+        "stages": {
+          "$ref": "#/$defs/TurnStages"
+        }
+      },
+      "required": [
+        "entry",
+        "duration_ms",
+        "stages",
+        "degraded",
+        "awaiting"
+      ],
+      "title": "TurnCompletedPayload",
+      "type": "object"
+    },
+    "TurnStages": {
+      "additionalProperties": false,
+      "description": "Duración por etapa del turno, en milisegundos (M0 §2.10).",
+      "properties": {
+        "flow_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flow Ms"
+        },
+        "guards_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Guards Ms"
+        },
+        "response_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Ms"
+        },
+        "understand_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Understand Ms"
+        }
+      },
+      "title": "TurnStages",
+      "type": "object"
+    },
+    "TurnStarted": {
+      "additionalProperties": false,
+      "description": "Evento `turn_started` de la cadena de auditoría (M0 §2.10).",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/TurnStartedPayload"
+        },
+        "prev_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Hash"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "ts": {
+          "format": "date-time",
+          "title": "Ts",
+          "type": "string"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "turn_started",
+          "default": "turn_started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "run_id",
+        "release",
+        "ts",
+        "payload"
+      ],
+      "title": "TurnStarted",
+      "type": "object"
+    },
+    "TurnStartedPayload": {
+      "additionalProperties": false,
+      "description": "Payload del evento `turn_started` (vista audit, M0 §2.10).",
+      "properties": {
+        "client_turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Turn Id"
+        },
+        "guards": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuardsOutput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "TurnStartedPayload",
+      "type": "object"
+    },
+    "ValidatorOutcome": {
+      "additionalProperties": false,
+      "description": "Resultado del validador de respuestas (M8): fallas y regeneraciones (M0 §2.10).",
+      "properties": {
+        "failures": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Failures",
+          "type": "array"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "regenerations": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Regenerations",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "title": "ValidatorOutcome",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "access_denied": "#/$defs/AccessDenied",
+      "action_cancelled": "#/$defs/ActionCancelled",
+      "action_confirmed": "#/$defs/ActionConfirmed",
+      "action_dispatched": "#/$defs/ActionDispatched",
+      "action_verified": "#/$defs/ActionVerified",
+      "agent_step": "#/$defs/AgentStep",
+      "command_emitted": "#/$defs/CommandEmitted",
+      "decision_made": "#/$defs/DecisionMade",
+      "escalated": "#/$defs/Escalated",
+      "expiry_evaluated": "#/$defs/ExpiryEvaluated",
+      "handoff_resolved": "#/$defs/HandoffResolved",
+      "injection_flagged": "#/$defs/InjectionFlagged",
+      "knowledge_read": "#/$defs/KnowledgeRead",
+      "node_entered": "#/$defs/NodeEntered",
+      "response_emitted": "#/$defs/ResponseEmitted",
+      "response_failed": "#/$defs/ResponseFailed",
+      "rule_evaluated": "#/$defs/RuleEvaluated",
+      "run_closed": "#/$defs/RunClosed",
+      "run_started": "#/$defs/RunStarted",
+      "run_transferred": "#/$defs/RunTransferred",
+      "step_up_requested": "#/$defs/StepUpRequested",
+      "tool_called": "#/$defs/ToolCalled",
+      "transfer_received": "#/$defs/TransferReceived",
+      "transfer_rejected": "#/$defs/TransferRejected",
+      "turn_completed": "#/$defs/TurnCompleted",
+      "turn_started": "#/$defs/TurnStarted"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/RunStarted"
+    },
+    {
+      "$ref": "#/$defs/TurnStarted"
+    },
+    {
+      "$ref": "#/$defs/CommandEmitted"
+    },
+    {
+      "$ref": "#/$defs/NodeEntered"
+    },
+    {
+      "$ref": "#/$defs/DecisionMade"
+    },
+    {
+      "$ref": "#/$defs/RuleEvaluated"
+    },
+    {
+      "$ref": "#/$defs/ToolCalled"
+    },
+    {
+      "$ref": "#/$defs/AgentStep"
+    },
+    {
+      "$ref": "#/$defs/KnowledgeRead"
+    },
+    {
+      "$ref": "#/$defs/StepUpRequested"
+    },
+    {
+      "$ref": "#/$defs/ActionConfirmed"
+    },
+    {
+      "$ref": "#/$defs/ActionCancelled"
+    },
+    {
+      "$ref": "#/$defs/ActionDispatched"
+    },
+    {
+      "$ref": "#/$defs/ActionVerified"
+    },
+    {
+      "$ref": "#/$defs/ExpiryEvaluated"
+    },
+    {
+      "$ref": "#/$defs/ResponseEmitted"
+    },
+    {
+      "$ref": "#/$defs/ResponseFailed"
+    },
+    {
+      "$ref": "#/$defs/TurnCompleted"
+    },
+    {
+      "$ref": "#/$defs/InjectionFlagged"
+    },
+    {
+      "$ref": "#/$defs/AccessDenied"
+    },
+    {
+      "$ref": "#/$defs/Escalated"
+    },
+    {
+      "$ref": "#/$defs/HandoffResolved"
+    },
+    {
+      "$ref": "#/$defs/RunClosed"
+    },
+    {
+      "$ref": "#/$defs/RunTransferred"
+    },
+    {
+      "$ref": "#/$defs/TransferReceived"
+    },
+    {
+      "$ref": "#/$defs/TransferRejected"
+    }
+  ]
+}

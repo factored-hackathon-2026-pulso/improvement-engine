@@ -1,0 +1,98 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Configuración del nodo `knowledge` (M0 §2.5, M12, ADR 0015).\n\n`read`: `pages` fijas (`ruta` o `ruta#ancla`), resueltas contra el snapshot de la release.\n`navigate`: `scope` (un directorio del snapshot) y `selector` (un `decision_model` sobre las rutas del\nscope); el modo está en el esquema, pero M12 todavía no lo ejecuta (sale por `not_found`).",
+  "properties": {
+    "mode": {
+      "enum": [
+        "read",
+        "navigate"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "pages": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "purpose": {
+      "enum": [
+        "customer_answer",
+        "advisor_view",
+        "agent_guidance"
+      ],
+      "title": "Purpose",
+      "type": "string"
+    },
+    "save_as": {
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "title": "Save As",
+      "type": "string"
+    },
+    "scope": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scope"
+    },
+    "selector": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RefSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "mode",
+    "purpose",
+    "save_as"
+  ],
+  "title": "KnowledgeConfig",
+  "type": "object"
+}

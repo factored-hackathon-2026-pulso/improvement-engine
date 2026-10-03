@@ -1,0 +1,477 @@
+{
+  "changes": [
+    {
+      "content": {
+        "id": "disputa-cargo",
+        "nodes": [
+          {
+            "config": {
+              "max_attempts": 2,
+              "prompt_ref": {
+                "id": "t/pedir_cargo",
+                "spec": "1.0.0"
+              },
+              "slot": "descripcion_cargo",
+              "validator": null
+            },
+            "id": "pedir_cargo",
+            "next": {
+              "max_attempts": "esc_sin_datos",
+              "ok": "buscar_tx"
+            },
+            "type": "collect"
+          },
+          {
+            "config": {
+              "args": {
+                "texto": "slots.descripcion_cargo"
+              },
+              "save_as": "candidatas",
+              "step_up_max_attempts": 2,
+              "tool": {
+                "id": "buscar_transacciones",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "buscar_tx",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "coincide",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "branch_on": "match",
+              "choices_from": null,
+              "input_view": null,
+              "model": {
+                "id": "match-cargo",
+                "spec": "2.0.0"
+              },
+              "save_as": "coincide"
+            },
+            "id": "coincide",
+            "next": {
+              "low_confidence": "aclarar",
+              "ninguna": "aclarar",
+              "unica": "elegir",
+              "varias": "aclarar"
+            },
+            "type": "decide"
+          },
+          {
+            "config": {
+              "args": {
+                "id": "decisions.coincide.transaction",
+                "lista": "facts.candidatas.value"
+              },
+              "save_as": "transaccion_elegida",
+              "step_up_max_attempts": 2,
+              "tool": {
+                "id": "seleccionar",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "elegir",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "a_usd",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "args": {
+                "destino": "USD",
+                "moneda": "facts.transaccion_elegida.value.currency",
+                "monto": "facts.transaccion_elegida.value.amount"
+              },
+              "save_as": "monto_usd",
+              "step_up_max_attempts": 2,
+              "tool": {
+                "id": "convertir_moneda",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "a_usd",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "umbral",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "expr": null,
+              "policy": {
+                "id": "escalamiento-disputa-monto",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "umbral",
+            "next": {
+              "false": "confirmar",
+              "true": "aviso_monto"
+            },
+            "type": "rule"
+          },
+          {
+            "config": {
+              "action": {
+                "args": {
+                  "descripcion": "slots.descripcion_cargo",
+                  "transaction_id": "facts.transaccion_elegida.value.transaction_id"
+                },
+                "tool": {
+                  "id": "radicar_pqr",
+                  "spec": "1.0.0"
+                }
+              },
+              "max_attempts": 2,
+              "reprompt_template": null,
+              "summary_template": {
+                "id": "t/resumen_pqr",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "confirmar",
+            "next": {
+              "max_attempts": "no_confirmado",
+              "no": "fin_cancelado",
+              "unclear": "confirmar",
+              "yes": "radicar"
+            },
+            "type": "confirm"
+          },
+          {
+            "config": {
+              "action_from": "confirmar",
+              "args": {},
+              "draft": false,
+              "save_as": "pqr",
+              "step_up_max_attempts": 2,
+              "tool": null
+            },
+            "id": "radicar",
+            "next": {
+              "denied": "esc_tool",
+              "ok": "verificar",
+              "uncertain": "verificar"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "by": "idempotency_key",
+              "predicate": {
+                "==": [
+                  {
+                    "var": "readback.status"
+                  },
+                  "Open"
+                ]
+              },
+              "readback": {
+                "id": "obtener_pqr",
+                "spec": "1.0.0"
+              },
+              "save_as": "pqr_verificada"
+            },
+            "id": "verificar",
+            "next": {
+              "failed": "esc_verif",
+              "verified": "responder_ok"
+            },
+            "type": "verify"
+          },
+          {
+            "config": {
+              "await": false,
+              "claims": [
+                "confirmar"
+              ],
+              "generate": {
+                "allowed_facts": [
+                  "facts.pqr_verificada"
+                ],
+                "fallback_template_ref": {
+                  "id": "t/pqr_radicado",
+                  "spec": "1.0.0"
+                },
+                "knowledge_from": [],
+                "prompt_ref": {
+                  "id": "p/resumen_radicado",
+                  "spec": "1.0.0"
+                },
+                "purpose": "customer_answer"
+              },
+              "template_ref": null
+            },
+            "id": "responder_ok",
+            "next": {
+              "next": "fin"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "outcome": "resolved",
+              "output_map": null
+            },
+            "id": "fin",
+            "next": {},
+            "type": "end"
+          },
+          {
+            "config": {
+              "await": true,
+              "claims": [],
+              "generate": null,
+              "template_ref": {
+                "id": "t/aclarar_cargo",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "aclarar",
+            "next": {
+              "next": "pedir_cargo"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "await": false,
+              "claims": [],
+              "generate": null,
+              "template_ref": {
+                "id": "t/no_confirmado",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "no_confirmado",
+            "next": {
+              "next": "fin_abstenido"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "outcome": "abstained",
+              "output_map": null
+            },
+            "id": "fin_abstenido",
+            "next": {},
+            "type": "end"
+          },
+          {
+            "config": {
+              "outcome": "cancelled",
+              "output_map": null
+            },
+            "id": "fin_cancelado",
+            "next": {},
+            "type": "end"
+          },
+          {
+            "config": {
+              "priority_expr": null,
+              "reason_code": "low_confidence",
+              "target_queue": null
+            },
+            "id": "esc_sin_datos",
+            "next": {},
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "priority_expr": null,
+              "reason_code": "tool_failure",
+              "target_queue": null
+            },
+            "id": "esc_tool",
+            "next": {},
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "priority_expr": null,
+              "reason_code": "policy:escalamiento-disputa-monto",
+              "target_queue": "disputas"
+            },
+            "id": "esc_monto",
+            "next": {},
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "priority_expr": null,
+              "reason_code": "verification_failed",
+              "target_queue": null
+            },
+            "id": "esc_verif",
+            "next": {},
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "await": false,
+              "claims": [],
+              "generate": null,
+              "template_ref": {
+                "id": "t/aviso_monto",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "aviso_monto",
+            "next": {
+              "next": "esc_monto"
+            },
+            "type": "respond"
+          }
+        ],
+        "priority": 50,
+        "version": "1.1.0"
+      },
+      "docs": {
+        "changelog": "umbral.true -> aviso_monto -> esc_monto",
+        "description": "umbral.true pasa por aviso_monto antes de escalar",
+        "rationale": "opp-demo-1"
+      },
+      "kind": "flow"
+    },
+    {
+      "content": {
+        "id": "t/aviso_monto",
+        "locales": {
+          "es": "Por el monto, un especialista revisara tu disputa.",
+          "pt": "Pelo valor, um especialista vai revisar sua contestacao."
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "docs": {
+        "changelog": "Nuevo template",
+        "description": "Aviso es/pt previo a escalamiento por monto",
+        "rationale": "opp-demo-1"
+      },
+      "kind": "template"
+    },
+    {
+      "content": {
+        "agent_id": "atencion",
+        "id": "disputas-suite",
+        "repetitions": 1,
+        "scenarios": [
+          {
+            "expect": {
+              "actions_verified": [
+                "radicar_pqr"
+              ],
+              "escalated": false,
+              "outcome": "resolved"
+            },
+            "id": "resuelto",
+            "principal": {
+              "attrs": {
+                "country": "CO"
+              },
+              "id": "cust-001"
+            },
+            "seed": {
+              "tools": {
+                "buscar_transacciones": [
+                  {
+                    "error": null,
+                    "result": [
+                      {
+                        "amount": "120.50",
+                        "currency": "USD",
+                        "transaction_id": "tx-1"
+                      },
+                      {
+                        "amount": "30.00",
+                        "currency": "USD",
+                        "transaction_id": "tx-2"
+                      }
+                    ],
+                    "status": "ok"
+                  }
+                ],
+                "convertir_moneda": [
+                  {
+                    "error": null,
+                    "result": "120.50",
+                    "status": "ok"
+                  }
+                ],
+                "obtener_pqr": [
+                  {
+                    "error": null,
+                    "result": {
+                      "id": "pqr-demo-1",
+                      "status": "Open"
+                    },
+                    "status": "ok"
+                  }
+                ],
+                "radicar_pqr": [
+                  {
+                    "error": null,
+                    "result": {
+                      "id": "pqr-demo-1",
+                      "status": "Open"
+                    },
+                    "status": "ok"
+                  }
+                ],
+                "seleccionar": [
+                  {
+                    "error": null,
+                    "result": {
+                      "amount": "120.50",
+                      "currency": "USD",
+                      "transaction_id": "tx-1"
+                    },
+                    "status": "ok"
+                  }
+                ]
+              }
+            },
+            "steps": [
+              {
+                "auth": "step_up",
+                "op": "start"
+              },
+              {
+                "auth": "step_up",
+                "op": "turn",
+                "text": "no reconozco un cargo de ciento veinte dolares"
+              },
+              {
+                "answer": "yes",
+                "auth": "step_up",
+                "op": "confirm"
+              }
+            ]
+          }
+        ],
+        "thresholds": {},
+        "version": "1.0.0"
+      },
+      "docs": {
+        "changelog": "Version inicial",
+        "description": "Suite baseline de disputas",
+        "rationale": "suite del mundo demo"
+      },
+      "kind": "eval_suite"
+    }
+  ],
+  "expected_rev": 0
+}

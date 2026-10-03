@@ -1,0 +1,25 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "What the transfer node sends: a literal reason and the names of validated slots (ADR 0021 D7).",
+  "properties": {
+    "reason": {
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "title": "Reason",
+      "type": "string"
+    },
+    "slots": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]*$",
+        "type": "string"
+      },
+      "title": "Slots",
+      "type": "array"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "title": "TransferPacketSpec",
+  "type": "object"
+}

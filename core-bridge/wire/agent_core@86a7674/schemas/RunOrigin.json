@@ -1,0 +1,72 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Why a run exists when another run transferred to it (spec §3.3, P2, P5).",
+  "properties": {
+    "depth": {
+      "exclusiveMinimum": 0,
+      "title": "Depth",
+      "type": "integer"
+    },
+    "from_agent": {
+      "$ref": "#/$defs/EntityRef"
+    },
+    "from_event_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "From Event Hash",
+      "type": "string"
+    },
+    "from_release_id": {
+      "title": "From Release Id",
+      "type": "string"
+    },
+    "from_run_id": {
+      "title": "From Run Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "transfer",
+      "title": "Kind",
+      "type": "string"
+    },
+    "transfer_id": {
+      "title": "Transfer Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "transfer_id",
+    "from_run_id",
+    "from_agent",
+    "from_release_id",
+    "from_event_hash",
+    "depth"
+  ],
+  "title": "RunOrigin",
+  "type": "object"
+}

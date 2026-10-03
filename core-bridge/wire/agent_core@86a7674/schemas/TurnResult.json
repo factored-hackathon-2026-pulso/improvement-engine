@@ -1,0 +1,251 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    },
+    "Awaiting": {
+      "description": "Qué espera el run del usuario en el siguiente turno (M0 §2.7).",
+      "enum": [
+        "none",
+        "slot",
+        "confirmation",
+        "step_up",
+        "input"
+      ],
+      "title": "Awaiting",
+      "type": "string"
+    },
+    "ConfirmationPrompt": {
+      "additionalProperties": false,
+      "description": "Forma interna; la API publica `summary.text` como `action_summary`.",
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "summary": {
+          "$ref": "#/$defs/Message"
+        },
+        "token": {
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "token",
+        "expires_at",
+        "summary"
+      ],
+      "title": "ConfirmationPrompt",
+      "type": "object"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "Message": {
+      "additionalProperties": false,
+      "description": "Mensaje al usuario: plantilla o generado, con su locale (M0 §2.8).",
+      "properties": {
+        "kind": {
+          "enum": [
+            "template",
+            "generated"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "locale": {
+          "pattern": "^[a-z]{2}$",
+          "title": "Locale",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "locale"
+      ],
+      "title": "Message",
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "Resultado final de un run (M0 §2.7).",
+      "enum": [
+        "resolved",
+        "abstained",
+        "cancelled",
+        "clarify_exhausted",
+        "completed",
+        "failed",
+        "abandoned",
+        "escalated",
+        "transferred"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "StepUpPrompt": {
+      "additionalProperties": false,
+      "description": "Solicitud de elevar el nivel de autenticación (M0 §2.8).",
+      "properties": {
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "required_level": {
+          "$ref": "#/$defs/AuthLevel"
+        }
+      },
+      "required": [
+        "required_level",
+        "reason"
+      ],
+      "title": "StepUpPrompt",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Resultado de un turno: mensajes, estado esperado y outcome (M0 §2.8).",
+  "properties": {
+    "agent": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EntityRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "awaiting": {
+      "$ref": "#/$defs/Awaiting"
+    },
+    "confirmation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConfirmationPrompt"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "handoff_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Handoff Ref"
+    },
+    "locale": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Locale",
+      "type": "string"
+    },
+    "messages": {
+      "items": {
+        "$ref": "#/$defs/Message"
+      },
+      "title": "Messages",
+      "type": "array"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Outcome"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "open",
+        "closed",
+        "escalated"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "step_up": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StepUpPrompt"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "trace_id": {
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "turn_id": {
+      "title": "Turn Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "turn_id",
+    "messages",
+    "locale",
+    "awaiting",
+    "status",
+    "trace_id"
+  ],
+  "title": "TurnResult",
+  "type": "object"
+}

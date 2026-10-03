@@ -1,0 +1,121 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Configuration of the `agent` node (M0 §2.5, ADR 0019).\n\n`save_as` names the fact that receives the output; `output_schema` is the JSON Schema of that output.\n`input_view` lists the paths (`slots`, `facts`) the model sees in the `model` view; empty means none.",
+  "properties": {
+    "goal": {
+      "title": "Goal",
+      "type": "string"
+    },
+    "input_view": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Input View",
+      "type": "array"
+    },
+    "max_steps": {
+      "exclusiveMinimum": 0,
+      "title": "Max Steps",
+      "type": "integer"
+    },
+    "output_schema": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Output Schema",
+      "type": "object"
+    },
+    "prompt_ref": {
+      "$ref": "#/$defs/RefSpec"
+    },
+    "save_as": {
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "title": "Save As",
+      "type": "string"
+    },
+    "tools_allowed": {
+      "items": {
+        "$ref": "#/$defs/RefSpec"
+      },
+      "title": "Tools Allowed",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tools_allowed",
+    "max_steps",
+    "prompt_ref",
+    "goal",
+    "save_as",
+    "output_schema"
+  ],
+  "title": "AgentNodeConfig",
+  "type": "object"
+}

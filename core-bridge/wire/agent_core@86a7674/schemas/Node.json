@@ -1,0 +1,1355 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "ActionSpec": {
+      "additionalProperties": false,
+      "description": "Acción de escritura que propone un nodo `confirm`: tool y argumentos (M0 §2.5).",
+      "properties": {
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Args",
+          "type": "object"
+        },
+        "tool": {
+          "$ref": "#/$defs/RefSpec"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "title": "ActionSpec",
+      "type": "object"
+    },
+    "AgentNode": {
+      "additionalProperties": false,
+      "description": "Nodo `agent` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/AgentNodeConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "agent",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "AgentNode",
+      "type": "object"
+    },
+    "AgentNodeConfig": {
+      "additionalProperties": false,
+      "description": "Configuration of the `agent` node (M0 §2.5, ADR 0019).\n\n`save_as` names the fact that receives the output; `output_schema` is the JSON Schema of that output.\n`input_view` lists the paths (`slots`, `facts`) the model sees in the `model` view; empty means none.",
+      "properties": {
+        "goal": {
+          "title": "Goal",
+          "type": "string"
+        },
+        "input_view": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input View",
+          "type": "array"
+        },
+        "max_steps": {
+          "exclusiveMinimum": 0,
+          "title": "Max Steps",
+          "type": "integer"
+        },
+        "output_schema": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Output Schema",
+          "type": "object"
+        },
+        "prompt_ref": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "save_as": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Save As",
+          "type": "string"
+        },
+        "tools_allowed": {
+          "items": {
+            "$ref": "#/$defs/RefSpec"
+          },
+          "title": "Tools Allowed",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tools_allowed",
+        "max_steps",
+        "prompt_ref",
+        "goal",
+        "save_as",
+        "output_schema"
+      ],
+      "title": "AgentNodeConfig",
+      "type": "object"
+    },
+    "Approver": {
+      "additionalProperties": false,
+      "description": "Aprobador de un nodo `await_approval` (M0 §2.5).",
+      "properties": {
+        "principal_type": {
+          "$ref": "#/$defs/PrincipalType"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "principal_type"
+      ],
+      "title": "Approver",
+      "type": "object"
+    },
+    "AwaitApprovalConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `await_approval` (M0 §2.5).",
+      "properties": {
+        "approver": {
+          "$ref": "#/$defs/Approver"
+        },
+        "summary_template": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "timeout": {
+          "format": "duration",
+          "title": "Timeout",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approver",
+        "summary_template",
+        "timeout"
+      ],
+      "title": "AwaitApprovalConfig",
+      "type": "object"
+    },
+    "AwaitApprovalNode": {
+      "additionalProperties": false,
+      "description": "Nodo `await_approval` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/AwaitApprovalConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "await_approval",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "AwaitApprovalNode",
+      "type": "object"
+    },
+    "CollectConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `collect` (M0 §2.5).",
+      "properties": {
+        "max_attempts": {
+          "default": 2,
+          "exclusiveMinimum": 0,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "prompt_ref": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "slot": {
+          "title": "Slot",
+          "type": "string"
+        },
+        "validator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SlotValidator"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "slot",
+        "prompt_ref"
+      ],
+      "title": "CollectConfig",
+      "type": "object"
+    },
+    "CollectNode": {
+      "additionalProperties": false,
+      "description": "Nodo `collect` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/CollectConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "collect",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "CollectNode",
+      "type": "object"
+    },
+    "ConfirmConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `confirm` (M0 §2.5).",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ActionSpec"
+        },
+        "max_attempts": {
+          "default": 2,
+          "exclusiveMinimum": 0,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "reprompt_template": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RefSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "summary_template": {
+          "$ref": "#/$defs/RefSpec"
+        }
+      },
+      "required": [
+        "action",
+        "summary_template"
+      ],
+      "title": "ConfirmConfig",
+      "type": "object"
+    },
+    "ConfirmNode": {
+      "additionalProperties": false,
+      "description": "Nodo `confirm` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/ConfirmConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "confirm",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "ConfirmNode",
+      "type": "object"
+    },
+    "DecideConfig": {
+      "additionalProperties": false,
+      "description": "Resultados = valores del enum de `branch_on` + `low_confidence`, cableados en `next` (rev. 4).",
+      "properties": {
+        "branch_on": {
+          "title": "Branch On",
+          "type": "string"
+        },
+        "choices_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Choices From"
+        },
+        "input_view": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input View"
+        },
+        "model": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "save_as": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Save As",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "branch_on",
+        "save_as"
+      ],
+      "title": "DecideConfig",
+      "type": "object"
+    },
+    "DecideNode": {
+      "additionalProperties": false,
+      "description": "Nodo `decide` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/DecideConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "decide",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "DecideNode",
+      "type": "object"
+    },
+    "EndConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `end` (M0 §2.5).",
+      "properties": {
+        "outcome": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "output_map": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Map"
+        }
+      },
+      "required": [
+        "outcome"
+      ],
+      "title": "EndConfig",
+      "type": "object"
+    },
+    "EndNode": {
+      "additionalProperties": false,
+      "description": "Nodo `end` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/EndConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "end",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "EndNode",
+      "type": "object"
+    },
+    "EscalateConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `escalate` (M0 §2.5).",
+      "properties": {
+        "priority_expr": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "reason_code": {
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "target_queue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Queue"
+        }
+      },
+      "required": [
+        "reason_code"
+      ],
+      "title": "EscalateConfig",
+      "type": "object"
+    },
+    "EscalateNode": {
+      "additionalProperties": false,
+      "description": "Nodo `escalate` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/EscalateConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "escalate",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "EscalateNode",
+      "type": "object"
+    },
+    "GenerateConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `generate` (M0 §2.5).\n\n`knowledge_from` lista los `save_as` de nodos `knowledge` cuyas páginas puede citar la respuesta, y\n`purpose` dice para quién es (M12 §2: reemplaza a `knowledge_refs`). El defecto es el más estricto.",
+      "properties": {
+        "allowed_facts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Facts",
+          "type": "array"
+        },
+        "fallback_template_ref": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "knowledge_from": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Knowledge From",
+          "type": "array"
+        },
+        "prompt_ref": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "purpose": {
+          "default": "customer_answer",
+          "enum": [
+            "customer_answer",
+            "advisor_view",
+            "agent_guidance"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prompt_ref",
+        "fallback_template_ref"
+      ],
+      "title": "GenerateConfig",
+      "type": "object"
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "array"
+        },
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "KnowledgeConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `knowledge` (M0 §2.5, M12, ADR 0015).\n\n`read`: `pages` fijas (`ruta` o `ruta#ancla`), resueltas contra el snapshot de la release.\n`navigate`: `scope` (un directorio del snapshot) y `selector` (un `decision_model` sobre las rutas del\nscope); el modo está en el esquema, pero M12 todavía no lo ejecuta (sale por `not_found`).",
+      "properties": {
+        "mode": {
+          "enum": [
+            "read",
+            "navigate"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "pages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Pages",
+          "type": "array"
+        },
+        "purpose": {
+          "enum": [
+            "customer_answer",
+            "advisor_view",
+            "agent_guidance"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "save_as": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Save As",
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_./-]{0,254}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RefSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "mode",
+        "purpose",
+        "save_as"
+      ],
+      "title": "KnowledgeConfig",
+      "type": "object"
+    },
+    "KnowledgeNode": {
+      "additionalProperties": false,
+      "description": "Nodo `knowledge` de un flow (M0 §2.5, M12).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/KnowledgeConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "knowledge",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "KnowledgeNode",
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "Resultado final de un run (M0 §2.7).",
+      "enum": [
+        "resolved",
+        "abstained",
+        "cancelled",
+        "clarify_exhausted",
+        "completed",
+        "failed",
+        "abandoned",
+        "escalated",
+        "transferred"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "PrincipalType": {
+      "description": "Tipo de principal que invoca el motor (ADR 0006, M0 §2.3).",
+      "enum": [
+        "customer",
+        "advisor",
+        "service",
+        "builder"
+      ],
+      "title": "PrincipalType",
+      "type": "string"
+    },
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    },
+    "RespondConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `respond` (M0 §2.5).",
+      "properties": {
+        "await": {
+          "default": false,
+          "title": "Await",
+          "type": "boolean"
+        },
+        "claims": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "generate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GenerateConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "template_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RefSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "RespondConfig",
+      "type": "object"
+    },
+    "RespondNode": {
+      "additionalProperties": false,
+      "description": "Nodo `respond` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/RespondConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "respond",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "RespondNode",
+      "type": "object"
+    },
+    "RuleConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `rule` (M0 §2.5).",
+      "properties": {
+        "expr": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RefSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "RuleConfig",
+      "type": "object"
+    },
+    "RuleNode": {
+      "additionalProperties": false,
+      "description": "Nodo `rule` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/RuleConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "rule",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "RuleNode",
+      "type": "object"
+    },
+    "SlotValidator": {
+      "additionalProperties": false,
+      "description": "Validador de un slot recolectado (M0 §2.5).",
+      "properties": {
+        "kind": {
+          "enum": [
+            "type",
+            "regex",
+            "enum",
+            "decide"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "SlotValidator",
+      "type": "object"
+    },
+    "SubflowConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `subflow` (M0 §2.5).",
+      "properties": {
+        "flow": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "map_in": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Map In",
+          "type": "object"
+        },
+        "map_out": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Map Out",
+          "type": "object"
+        }
+      },
+      "required": [
+        "flow"
+      ],
+      "title": "SubflowConfig",
+      "type": "object"
+    },
+    "SubflowNode": {
+      "additionalProperties": false,
+      "description": "Nodo `subflow` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/SubflowConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "subflow",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "SubflowNode",
+      "type": "object"
+    },
+    "ToolConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `tool` (M0 §2.5).",
+      "properties": {
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Args",
+          "type": "object"
+        },
+        "save_as": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Save As",
+          "type": "string"
+        },
+        "step_up_max_attempts": {
+          "default": 2,
+          "exclusiveMinimum": 0,
+          "title": "Step Up Max Attempts",
+          "type": "integer"
+        },
+        "tool": {
+          "$ref": "#/$defs/RefSpec"
+        }
+      },
+      "required": [
+        "tool",
+        "save_as"
+      ],
+      "title": "ToolConfig",
+      "type": "object"
+    },
+    "ToolNode": {
+      "additionalProperties": false,
+      "description": "Nodo `tool` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/ToolConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "tool",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "ToolNode",
+      "type": "object"
+    },
+    "TransferConfig": {
+      "additionalProperties": false,
+      "description": "`target_from` is a `decisions.<save_as>.choice` path; `directory_from` the fact of `directory/list`.",
+      "properties": {
+        "directory_from": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Directory From",
+          "type": "string"
+        },
+        "packet": {
+          "$ref": "#/$defs/TransferPacketSpec"
+        },
+        "target_from": {
+          "pattern": "^decisions\\.[a-z][a-z0-9_]*\\.choice$",
+          "title": "Target From",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_from",
+        "directory_from",
+        "packet"
+      ],
+      "title": "TransferConfig",
+      "type": "object"
+    },
+    "TransferNode": {
+      "additionalProperties": false,
+      "description": "`transfer` node (ADR 0021): hands the conversation to a specialist; only `rejected` is wired.",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/TransferConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "transfer",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "TransferNode",
+      "type": "object"
+    },
+    "TransferPacketSpec": {
+      "additionalProperties": false,
+      "description": "What the transfer node sends: a literal reason and the names of validated slots (ADR 0021 D7).",
+      "properties": {
+        "reason": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Reason",
+          "type": "string"
+        },
+        "slots": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Slots",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "TransferPacketSpec",
+      "type": "object"
+    },
+    "VerifyConfig": {
+      "additionalProperties": false,
+      "description": "Configuración del nodo `verify` (M0 §2.5).",
+      "properties": {
+        "by": {
+          "pattern": "^(idempotency_key|fact:.+)$",
+          "title": "By",
+          "type": "string"
+        },
+        "predicate": {
+          "$ref": "#/$defs/JsonValue"
+        },
+        "readback": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "save_as": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Save As",
+          "type": "string"
+        }
+      },
+      "required": [
+        "readback",
+        "by",
+        "predicate",
+        "save_as"
+      ],
+      "title": "VerifyConfig",
+      "type": "object"
+    },
+    "VerifyNode": {
+      "additionalProperties": false,
+      "description": "Nodo `verify` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/VerifyConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "verify",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "VerifyNode",
+      "type": "object"
+    },
+    "WriteToolConfig": {
+      "additionalProperties": false,
+      "description": "Escritura de un nodo `tool`.\n\nCon `action_from` usa la acción congelada de un `confirm` (ADR 0007) y no admite `tool` ni `args`.\nCon `draft: true` (ADR 0019) invoca una tool `write_draft` con sus propios `args`: no hay `confirm`; la\nacción se congela al entrar al nodo.",
+      "properties": {
+        "action_from": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action From"
+        },
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Args",
+          "type": "object"
+        },
+        "draft": {
+          "default": false,
+          "title": "Draft",
+          "type": "boolean"
+        },
+        "save_as": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Save As",
+          "type": "string"
+        },
+        "step_up_max_attempts": {
+          "default": 2,
+          "exclusiveMinimum": 0,
+          "title": "Step Up Max Attempts",
+          "type": "integer"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RefSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "save_as"
+      ],
+      "title": "WriteToolConfig",
+      "type": "object"
+    },
+    "WriteToolNode": {
+      "additionalProperties": false,
+      "description": "Nodo `write_tool` de un flow (M0 §2.5).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/WriteToolConfig"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "next": {
+          "additionalProperties": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Next",
+          "type": "object"
+        },
+        "type": {
+          "const": "tool",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "title": "WriteToolNode",
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/DecideNode"
+    },
+    {
+      "$ref": "#/$defs/RuleNode"
+    },
+    {
+      "$ref": "#/$defs/CollectNode"
+    },
+    {
+      "$ref": "#/$defs/ToolNode"
+    },
+    {
+      "$ref": "#/$defs/WriteToolNode"
+    },
+    {
+      "$ref": "#/$defs/ConfirmNode"
+    },
+    {
+      "$ref": "#/$defs/VerifyNode"
+    },
+    {
+      "$ref": "#/$defs/RespondNode"
+    },
+    {
+      "$ref": "#/$defs/EscalateNode"
+    },
+    {
+      "$ref": "#/$defs/EndNode"
+    },
+    {
+      "$ref": "#/$defs/KnowledgeNode"
+    },
+    {
+      "$ref": "#/$defs/AgentNode"
+    },
+    {
+      "$ref": "#/$defs/SubflowNode"
+    },
+    {
+      "$ref": "#/$defs/AwaitApprovalNode"
+    },
+    {
+      "$ref": "#/$defs/TransferNode"
+    }
+  ]
+}

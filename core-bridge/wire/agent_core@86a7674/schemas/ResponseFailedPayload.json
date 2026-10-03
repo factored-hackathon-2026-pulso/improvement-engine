@@ -1,0 +1,142 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "LlmUsage": {
+      "additionalProperties": false,
+      "description": "Uso agregado del LLM en una respuesta: llamadas, latencia, tokens y costo (M0 §2.10).",
+      "properties": {
+        "calls": {
+          "minimum": 0,
+          "title": "Calls",
+          "type": "integer"
+        },
+        "cost_known": {
+          "title": "Cost Known",
+          "type": "boolean"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Cost Usd"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Models",
+          "type": "array"
+        },
+        "tokens_in": {
+          "minimum": 0,
+          "title": "Tokens In",
+          "type": "integer"
+        },
+        "tokens_out": {
+          "minimum": 0,
+          "title": "Tokens Out",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "calls",
+        "latency_ms",
+        "tokens_in",
+        "tokens_out",
+        "cost_usd",
+        "cost_known"
+      ],
+      "title": "LlmUsage",
+      "type": "object"
+    },
+    "ValidatorOutcome": {
+      "additionalProperties": false,
+      "description": "Resultado del validador de respuestas (M8): fallas y regeneraciones (M0 §2.10).",
+      "properties": {
+        "failures": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Failures",
+          "type": "array"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "regenerations": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Regenerations",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "title": "ValidatorOutcome",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `response_failed` (vista audit, M0 §2.10): `respond(generate)` terminó en\n`EscalationRequest` y no hubo `response_emitted`. Deja auditado el uso del LLM de esa cadena.\nNunca lleva el texto de los borradores.",
+  "properties": {
+    "claims": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "llm": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LlmUsage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "node_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Node Id"
+    },
+    "reason_code": {
+      "const": "validation_failed",
+      "title": "Reason Code",
+      "type": "string"
+    },
+    "validator": {
+      "$ref": "#/$defs/ValidatorOutcome"
+    }
+  },
+  "required": [
+    "reason_code",
+    "validator"
+  ],
+  "title": "ResponseFailedPayload",
+  "type": "object"
+}

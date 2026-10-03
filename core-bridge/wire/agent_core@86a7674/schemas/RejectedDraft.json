@@ -1,0 +1,28 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "M8 → M11 (transcript).",
+  "properties": {
+    "failures": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Failures",
+      "type": "array"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "text_model": {
+      "title": "Text Model",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text_model",
+    "reason"
+  ],
+  "title": "RejectedDraft",
+  "type": "object"
+}

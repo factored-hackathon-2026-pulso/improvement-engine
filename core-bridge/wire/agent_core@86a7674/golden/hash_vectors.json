@@ -1,0 +1,1554 @@
+{
+  "_note": "Recorded from the real RegistryService at the pinned SHA (a2 in-memory). Reproducible by gen-wire.",
+  "candidate": {
+    "auto_bumped": [
+      {
+        "id": "atencion",
+        "kind": "agent",
+        "version": "1.0.1"
+      }
+    ],
+    "candidate_hash": "4699e291a8f0747a94666ea8f3881c6a5c84644500ba68468682b397cb4bf34c",
+    "new_versions": [
+      {
+        "id": "atencion",
+        "kind": "agent",
+        "version": "1.0.1"
+      },
+      {
+        "id": "disputas-suite",
+        "kind": "eval_suite",
+        "version": "1.0.0"
+      },
+      {
+        "id": "disputa-cargo",
+        "kind": "flow",
+        "version": "1.1.0"
+      },
+      {
+        "id": "t/aviso_monto",
+        "kind": "template",
+        "version": "1.0.0"
+      }
+    ],
+    "release_id_preview": "rel-4699e291a8f0747a",
+    "validation": {
+      "auto_bumped": [
+        {
+          "id": "atencion",
+          "kind": "agent",
+          "version": "1.0.1"
+        }
+      ],
+      "candidate_hash": "4699e291a8f0747a94666ea8f3881c6a5c84644500ba68468682b397cb4bf34c",
+      "violations": []
+    }
+  },
+  "entities": [
+    {
+      "authored_json": {
+        "budgets": {
+          "max_cost_per_run": 0.5,
+          "max_model_calls_per_turn": 3,
+          "max_nodes_per_turn": 40,
+          "max_tokens_per_run": 20000,
+          "max_wall_ms_per_turn": 8000
+        },
+        "default_locale": "es",
+        "default_target_queue": "general",
+        "entry_flow": "disputa-cargo@1",
+        "id": "atencion",
+        "invocable_by": [
+          "customer"
+        ],
+        "max_clarifications": 2,
+        "min_auth_level": "session",
+        "mode": "conversational",
+        "on_clarify_exhausted": "escalate",
+        "subject_kinds": [
+          "customer"
+        ],
+        "supported_locales": [
+          "es",
+          "pt"
+        ],
+        "templates": {
+          "abstain": "t/abstencion",
+          "clarify": "t/aclarar",
+          "handoff": "t/traspaso",
+          "input_too_large": "t/mensaje_largo",
+          "pending_ack": "t/acuse",
+          "pending_offer": "t/oferta",
+          "unsupported_language": "t/idioma_no_soportado"
+        },
+        "tools_allowed": [
+          "buscar_transacciones@1",
+          "seleccionar@1",
+          "convertir_moneda@1",
+          "radicar_pqr@1",
+          "obtener_pqr@1"
+        ],
+        "understand": "understand-turno@1",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b2261636365707473223a6e756c6c2c2262756467657473223a7b226d61785f636f73745f7065725f72756e223a22302e3530222c226d61785f6d6f64656c5f63616c6c735f7065725f7475726e223a332c226d61785f6e6f6465735f7065725f7475726e223a34302c226d61785f746f6b656e735f7065725f72756e223a32303030302c226d61785f77616c6c5f6d735f7065725f7475726e223a383030307d2c2264656661756c745f6c6f63616c65223a226573222c2264656661756c745f7461726765745f7175657565223a2267656e6572616c222c22656e7472795f666c6f77223a7b226964223a22646973707574612d636172676f222c2273706563223a22312e302e30227d2c226964223a226174656e63696f6e222c22696e61637469766974795f74746c223a22505433304d222c22696e766f6361626c655f6279223a5b22637573746f6d6572225d2c226d61785f636c6172696669636174696f6e73223a322c226d61785f7265706169725f7475726e735f7065725f72756e223a382c226d657472696373223a5b5d2c226d696e5f617574685f6c6576656c223a2273657373696f6e222c226d6f6465223a22636f6e766572736174696f6e616c222c226f6e5f636c61726966795f657868617573746564223a22657363616c617465222c22726f7574696e67223a6e756c6c2c22736c6f74735f6d6f64656c223a6e756c6c2c227375626a6563745f6b696e6473223a5b22637573746f6d6572225d2c22737570706f727465645f6c6f63616c6573223a5b226573222c227074225d2c2274656d706c61746573223a7b226162737461696e223a7b226964223a22742f61627374656e63696f6e222c2273706563223a22312e302e30227d2c22636c6172696679223a7b226964223a22742f61636c61726172222c2273706563223a22312e302e30227d2c2268616e646f6666223a7b226964223a22742f747261737061736f222c2273706563223a22312e302e30227d2c22696e7075745f746f6f5f6c61726765223a7b226964223a22742f6d656e73616a655f6c6172676f222c2273706563223a22312e302e30227d2c2270656e64696e675f61636b223a7b226964223a22742f6163757365222c2273706563223a22312e302e30227d2c2270656e64696e675f6f66666572223a7b226964223a22742f6f6665727461222c2273706563223a22312e302e30227d2c22756e737570706f727465645f6c616e6775616765223a7b226964223a22742f6964696f6d615f6e6f5f736f706f727461646f222c2273706563223a22312e302e30227d7d2c22746f6f6c735f616c6c6f776564223a5b7b226964223a226275736361725f7472616e73616363696f6e6573222c2273706563223a22312e302e30227d2c7b226964223a2273656c656363696f6e6172222c2273706563223a22312e302e30227d2c7b226964223a22636f6e7665727469725f6d6f6e656461222c2273706563223a22312e302e30227d2c7b226964223a22726164696361725f707172222c2273706563223a22312e302e30227d2c7b226964223a226f6274656e65725f707172222c2273706563223a22312e302e30227d5d2c22756e6465727374616e64223a7b226964223a22756e6465727374616e642d7475726e6f222c2273706563223a22312e302e30227d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "f94fef3588265b627d184932f0a774ac8e37f4be5d343c9bd39d3ddfb7ef1add",
+      "normalized_dump_json": {
+        "accepts": null,
+        "budgets": {
+          "max_cost_per_run": "0.50",
+          "max_model_calls_per_turn": 3,
+          "max_nodes_per_turn": 40,
+          "max_tokens_per_run": 20000,
+          "max_wall_ms_per_turn": 8000
+        },
+        "default_locale": "es",
+        "default_target_queue": "general",
+        "entry_flow": {
+          "id": "disputa-cargo",
+          "spec": "1.0.0"
+        },
+        "id": "atencion",
+        "inactivity_ttl": "PT30M",
+        "invocable_by": [
+          "customer"
+        ],
+        "max_clarifications": 2,
+        "max_repair_turns_per_run": 8,
+        "metrics": [],
+        "min_auth_level": "session",
+        "mode": "conversational",
+        "on_clarify_exhausted": "escalate",
+        "routing": null,
+        "slots_model": null,
+        "subject_kinds": [
+          "customer"
+        ],
+        "supported_locales": [
+          "es",
+          "pt"
+        ],
+        "templates": {
+          "abstain": {
+            "id": "t/abstencion",
+            "spec": "1.0.0"
+          },
+          "clarify": {
+            "id": "t/aclarar",
+            "spec": "1.0.0"
+          },
+          "handoff": {
+            "id": "t/traspaso",
+            "spec": "1.0.0"
+          },
+          "input_too_large": {
+            "id": "t/mensaje_largo",
+            "spec": "1.0.0"
+          },
+          "pending_ack": {
+            "id": "t/acuse",
+            "spec": "1.0.0"
+          },
+          "pending_offer": {
+            "id": "t/oferta",
+            "spec": "1.0.0"
+          },
+          "unsupported_language": {
+            "id": "t/idioma_no_soportado",
+            "spec": "1.0.0"
+          }
+        },
+        "tools_allowed": [
+          {
+            "id": "buscar_transacciones",
+            "spec": "1.0.0"
+          },
+          {
+            "id": "seleccionar",
+            "spec": "1.0.0"
+          },
+          {
+            "id": "convertir_moneda",
+            "spec": "1.0.0"
+          },
+          {
+            "id": "radicar_pqr",
+            "spec": "1.0.0"
+          },
+          {
+            "id": "obtener_pqr",
+            "spec": "1.0.0"
+          }
+        ],
+        "understand": {
+          "id": "understand-turno",
+          "spec": "1.0.0"
+        },
+        "version": "1.0.0"
+      },
+      "ref": "agent:atencion@1.0.0"
+    },
+    {
+      "authored_json": {
+        "calibrated_fields": [
+          "match"
+        ],
+        "calibration": {
+          "method": "none"
+        },
+        "id": "match-cargo",
+        "input_view": [
+          "slots.descripcion_cargo",
+          "facts.candidatas.value"
+        ],
+        "output_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "match": {
+              "enum": [
+                "unica",
+                "ninguna",
+                "varias"
+              ]
+            },
+            "transaction": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "providers": [
+          {
+            "config": {
+              "artifact": "sintetico"
+            },
+            "provider": "classifier"
+          }
+        ],
+        "thresholds_from": "cal-demo",
+        "version": "2.0.0"
+      },
+      "canonical_bytes_hex": "7b2263616c696272617465645f6669656c6473223a5b226d61746368225d2c2263616c6962726174696f6e223a7b226d6574686f64223a226e6f6e65222c2272756e223a6e756c6c7d2c226964223a226d617463682d636172676f222c22696e7075745f76696577223a5b22736c6f74732e6465736372697063696f6e5f636172676f222c2266616374732e63616e646964617461732e76616c7565225d2c226f75747075745f736368656d61223a7b226164646974696f6e616c50726f70657274696573223a66616c73652c2270726f70657274696573223a7b226d61746368223a7b22656e756d223a5b22756e696361222c226e696e67756e61222c22766172696173225d7d2c227472616e73616374696f6e223a7b2274797065223a22737472696e67227d7d2c2274797065223a226f626a656374227d2c2270726f766964657273223a5b7b22636f6e666967223a7b226172746966616374223a2273696e74657469636f227d2c2270726f7669646572223a22636c6173736966696572227d5d2c227468726573686f6c64735f66726f6d223a2263616c2d64656d6f222c2276657273696f6e223a22322e302e30227d",
+      "content_hash": "e3f2936729678f764e5e24cf26fb65b02e9d8c4043f68592dd6a003b73e6e75d",
+      "normalized_dump_json": {
+        "calibrated_fields": [
+          "match"
+        ],
+        "calibration": {
+          "method": "none",
+          "run": null
+        },
+        "id": "match-cargo",
+        "input_view": [
+          "slots.descripcion_cargo",
+          "facts.candidatas.value"
+        ],
+        "output_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "match": {
+              "enum": [
+                "unica",
+                "ninguna",
+                "varias"
+              ]
+            },
+            "transaction": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "providers": [
+          {
+            "config": {
+              "artifact": "sintetico"
+            },
+            "provider": "classifier"
+          }
+        ],
+        "thresholds_from": "cal-demo",
+        "version": "2.0.0"
+      },
+      "ref": "decision_model:match-cargo@2.0.0"
+    },
+    {
+      "authored_json": {
+        "calibrated_fields": [
+          "command",
+          "flow",
+          "interrupt"
+        ],
+        "calibration": {
+          "method": "none"
+        },
+        "id": "understand-turno",
+        "output_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "providers": [
+          {
+            "provider": "jev"
+          }
+        ],
+        "thresholds_from": "cal-demo",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b2263616c696272617465645f6669656c6473223a5b22636f6d6d616e64222c22666c6f77222c22696e74657272757074225d2c2263616c6962726174696f6e223a7b226d6574686f64223a226e6f6e65222c2272756e223a6e756c6c7d2c226964223a22756e6465727374616e642d7475726e6f222c22696e7075745f76696577223a5b5d2c226f75747075745f736368656d61223a7b226164646974696f6e616c50726f70657274696573223a66616c73652c2270726f70657274696573223a7b22636f6d6d616e64223a7b2274797065223a22737472696e67227d7d2c2274797065223a226f626a656374227d2c2270726f766964657273223a5b7b22636f6e666967223a7b7d2c2270726f7669646572223a226a6576227d5d2c227468726573686f6c64735f66726f6d223a2263616c2d64656d6f222c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "011cdc30f5e4a0763f7b0920faeb187689d4d56bc7daa8a575474ced1729ec0b",
+      "normalized_dump_json": {
+        "calibrated_fields": [
+          "command",
+          "flow",
+          "interrupt"
+        ],
+        "calibration": {
+          "method": "none",
+          "run": null
+        },
+        "id": "understand-turno",
+        "input_view": [],
+        "output_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "providers": [
+          {
+            "config": {},
+            "provider": "jev"
+          }
+        ],
+        "thresholds_from": "cal-demo",
+        "version": "1.0.0"
+      },
+      "ref": "decision_model:understand-turno@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "disputa-cargo",
+        "nodes": [
+          {
+            "config": {
+              "max_attempts": 2,
+              "prompt_ref": "t/pedir_cargo",
+              "slot": "descripcion_cargo"
+            },
+            "id": "pedir_cargo",
+            "next": {
+              "max_attempts": "esc_sin_datos",
+              "ok": "buscar_tx"
+            },
+            "type": "collect"
+          },
+          {
+            "config": {
+              "args": {
+                "texto": "slots.descripcion_cargo"
+              },
+              "save_as": "candidatas",
+              "tool": "buscar_transacciones@1"
+            },
+            "id": "buscar_tx",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "coincide",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "branch_on": "match",
+              "model": "match-cargo@2",
+              "save_as": "coincide"
+            },
+            "id": "coincide",
+            "next": {
+              "low_confidence": "aclarar",
+              "ninguna": "aclarar",
+              "unica": "elegir",
+              "varias": "aclarar"
+            },
+            "type": "decide"
+          },
+          {
+            "config": {
+              "args": {
+                "id": "decisions.coincide.transaction",
+                "lista": "facts.candidatas.value"
+              },
+              "save_as": "transaccion_elegida",
+              "tool": "seleccionar@1"
+            },
+            "id": "elegir",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "a_usd",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "args": {
+                "destino": "USD",
+                "moneda": "facts.transaccion_elegida.value.currency",
+                "monto": "facts.transaccion_elegida.value.amount"
+              },
+              "save_as": "monto_usd",
+              "tool": "convertir_moneda@1"
+            },
+            "id": "a_usd",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "umbral",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "policy": "escalamiento-disputa-monto@1"
+            },
+            "id": "umbral",
+            "next": {
+              "false": "confirmar",
+              "true": "esc_monto"
+            },
+            "type": "rule"
+          },
+          {
+            "config": {
+              "action": {
+                "args": {
+                  "descripcion": "slots.descripcion_cargo",
+                  "transaction_id": "facts.transaccion_elegida.value.transaction_id"
+                },
+                "tool": "radicar_pqr@1"
+              },
+              "summary_template": "t/resumen_pqr"
+            },
+            "id": "confirmar",
+            "next": {
+              "false": "fin_cancelado",
+              "max_attempts": "no_confirmado",
+              "true": "radicar",
+              "unclear": "confirmar"
+            },
+            "type": "confirm"
+          },
+          {
+            "config": {
+              "action_from": "confirmar",
+              "save_as": "pqr"
+            },
+            "id": "radicar",
+            "next": {
+              "denied": "esc_tool",
+              "ok": "verificar",
+              "uncertain": "verificar"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "by": "idempotency_key",
+              "predicate": {
+                "==": [
+                  {
+                    "var": "readback.status"
+                  },
+                  "Open"
+                ]
+              },
+              "readback": "obtener_pqr@1",
+              "save_as": "pqr_verificada"
+            },
+            "id": "verificar",
+            "next": {
+              "failed": "esc_verif",
+              "verified": "responder_ok"
+            },
+            "type": "verify"
+          },
+          {
+            "config": {
+              "claims": [
+                "confirmar"
+              ],
+              "generate": {
+                "allowed_facts": [
+                  "facts.pqr_verificada"
+                ],
+                "fallback_template_ref": "t/pqr_radicado@1",
+                "prompt_ref": "p/resumen_radicado@1"
+              }
+            },
+            "id": "responder_ok",
+            "next": {
+              "next": "fin"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "outcome": "resolved"
+            },
+            "id": "fin",
+            "type": "end"
+          },
+          {
+            "config": {
+              "await": true,
+              "template_ref": "t/aclarar_cargo"
+            },
+            "id": "aclarar",
+            "next": {
+              "next": "pedir_cargo"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "template_ref": "t/no_confirmado"
+            },
+            "id": "no_confirmado",
+            "next": {
+              "next": "fin_abstenido"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "outcome": "abstained"
+            },
+            "id": "fin_abstenido",
+            "type": "end"
+          },
+          {
+            "config": {
+              "outcome": "cancelled"
+            },
+            "id": "fin_cancelado",
+            "type": "end"
+          },
+          {
+            "config": {
+              "reason_code": "low_confidence"
+            },
+            "id": "esc_sin_datos",
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "reason_code": "tool_failure"
+            },
+            "id": "esc_tool",
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "reason_code": "policy:escalamiento-disputa-monto",
+              "target_queue": "disputas"
+            },
+            "id": "esc_monto",
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "reason_code": "verification_failed"
+            },
+            "id": "esc_verif",
+            "type": "escalate"
+          }
+        ],
+        "priority": 50,
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22646973707574612d636172676f222c226e6f646573223a5b7b22636f6e666967223a7b226d61785f617474656d707473223a322c2270726f6d70745f726566223a7b226964223a22742f70656469725f636172676f222c2273706563223a22312e302e30227d2c22736c6f74223a226465736372697063696f6e5f636172676f222c2276616c696461746f72223a6e756c6c7d2c226964223a2270656469725f636172676f222c226e657874223a7b226d61785f617474656d707473223a226573635f73696e5f6461746f73222c226f6b223a226275736361725f7478227d2c2274797065223a22636f6c6c656374227d2c7b22636f6e666967223a7b2261726773223a7b22746578746f223a22736c6f74732e6465736372697063696f6e5f636172676f227d2c22736176655f6173223a2263616e64696461746173222c22737465705f75705f6d61785f617474656d707473223a322c22746f6f6c223a7b226964223a226275736361725f7472616e73616363696f6e6573222c2273706563223a22312e302e30227d7d2c226964223a226275736361725f7478222c226e657874223a7b2264656e696564223a226573635f746f6f6c222c226572726f72223a226573635f746f6f6c222c226f6b223a22636f696e63696465222c2274696d656f7574223a226573635f746f6f6c227d2c2274797065223a22746f6f6c227d2c7b22636f6e666967223a7b226272616e63685f6f6e223a226d61746368222c2263686f696365735f66726f6d223a6e756c6c2c22696e7075745f76696577223a6e756c6c2c226d6f64656c223a7b226964223a226d617463682d636172676f222c2273706563223a22322e302e30227d2c22736176655f6173223a22636f696e63696465227d2c226964223a22636f696e63696465222c226e657874223a7b226c6f775f636f6e666964656e6365223a2261636c61726172222c226e696e67756e61223a2261636c61726172222c22756e696361223a22656c65676972222c22766172696173223a2261636c61726172227d2c2274797065223a22646563696465227d2c7b22636f6e666967223a7b2261726773223a7b226964223a226465636973696f6e732e636f696e636964652e7472616e73616374696f6e222c226c69737461223a2266616374732e63616e646964617461732e76616c7565227d2c22736176655f6173223a227472616e73616363696f6e5f656c6567696461222c22737465705f75705f6d61785f617474656d707473223a322c22746f6f6c223a7b226964223a2273656c656363696f6e6172222c2273706563223a22312e302e30227d7d2c226964223a22656c65676972222c226e657874223a7b2264656e696564223a226573635f746f6f6c222c226572726f72223a226573635f746f6f6c222c226f6b223a22615f757364222c2274696d656f7574223a226573635f746f6f6c227d2c2274797065223a22746f6f6c227d2c7b22636f6e666967223a7b2261726773223a7b2264657374696e6f223a22555344222c226d6f6e656461223a2266616374732e7472616e73616363696f6e5f656c65676964612e76616c75652e63757272656e6379222c226d6f6e746f223a2266616374732e7472616e73616363696f6e5f656c65676964612e76616c75652e616d6f756e74227d2c22736176655f6173223a226d6f6e746f5f757364222c22737465705f75705f6d61785f617474656d707473223a322c22746f6f6c223a7b226964223a22636f6e7665727469725f6d6f6e656461222c2273706563223a22312e302e30227d7d2c226964223a22615f757364222c226e657874223a7b2264656e696564223a226573635f746f6f6c222c226572726f72223a226573635f746f6f6c222c226f6b223a22756d6272616c222c2274696d656f7574223a226573635f746f6f6c227d2c2274797065223a22746f6f6c227d2c7b22636f6e666967223a7b2265787072223a6e756c6c2c22706f6c696379223a7b226964223a22657363616c616d69656e746f2d646973707574612d6d6f6e746f222c2273706563223a22312e302e30227d7d2c226964223a22756d6272616c222c226e657874223a7b2266616c7365223a22636f6e6669726d6172222c2274727565223a226573635f6d6f6e746f227d2c2274797065223a2272756c65227d2c7b22636f6e666967223a7b22616374696f6e223a7b2261726773223a7b226465736372697063696f6e223a22736c6f74732e6465736372697063696f6e5f636172676f222c227472616e73616374696f6e5f6964223a2266616374732e7472616e73616363696f6e5f656c65676964612e76616c75652e7472616e73616374696f6e5f6964227d2c22746f6f6c223a7b226964223a22726164696361725f707172222c2273706563223a22312e302e30227d7d2c226d61785f617474656d707473223a322c22726570726f6d70745f74656d706c617465223a6e756c6c2c2273756d6d6172795f74656d706c617465223a7b226964223a22742f726573756d656e5f707172222c2273706563223a22312e302e30227d7d2c226964223a22636f6e6669726d6172222c226e657874223a7b226d61785f617474656d707473223a226e6f5f636f6e6669726d61646f222c226e6f223a2266696e5f63616e63656c61646f222c22756e636c656172223a22636f6e6669726d6172222c22796573223a2272616469636172227d2c2274797065223a22636f6e6669726d227d2c7b22636f6e666967223a7b22616374696f6e5f66726f6d223a22636f6e6669726d6172222c2261726773223a7b7d2c226472616674223a66616c73652c22736176655f6173223a22707172222c22737465705f75705f6d61785f617474656d707473223a322c22746f6f6c223a6e756c6c7d2c226964223a2272616469636172222c226e657874223a7b2264656e696564223a226573635f746f6f6c222c226f6b223a22766572696669636172222c22756e6365727461696e223a22766572696669636172227d2c2274797065223a22746f6f6c227d2c7b22636f6e666967223a7b226279223a226964656d706f74656e63795f6b6579222c22707265646963617465223a7b223d3d223a5b7b22766172223a22726561646261636b2e737461747573227d2c224f70656e225d7d2c22726561646261636b223a7b226964223a226f6274656e65725f707172222c2273706563223a22312e302e30227d2c22736176655f6173223a227071725f76657269666963616461227d2c226964223a22766572696669636172222c226e657874223a7b226661696c6564223a226573635f7665726966222c227665726966696564223a22726573706f6e6465725f6f6b227d2c2274797065223a22766572696679227d2c7b22636f6e666967223a7b226177616974223a66616c73652c22636c61696d73223a5b22636f6e6669726d6172225d2c2267656e6572617465223a7b22616c6c6f7765645f6661637473223a5b2266616374732e7071725f76657269666963616461225d2c2266616c6c6261636b5f74656d706c6174655f726566223a7b226964223a22742f7071725f726164696361646f222c2273706563223a22312e302e30227d2c226b6e6f776c656467655f66726f6d223a5b5d2c2270726f6d70745f726566223a7b226964223a22702f726573756d656e5f726164696361646f222c2273706563223a22312e302e30227d2c22707572706f7365223a22637573746f6d65725f616e73776572227d2c2274656d706c6174655f726566223a6e756c6c7d2c226964223a22726573706f6e6465725f6f6b222c226e657874223a7b226e657874223a2266696e227d2c2274797065223a22726573706f6e64227d2c7b22636f6e666967223a7b226f7574636f6d65223a227265736f6c766564222c226f75747075745f6d6170223a6e756c6c7d2c226964223a2266696e222c226e657874223a7b7d2c2274797065223a22656e64227d2c7b22636f6e666967223a7b226177616974223a747275652c22636c61696d73223a5b5d2c2267656e6572617465223a6e756c6c2c2274656d706c6174655f726566223a7b226964223a22742f61636c617261725f636172676f222c2273706563223a22312e302e30227d7d2c226964223a2261636c61726172222c226e657874223a7b226e657874223a2270656469725f636172676f227d2c2274797065223a22726573706f6e64227d2c7b22636f6e666967223a7b226177616974223a66616c73652c22636c61696d73223a5b5d2c2267656e6572617465223a6e756c6c2c2274656d706c6174655f726566223a7b226964223a22742f6e6f5f636f6e6669726d61646f222c2273706563223a22312e302e30227d7d2c226964223a226e6f5f636f6e6669726d61646f222c226e657874223a7b226e657874223a2266696e5f61627374656e69646f227d2c2274797065223a22726573706f6e64227d2c7b22636f6e666967223a7b226f7574636f6d65223a226162737461696e6564222c226f75747075745f6d6170223a6e756c6c7d2c226964223a2266696e5f61627374656e69646f222c226e657874223a7b7d2c2274797065223a22656e64227d2c7b22636f6e666967223a7b226f7574636f6d65223a2263616e63656c6c6564222c226f75747075745f6d6170223a6e756c6c7d2c226964223a2266696e5f63616e63656c61646f222c226e657874223a7b7d2c2274797065223a22656e64227d2c7b22636f6e666967223a7b227072696f726974795f65787072223a6e756c6c2c22726561736f6e5f636f6465223a226c6f775f636f6e666964656e6365222c227461726765745f7175657565223a6e756c6c7d2c226964223a226573635f73696e5f6461746f73222c226e657874223a7b7d2c2274797065223a22657363616c617465227d2c7b22636f6e666967223a7b227072696f726974795f65787072223a6e756c6c2c22726561736f6e5f636f6465223a22746f6f6c5f6661696c757265222c227461726765745f7175657565223a6e756c6c7d2c226964223a226573635f746f6f6c222c226e657874223a7b7d2c2274797065223a22657363616c617465227d2c7b22636f6e666967223a7b227072696f726974795f65787072223a6e756c6c2c22726561736f6e5f636f6465223a22706f6c6963793a657363616c616d69656e746f2d646973707574612d6d6f6e746f222c227461726765745f7175657565223a226469737075746173227d2c226964223a226573635f6d6f6e746f222c226e657874223a7b7d2c2274797065223a22657363616c617465227d2c7b22636f6e666967223a7b227072696f726974795f65787072223a6e756c6c2c22726561736f6e5f636f6465223a22766572696669636174696f6e5f6661696c6564222c227461726765745f7175657565223a6e756c6c7d2c226964223a226573635f7665726966222c226e657874223a7b7d2c2274797065223a22657363616c617465227d5d2c227072696f72697479223a35302c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "6b5b579464f54370d2eed81b5c1a460c6a3ab270c0c8244fe17ed0a80d953b11",
+      "normalized_dump_json": {
+        "id": "disputa-cargo",
+        "nodes": [
+          {
+            "config": {
+              "max_attempts": 2,
+              "prompt_ref": {
+                "id": "t/pedir_cargo",
+                "spec": "1.0.0"
+              },
+              "slot": "descripcion_cargo",
+              "validator": null
+            },
+            "id": "pedir_cargo",
+            "next": {
+              "max_attempts": "esc_sin_datos",
+              "ok": "buscar_tx"
+            },
+            "type": "collect"
+          },
+          {
+            "config": {
+              "args": {
+                "texto": "slots.descripcion_cargo"
+              },
+              "save_as": "candidatas",
+              "step_up_max_attempts": 2,
+              "tool": {
+                "id": "buscar_transacciones",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "buscar_tx",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "coincide",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "branch_on": "match",
+              "choices_from": null,
+              "input_view": null,
+              "model": {
+                "id": "match-cargo",
+                "spec": "2.0.0"
+              },
+              "save_as": "coincide"
+            },
+            "id": "coincide",
+            "next": {
+              "low_confidence": "aclarar",
+              "ninguna": "aclarar",
+              "unica": "elegir",
+              "varias": "aclarar"
+            },
+            "type": "decide"
+          },
+          {
+            "config": {
+              "args": {
+                "id": "decisions.coincide.transaction",
+                "lista": "facts.candidatas.value"
+              },
+              "save_as": "transaccion_elegida",
+              "step_up_max_attempts": 2,
+              "tool": {
+                "id": "seleccionar",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "elegir",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "a_usd",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "args": {
+                "destino": "USD",
+                "moneda": "facts.transaccion_elegida.value.currency",
+                "monto": "facts.transaccion_elegida.value.amount"
+              },
+              "save_as": "monto_usd",
+              "step_up_max_attempts": 2,
+              "tool": {
+                "id": "convertir_moneda",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "a_usd",
+            "next": {
+              "denied": "esc_tool",
+              "error": "esc_tool",
+              "ok": "umbral",
+              "timeout": "esc_tool"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "expr": null,
+              "policy": {
+                "id": "escalamiento-disputa-monto",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "umbral",
+            "next": {
+              "false": "confirmar",
+              "true": "esc_monto"
+            },
+            "type": "rule"
+          },
+          {
+            "config": {
+              "action": {
+                "args": {
+                  "descripcion": "slots.descripcion_cargo",
+                  "transaction_id": "facts.transaccion_elegida.value.transaction_id"
+                },
+                "tool": {
+                  "id": "radicar_pqr",
+                  "spec": "1.0.0"
+                }
+              },
+              "max_attempts": 2,
+              "reprompt_template": null,
+              "summary_template": {
+                "id": "t/resumen_pqr",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "confirmar",
+            "next": {
+              "max_attempts": "no_confirmado",
+              "no": "fin_cancelado",
+              "unclear": "confirmar",
+              "yes": "radicar"
+            },
+            "type": "confirm"
+          },
+          {
+            "config": {
+              "action_from": "confirmar",
+              "args": {},
+              "draft": false,
+              "save_as": "pqr",
+              "step_up_max_attempts": 2,
+              "tool": null
+            },
+            "id": "radicar",
+            "next": {
+              "denied": "esc_tool",
+              "ok": "verificar",
+              "uncertain": "verificar"
+            },
+            "type": "tool"
+          },
+          {
+            "config": {
+              "by": "idempotency_key",
+              "predicate": {
+                "==": [
+                  {
+                    "var": "readback.status"
+                  },
+                  "Open"
+                ]
+              },
+              "readback": {
+                "id": "obtener_pqr",
+                "spec": "1.0.0"
+              },
+              "save_as": "pqr_verificada"
+            },
+            "id": "verificar",
+            "next": {
+              "failed": "esc_verif",
+              "verified": "responder_ok"
+            },
+            "type": "verify"
+          },
+          {
+            "config": {
+              "await": false,
+              "claims": [
+                "confirmar"
+              ],
+              "generate": {
+                "allowed_facts": [
+                  "facts.pqr_verificada"
+                ],
+                "fallback_template_ref": {
+                  "id": "t/pqr_radicado",
+                  "spec": "1.0.0"
+                },
+                "knowledge_from": [],
+                "prompt_ref": {
+                  "id": "p/resumen_radicado",
+                  "spec": "1.0.0"
+                },
+                "purpose": "customer_answer"
+              },
+              "template_ref": null
+            },
+            "id": "responder_ok",
+            "next": {
+              "next": "fin"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "outcome": "resolved",
+              "output_map": null
+            },
+            "id": "fin",
+            "next": {},
+            "type": "end"
+          },
+          {
+            "config": {
+              "await": true,
+              "claims": [],
+              "generate": null,
+              "template_ref": {
+                "id": "t/aclarar_cargo",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "aclarar",
+            "next": {
+              "next": "pedir_cargo"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "await": false,
+              "claims": [],
+              "generate": null,
+              "template_ref": {
+                "id": "t/no_confirmado",
+                "spec": "1.0.0"
+              }
+            },
+            "id": "no_confirmado",
+            "next": {
+              "next": "fin_abstenido"
+            },
+            "type": "respond"
+          },
+          {
+            "config": {
+              "outcome": "abstained",
+              "output_map": null
+            },
+            "id": "fin_abstenido",
+            "next": {},
+            "type": "end"
+          },
+          {
+            "config": {
+              "outcome": "cancelled",
+              "output_map": null
+            },
+            "id": "fin_cancelado",
+            "next": {},
+            "type": "end"
+          },
+          {
+            "config": {
+              "priority_expr": null,
+              "reason_code": "low_confidence",
+              "target_queue": null
+            },
+            "id": "esc_sin_datos",
+            "next": {},
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "priority_expr": null,
+              "reason_code": "tool_failure",
+              "target_queue": null
+            },
+            "id": "esc_tool",
+            "next": {},
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "priority_expr": null,
+              "reason_code": "policy:escalamiento-disputa-monto",
+              "target_queue": "disputas"
+            },
+            "id": "esc_monto",
+            "next": {},
+            "type": "escalate"
+          },
+          {
+            "config": {
+              "priority_expr": null,
+              "reason_code": "verification_failed",
+              "target_queue": null
+            },
+            "id": "esc_verif",
+            "next": {},
+            "type": "escalate"
+          }
+        ],
+        "priority": 50,
+        "version": "1.0.0"
+      },
+      "ref": "flow:disputa-cargo@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "injection-rules",
+        "rules": [
+          {
+            "id": "ignore-instructions-es",
+            "kind": "regex",
+            "pattern": "\\b(ignora|olvida|descarta)\\b.{0,30}\\b(instrucciones|indicaciones|reglas)\\b"
+          },
+          {
+            "id": "ignore-instructions-pt",
+            "kind": "regex",
+            "pattern": "\\b(ignore|esque[cç]a|descarte)\\b.{0,30}\\b(instru[cç][õo]es|regras)\\b"
+          },
+          {
+            "id": "ignore-instructions-en",
+            "kind": "regex",
+            "pattern": "\\b(ignore|forget|disregard)\\b.{0,30}\\b(instructions|rules|guidelines)\\b"
+          },
+          {
+            "id": "role-override-es",
+            "kind": "regex",
+            "pattern": "\\b(eres|ahora eres|actúa como|finge ser)\\b.{0,20}\\b(ahora|un|una)\\b"
+          },
+          {
+            "id": "role-override-pt",
+            "kind": "regex",
+            "pattern": "\\b(você agora é|voce agora e|finja ser|aja como)\\b"
+          },
+          {
+            "id": "role-override-en",
+            "kind": "regex",
+            "pattern": "\\b(you are now|act as|pretend to be)\\b"
+          },
+          {
+            "id": "system-prompt",
+            "kind": "phrase",
+            "pattern": "system prompt"
+          },
+          {
+            "id": "reveal-prompt-es",
+            "kind": "phrase",
+            "pattern": "muestra tu prompt"
+          },
+          {
+            "id": "fake-delimiter",
+            "kind": "regex",
+            "pattern": "</?\\s*datos_no_confiables"
+          },
+          {
+            "id": "fake-token",
+            "kind": "regex",
+            "pattern": "⟦[a-z]{1,12}:[0-9]+⟧"
+          }
+        ],
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22696e6a656374696f6e2d72756c6573222c2272756c6573223a5b7b226964223a2269676e6f72652d696e737472756374696f6e732d6573222c226b696e64223a227265676578222c227061747465726e223a225c5c622869676e6f72617c6f6c766964617c6465736361727461295c5c622e7b302c33307d5c5c6228696e737472756363696f6e65737c696e6469636163696f6e65737c7265676c6173295c5c62227d2c7b226964223a2269676e6f72652d696e737472756374696f6e732d7074222c226b696e64223a227265676578222c227061747465726e223a225c5c622869676e6f72657c65737175655b63c3a75d617c6465736361727465295c5c622e7b302c33307d5c5c6228696e737472755b63c3a75d5bc3b56f5d65737c726567726173295c5c62227d2c7b226964223a2269676e6f72652d696e737472756374696f6e732d656e222c226b696e64223a227265676578222c227061747465726e223a225c5c622869676e6f72657c666f726765747c646973726567617264295c5c622e7b302c33307d5c5c6228696e737472756374696f6e737c72756c65737c67756964656c696e6573295c5c62227d2c7b226964223a22726f6c652d6f766572726964652d6573222c226b696e64223a227265676578222c227061747465726e223a225c5c6228657265737c61686f726120657265737c616374c3ba6120636f6d6f7c66696e676520736572295c5c622e7b302c32307d5c5c622861686f72617c756e7c756e61295c5c62227d2c7b226964223a22726f6c652d6f766572726964652d7074222c226b696e64223a227265676578222c227061747465726e223a225c5c6228766f63c3aa2061676f726120c3a97c766f63652061676f726120657c66696e6a61207365727c616a6120636f6d6f295c5c62227d2c7b226964223a22726f6c652d6f766572726964652d656e222c226b696e64223a227265676578222c227061747465726e223a225c5c6228796f7520617265206e6f777c6163742061737c70726574656e6420746f206265295c5c62227d2c7b226964223a2273797374656d2d70726f6d7074222c226b696e64223a22706872617365222c227061747465726e223a2273797374656d2070726f6d7074227d2c7b226964223a2272657665616c2d70726f6d70742d6573222c226b696e64223a22706872617365222c227061747465726e223a226d7565737472612074752070726f6d7074227d2c7b226964223a2266616b652d64656c696d69746572222c226b696e64223a227265676578222c227061747465726e223a223c2f3f5c5c732a6461746f735f6e6f5f636f6e666961626c6573227d2c7b226964223a2266616b652d746f6b656e222c226b696e64223a227265676578222c227061747465726e223a22e29fa65b612d7a5d7b312c31327d3a5b302d395d2be29fa7227d5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "172c1c4c0a20480fff9d2221e1df155bd5765b3a87e2d5591d42ba5ef82e361f",
+      "normalized_dump_json": {
+        "id": "injection-rules",
+        "rules": [
+          {
+            "id": "ignore-instructions-es",
+            "kind": "regex",
+            "pattern": "\\b(ignora|olvida|descarta)\\b.{0,30}\\b(instrucciones|indicaciones|reglas)\\b"
+          },
+          {
+            "id": "ignore-instructions-pt",
+            "kind": "regex",
+            "pattern": "\\b(ignore|esque[cç]a|descarte)\\b.{0,30}\\b(instru[cç][õo]es|regras)\\b"
+          },
+          {
+            "id": "ignore-instructions-en",
+            "kind": "regex",
+            "pattern": "\\b(ignore|forget|disregard)\\b.{0,30}\\b(instructions|rules|guidelines)\\b"
+          },
+          {
+            "id": "role-override-es",
+            "kind": "regex",
+            "pattern": "\\b(eres|ahora eres|actúa como|finge ser)\\b.{0,20}\\b(ahora|un|una)\\b"
+          },
+          {
+            "id": "role-override-pt",
+            "kind": "regex",
+            "pattern": "\\b(você agora é|voce agora e|finja ser|aja como)\\b"
+          },
+          {
+            "id": "role-override-en",
+            "kind": "regex",
+            "pattern": "\\b(you are now|act as|pretend to be)\\b"
+          },
+          {
+            "id": "system-prompt",
+            "kind": "phrase",
+            "pattern": "system prompt"
+          },
+          {
+            "id": "reveal-prompt-es",
+            "kind": "phrase",
+            "pattern": "muestra tu prompt"
+          },
+          {
+            "id": "fake-delimiter",
+            "kind": "regex",
+            "pattern": "</?\\s*datos_no_confiables"
+          },
+          {
+            "id": "fake-token",
+            "kind": "regex",
+            "pattern": "⟦[a-z]{1,12}:[0-9]+⟧"
+          }
+        ],
+        "version": "1.0.0"
+      },
+      "ref": "injection_ruleset:injection-rules@1.0.0"
+    },
+    {
+      "authored_json": {
+        "candidates": [
+          "es",
+          "pt"
+        ],
+        "detector": "lingua@2.1.1",
+        "id": "lang-es-pt",
+        "min_letters": 12,
+        "min_letters_unsupported": 20,
+        "unsupported": [
+          "en"
+        ],
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b2263616e64696461746573223a5b226573222c227074225d2c226465746563746f72223a226c696e67756140322e312e31222c226964223a226c616e672d65732d7074222c226d696e5f6c657474657273223a31322c226d696e5f6c6574746572735f756e737570706f72746564223a32302c227468726573686f6c64735f66726f6d223a6e756c6c2c22756e737570706f72746564223a5b22656e225d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "819529d6716a28ce54252f7975958b38790c7d05b4fe972516020d0a4e674d6c",
+      "normalized_dump_json": {
+        "candidates": [
+          "es",
+          "pt"
+        ],
+        "detector": "lingua@2.1.1",
+        "id": "lang-es-pt",
+        "min_letters": 12,
+        "min_letters_unsupported": 20,
+        "thresholds_from": null,
+        "unsupported": [
+          "en"
+        ],
+        "version": "1.0.0"
+      },
+      "ref": "language_detection:lang-es-pt@1.0.0"
+    },
+    {
+      "authored_json": {
+        "endpoint_alias": "llm-sintetico",
+        "id": "perfil-generacion",
+        "max_tokens": 400,
+        "model": "modelo-sintetico-1",
+        "price": {
+          "as_of": "2026-09-29",
+          "input_per_mtok": 1,
+          "output_per_mtok": 2,
+          "source": "tarifa sintetica de pruebas"
+        },
+        "temperature": 0,
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b22656e64706f696e745f616c696173223a226c6c6d2d73696e74657469636f222c226964223a2270657266696c2d67656e65726163696f6e222c226d61785f746f6b656e73223a3430302c226d6f64656c223a226d6f64656c6f2d73696e74657469636f2d31222c227072696365223a7b2261735f6f66223a22323032362d30392d3239222c22696e7075745f7065725f6d746f6b223a2231222c226f75747075745f7065725f6d746f6b223a2232222c22736f75726365223a227461726966612073696e7465746963612064652070727565626173227d2c2273747275637475726564223a226e6174697665222c2274656d7065726174757265223a2230222c2274696d656f75745f73223a382c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "d685c8c3161a94542e3337a8c5950a3d90bdc9ea180b8a09805311219d7a4129",
+      "normalized_dump_json": {
+        "endpoint_alias": "llm-sintetico",
+        "id": "perfil-generacion",
+        "max_tokens": 400,
+        "model": "modelo-sintetico-1",
+        "price": {
+          "as_of": "2026-09-29",
+          "input_per_mtok": "1",
+          "output_per_mtok": "2",
+          "source": "tarifa sintetica de pruebas"
+        },
+        "structured": "native",
+        "temperature": "0",
+        "timeout_s": 8,
+        "version": "1.0.0"
+      },
+      "ref": "model_profile:perfil-generacion@1.0.0"
+    },
+    {
+      "authored_json": {
+        "expr": {
+          ">": [
+            {
+              "var": "facts.monto_usd.value"
+            },
+            500
+          ]
+        },
+        "id": "escalamiento-disputa-monto",
+        "owner": "riesgo",
+        "rationale": "Disputas sobre montos altos requieren revisión humana (política sintética).",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b2265787072223a7b223e223a5b7b22766172223a2266616374732e6d6f6e746f5f7573642e76616c7565227d2c3530305d7d2c226964223a22657363616c616d69656e746f2d646973707574612d6d6f6e746f222c226f776e6572223a2272696573676f222c22726174696f6e616c65223a22446973707574617320736f627265206d6f6e746f7320616c746f732072657175696572656e20726576697369c3b36e2068756d616e612028706f6cc3ad746963612073696e74c3a974696361292e222c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "e67997e2d2a2356ad1d1e4fd6733a7c33b4754a8a54054c43e15fe897f37b6bf",
+      "normalized_dump_json": {
+        "expr": {
+          ">": [
+            {
+              "var": "facts.monto_usd.value"
+            },
+            500
+          ]
+        },
+        "id": "escalamiento-disputa-monto",
+        "owner": "riesgo",
+        "rationale": "Disputas sobre montos altos requieren revisión humana (política sintética).",
+        "version": "1.0.0"
+      },
+      "ref": "policy:escalamiento-disputa-monto@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "p/resumen_radicado",
+        "locales": {
+          "es": "Redacta un mensaje breve para el cliente que confirme que su disputa fue radicada. No repitas cifras.",
+          "pt": "Redija uma mensagem breve para o cliente confirmando que sua contestação foi registrada. Não repita números."
+        },
+        "model_profile": "perfil-generacion@1",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22702f726573756d656e5f726164696361646f222c226c6f63616c6573223a7b226573223a225265646163746120756e206d656e73616a65206272657665207061726120656c20636c69656e74652071756520636f6e6669726d65207175652073752064697370757461206675652072616469636164612e204e6f2072657069746173206369667261732e222c227074223a22526564696a6120756d61206d656e736167656d2062726576652070617261206f20636c69656e746520636f6e6669726d616e646f207175652073756120636f6e7465737461c3a7c3a36f20666f6920726567697374726164612e204ec3a36f20726570697461206ec3ba6d65726f732e227d2c226d6f64656c5f70726f66696c65223a7b226964223a2270657266696c2d67656e65726163696f6e222c2273706563223a22312e302e30227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "26389427d9931d33d38fb69d86959b0c95e162664fd964f8f898b38cda50d639",
+      "normalized_dump_json": {
+        "id": "p/resumen_radicado",
+        "locales": {
+          "es": "Redacta un mensaje breve para el cliente que confirme que su disputa fue radicada. No repitas cifras.",
+          "pt": "Redija uma mensagem breve para o cliente confirmando que sua contestação foi registrada. Não repita números."
+        },
+        "model_profile": {
+          "id": "perfil-generacion",
+          "spec": "1.0.0"
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "prompt:p/resumen_radicado@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/abstencion",
+        "locales": {
+          "es": "No puedo ayudarte con eso.",
+          "pt": "Não posso ajudar com isso."
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f61627374656e63696f6e222c226c6f63616c6573223a7b226573223a224e6f20707565646f20617975646172746520636f6e2065736f2e222c227074223a224ec3a36f20706f73736f20616a7564617220636f6d206973736f2e227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "cc0289873212eaaa029239618c0e10a037f8656892c8a677364f79338f763705",
+      "normalized_dump_json": {
+        "id": "t/abstencion",
+        "locales": {
+          "es": "No puedo ayudarte con eso.",
+          "pt": "Não posso ajudar com isso."
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/abstencion@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/aclarar",
+        "locales": {
+          "es": "¿Puedes aclararlo?",
+          "pt": "Pode esclarecer?"
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f61636c61726172222c226c6f63616c6573223a7b226573223a22c2bf5075656465732061636c617261726c6f3f222c227074223a22506f6465206573636c6172656365723f227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "56206672b53310b8c4cb1c30bd33bcee1d6abfbfd89cbe470d2fd658fd248179",
+      "normalized_dump_json": {
+        "id": "t/aclarar",
+        "locales": {
+          "es": "¿Puedes aclararlo?",
+          "pt": "Pode esclarecer?"
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/aclarar@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/aclarar_cargo",
+        "locales": {
+          "es": "No encontré ese cargo. ¿Puedes darme más detalles?",
+          "pt": "Não encontrei essa cobrança. Pode dar mais detalhes?"
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f61636c617261725f636172676f222c226c6f63616c6573223a7b226573223a224e6f20656e636f6e7472c3a92065736520636172676f2e20c2bf507565646573206461726d65206dc3a17320646574616c6c65733f222c227074223a224ec3a36f20656e636f6e74726569206573736120636f6272616ec3a7612e20506f646520646172206d61697320646574616c6865733f227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "543147ce52f54cea888536f6296a1b957ee0c9ccbddc5ca43c9555c07430b968",
+      "normalized_dump_json": {
+        "id": "t/aclarar_cargo",
+        "locales": {
+          "es": "No encontré ese cargo. ¿Puedes darme más detalles?",
+          "pt": "Não encontrei essa cobrança. Pode dar mais detalhes?"
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/aclarar_cargo@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/acuse",
+        "locales": {
+          "es": "Lo anoto para después.",
+          "pt": "Anotei para depois."
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f6163757365222c226c6f63616c6573223a7b226573223a224c6f20616e6f746f2070617261206465737075c3a9732e222c227074223a22416e6f7465692070617261206465706f69732e227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "9061fefb66a06575d9941f7b2dcd83efa5765ed1c5954e07b1d86e74a05d0fce",
+      "normalized_dump_json": {
+        "id": "t/acuse",
+        "locales": {
+          "es": "Lo anoto para después.",
+          "pt": "Anotei para depois."
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/acuse@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/idioma_no_soportado",
+        "locales": {
+          "es": "Atiendo en español y portugués.",
+          "pt": "Atendo em espanhol e português."
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f6964696f6d615f6e6f5f736f706f727461646f222c226c6f63616c6573223a7b226573223a22417469656e646f20656e2065737061c3b16f6c207920706f7274756775c3a9732e222c227074223a224174656e646f20656d20657370616e686f6c206520706f7274756775c3aa732e227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "63a73d2237109534ada31082b64486dda7c498b5a7d5fb19659594ccfc6f3ef5",
+      "normalized_dump_json": {
+        "id": "t/idioma_no_soportado",
+        "locales": {
+          "es": "Atiendo en español y portugués.",
+          "pt": "Atendo em espanhol e português."
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/idioma_no_soportado@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/mensaje_largo",
+        "locales": {
+          "es": "El mensaje es muy largo.",
+          "pt": "A mensagem é muito longa."
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f6d656e73616a655f6c6172676f222c226c6f63616c6573223a7b226573223a22456c206d656e73616a65206573206d7579206c6172676f2e222c227074223a2241206d656e736167656d20c3a9206d7569746f206c6f6e67612e227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "93427eb0c1696c0e9fad0a9eb60ed950c2928d2813c7e6e4a939f3fd22d1020f",
+      "normalized_dump_json": {
+        "id": "t/mensaje_largo",
+        "locales": {
+          "es": "El mensaje es muy largo.",
+          "pt": "A mensagem é muito longa."
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/mensaje_largo@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/no_confirmado",
+        "locales": {
+          "es": "No registré la disputa.",
+          "pt": "Não registrei a contestação."
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f6e6f5f636f6e6669726d61646f222c226c6f63616c6573223a7b226573223a224e6f2072656769737472c3a9206c6120646973707574612e222c227074223a224ec3a36f20726567697374726569206120636f6e7465737461c3a7c3a36f2e227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "19eb7f8d529389961ff1ed14ec66283cd303128435d41dfe78623b2071abf754",
+      "normalized_dump_json": {
+        "id": "t/no_confirmado",
+        "locales": {
+          "es": "No registré la disputa.",
+          "pt": "Não registrei a contestação."
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/no_confirmado@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/oferta",
+        "locales": {
+          "es": "¿Seguimos con lo pendiente?",
+          "pt": "Seguimos com o pendente?"
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f6f6665727461222c226c6f63616c6573223a7b226573223a22c2bf53656775696d6f7320636f6e206c6f2070656e6469656e74653f222c227074223a2253656775696d6f7320636f6d206f2070656e64656e74653f227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "cdcd2ac3f37ecbb0fd3cf052764980d36276cdd602f9b216b31e3b77e43e8eab",
+      "normalized_dump_json": {
+        "id": "t/oferta",
+        "locales": {
+          "es": "¿Seguimos con lo pendiente?",
+          "pt": "Seguimos com o pendente?"
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/oferta@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/pedir_cargo",
+        "locales": {
+          "es": "¿Qué cargo quieres disputar?",
+          "pt": "Qual cobrança você quer contestar?"
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f70656469725f636172676f222c226c6f63616c6573223a7b226573223a22c2bf5175c3a920636172676f20717569657265732064697370757461723f222c227074223a225175616c20636f6272616ec3a76120766f63c3aa207175657220636f6e7465737461723f227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "d916ce88da49e354d7f9cc89247da6bc7167a2fabfab9b1b6399a0baaa944def",
+      "normalized_dump_json": {
+        "id": "t/pedir_cargo",
+        "locales": {
+          "es": "¿Qué cargo quieres disputar?",
+          "pt": "Qual cobrança você quer contestar?"
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/pedir_cargo@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/pqr_radicado",
+        "locales": {
+          "es": "Radicamos tu disputa con el número {{ facts.pqr_verificada.value.id }}.",
+          "pt": "Registramos sua contestação com o número {{ facts.pqr_verificada.value.id }}."
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f7071725f726164696361646f222c226c6f63616c6573223a7b226573223a225261646963616d6f73207475206469737075746120636f6e20656c206ec3ba6d65726f207b7b2066616374732e7071725f766572696669636164612e76616c75652e6964207d7d2e222c227074223a2252656769737472616d6f732073756120636f6e7465737461c3a7c3a36f20636f6d206f206ec3ba6d65726f207b7b2066616374732e7071725f766572696669636164612e76616c75652e6964207d7d2e227d2c227265616473223a5b2266616374732e7071725f766572696669636164612e76616c75652e6964225d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "b9a7fed3a2be46a9fb33e8890216e1876f1d5923bfb3ad571c93c0841f498dff",
+      "normalized_dump_json": {
+        "id": "t/pqr_radicado",
+        "locales": {
+          "es": "Radicamos tu disputa con el número {{ facts.pqr_verificada.value.id }}.",
+          "pt": "Registramos sua contestação com o número {{ facts.pqr_verificada.value.id }}."
+        },
+        "reads": [
+          "facts.pqr_verificada.value.id"
+        ],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/pqr_radicado@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/resumen_pqr",
+        "locales": {
+          "es": "Voy a radicar la disputa del cargo. ¿Confirmas?",
+          "pt": "Vou registrar a contestação. Confirma?"
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f726573756d656e5f707172222c226c6f63616c6573223a7b226573223a22566f7920612072616469636172206c6120646973707574612064656c20636172676f2e20c2bf436f6e6669726d61733f222c227074223a22566f7520726567697374726172206120636f6e7465737461c3a7c3a36f2e20436f6e6669726d613f227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "9895ee51f07535ed517dd468d6168387cb5248139b4587be6c8595f91d7baf5c",
+      "normalized_dump_json": {
+        "id": "t/resumen_pqr",
+        "locales": {
+          "es": "Voy a radicar la disputa del cargo. ¿Confirmas?",
+          "pt": "Vou registrar a contestação. Confirma?"
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/resumen_pqr@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "t/traspaso",
+        "locales": {
+          "es": "Te paso con un asesor.",
+          "pt": "Vou transferir para um atendente."
+        },
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b226964223a22742f747261737061736f222c226c6f63616c6573223a7b226573223a225465207061736f20636f6e20756e20617365736f722e222c227074223a22566f75207472616e736665726972207061726120756d206174656e64656e74652e227d2c227265616473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "aa993133401ef31c971efdd2a0c3a74881663df95299dabd83bb700c4c04a481",
+      "normalized_dump_json": {
+        "id": "t/traspaso",
+        "locales": {
+          "es": "Te paso con un asesor.",
+          "pt": "Vou transferir para um atendente."
+        },
+        "reads": [],
+        "version": "1.0.0"
+      },
+      "ref": "template:t/traspaso@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "buscar_transacciones",
+        "idempotent": true,
+        "min_auth_level": "session",
+        "risk_class": "read",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b22617267735f736368656d61223a6e756c6c2c22636f6e6669726d6174696f6e5f74746c223a225054354d222c226465736372697074696f6e223a6e756c6c2c226964223a226275736361725f7472616e73616363696f6e6573222c226964656d706f74656e74223a747275652c226d61785f617574685f616765223a6e756c6c2c226d696e5f617574685f6c6576656c223a2273657373696f6e222c22726561646261636b5f6279223a6e756c6c2c227269736b5f636c617373223a2272656164222c22736f75726365223a6e756c6c2c22756e747275737465645f6669656c6473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "a7e05d1d46c07c8add95eba12f6fc200e973dad31b659dd7c800b35948903deb",
+      "normalized_dump_json": {
+        "args_schema": null,
+        "confirmation_ttl": "PT5M",
+        "description": null,
+        "id": "buscar_transacciones",
+        "idempotent": true,
+        "max_auth_age": null,
+        "min_auth_level": "session",
+        "readback_by": null,
+        "risk_class": "read",
+        "source": null,
+        "untrusted_fields": [],
+        "version": "1.0.0"
+      },
+      "ref": "tool:buscar_transacciones@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "convertir_moneda",
+        "idempotent": true,
+        "min_auth_level": "session",
+        "risk_class": "compute",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b22617267735f736368656d61223a6e756c6c2c22636f6e6669726d6174696f6e5f74746c223a225054354d222c226465736372697074696f6e223a6e756c6c2c226964223a22636f6e7665727469725f6d6f6e656461222c226964656d706f74656e74223a747275652c226d61785f617574685f616765223a6e756c6c2c226d696e5f617574685f6c6576656c223a2273657373696f6e222c22726561646261636b5f6279223a6e756c6c2c227269736b5f636c617373223a22636f6d70757465222c22736f75726365223a6e756c6c2c22756e747275737465645f6669656c6473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "3b0addb9f12b20cd58beda0958a04ebb397ad62f8a0f82f5e6760f7f9953a86b",
+      "normalized_dump_json": {
+        "args_schema": null,
+        "confirmation_ttl": "PT5M",
+        "description": null,
+        "id": "convertir_moneda",
+        "idempotent": true,
+        "max_auth_age": null,
+        "min_auth_level": "session",
+        "readback_by": null,
+        "risk_class": "compute",
+        "source": null,
+        "untrusted_fields": [],
+        "version": "1.0.0"
+      },
+      "ref": "tool:convertir_moneda@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "obtener_pqr",
+        "idempotent": true,
+        "min_auth_level": "session",
+        "risk_class": "read",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b22617267735f736368656d61223a6e756c6c2c22636f6e6669726d6174696f6e5f74746c223a225054354d222c226465736372697074696f6e223a6e756c6c2c226964223a226f6274656e65725f707172222c226964656d706f74656e74223a747275652c226d61785f617574685f616765223a6e756c6c2c226d696e5f617574685f6c6576656c223a2273657373696f6e222c22726561646261636b5f6279223a6e756c6c2c227269736b5f636c617373223a2272656164222c22736f75726365223a6e756c6c2c22756e747275737465645f6669656c6473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "72446b11c64d7eccc6f6e22244f7a0aa983be10a844d12eeac534d37e326d27b",
+      "normalized_dump_json": {
+        "args_schema": null,
+        "confirmation_ttl": "PT5M",
+        "description": null,
+        "id": "obtener_pqr",
+        "idempotent": true,
+        "max_auth_age": null,
+        "min_auth_level": "session",
+        "readback_by": null,
+        "risk_class": "read",
+        "source": null,
+        "untrusted_fields": [],
+        "version": "1.0.0"
+      },
+      "ref": "tool:obtener_pqr@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "radicar_pqr",
+        "idempotent": true,
+        "min_auth_level": "step_up",
+        "readback_by": "idempotency_key",
+        "risk_class": "write_reversible",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b22617267735f736368656d61223a6e756c6c2c22636f6e6669726d6174696f6e5f74746c223a225054354d222c226465736372697074696f6e223a6e756c6c2c226964223a22726164696361725f707172222c226964656d706f74656e74223a747275652c226d61785f617574685f616765223a6e756c6c2c226d696e5f617574685f6c6576656c223a22737465705f7570222c22726561646261636b5f6279223a226964656d706f74656e63795f6b6579222c227269736b5f636c617373223a2277726974655f72657665727369626c65222c22736f75726365223a6e756c6c2c22756e747275737465645f6669656c6473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "e0f54302e353c787b15a1e738147ede6b7c5eeeab1c06fd39a94694c220d810f",
+      "normalized_dump_json": {
+        "args_schema": null,
+        "confirmation_ttl": "PT5M",
+        "description": null,
+        "id": "radicar_pqr",
+        "idempotent": true,
+        "max_auth_age": null,
+        "min_auth_level": "step_up",
+        "readback_by": "idempotency_key",
+        "risk_class": "write_reversible",
+        "source": null,
+        "untrusted_fields": [],
+        "version": "1.0.0"
+      },
+      "ref": "tool:radicar_pqr@1.0.0"
+    },
+    {
+      "authored_json": {
+        "id": "seleccionar",
+        "idempotent": true,
+        "min_auth_level": "session",
+        "risk_class": "compute",
+        "version": "1.0.0"
+      },
+      "canonical_bytes_hex": "7b22617267735f736368656d61223a6e756c6c2c22636f6e6669726d6174696f6e5f74746c223a225054354d222c226465736372697074696f6e223a6e756c6c2c226964223a2273656c656363696f6e6172222c226964656d706f74656e74223a747275652c226d61785f617574685f616765223a6e756c6c2c226d696e5f617574685f6c6576656c223a2273657373696f6e222c22726561646261636b5f6279223a6e756c6c2c227269736b5f636c617373223a22636f6d70757465222c22736f75726365223a6e756c6c2c22756e747275737465645f6669656c6473223a5b5d2c2276657273696f6e223a22312e302e30227d",
+      "content_hash": "087dc355351dd0b082f72996af259de5748a16c13f0d4a3d95e5b270c0faba36",
+      "normalized_dump_json": {
+        "args_schema": null,
+        "confirmation_ttl": "PT5M",
+        "description": null,
+        "id": "seleccionar",
+        "idempotent": true,
+        "max_auth_age": null,
+        "min_auth_level": "session",
+        "readback_by": null,
+        "risk_class": "compute",
+        "source": null,
+        "untrusted_fields": [],
+        "version": "1.0.0"
+      },
+      "ref": "tool:seleccionar@1.0.0"
+    }
+  ],
+  "release_hash": "98130317a10038497cb752062500d056425c7be0225452e28a606ac9a1ed8549",
+  "release_id": "rel-98130317a1003849"
+}

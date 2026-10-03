@@ -1,0 +1,81 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "ConfirmAnswer": {
+      "additionalProperties": false,
+      "description": "Respuesta del usuario (sí/no) a una confirmación, con su token (M0 §2.8).",
+      "properties": {
+        "answer": {
+          "enum": [
+            "yes",
+            "no"
+          ],
+          "title": "Answer",
+          "type": "string"
+        },
+        "token": {
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token",
+        "answer"
+      ],
+      "title": "ConfirmAnswer",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Entrada de un turno conversacional: texto o respuesta de confirmación (M0 §2.8).",
+  "properties": {
+    "channel": {
+      "title": "Channel",
+      "type": "string"
+    },
+    "client_turn_id": {
+      "title": "Client Turn Id",
+      "type": "string"
+    },
+    "confirm": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConfirmAnswer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "lang": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lang"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "text": {
+      "default": "",
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id",
+    "channel",
+    "client_turn_id"
+  ],
+  "title": "TurnInput",
+  "type": "object"
+}

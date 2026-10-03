@@ -1,0 +1,66 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Payload of `transfer_rejected` (audit view).",
+  "properties": {
+    "directory": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Directory"
+    },
+    "directory_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Directory Hash"
+    },
+    "reason_code": {
+      "enum": [
+        "not_in_directory",
+        "no_active_release",
+        "not_eligible",
+        "accepts_mismatch",
+        "transfer_limit",
+        "no_turn"
+      ],
+      "title": "Reason Code",
+      "type": "string"
+    },
+    "to_agent": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "To Agent"
+    },
+    "transfer_id": {
+      "title": "Transfer Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "transfer_id",
+    "reason_code"
+  ],
+  "title": "TransferRejectedPayload",
+  "type": "object"
+}

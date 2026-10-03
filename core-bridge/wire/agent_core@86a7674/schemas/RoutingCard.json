@@ -1,0 +1,32 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "What a specialist solves, as shown to the reception agent (spec §3.1).",
+  "properties": {
+    "directory": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Directory",
+      "type": "string"
+    },
+    "examples": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Examples",
+      "type": "array"
+    },
+    "summary": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Summary",
+      "type": "string"
+    }
+  },
+  "required": [
+    "directory",
+    "summary"
+  ],
+  "title": "RoutingCard",
+  "type": "object"
+}

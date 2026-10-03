@@ -1,0 +1,30 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "additionalProperties": false,
+  "description": "Una página pedida que M12 no entregó, y por qué (nunca lleva su contenido).",
+  "properties": {
+    "reason": {
+      "enum": [
+        "audience",
+        "not_approved",
+        "expired",
+        "not_yet_valid",
+        "lang",
+        "snapshot",
+        "view"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "ref": {
+      "title": "Ref",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "reason"
+  ],
+  "title": "FilteredPage",
+  "type": "object"
+}

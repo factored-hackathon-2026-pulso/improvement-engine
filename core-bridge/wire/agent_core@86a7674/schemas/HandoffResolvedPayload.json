@@ -1,0 +1,48 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "PrincipalType": {
+      "description": "Tipo de principal que invoca el motor (ADR 0006, M0 §2.3).",
+      "enum": [
+        "customer",
+        "advisor",
+        "service",
+        "builder"
+      ],
+      "title": "PrincipalType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `handoff_resolved` (vista audit, M0 §2.10).",
+  "properties": {
+    "handoff_quality": {
+      "enum": [
+        "useful",
+        "incomplete",
+        "unnecessary"
+      ],
+      "title": "Handoff Quality",
+      "type": "string"
+    },
+    "handoff_ref": {
+      "title": "Handoff Ref",
+      "type": "string"
+    },
+    "reader_type": {
+      "$ref": "#/$defs/PrincipalType"
+    },
+    "resolution_code": {
+      "title": "Resolution Code",
+      "type": "string"
+    }
+  },
+  "required": [
+    "handoff_ref",
+    "resolution_code",
+    "handoff_quality",
+    "reader_type"
+  ],
+  "title": "HandoffResolvedPayload",
+  "type": "object"
+}

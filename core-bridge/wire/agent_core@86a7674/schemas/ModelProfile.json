@@ -1,0 +1,130 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "ModelPrice": {
+      "additionalProperties": false,
+      "description": "Tarifa de un modelo por millón de tokens, con fuente y fecha (M0 §2.4).",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "input_per_mtok": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Input Per Mtok"
+        },
+        "output_per_mtok": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Output Per Mtok"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_per_mtok",
+        "output_per_mtok",
+        "source",
+        "as_of"
+      ],
+      "title": "ModelPrice",
+      "type": "object"
+    },
+    "StructuredMode": {
+      "description": "Modo de salida estructurada de un modelo: nativo o por prompt (M0 §2.4).",
+      "enum": [
+        "native",
+        "prompted"
+      ],
+      "title": "StructuredMode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Perfil de un modelo de lenguaje: alias de endpoint, parámetros y tarifa (ADR 0016).",
+  "properties": {
+    "endpoint_alias": {
+      "minLength": 1,
+      "title": "Endpoint Alias",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "max_tokens": {
+      "exclusiveMinimum": 0,
+      "title": "Max Tokens",
+      "type": "integer"
+    },
+    "model": {
+      "minLength": 1,
+      "title": "Model",
+      "type": "string"
+    },
+    "price": {
+      "$ref": "#/$defs/ModelPrice"
+    },
+    "structured": {
+      "$ref": "#/$defs/StructuredMode",
+      "default": "native"
+    },
+    "temperature": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Temperature"
+    },
+    "timeout_s": {
+      "default": 8,
+      "exclusiveMinimum": 0,
+      "title": "Timeout S",
+      "type": "integer"
+    },
+    "version": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "endpoint_alias",
+    "model",
+    "temperature",
+    "max_tokens",
+    "price"
+  ],
+  "title": "ModelProfile",
+  "type": "object"
+}

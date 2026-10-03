@@ -1,0 +1,39 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Payload del evento `step_up_requested` (vista audit, M0 §2.10).",
+  "properties": {
+    "attempt": {
+      "exclusiveMinimum": 0,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "node_id": {
+      "pattern": "^[a-z0-9][a-z0-9_]*$",
+      "title": "Node Id",
+      "type": "string"
+    },
+    "required_level": {
+      "$ref": "#/$defs/AuthLevel"
+    }
+  },
+  "required": [
+    "node_id",
+    "required_level",
+    "attempt"
+  ],
+  "title": "StepUpRequestedPayload",
+  "type": "object"
+}
