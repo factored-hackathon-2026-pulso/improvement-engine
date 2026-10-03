@@ -1,8 +1,9 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { makeWorld } from '../fixtures/world.mjs';
+import { makeScenario } from '../fixtures/scenarios.mjs';
 
-let world = makeWorld();
+let scenario = 'default';
+let world = makeScenario(scenario);
 let faults = { stream: null }; // 'gone' (410 once) | 'unauthorized' (401 until reset)
 const sseClients = new Set();
 const CSRF = 'fixture-csrf-token';
@@ -28,7 +29,7 @@ const readBody = (req) => new Promise((ok) => {
   req.on('end', () => { try { ok(d ? JSON.parse(d) : {}); } catch { ok(null); } });
 });
 
-function emit(runId, nodeId, status) {
+function emit(runId, nodeId, status, deliver = true) {
   const run = world.runs[runId];
   if (!run) return null;
   const n = run.nodes.find((x) => x.node_id === nodeId);
@@ -41,7 +42,7 @@ function emit(runId, nodeId, status) {
     entity_ref: { kind: 'node', id: nodeId }, projection_revision: run.revision, kind: 'node_status_changed',
   };
   list.push(ev);
-  for (const c of sseClients) if (c.runId === runId) c.res.write(`id: ${ev.sequence}\ndata: ${JSON.stringify(ev)}\n\n`);
+  if (deliver) for (const c of sseClients) if (c.runId === runId) c.res.write(`id: ${ev.sequence}\ndata: ${JSON.stringify(ev)}\n\n`);
   return ev;
 }
 
@@ -51,16 +52,28 @@ const server = http.createServer(async (req, res) => {
   const m = req.method;
   if (p === '/healthz') return send(res, 200, { ok: true });
   if (p.startsWith('/__fixture/')) {
-    if (p === '/__fixture/reset') {
+    if (p === '/__fixture/reset' || p === '/__fixture/scenario') {
+      const b = (await readBody(req)) ?? {};
+      const next = p === '/__fixture/reset' ? (b.scenario ?? 'default') : b.scenario;
+      try { world = makeScenario(next); scenario = next; } catch { return send(res, 400, { code: 'unknown_scenario' }); }
       for (const c of sseClients) c.res.end();
       sseClients.clear();
-      world = makeWorld();
       faults = { stream: null };
+      return send(res, 200, { ok: true, scenario });
+    }
+    if (p === '/__fixture/deliver') { // push existing log entries as raw SSE frames, in the given order (dup/reorder/gap)
+      const b = await readBody(req);
+      const list = b && world.events[b.run_id];
+      if (!list) return send(res, 400, { code: 'bad_deliver' });
+      for (const seq of b.sequences) {
+        const ev = list.find((e) => e.sequence === seq);
+        if (ev) for (const c of sseClients) if (c.runId === b.run_id) c.res.write(`id: ${ev.sequence}\ndata: ${JSON.stringify(ev)}\n\n`);
+      }
       return send(res, 200, { ok: true });
     }
     if (p === '/__fixture/emit') {
       const b = await readBody(req);
-      const ev = b && emit(b.run_id, b.node_id, b.status);
+      const ev = b && emit(b.run_id, b.node_id, b.status, b.deliver !== 'none');
       return ev ? send(res, 200, ev) : send(res, 400, { code: 'bad_emit' });
     }
     if (p === '/__fixture/fault') {

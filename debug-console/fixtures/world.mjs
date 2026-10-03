@@ -1,11 +1,11 @@
 // Pure, deterministic fixture world (L7). All data is synthetic; shapes follow plan 16.10 and
 // fields beyond it are consumer proposals (marked in the manifest, not on the wire here).
-const T0 = '2026-01-01T00:00:00Z';
-const node = (node_id, label, stage, status, depends_on = [], reason_code = null) => ({
+export const T0 = '2026-01-01T00:00:00Z';
+export const node =(node_id, label, stage, status, depends_on = [], reason_code = null) => ({
   node_id, label, stage, status, depends_on, reason_code, node_kind: 'material_step', job_ref: null,
 });
 
-export function makeWorld() {
+export function baseWorld() {
   const runs = {
     'run-active': {
       run_id: 'run-active', title: 'Investigation in progress', state: 'running', origin: 'scheduled', revision: 1,

@@ -1,0 +1,6 @@
+{
+  "provider": "fixture",
+  "apiBase": "",
+  "sseHeartbeatMs": 5000,
+  "traceLinkOrigins": []
+}

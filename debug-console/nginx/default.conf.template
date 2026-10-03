@@ -1,0 +1,51 @@
+# Rendered by the nginx image entrypoint; only PULSO_* and NGINX_LOCAL_RESOLVERS are substituted (NGINX_ENVSUBST_FILTER).
+server {
+  listen 3000;
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
+  server_tokens off;
+  resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+
+  # Security headers (CSP without 'unsafe-inline'; connect-src 'self': the SPA only talks to its own origin, proxied below).
+  # add_header is not inherited once a location sets its own, so every location includes the file.
+  location = /healthz {
+    include /etc/nginx/conf.d/security-headers.inc;
+    default_type application/json;
+    return 200 '{"ok":true}';
+  }
+
+  # Same-origin proxy to the control API (both prefixes). SSE must be unbuffered.
+  location /internal/ {
+    include /etc/nginx/conf.d/security-headers.inc;
+    set $upstream ${PULSO_CONTROL_API_URL};
+    proxy_pass $upstream;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 1h;
+    add_header Cache-Control "no-store" always;
+  }
+  location /api/ {
+    include /etc/nginx/conf.d/security-headers.inc;
+    set $upstream ${PULSO_CONTROL_API_URL};
+    proxy_pass $upstream;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_buffering off;
+    add_header Cache-Control "no-store" always;
+  }
+
+  location / {
+    include /etc/nginx/conf.d/security-headers.inc;
+    try_files $uri $uri/ /index.html;
+    add_header Cache-Control "no-cache" always;
+  }
+}

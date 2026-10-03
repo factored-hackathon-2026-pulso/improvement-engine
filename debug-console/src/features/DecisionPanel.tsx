@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
+import { t } from '../i18n/es419';
 
 type Phase = 'idle' | 'needs_step_up' | 'requested' | 'running' | 'succeeded' | 'failed' | 'unknown';
 
@@ -32,25 +33,29 @@ export function DecisionPanel() {
   }
   async function stepUp() { await api.stepUp(); await submit(); }
 
-  if (available === null) return <section aria-label="Decisión"><h2>Decisión</h2><p>unknown · decisión no disponible</p></section>;
+  if (available === null) return <section aria-label={t('dec.title')}><h2>{t('dec.title')}</h2><p>{t('dec.unavailable')}</p></section>;
   const canApprove = available.includes('approve');
   return (
-    <section aria-label="Decisión">
-      <h2>Decisión</h2>
-      <label>Nota <textarea value={note} onChange={(e) => setNote(e.target.value)} /></label>
-      {canApprove
-        ? <button type="button" onClick={() => void submit()}>Aprobar</button>
-        : <button type="button" disabled aria-describedby="why">Aprobar</button>}
-      {!canApprove && <span id="why"> Sin permiso: approve no está en available_commands</span>}
+    <section aria-label={t('dec.title')}>
+      <h2>{t('dec.title')}</h2>
+      {canApprove ? (
+        <>
+          <label>{t('dec.note')} <textarea value={note} onChange={(e) => setNote(e.target.value)} /></label>
+          <button type="button" onClick={() => void submit()}>{t('dec.approve')}</button>
+        </>
+      ) : (
+        // No role-name inference: the control is absent whenever the server does not offer the command.
+        <p>{t('dec.noPermission')}</p>
+      )}
       {phase === 'needs_step_up' && (
-        <div role="alert">Se requiere reautenticación humana. <button type="button" onClick={() => void stepUp()}>Reautenticar</button></div>
+        <div role="alert">{t('dec.stepUpNeeded')} <button type="button" onClick={() => void stepUp()}>{t('dec.stepUp')}</button></div>
       )}
       <p data-testid="decision-phase" data-phase={phase} role="status">
-        {phase === 'requested' && 'Solicitada (aún no confirmada)'}
-        {phase === 'running' && 'En ejecución (aún no confirmada)'}
-        {phase === 'succeeded' && 'Confirmada por el recibo del comando'}
-        {phase === 'failed' && 'Falló'}
-        {phase === 'unknown' && 'Desconocido: sin confirmación'}
+        {phase === 'requested' && t('dec.requested')}
+        {phase === 'running' && t('dec.running')}
+        {phase === 'succeeded' && t('dec.succeeded')}
+        {phase === 'failed' && t('dec.failed')}
+        {phase === 'unknown' && t('dec.unknown')}
       </p>
     </section>
   );

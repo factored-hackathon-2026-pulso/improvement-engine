@@ -6,16 +6,10 @@ import { acceptRevision, applyEvent, initStream, type DebugEvent, type StreamSta
 import { Drawer } from '../components/Drawer';
 import { label, Investigation, Gates, DiffView } from './Panels';
 import { DecisionPanel } from './DecisionPanel';
+import { t, type I18nKey } from '../i18n/es419';
 
 type GraphT = z.infer<typeof S.Graph>;
 const KNOWN_NODE = ['planned', 'queued', 'running', 'complete', 'dead', 'cancelled', 'superseded', 'retry_wait', 'deferred', 'waiting_dependency', 'unknown'];
-const CONN_TEXT = {
-  connecting: 'Conectando al flujo en vivo…',
-  live: 'Flujo en vivo conectado',
-  reconnecting: 'Flujo en vivo interrumpido: reconectando; los datos pueden estar desactualizados.',
-  session_expired: 'La sesión expiró: inicia sesión de nuevo. El flujo en vivo se cerró.',
-  forbidden: 'Sin acceso a este run.',
-} as const;
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: string | null; onNode: (id: string | null) => void }) {
@@ -76,14 +70,14 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
     return stop;
   }, [runId, handle, reload]);
 
-  if (failed) return <p role="alert">unknown · no se pudo leer el run</p>;
-  if (!graph) return <p>Cargando grafo…</p>;
+  if (failed) return <p role="alert">{t('run.failed')}</p>;
+  if (!graph) return <p>{t('run.loadingGraph')}</p>;
   const selected = graph.nodes.find((n) => n.node_id === nodeId) ?? null;
   return (
     <div>
-      <h1>Run {runId} <small>({graph.status})</small></h1>
-      <p role="status" data-testid="stream-status" data-state={conn}>{CONN_TEXT[conn]}</p>
-      <div className="graph" role="group" aria-label="Grafo del run">
+      <h1>{t('run.title', { id: runId })} <small>({graph.status})</small></h1>
+      <p role="status" data-testid="stream-status" data-state={conn}>{t(`stream.${conn}` as I18nKey)}</p>
+      <div className="graph" role="group" aria-label={t('run.graphGroup')}>
         {graph.nodes.map((n) => (
           <button
             key={n.node_id} type="button" className="node" data-testid={`node-${n.node_id}`}
@@ -93,20 +87,20 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
           </button>
         ))}
       </div>
-      <ol aria-label="Equivalente textual del grafo">
+      <ol aria-label={t('run.textGraph')}>
         {graph.nodes.map((n) => (
           <li key={n.node_id} data-testid={`textgraph-${n.node_id}`}>
             {n.label}: {label(n.status, KNOWN_NODE)}{n.reason_code ? ` (${n.reason_code})` : ''}
-            {n.depends_on.length ? `; depende de ${n.depends_on.join(', ')}` : ''}
+            {n.depends_on.length ? t('run.dependsOn', { ids: n.depends_on.join(', ') }) : ''}
           </li>
         ))}
       </ol>
       <div aria-live="polite" className="sr-only" style={{ position: 'absolute', left: -9999 }}>{graph.nodes.map((n) => `${n.label} ${n.status}`).join('. ')}</div>
       {selected && (
-        <Drawer key={selected.node_id} title={`Nodo ${selected.label}`} instance={selected.node_id} onClose={() => onNode(null)}>
-          <p>Estado: {label(selected.status, KNOWN_NODE)}</p>
-          <p>Etapa: {selected.stage}</p>
-          <p>Motivo: {selected.reason_code ?? 'sin motivo'}</p>
+        <Drawer key={selected.node_id} title={t('drawer.node', { label: selected.label })} instance={selected.node_id} onClose={() => onNode(null)}>
+          <p>{t('drawer.status', { value: label(selected.status, KNOWN_NODE) })}</p>
+          <p>{t('drawer.stage', { value: selected.stage })}</p>
+          <p>{t('drawer.reason', { value: selected.reason_code ?? t('drawer.noReason') })}</p>
         </Drawer>
       )}
       <Investigation runId={runId} />

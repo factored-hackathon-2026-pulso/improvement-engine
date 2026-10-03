@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { t } from '../i18n/es419';
 
 interface Props { title: string; instance: string; onClose: () => void; children: ReactNode }
 
@@ -18,7 +19,7 @@ export function Drawer({ title, instance, onClose, children }: Props) {
       style={{ overflow: 'auto', maxHeight: '40vh', border: '1px solid #888', padding: 12 }}
     >
       <h3>{title}</h3>
-      <button type="button" onClick={onClose}>Cerrar</button>
+      <button type="button" onClick={onClose}>{t('drawer.close')}</button>
       {children}
     </aside>
   );
