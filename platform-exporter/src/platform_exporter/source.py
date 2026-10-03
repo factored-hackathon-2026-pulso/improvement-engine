@@ -93,6 +93,8 @@ class SqlSource:
                 payload = json.loads(payload)
             except ValueError:
                 payload, problem = None, problem or "payload_unparseable"
+        if problem is None and not isinstance(payload, dict):
+            payload, problem = None, "payload_not_object"  # contract: payload is a JSON object; scalars may be free text
         actor = d.get("actor_id")
         return RawEvent(int(d["sequence"]), str(d["event_id"]), str(d["event_type"]), d.get("entity"),
                         d.get("entity_id"), d.get("case_id"), d.get("actor_role"), None if actor is None else str(actor), et, it, payload, d.get("tenant_id"),
@@ -176,8 +178,9 @@ class PostgresSource(SqlSource):
         import psycopg
 
         self._schema = schema
-        self._conn = psycopg.connect(dsn, autocommit=True)
-        self._conn.read_only = True
+        # Enforced by the server for every statement of the session, whatever the role can do (read_only on an
+        # autocommit connection is not applied by psycopg).
+        self._conn = psycopg.connect(dsn, autocommit=True, options="-c default_transaction_read_only=on")
 
     def close(self) -> None:
         self._conn.close()

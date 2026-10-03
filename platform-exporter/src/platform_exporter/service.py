@@ -11,7 +11,7 @@ from __future__ import annotations
 import random
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -256,7 +256,12 @@ class Exporter:
         taken = rows
         while True:
             spec = self._assemble(taken, mode, skipped, force_late, clear, extra or [], meta or {})
-            if self._wire_size(spec) <= self.cfg.batch_max_bytes or len(taken) <= 1:
+            if self._wire_size(spec) <= self.cfg.batch_max_bytes:
+                return spec
+            if len(taken) <= 1:
+                if taken[0].problem is None:  # a poison row must not stop the partition: quarantine, never forward
+                    taken = [replace(taken[0], payload=None, problem="oversized_event")]
+                    continue
                 return spec
             taken = taken[: len(taken) // 2]
 

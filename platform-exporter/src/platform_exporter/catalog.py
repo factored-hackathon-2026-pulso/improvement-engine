@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,27 +25,53 @@ DENIED_EVENT_TYPES = frozenset({"auth.password_accepted", "auth.mfa_challenge_is
 # Announced by Product but not admitted yet: quarantined like an unknown type (finding says catalog_status=planned).
 PLANNED_PREFIXES = ("staff.", "team.")
 
-# Keys never forwarded, at any depth: message text, names, contact data, credentials, free-text notes.
+# Keys never forwarded, at any depth: message text, names, contact data, credentials, free-text notes. A key is
+# redacted when it equals one of REDACTED_KEYS or when ANY of its tokens (snake_case / camelCase / kebab split) is in
+# REDACTED_TOKENS, so `customer_email`, `fullName`, `phone_number` or `message_preview` cannot slip through. Keys whose
+# last token is an identifier/count marker (`message_id`, `name_count`) are kept: they carry no free text.
 REDACTED_KEYS = frozenset({
     "text", "body", "message", "content", "name", "display_name", "email", "phone", "note", "close_note",
     "password", "password_hash", "token", "secret", "code", "code_hash",
 })
+REDACTED_TOKENS = frozenset({
+    "text", "body", "message", "msg", "content", "name", "names", "email", "emails", "mail", "phone", "mobile", "note",
+    "notes", "comment", "comments", "subject", "preview", "snippet", "address", "password", "passwd", "token", "secret",
+    "hash", "username", "otp", "transcript", "description", "title", "summary",
+})
+_KEEP_LAST_TOKENS = frozenset({"id", "ids", "ref", "refs", "count", "sequence", "seq", "at", "length", "len"})
+_TOKEN_SPLIT = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+_EMAIL_VALUE = re.compile(r"[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,255}\.[A-Za-z0-9]{2,63}")  # bounded: no ReDoS
+EMAIL_PLACEHOLDER = "[redacted-email]"
+
+
+def is_redacted_key(key: Any) -> bool:
+    k = str(key)
+    if k.lower() in REDACTED_KEYS:
+        return True
+    tokens = [t.lower() for t in _TOKEN_SPLIT.split(k) if t]
+    if not tokens or tokens[-1] in _KEEP_LAST_TOKENS:
+        return False
+    return any(t in REDACTED_TOKENS for t in tokens)
 
 
 def treat_payload(value: Any, redacted: list[str] | None = None, path: str = "") -> Any:
-    """Copy of `value` without redacted keys; the removed key paths are appended to `redacted`."""
+    """Copy of `value` without redacted keys; the removed key paths are appended to `redacted`. Email-looking string
+    values under any other key are masked as well (and recorded)."""
     red = redacted if redacted is not None else []
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for k, v in value.items():
             p = f"{path}.{k}" if path else str(k)
-            if str(k).lower() in REDACTED_KEYS:
+            if is_redacted_key(k):
                 red.append(p)
             else:
                 out[k] = treat_payload(v, red, p)
         return out
     if isinstance(value, list):
         return [treat_payload(v, red, path) for v in value]
+    if isinstance(value, str) and "@" in value and _EMAIL_VALUE.search(value):
+        red.append(path or "$")
+        return _EMAIL_VALUE.sub(EMAIL_PLACEHOLDER, value)
     return value
 
 
