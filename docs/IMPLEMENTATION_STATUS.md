@@ -1,8 +1,13 @@
 # Cumulative implementation status
 
-This document is the entry point for the long-lived cumulative implementation
-PR. It distinguishes merged capability from work in progress; it never treats a
-green unit test as proof that a broader product flow is complete.
+This document describes capabilities present in the consolidated code tree.
+It distinguishes an implemented boundary from an integrated product flow;
+a green unit test does not prove the broader product is complete.
+
+PRs #69 and #71 originally merged into feature branches after their parent PRs
+had already merged into main. The restore-main consolidation ports their unique
+commits onto main's #68 baseline, preserving unrelated main capabilities and
+repairing the malformed/duplicated source privacy fixture. See journal 0055.
 
 ## Integrated into `main`
 
@@ -18,7 +23,7 @@ green unit test as proof that a broader product flow is complete.
   receipts. Its present in-memory adapter is not production-durability proof;
   the U33 corrective slice covers an overflow atomicity regression.
 
-## Implemented in the cumulative branch (not yet merged)
+## Implemented boundaries and remaining integration limits
 
 - U07 durable V2 run-event persistence: new `pulso_jobs` / `pulso_run_events`
   migration and PostgreSQL ledger atomically compare-and-sets a child job
@@ -118,19 +123,29 @@ green unit test as proof that a broader product flow is complete.
   timeline remains atomically persisted, and no durable U07, OpenTelemetry,
   health endpoint, or production-monitoring claim is added. See journal 0053.
   Original-bank local execution now supports an independently sealed,
-  privacy-safe snapshot projection for call-center reason × channel. The API
-  names its metric `record_count`: it counts CSV records and does not deduplicate
-  `interaction_id`. A nonblank `reason_category` takes precedence, then a
-  nonblank `contact_reason`; both blank maps to `unclassified`. It is not an
-  event-date cohort or cutoff-filtered result; naive source timestamps are not
-  compared to the run cutoff. The local motor reports this descriptively but
-  emits no signal, candidate, or proposal. Repeat contacts, PQR/SLA, technical
-  errors, causal relationships, and outcome claims remain unsupported; customer
-  IDs, row-level facts, free text, and contact outcomes are not used. `k`
-  defaults to 5 and is configurable via `--min-contact-cell-count` (5–10,000);
-  policy version and threshold are sealed into the prepared-source manifest and
-  validated again at the core boundary. Tests are synthetic only; no real-data
-  prevalence claim is made.
+  privacy-safe snapshot projection for call-center reason × channel. The flat
+  API metric `record_count` counts CSV records and does not deduplicate
+  `interaction_id`; it is still not an event-date cohort or cutoff-filtered
+  result. A separate descriptive projection groups valid literal source months
+  × reason × channel, with `coverage=partial` and `final_extract_facts_only`.
+  Naive timestamps are never assigned a timezone or compared with the run
+  cutoff. Its k threshold applies within each month × reason × channel cell;
+  only rows with valid month and usable grouping labels enter that cell, and
+  only k-qualified cells contribute to `supported_contact_count`. Rejected
+  rows and suppressed cells never increase a visible cell denominator; their
+  exact counts are omitted from agent-facing serialization and `result.json`.
+  When complaint cells qualify, the runner emits a finding
+  and a local descriptive proposal envelope bound to snapshot, manifest, and
+  projection digests. It is not a U13/Agent Core candidate:
+  `dependency_blocked_snapshot_semantics`, `simulated_unverified`,
+  `not_executed`, `publication_eligible=false`, formal route `do_nothing`.
+  Agent Core/U13 has no offline snapshot-candidate contract; no query receipt,
+  candidate admission, artifact compilation, release, cause, ROI, or outcome
+  claim is fabricated. Customer IDs, row-level facts, free text, and contact
+  outcomes are not used. `k=5` is fixed on the discovery-facing CLI path; no
+  per-run override is accepted, avoiding easy differencing across comparable
+  runs. Policy version and threshold are sealed into the source manifest and
+  revalidated at the core boundary. Synthetic CLI E2E verifies this boundary.
 - Windows local E0 convenience wrapper: scripts/run-local-e0-e2e.ps1 invokes
   the opt-in local simulation with locked/offline Cargo, required UTC cutoff,
   default Arranque/support settings and a fresh non-overlapping output path;
@@ -190,10 +205,13 @@ green unit test as proof that a broader product flow is complete.
   single static allowlisted U15 `Create` transform. Scope/access are exact
   Frozen bindings with `allowed_at == cutoff`; output is opaque commitments
   only, never pages, workspace/text, publication, memory use or an artifact.
-  U33-E publication exists locally; U23-E admission now re-attests the exact
-  published revision against the same U33-E sidecar/head and creates one
-  opaque receipt per publication/scope/run. This remains a crate-private
-  semantic contract, not wired into the CLI runtime.
+  U33-E publication exists locally; U23-E admission re-attests the exact
+  published revision against the exact U33-E publication sidecar and creates one
+  opaque receipt per publication/scope/run. The trusted crate composition can
+  now read a page for the later run only with the admitted run/grant/scope/
+  snapshot/clock binding, while the scratch authority rechecks grant liveness.
+  This remains a crate-private local semantic path, not wired into the CLI or
+  durable runtime.
 - U33-E: Frozen E0 summary publication boundary. A crate-private composer
   redeems only the opaque U15-EQ preparation after recomputing the exact
   U13-A/U14-E/U14-EQ/U04-B and canonical U15 transform chain. It emits an
@@ -206,8 +224,9 @@ green unit test as proof that a broader product flow is complete.
   receipts, but have no U33-E publication record and accept grant reference as
   a string rather than resolving its authority. U23-E is the sole consumer
   allowed to attest governed use:
-  its local path checks exact revision/head, tenant/world/scope, replay cutoff,
-  grant liveness and revocation, and makes retries idempotent by
+  its local path checks the exact immutable publication revision,
+  tenant/world/scope, replay cutoff, current grant liveness and explicit
+  snapshot/ancestor revocation, and makes retries idempotent by
   `(publication_commitment, scope, run_id)`. A changed grant or access time for
   the same semantic use conflicts without a second receipt. Durable admission
   remains `DependencyUnavailable` until one database transaction can lock and

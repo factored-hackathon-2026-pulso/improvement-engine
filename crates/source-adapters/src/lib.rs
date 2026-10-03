@@ -19,6 +19,7 @@ use arrow_array::{
 };
 use arrow_schema::{DataType, SchemaRef};
 use improvement_engine_core::ArtifactReference;
+use improvement_engine_core::original_contact_projection::source_wall_clock_month;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -54,7 +55,6 @@ pub struct PreparationConfig {
     observed_cutoff: String,
     cutoff_unix_seconds: u64,
     arranque_cases: usize,
-    minimum_contact_cell_count: u64,
 }
 
 impl PreparationConfig {
@@ -86,21 +86,7 @@ impl PreparationConfig {
             observed_cutoff,
             cutoff_unix_seconds,
             arranque_cases,
-            minimum_contact_cell_count: CONTACT_PROJECTION_MINIMUM_CELL_COUNT,
         })
-    }
-
-    pub fn with_minimum_contact_cell_count(
-        mut self,
-        minimum_contact_cell_count: u64,
-    ) -> Result<Self, AdapterError> {
-        if !(5..=10_000).contains(&minimum_contact_cell_count) {
-            return Err(AdapterError::InvalidConfig(
-                "minimum_contact_cell_count must be between 5 and 10000",
-            ));
-        }
-        self.minimum_contact_cell_count = minimum_contact_cell_count;
-        Ok(self)
     }
 
     #[must_use]
@@ -234,6 +220,7 @@ pub struct AgentInputSet {
     facts: Vec<E0Fact>,
     contact_volumes: Vec<SnapshotContactVolume>,
     contact_projection: Option<ContactProjectionSummary>,
+    descriptive_contact_projection: Option<DescriptiveContactProjection>,
     unsupported_metrics: Vec<UnsupportedMetric>,
     available_tables: Vec<String>,
 }
@@ -257,6 +244,11 @@ impl AgentInputSet {
     #[must_use]
     pub fn contact_projection(&self) -> Option<&ContactProjectionSummary> {
         self.contact_projection.as_ref()
+    }
+
+    #[must_use]
+    pub fn descriptive_contact_projection(&self) -> Option<&DescriptiveContactProjection> {
+        self.descriptive_contact_projection.as_ref()
     }
 
     #[must_use]
@@ -331,8 +323,86 @@ pub struct ContactProjectionSummary {
     policy_version: u32,
     minimum_cell_count: u64,
     included_record_count: u64,
-    rejected_rows: u64,
-    suppressed_cells: u64,
+}
+
+/// Literal-month aggregate facts from the final source extract. This projection
+/// is descriptive only and deliberately carries no event-time cutoff.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DescriptiveContactProjection {
+    temporal_basis: &'static str,
+    value_semantics: &'static str,
+    coverage: &'static str,
+    policy_version: u32,
+    minimum_cell_count: u64,
+    included_contact_count: u64,
+    aggregates: Vec<DescriptiveContactAggregate>,
+}
+
+impl DescriptiveContactProjection {
+    #[must_use]
+    pub fn temporal_basis(&self) -> &'static str {
+        self.temporal_basis
+    }
+
+    #[must_use]
+    pub fn value_semantics(&self) -> &'static str {
+        self.value_semantics
+    }
+
+    #[must_use]
+    pub fn coverage(&self) -> &'static str {
+        self.coverage
+    }
+
+    #[must_use]
+    pub fn minimum_cell_count(&self) -> u64 {
+        self.minimum_cell_count
+    }
+
+    #[must_use]
+    pub fn policy_version(&self) -> u32 {
+        self.policy_version
+    }
+
+    #[must_use]
+    pub fn included_contact_count(&self) -> u64 {
+        self.included_contact_count
+    }
+
+    #[must_use]
+    pub fn aggregates(&self) -> &[DescriptiveContactAggregate] {
+        &self.aggregates
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DescriptiveContactAggregate {
+    period: String,
+    reason: ContactReasonCategory,
+    channel: ContactChannel,
+    contact_count: u64,
+}
+
+impl DescriptiveContactAggregate {
+    #[must_use]
+    pub fn period(&self) -> &str {
+        &self.period
+    }
+
+    #[must_use]
+    pub fn contact_count(&self) -> u64 {
+        self.contact_count
+    }
+
+    #[must_use]
+    pub fn reason(&self) -> &'static str {
+        contact_reason_label(self.reason)
+    }
+
+    #[must_use]
+    pub fn channel(&self) -> &'static str {
+        contact_channel_label(self.channel)
+    }
 }
 
 impl ContactProjectionSummary {
@@ -344,16 +414,6 @@ impl ContactProjectionSummary {
     #[must_use]
     pub fn included_record_count(&self) -> u64 {
         self.included_record_count
-    }
-
-    #[must_use]
-    pub fn rejected_rows(&self) -> u64 {
-        self.rejected_rows
-    }
-
-    #[must_use]
-    pub fn suppressed_cells(&self) -> u64 {
-        self.suppressed_cells
     }
 
     #[must_use]
@@ -589,8 +649,8 @@ pub fn prepare_original_bank(
     if files.is_empty() {
         return Err(AdapterError::MissingInput("no CSV files found"));
     }
-    let (contact_volumes, contact_projection) =
-        project_contact_snapshot(root, &files, config.minimum_contact_cell_count)?;
+    let (contact_volumes, contact_projection, descriptive_contact_projection) =
+        project_contact_snapshot(root, &files, CONTACT_PROJECTION_MINIMUM_CELL_COUNT)?;
     let available_tables = files.iter().map(|entry| entry.table.clone()).collect();
     let mut manifest = DatasetManifest::new(
         SourceKind::OriginalBank,
@@ -600,7 +660,8 @@ pub fn prepare_original_bank(
     );
     if contact_projection.is_some() {
         manifest.contact_projection_policy_version = Some(CONTACT_PROJECTION_POLICY_VERSION);
-        manifest.contact_projection_minimum_cell_count = Some(config.minimum_contact_cell_count);
+        manifest.contact_projection_minimum_cell_count =
+            Some(CONTACT_PROJECTION_MINIMUM_CELL_COUNT);
     }
     prepared_source(
         SourceKind::OriginalBank,
@@ -611,6 +672,7 @@ pub fn prepare_original_bank(
             facts: Vec::new(),
             contact_volumes,
             contact_projection,
+            descriptive_contact_projection,
             unsupported_metrics: vec![
                 UnsupportedMetric::TechnicalErrorNotPresentInOriginalBankHistory,
             ],
@@ -832,6 +894,7 @@ pub fn prepare_e0_package(
             facts,
             contact_volumes: Vec::new(),
             contact_projection: None,
+            descriptive_contact_projection: None,
             unsupported_metrics: Vec::new(),
             available_tables,
         },
@@ -1086,13 +1149,20 @@ mod contact_snapshot_tests {
     }
 }
 
+type ContactSnapshotProjection = (
+    Vec<SnapshotContactVolume>,
+    Option<ContactProjectionSummary>,
+    Option<DescriptiveContactProjection>,
+);
+
 fn project_contact_snapshot(
     root: &Path,
     entries: &[ManifestEntry],
     minimum_cell_count: u64,
-) -> Result<(Vec<SnapshotContactVolume>, Option<ContactProjectionSummary>), AdapterError> {
+) -> Result<ContactSnapshotProjection, AdapterError> {
     let mut grouped = BTreeMap::<(ContactReasonCategory, ContactChannel), u64>::new();
-    let mut rejected_rows = 0_u64;
+    let mut descriptive_grouped =
+        BTreeMap::<(String, ContactReasonCategory, ContactChannel), u64>::new();
     let mut saw_contacts_table = false;
     let mut unsupported_schema = false;
     for entry in entries
@@ -1126,6 +1196,7 @@ fn project_contact_snapshot(
         }
         let reason_category_index = positions.get("reason_category").copied();
         let contact_reason_index = positions.get("contact_reason").copied();
+        let interaction_date_index = positions.get("interaction_date").copied();
         let channel_index = positions.get("channel").copied();
         let supported_schema = (reason_category_index.is_some() || contact_reason_index.is_some())
             && channel_index.is_some();
@@ -1140,12 +1211,10 @@ fn project_contact_snapshot(
                 .get(channel_index.expect("supported schema has channel"))
                 .map(str::trim)
                 .unwrap_or("");
+            let period = interaction_date_index
+                .and_then(|index| record.get(index))
+                .and_then(|value| source_wall_clock_month(Some(value)));
             let Some(channel) = normalize_contact_channel(channel_value) else {
-                rejected_rows = rejected_rows
-                    .checked_add(1)
-                    .ok_or(AdapterError::InvalidInput(
-                        "contact projection count overflow",
-                    ))?;
                 continue;
             };
             let primary_reason = reason_category_index
@@ -1165,6 +1234,15 @@ fn project_contact_snapshot(
             *count = count.checked_add(1).ok_or(AdapterError::InvalidInput(
                 "contact projection count overflow",
             ))?;
+
+            if let Some(period) = period {
+                let count = descriptive_grouped
+                    .entry((period, reason, channel))
+                    .or_default();
+                *count = count.checked_add(1).ok_or(AdapterError::InvalidInput(
+                    "descriptive contact projection count overflow",
+                ))?;
+            }
         }
         let hashing_reader = csv.into_inner();
         let actual_digest = format!("sha256:{:x}", hashing_reader.hash.finalize());
@@ -1175,12 +1253,8 @@ fn project_contact_snapshot(
         }
     }
     if unsupported_schema {
-        return Ok((Vec::new(), None));
+        return Ok((Vec::new(), None, None));
     }
-    let suppressed_cells = grouped
-        .values()
-        .filter(|count| **count < minimum_cell_count)
-        .count() as u64;
     let contact_volumes = grouped
         .into_iter()
         .filter(|(_, count)| *count >= minimum_cell_count)
@@ -1201,10 +1275,35 @@ fn project_contact_snapshot(
         policy_version: CONTACT_PROJECTION_POLICY_VERSION,
         minimum_cell_count,
         included_record_count,
-        rejected_rows,
-        suppressed_cells,
     });
-    Ok((contact_volumes, summary))
+    let descriptive_aggregates = descriptive_grouped
+        .into_iter()
+        .filter(|(_, count)| *count >= minimum_cell_count)
+        .map(
+            |((period, reason, channel), contact_count)| DescriptiveContactAggregate {
+                period,
+                reason,
+                channel,
+                contact_count,
+            },
+        )
+        .collect::<Vec<_>>();
+    let included_contact_count = descriptive_aggregates
+        .iter()
+        .try_fold(0_u64, |sum, cell| sum.checked_add(cell.contact_count))
+        .ok_or(AdapterError::InvalidInput(
+            "descriptive contact projection count overflow",
+        ))?;
+    let descriptive_projection = saw_contacts_table.then_some(DescriptiveContactProjection {
+        temporal_basis: "literal_source_wall_clock_month",
+        value_semantics: "final_extract_facts_only",
+        coverage: "partial",
+        policy_version: CONTACT_PROJECTION_POLICY_VERSION,
+        minimum_cell_count,
+        included_contact_count,
+        aggregates: descriptive_aggregates,
+    });
+    Ok((contact_volumes, summary, descriptive_projection))
 }
 
 fn normalize_contact_channel(value: &str) -> Option<ContactChannel> {

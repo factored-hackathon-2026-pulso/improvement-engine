@@ -29,8 +29,20 @@ pub enum ProjectionCoverage {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectionPolicy {
-    pub version: u32,
-    pub minimum_cell_count: u64,
+    version: u32,
+    minimum_cell_count: u64,
+}
+
+impl ProjectionPolicy {
+    /// Fixed disclosure policy for discovery-facing snapshot projections.
+    /// Changing k requires a new policy version and release, not a run option.
+    #[must_use]
+    pub const fn v1() -> Self {
+        Self {
+            version: 1,
+            minimum_cell_count: 5,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +85,20 @@ pub enum ProjectionTemporalSemantics {
     /// Rows are selected by creation timestamp at or before cutoff, but their
     /// outcome fields are final values from the extract and may be later.
     CreationCohortWithFinalOutcomes,
+}
+
+/// Descriptive bucketing uses only the calendar text supplied by the source.
+/// It does not map local wall-clock values to UTC or establish row availability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DescriptiveTemporalBasis {
+    LiteralSourceWallClockMonth,
+}
+
+/// Values in this projection are facts from the immutable final extract, not
+/// outcome state as of the snapshot's observation cutoff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DescriptiveValueSemantics {
+    FinalExtractFactsOnly,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -185,9 +211,46 @@ pub struct Projection<T> {
     pub observed_cutoff: String,
     pub coverage: ProjectionCoverage,
     pub policy_version: u32,
-    pub suppressed_count: u64,
-    pub rejected_rows: u64,
     pub aggregates: Vec<T>,
+}
+
+/// Snapshot-bound aggregate that deliberately has no event-time cutoff field.
+/// Its type is distinct from `Projection<T>`, which supports UTC as-of filters.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SnapshotDescriptiveProjection<T> {
+    pub status: SupportStatus,
+    pub temporal_basis: DescriptiveTemporalBasis,
+    pub value_semantics: DescriptiveValueSemantics,
+    pub source_snapshot_ref: ArtifactReference,
+    pub source_snapshot_binding_digest: String,
+    pub manifest_digest: String,
+    pub coverage: ProjectionCoverage,
+    pub policy_version: u32,
+    pub aggregates: Vec<T>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SnapshotDescriptiveContactAggregate {
+    pub period: String,
+    pub category: ContactCategory,
+    pub channel: Channel,
+    pub contact_count: u64,
+    pub resolved: BooleanSummary,
+    pub followup: BooleanSummary,
+    pub escalated: BooleanSummary,
+    pub duration_seconds: MetricSummary,
+    pub wait_time_seconds: MetricSummary,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SnapshotDescriptiveComplaintAggregate {
+    pub period: String,
+    pub category: ContactCategory,
+    pub channel: Channel,
+    pub complaint_count: u64,
+    pub final_sla_breached: BooleanSummary,
+    pub final_resolution_days: MetricSummary,
+    pub final_resolution_satisfaction: MetricSummary,
 }
 
 pub struct CsvPartition<R> {
@@ -272,7 +335,7 @@ impl ProjectionManifest {
             || !valid_uuid_v7(&source_snapshot_ref.id)
             || !valid_digest(&source_snapshot_ref.digest)
             || policy.version == 0
-            || policy.minimum_cell_count == 0
+            || !(5..=10_000).contains(&policy.minimum_cell_count)
             || partitions.is_empty()
         {
             return Err(ProjectionError::InvalidManifest);
@@ -322,6 +385,352 @@ impl ProjectionManifest {
             digest,
         })
     }
+}
+
+/// Manifest for descriptive full-snapshot projections. It reuses the same
+/// immutable snapshot, exact partition inventory, byte/header digests,
+/// coverage declaration, and suppression policy as the UTC projector, while
+/// preventing consumers from mistaking a descriptive result for an as-of one.
+pub struct SnapshotDescriptiveManifest {
+    verified: ProjectionManifest,
+    digest: String,
+}
+
+impl SnapshotDescriptiveManifest {
+    pub fn new(
+        repository: &mut impl ArtifactRepository,
+        source_snapshot_ref: ArtifactReference,
+        table: ProjectionTable,
+        partitions: Vec<ManifestPartition>,
+        coverage: ProjectionCoverage,
+        // Snapshot discovery policy is fixed; changing k requires a new policy
+        // version and release, not a per-run request.
+    ) -> Result<Self, ProjectionError> {
+        let verified = ProjectionManifest::new(
+            repository,
+            source_snapshot_ref,
+            table,
+            partitions,
+            coverage,
+            ProjectionPolicy::v1(),
+        )?;
+        let digest = snapshot_descriptive_manifest_digest(&verified.digest);
+        Ok(Self { verified, digest })
+    }
+}
+
+pub fn project_contacts_descriptive<R: Read>(
+    manifest: &SnapshotDescriptiveManifest,
+    partitions: impl IntoIterator<Item = CsvPartition<R>>,
+) -> Result<SnapshotDescriptiveProjection<SnapshotDescriptiveContactAggregate>, ProjectionError> {
+    let descriptive_manifest_digest = manifest.digest.clone();
+    let manifest = &manifest.verified;
+    if manifest.table != ProjectionTable::Contacts {
+        return Err(ProjectionError::InvalidManifest);
+    }
+    let mut seen = BTreeSet::new();
+    let mut missing_fields = BTreeSet::new();
+    let mut grouped: BTreeMap<(String, ContactCategory, Channel), ContactAccumulator> =
+        BTreeMap::new();
+    let mut rejected_rows = 0_u64;
+    let mut valid_timestamps = 0_u64;
+    let mut usable_rows = 0_u64;
+    for partition in partitions {
+        if !manifest.partitions.contains_key(&partition.id) || !seen.insert(partition.id.clone()) {
+            return Err(ProjectionError::PartitionSetMismatch);
+        }
+        let hashed = HashingReader::new(partition.reader);
+        let mut csv = csv::ReaderBuilder::new()
+            .flexible(false)
+            .from_reader(hashed);
+        let headers = csv
+            .headers()
+            .map_err(|_| ProjectionError::MalformedCsv)?
+            .clone();
+        let mut positions = BTreeMap::new();
+        for (index, header) in headers.iter().enumerate() {
+            if positions
+                .insert(header.trim().to_ascii_lowercase(), index)
+                .is_some()
+            {
+                return Err(ProjectionError::DuplicateHeader);
+            }
+        }
+        let date_idx = field(&positions, &["interaction_date"]);
+        let category_idx = field(&positions, &["reason_category", "contact_reason"]);
+        let channel_idx = field(&positions, &["channel"]);
+        for (name, found) in [
+            ("interaction_date", date_idx.is_some()),
+            ("reason_category|contact_reason", category_idx.is_some()),
+            ("channel", channel_idx.is_some()),
+        ] {
+            if !found {
+                missing_fields.insert(name);
+            }
+        }
+        if let (Some(date_idx), Some(category_idx), Some(channel_idx)) =
+            (date_idx, category_idx, channel_idx)
+        {
+            for result in csv.records() {
+                let record = result.map_err(|_| ProjectionError::MalformedCsv)?;
+                if record.len() != headers.len() {
+                    return Err(ProjectionError::MalformedCsv);
+                }
+                let Some(period) = source_wall_clock_month(csv_value(&record, date_idx)) else {
+                    rejected_rows += 1;
+                    continue;
+                };
+                valid_timestamps += 1;
+                let Some(channel) = normalize_channel(csv_value(&record, channel_idx)) else {
+                    rejected_rows += 1;
+                    continue;
+                };
+                usable_rows += 1;
+                let category = normalize_category(csv_value(&record, category_idx));
+                let aggregate = grouped.entry((period, category, channel)).or_default();
+                aggregate.contact_count += 1;
+                aggregate.resolved.push(parse_bool(csv_field(
+                    &record,
+                    field(&positions, &["was_resolved"]),
+                )));
+                aggregate.followup.push(parse_bool(csv_field(
+                    &record,
+                    field(&positions, &["requires_followup"]),
+                )));
+                aggregate.escalated.push(parse_bool(csv_field(
+                    &record,
+                    field(&positions, &["was_escalated"]),
+                )));
+                aggregate.duration_seconds.push(parse_nonnegative(csv_field(
+                    &record,
+                    field(&positions, &["duration_seconds"]),
+                )));
+                aggregate
+                    .wait_time_seconds
+                    .push(parse_nonnegative(csv_field(
+                        &record,
+                        field(&positions, &["wait_time_seconds"]),
+                    )));
+            }
+        } else {
+            for record in csv.records() {
+                record.map_err(|_| ProjectionError::MalformedCsv)?;
+            }
+        }
+        let hasher = csv.into_inner();
+        let header_digest = hasher.header_digest();
+        let actual_digest = format!("sha256:{:x}", hasher.hash.finalize());
+        if manifest.partitions.get(&partition.id) != Some(&actual_digest) {
+            return Err(ProjectionError::DigestMismatch);
+        }
+        if header_digest != manifest.source_header_digest {
+            return Err(ProjectionError::HeaderDigestMismatch);
+        }
+    }
+    if seen.len() != manifest.partitions.len() {
+        return Err(ProjectionError::PartitionSetMismatch);
+    }
+    let status = if missing_fields.is_empty() && usable_rows > 0 {
+        SupportStatus::Supported
+    } else {
+        if valid_timestamps == 0 && rejected_rows > 0 {
+            missing_fields.insert("valid source wall-clock timestamp");
+        } else if valid_timestamps > 0 && usable_rows == 0 {
+            missing_fields.insert("usable grouping rows");
+        }
+        SupportStatus::Unsupported {
+            missing_fields: missing_fields.into_iter().collect(),
+        }
+    };
+    let aggregates = if status == SupportStatus::Supported {
+        grouped
+            .into_iter()
+            .filter_map(|((period, category, channel), values)| {
+                if values.contact_count < manifest.policy.minimum_cell_count {
+                    None
+                } else {
+                    Some(SnapshotDescriptiveContactAggregate {
+                        period,
+                        category,
+                        channel,
+                        contact_count: values.contact_count,
+                        resolved: values.resolved.finish(values.contact_count),
+                        followup: values.followup.finish(values.contact_count),
+                        escalated: values.escalated.finish(values.contact_count),
+                        duration_seconds: values.duration_seconds.finish(values.contact_count),
+                        wait_time_seconds: values.wait_time_seconds.finish(values.contact_count),
+                    })
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Ok(SnapshotDescriptiveProjection {
+        status,
+        temporal_basis: DescriptiveTemporalBasis::LiteralSourceWallClockMonth,
+        value_semantics: DescriptiveValueSemantics::FinalExtractFactsOnly,
+        source_snapshot_ref: manifest.source_snapshot_ref.clone(),
+        source_snapshot_binding_digest: manifest.snapshot_binding_digest.clone(),
+        manifest_digest: descriptive_manifest_digest,
+        coverage: manifest.coverage,
+        policy_version: manifest.policy.version,
+        aggregates,
+    })
+}
+
+pub fn project_complaints_descriptive<R: Read>(
+    manifest: &SnapshotDescriptiveManifest,
+    partitions: impl IntoIterator<Item = CsvPartition<R>>,
+) -> Result<SnapshotDescriptiveProjection<SnapshotDescriptiveComplaintAggregate>, ProjectionError> {
+    let descriptive_manifest_digest = manifest.digest.clone();
+    let manifest = &manifest.verified;
+    if manifest.table != ProjectionTable::Complaints {
+        return Err(ProjectionError::InvalidManifest);
+    }
+    let mut seen = BTreeSet::new();
+    let mut missing_fields = BTreeSet::new();
+    let mut grouped: BTreeMap<(String, ContactCategory, Channel), ComplaintAccumulator> =
+        BTreeMap::new();
+    let mut rejected_rows = 0_u64;
+    let mut valid_timestamps = 0_u64;
+    let mut usable_rows = 0_u64;
+    for partition in partitions {
+        if !manifest.partitions.contains_key(&partition.id) || !seen.insert(partition.id.clone()) {
+            return Err(ProjectionError::PartitionSetMismatch);
+        }
+        let hashed = HashingReader::new(partition.reader);
+        let mut csv = csv::ReaderBuilder::new()
+            .flexible(false)
+            .from_reader(hashed);
+        let headers = csv
+            .headers()
+            .map_err(|_| ProjectionError::MalformedCsv)?
+            .clone();
+        let mut positions = BTreeMap::new();
+        for (index, header) in headers.iter().enumerate() {
+            if positions
+                .insert(header.trim().to_ascii_lowercase(), index)
+                .is_some()
+            {
+                return Err(ProjectionError::DuplicateHeader);
+            }
+        }
+        let date_idx = field(&positions, &["creation_date"]);
+        let category_idx = field(&positions, &["category"]);
+        let channel_idx = field(&positions, &["reception_channel"]);
+        for (name, found) in [
+            ("creation_date", date_idx.is_some()),
+            ("category", category_idx.is_some()),
+            ("reception_channel", channel_idx.is_some()),
+        ] {
+            if !found {
+                missing_fields.insert(name);
+            }
+        }
+        if let (Some(date_idx), Some(category_idx), Some(channel_idx)) =
+            (date_idx, category_idx, channel_idx)
+        {
+            for result in csv.records() {
+                let record = result.map_err(|_| ProjectionError::MalformedCsv)?;
+                if record.len() != headers.len() {
+                    return Err(ProjectionError::MalformedCsv);
+                }
+                let Some(period) = source_wall_clock_month(csv_value(&record, date_idx)) else {
+                    rejected_rows += 1;
+                    continue;
+                };
+                valid_timestamps += 1;
+                let Some(channel) = normalize_channel(csv_value(&record, channel_idx)) else {
+                    rejected_rows += 1;
+                    continue;
+                };
+                usable_rows += 1;
+                let category = normalize_category(csv_value(&record, category_idx));
+                let aggregate = grouped.entry((period, category, channel)).or_default();
+                aggregate.complaint_count += 1;
+                aggregate.sla_breached.push(parse_bool(csv_field(
+                    &record,
+                    field(&positions, &["sla_breached"]),
+                )));
+                aggregate.resolution_days.push(parse_nonnegative(csv_field(
+                    &record,
+                    field(&positions, &["resolution_days"]),
+                )));
+                aggregate
+                    .resolution_satisfaction
+                    .push(parse_satisfaction(csv_field(
+                        &record,
+                        field(&positions, &["resolution_satisfaction"]),
+                    )));
+            }
+        } else {
+            for record in csv.records() {
+                record.map_err(|_| ProjectionError::MalformedCsv)?;
+            }
+        }
+        let hasher = csv.into_inner();
+        let header_digest = hasher.header_digest();
+        let actual_digest = format!("sha256:{:x}", hasher.hash.finalize());
+        if manifest.partitions.get(&partition.id) != Some(&actual_digest) {
+            return Err(ProjectionError::DigestMismatch);
+        }
+        if header_digest != manifest.source_header_digest {
+            return Err(ProjectionError::HeaderDigestMismatch);
+        }
+    }
+    if seen.len() != manifest.partitions.len() {
+        return Err(ProjectionError::PartitionSetMismatch);
+    }
+    let status = if missing_fields.is_empty() && usable_rows > 0 {
+        SupportStatus::Supported
+    } else {
+        if valid_timestamps == 0 && rejected_rows > 0 {
+            missing_fields.insert("valid source wall-clock timestamp");
+        } else if valid_timestamps > 0 && usable_rows == 0 {
+            missing_fields.insert("usable grouping rows");
+        }
+        SupportStatus::Unsupported {
+            missing_fields: missing_fields.into_iter().collect(),
+        }
+    };
+    let aggregates = if status == SupportStatus::Supported {
+        grouped
+            .into_iter()
+            .filter_map(|((period, category, channel), values)| {
+                if values.complaint_count < manifest.policy.minimum_cell_count {
+                    None
+                } else {
+                    Some(SnapshotDescriptiveComplaintAggregate {
+                        period,
+                        category,
+                        channel,
+                        complaint_count: values.complaint_count,
+                        final_sla_breached: values.sla_breached.finish(values.complaint_count),
+                        final_resolution_days: values
+                            .resolution_days
+                            .finish(values.complaint_count),
+                        final_resolution_satisfaction: values
+                            .resolution_satisfaction
+                            .finish(values.complaint_count),
+                    })
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Ok(SnapshotDescriptiveProjection {
+        status,
+        temporal_basis: DescriptiveTemporalBasis::LiteralSourceWallClockMonth,
+        value_semantics: DescriptiveValueSemantics::FinalExtractFactsOnly,
+        source_snapshot_ref: manifest.source_snapshot_ref.clone(),
+        source_snapshot_binding_digest: manifest.snapshot_binding_digest.clone(),
+        manifest_digest: descriptive_manifest_digest,
+        coverage: manifest.coverage,
+        policy_version: manifest.policy.version,
+        aggregates,
+    })
 }
 
 pub fn project_contacts<R: Read>(
@@ -444,13 +853,11 @@ pub fn project_contacts<R: Read>(
             missing_fields: missing_fields.into_iter().collect(),
         }
     };
-    let mut suppressed_count = 0;
     let aggregates = if status == SupportStatus::Supported {
         grouped
             .into_iter()
             .filter_map(|((period, category, channel), values)| {
                 if values.contact_count < manifest.policy.minimum_cell_count {
-                    suppressed_count += 1;
                     None
                 } else {
                     Some(ContactAggregate {
@@ -479,8 +886,6 @@ pub fn project_contacts<R: Read>(
         observed_cutoff: manifest.observed_cutoff.clone(),
         coverage: manifest.coverage,
         policy_version: manifest.policy.version,
-        suppressed_count,
-        rejected_rows,
         aggregates,
     })
 }
@@ -603,13 +1008,11 @@ pub fn project_complaints<R: Read>(
             missing_fields: missing_fields.into_iter().collect(),
         }
     };
-    let mut suppressed_count = 0;
     let aggregates = if status == SupportStatus::Supported {
         grouped
             .into_iter()
             .filter_map(|((period, category, channel), values)| {
                 if values.complaint_count < manifest.policy.minimum_cell_count {
-                    suppressed_count += 1;
                     None
                 } else {
                     Some(ComplaintAggregate {
@@ -643,8 +1046,6 @@ pub fn project_complaints<R: Read>(
         observed_cutoff: manifest.observed_cutoff.clone(),
         coverage: manifest.coverage,
         policy_version: manifest.policy.version,
-        suppressed_count,
-        rejected_rows,
         aggregates,
     })
 }
@@ -719,6 +1120,62 @@ fn elapsed_timestamp_days(start: &str, end: &str) -> Option<f64> {
         return None;
     }
     Some(elapsed_seconds as f64 / 86_400.0)
+}
+
+/// Returns the calendar month exactly as represented in a source timestamp.
+/// No timezone is inferred and no cutoff comparison is possible in this path.
+pub fn source_wall_clock_month(value: Option<&str>) -> Option<String> {
+    let value = value?;
+    if value.len() != 19 || !matches!(value.as_bytes().get(10), Some(b' ' | b'T')) {
+        return None;
+    }
+    let date = value.get(..10)?;
+    let year = date.get(..4)?.parse::<u16>().ok()?;
+    let month = date.get(5..7)?.parse::<u8>().ok()?;
+    let day = date.get(8..10)?.parse::<u8>().ok()?;
+    if date.as_bytes().get(4) != Some(&b'-') || date.as_bytes().get(7) != Some(&b'-') {
+        return None;
+    }
+    if !date
+        .bytes()
+        .enumerate()
+        .all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    if month == 0 || month > 12 || day == 0 || day > days[month as usize - 1] {
+        return None;
+    }
+    let time = value.get(11..19)?.as_bytes();
+    if time[2] != b':' || time[5] != b':' {
+        return None;
+    }
+    let digits = [time[0], time[1], time[3], time[4], time[6], time[7]];
+    if !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    let hour = value[11..13].parse::<u8>().ok()?;
+    let minute = value[14..16].parse::<u8>().ok()?;
+    let second = value[17..19].parse::<u8>().ok()?;
+    if hour > 23 || minute > 59 || second > 59 {
+        return None;
+    }
+    Some(value[..7].to_owned())
 }
 
 fn valid_partition_id(id: &str) -> bool {
@@ -993,5 +1450,15 @@ fn manifest_digest(input: ManifestDigestInput<'_>) -> String {
         h.update(id.as_bytes());
         h.update(digest.as_bytes());
     }
+    format!("sha256:{:x}", h.finalize())
+}
+
+fn snapshot_descriptive_manifest_digest(verified_manifest_digest: &str) -> String {
+    let mut h = Sha256::new();
+    let domain = b"pulso-source-snapshot-descriptive-projection-v1\0";
+    h.update((domain.len() as u64).to_be_bytes());
+    h.update(domain);
+    h.update((verified_manifest_digest.len() as u64).to_be_bytes());
+    h.update(verified_manifest_digest.as_bytes());
     format!("sha256:{:x}", h.finalize())
 }

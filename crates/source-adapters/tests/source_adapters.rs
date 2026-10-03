@@ -32,7 +32,7 @@ fn cutoff_rejects_fractional_seconds_instead_of_silently_truncating_them() {
 }
 
 #[test]
-fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories() {
+fn original_contacts_expose_only_k_qualified_snapshot_aggregates() {
     let temp = TempDir::new().unwrap();
     let table = temp.path().join("call_center_interactions");
     fs::create_dir_all(&table).unwrap();
@@ -47,13 +47,6 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
             "INTERACTION-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-c218f6a9,CUSTOMER-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-9d07c351,2025-01-05T10:00:00,Queja,Phone,true,false,AGENT-PII-SENTINEL-ROW-05-DO-NOT-SERIALIZE-2fa19c73,70,9\n",
             "INTERACTION-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-3d5f209a,CUSTOMER-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-ec68240b,2099-01-06T10:00:00,person@example.test,Phone,true,false,AGENT-PII-SENTINEL-ROW-06-DO-NOT-SERIALIZE-98a61e0d,80,10\n",
             "INTERACTION-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-d0512a86,CUSTOMER-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-0f23bd74,2025-01-07T10:00:00,Queja,,true,false,AGENT-PII-SENTINEL-ROW-07-DO-NOT-SERIALIZE-a67c3d18,80,10\n",
-            "interaction-identifier-pii-sentinel-0001,customer-identifier-pii-sentinel-0001,2025-01-01T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0001,30,5\n",
-            "interaction-identifier-pii-sentinel-0002,customer-identifier-pii-sentinel-0002,2025-01-02T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0002,40,6\n",
-            "interaction-identifier-pii-sentinel-0003,customer-identifier-pii-sentinel-0003,2025-01-03T10:00:00,Queja,Phone,false,true,agent-identifier-pii-sentinel-0003,50,7\n",
-            "interaction-identifier-pii-sentinel-0004,customer-identifier-pii-sentinel-0004,2025-01-04T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0004,60,8\n",
-            "interaction-identifier-pii-sentinel-0005,customer-identifier-pii-sentinel-0005,2025-01-05T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0005,70,9\n",
-            "interaction-identifier-pii-sentinel-0006,customer-identifier-pii-sentinel-0006,2099-01-06T10:00:00,person@example.test,Phone,true,false,agent-identifier-pii-sentinel-0006,80,10\n",
-            "interaction-identifier-pii-sentinel-0007,customer-identifier-pii-sentinel-0007,2025-01-07T10:00:00,Queja,,true,false,agent-identifier-pii-sentinel-0007,80,10\n",
         ),
     )
     .unwrap();
@@ -71,8 +64,6 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
         improvement_engine_source_adapters::ContactProjectionSemantics::SnapshotExtractCounts
     );
     assert_eq!(summary.included_record_count(), 5);
-    assert_eq!(summary.rejected_rows(), 1);
-    assert_eq!(summary.suppressed_cells(), 1);
     let serialized = serde_json::to_string(&prepared).unwrap();
     for forbidden in [
         "INTERACTION-PII-SENTINEL-ROW-01-DO-NOT-SERIALIZE-6f11c9e8",
@@ -100,27 +91,17 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
         "2025-01-01",
         "2099-01-06T10:00:00",
     ] {
-    for ordinal in 1..=7 {
-        for forbidden in [
-            format!("interaction-identifier-pii-sentinel-{ordinal:04}"),
-            format!("customer-identifier-pii-sentinel-{ordinal:04}"),
-            format!("agent-identifier-pii-sentinel-{ordinal:04}"),
-        ] {
-            assert!(
-                !serialized.contains(&forbidden),
-                "serialized source sentinel"
-            );
-        }
-        let (year, day) = if ordinal == 6 {
-            (2099, ordinal)
-        } else {
-            (2025, ordinal)
-        };
-        let forbidden_timestamp = format!("{year}-01-{day:02}T10:00:00");
-        assert!(!serialized.contains(&forbidden_timestamp));
+        assert!(
+            !serialized.contains(forbidden),
+            "serialized source sentinel"
+        );
     }
     for forbidden in ["person@example.test", "Queja", "Phone"] {
         assert!(!serialized.contains(forbidden));
+    }
+    for day in 1..=7 {
+        let year = if day == 6 { 2099 } else { 2025 };
+        assert!(!serialized.contains(&format!("{year}-01-{day:02}T10:00:00")));
     }
     let serialized_json: serde_json::Value = serde_json::from_str(&serialized).unwrap();
     fn contains_key(value: &serde_json::Value, expected: &str) -> bool {
@@ -146,6 +127,97 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
     ] {
         assert!(!contains_key(&serialized_json, forbidden_key));
     }
+    assert!(!serialized.contains("true"));
+    assert!(!serialized.contains("rejected_rows"));
+    assert!(!serialized.contains("suppressed_cells"));
+}
+
+#[test]
+fn original_contacts_expose_literal_month_snapshot_projection_without_cutoff_or_raw_values() {
+    let temp = TempDir::new().unwrap();
+    let table = temp.path().join("call_center_interactions");
+    fs::create_dir_all(&table).unwrap();
+    fs::write(
+        table.join("part-000.csv"),
+        concat!(
+            "interaction_id,customer_id,interaction_date,contact_reason,channel\n",
+            "id-1,c-1,2027-03-31 23:59:59,Queja,Phone\n",
+            "id-2,c-2,2027-03-31 23:59:59,Queja,Phone\n",
+            "id-3,c-3,2027-03-31 23:59:59,Queja,Phone\n",
+            "id-4,c-4,2027-03-31 23:59:59,Queja,Phone\n",
+            "id-5,c-5,2027-03-31 23:59:59,Queja,Phone\n",
+            "id-6,c-6,2027-04-01 00:00:00,Queja,Phone\n",
+            "id-7,c-7,2027-04-01 00:00:00,Queja,Phone\n",
+            "id-8,c-8,2027-04-01 00:00:00,Queja,Phone\n",
+            "id-9,c-9,2027-04-01 00:00:00,Queja,Phone\n",
+            "id-10,c-10,2027-04-01 00:00:00,Queja,Phone\n",
+        ),
+    )
+    .unwrap();
+
+    let prepared = prepare_original_bank(temp.path(), &config(10)).unwrap();
+    let projection = prepared
+        .agent_inputs()
+        .descriptive_contact_projection()
+        .expect("snapshot descriptive projection");
+
+    assert_eq!(
+        projection.temporal_basis(),
+        "literal_source_wall_clock_month"
+    );
+    assert_eq!(projection.value_semantics(), "final_extract_facts_only");
+    assert_eq!(projection.coverage(), "partial");
+    assert_eq!(projection.minimum_cell_count(), 5);
+    assert_eq!(projection.aggregates().len(), 2);
+    assert_eq!(projection.aggregates()[0].period(), "2027-03");
+    assert_eq!(projection.aggregates()[0].contact_count(), 5);
+    assert_eq!(projection.aggregates()[1].period(), "2027-04");
+    assert_eq!(projection.aggregates()[1].contact_count(), 5);
+
+    let serialized = serde_json::to_string(projection).unwrap();
+    for forbidden in ["id-1", "c-1", "interaction_date", "observed_cutoff"] {
+        assert!(!serialized.contains(forbidden));
+    }
+}
+
+#[test]
+fn descriptive_projection_omits_exact_rejection_and_suppression_counts() {
+    let temp = TempDir::new().unwrap();
+    let table = temp.path().join("call_center_interactions");
+    fs::create_dir_all(&table).unwrap();
+    fs::write(
+        table.join("part-000.csv"),
+        concat!(
+            "interaction_id,interaction_date,contact_reason,channel\n",
+            "id-1,2027-03-01 10:00:00,Queja,Phone\n",
+            "id-2,2027-03-02 10:00:00,Queja,Phone\n",
+            "id-3,2027-03-03 10:00:00,Queja,Phone\n",
+            "id-4,2027-03-04 10:00:00,Queja,Phone\n",
+            "id-5,2027-03-05 10:00:00,Queja,Phone\n",
+            "id-6,2027-03-06 10:00:00,Queja,\n",
+            "id-7,not-a-date,Queja,Phone\n",
+            "id-8,2027-04-01 10:00:00,Técnico,Chat\n",
+            "id-9,2027-04-02 10:00:00,Técnico,Chat\n",
+            "id-10,2027-04-03 10:00:00,Técnico,Chat\n",
+            "id-11,2027-04-04 10:00:00,Técnico,Chat\n",
+        ),
+    )
+    .unwrap();
+
+    let prepared = prepare_original_bank(temp.path(), &config(10)).unwrap();
+    let projection = prepared
+        .agent_inputs()
+        .descriptive_contact_projection()
+        .unwrap();
+    assert_eq!(projection.included_contact_count(), 5);
+    assert_eq!(projection.aggregates().len(), 1);
+    let serialized_inputs = serde_json::to_string(prepared.agent_inputs()).unwrap();
+    for forbidden in ["rejected_rows", "suppressed_cells"] {
+        assert!(
+            !serialized_inputs.contains(forbidden),
+            "unexpected disclosure field or label: {forbidden}"
+        );
+    }
 }
 
 #[test]
@@ -164,7 +236,7 @@ fn original_contact_projection_fails_closed_on_truncated_or_duplicate_headers() 
 }
 
 #[test]
-fn snapshot_contact_suppression_floor_is_configurable_and_recorded() {
+fn snapshot_contact_suppression_floor_is_fixed_by_policy_v1() {
     let temp = TempDir::new().unwrap();
     let table = temp.path().join("call_center_interactions");
     fs::create_dir_all(&table).unwrap();
@@ -176,20 +248,13 @@ fn snapshot_contact_suppression_floor_is_configurable_and_recorded() {
             "id-2,Complaint,Phone\n",
             "id-3,Complaint,Phone\n",
             "id-4,Complaint,Phone\n",
-            "id-5,Complaint,Phone\n",
         ),
     )
     .unwrap();
-    let baseline = prepare_original_bank(temp.path(), &config(10)).unwrap();
-    let config = config(10).with_minimum_contact_cell_count(6).unwrap();
-
-    let prepared = prepare_original_bank(temp.path(), &config).unwrap();
-
-    assert_ne!(baseline.manifest_digest(), prepared.manifest_digest());
+    let prepared = prepare_original_bank(temp.path(), &config(10)).unwrap();
     assert!(prepared.agent_inputs().contact_volumes().is_empty());
     let summary = prepared.agent_inputs().contact_projection().unwrap();
-    assert_eq!(summary.minimum_cell_count(), 6);
-    assert_eq!(summary.suppressed_cells(), 1);
+    assert_eq!(summary.minimum_cell_count(), 5);
     assert_eq!(summary.included_record_count(), 0);
 }
 
