@@ -21,7 +21,8 @@ def fixtures_digest(directory: Path = FIXTURES_DIR) -> str:
     h = hashlib.sha256()
     if directory.is_dir():
         for p in sorted(directory.glob("*.json")):
-            h.update(f"{p.name}:{hashlib.sha256(p.read_bytes()).hexdigest()}\n".encode())
+            data = p.read_bytes().replace(b"\r\n", b"\n")  # git autocrlf must not change the digest
+            h.update(f"{p.name}:{hashlib.sha256(data).hexdigest()}\n".encode())
     return h.hexdigest()
 
 

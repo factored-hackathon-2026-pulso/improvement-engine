@@ -26,7 +26,7 @@ def record(base_url: str, target: str, *, sim: bool, only_mock_only: bool) -> in
             if case.requires_sim and not sim:
                 continue
             result = runner.run_case(client, case, sim=sim)
-            runner.fixture_path(case.id).write_text(runner.dump_fixture(result), encoding="utf-8")
+            runner.fixture_path(case.id).write_bytes(runner.dump_fixture(result).encode("utf-8"))  # LF on every OS
             written += 1
     return written
 

@@ -4,6 +4,7 @@
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -19,9 +20,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "manual",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "golden"
       },
       "shape": {
         "agent_id": "scalar",
@@ -36,12 +41,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -57,9 +64,13 @@
       "method": "PUT",
       "path": "/v1/registry/proposals/{pid}/draft",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "manual",
         "rev": 1,
-        "state": "draft"
+        "state": "draft",
+        "title": "golden"
       },
       "shape": {
         "agent_id": "scalar",
@@ -74,12 +85,14 @@
         "updated_at": "scalar"
       },
       "status": 200,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "auto_bumped",
         "candidate_hash",
@@ -88,6 +101,7 @@
       "method": "POST",
       "path": "/v1/registry/proposals/{pid}/validate",
       "scalars": {
+        "violation_paths": [],
         "violation_rules": []
       },
       "shape": {
@@ -100,12 +114,14 @@
         ]
       },
       "status": 200,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "auto_bumped",
         "candidate_hash",
@@ -128,12 +144,14 @@
         "release_id_preview": "scalar"
       },
       "status": 200,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": "not_found",
       "content_type": "application/problem+json",
+      "headers": {},
       "keys": [
         "code",
         "detail",
@@ -145,7 +163,8 @@
       "method": "POST",
       "path": "/v1/registry/proposals/{pid}/evaluate",
       "scalars": {
-        "status": 404
+        "status": 404,
+        "title": "not_found"
       },
       "shape": {
         "code": "scalar",
@@ -156,6 +175,7 @@
         "type": "scalar"
       },
       "status": 404,
+      "title": "not_found",
       "trace_id_present": true,
       "type": "urn:agentcore:registry:not_found"
     }

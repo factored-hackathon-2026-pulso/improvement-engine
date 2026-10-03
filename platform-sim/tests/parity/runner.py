@@ -6,6 +6,7 @@ whitelist of stable scalars) that is compared against a recorded fixture (see `r
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from dataclasses import dataclass, field
@@ -25,8 +26,11 @@ FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "agent_core_wire" 
 WIRE = Path(__file__).resolve().parents[3] / "core-bridge" / "wire" / f"agent_core@{PIN_SHA[:7]}"
 GOLDEN_DRAFT = WIRE / "golden" / "golden_draft_disputa.json"
 
-STABLE_SCALARS = {"state", "rev", "verdict", "status", "origin", "decision", "alias", "changed_vs_base"}
+STABLE_SCALARS = {"state", "rev", "verdict", "status", "origin", "decision", "alias", "changed_vs_base", "title",
+                  "agent_id", "created_by", "actor", "reason", "base_release_id", "released_by", "published_by"}
+CHECKED_HEADERS = ("www-authenticate", "retry-after", "cache-control", "allow", "location")
 OPAQUE_KEYS = {"content", "args", "locales", "seed", "scenarios", "steps"}  # user content: not part of the shape
+_REL = re.compile(r"rel-[0-9a-f]{16}")
 _VAR = re.compile(r"\{([a-z_]+[0-9]*)\}")
 ACTORS = ("bot", "human", "admin", "customer", "advisor", "human_session", "approver_only", "bot_aprobador")
 
@@ -164,6 +168,25 @@ def _body(spec: Any, env: dict[str, Any]) -> Any:
             change["content"]["locales"]["es"] = "a" * (int(arg["size"]) - base)
             assert _canonical_len(change["content"]) == int(arg["size"])
             return {"expected_rev": int(arg.get("expected_rev", 0)), "changes": [change]}
+        if key == "$flow_nodes":  # golden flow padded to exactly `count` nodes (clones with fresh ids)
+            draft = _golden_draft(int(arg.get("expected_rev", 0)))
+            flow = next(c for c in draft["changes"] if c["kind"] == "flow")
+            nodes = flow["content"]["nodes"]
+            first = nodes[0]  # entry `collect` node: padding is a reachable chain of its clones
+            pads = [{**copy.deepcopy(first), "id": f"pad{i}"} for i in range(int(arg["count"]) - len(nodes))]
+            for i, node in enumerate(pads):
+                node["next"]["ok"] = pads[i + 1]["id"] if i + 1 < len(pads) else first["next"]["ok"]
+            if pads:
+                first["next"]["ok"] = pads[0]["id"]
+            flow["content"]["nodes"] = nodes + pads
+            return draft
+        if key == "$suite_scenarios":  # golden suite padded to exactly `count` scenarios (clones with fresh ids)
+            draft = _golden_draft(int(arg.get("expected_rev", 0)))
+            suite = next(c for c in draft["changes"] if c["kind"] == "eval_suite")
+            scen = suite["content"]["scenarios"]
+            suite["content"]["scenarios"] = [{**copy.deepcopy(scen[i % len(scen)]), "id": f"sc{i}"}
+                                             for i in range(int(arg["count"]))]
+            return draft
         if key == "$title":
             return {"agent_id": AGENT_ID, "origin": arg.get("origin", "manual"), "title": "t" * int(arg["length"])}
         if key == "$one_template":
@@ -186,34 +209,43 @@ def _shape(value: Any, depth: int) -> Any:
     return "null" if value is None else "scalar"
 
 
-def _scalars(body: Any) -> dict[str, Any]:
+def _scalars(body: Any, only_rules: list[str] | None = None) -> dict[str, Any]:
     found: dict[str, Any] = {}
     if isinstance(body, dict):
         for k in STABLE_SCALARS:
             if k in body and isinstance(body[k], (str, int, bool)):
-                found[k] = body[k]
+                v = body[k]
+                # Release ids are hashes of Core's normalised entities (not reproducible by a mock): only the seeded
+                # base release is stable; any other `rel-<hex16>` is masked.
+                found[k] = "<release_id>" if isinstance(v, str) and _REL.fullmatch(v) and v != BASE_RELEASE_ID else v
         if isinstance(body.get("proposal"), dict):
             for k, v in _scalars(body["proposal"]).items():
                 found[f"proposal.{k}"] = v
         if isinstance(body.get("violations"), list):
-            found["violation_rules"] = sorted({str(v.get("rule")) for v in body["violations"] if isinstance(v, dict)})
+            rules = {str(v.get("rule")) for v in body["violations"] if isinstance(v, dict)}
+            # `only_rules` narrows a limits case to the rule under test (the mock validates a documented subset)
+            found["violation_rules"] = sorted(rules & set(only_rules) if only_rules else rules)
+            found["violation_paths"] = sorted({f"{v.get('rule')}@{v.get('path')}" for v in body["violations"]
+                                               if isinstance(v, dict) and (not only_rules or v.get("rule") in only_rules)})
     return found
 
 
-def normalise(method: str, path_tpl: str, resp: httpx.Response) -> dict[str, Any]:
+def normalise(method: str, path_tpl: str, resp: httpx.Response, only_rules: list[str] | None = None) -> dict[str, Any]:
     ctype = resp.headers.get("content-type", "").split(";")[0].strip()
     try:
         body = resp.json()
     except ValueError:
         body = None
     out: dict[str, Any] = {"method": method, "path": path_tpl, "status": resp.status_code, "content_type": ctype}
+    out["headers"] = {h: resp.headers[h] for h in CHECKED_HEADERS if h in resp.headers}
     if isinstance(body, dict):
         out["type"] = body.get("type")
+        out["title"] = body.get("title") if "type" in body else None
         out["code"] = body.get("code")
         out["keys"] = sorted(body)
         out["shape"] = _shape(body, 2)
         out["trace_id_present"] = bool(body.get("trace_id")) if "trace_id" in body else None
-        out["scalars"] = _scalars(body)
+        out["scalars"] = _scalars(body, only_rules)
     else:
         out["keys"] = None
     return out
@@ -253,7 +285,8 @@ def run_case(client: httpx.Client, case: Case, *, sim: bool) -> CaseResult:
             env["i"] = i
             env["n"] = i + 1
             path = _subst(step["path"], env)
-            headers: dict[str, str] = {k: str(_subst(v, env)) for k, v in (step.get("headers") or {}).items()}
+            headers: dict[str, str] = {k: (v["$repeat"][0] * int(v["$repeat"][1]) if isinstance(v, dict) else str(_subst(v, env)))
+                                       for k, v in (step.get("headers") or {}).items()}
             token = _token(step.get("as", "bot"))
             if token is not None:
                 headers["Authorization"] = f"Bearer {token}"
@@ -261,7 +294,7 @@ def run_case(client: httpx.Client, case: Case, *, sim: bool) -> CaseResult:
             if "json" in step:
                 kwargs["json"] = _body(step["json"], env)
             resp = client.request(step["method"], path, **kwargs)
-            result.steps.append(normalise(step["method"], step["path"], resp))
+            result.steps.append(normalise(step["method"], step["path"], resp, step.get("only_rules")))
             for name, dotted in (step.get("save") or {}).items():
                 try:
                     env[name] = _dig(resp.json(), dotted)

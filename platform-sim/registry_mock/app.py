@@ -46,8 +46,8 @@ ERROR_STATUS = {
     "not_found": 404, "loosening_not_accepted": 409, "idempotency_conflict": 409, "quota_exceeded": 429,
 }
 PROBLEM_TITLES = {
-    "credentials_invalid": "Credenciales invalidas", "principal_expired": "Principal vencido",
-    "not_found": "Recurso inexistente", "invalid_request": "Solicitud invalida", "internal_error": "Error interno",
+    "credentials_invalid": "Credenciales inválidas", "principal_expired": "Principal vencido",
+    "not_found": "Recurso inexistente", "invalid_request": "Solicitud inválida", "internal_error": "Error interno",
 }
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9_/-]*$")
 SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -58,6 +58,7 @@ class Limits:
     max_changes: int = 50
     max_entity_bytes: int = 262_144
     max_flow_nodes: int = 200
+    max_suite_scenarios: int = 200  # EvalSuite.scenarios max_length: a schema violation (REG-SCHEMA), not REG-LIMIT
     proposals_per_day: int = 10
     evals_per_proposal: int = 20
     window: timedelta = timedelta(hours=24)
@@ -309,7 +310,7 @@ def build_candidate(st: State, p: ProposalRec) -> tuple[list[dict[str, Any]], Ca
         digest = sha256_hex(canonical(d.content))
         existing = st.versions.get(ref)
         if existing is not None and existing.content_hash != digest:
-            problems.append(violation("REG-VERSION-TAKEN", f"{ref_str(ref)} already exists with other content", where))
+            problems.append(violation("REG-VERSION-TAKEN", f"{ref_str(ref)} already exists with other content", ref_str(ref)))
         elif existing is None:
             old = base_versions.get((d.kind, d.content["id"]))
             if old is not None:
@@ -320,6 +321,11 @@ def build_candidate(st: State, p: ProposalRec) -> tuple[list[dict[str, Any]], Ca
             problems.append(violation("REG-LIMIT", f"{where} exceeds {st.limits.max_entity_bytes} bytes", where))
         if d.kind == "flow" and len(d.content.get("nodes") or []) > st.limits.max_flow_nodes:
             problems.append(violation("REG-LIMIT", f"flow has more than {st.limits.max_flow_nodes} nodes", where))
+        scenarios = d.content.get("scenarios")
+        if d.kind == "eval_suite" and isinstance(scenarios, list) and len(scenarios) > st.limits.max_suite_scenarios:
+            problems.append(violation(
+                "REG-SCHEMA", f"el contenido no cumple el esquema: scenarios: List should have at most "
+                f"{st.limits.max_suite_scenarios} items after validation, not {len(scenarios)}", f"eval_suite:{ref[1]}"))
         by_ref[ref] = d
     mentioned: set[str] = set()
     for d in by_ref.values():
@@ -368,7 +374,7 @@ Auth = Annotated[str | None, Header(alias="authorization")]
 
 def problem(code: str, status: int, detail: str, trace_id: str, *, extra: dict[str, Any] | None = None,
             urn: str = "problem") -> Response:
-    body: dict[str, Any] = {"type": f"urn:agentcore:{urn}:{code}", "title": PROBLEM_TITLES.get(code, code),
+    body: dict[str, Any] = {"type": f"urn:agentcore:{urn}:{code}", "title": PROBLEM_TITLES.get(code, code) if urn == "problem" else code,  # registry errors carry the code
                             "status": status, "code": code, "detail": detail, "trace_id": trace_id}
     body.update(extra or {})
     return Response(json.dumps(body), status_code=status, media_type="application/problem+json")

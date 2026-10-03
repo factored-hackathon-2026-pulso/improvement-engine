@@ -4,6 +4,7 @@
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -19,9 +20,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "manual",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "t"
       },
       "shape": {
         "agent_id": "scalar",
@@ -36,12 +41,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -57,9 +64,13 @@
       "method": "PUT",
       "path": "/v1/registry/proposals/{pid}/draft",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "manual",
         "rev": 1,
-        "state": "draft"
+        "state": "draft",
+        "title": "t"
       },
       "shape": {
         "agent_id": "scalar",
@@ -74,12 +85,14 @@
         "updated_at": "scalar"
       },
       "status": 200,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "auto_bumped",
         "candidate_hash",
@@ -88,6 +101,9 @@
       "method": "POST",
       "path": "/v1/registry/proposals/{pid}/validate",
       "scalars": {
+        "violation_paths": [
+          "REG-VERSION-TAKEN@template:t/aclarar@1.0.0"
+        ],
         "violation_rules": [
           "REG-VERSION-TAKEN"
         ]
@@ -102,6 +118,7 @@
         ]
       },
       "status": 200,
+      "title": null,
       "trace_id_present": null,
       "type": null
     }

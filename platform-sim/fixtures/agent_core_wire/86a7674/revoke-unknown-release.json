@@ -4,6 +4,7 @@
     {
       "code": "not_found",
       "content_type": "application/problem+json",
+      "headers": {},
       "keys": [
         "code",
         "detail",
@@ -15,7 +16,8 @@
       "method": "POST",
       "path": "/v1/registry/releases/rel-0000000000000000/revoke",
       "scalars": {
-        "status": 404
+        "status": 404,
+        "title": "not_found"
       },
       "shape": {
         "code": "scalar",
@@ -26,6 +28,7 @@
         "type": "scalar"
       },
       "status": 404,
+      "title": "not_found",
       "trace_id_present": true,
       "type": "urn:agentcore:registry:not_found"
     }

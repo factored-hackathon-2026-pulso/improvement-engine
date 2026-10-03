@@ -4,6 +4,7 @@
     {
       "code": "credentials_invalid",
       "content_type": "application/problem+json",
+      "headers": {},
       "keys": [
         "code",
         "detail",
@@ -15,7 +16,8 @@
       "method": "GET",
       "path": "/v1/registry/releases/{base_release}",
       "scalars": {
-        "status": 401
+        "status": 401,
+        "title": "Credenciales inv\u00e1lidas"
       },
       "shape": {
         "code": "scalar",
@@ -26,6 +28,7 @@
         "type": "scalar"
       },
       "status": 401,
+      "title": "Credenciales inv\u00e1lidas",
       "trace_id_present": true,
       "type": "urn:agentcore:problem:credentials_invalid"
     }

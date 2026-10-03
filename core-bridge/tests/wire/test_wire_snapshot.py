@@ -68,3 +68,23 @@ def test_golden_release_demo_values() -> None:
     assert vectors["release_hash"].startswith("98130317a1003849")
     assert len(vectors["entities"]) == 26
     assert vectors["candidate"]["candidate_hash"]
+
+
+def test_every_entity_vector_rederives_independently() -> None:
+    """All 26 vectors: sha256(canonical bytes) == content_hash, and the canonical bytes equal an independent
+    sorted-key/compact/UTF-8 serialisation of the normalised dump (no agent_core involved)."""
+    vectors = json.loads((WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))
+    refs = set()
+    for v in vectors["entities"]:
+        raw = bytes.fromhex(v["canonical_bytes_hex"])
+        assert hashlib.sha256(raw).hexdigest() == v["content_hash"], v["ref"]
+        independent = json.dumps(v["normalized_dump_json"], sort_keys=True, separators=(",", ":"),
+                                 ensure_ascii=False).encode("utf-8")
+        assert independent == raw, v["ref"]
+        refs.add(v["ref"])
+    assert len(refs) == len(vectors["entities"]) == 26
+
+
+def test_candidate_vector_is_complete() -> None:
+    cand = json.loads((WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))["candidate"]
+    assert len(cand["candidate_hash"]) == 64 and int(cand["candidate_hash"], 16) >= 0

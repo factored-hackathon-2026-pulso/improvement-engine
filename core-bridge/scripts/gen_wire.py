@@ -1,7 +1,7 @@
 """Worker of gen-wire.ps1. Runs INSIDE the scratch venv built from the pinned agent-core checkout.
 
 Writes ONLY `<out>/` (the `agent_core@<sha7>` wire directory). Deterministic and fail-closed.
-Usage: python gen_wire.py --checkout <path> --out <dir> --expected-sha <sha>
+Usage: python gen_wire.py --checkout <path> --out <dir> [--expected-sha <sha>]
 """
 
 from __future__ import annotations
@@ -27,6 +27,35 @@ BODY_MODELS = ["_Create", "_Draft", "_Evaluate", "_Approve", "_Promote", "_Reaso
 def die(msg: str) -> None:
     print(f"pulso:wire_gen_failed {msg}", file=sys.stderr)
     raise SystemExit(2)
+
+
+FALLBACK_PIN = {"sha": "86a767474042a566a0dbd6ed23588959f27ebdb3", "contract_version": "1.3.0"}
+SUPPORTED_CONTRACT = "1.3.0"
+
+
+def resolve_pin(repo_root: Path) -> dict:
+    """`contracts/agent_core/pin.json` when present (a malformed one fails closed, never falls back), else the
+    built-in fallback pin. Mirrors gen-wire.ps1 so both entry points agree on the SHA."""
+    pin_file = repo_root / "contracts" / "agent_core" / "pin.json"
+    if not pin_file.exists():
+        return {**FALLBACK_PIN, "source": "fallback"}
+    try:
+        pin = json.loads(pin_file.read_text(encoding="utf-8"))
+    except ValueError:
+        die(f"{pin_file} is not valid JSON")
+    sha = pin.get("sha") if isinstance(pin, dict) else None
+    if not (isinstance(sha, str) and len(sha) == 40 and all(c in "0123456789abcdef" for c in sha)):
+        die(f"{pin_file}: `sha` must be 40 lowercase hex characters")
+    if pin.get("contract_version") != SUPPORTED_CONTRACT:
+        die(f"{pin_file}: contract_version {pin.get('contract_version')!r} != {SUPPORTED_CONTRACT}")
+    return {**pin, "source": "pin.json"}
+
+
+def check_manifest_digest(pin: dict, manifest_bytes: bytes) -> None:
+    """pin.json `manifest_sha256` (when declared) must equal the digest of the generated MANIFEST.json."""
+    declared = pin.get("manifest_sha256")
+    if declared and declared != hashlib.sha256(manifest_bytes).hexdigest():
+        die(f"pulso:wire_drift manifest_sha256 {hashlib.sha256(manifest_bytes).hexdigest()} != pin {declared}")
 
 
 def _keys_to_str(obj: object) -> object:
@@ -206,9 +235,14 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--checkout", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--expected-sha", required=True)
+    ap.add_argument("--expected-sha", help="default: resolved from contracts/agent_core/pin.json, else the fallback pin")
     a = ap.parse_args()
     checkout, out = Path(a.checkout).resolve(), Path(a.out)
+    pin = resolve_pin(PLATFORM_SIM.parent)
+    if a.expected_sha is None:
+        a.expected_sha = pin["sha"]
+    elif a.expected_sha != pin["sha"]:
+        die(f"--expected-sha {a.expected_sha} != pin {pin['sha']} ({pin['source']})")
     version = preflight(checkout, a.expected_sha)
     if out.exists():
         shutil.rmtree(out)
@@ -235,7 +269,9 @@ def main() -> None:
             pass
     manifest = {"repo": "agent-core", "sha": a.expected_sha, "contract_version": version,
                 "files": sorted(files, key=lambda f: f["path"]), "tool_versions": tools}
-    (out / "MANIFEST.json").write_bytes(dump(manifest))
+    manifest_bytes = dump(manifest)
+    check_manifest_digest(pin, manifest_bytes)
+    (out / "MANIFEST.json").write_bytes(manifest_bytes)
     print(f"wire written: {out} ({len(files)} files; manifest_sha256={sha(dump(manifest))})")
 
 

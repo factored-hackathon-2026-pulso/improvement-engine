@@ -4,6 +4,7 @@
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -19,9 +20,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "manual",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
       },
       "shape": {
         "agent_id": "scalar",
@@ -36,6 +41,7 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     }

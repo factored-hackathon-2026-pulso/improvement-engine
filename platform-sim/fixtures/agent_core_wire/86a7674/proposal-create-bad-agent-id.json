@@ -4,6 +4,7 @@
     {
       "code": "validation_failed",
       "content_type": "application/problem+json",
+      "headers": {},
       "keys": [
         "code",
         "detail",
@@ -17,6 +18,10 @@
       "path": "/v1/registry/proposals",
       "scalars": {
         "status": 422,
+        "title": "validation_failed",
+        "violation_paths": [
+          "REG-PROPOSAL@agent_id"
+        ],
         "violation_rules": [
           "REG-PROPOSAL"
         ]
@@ -33,6 +38,7 @@
         ]
       },
       "status": 422,
+      "title": "validation_failed",
       "trace_id_present": true,
       "type": "urn:agentcore:registry:validation_failed"
     }

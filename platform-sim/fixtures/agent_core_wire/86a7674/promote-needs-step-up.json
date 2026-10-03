@@ -4,6 +4,7 @@
     {
       "code": "step_up_required",
       "content_type": "application/problem+json",
+      "headers": {},
       "keys": [
         "code",
         "detail",
@@ -15,7 +16,8 @@
       "method": "POST",
       "path": "/v1/registry/aliases/atencion/staging",
       "scalars": {
-        "status": 403
+        "status": 403,
+        "title": "step_up_required"
       },
       "shape": {
         "code": "scalar",
@@ -26,6 +28,7 @@
         "type": "scalar"
       },
       "status": 403,
+      "title": "step_up_required",
       "trace_id_present": true,
       "type": "urn:agentcore:registry:step_up_required"
     }

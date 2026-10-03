@@ -48,3 +48,27 @@
       path: /v1/registry/proposals/{pid}/evaluate
       repeat: 21
       json: {suite_id: disputas-suite}
+- id: limit-flow-nodes-200-ok
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$flow_nodes: {count: 200}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", only_rules: [REG-LIMIT, REG-SCHEMA]}
+- id: limit-flow-nodes-201-rejected
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$flow_nodes: {count: 201}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", only_rules: [REG-LIMIT, REG-SCHEMA]}
+- id: limit-suite-scenarios-200-ok
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$suite_scenarios: {count: 200}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", only_rules: [REG-LIMIT, REG-SCHEMA]}
+- id: limit-suite-scenarios-201-rejected
+  rule: limits
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$suite_scenarios: {count: 201}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", only_rules: [REG-LIMIT, REG-SCHEMA]}

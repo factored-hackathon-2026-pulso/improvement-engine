@@ -4,6 +4,7 @@
     {
       "code": "forbidden_role",
       "content_type": "application/problem+json",
+      "headers": {},
       "keys": [
         "code",
         "detail",
@@ -15,7 +16,8 @@
       "method": "POST",
       "path": "/v1/registry/releases/{base_release}/revoke",
       "scalars": {
-        "status": 403
+        "status": 403,
+        "title": "forbidden_role"
       },
       "shape": {
         "code": "scalar",
@@ -26,6 +28,7 @@
         "type": "scalar"
       },
       "status": 403,
+      "title": "forbidden_role",
       "trace_id_present": true,
       "type": "urn:agentcore:registry:forbidden_role"
     }

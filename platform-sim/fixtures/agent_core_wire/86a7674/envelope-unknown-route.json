@@ -4,6 +4,7 @@
     {
       "code": "not_found",
       "content_type": "application/problem+json",
+      "headers": {},
       "keys": [
         "code",
         "detail",
@@ -15,7 +16,8 @@
       "method": "GET",
       "path": "/v1/registry/nope",
       "scalars": {
-        "status": 404
+        "status": 404,
+        "title": "Recurso inexistente"
       },
       "shape": {
         "code": "scalar",
@@ -26,6 +28,7 @@
         "type": "scalar"
       },
       "status": 404,
+      "title": "Recurso inexistente",
       "trace_id_present": true,
       "type": "urn:agentcore:problem:not_found"
     }

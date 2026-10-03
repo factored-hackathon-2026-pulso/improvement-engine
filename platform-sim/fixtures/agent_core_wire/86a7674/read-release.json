@@ -4,6 +4,7 @@
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -19,6 +20,8 @@
       "method": "GET",
       "path": "/v1/registry/releases/{base_release}",
       "scalars": {
+        "agent_id": "atencion",
+        "published_by": "root",
         "status": "active"
       },
       "shape": {
@@ -38,6 +41,7 @@
         "status": "scalar"
       },
       "status": 200,
+      "title": null,
       "trace_id_present": null,
       "type": null
     }

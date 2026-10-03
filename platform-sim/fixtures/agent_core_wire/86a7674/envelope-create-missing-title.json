@@ -4,6 +4,7 @@
     {
       "code": "invalid_request",
       "content_type": "application/problem+json",
+      "headers": {},
       "keys": [
         "code",
         "detail",
@@ -15,7 +16,8 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
-        "status": 422
+        "status": 422,
+        "title": "Solicitud inv\u00e1lida"
       },
       "shape": {
         "code": "scalar",
@@ -26,6 +28,7 @@
         "type": "scalar"
       },
       "status": 422,
+      "title": "Solicitud inv\u00e1lida",
       "trace_id_present": true,
       "type": "urn:agentcore:problem:invalid_request"
     }

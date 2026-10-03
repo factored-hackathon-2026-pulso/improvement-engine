@@ -222,3 +222,21 @@
     - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
     - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$one_template: {expected_rev: 0}}}
     - {method: POST, path: "/v1/registry/proposals/{pid}/freeze"}
+- id: publish-idempotency-key-255-ok
+  rule: idempotency
+  requires_sim: true
+  steps:
+    - {use: golden_approved}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", headers: {Idempotency-Key: {$repeat: [k, 255]}}, as: human}
+- id: publish-idempotency-key-256-rejected
+  rule: idempotency
+  requires_sim: true
+  steps:
+    - {use: golden_approved}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", headers: {Idempotency-Key: {$repeat: [k, 256]}}, as: human}
+- id: publish-idempotency-key-empty-rejected
+  rule: idempotency
+  requires_sim: true
+  steps:
+    - {use: golden_approved}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", headers: {Idempotency-Key: ""}, as: human}

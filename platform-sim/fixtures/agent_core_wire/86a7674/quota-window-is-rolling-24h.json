@@ -4,6 +4,7 @@
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -19,9 +20,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p1"
       },
       "shape": {
         "agent_id": "scalar",
@@ -36,12 +41,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -57,9 +64,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p2"
       },
       "shape": {
         "agent_id": "scalar",
@@ -74,12 +85,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -95,9 +108,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p3"
       },
       "shape": {
         "agent_id": "scalar",
@@ -112,12 +129,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -133,9 +152,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p4"
       },
       "shape": {
         "agent_id": "scalar",
@@ -150,12 +173,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -171,9 +196,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p5"
       },
       "shape": {
         "agent_id": "scalar",
@@ -188,12 +217,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -209,9 +240,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p6"
       },
       "shape": {
         "agent_id": "scalar",
@@ -226,12 +261,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -247,9 +284,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p7"
       },
       "shape": {
         "agent_id": "scalar",
@@ -264,12 +305,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -285,9 +328,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p8"
       },
       "shape": {
         "agent_id": "scalar",
@@ -302,12 +349,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -323,9 +372,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p9"
       },
       "shape": {
         "agent_id": "scalar",
@@ -340,12 +393,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -361,9 +416,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "p10"
       },
       "shape": {
         "agent_id": "scalar",
@@ -378,12 +437,14 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     },
     {
       "code": null,
       "content_type": "application/json",
+      "headers": {},
       "keys": [
         "agent_id",
         "base_release_id",
@@ -399,9 +460,13 @@
       "method": "POST",
       "path": "/v1/registry/proposals",
       "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-98130317a1003849",
+        "created_by": "constructor-bot",
         "origin": "auto_detect",
         "rev": 0,
-        "state": "draft"
+        "state": "draft",
+        "title": "later"
       },
       "shape": {
         "agent_id": "scalar",
@@ -416,6 +481,7 @@
         "updated_at": "scalar"
       },
       "status": 201,
+      "title": null,
       "trace_id_present": null,
       "type": null
     }
