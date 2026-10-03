@@ -26,7 +26,8 @@ KEYS_DIR = "/run/pulso-keys"
 # (env var, default file stem under KEYS_DIR): the bridge's own private signers (see `invoke.wiring.build_l3`).
 SIGNER_FILES: tuple[tuple[str, str], ...] = (
     ("PULSO_BRIDGE_IDENTITY_SIGNER", "bridge-identity"), ("PULSO_BRIDGE_STAFF_SIGNER", "bridge-staff"),
-    ("PULSO_BRIDGE_CALLBACK_SIGNER", "bridge-callback"))
+    ("PULSO_BRIDGE_CALLBACK_SIGNER", "bridge-callback"),
+    ("PULSO_BRIDGE_EXECUTOR_SIGNER", "bridge-executor"))
 
 
 def preflight(env: Mapping[str, str]) -> None:
@@ -261,6 +262,7 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
             readiness=(*deps.readiness, *extra))
         app = create_app(deps)
         holder["app"] = app
+        app.state.pulso_arms = arms  # introspection handle for composition tests (no secrets, in-process only)
         if serve is None:
             import uvicorn
             serve = uvicorn.run

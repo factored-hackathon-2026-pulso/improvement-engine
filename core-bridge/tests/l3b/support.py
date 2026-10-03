@@ -125,8 +125,9 @@ class Env:
         self.backend = FakeBackend()
         self.http = httpx.Client(transport=httpx.MockTransport(self.backend.handle), base_url=BASE)
         self.contexts = InvocationRegistry()
-        self.broker = BrokerClient(BASE, lambda scope: "jwt-" + scope, http=self.http, sleep=lambda s: None)
-        self.control = ControlApiClient(BASE, lambda scope: "jwt-" + scope, http=self.http)
+        self.broker = BrokerClient(BASE, lambda scope, claims: "jwt-" + scope, http=self.http, sleep=lambda s: None,
+                                   identity=self._identity)
+        self.control = ControlApiClient(BASE, lambda scope, claims: "jwt-" + scope, http=self.http)
         self.inner = RecordingInner()
         self.gate = evaluate_gate
         self.admissions: Any = AnyAdmission()
@@ -137,6 +138,13 @@ class Env:
         self.provider = CountingProvider()
         self.guard = BindingGuardGateway(self.gateway, self.contexts)
         self.provider_guard = BindingGuardProvider(self.provider, self.contexts)
+
+    def _identity(self, ref: str) -> tuple[str, str] | None:
+        try:
+            ic = self.contexts.lookup(ref)
+        except Exception:  # noqa: BLE001
+            return None
+        return ic.tenant_id, ic.job_id
 
     def _builder(self, ic: InvocationContext) -> Any:
         from pulso_core_runtime.tools.builder import ProtectedBuilderToolExecutor

@@ -38,11 +38,11 @@ class BindingService:
         self._url, self._key, self._kid = control_api_url.rstrip("/") + BINDING_PATH, signing_key, kid
         self._instance, self._transport, self._timeout, self._clock = bridge_instance_id, transport, timeout_s, clock
 
-    def _token(self) -> str:
+    def _token(self, tenant_id: str) -> str:
         now = int(self._clock())
         return sign_service_jwt(self._key, kid=self._kid, claims={
             "iss": "core-bridge", "aud": "control-api", "sub": f"bridge:{self._instance}", "scope": "binding",
-            "purpose": "core_task_binding", "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex})
+            "purpose": "core_task_binding", "tenant_id": tenant_id, "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex})
 
     def bind(self, *, run_id: str, principal_attrs: dict[str, str]) -> BindResult:
         try:
@@ -63,7 +63,7 @@ class BindingService:
             try:
                 with httpx.Client(transport=self._transport, timeout=self._timeout) as client:
                     resp = client.post(self._url, json=body, headers={
-                        "Authorization": f"Bearer {self._token()}", "Idempotency-Key": ctx.command_key})
+                        "Authorization": f"Bearer {self._token(ctx.tenant_id)}", "Idempotency-Key": ctx.command_key})
                 break
             except httpx.TransportError:
                 resp = None

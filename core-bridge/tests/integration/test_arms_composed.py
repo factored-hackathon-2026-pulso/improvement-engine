@@ -64,16 +64,11 @@ def test_task_arms_run_against_the_loopback_bank_with_a_real_manifest(composed: 
 
 
 def test_composition_wires_real_clients_and_the_shared_ledger(composed: Composed) -> None:
-    import gc
-
-    from pulso_core_runtime.evaluation.arms import ArmRunner
     from pulso_core_runtime.evaluation.broker_clients import BrokerArtifactPort, BrokerSandboxClient
     from pulso_core_runtime.store.receipts import ReceiptStore
 
-    runners = [o for o in gc.get_objects() if isinstance(o, ArmRunner)
-               and getattr(o.artifacts, "_h", None) is not None and o.artifacts._h._base == composed.loop.url]
-    assert runners, "composed ArmRunner not found"
-    arms = runners[-1]
+    arms = composed.app.state.pulso_arms  # deterministic handle; no gc.get_objects scan
+    assert arms.artifacts._h._base == composed.loop.url
     assert isinstance(arms.artifacts, BrokerArtifactPort) and isinstance(arms.sandbox, BrokerSandboxClient)
     assert isinstance(arms.ledger, ReceiptStore)  # atomic capped spend, not the in-process tally
 
@@ -87,3 +82,31 @@ def test_bank_down_is_failed_infra_and_missing_manifest_is_manifest_missing(comp
     assert rep["status"] == "failed_infra" and rep["reason"] == "manifest_missing"
     native = run_arm(composed, arm_body("k-native", "native", seed_manifest_ref=None))  # native: no bank, same manifest
     del native
+
+
+def test_composed_arm_ledger_charges_atomically_and_enforces_the_cap(composed: Composed) -> None:
+    """The ledger the composition hands to the ArmRunner is the real PG `ReceiptStore`: an `EvalBudgetMeter` over
+    it, wrapping the composed test gateway, charges `budget_meter` and refuses spend over the cap. (The demo arm
+    scenarios of the loopback bank make zero model calls, so the arm route itself cannot move the meter here; the
+    live scout path charging the same store is covered in test_scout.)"""
+    from decimal import Decimal
+
+    from agent_core.domain import EntityRef, Locale
+
+    from pulso_core_runtime.evaluation.budget import BudgetLimits, EvalBudgetMeter
+    from pulso_core_runtime.store.receipts import ReceiptStore
+
+    arms = composed.app.state.pulso_arms
+    assert isinstance(arms.ledger, ReceiptStore)
+    meter = EvalBudgetMeter(BudgetLimits("bud-x", Decimal("0.0015"), None, None, None), ledger=arms.ledger,
+                            tenant_id="t1", job_id="job-ledger-cap")
+    gateway = meter.wrap(composed.gateway)
+    prompt, loc = EntityRef(id="p", version="1.0.0"), Locale("es")
+    inputs = {"goal": "g"}
+    gateway.generate(prompt, inputs, loc)  # 0.001 within the 0.0015 cap
+    row = ReceiptStore(composed.pg.runtime).meter_get("t1", "job-ledger-cap", "evaluation", 0)
+    assert row is not None and row["calls"] == 1 and Decimal(str(row["cost_usd"])) == Decimal("0.001")
+    gateway.generate(prompt, inputs, loc)  # would reach 0.002: the ledger refuses and the meter marks exhaustion
+    assert meter.exhausted == "cost_usd_max"
+    row = ReceiptStore(composed.pg.runtime).meter_get("t1", "job-ledger-cap", "evaluation", 0)
+    assert row is not None and row["calls"] == 1  # the refused spend was never applied

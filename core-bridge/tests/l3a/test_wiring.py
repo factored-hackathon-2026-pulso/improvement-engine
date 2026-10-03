@@ -25,10 +25,10 @@ def _signer_file(path: Path, kid: str) -> None:
 def test_build_l3_registers_the_three_routes_and_migrates(pg: PgDbs, tmp_path: Path) -> None:
     from pulso_core_runtime.internal.store import ensure_schema
     ensure_schema(pg.runtime)
-    for name, kid in (("i", "id1"), ("s", "st1"), ("c", "cb1")):
+    for name, kid in (("i", "id1"), ("s", "st1"), ("c", "cb1"), ("e", "ex1")):
         _signer_file(tmp_path / f"{name}.json", kid)
     env = {"PULSO_BRIDGE_IDENTITY_SIGNER": str(tmp_path / "i.json"), "PULSO_BRIDGE_STAFF_SIGNER": str(tmp_path / "s.json"),
-           "PULSO_BRIDGE_CALLBACK_SIGNER": str(tmp_path / "c.json"), "PULSO_CONTROL_API_URL": "http://control.test"}
+           "PULSO_BRIDGE_CALLBACK_SIGNER": str(tmp_path / "c.json"), "PULSO_BRIDGE_EXECUTOR_SIGNER": str(tmp_path / "e.json"), "PULSO_CONTROL_API_URL": "http://control.test"}
     l3 = build_l3(env, dsn=pg.runtime, registry=object(), app_getter=lambda: None)
     assert set(l3.handlers) == {"POST /core-tasks/invoke", "GET /core-tasks/{task_id}", "POST /core-credentials/issue"}
     assert l3_ready(pg.runtime)

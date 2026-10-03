@@ -46,7 +46,8 @@ def keys(tmp_path: Path) -> dict[str, Any]:
     (tmp_path / "service.json").write_text(json.dumps(
         {"keys": {"cp1": {"iss": "control-api", "aud": "core-bridge", "key": _pub(svc)}}}))
     for name, kid, key in (("bridge-identity", "id1", ident), ("bridge-staff", "st1", staff),
-                           ("bridge-callback", "cb1", Ed25519PrivateKey.generate())):
+                           ("bridge-callback", "cb1", Ed25519PrivateKey.generate()),
+                           ("bridge-executor", "ex1", Ed25519PrivateKey.generate())):
         (tmp_path / f"{name}.json").write_text(json.dumps({"kid": kid, "key": _seed(key)}))
     return {"dir": tmp_path, "svc": svc}
 
@@ -61,6 +62,7 @@ def _env(pg: PgDbs, keys: dict[str, Any], **extra: str) -> dict[str, str]:
             "PULSO_BRIDGE_IDENTITY_SIGNER": str(d / "bridge-identity.json"),
             "PULSO_BRIDGE_STAFF_SIGNER": str(d / "bridge-staff.json"),
             "PULSO_BRIDGE_CALLBACK_SIGNER": str(d / "bridge-callback.json"),
+            "PULSO_BRIDGE_EXECUTOR_SIGNER": str(d / "bridge-executor.json"),
             "PULSO_LAB_BROKER_URL": "http://127.0.0.1:9", "PULSO_CONTROL_API_URL": "http://127.0.0.1:9",
             "PULSO_SHA": "abc1234", "PULSO_IMAGE_DIGEST": "sha256:" + "a" * 64, **extra}
 

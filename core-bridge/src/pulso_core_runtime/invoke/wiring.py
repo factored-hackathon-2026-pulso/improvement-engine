@@ -43,6 +43,7 @@ class L3:
     registry: InvocationRegistry
     store: ReceiptStore
     callback_signer: Any = None
+    executor_signer: Any = None
 
 
 def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Callable[[], Any],
@@ -56,6 +57,10 @@ def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Cal
     identity = load_signer(Path(env.get("PULSO_BRIDGE_IDENTITY_SIGNER", f"{KEYS_DIR}/bridge-identity.json")))
     staff = load_signer(Path(env.get("PULSO_BRIDGE_STAFF_SIGNER", f"{KEYS_DIR}/bridge-staff.json")))
     callback = load_signer(Path(env.get("PULSO_BRIDGE_CALLBACK_SIGNER", f"{KEYS_DIR}/bridge-callback.json")))
+    executor = load_signer(Path(env.get("PULSO_BRIDGE_EXECUTOR_SIGNER", f"{KEYS_DIR}/bridge-executor.json")))
+    if _seed(executor) == _seed(callback) or executor.kid == callback.kid:
+        raise ValueError("pulso:credential_signing_unavailable: executor and callback signers must be distinct "
+                         "keypairs (A03 iii)")
     store = ReceiptStore(dsn)
     runs = PgRunReader(dsn)
     from pulso_core_runtime.stages.catalog import CATALOG
@@ -77,7 +82,11 @@ def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Cal
         store=store, registry=inv_registry, control_api_url=env.get("PULSO_CONTROL_API_URL", ""),
         signing_key=callback._key, kid=callback.kid, bridge_instance_id=env.get("PULSO_BRIDGE_INSTANCE", "bridge-1"))
     issuer = CredentialIssuer({"identity": identity, "staff": staff})
-    return L3(make_handlers(service, issuer), service, binding, inv_registry, store, callback)
+    return L3(make_handlers(service, issuer), service, binding, inv_registry, store, callback, executor)
+
+
+def _seed(signer: Any) -> bytes:
+    return bytes(signer._key.private_bytes_raw())
 
 
 def lab_broker_minter(l3: L3, env: Mapping[str, str]) -> Any:
@@ -88,14 +97,15 @@ def lab_broker_minter(l3: L3, env: Mapping[str, str]) -> Any:
 
     from pulso_core_runtime.internal.auth import sign_service_jwt
 
-    signer = l3.callback_signer
+    signer = l3.executor_signer  # A03 iii: the separate executor keypair, never the callback key
 
     def mint(claims: dict[str, Any]) -> str:
         now = int(time.time())
         body = {k: v for k, v in claims.items() if v is not None}
         return sign_service_jwt(signer._key, kid=signer.kid, claims={
-            "iss": "core-bridge", "aud": "lab-broker", "sub": f"bridge:{env.get('PULSO_BRIDGE_INSTANCE', 'bridge-1')}",
-            "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex, **body})
+            **body, "iss": "core-bridge", "aud": "lab-broker",
+            "sub": f"bridge:{env.get('PULSO_BRIDGE_INSTANCE', 'bridge-1')}",
+            "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex})
 
     return mint
 
@@ -110,17 +120,26 @@ def install_tools(l3: L3, env: Mapping[str, str], *, builder_factory: Any = None
     from pulso_core_runtime.tools.broker import BrokerClient, ControlApiClient
     from pulso_core_runtime.tools.factory import ToolRuntime, configure
 
-    signer = l3.callback_signer
+    callback, executor = l3.callback_signer, l3.executor_signer
+    sub = f"bridge:{env.get('PULSO_BRIDGE_INSTANCE', 'bridge-1')}"
 
-    def tokens(scope: str) -> str:
+    def tokens(scope: str, claims: dict[str, Any]) -> str:
+        """One fresh token per HTTP attempt. `binding` (class ii) is signed by the callback key for
+        `aud=control-api`; every lab-broker scope (class iii) by the separate executor key."""
         now = int(time.time())
+        signer = callback if scope == "binding" else executor
         return sign_service_jwt(signer._key, kid=signer.kid, claims={
-            "iss": "core-bridge", "aud": "control-api" if scope == "binding" else "lab-broker",
-            "sub": f"bridge:{env.get('PULSO_BRIDGE_INSTANCE', 'bridge-1')}", "scope": scope,
-            "purpose": "core_task_binding" if scope == "binding" else "broker", "iat": now, "exp": now + 60,
-            "jti": uuid.uuid4().hex})
+            **claims, "iss": "core-bridge", "aud": "control-api" if scope == "binding" else "lab-broker",
+            "sub": sub, "scope": scope, "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex})
 
-    runtime = ToolRuntime(l3.registry, BrokerClient(env.get("PULSO_LAB_BROKER_URL", ""), tokens),
+    def identity(binding_ref: str) -> tuple[str, str] | None:
+        try:
+            ic = l3.registry.lookup(binding_ref)
+        except Exception:  # noqa: BLE001 - unknown/expired binding: no identity, so no token
+            return None
+        return ic.tenant_id, ic.job_id
+
+    runtime = ToolRuntime(l3.registry, BrokerClient(env.get("PULSO_LAB_BROKER_URL", ""), tokens, identity=identity),
                           ControlApiClient(env.get("PULSO_CONTROL_API_URL", ""), tokens), builder_factory, leak_signal)
     configure(runtime)
     return runtime

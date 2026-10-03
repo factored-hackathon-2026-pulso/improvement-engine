@@ -126,6 +126,7 @@ def build_env(c: Composed, extra: dict[str, str] | None = None) -> dict[str, str
             "PULSO_BRIDGE_IDENTITY_SIGNER": str(d / "bridge-identity.json"),
             "PULSO_BRIDGE_STAFF_SIGNER": str(d / "bridge-staff.json"),
             "PULSO_BRIDGE_CALLBACK_SIGNER": str(d / "bridge-callback.json"),
+            "PULSO_BRIDGE_EXECUTOR_SIGNER": str(d / "bridge-executor.json"),
             "PULSO_LAB_BROKER_URL": c.loop.url, "PULSO_CONTROL_API_URL": c.loop.url,
             "PULSO_EVAL_BUDGETS": str(d / "budgets.json"), "PULSO_EVAL_PERMITS": "1",
             "PULSO_SHA": "integ", **(extra or {})}
@@ -180,14 +181,14 @@ def composed(pg: PgDbs, loop: Loopback, tmp_path: Path) -> Composed:  # noqa: F8
     from agent_core.registry import PgRegistryStore, PostgresRegistry
     from agent_core.registry.service import RegistryService
 
-    ident, staff, svc, callback = (Ed25519PrivateKey.generate() for _ in range(4))
+    ident, staff, svc, callback, executor = (Ed25519PrivateKey.generate() for _ in range(5))
     (tmp_path / "identity.json").write_text(json.dumps(
         {"principal_keys": {"id1": pub(ident)}, "delegation_keys": {"id1": pub(ident)}}))
     (tmp_path / "staff.json").write_text(json.dumps({"principal_keys": {"st1": pub(staff)}}))
     (tmp_path / "service.json").write_text(json.dumps(
         {"keys": {"cp1": {"iss": "control-api", "aud": "core-bridge", "key": pub(svc)}}}))
     for name, kid, key in (("bridge-identity", "id1", ident), ("bridge-staff", "st1", staff),
-                           ("bridge-callback", "cb1", callback)):
+                           ("bridge-callback", "cb1", callback), ("bridge-executor", "ex1", executor)):
         (tmp_path / f"{name}.json").write_text(json.dumps({"kid": kid, "key": seed(key)}))
     (tmp_path / "budgets.json").write_text(json.dumps(
         {"bud-1": {"cost_usd_max": "5", "tokens_max": 100000, "jobs_max": 20}}))

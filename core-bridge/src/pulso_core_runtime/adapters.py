@@ -23,7 +23,7 @@ class BrokerAuthPort:
 
     def check(self, *, tenant_id: str, binding_ref: str, scope: str, payload_digest: str) -> bool:
         try:
-            decision = self._broker.authorization_check(binding_ref, scope, [], payload_digest)
+            decision = self._broker.authorization_check(binding_ref, scope, [], payload_digest, tenant_id=tenant_id)
         except Exception:  # noqa: BLE001 - broker down/timeout/garbage is a denial, never a pass
             return False
         return decision.allowed

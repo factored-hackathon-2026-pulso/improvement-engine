@@ -90,7 +90,7 @@ def world(pg: PgDbs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
     (tmp_path / "service.json").write_text(json.dumps(
         {"keys": {"cp1": {"iss": "control-api", "aud": "core-bridge", "key": _pub(svc)}}}))
     from cryptography.hazmat.primitives.serialization import Encoding as Enc, NoEncryption, PrivateFormat
-    for name, kid in (("bridge-identity", "id1"), ("bridge-staff", "st1"), ("bridge-callback", "cb1")):
+    for name, kid in (("bridge-identity", "id1"), ("bridge-staff", "st1"), ("bridge-callback", "cb1"), ("bridge-executor", "ex1")):
         seed = (ident if name == "bridge-identity" else Ed25519PrivateKey.generate()).private_bytes(
             Enc.Raw, PrivateFormat.Raw, NoEncryption())
         (tmp_path / f"{name}.json").write_text(json.dumps({"kid": kid, "key": b64url_encode(seed)}))
@@ -119,6 +119,7 @@ def world(pg: PgDbs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
            "PULSO_BRIDGE_IDENTITY_SIGNER": str(tmp_path / "bridge-identity.json"),
            "PULSO_BRIDGE_STAFF_SIGNER": str(tmp_path / "bridge-staff.json"),
            "PULSO_BRIDGE_CALLBACK_SIGNER": str(tmp_path / "bridge-callback.json"),
+           "PULSO_BRIDGE_EXECUTOR_SIGNER": str(tmp_path / "bridge-executor.json"),
            "PULSO_LAB_BROKER_URL": loop.url, "PULSO_CONTROL_API_URL": loop.url}
     captured: list[Any] = []
     err = io.StringIO()

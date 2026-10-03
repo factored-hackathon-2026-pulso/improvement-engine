@@ -67,8 +67,8 @@ def tools(ctx: Any) -> PulsoToolDispatcher:
     runtime = _RUNTIME
     if runtime is None:  # fail-closed placeholder: nothing is registered, every tool is denied
         contexts = InvocationRegistry()
-        runtime = ToolRuntime(contexts, BrokerClient("http://unconfigured.invalid", lambda s: ""),
-                              ControlApiClient("http://unconfigured.invalid", lambda s: ""))
+        runtime = ToolRuntime(contexts, BrokerClient("http://unconfigured.invalid", lambda s, c: ""),
+                              ControlApiClient("http://unconfigured.invalid", lambda s, c: ""))
     return make_dispatcher(ctx.registry, ctx.ids, runtime)
 
 
