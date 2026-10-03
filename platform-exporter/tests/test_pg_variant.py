@@ -119,7 +119,7 @@ def test_pg_poll_matches_simulator_faults_and_paths(pg_rig):
     assert rep.late_events
     total = sim.conn.execute("SELECT COUNT(*) FROM event_log").fetchone()[0]
     known = {e["native_event_id"] for b in ingest.batches for e in b["events"] if e["source_sequence"] is not None
-             and e["source_event"]["event_type"] not in ("exporter.finding",)}
+             and e["source_event"].get("kind") != "exporter_finding"}
     assert len(known) + sum(rep.unknown_event_types.values()) == total
     ex.rescan()  # staff/dimension reads with column-level grants only
 

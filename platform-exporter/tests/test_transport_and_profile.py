@@ -144,11 +144,11 @@ def test_profile_manifest_is_emitted_once_per_digest(rig):
     _seed(rig)
     ex = rig.make()
     ex.poll_once()
-    profs = [e for e in _ev(rig) if e["source_event"]["event_type"] == "exporter.capability_profile"]
+    profs = [e for e in _ev(rig) if e["source_event"].get("finding_code") == "capability_profile"]
     assert len(profs) == 1
     add_event(rig.db, 4, "case.viewed")
     ex.poll_once()
-    assert len([e for e in _ev(rig) if e["source_event"]["event_type"] == "exporter.capability_profile"]) == 1
+    assert len([e for e in _ev(rig) if e["source_event"].get("finding_code") == "capability_profile"]) == 1
 
 
 def test_gap_is_held_back_during_grace_then_declared(rig):
@@ -178,8 +178,8 @@ def test_rescan_emits_dimension_snapshot_and_turn_gap_findings(rig):
     ex = rig.make()
     rep = ex.rescan()
     assert rep.batches_sent == 1
-    types = {e["source_event"]["event_type"] for e in _ev(rig)}
-    assert {"exporter.dimension_snapshot", "exporter.capability_profile", "exporter.finding"} <= types
-    gap = next(e for e in _ev(rig) if e["source_event"].get("finding", {}).get("type") == "turn_sequence_gap")
-    assert gap["source_event"]["finding"]["missing"] == [2]
+    codes = {e["source_event"]["finding_code"] for e in _ev(rig) if e["source_event"]["kind"] == "exporter_finding"}
+    assert {"dimension_snapshot", "capability_profile", "turn_sequence_gap"} <= codes
+    gap = next(e for e in _ev(rig) if e["source_event"].get("finding_code") == "turn_sequence_gap")
+    assert gap["source_event"]["details"]["missing"] == [2]
     assert rig.ingest.cursors == {}  # rescan never advances the checkpoint

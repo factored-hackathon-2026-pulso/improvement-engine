@@ -25,6 +25,9 @@ class ExporterConfig:
     max_retries: int = 5
     backoff_cap_seconds: float = 60.0
     extra_event_types: frozenset[str] = frozenset()  # versioned allow-list additions (e.g. one auth.* type)
+    # Contract 1.0.0 interim shape: exporter metadata as `event_type` "exporter.*" instead of kind=exporter_finding.
+    # Default False (contract 1.1.0). Set True only for a consumer that has not adopted the 1.1.0 discriminator yet.
+    legacy_prefix: bool = False
     source_schema_ref: dict[str, str] | None = None
     token_for: Callable[[str], str] | None = None  # route class "observations" | "artifacts" | "cursor"
 

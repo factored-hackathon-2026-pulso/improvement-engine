@@ -10,8 +10,8 @@ def _events(rig, kind="platform_event"):
 
 
 def _findings(rig, name):
-    return [e for e in _events(rig) if e["source_event"]["event_type"] == "exporter.finding"
-            and e["source_event"]["finding"]["type"] == name]
+    return [e for e in _events(rig) if e["source_event"].get("kind") == "exporter_finding"
+            and e["source_event"]["finding_code"] == name]
 
 
 def test_pl02_unknown_event_type_is_counted_quarantined_and_batch_acked(rig):
@@ -23,12 +23,12 @@ def test_pl02_unknown_event_type_is_counted_quarantined_and_batch_acked(rig):
     assert rep.batches_sent == 1 and not rep.stopped
     assert rep.unknown_event_types == {"team.created": 1}
     (finding,) = _findings(rig, "unknown_event_type")
-    assert finding["source_event"]["finding"]["event_type"] == "team.created"
+    assert finding["source_event"]["details"]["event_type"] == "team.created"
     assert finding["source_sequence"] == 2
     assert rig.ingest.cursors[("plat-a.events", "tenant.tenant-1")]["cursor"] == "s.3"  # acked past the unknown row
     assert b"DO-NOT-FORWARD" not in b"".join(rig.ingest.raw_bodies)  # quarantined payload never leaves
     assert [q[2] for q in ex.state.quarantined()] == ["team.created"]
-    known = {e["native_event_id"] for e in _events(rig) if e["source_event"]["event_type"].startswith("case.")}
+    known = {e["native_event_id"] for e in _events(rig) if e["source_event"].get("event_type", "").startswith("case.")}
     assert known == {"EVT-1", "EVT-3"}
 
 
@@ -39,7 +39,7 @@ def test_pl03_skipped_sequence_is_gap_suspected_with_backfill_request(rig):
     rep = ex.poll_once()
     assert rep.gaps == [(3, 4)] and rep.backfill_requests == [(3, 4)]
     (f,) = _findings(rig, "gap_suspected")
-    assert f["source_event"]["finding"] == {"type": "gap_suspected", "from_sequence": 3, "to_sequence": 4,
+    assert f["source_event"]["details"] == {"from_sequence": 3, "to_sequence": 4,
                                             "backfill_requested": True, "verify_with_owner": True}
     assert ex.state.open_backfills() == [(3, 4)]
     # the rows commit late: backfill delivers them as late events and closes the request
@@ -57,9 +57,9 @@ def test_pl04_event_ingested_after_window_close_triggers_window_revision(rig):
     rep = rig.make(window_seconds=3600).poll_once()
     assert rep.late_events == ["EVT-2"]
     (f,) = _findings(rig, "late_event")
-    assert f["source_event"]["finding"]["window_start"] == "2026-03-01T10:00:00Z"
-    assert f["source_event"]["finding"]["window_end"] == "2026-03-01T11:00:00Z"
-    assert f["source_event"]["finding"]["window_revision_required"] is True
+    assert f["source_event"]["details"]["window_start"] == "2026-03-01T10:00:00Z"
+    assert f["source_event"]["details"]["window_end"] == "2026-03-01T11:00:00Z"
+    assert f["source_event"]["details"]["window_revision_required"] is True
     by_id = {e["native_event_id"]: e for e in _events(rig)}
     assert by_id["EVT-2"]["coverage_marker"] == "late" and by_id["EVT-1"]["coverage_marker"] is None
     assert by_id["EVT-2"]["source_event"]["available_at"] == "2026-03-01T11:20:00Z"  # available_at = ingested_at
@@ -92,6 +92,6 @@ def test_pl08_simulator_customers_are_team_generated_and_excluded_from_populatio
     add_event(rig.db, 2, "case.opened", case_id="CASE-1")
     rig.make().poll_once()
     by_case = {e["source_event"]["case_id"]: e["source_event"] for e in _events(rig)
-               if e["source_event"]["event_type"] == "case.opened"}
+               if e["source_event"].get("event_type") == "case.opened"}
     assert by_case["CASE-SIM"]["evidence_kind"] == "team_generated" and by_case["CASE-SIM"]["population_excluded"]
     assert by_case["CASE-1"]["evidence_kind"] == "observed" and not by_case["CASE-1"]["population_excluded"]
