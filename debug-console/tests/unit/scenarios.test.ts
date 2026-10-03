@@ -44,3 +44,23 @@ describe('fixture scenarios', () => {
     expect(l.events['run-large-0']).toHaveLength(1200);
   });
 });
+
+describe('F11 / F21 / canary scenarios', () => {
+  type Nodes = { runs: Record<string, { nodes: { trace_id: string | null }[] }> };
+  it('collector_down: every node has trace_id null', () => {
+    const nodes = Object.values((build('collector_down') as unknown as Nodes).runs).flatMap((r) => r.nodes);
+    expect(nodes.length).toBeGreaterThan(0);
+    expect(nodes.every((n) => n.trace_id === null)).toBe(true);
+  });
+  it('default scenario nodes carry well-formed trace ids', () => {
+    for (const n of Object.values((build('default') as unknown as Nodes).runs).flatMap((r) => r.nodes)) expect(n.trace_id).toMatch(/^[0-9a-f]{32}$/);
+  });
+  it('canary scenario plants CANARY_* markers for the browser leak tests', () => {
+    expect(JSON.stringify(build('canary'))).toMatch(/CANARY_SECRET_[0-9a-f-]{36}/);
+  });
+  it('F11 and F21 are covered, not gaps', () => {
+    const cov = F_COVERAGE as Record<string, string>;
+    expect(cov.F11).toBe('scenario:collector_down');
+    expect(cov.F21).toBe('control:bump_decision');
+  });
+});
