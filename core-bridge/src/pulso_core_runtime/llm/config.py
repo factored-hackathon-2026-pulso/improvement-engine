@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from pulso_core_runtime.llm.policy import ModelPolicy
 
 URL_ENV = "AGENTCORE_LLM_GATEWAY_URL"
-TOKEN_ENV = "AGENTCORE_LLM_GATEWAY_TOKEN"  # noqa: S105 - the NAME of the variable, not a secret
+TOKEN_ENV = "AGENTCORE_LLM_GATEWAY_TOKEN"
 MODE_ENV = "PULSO_LLM_MODE"
 POLICY_FILE_ENV = "PULSO_LLM_STAGE_POLICY"
 POLICY_JSON_ENV = "PULSO_LLM_STAGE_POLICY_JSON"
@@ -88,6 +88,6 @@ def llm_doubles(cfg: LlmConfig) -> list[str]:
     if cfg.mode == "disabled":
         return [f"llm-gateway: disabled ({MODE_ENV}=disabled): every model call fails unavailable"]
     if cfg.policy is None:
-        return ["llm-model-policy: unpinned (registry ModelProfile price is trusted; set "
-                f"{POLICY_JSON_ENV} to pin per-stage alias/model/price)"]
+        return [("llm-model-policy: unpinned (registry ModelProfile price is trusted; set "
+                 f"{POLICY_JSON_ENV} to pin per-stage alias/model/price)")]
     return [f"llm-model-policy: pinned stages {','.join(cfg.policy.stages)}"]

@@ -56,7 +56,7 @@ def test_explicit_disabled_mode_is_the_only_way_out_and_is_reported_as_a_double(
     assert any("disabled" in d for d in llm_doubles(cfg))
     _, problems = parse_llm_config({"PULSO_LLM_MODE": "off"})
     assert problems and "PULSO_LLM_MODE" in problems[0]
-    code, err = _run({"PULSO_LLM_MODE": "disabled"})
+    _, err = _run({"PULSO_LLM_MODE": "disabled"})
     assert "AGENTCORE_LLM_GATEWAY" not in err  # passes the LLM check, fails later on something else
 
 
