@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pulso:fact:pulso_writer_receipts:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "proposal_id", "rev", "candidate_hash", "native_evaluation", "write_receipts", "state"],
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["1"]},
+    "proposal_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "rev": {"type": "integer", "minimum": 0},
+    "candidate_hash": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9:_-]{1,128}$"},
+    "native_evaluation": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "eval_run_ref", "report_digest"],
+          "properties": {
+            "verdict": {"type": "string", "enum": ["pass", "fail", "failed_infra"]},
+            "eval_run_ref": {"type": ["string", "null"], "maxLength": 200},
+            "report_digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
+      ]
+    },
+    "write_receipts": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op", "key_digest", "rev_after", "request_hash", "verified"],
+        "properties": {
+          "op": {"type": "string", "enum": ["create_proposal", "put_draft", "freeze", "reopen", "evaluate"]},
+          "key_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "rev_after": {"type": "integer", "minimum": 0},
+          "request_hash": {"type": "string", "minLength": 1, "maxLength": 128},
+          "verified": {"type": "boolean"}
+        }
+      }
+    },
+    "state": {"type": "string", "enum": ["confirmed", "unknown"]}
+  }
+}

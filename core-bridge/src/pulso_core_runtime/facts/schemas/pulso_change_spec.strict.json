@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pulso:fact:pulso_change_spec:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "change_spec"],
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["1"]},
+    "change_spec": {"type": "object", "minProperties": 1, "maxProperties": 64}
+  }
+}

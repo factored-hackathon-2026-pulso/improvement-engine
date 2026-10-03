@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:pulso:fact:pulso_hypotheses:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "hypotheses"],
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["1"]},
+    "hypotheses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hypothesis_id", "statement", "evidence_refs"],
+        "properties": {
+          "hypothesis_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "statement": {"type": "string", "minLength": 1, "maxLength": 2000},
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$"}
+          }
+        }
+      }
+    }
+  }
+}
