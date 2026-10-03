@@ -12,13 +12,17 @@ use crate::e0_frozen_memory_publication::{
 use crate::enriched_history::VerifiedReplayAvailability;
 use crate::memory_store::MemoryScope;
 use crate::memory_temporal_protocol::{TemporalProtocolError, attest_frozen_e0_reuse};
-use crate::wiki_scratch::{WikiAccess, WikiAuthorizationPort};
+use crate::wiki_scratch::{
+    WikiAccess, WikiAuthorizationPort, WikiError, WikiReadResult, WikiScratchPort,
+};
 
 #[derive(Debug, Eq, PartialEq)]
 #[allow(dead_code)] // The trusted runtime composition is not wired into the demo runner yet.
 pub(crate) enum FrozenE0MemoryCycleError {
     Temporal(TemporalProtocolError),
     Publication(FrozenE0SummaryPublicationError),
+    UseAccessMismatch,
+    Scratch(WikiError),
 }
 
 /// Opaque provenance that a subsequent Frozen run was admitted to use the
@@ -33,10 +37,15 @@ pub(crate) struct VerifiedFrozenE0MemoryUse {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct FrozenE0MemoryUseReceipt {
     pub(crate) receipt_id: String,
+    pub(crate) publication_commitment: String,
     pub(crate) scope: MemoryScope,
     pub(crate) snapshot_ref: crate::ArtifactReference,
     pub(crate) head_version: u64,
     pub(crate) run_id: String,
+    pub(crate) grant_id: String,
+    pub(crate) grant_revision: u64,
+    pub(crate) allowed_at_unix_seconds: u64,
+    pub(crate) cutoff_at_unix_seconds: u64,
     pub(crate) temporal_commitment: String,
 }
 
@@ -52,6 +61,14 @@ pub(crate) struct FrozenE0MemoryUseCommitRequest<'a> {
 /// bind publication sidecar, current head, revocation and grant in one commit.
 #[allow(dead_code)] // Implemented by U33-E now; selected only when runtime composition is wired.
 pub(crate) trait FrozenE0MemoryUseCommitPort {
+    /// Re-attests the stored U33-E publication identity and explicit revocation
+    /// state before later-run page bytes are materialized. A newer current head
+    /// alone does not invalidate a still-authorized historical publication.
+    fn revalidate_frozen_e0_memory_use(
+        &self,
+        receipt: &FrozenE0MemoryUseReceipt,
+    ) -> Result<(), FrozenE0SummaryPublicationError>;
+
     fn commit_frozen_e0_memory_use<R, A>(
         &mut self,
         artifacts: &mut R,
@@ -121,5 +138,59 @@ impl FrozenE0MemoryCycle {
             )
             .map_err(FrozenE0MemoryCycleError::Publication)?;
         Ok(VerifiedFrozenE0MemoryUse { receipt })
+    }
+
+    /// Reads one page for the admitted run only. The sealed U23-E result binds
+    /// the exact run, grant revision, scope, snapshot and clock admitted above;
+    /// the ordinary scratch port still rechecks grant liveness at access time.
+    #[allow(dead_code)] // Wired by the trusted runtime after the local cycle is exercised.
+    pub(crate) fn read_admitted_page<R, P, W>(
+        admitted: &VerifiedFrozenE0MemoryUse,
+        access: &WikiAccess,
+        publication_state: &P,
+        scratch: &mut W,
+        artifacts: &mut R,
+        path: &str,
+    ) -> Result<WikiReadResult, FrozenE0MemoryCycleError>
+    where
+        R: ArtifactRepository,
+        P: FrozenE0MemoryUseCommitPort,
+        W: WikiScratchPort + WikiAuthorizationPort,
+    {
+        let receipt = &admitted.receipt;
+        let scope = &receipt.scope;
+        if access.run_id != receipt.run_id
+            || access.tenant_id != scope.tenant_id
+            || access.purpose != scope.purpose
+            || access.grant_id != receipt.grant_id
+            || access.grant_revision != receipt.grant_revision
+            || access.snapshot_ref != receipt.snapshot_ref
+            || access.allowed_at_unix_seconds != receipt.allowed_at_unix_seconds
+            || access.allowed_at_unix_seconds > receipt.cutoff_at_unix_seconds
+            || access.memory_scope.world != scope.world
+            || access.memory_scope.campaign != scope.campaign
+            || access.memory_scope.protocol != scope.protocol
+            || access.memory_scope.partition != scope.partition
+        {
+            return Err(FrozenE0MemoryCycleError::UseAccessMismatch);
+        }
+        publication_state
+            .revalidate_frozen_e0_memory_use(receipt)
+            .map_err(FrozenE0MemoryCycleError::Publication)?;
+        if !scratch.authorize(access, &receipt.snapshot_ref) {
+            return Err(FrozenE0MemoryCycleError::Scratch(
+                WikiError::AuthorizationDenied,
+            ));
+        }
+        let workspace = scratch
+            .mount(artifacts, access.clone())
+            .map_err(FrozenE0MemoryCycleError::Scratch)?;
+        let read = scratch
+            .read(&workspace, access, path)
+            .map_err(FrozenE0MemoryCycleError::Scratch)?;
+        if read.snapshot_ref != receipt.snapshot_ref || read.path != path {
+            return Err(FrozenE0MemoryCycleError::UseAccessMismatch);
+        }
+        Ok(read)
     }
 }
