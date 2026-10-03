@@ -100,6 +100,8 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
         "2025-01-01",
         "2099-01-06T10:00:00",
     ] {
+        assert!(!serialized.contains(forbidden), "serialized source sentinel");
+    }
     for ordinal in 1..=7 {
         for forbidden in [
             format!("interaction-identifier-pii-sentinel-{ordinal:04}"),
