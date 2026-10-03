@@ -38,12 +38,20 @@ class FakeCore:
         self.run_facts: dict[str, Any] = {}
         self.release_override: str | None = None
         self._n = 0
+        self.in_flight_for = 0  # first N calls answer Core 894fa65's "same key still in flight" 409 (no effect yet)
+        self.plain_conflict = False  # Core saw this (principal, key) with ANOTHER body: 409 without the in-flight detail
         self.binder: Any = None  # simulates `pulso/bind_context` confirming the binding inside the run
 
     async def start_run(self, bearer: str, key: str, body: dict[str, Any]) -> CoreResponse:
         principal_id = _principal_id(bearer)
         self.start_calls.append({"key": key, "body": body, "principal": principal_id})
         h = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+        if self.plain_conflict:
+            return CoreResponse(409, {"code": "idempotency_conflict", "title": "Conflicto de idempotencia", "detail": ""})
+        if self.in_flight_for > 0:
+            self.in_flight_for -= 1
+            return CoreResponse(409, {"code": "idempotency_conflict", "title": "Conflicto de idempotencia",
+                                      "detail": "otra petición con esta clave sigue en curso"})
         prior = self.stored.get((principal_id, key))
         if prior is not None:
             if prior[0] != h:

@@ -34,6 +34,10 @@ from pulso_core_runtime.reconcile.reconciler import Reconciler, RunReader
 from pulso_core_runtime.stages.catalog import CATALOG
 from pulso_core_runtime.store.receipts import Receipt, ReceiptStore
 
+# `detail` of Core's 409 for "same key, still in flight" (agent_core/adapters/postgres_uow.py). The other 409 of the
+# same code (same key, other body) carries no detail. Core 789d6c8 never emits the in-flight form.
+CORE_IN_FLIGHT_MARKER = "sigue en curso"
+
 NON_TERMINAL_REENTRY = frozenset({"sent", "binding_confirmed", "unknown", "manual_reconcile"})
 
 
@@ -44,6 +48,10 @@ class InvokeSettings:
     principal_ttl: timedelta = timedelta(minutes=15)
     context_ttl: timedelta = timedelta(minutes=20)
     prepared_stale: timedelta = timedelta(seconds=30)
+    # Core >= 894fa65 answers 409 `idempotency_conflict` to a same-key request whose first attempt is still running (or
+    # crashed and holds the reservation for `lease_ttl` = 60 s). Wait that long (backoff), then leave the receipt `unknown`.
+    core_inflight_wait: timedelta = timedelta(seconds=60)
+    core_inflight_backoff: tuple[float, float] = (0.25, 4.0)  # first delay, cap (seconds)
     # Stage -> declared input slots (L3b `stages/catalog.py`). None = not enforced yet.
     stage_slots: Mapping[str, frozenset[str]] | None = None
     # Stage -> roles on the run principal. Only the writer carries `constructor` (registry role check).
@@ -109,13 +117,14 @@ class InvokeService:
     def __init__(self, *, store: ReceiptStore, core: CoreRuns, releases: ReleaseChecker, signer: PrincipalSigner,
                  runs: RunReader, registry: InvocationRegistry, settings: InvokeSettings | None = None,
                  projector: FactProjector | None = None, reconciler: Reconciler | None = None,
-                 now: Any = lambda: datetime.now(UTC)) -> None:
+                 now: Any = lambda: datetime.now(UTC), sleep: Any = asyncio.sleep) -> None:
         self._store, self._core, self._releases, self._signer = store, core, releases, signer
         self._runs, self._registry = runs, registry
         self._settings = settings or InvokeSettings()
         self._projector = projector
         self._reconciler = reconciler or Reconciler(store=store, runs=runs, projector=projector)
         self._now = now
+        self._sleep = sleep
         self._inflight = 0
         self._live: set[tuple[str, str]] = set()  # keys whose Core call is in flight in this process
 
@@ -273,7 +282,7 @@ class InvokeService:
                 if inv.lang:
                     body["lang"] = inv.lang
                 try:
-                    resp = await self._core.start_run(bearer, key, body)
+                    resp = await self._start_run_waiting_in_flight(bearer, key, body)
                 except Exception:  # 11. timeout / disconnect / anything after `sent` -> unknown
                     return await self._mark_unknown(tenant, key, "core_call_failed")
                 return await self._after_response(inv, key, ref, resp)
@@ -281,6 +290,25 @@ class InvokeService:
             raise
         except Exception:
             return await self._mark_unknown(tenant, key, "post_send_exception")
+
+    @staticmethod
+    def _is_in_flight_conflict(resp: CoreResponse) -> bool:
+        return resp.status == 409 and CORE_IN_FLIGHT_MARKER in str(resp.body.get("detail") or "")
+
+    async def _start_run_waiting_in_flight(self, bearer: str, key: str, body: dict[str, Any]) -> CoreResponse:
+        """Same key + same body is safe to resend: Core returns the stored result once the first attempt commits, or
+        takes over the reservation if that attempt died. Retry only the in-flight 409, only within the lease."""
+        resp = await self._core.start_run(bearer, key, body)
+        delay, cap = self._settings.core_inflight_backoff
+        budget = self._settings.core_inflight_wait.total_seconds()
+        waited = 0.0
+        while self._is_in_flight_conflict(resp) and waited < budget:
+            step = min(delay, budget - waited)
+            await self._sleep(step)
+            waited += step
+            delay = min(delay * 2, cap)
+            resp = await self._core.start_run(bearer, key, body)
+        return resp
 
     async def _mark_unknown(self, tenant: str, key: str, reason: str) -> InvokeOutcome:
         moved = await asyncio.to_thread(self._store.transition, tenant, key, "unknown", reason=reason)
@@ -312,6 +340,8 @@ class InvokeService:
         status = resp.status
         if status >= 500:
             return await self._mark_unknown(inv.tenant_id, key, f"core_http_{status}")
+        if self._is_in_flight_conflict(resp):  # still running after the whole lease: nothing proven either way
+            return await self._mark_unknown(inv.tenant_id, key, "core_idempotency_in_flight")
         if status == 409:  # Core saw this (principal, key) with another body: we cannot tell who ran what
             moved = await asyncio.to_thread(self._store.transition, inv.tenant_id, key, "manual_reconcile",
                                             reason="core_idempotency_conflict")
