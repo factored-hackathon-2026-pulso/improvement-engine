@@ -92,6 +92,7 @@ class ManualGate:
 
     def wait(self, request: dict[str, Any]) -> Choice:
         req_path, dec_path = self.dir / REQUEST_FILE, self.dir / DECISION_FILE
+        dec_path.unlink(missing_ok=True)  # a decision file that predates this request can never be a decision about it
         req_path.write_text(json.dumps({**request, "how": f"python -m pulso_demo.decide --out {self.dir} approve|reject"}, indent=1), "utf-8")
         deadline = time.monotonic() + self.timeout_s
         try:

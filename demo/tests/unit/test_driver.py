@@ -104,3 +104,54 @@ def test_manual_mode_pauses_until_the_cli_approves_and_times_out_into_pending(tm
     assert driver.main(["--out", str(tmp2), "--offline", "--human-mode", "manual", "--human-timeout", "0.2"]) == 0  # nobody decides: stays pending
     rep2 = json.loads((tmp2 / "demo-report.json").read_text("utf-8"))
     assert rep2["human"]["stage"] == "requested" and rep2["successor"] is None
+
+
+# ---- adversarial review: pipeline output must follow the data, failures must stay visible (never a crash, never a fake pass)
+def run_offline_any(tmp_path, monkeypatch=None, **kw):
+    rc = driver.main(["--out", str(tmp_path), "--offline"])
+    return rc, json.loads((tmp_path / "demo-report.json").read_text("utf-8")), json.loads((tmp_path / "world.json").read_text("utf-8"))
+
+
+def test_dataset_without_the_mechanism_never_reaches_the_human(tmp_path, monkeypatch):
+    real = dataset.build
+    monkeypatch.setattr(dataset, "build", lambda *a, **k: real(*a, **{**k, "plant": False}))
+    rc, rep, world = run_offline_any(tmp_path)
+    st = {s["n"]: s["outcome"] for s in rep["steps"]}
+    assert rc == 0 and rep["outcome"] == "no_candidate_passed_gates"  # the unplanted flow still shows a (weaker) real effect; candidate 1 fails, no revision clears
+    assert st[7] == "failed" and st[8] == "pending" and st[9] == "not_run" and st[10] == "not_run" and rep["human"] is None
+    assert world["gates"]["combined"]["decision"] == "revise"
+    assert "transfer_limit/otp_verify" not in json.dumps(world["investigation"])
+
+
+def test_no_supported_hypothesis_means_no_candidate_and_a_hold(tmp_path, monkeypatch):
+    monkeypatch.setattr(analysis, "scout", lambda conn: {"queries": [analysis.run_query(conn, "q-overall", "select count(*) from sessions")], "hypotheses": []})
+    rc, rep, world = run_offline_any(tmp_path)
+    assert rc == 0 and rep["outcome"] == "no_opportunity" and rep["attempts"] == [] and rep["human"] is None
+    assert {s["n"]: s["outcome"] for s in rep["steps"]}[4] != "shown" and world["gates"]["combined"]["decision"] == "hold"
+
+
+def test_revision_is_only_triggered_by_a_failing_gate(tmp_path, monkeypatch):
+    monkeypatch.setattr(analysis, "GUARD_MAX_EXPOSURE", 1.0)  # candidate 1 now clears the guard on the real data
+    rc, rep, world = run_offline_any(tmp_path)
+    assert len(rep["attempts"]) == 1 and {s["n"]: s["outcome"] for s in rep["steps"]}[7] == "not_triggered"
+    assert rep["attempts"][0]["improvement"]["status"] == "pass"
+
+
+def test_exhausted_revision_is_reported_failed_and_never_reaches_the_human(tmp_path, monkeypatch):
+    monkeypatch.setattr(analysis, "revise", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no revision within bounds clears the gates")))
+    rc, rep, world = run_offline_any(tmp_path)
+    st = {s["n"]: s["outcome"] for s in rep["steps"]}
+    assert rep["outcome"] == "no_candidate_passed_gates" and st[7] == "failed" and st[8] == "pending" and rep["human"] is None
+    assert len(rep["attempts"]) == 1 and rep["attempts"][0]["improvement"]["status"] == "fail"
+
+
+def test_moving_the_mechanism_moves_the_finding(tmp_path, monkeypatch):
+    real = dataset.build
+
+    def swapped(*a, **k):
+        c = real(*a, **k)
+        c.execute("update sessions set flow=case flow when 'transfer_limit' then 'address_change' when 'address_change' then 'transfer_limit' else flow end")
+        return c
+    monkeypatch.setattr(dataset, "build", swapped)
+    rc, rep, world = run_offline_any(tmp_path)
+    assert world["investigation"]["run-demo"]["hypothesis"].startswith("address_change") and rep["attempts"][-1]["scope"] == "flow:address_change"

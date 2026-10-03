@@ -92,7 +92,7 @@ if (Test-Path (Join-Path $out 'world.json')) {
     if ($Serve) {
         $env:FIXTURE_PORT = "$Port"
         $env:FIXTURE_WORLD_FILE = (Join-Path $out 'world.json')
-        node (Join-Path $root 'debug-consoleixture-server\server.mjs')
+        node (Join-Path $root 'debug-console\fixture-server\server.mjs')
     }
 }
 exit $exit

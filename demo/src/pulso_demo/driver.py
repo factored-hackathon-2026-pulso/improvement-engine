@@ -41,7 +41,7 @@ def model_outputs(scout: dict[str, Any], verify: dict[str, Any], alts: list[dict
     hyps = []
     for i, h in enumerate(scout["hypotheses"][:4], 1):
         hyps.append({"id": f"h{i}", "statement": f"{h['flow']} {h['value']}: abandonment {h['rate']:.1%} vs {h['baseline_rate']:.1%} baseline",
-                     "mechanism": "retry/otp exhaustion" if h["dim"] == "step" else "device or incident effect",
+                     "mechanism": f"concentration of abandonment by {h['dim']} (descriptive; mechanism not established by the scout)",
                      "evidence_refs": [ref], "counterevidence_refs": [], "missing_evidence": ["causal test"], "next_queries": []})
     key_of = {f"h{i}": h["key"] for i, h in enumerate(scout["hypotheses"][:4], 1)}
     assessments = []
@@ -53,7 +53,7 @@ def model_outputs(scout: dict[str, Any], verify: dict[str, Any], alts: list[dict
         RESEARCH: {"schema_version": "1", "hypotheses": hyps},
         VERIFY: {"schema_version": "1", "assessments": assessments},
         DESIGN: {"schema_version": "1", "change_spec": {"target": "pulso-scout", "kind": "prompt"},
-                 "rationale": "supported, verifier-confirmed hypothesis", "evidence_refs": [ref],
+                 "rationale": ("verifier-supported hypothesis: " + ", ".join(k for k, a in assess.items() if a["verdict"] == "supported")) if any(a["verdict"] == "supported" for a in assess.values()) else "no supported hypothesis", "evidence_refs": [ref],
                  "alternatives": [{"id": a["id"], "kind": a["kind"], "summary": a["summary"]} for a in alts]},
     }
 
@@ -263,7 +263,9 @@ def step_status(i: int, world: dict[str, Any], core: dict[str, Any], exporter: d
     if i == 6:
         return "stand-in", OUTCOME.get(nodes["evaluate_2"], nodes["evaluate_2"]), "native evaluation real; improvement judge is a stand-in"
     if i == 7:
-        return "stand-in", "shown" if nodes["revise"] == "complete" else "not_triggered", "candidate 1 failed the guard, revised automatically"
+        why = {"complete": "candidate 1 failed a gate; the bounded revision search found a candidate (see attempts[])",
+               "dead": "candidate 1 failed a gate and no revision within bounds cleared it"}.get(nodes["revise"], "no gate failed (or no candidate): no revision needed")
+        return "stand-in", {"complete": "shown", "dead": "failed"}.get(nodes["revise"], "not_triggered"), why
     stage = decision["stage"] if decision else None
     if i == 8:
         if decision is None:
@@ -288,9 +290,24 @@ def step_status(i: int, world: dict[str, Any], core: dict[str, Any], exporter: d
         "successor investigation")
 
 
+def _no_change(results: dict[str, Any]) -> str | None:
+    """Honest non-error terminal outcomes: nothing was supported (no candidate designed) or no candidate cleared both gates."""
+    an = results["analysis"]
+    if not an["attempts"]:
+        return "no_opportunity"
+    if an["attempts"][-1]["improvement"]["status"] != "pass":
+        return "no_candidate_passed_gates"
+    return None
+
+
 def make_report(results: dict[str, Any], world: dict[str, Any], notes: list[str], mode: str, hook_state: str, started: str, error: str | None) -> dict[str, Any]:
     core, exporter = results["core"], results["exporter"]
+    no_change = _no_change(results)
     dec, succ = results.get("decision"), results.get("successor")
+    if dec and dec["stage"] == "requested":
+        no_change = "awaiting_human_decision"
+    elif dec and dec["stage"] == "rejected":
+        no_change = "rejected_by_human"
     human = None
     if dec:
         human = {k: dec.get(k) for k in ("mode", "simulated_human", "actor", "stage", "proposal_id", "candidate_hash", "release_id", "staging_alias",
@@ -302,7 +319,7 @@ def make_report(results: dict[str, Any], world: dict[str, Any], notes: list[str]
         successor["new_hypotheses"] = [h["key"] for h in succ.get("new_hypotheses", [])]
         successor["successor_investigation"] = (succ.get("successor_target") or {}).get("key")
     return {"schema": "pulso-demo-report/2", "mode": mode, "started_at": started, "finished_at": datetime.now(UTC).isoformat(), "namespace": results["namespace"],
-            "outcome": "error" if error else "ok", "error": error, "notes": notes,
+            "outcome": "error" if error else (no_change or "ok"), "error": error, "notes": notes,
             "claims": "Codex stand-in demo over a synthetic bank dataset; NOT the Rust engine, NOT a real model, NOT a causal/SLA claim (mechanism_proxy only)",
             "doubles": results["doubles"] + ([{"id": "offline_core", "what": "synthetic Core values (no stack was run)"}] if core.get("synthetic") else []),
             "steps": [{"n": n, "title": t, "source": src, **dict(zip(("status", "outcome", "basis"), step_status(n, world, core, exporter, dec, succ)))} for n, t, src in STEPS],
@@ -343,12 +360,22 @@ def main(argv: list[str] | None = None, hook: DecisionHook | None = None) -> int
     conn = dataset.build()
     sc = analysis.scout(conn)
     ver = analysis.verify(conn, sc["hypotheses"])
-    c1 = analysis.first_candidate()
-    j1 = analysis.judge(conn, c1)
-    c2 = analysis.revise(conn, c1, j1)
-    j2 = analysis.judge(conn, c2)
-    attempts = [{"candidate": j["candidate"], "improvement": j["improvement"], "native_proxy": j["native_proxy"]} for j in (j1, j2)]
-    alts = analysis.alternatives(conn, c2)
+    assess = {x["key"]: x["verdict"] for x in ver["assessments"]}
+    attempts: list[dict[str, Any]] = []
+    alts: list[dict[str, Any]] = []
+    analysis_notes: list[str] = []
+    if any(v == "supported" for v in assess.values()):  # a candidate is only designed when the verifier supports something
+        c1 = analysis.first_candidate()  # canned aggressive first draft (see README: scripted); the gate verdict on it is derived from the data
+        j1 = analysis.judge(conn, c1)
+        attempts.append(j1)
+        if j1["improvement"]["status"] != "pass":  # revision is triggered ONLY by a failing gate
+            try:
+                c2 = analysis.revise(conn, c1, j1)
+                attempts.append(analysis.judge(conn, c2))
+            except RuntimeError as exc:
+                analysis_notes.append(f"automatic revision exhausted its bounds: {exc}")
+        alts = analysis.alternatives(conn, attempts[-1]["candidate"])
+    attempts = [{"candidate": j["candidate"], "improvement": j["improvement"], "native_proxy": j["native_proxy"]} for j in attempts]
     obs = analysis.observe(dataset.build(seed=20260102, post=True), sc["hypotheses"], ver)  # the scripted second batch of observations (step 10)
     error: str | None = None
     notes: list[str] = []
@@ -362,6 +389,7 @@ def main(argv: list[str] | None = None, hook: DecisionHook | None = None) -> int
         error = traceback.format_exc()[-1500:]
         core = {"scout": None, "verifier": None, "design": None, "attempts": []}
         exporter = {"audit_events": 0, "verification_receipts": []}
+    notes = analysis_notes + notes
     common: dict[str, Any] = dict(namespace=a.namespace, tenant=TENANT, generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), scout=sc, verify=ver,
                                   alternatives=alts, attempts=attempts, dataset={"rows": 8000, "seed": 20260101})
     results = bundle.assemble(core=core, exporter=exporter, **common)

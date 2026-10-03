@@ -117,7 +117,11 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         _eval_node(1, ["change"], core_att[0] if core_att else None, an_att[0] if an_att else None),
     ]
     prev = "evaluate_1"
-    if two:
+    if not two and an_att and an_att[0]["improvement"]["status"] == "fail":
+        nodes.append(_node("revise", LABELS["revise"], "proposal", "dead", ["evaluate_1"], "no_revision_within_bounds"))
+        nodes.append(_node("evaluate_2", LABELS["evaluate_2"], "evaluation", "planned", ["revise"], "no_revision"))
+        prev = "evaluate_1"
+    elif two:
         nodes.append(_node("revise", LABELS["revise"], "proposal", "complete", ["evaluate_1"], "proposal_revised"))
         nodes.append(_eval_node(2, ["revise"], core_att[1] if len(core_att) > 1 else None, an_att[1]))
         prev = "evaluate_2"
@@ -188,8 +192,9 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
                 "evidence_refs": [_ref(qid, digest)] if qid and digest else []}
 
     vq = {q["id"]: q["rows_digest"] for q in an["verify"]["queries"]}
-    investigation[MAIN]["hypotheses"] = [_hyp(h, assess[h["key"]]["verdict"], assess[h["key"]]["query_id"], vq.get(assess[h["key"]]["query_id"]))
-                                         for h in scout_h if h["key"] in assess] if MAIN in investigation else []
+    if MAIN in investigation:
+        investigation[MAIN]["hypotheses"] = [_hyp(h, assess[h["key"]]["verdict"], assess[h["key"]]["query_id"], vq.get(assess[h["key"]]["query_id"]))
+                                             for h in scout_h if h["key"] in assess]
     if REFUTED in investigation:
         investigation[REFUTED]["hypotheses"] = [_hyp(refuted[0], "refuted", assess[refuted[0]["key"]]["query_id"], vq.get(assess[refuted[0]["key"]]["query_id"]))]
     if SUCCESSOR in investigation and tgt:
@@ -218,7 +223,7 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         "improvement": {"status": imp["status"], "reason_code": imp.get("reason_code"), "receipt_refs": [], "checked_at": t, "attempt": final + 1,
                         "lift": imp.get("lift"), "lift_lo": imp.get("lift_lo"), "exposure": imp.get("exposure"), "guard_max_exposure": imp.get("guard_max_exposure")},
         "combined": comb}
-    final_cand = an_att[final]["candidate"]
+    final_cand = an_att[final]["candidate"] if an_att else None
     attempts = []
     for i, a in enumerate(an_att):
         nstat, nreason = _native_status(core_att[i] if i < len(core_att) else None)
@@ -233,7 +238,7 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
                     "state": stage}
     return {
         "runs": runs, "events": events, "investigation": investigation,
-        "diff": {"proposal_id": "prop-1", "lines": _diff(final_cand, core_att[final] if core_att else None)},
+        "diff": {"proposal_id": "prop-1", "lines": _diff(final_cand, core_att[final] if core_att else None) if final_cand else []},
         "gates": gates, "memory": memory,
         "decision": decision,
         "gates_by_run": {MAIN: {"proposal_id": (core_att[final].get("proposal_id") if core_att else None), "attempts": [

@@ -42,10 +42,30 @@ Open run `run-demo` (main path), `run-demo-refuted` (refuted hypothesis kept vis
 | Console API | | fixture API/SSE fed from `world.json` |
 | Human approve/publish | Core registry approve/publish/alias reads, JWS verified by Core | the human (scripted = simulated) and the sandbox human issuer (IdP double) |
 
-Nothing is precomputed as the winning finding: `analysis.scout` ranks measured excess abandonment, `analysis.verify` re-tests per week and
-refutes the decoy, `analysis.judge/revise` simulate candidates on the data (candidate 1, a global retry raise, breaches the guard; the
-bounded revision narrows the scope and passes). `tests/unit/test_analysis_first_red.py` proves that a dataset without the latent mechanism
-yields no such hypothesiapproved is not published) -> `publish` -> staging confirmed by an
+## Scripted vs derived (read this before believing the demo)
+
+Derived from the data (mutation-tested: swapping the planted mechanism to another flow moves the finding; no mechanism, noise and a second
+mechanism change hypotheses, verdicts and the candidate; see `tests/unit/test_driver.py`): scout hypotheses (measured excess abandonment, lower
+confidence bound), verifier verdicts (per-week stability + pooled test; the device-mix decoy is refuted by that test, not by name), the gate verdicts
+on each candidate, the revised candidate's scope/limit, the second-batch contradiction and the successor target.
+
+Scripted / canned (honest limits):
+* The dataset is synthetic and its generator PLANTS the mechanism (OTP retry exhaustion in one flow, a decoy incident) and the second-batch change
+  (`dataset.py`). The pipeline finds what was planted; it is not evidence that the method works on real data.
+* Candidate 1 (global retry raise to 5, step `otp_verify`) is a CANNED aggressive first draft, as is the fixed candidate shape (retry policy). It is
+  not generated from the hypothesis. The judge's mechanism_proxy reads the planted `retry_exhausted/extra_needed/risky` columns.
+* The automatic revision is a bounded GRID SEARCH (scope = one flow x retry limit) re-judged on the data; the failing gate's reason is only recorded,
+  not used to steer the search, and the revised scope is not constrained to flows with a supported hypothesis. It is not an LLM reviser.
+* Revision is triggered only when candidate 1 fails; a candidate is only designed when the verifier supports something; if the bounded search finds
+  nothing the report says `no_candidate_passed_gates` and nobody is asked to approve. No-human / pending / rejected outcomes are reported as such
+  (`outcome` = `awaiting_human_decision`, `rejected_by_human`, `no_opportunity`, ...), never as ok.
+* The LLM is scripted (answers built from the analysis); `lab_query` rows from the e2e double are fixed, the SQL that matters runs on the sqlite dataset.
+* Step 5 and 9 are `real` only because the Core registry receipts / staging alias READ come from the real stack; with `--offline` they are `simulated`.
+  Step 8 is `simulated` in scripted mode (a labelled simulated human), `real` only for `--human-mode manual` (identity is still the sandbox issuer).
+* A manual-mode decision file is bound to proposal id + candidate hash, consumed on read, and a decision file predating the request is discarded.
+
+Human step (plan: authority only): the human decides ONLY `approve` (operation and candidate hash fixed by a durable single-use intention; approved is
+not published) -> `publish` -> staging confirmed by an
 alias READ. Prod is never touched unless `--promote` is given. The console world shows decision requested (`waiting_dependency` /
 `human_decision_pending`) -> approved -> published -> staging confirmed, with receipt refs (intention/command ids, proposal rev, release id, aliases).
 

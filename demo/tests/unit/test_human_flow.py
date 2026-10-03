@@ -115,7 +115,12 @@ def test_manual_gate_times_out_into_pending_and_a_mismatching_decision_is_a_reje
     f, reg = flow(tmp_path, gate=human_flow.ManualGate(tmp_path, timeout_s=0.2, poll_s=0.05))
     res = f.run(req())
     assert res.state == "pending" and res.detail["stage"] == "requested" and events(res)[-1] == "human_timeout"
-    (tmp_path / human_flow.DECISION_FILE).write_text(json.dumps({"decision": "approve", "proposal_id": "prop-1", "candidate_hash": "e" * 64}), "utf-8")
+
+    def late_mismatch():  # written AFTER the request exists (a decision predating the request is discarded, see the stale-file test)
+        while not (tmp_path / human_flow.REQUEST_FILE).exists():
+            time.sleep(0.02)
+        (tmp_path / human_flow.DECISION_FILE).write_text(json.dumps({"decision": "approve", "proposal_id": "prop-1", "candidate_hash": "e" * 64}), "utf-8")
+    threading.Thread(target=late_mismatch, daemon=True).start()
     res2 = flow(tmp_path, gate=human_flow.ManualGate(tmp_path, timeout_s=5, poll_s=0.05))[0].run(req())
     assert res2.state == "rejected" and res2.detail["reason"] == "decision_file_mismatch"
     assert not (tmp_path / human_flow.DECISION_FILE).exists()  # consumed: a stale approval can never be replayed
@@ -126,3 +131,24 @@ def test_manual_gate_times_out_into_pending_and_a_mismatching_decision_is_a_reje
 def test_gate_factory_labels_the_mode(tmp_path, mode):
     g = human_flow.make_gate(mode, tmp_path, timeout_s=1)
     assert g.mode == mode and g.simulated is (mode == "scripted")
+
+
+def test_stale_decision_file_from_a_previous_run_is_discarded_not_applied(tmp_path):
+    (tmp_path / human_flow.DECISION_FILE).write_text(json.dumps({"decision": "approve", "proposal_id": "prop-1", "candidate_hash": HASH}), "utf-8")
+    gate = human_flow.ManualGate(tmp_path, timeout_s=0.3, poll_s=0.05)
+    res = flow(tmp_path, gate=gate)[0].run(req())
+    assert res.detail["stage"] == "requested" and "approved" not in events(res)  # the pre-existing approval predates the request: ignored
+
+
+def test_manual_run_with_no_decision_reports_awaiting_human_not_ok(tmp_path):
+    from pulso_demo import driver
+    assert driver.main(["--out", str(tmp_path), "--offline", "--human-mode", "manual", "--human-timeout", "0.2"]) == 0
+    assert json.loads((tmp_path / "demo-report.json").read_text("utf-8"))["outcome"] == "awaiting_human_decision"
+
+
+def test_outputs_never_contain_a_jws_or_private_material(tmp_path):
+    from pulso_demo import driver
+    driver.main(["--out", str(tmp_path), "--offline"])
+    blob = "".join(p.read_text("utf-8") for p in tmp_path.glob("*.json"))
+    import re
+    assert not re.search(r"eyJ[A-Za-z0-9_-]{10,}\.", blob) and "PRIVATE KEY" not in blob and "bearer" not in blob.lower()
