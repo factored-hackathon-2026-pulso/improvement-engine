@@ -21,6 +21,8 @@ from .model import (
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_TABLES = tuple(TABLES)
 ADMITTED_EVENT_TYPES = tuple(t for t, _, _, s in EVENT_TYPES if s == "admitted")
+# The platform stores UTC timestamps; offsets other than Z / +00:00 are contract violations.
+UTC_DATETIME_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$"
 SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -43,7 +45,7 @@ def assert_table_readable(table: str) -> None:
 
 def _prop(kind, nullable, extra):
     if kind == "datetime":
-        s: dict = {"type": "string", "format": "date-time"}
+        s: dict = {"type": "string", "format": "date-time", "pattern": UTC_DATETIME_PATTERN}
     elif kind == "array":
         s = {"type": "array"}
         if "items" in extra:

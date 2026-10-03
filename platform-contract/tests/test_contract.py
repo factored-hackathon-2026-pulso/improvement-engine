@@ -113,3 +113,27 @@ def test_sequence_gap_and_late_event_findings():
     evs2[0]["ingested_at"] = "2026-12-31T00:00:00Z"
     codes2 = [f["code"] for f in conformance.check_event_stream(evs2, late_after_seconds=60)]
     assert "late_event" in codes2
+
+
+def _case_row():
+    return dict(json.loads((ROOT / "examples" / "cases.valid.json").read_text("utf-8"))[0])
+
+
+@pytest.mark.parametrize("bad", ["not-a-date", "2026-03-02", "2026-03-02T09:00:00", "2026-03-02T09:00:00+02:00"])
+def test_datetimes_must_be_rfc3339_utc(bad):
+    row = dict(_case_row(), opened_at=bad)
+    assert conformance.validate_rows("cases", [row]), bad
+
+
+def test_violation_messages_never_echo_row_values():
+    secret = "TOPSECRETVALUE"
+    row = dict(_case_row(), close_note=secret * 100, channel=secret, language=secret)
+    msgs = "\n".join(conformance.validate_rows("cases", [row]))
+    assert msgs and secret not in msgs
+
+
+@pytest.mark.parametrize("table,field", [("turns", "author_id"), ("cases", "closed_by_id")])
+def test_actor_ids_carry_prefix_patterns(table, field):
+    rows = json.loads((ROOT / "examples" / f"{table}.valid.json").read_text("utf-8"))
+    row = dict(rows[0], **{field: "nobody"})
+    assert conformance.validate_rows(table, [row])

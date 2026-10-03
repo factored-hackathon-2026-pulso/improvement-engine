@@ -44,7 +44,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "pattern": "^(CUS|STF)-.+$"
     },
     "text": {
       "type": "string",
@@ -59,7 +60,8 @@
     },
     "created_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
     },
     "client_message_id": {
       "type": [

@@ -46,18 +46,21 @@
     },
     "opened_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
     },
     "sla_due_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
     },
     "first_response_at": {
       "type": [
         "string",
         "null"
       ],
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
     },
     "previous_case_id": {
       "type": [
@@ -78,14 +81,16 @@
         "string",
         "null"
       ],
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
     },
     "queued_at": {
       "type": [
         "string",
         "null"
       ],
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
     },
     "queue_label": {
       "type": [
@@ -106,7 +111,8 @@
         "string",
         "null"
       ],
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
     },
     "last_message_author_role": {
       "type": [
@@ -151,13 +157,15 @@
         "string",
         "null"
       ],
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
     },
     "closed_by_id": {
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "pattern": "^STF-.+$"
     },
     "closed_by_role": {
       "type": [

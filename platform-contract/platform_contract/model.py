@@ -34,6 +34,7 @@ ID_PATTERNS = {
     "assignment": r"^ASG-.+$",
     "customer": r"^CUS-.+$",
     "staff": r"^STF-.+$",
+    "actor": r"^(CUS|STF)-.+$",
     "event": r"^EVT-.+$",
 }
 
@@ -73,7 +74,7 @@ TABLES: dict[str, dict] = {
             _c("assignee_read_sequence", "integer", minimum=0),
             _c("unread_sequences", "array", items={"type": "integer"}),
             _c("closed_at", "datetime", True),
-            _c("closed_by_id", "string", True),
+            _c("closed_by_id", "string", True, pattern=ID_PATTERNS["staff"]),
             _c("closed_by_role", "string", True, enum=ROLES),
             _c(
                 "close_reason", "string", True,
@@ -94,7 +95,7 @@ TABLES: dict[str, dict] = {
             _c("kind", "string", enum=["message", "routing", "notice"]),
             _c("audience", "string", enum=["everyone", "staff"]),
             _c("author_role", "string", enum=["customer", "analyst", "system"]),
-            _c("author_id", "string", True),
+            _c("author_id", "string", True, pattern=ID_PATTERNS["actor"]),
             _c("text", "string", sensitive_text=True),
             _c("language", "string", enum=["es", "pt"]),
             _c("created_at", "datetime"),

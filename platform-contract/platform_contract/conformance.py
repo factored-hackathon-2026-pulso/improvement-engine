@@ -12,10 +12,22 @@ from . import TABLES, assert_table_readable, classify_event_type, load_schema
 
 _validators: dict[str, Draft202012Validator] = {}
 
+# jsonschema only enforces "date-time" when an optional rfc3339 package is installed; register
+# our own so the check can never silently turn into a no-op.
+_formats = FormatChecker()
+
+
+@_formats.checks("date-time", raises=ValueError)
+def _is_datetime(value) -> bool:
+    if not isinstance(value, str):
+        return True
+    datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return "T" in value
+
 
 def _validator(table: str) -> Draft202012Validator:
     if table not in _validators:
-        _validators[table] = Draft202012Validator(load_schema(table), format_checker=FormatChecker())
+        _validators[table] = Draft202012Validator(load_schema(table), format_checker=_formats)
     return _validators[table]
 
 
@@ -26,7 +38,10 @@ def validate_rows(table: str, rows) -> list[str]:
     for i, row in enumerate(rows):
         for e in v.iter_errors(row):
             path = ".".join(str(p) for p in e.absolute_path) or "<row>"
-            errs.append(f"{table}[{i}].{path}: {e.message}")
+            # Never echo e.message: it embeds the offending value (free text, ids, notes).
+            detail = e.message if e.validator in ("required", "additionalProperties") else (
+                f"violates {e.validator}")
+            errs.append(f"{table}[{i}].{path}: {detail}")
     return errs
 
 

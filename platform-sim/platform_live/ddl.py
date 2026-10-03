@@ -148,6 +148,9 @@ _TEMPLATE = [
   ingested_at {TS} NOT NULL,
   payload {JSON} NOT NULL
 )""",
+    # Artifact: client_message_id "evita duplicados si se reenvia (unico por autor)".
+    "CREATE UNIQUE INDEX ux_turns_client_msg ON turns (author_id, client_message_id) "
+    "WHERE client_message_id IS NOT NULL",
     "CREATE INDEX ix_turns_case ON turns (case_id, sequence)",
     "CREATE INDEX ix_assignments_case ON assignments (case_id)",
     "CREATE INDEX ix_cases_customer ON cases (customer_id)",
@@ -174,4 +177,16 @@ def append_only_guards_sqlite() -> list[str]:
                 f"CREATE TRIGGER {tb}_no_{op.lower()} BEFORE {op} ON {tb} "
                 f"BEGIN SELECT RAISE(ABORT, '{tb} is append-only'); END"
             )
+    return out
+
+
+def append_only_guards_postgres() -> list[str]:
+    """Postgres equivalent of the SQLite guards (the real platform enforces this in code)."""
+    out = [
+        "CREATE FUNCTION forbid_mutation() RETURNS trigger LANGUAGE plpgsql AS "
+        "$$ BEGIN RAISE EXCEPTION '% is append-only', TG_TABLE_NAME; END $$"
+    ]
+    for tb in APPEND_ONLY_TABLES:
+        out.append(f"CREATE TRIGGER {tb}_append_only BEFORE UPDATE OR DELETE ON {tb} "
+                   "FOR EACH ROW EXECUTE FUNCTION forbid_mutation()")
     return out

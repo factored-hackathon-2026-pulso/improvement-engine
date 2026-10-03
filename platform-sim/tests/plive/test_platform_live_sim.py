@@ -223,3 +223,25 @@ def test_generate_with_faults_is_deterministic_and_covers_scenarios():
     assert q("select count(*) from assignments where reason='queue_drained'").fetchone()[0] > 0
     assert q("select count(*) from assignments where previous_staff_id is not null").fetchone()[0] > 0
     assert q("select count(distinct close_reason) from cases").fetchone()[0] >= 3
+
+
+def test_client_message_id_unique_per_author():
+    sim = PlatformLiveSim(seed=1)
+    cid = sim.open_case(sim.customer_ids(simulator=False)[0])
+    row = sim.conn.execute("select case_id, author_id, client_message_id from turns "
+                           "where client_message_id is not null").fetchone()
+    with pytest.raises(sqlite3.IntegrityError):
+        sim.conn.execute("insert into turns (id, case_id, sequence, kind, audience, author_role, author_id, text, "
+                         "language, created_at, client_message_id) values ('TRN-X', ?, 99, 'message', 'everyone', "
+                         "'customer', ?, 't', 'es', '2026-03-02T09:00:00Z', ?)", (cid, row[1], row[2]))
+
+
+def test_postgres_append_only_guards_exist_and_parse():
+    from platform_live.ddl import append_only_guards_postgres
+    stmts = append_only_guards_postgres()
+    joined = "\n".join(stmts)
+    for tb in ("turns", "assignments", "event_log"):
+        assert f"BEFORE UPDATE OR DELETE ON {tb}" in joined
+    sqlglot = pytest.importorskip("sqlglot")
+    for s in stmts:
+        sqlglot.parse_one(s, read="postgres")
