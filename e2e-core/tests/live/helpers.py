@@ -110,7 +110,11 @@ def run_pipeline(e: Engine, db: Any) -> SimpleNamespace:
     p.admission_body = admission(ref=p.ctx_ref, binding_ref=p.eval_binding_ref,
                                  proposal_id=p.proposal_id, candidate_hash=p.candidate_hash, suite_id="pulso-smoke",
                                  suite_version="1.1.0", suite_digest=p.suite_digest, budget_ref="bud-e2e")
+    # control-api double: the platform issued the evaluate-only task's binding_ref (derivable from tenant|key) before the
+    # evaluation admission is requested; the runtime's own bind callback later confirms the same ref.
+    e.configure(preauthorized_bindings=[{"tenant": TENANT, "binding_ref": p.eval_binding_ref}])
     p.admit = e.bridge.admit(TENANT, p.eval_job, p.admission_body)
+    p.admit_replay = e.bridge.admit(TENANT, p.eval_job, p.admission_body)  # before the evaluate-only run consumes it
     p.eval_only = e.stage("writer", p.eval_job, "evalonly", "pulso-writer", {
         "draft_plan_ref": f"plan-{n}", "proposal_id": p.proposal_id, "base_release_id": p.base_rel,
         "evaluate_enabled": True, "evaluation_suite_id": "pulso-smoke", "evaluation_suite_version": "1.1.0"},

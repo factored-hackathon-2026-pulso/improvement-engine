@@ -112,7 +112,7 @@ class Engine:
     def facts(self, run_id: str) -> dict[str, Any]:
         r = self.bridge.read_task(self.tenant, run_id)
         assert r.status_code == 200, r.text
-        return r.json()["result"]["facts"]  # type: ignore[no-any-return]
+        return ((r.json().get("result") or {}).get("facts") or {})  # type: ignore[no-any-return]
 
     def seal(self, art_id: str, content: Any) -> str:
         """Engine stand-in uploads a sealed artifact to the broker double; returns the artifact id."""

@@ -76,7 +76,8 @@ def test_writer_commits_create_put_freeze_with_derived_keys_and_exactly_one_prop
     assert db.one("select count(*) from reg_proposals where proposal_json::json->>'title' = %s", pipeline.title) == 1
     ops = [r[0] for r in db.rows("select op from reg_draft_writes where proposal_id=%s order by created_at",
                                  pipeline.proposal_id)]
-    assert ops == ["create_proposal", "put_draft", "freeze"]  # one effect per committed write
+    assert [o for o in ops if o != "evaluate"] == ["create_proposal", "put_draft", "freeze"]  # one effect per write
+    # (the evaluate-only invocation of the same proposal later appends its single `evaluate` op: asserted below)
     assert db.one("select proposal_json::json->>'state' from reg_proposals where proposal_id=%s",
                   pipeline.proposal_id) == "candidate"
     authz = [r["body"]["operation"] for r in stack.engine.state()["requests"] if r["route"] == "authz"]
@@ -89,10 +90,12 @@ def test_writer_commits_create_put_freeze_with_derived_keys_and_exactly_one_prop
 def test_evaluation_admission_is_created_and_a_replay_is_the_same_admission(stack: Any, pipeline: Any) -> None:
     assert pipeline.admit.status_code == 201, pipeline.admit.text
     assert pipeline.admit.json()["state"] == "admitted"
-    again = stack.bridge.admit(TENANT, pipeline.eval_job, pipeline.admission_body)
+    again = pipeline.admit_replay  # same body, requested before the evaluate-only invocation consumed the admission
     assert again.status_code == 200 and again.json()["state"] == "admitted"
     assert stack.runtime_db.one("select count(*) from pulso_bridge.eval_admissions where evaluation_context_ref=%s",
                                 pipeline.ctx_ref) == 1
+    assert stack.runtime_db.one("select state from pulso_bridge.eval_admissions where evaluation_context_ref=%s",
+                                pipeline.ctx_ref) == "consumed"  # the evaluate-only invocation used it exactly once
     stale = {**pipeline.admission_body, "evaluation_context_ref": pipeline.ctx_ref + "-b",
              "candidate_hash": "0" * 64}
     r = stack.bridge.admit(TENANT, pipeline.eval_job, stale)
@@ -120,7 +123,7 @@ def test_evaluate_only_invocation_runs_the_native_evaluation_end_to_end_and_neve
     assert db.one("select count(*) from reg_eval_runs where proposal_id=%s", pipeline.proposal_id) == 1
     writes = [r[0] for r in db.rows("select op from reg_draft_writes where proposal_id=%s order by created_at",
                                     pipeline.proposal_id)]
-    assert writes == ["create_proposal", "put_draft", "freeze"], writes  # evaluate-only wrote nothing, no reopen
+    assert writes == ["create_proposal", "put_draft", "freeze", "evaluate"], writes  # one evaluate, no reopen/put
     assert db.one("select proposal_json::json->>'state' from reg_proposals where proposal_id=%s",
                   pipeline.proposal_id) == "candidate"  # still frozen
     authz = [r["body"]["operation"] for r in stack.engine.state()["requests"]

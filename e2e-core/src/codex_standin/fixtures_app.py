@@ -450,6 +450,8 @@ def create_app(world: World, ingest: FastAPI | None = None) -> FastAPI:
                 world.llm_rules = new if cfg.get("llm_replace") else world.llm_rules + new
             for item in cfg.get("artifacts", []):
                 world.put_artifact(item["tenant"], item["id"], item["content"])
+            for item in cfg.get("preauthorized_bindings", []):  # the platform issued this binding_ref up front
+                world.binding_refs[item["binding_ref"]] = item["tenant"]
             for item in cfg.get("wiki", []):
                 world.wiki[(item["tenant"], item["path"])] = item["content"]
             if "ingest_fail_next" in cfg and ing is not None:

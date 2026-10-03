@@ -71,10 +71,11 @@ def test_another_tenant_cannot_read_arms_admissions_or_tasks_of_this_tenant(stac
     br = stack.bridge
     for stage in (pipeline.scout, pipeline.writer):
         assert br.read_task(TENANT, stage.out["core_run_id"]).status_code == 200
-        assert br.read_task(OTHER, stage.out["core_run_id"]).status_code == 404  # not found, never "forbidden": no oracle
-    assert br.arm_by_key(OTHER, pipeline.arm_bank.body["idempotency_key"]).status_code == 404
+        denied = br.read_task(OTHER, stage.out["core_run_id"])  # the deployment tenant set is enforced at the door
+        assert denied.status_code == 403 and denied.json()["code"] == "pulso:tenant_mismatch"
+    assert br.arm_by_key(OTHER, pipeline.arm_bank.body["idempotency_key"]).status_code == 403
     rep = pipeline.arm_bank.report
-    assert br.call("GET", f"/evaluation/arms/{rep['execution_id']}", "arm_read", OTHER).status_code == 404
+    assert br.call("GET", f"/evaluation/arms/{rep['execution_id']}", "arm_read", OTHER).status_code == 403
     # admitting with this tenant's binding under another tenant's token: the broker double refuses (binding unknown
     # to that tenant), zero admission rows
     rows = stack.runtime_db.one("select count(*) from pulso_bridge.eval_admissions")
