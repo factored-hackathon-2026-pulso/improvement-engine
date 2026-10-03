@@ -47,6 +47,22 @@ podman compose --env-file local/.env -f local/compose.yaml up -d
 only verifies the Compose rendering when a real Podman backend is available.
 It does not certify PostgreSQL, S3, Agent Core, AWS or a deployed engine.
 
+Before pushing a feature branch, run the same safe Rust, Python and Windows
+Pester gates used by GitHub Actions:
+
+```powershell
+pwsh -NoProfile -File scripts/verify-local-ci.ps1
+```
+
+The PostgreSQL migration suites are deliberately excluded by default because
+they reset their target database. To opt in, pass `-IncludePostgres
+-AllowDestructiveTestDb -PostgresTestUrl <local-url>`; the script only accepts
+loopback hosts and the database name `pulso_test`, keeps the URL out of output,
+and sets the repository's destructive-test consent only while those commands
+run. Use a disposable database (preferably the same PostgreSQL major version as
+CI). `-PlanOnly` prints the selected commands without running them. A local
+green run is a pre-PR signal, not a substitute for the required GitHub checks.
+
 Start with [AGENTS.md](AGENTS.md), [CONTEXT.md](CONTEXT.md), the [contract journal](docs/journal/0002-layer-0-contract-envelope.md), the [workspace journal](docs/journal/0003-layer-0-rust-workspace.md), the [source-validation journal](docs/journal/0004-u03-source-contract-validation.md), the [artifact-store journal](docs/journal/0004-u02-immutable-artifact-store.md), the [enriched-history journal](docs/journal/0006-u04-enriched-history.md), the [wiki-scratch journal](docs/journal/0006-u15-wiki-scratch.md) and the [published-memory journal](docs/journal/0010-u33-published-memory.md).
 
 U08/U12 add a local investigation foundation: embedded in-memory SQLite receives
