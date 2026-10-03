@@ -118,7 +118,8 @@ def world(pg: PgDbs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
            "PULSO_BRIDGE_STAFF_SIGNER": str(tmp_path / "bridge-staff.json"),
            "PULSO_BRIDGE_CALLBACK_SIGNER": str(tmp_path / "bridge-callback.json"),
            "PULSO_BRIDGE_EXECUTOR_SIGNER": str(tmp_path / "bridge-executor.json"),
-           "PULSO_LAB_BROKER_URL": loop.url, "PULSO_CONTROL_API_URL": loop.url, "PULSO_TENANT_ID": "t1"}
+           "PULSO_LAB_BROKER_URL": loop.url, "PULSO_CONTROL_API_URL": loop.url, "PULSO_TENANT_ID": "t1",
+           "PULSO_LLM_MODE": "disabled"}  # the model is absent on purpose here
     captured: list[Any] = []
     err = io.StringIO()
     code = runtime_main.run([], env=env, stderr=err, serve=lambda app, **kw: captured.append(app), resolve=resolve)

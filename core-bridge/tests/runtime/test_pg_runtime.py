@@ -64,6 +64,7 @@ def _env(pg: PgDbs, keys: dict[str, Any], **extra: str) -> dict[str, str]:
             "PULSO_BRIDGE_CALLBACK_SIGNER": str(d / "bridge-callback.json"),
             "PULSO_BRIDGE_EXECUTOR_SIGNER": str(d / "bridge-executor.json"),
             "PULSO_LAB_BROKER_URL": "http://127.0.0.1:9", "PULSO_CONTROL_API_URL": "http://127.0.0.1:9", "PULSO_TENANT_ID": "t1",
+            "AGENTCORE_LLM_GATEWAY_URL": "http://llm-gateway.test:8080", "AGENTCORE_LLM_GATEWAY_TOKEN": "tok-ok",
             "PULSO_SHA": "abc1234", "PULSO_IMAGE_DIGEST": "sha256:" + "a" * 64, **extra}
 
 
@@ -72,7 +73,9 @@ def _compose(env: dict[str, str]) -> tuple[int, Any, str]:
 
     captured: list[Any] = []
     err = io.StringIO()
-    code = runtime_main.run([], env=env, stderr=err, serve=lambda app, **kw: captured.append(app))
+    from llm.gateway_double import GatewayDouble  # contract double: the gateway answers the readiness probe
+    code = runtime_main.run([], env=env, stderr=err, serve=lambda app, **kw: captured.append(app),
+                            llm_probe_client=GatewayDouble().client())
     return code, (captured[0] if captured else None), err.getvalue()
 
 

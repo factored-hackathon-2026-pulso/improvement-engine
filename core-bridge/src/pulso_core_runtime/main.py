@@ -103,7 +103,8 @@ def version_info(env: Mapping[str, str], doubles: list[str] | None = None,
 
 
 def run(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = None, stderr: TextIO | None = None,
-        serve: Callable[..., None] | None = None, resolve: Callable[..., Any] | None = None) -> int:
+        serve: Callable[..., None] | None = None, resolve: Callable[..., Any] | None = None,
+        llm_probe_client: Any = None) -> int:
     env = dict(os.environ if env is None else env)
     err = stderr or sys.stderr
     try:
@@ -112,7 +113,7 @@ def run(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = No
     except RuntimeConfigError as exc:
         print(f"pulso-core-runtime cannot start: {exc}", file=err)
         return EXIT_CONFIG
-    return _compose(env, err, paths, serve, resolve)
+    return _compose(env, err, paths, serve, resolve, llm_probe_client)
 
 
 class _Lazy:
@@ -167,7 +168,7 @@ def _fail(err: TextIO, *problems: str) -> int:
 
 
 def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Callable[..., None] | None,
-             resolve: Callable[..., Any] | None) -> int:
+             resolve: Callable[..., Any] | None, llm_probe_client: Any = None) -> int:
     import psycopg
     from agent_core.adapters.system_clock import SystemClock
     from agent_core.api.app import create_app
@@ -196,6 +197,8 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
     from pulso_core_runtime.internal.auth import ServiceJwtVerifier, load_service_keys
     from pulso_core_runtime.internal.store import PgJtiStore, ensure_schema
     from pulso_core_runtime.invoke.wiring import build_l3, install_tools, lab_broker_minter
+    from pulso_core_runtime.llm.config import llm_doubles, parse_llm_config
+    from pulso_core_runtime.llm.probe import llm_gateway_check
     from pulso_core_runtime.pin import PinnedRegistryPort
     from pulso_core_runtime.readiness import bridge_schema_check, factories_ok_check, key_files_check
     from pulso_core_runtime.registry_service import FlowEvaluationGate, build_evaluation_runtime
@@ -212,6 +215,10 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         except RuntimeConfigError as exc:
             print(f"pulso-core-runtime cannot start: {exc}", file=err)
             return EXIT_CONFIG
+        # Fail closed: the runtime has task stages, so no gateway configuration is a startup error (exit 2).
+        llm_cfg, llm_problems = parse_llm_config(env)
+        if llm_cfg is None:
+            return _fail(err, *llm_problems)
         dsn = env.get("AGENTCORE_REGISTRY_DSN", "")
         eval_dsn = env.get("AGENTCORE_EVAL_DSN", "")
         service_path = Path(env.get("PULSO_SERVICE_KEYS", f"{KEYS_DIR}/service.json"))
@@ -277,7 +284,9 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
             gate=FlowEvaluationGate(evaluation, _constructor_principal), admissions=evaluation.admissions)
 
         live = dataclasses.replace(
-            ports, gateway=BindingGuardGateway(SpendMeteringGateway(ports.gateway, l3.registry, l3.store), l3.registry),
+            ports, gateway=BindingGuardGateway(
+                SpendMeteringGateway(ports.gateway, l3.registry, l3.store, policy=llm_cfg.policy,
+                                     profiles=_profile_lookup(pinned)), l3.registry),
             providers={name: BindingGuardProvider(p, l3.registry) for name, p in ports.providers.items()})
         if not export_enabled(env):
             live = dataclasses.replace(live, run_export=None)  # N-08: no `/v1/export/*` unless explicitly enabled
@@ -287,6 +296,7 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         handlers: dict[str, Any] = {}
         register_evaluation(handlers, EvaluationDeps(evaluation, arms, broker, budgets))
         doubles = [f"{k}: {v}" for k, v in sorted({**stand_ins(env), **_wiring_stand_ins(budgets)}.items())]
+        doubles += llm_doubles(llm_cfg)
         doubles += [f"core:{name}" for name in ports.doubles]
         verifier = ServiceJwtVerifier(service_keys, PgJtiStore(dsn))
         internal = build_internal_app(verifier, version_info=version_info(env, doubles, ports), handlers=handlers, l3=l3)
@@ -297,6 +307,8 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         extra = (
             ("eval_db", _eval_ping(env)), bridge_schema_check(dsn),
             ("key_files", key_files_check(key_paths)), factories_ok_check(set(FACTORY_NAMES), FACTORY_NAMES),
+            *((llm_gateway_check(llm_cfg.url or "", llm_cfg.token or "", client=llm_probe_client),)
+              if llm_cfg.mode == "gateway" else ()),
         )
         deps = dataclasses.replace(
             deps, limits=RateLimitConfig(), extensions=(*deps.extensions, internal_extension),
@@ -311,6 +323,16 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         return EXIT_OK
     finally:
         observability.shutdown()
+
+
+def _profile_lookup(registry: Any) -> Callable[[Any], Any]:
+    """`prompt ref -> ModelProfile` the registry will send to the gateway (same resolution as `HttpLLMGateway`)."""
+    from agent_core.domain import ModelProfile, Prompt
+
+    def lookup(prompt: Any) -> Any:
+        profile_ref = registry.get(prompt, Prompt).model_profile.require_exact()
+        return registry.get(profile_ref, ModelProfile)
+    return lookup
 
 
 def _eval_ping(env: Mapping[str, str]) -> Callable[[], bool]:

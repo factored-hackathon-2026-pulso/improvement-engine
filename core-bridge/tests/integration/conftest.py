@@ -26,6 +26,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption,
 from fastapi.testclient import TestClient
 
 from integration.loopback import BankBackend, Loopback
+from llm.gateway_double import GatewayDouble
 from pulso_core_runtime import main as runtime_main
 from pulso_core_runtime.internal.auth import b64url_encode, sign_service_jwt
 from runtime.conftest import PgDbs, pg  # noqa: F401  (fixture re-export)
@@ -129,7 +130,8 @@ def build_env(c: Composed, extra: dict[str, str] | None = None) -> dict[str, str
             "PULSO_BRIDGE_EXECUTOR_SIGNER": str(d / "bridge-executor.json"),
             "PULSO_LAB_BROKER_URL": c.loop.url, "PULSO_CONTROL_API_URL": c.loop.url,
             "PULSO_EVAL_BUDGETS": str(d / "budgets.json"), "PULSO_EVAL_PERMITS": "1",
-            "PULSO_SHA": "integ", "PULSO_TENANT_ID": TENANT, **(extra or {})}
+            "PULSO_SHA": "integ", "PULSO_TENANT_ID": TENANT,
+            "AGENTCORE_LLM_GATEWAY_URL": "http://llm-gateway.test:8080", "AGENTCORE_LLM_GATEWAY_TOKEN": "tok-ok", **(extra or {})}
 
 
 def boot(c: Composed, extra: dict[str, str] | None = None) -> Composed:
@@ -149,7 +151,8 @@ def boot(c: Composed, extra: dict[str, str] | None = None) -> Composed:
     captured: list[Any] = []
     err = io.StringIO()
     c.exit_code = runtime_main.run([], env=build_env(c, extra), stderr=err,
-                                   serve=lambda app, **kw: captured.append(app), resolve=resolve)
+                                   serve=lambda app, **kw: captured.append(app), resolve=resolve,
+                                   llm_probe_client=GatewayDouble().client())
     c.stderr = err.getvalue()
     assert c.exit_code == 0, c.stderr
     c.app = captured[0]
