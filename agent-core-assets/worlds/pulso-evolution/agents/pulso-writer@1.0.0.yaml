@@ -7,7 +7,7 @@ min_auth_level: session
 subject_kinds: []
 supported_locales: [en]
 default_locale: en
-tools_allowed: [pulso/bind_context@1, pulso/artifact_get@1, registry/create_proposal@1, registry/put_draft@1, registry/freeze@1, registry/validate@1, registry/evaluate@1, registry/get_proposal@1, registry/get_write@1]
+tools_allowed: [pulso/bind_context@1, pulso/artifact_get@1, registry/create_proposal@1, registry/put_draft@1, registry/freeze@1, registry/reopen@1, registry/validate@1, registry/evaluate@1, registry/get_proposal@1, registry/get_write@1]
 budgets: {max_nodes_per_turn: 40, max_model_calls_per_turn: 16, max_tokens_per_run: 120000, max_cost_per_run: 5.00, max_wall_ms_per_turn: 900000}
 templates:
   clarify: t/evo_clarify

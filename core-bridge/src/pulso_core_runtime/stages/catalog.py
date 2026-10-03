@@ -56,8 +56,8 @@ class StageSpec:
 
 _BIND, _ART = BIND_TOOL, "pulso/artifact_get@1"
 _LAB, _WR, _WE, _WT = "pulso/lab_query@1", "pulso/wiki_read@1", "pulso/wiki_explore@1", "pulso/wiki_transform@1"
-_REG = tuple(f"registry/{n}@1" for n in ("create_proposal", "put_draft", "freeze", "validate", "evaluate",
-                                         "get_proposal", "get_write"))
+_REG = tuple(f"registry/{n}@1" for n in ("create_proposal", "put_draft", "freeze", "reopen", "validate",
+                                         "evaluate", "get_proposal", "get_write"))
 
 CATALOG: dict[str, StageSpec] = {s.stage: s for s in (
     StageSpec("scout", "pulso-scout", "pulso-scout", "pulso_hypotheses",

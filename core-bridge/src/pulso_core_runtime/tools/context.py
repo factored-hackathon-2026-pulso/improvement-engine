@@ -183,6 +183,18 @@ class InvocationRegistry:
         with entry.lock:
             return entry.scratch.get(key, default)
 
+    def remember_in_map(self, binding_ref: str, key: str, map_key: str, value: Any) -> None:
+        """Atomic `scratch[key][map_key] = value` (creates the dict under the entry lock)."""
+        entry = self._entry(binding_ref)
+        with entry.lock:
+            entry.scratch.setdefault(key, {})[map_key] = value
+
+    def claim(self, binding_ref: str, key: str, value: Any) -> Any:
+        """Atomic set-if-absent; returns the value that is stored afterwards (first writer wins)."""
+        entry = self._entry(binding_ref)
+        with entry.lock:
+            return entry.scratch.setdefault(key, value)
+
     def record_refs(self, binding_ref: str, refs: list[str]) -> None:
         entry = self._entry(binding_ref)
         with entry.lock:

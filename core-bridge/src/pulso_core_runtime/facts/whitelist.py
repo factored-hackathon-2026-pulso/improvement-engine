@@ -27,7 +27,8 @@ MAX_RESULT_BYTES = 256 * 1024
 CORE_SUBSET_KEYS = frozenset({"type", "enum", "properties", "required", "additionalProperties", "items"})
 
 # Raw facts of the writer Flow that feed the bridge-composed `pulso_writer_receipts` projection.
-WRITER_SOURCE_FACTS = ("proposal", "created", "put_verified", "validation", "frozen", "freeze_verified",
+WRITER_SOURCE_FACTS = ("proposal", "created", "put_verified", "reopen_verified", "validation", "frozen",
+                       "freeze_verified",
                        "evaluation", "evaluate_verified")
 
 
@@ -114,6 +115,21 @@ def _collect_refs(value: Any, out: list[str]) -> None:
             _collect_refs(v, out)
 
 
+def _string_leaves(value: Any) -> list[str]:
+    """Unescaped string keys/values: the JSON text escapes quotes, newlines and backslashes, hiding canaries."""
+    out: list[str] = []
+    if isinstance(value, str):
+        out.append(value)
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            out.append(str(k))
+            out.extend(_string_leaves(v))
+    elif isinstance(value, list):
+        for v in value:
+            out.extend(_string_leaves(v))
+    return out
+
+
 def validate_fact(name: str, value: Any, *, canaries: Collection[str] = (),
                   call_log_refs: Collection[str] | None = None) -> str:
     """Validates one fact; returns its digest `sha256(JCS(value))`."""
@@ -128,7 +144,7 @@ def validate_fact(name: str, value: Any, *, canaries: Collection[str] = (),
     if errors:
         raise FactError("pulso:fact_schema_violation", f"{name}: {errors[0].message[:120]}")
     text = raw.decode("utf-8")
-    if any(c and c in text for c in canaries):
+    if any(c and (c in text or any(c in leaf for leaf in _string_leaves(value))) for c in canaries):
         raise FactError("pulso:canary_detected", name)
     if call_log_refs is not None and name in ("pulso_hypotheses", "pulso_verification"):
         refs: list[str] = []
@@ -188,10 +204,10 @@ def compose_writer_receipts(run_facts: Mapping[str, Any], actions: list[Mapping[
         return _fact_parts(run_facts[name])[0] if name in run_facts else None
 
     proposal, frozen, evaluation = value("proposal"), value("frozen"), value("evaluation")
-    verified_ops = {v.get("op"): v for v in (value(n) for n in ("created", "put_verified", "freeze_verified",
-                                                                "evaluate_verified")) if isinstance(v, dict)}
+    verified_ops = {v.get("op"): v for v in (value(n) for n in ("created", "reopen_verified", "put_verified",
+                                                                "freeze_verified", "evaluate_verified")) if isinstance(v, dict)}
     receipts: list[dict[str, Any]] = []
-    for op in ("create_proposal", "put_draft", "freeze", "evaluate"):
+    for op in ("create_proposal", "reopen", "put_draft", "freeze", "evaluate"):
         rec = verified_ops.get(op)
         if rec is None:
             continue

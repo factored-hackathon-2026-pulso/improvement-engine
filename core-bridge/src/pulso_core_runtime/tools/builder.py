@@ -49,6 +49,7 @@ MUTATORS = frozenset({"registry/create_proposal", "registry/put_draft", "registr
                       EVALUATE})
 _CREATED = "created_proposal_id"
 _DERIVED = "derived_keys"
+_MAX_ORDINALS = 32
 
 
 class EvaluationGate(Protocol):
@@ -212,17 +213,22 @@ class ProtectedBuilderToolExecutor:
 
     # -- delegation -------------------------------------------------------------------------------------
     def _remember_key(self, ic: InvocationContext, engine_key: str, derived: str) -> None:
-        mapping = self._contexts.recall(ic.binding_ref, _DERIVED, None)
-        if mapping is None:
-            mapping = {}
-            self._contexts.remember(ic.binding_ref, _DERIVED, mapping)
-        mapping[engine_key] = derived
+        self._contexts.remember_in_map(ic.binding_ref, _DERIVED, engine_key, derived)
 
     def _derive(self, ic: InvocationContext, engine_key: str) -> str:
         ordinal = self._contexts.ordinal(ic.binding_ref, engine_key)
         derived = write_key(ic.command_key, ic.stage, ordinal)
         self._remember_key(ic, engine_key, derived)
         return derived
+
+    @staticmethod
+    def _own_keys(ic: InvocationContext) -> frozenset[str]:
+        """Keys this command can have produced (crash recovery reads them without the in-memory map)."""
+        keys = {write_key(ic.command_key, ic.stage, n) for n in range(_MAX_ORDINALS)}
+        ref = ic.evaluation_context_ref
+        if ref is not None and _EVAL_REF.match(ref):
+            keys.add(eval_key(ref))
+        return frozenset(keys)
 
     def _delegate(self, tool: EntityRef, args: dict[str, JsonValue], bound_params: dict[str, str],
                   ctx: ToolCallContext, engine_key: str | None, ic: InvocationContext,
@@ -232,6 +238,8 @@ class ProtectedBuilderToolExecutor:
         if definition.is_write:
             if not engine_key:
                 return self._result(_denied("pulso:write_without_key"))
+            if tool.id == "registry/create_proposal" and                     self._contexts.claim(ic.binding_ref, "create_engine_key", engine_key) != engine_key:
+                return self._result(_denied("commitment_mismatch"))  # one proposal per invocation
             derived = self._derive(ic, engine_key)
         elif tool.id == "registry/get_write":
             requested = args.get("idempotency_key")
@@ -239,8 +247,10 @@ class ProtectedBuilderToolExecutor:
             if isinstance(requested, str) and requested in mapping:
                 derived = mapping[requested]
                 send_args["idempotency_key"] = derived
-            elif isinstance(requested, str):
-                derived = requested if requested.startswith((WRITE_PREFIX, EVAL_PREFIX)) else None
+            elif isinstance(requested, str) and requested in self._own_keys(ic):
+                derived = requested
+            else:  # never read another invocation's (or tenant's) write receipt
+                return self._result(_denied("commitment_mismatch"))
         try:
             result: ToolResult = self._inner.execute(tool, send_args, bound_params, ctx, derived if definition.is_write else None)
         except Exception:  # noqa: BLE001

@@ -8,7 +8,12 @@ nodes:
      next: {ok: chk_proposal, error: esc_read, timeout: esc_read, denied: esc_read}}
   - {id: chk_proposal, type: rule, config: {expr: {"==": [{var: slots.proposal_id}, null]}}, next: {true: create, false: load_proposal}}
   - {id: load_proposal, type: tool, config: {tool: registry/get_proposal@1, args: {proposal_id: slots.proposal_id}, save_as: proposal},
-     next: {ok: chk_base, error: esc_read, timeout: esc_read, denied: esc_denied}}
+     next: {ok: chk_state, error: esc_read, timeout: esc_read, denied: esc_denied}}
+  - {id: chk_state, type: rule, config: {expr: {"==": [{var: facts.proposal.value.candidate_hash}, null]}}, next: {true: chk_base, false: reopen}}
+  - {id: reopen, type: tool, config: {draft: true, tool: registry/reopen@1, args: {proposal_id: facts.proposal.value.proposal_id}, save_as: proposal},
+     next: {ok: verify_reopen, uncertain: verify_reopen, denied: esc_denied}}
+  - {id: verify_reopen, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "reopen"]}, save_as: reopen_verified},
+     next: {verified: chk_base, failed: esc_verify}}
   - {id: create, type: tool, config: {draft: true, tool: registry/create_proposal@1, args: {agent_id: facts.draft_plan.value.agent_id, origin: builder_chat, title: facts.draft_plan.value.title}, save_as: proposal},
      next: {ok: verify_create, uncertain: verify_create, denied: esc_denied}}
   - {id: verify_create, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "create_proposal"]}, save_as: created},

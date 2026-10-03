@@ -527,13 +527,13 @@
     "agent_version": "1.0.0",
     "entities": [
       {
-        "content_hash": "241c87b939c16363d9ca9925826897861b98ce94078232a8b7e0d6342b73d12d",
+        "content_hash": "f9946430f9a456b74a40097dc4472994be1555130b6f22bc3725e3527146f324",
         "id": "pulso-writer",
         "kind": "agent",
         "version": "1.0.0"
       },
       {
-        "content_hash": "5ae1f7ec116c21d784abfaabe38773809d15fd28deee547552fe478d73c4ff47",
+        "content_hash": "5b05ef2cd63f52d06d51bc2f55c8bc9842ccbe3a138b8215f4243f97b2c4c87e",
         "id": "pulso-writer",
         "kind": "flow",
         "version": "1.0.0"
@@ -641,6 +641,12 @@
         "version": "1.0.0"
       },
       {
+        "content_hash": "450f64a722188335137d8ea97296daf1783d28558b7281393609b5913bfdf57a",
+        "id": "registry/reopen",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
         "content_hash": "5b588bd3750f5afc000a267cff391b8f3f4cb5897a110ef684f9ad7810bbdbd9",
         "id": "registry/validate",
         "kind": "tool",
@@ -648,7 +654,7 @@
       }
     ],
     "eval_suites": [],
-    "release_hash": "738b23c6cde590d07c9ece861a796b43c18219ce173245b0aa7fd6c150460cb1",
-    "release_id": "rel-738b23c6cde590d0"
+    "release_hash": "bf3f06148962dabb63f9998ce88697e8117d8bc13cd326e7202ff780a7beaa80",
+    "release_id": "rel-bf3f06148962dabb"
   }
 }
