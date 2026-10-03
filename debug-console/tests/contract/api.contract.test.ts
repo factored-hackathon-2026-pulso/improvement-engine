@@ -26,7 +26,9 @@ describe('every response validates against the zod schemas', () => {
       await ok(S.Graph, `${DEBUG}/runs/${r.run_id}/graph`);
       await ok(z.object({ items: z.array(S.DebugEventSchema) }), `${DEBUG}/runs/${r.run_id}/events?after_sequence=0`);
       await ok(S.Investigation, `${DEBUG}/runs/${r.run_id}/investigation`);
-      await ok(S.Gates, `${DEBUG}/runs/${r.run_id}/gates`);
+      const g = await ok(S.Gates, `${DEBUG}/runs/${r.run_id}/gates`);
+      await ok(S.Alternatives, `${DEBUG}/runs/${r.run_id}/alternatives`);
+      if (g.proposal_id) await ok(S.Diff, `${DEBUG}/proposals/${g.proposal_id}/diff`);
     }
   });
   it('diff, memory, decision (consumer_proposal)', async () => {

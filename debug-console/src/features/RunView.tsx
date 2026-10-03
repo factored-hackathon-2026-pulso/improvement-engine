@@ -5,7 +5,8 @@ import { isStale } from '../api/reconnect';
 import type * as S from '../api/schemas';
 import { acceptRevision, applyEvent, initStream, type DebugEvent, type StreamState } from '../state/runStore';
 import { Drawer } from '../components/Drawer';
-import { label, Investigation, Gates, DiffView, TracePanel } from './Panels';
+import { label, Investigation, RunOutcome, TracePanel } from './Panels';
+import { hookState } from './demoModel';
 import { DecisionPanel } from './DecisionPanel';
 import { useAnnounce } from '../a11y/AnnounceContext';
 import { diffNodes } from '../a11y/announcer';
@@ -135,7 +136,8 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
         {graph.nodes.map((n) => (
           <button
             key={n.node_id} type="button" className="node" data-testid={`node-${n.node_id}`}
-            data-status={n.status} data-pulse={pulse.includes(n.node_id) ? '1' : '0'} onClick={() => onNode(n.node_id)}
+            data-status={n.status} data-pulse={pulse.includes(n.node_id) ? '1' : '0'} data-hook={hookState(n) ?? undefined}
+            onClick={() => onNode(n.node_id)}
           >
             <strong>{n.label}</strong><br />{label(n.status, KNOWN_NODE)}
           </button>
@@ -146,6 +148,7 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
           <li key={n.node_id} data-testid={`textgraph-${n.node_id}`}>
             {n.label}: {label(n.status, KNOWN_NODE)}{n.reason_code ? ` (${n.reason_code})` : ''}
             {n.depends_on.length ? t('run.dependsOn', { ids: n.depends_on.join(', ') }) : ''}
+            {hookState(n) && <span className="hook"> {t(`hook.${hookState(n)!}` as I18nKey)}</span>}
           </li>
         ))}
       </ol>
@@ -154,13 +157,13 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
           <p>{t('drawer.status', { value: label(selected.status, KNOWN_NODE) })}</p>
           <p>{t('drawer.stage', { value: selected.stage })}</p>
           <p>{t('drawer.reason', { value: selected.reason_code ?? t('drawer.noReason') })}</p>
+          {hookState(selected) && <p className="hook">{t(`hook.${hookState(selected)!}` as I18nKey)}</p>}
         </Drawer>
       )}
       <TracePanel nodes={graph.nodes} />
       <Investigation runId={runId} />
-      <Gates runId={runId} />
-      <DiffView />
-      <DecisionPanel />
+      <RunOutcome runId={runId} />
+      <DecisionPanel hookPending={graph.nodes.some((n) => hookState(n) === 'decision_pending')} />
     </div>
   );
 }

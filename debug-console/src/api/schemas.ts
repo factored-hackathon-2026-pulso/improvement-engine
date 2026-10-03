@@ -9,7 +9,7 @@ const str = z.string();
  */
 export const CONSUMER_PROPOSALS: Record<string, string> = {
   Investigation: 'R5/M1', Gates: 'R5', Diff: 'R7/M2/M3', Memory: 'M2', Decision: 'R4',
-  Session: 'CO-02/CLQ-22', Profile: 'M6/CLQ-28', StepUp: 'CO-02',
+  Session: 'CO-02/CLQ-22', Profile: 'M6/CLQ-28', StepUp: 'CO-02', Alternatives: 'R5/D2',
 };
 const proposal = <T extends z.ZodTypeAny>(name: string, schema: T): T =>
   schema.describe(JSON.stringify({ consumer_proposal: true, ref: CONSUMER_PROPOSALS[name] }));
@@ -37,12 +37,32 @@ export const Evidence = z.object({
   evidence_ref: z.object({ id: str, digest: str, media_type: str }),
   relation: str, summary: str, source_kind: str, validation: str, available_at: str,
 });
+/** Optional per-hypothesis breakdown (R5/M1). Absent: the console derives it from `hypothesis`/`verifier`/`evidence`. */
+export const HypothesisItem = z.object({
+  hypothesis_id: str, statement: str, verdict: str, evidence_refs: z.array(str).optional().catch(undefined),
+});
 export const Investigation = proposal('Investigation', Envelope.extend({
-  hypothesis: str.nullable(), verifier: str, evidence: z.array(Evidence),
+  hypothesis: str.nullable(), verifier: str, evidence: z.array(Evidence), hypotheses: z.array(HypothesisItem).optional().catch(undefined),
 }));
+const ReportRef = z.object({ id: str, digest: str, media_type: str });
 const GateStatus = z.object({ status: str, reason_code: str.nullable() });
+export const GateAttempt = z.object({
+  attempt: z.number().int(), candidate_id: str, revision_of: str.nullable().optional(), scope: str.optional(),
+  max_retries: z.number().optional(), native: str, native_reason: str.nullable().optional(),
+  improvement: z.object({
+    status: str, reason_code: str.nullable().optional(), lift: z.number().nullable().optional(), lift_lo: z.number().nullable().optional(),
+    exposure: z.number().nullable().optional(), guard_max_exposure: z.number().nullable().optional(),
+  }),
+});
 export const Gates = proposal('Gates', Envelope.extend({
-  native: GateStatus, improvement: GateStatus, combined: z.object({ decision: str, reason_code: str.nullable() }),
+  native: GateStatus.extend({ report_ref: ReportRef.nullable().optional().catch(null), attempt: z.number().int().optional() }),
+  improvement: GateStatus.extend({ attempt: z.number().int().optional() }),
+  combined: z.object({ decision: str, reason_code: str.nullable() }),
+  proposal_id: str.nullable().optional().catch(null),
+  attempts: z.array(GateAttempt).optional().catch(undefined),
+}));
+export const Alternatives = proposal('Alternatives', Envelope.extend({
+  items: z.array(z.object({ id: str, kind: str, summary: str, expected_abandoned: z.number().nullable().optional(), risk: str.nullable().optional() })),
 }));
 export const Diff = proposal('Diff', Envelope.extend({ lines: z.array(z.object({ op: str, text: str })) }));
 export const Memory = proposal('Memory', Envelope.extend({
@@ -53,7 +73,11 @@ export const Session = proposal('Session', z.object({
   principal: str, tenant_id: str, scopes: z.array(str), expires_at: str, csrf_token: str,
   auth: z.object({ simulated: z.boolean(), level: str, auth_at: str }),
 }));
-export const Profile = proposal('Profile', z.object({ target: str, runtime_profile: str, doubles: z.array(str), pin: str.nullable() }));
+export const Profile = proposal('Profile', z.object({
+  target: str, runtime_profile: str, doubles: z.array(str), pin: str.nullable(),
+  mode: str.optional().catch(undefined), decision_hook: str.optional().catch(undefined),
+  doubles_detail: z.array(z.object({ id: str, what: str, until: str.optional() })).optional().catch(undefined),
+}));
 export const Conflict = z.object({ expected_revision: z.number().int(), current_revision: z.number().int(), diff_ref: z.unknown().nullable() });
 export const Problem = z.object({
   code: str, message: str, correlation_id: str, retryable: z.boolean(), conflict: Conflict.nullable().optional().catch(null),
