@@ -39,3 +39,11 @@ The e2e run starts the fixture API/SSE (:4010) and Vite (:5173, same-origin prox
 - `stale_revision` as the 409 code and `trace_id` on graph nodes are consumer assumptions until Codex records them; traceLinkOrigins links are not rendered.
 - No evidence manifest, `LocalServiceManifest` fragment or CI patch yet.
 - The 410/reconnect/axe/leak checks were authored by the implementer; the plan requires an independent reviewer for a11y/security.
+
+## Verification (local CI parity)
+
+`debug-console/` is outside the Cargo workspace (`members` lists only `crates/*`) and is not referenced by `.github/workflows/ci.yml`,
+so the Rust CI job is unaffected by this directory. The console is verified locally:
+`npm ci && npm run typecheck && npm test && npm run test:contract && npm run build`, then `npx playwright test <spec>` one spec at a time,
+then `podman --connection pulso-dev build --format docker -t pulso-debug-console debug-console`.
+No CI job runs these yet; wiring one is a Codex-owned workflow change (see the gap above).
