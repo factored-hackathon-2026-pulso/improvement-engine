@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backoffDelay, classifyClose, parseSseFrames } from '../../src/api/reconnect';
+import { backoffDelay, classifyClose, isStale, parseGone, parseSseFrames } from '../../src/api/reconnect';
 
 describe('backoffDelay (plan 16.13.4: 1-30 s with jitter)', () => {
   it('never goes below 1 s, even with zero jitter', () => {
@@ -40,5 +40,27 @@ describe('parseSseFrames', () => {
   it('joins multi-line data and handles CRLF', () => {
     const r = parseSseFrames('data: {"a":\r\ndata: 1}\r\n\r\n');
     expect(r.frames).toEqual([{ id: null, data: '{"a":1}' }]);
+  });
+});
+
+describe('isStale (silence is not completion)', () => {
+  it('is stale only after more than 2x the heartbeat without any signal', () => {
+    expect(isStale(1000, 1000 + 10000, 5000)).toBe(false);
+    expect(isStale(1000, 1000 + 10001, 5000)).toBe(true);
+  });
+  it('is never stale before the first signal', () => {
+    expect(isStale(null, 999999, 5000)).toBe(false);
+  });
+});
+
+describe('parseGone (410 body)', () => {
+  it('reads the recovery cursor from a cursor_expired problem', () => {
+    expect(parseGone({ code: 'cursor_expired', recovery_after_sequence: 42, snapshot_url: '/x' })).toEqual({ recoveryCursor: 42 });
+  });
+  it('treats absent, negative or non-integer cursors as unknown (never invents events)', () => {
+    expect(parseGone({ code: 'cursor_expired' })).toEqual({ recoveryCursor: null });
+    expect(parseGone({ recovery_after_sequence: -1 })).toEqual({ recoveryCursor: null });
+    expect(parseGone({ recovery_after_sequence: '5' })).toEqual({ recoveryCursor: null });
+    expect(parseGone(null)).toEqual({ recoveryCursor: null });
   });
 });
