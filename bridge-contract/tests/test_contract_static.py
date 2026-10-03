@@ -212,3 +212,22 @@ def test_agent_step_failed_evidence_matches_the_checked_in_real_core_fixtures() 
     obs["source_schema_ref"] = {"id": "schema-1", "digest": "a" * 64, "media_type": "application/json"}
     obs["observed_at"] = "2026-10-03T12:00:00Z"
     validate("ObservationEvent", obs)
+
+
+def test_no_route_or_schema_is_marked_pending_implementation() -> None:
+    """Alias read and authoring dry-run are implemented and reviewed (agent-core pin 894fa65): the markers are gone."""
+    assert "pending-implementation" not in json.dumps(CONTRACT) + json.dumps(OPENAPI) + json.dumps(SCHEMAS)
+    assert not any(c.get("pending") for c in CONTRACT["error_codes"]["wire"].values()), "pending error codes remain"
+    for flow in (ROOT / "examples" / "flows").glob("*.json"):
+        assert "x-status" not in json.loads(flow.read_text(encoding="utf-8")), flow.name
+
+
+def test_alias_and_dry_run_goldens_cover_200_404_valid_and_invalid() -> None:
+    flow = json.loads((ROOT / "examples" / "flows" / "authoring.json").read_text(encoding="utf-8"))
+    cases = {s["case"]: s["response"]["status"] for s in flow["steps"]}
+    assert cases["alias_read"] == 200 and cases["alias_unknown_agent"] == 404
+    assert cases["dry_run_valid"] == 200 and cases["dry_run_violations"] == 200
+    valid = next(s for s in flow["steps"] if s["case"] == "dry_run_valid")["response"]["body"]
+    invalid = next(s for s in flow["steps"] if s["case"] == "dry_run_violations")["response"]["body"]
+    assert valid["valid"] is True and valid["candidate_hash"] and not valid["violations"]
+    assert invalid["valid"] is False and invalid["candidate_hash"] is None and invalid["violations"]

@@ -321,6 +321,11 @@ def flow_authoring(ex: Exchange) -> dict[str, Any]:
     ex.call("alias_bad_name", "GET", f"/core-state/aliases/{w.arm_agent}/canary", purpose="alias_read", status=422)
     base = {"schema_version": "1", "tenant_id": w.tenant, "agent_id": w.arm_agent, "base_release_id": None,
             "changes": []}
+    ex.call("dry_run_valid", "POST", "/core-authoring/dry-run", purpose="authoring_dry_run",
+            body={**base, "base_release_id": w.arm_release}, status=200, schema="CoreAuthoringDryRun",
+            doc="The base release alone is a valid candidate: valid=true, candidate_hash set, no proposal created.")
+    ex.call("dry_run_base_release_unknown", "POST", "/core-authoring/dry-run", purpose="authoring_dry_run",
+            body={**base, "base_release_id": "rel-nope"}, status=404)
     ex.call("dry_run_violations", "POST", "/core-authoring/dry-run", purpose="authoring_dry_run",
             body={**base, "changes": [{"kind": "no-such-kind", "content": {}, "docs": {}}]}, status=200,
             schema="CoreAuthoringDryRun", doc="HTTP 200 with violations is NOT success: candidate_hash is null.")
@@ -328,8 +333,8 @@ def flow_authoring(ex: Exchange) -> dict[str, Any]:
             body={**base, "tenant_id": w.other_tenant}, status=403)
     ex.call("dry_run_unknown_field", "POST", "/core-authoring/dry-run", purpose="authoring_dry_run",
             body={**base, "surprise": 1}, status=422)
-    return {"description": "PENDING shapes (x-status): alias read and authoring dry-run; regenerate when final.",
-            "x-status": "pending-implementation"}
+    return {"description": "Alias read (CAP-08) and authoring dry-run (CAP-16 L2): 200/404/422 alias cases, a valid "
+                           "dry-run (base release alone, candidate_hash set), violations and request errors."}
 
 
 FLOWS: dict[str, tuple[Callable[[Exchange], dict[str, Any]], set[str]]] = {

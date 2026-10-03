@@ -11,8 +11,8 @@ source (they are built as dicts) are declared here ONCE, with every closed list 
 codes are checked against a scan of the source: a `pulso:*` literal that is neither classified below nor listed as
 non-wire makes the build fail, so a new error code cannot ship without a contract decision.
 
-Routes marked `x-status: pending-implementation` (alias read, authoring dry-run) are specified from V3 CAP-16/17/33
-and plan annex D until the runtime implementation lands; regenerate afterwards."""
+Alias read (CAP-08) and authoring dry-run (CAP-16 L2) are implemented and reviewed: their DTOs are generated from the
+runtime models like every other route (no `x-status` marker remains)."""
 
 from __future__ import annotations
 
@@ -34,7 +34,6 @@ if str(SRC_ROOT) not in sys.path:
 
 CONTRACT_REVISION = "pulso-two-teams-1"
 CONTRACT_SCHEMA_VERSION = "1"
-PENDING = "pending-implementation"
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -69,7 +68,7 @@ WIRE_CODES: dict[str, dict[str, Any]] = {
                          "doc": "Other framework-level HTTP error (e.g. method not allowed)."},
     "pulso:internal_error": {"status": [500], "retryable": True, "routes": [ALL], "doc": "Unhandled bridge error."},
     "pulso:not_implemented": {"status": [501], "retryable": False, "routes": [ALL],
-                              "doc": "Route authenticated but no handler is wired (pending routes)."},
+                              "doc": "Route authenticated but no handler is wired."},
     "pulso:payload_too_large": {"status": [413], "retryable": False, "routes": [ALL],
                                 "doc": "Body > MAX_BODY_BYTES (declared length or actual bytes)."},
     # invoke / read
@@ -147,16 +146,14 @@ WIRE_CODES: dict[str, dict[str, Any]] = {
     "pulso:binding_not_confirmed": {"status": [403], "retryable": False, "routes": [ADM], "doc": "Binding not confirmed."},
     "pulso:evaluate_disabled": {"status": [403], "retryable": False, "routes": [ADM], "doc": "evaluate_enabled=false."},
     "pulso:evaluation_context_missing": {"status": [403], "retryable": False, "routes": [ADM], "doc": "No context ref."},
-    # pending routes (V3 CAP-16/17): documented, not yet produced by the runtime
-    "pulso:compile_violation": {"status": [200], "retryable": False, "routes": [DRY], "pending": True,
-                                "doc": "Dry-run `violations` non-empty: HTTP 200 with violations is NOT success."},
-    "pulso:dry_run_unavailable": {"status": [503], "retryable": True, "routes": [DRY], "pending": True,
+    # authoring routes (V3 CAP-16/17/08)
+    "pulso:dry_run_unavailable": {"status": [503], "retryable": True, "routes": [DRY],
                                   "doc": "The dry-run engine is unavailable."},
-    "pulso:base_release_unknown": {"status": [404], "retryable": False, "routes": [DRY], "pending": True,
+    "pulso:base_release_unknown": {"status": [404], "retryable": False, "routes": [DRY],
                                    "doc": "base_release_id does not exist for the agent."},
-    "pulso:release_settings_not_allowed": {"status": [422], "retryable": False, "routes": [DRY], "pending": True,
+    "pulso:release_settings_not_allowed": {"status": [422], "retryable": False, "routes": [DRY],
                                            "doc": "A change targets release_settings (default deny, CAP-23)."},
-    "pulso:alias_unknown": {"status": [404], "retryable": False, "routes": [ALIAS], "pending": True,
+    "pulso:alias_unknown": {"status": [404], "retryable": False, "routes": [ALIAS],
                             "doc": "Alias not set for the agent."},
 }
 
@@ -182,7 +179,7 @@ NON_WIRE_CODES: dict[str, str] = {
     "pulso:write_without_key": "tool",
 }
 # Codes the source spells without the `pulso:` prefix (derived names, e.g. `Denied("budget_unknown", 403)`).
-SCAN_SKIP_DIRS = ("authoring",)  # the pending routes' own package: classified above as pending
+SCAN_SKIP_DIRS: tuple[str, ...] = ()
 
 # Receipt `reason` values (not codes). Dynamic suffix families are listed with a `*`.
 RECEIPT_REASONS = ["completed", "run_failed", "unexpected_outcome", "core_call_failed", "post_send_exception",
@@ -237,10 +234,9 @@ def scan_statuses() -> dict[str, set[int]]:
 def check_codes() -> None:
     scanned = scan_source_codes()
     known = set(WIRE_CODES) | set(NON_WIRE_CODES)
-    pending = {c for c, v in WIRE_CODES.items() if v.get("pending")}
     # task_unknown/task_in_progress are built with a ternary; always present in the scan
     missing = sorted(scanned - known)
-    stale = sorted(known - scanned - pending)
+    stale = sorted(known - scanned)
     if missing or stale:
         raise GenError(f"error-code classification drift. unclassified in src: {missing}; stale in gen.py: {stale}. "
                        "Classify the code in WIRE_CODES / NON_WIRE_CODES (gen.py).")
@@ -326,8 +322,7 @@ def build_schemas() -> dict[str, dict[str, Any]]:
     schemas["ArtifactRef"] = _schema("ArtifactRef", _obj(["id", "digest", "media_type"], {
         "id": S, "digest": S, "media_type": S}), "Annex D.1 ArtifactRef: treated data only, never a path/DSN/URL.")
 
-    codes = sorted(c for c, v in WIRE_CODES.items() if not v.get("pending")) + sorted(
-        c for c, v in WIRE_CODES.items() if v.get("pending"))
+    codes = sorted(WIRE_CODES)
     schemas["ErrorEnvelope"] = _schema("ErrorEnvelope", _obj(
         ["schema_version", "code", "retryable", "trace_id", "details"], {
             "schema_version": SV1, "code": {"type": "string", "enum": codes}, "retryable": {"type": "boolean"},
@@ -494,23 +489,22 @@ def build_schemas() -> dict[str, dict[str, Any]]:
         "CX-0073/0075: ONLY a correlated audit `agent_step` with kind=failed + error_kind classifies a model "
         "dependency failure; the task receipt keeps its own outcome. Prompts/inputs never appear.")
 
-    # -- pending (V3 CAP-16/17/33, annex D) ---------------------------------------------------------------------
+    # -- alias read / authoring dry-run (V3 CAP-08/16/17/33, annex D) ---------------------------------------------------------------------
     schemas["AliasState"] = _schema("AliasState", _obj(
         ["schema_version", "agent_id", "alias", "release_id"], {
             "schema_version": SV1, "agent_id": S, "alias": {"enum": ["staging", "prod"]},
             "release_id": NULLABLE_S, "status": NULLABLE_S, "source": S,
             "observed_at": {"type": "string", "pattern": r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$"},
             "runtime_profile": S}, extra=True),
-        "PENDING (x-status): V3 CAP-08/33 AliasState; optional fields mirror the in-flight runtime implementation "
-        "and are not final.") | {"x-status": PENDING}
+        "V3 CAP-08/33 AliasState (read-only observation of an alias; no write path).")
     from pulso_core_runtime.authoring.service import ALIASES, DryRunRequest
 
     schemas["AliasState"]["properties"]["alias"] = {"enum": sorted(ALIASES)}
     dry = _from_model(DryRunRequest, "CoreAuthoringDryRunRequest",
-                      "PENDING (x-status): V3 CAP-16 L2 request (generated from authoring.service.DryRunRequest). "
+                      "V3 CAP-16 L2 request (generated from authoring.service.DryRunRequest). "
                       "More than 50 changes / 262144 canonical bytes per entity is a REG-LIMIT violation in the "
                       "response, not a 4xx.")
-    schemas["CoreAuthoringDryRunRequest"] = _inline_defs(dry) | {"x-status": PENDING}
+    schemas["CoreAuthoringDryRunRequest"] = _inline_defs(dry)
     schemas["CoreAuthoringDryRun"] = _schema("CoreAuthoringDryRun", _obj(
         ["schema_version", "violations", "candidate_hash"], {
             "schema_version": SV1, "valid": {"type": "boolean"},
@@ -520,9 +514,8 @@ def build_schemas() -> dict[str, dict[str, Any]]:
             "release_hash": {"type": ["string", "null"]}, "release_id_preview": NULLABLE_S,
             "auto_bumped": {"type": "array"}, "new_versions": {"type": "array"}, "content_hashes": {"type": "object"},
             "request_digest": SHA256_HEX, "proposal_created": {"const": False}, "runtime_profile": S}, extra=True),
-        "PENDING (x-status): V3 CAP-16/17 dry-run result. HTTP 200 with non-empty `violations` is not success "
-        "(candidate_hash null); `release_id_preview` = 'rel-' + candidate_hash[:16]; no proposal is created.") | {
-            "x-status": PENDING}
+        "V3 CAP-16/17 dry-run result. HTTP 200 with non-empty `violations` is not success "
+        "(candidate_hash null); `release_id_preview` = 'rel-' + candidate_hash[:16]; no proposal is created.")
     return schemas
 
 
@@ -546,17 +539,6 @@ def build_contract() -> dict[str, Any]:
         purposes = sorted(r.purposes)
         routes.append({"id": route_id(r.method, r.path), "method": r.method, "path": r.path, "audience": r.audience,
                        "purposes": purposes, "tenant_required": not r.purposes <= TENANT_EXEMPT})
-    routes.append({"id": ALIAS, "method": "GET", "path": "/core-state/aliases/{agent_id}/{alias}",
-                   "audience": "core-bridge", "purposes": ["alias_read"], "tenant_required": True,
-                   "x-status": PENDING, "note": "V3 CAP-33/plan 4.1 path; the runtime route table currently "
-                                                 "registers `/core-state/aliases` (see README divergences)."}
-                  if not any(x["id"] == ALIAS for x in routes) else None)
-    routes = [r for r in routes if r]
-    for r in routes:
-        if r["id"] == DRY:
-            r["x-status"] = PENDING
-        if r["id"] == ALIAS:
-            r["x-status"] = PENDING
     settings = InvokeSettings()
     return {
         "contract_revision": CONTRACT_REVISION, "schema_version": CONTRACT_SCHEMA_VERSION,

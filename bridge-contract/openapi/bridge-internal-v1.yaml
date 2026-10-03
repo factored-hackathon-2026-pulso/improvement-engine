@@ -17,8 +17,7 @@ components:
   schemas:
     AliasState:
       additionalProperties: true
-      description: 'PENDING (x-status): V3 CAP-08/33 AliasState; optional fields mirror the in-flight
-        runtime implementation and are not final.'
+      description: V3 CAP-08/33 AliasState (read-only observation of an alias; no write path).
       properties:
         agent_id:
           type: string
@@ -51,7 +50,6 @@ components:
       - release_id
       title: AliasState
       type: object
-      x-status: pending-implementation
     ArmReport:
       additionalProperties: false
       description: ArmReport. `usage=null` is 'not available'; `cost_known=false` is not free. A denied/interrupted
@@ -299,9 +297,8 @@ components:
       type: object
     CoreAuthoringDryRun:
       additionalProperties: true
-      description: 'PENDING (x-status): V3 CAP-16/17 dry-run result. HTTP 200 with non-empty `violations`
-        is not success (candidate_hash null); `release_id_preview` = ''rel-'' + candidate_hash[:16]; no
-        proposal is created.'
+      description: V3 CAP-16/17 dry-run result. HTTP 200 with non-empty `violations` is not success (candidate_hash
+        null); `release_id_preview` = 'rel-' + candidate_hash[:16]; no proposal is created.
       properties:
         auto_bumped:
           type: array
@@ -365,12 +362,10 @@ components:
       - candidate_hash
       title: CoreAuthoringDryRun
       type: object
-      x-status: pending-implementation
     CoreAuthoringDryRunRequest:
       additionalProperties: false
-      description: 'PENDING (x-status): V3 CAP-16 L2 request (generated from authoring.service.DryRunRequest).
-        More than 50 changes / 262144 canonical bytes per entity is a REG-LIMIT violation in the response,
-        not a 4xx.'
+      description: V3 CAP-16 L2 request (generated from authoring.service.DryRunRequest). More than 50
+        changes / 262144 canonical bytes per entity is a REG-LIMIT violation in the response, not a 4xx.
       properties:
         agent_id:
           maxLength: 255
@@ -422,7 +417,6 @@ components:
       - changes
       title: CoreAuthoringDryRunRequest
       type: object
-      x-status: pending-implementation
     CoreCredentialIssue:
       additionalProperties: false
       description: 'Principal JWS (typ=principal+jws), TTL <= 900 s, `Cache-Control: no-store`. Never
@@ -855,8 +849,10 @@ components:
           - pulso:admission_missing
           - pulso:admission_not_admitted
           - pulso:admission_proposal_mismatch
+          - pulso:alias_unknown
           - pulso:auth_denied
           - pulso:auth_invalid
+          - pulso:base_release_unknown
           - pulso:binding_not_confirmed
           - pulso:bridge_busy
           - pulso:broker_denied
@@ -867,6 +863,7 @@ components:
           - pulso:credential_not_issuable
           - pulso:credential_signing_unavailable
           - pulso:digest_conflict
+          - pulso:dry_run_unavailable
           - pulso:evaluate_disabled
           - pulso:evaluation_attempt_exists
           - pulso:evaluation_context_invalid
@@ -890,6 +887,7 @@ components:
           - pulso:release_drift
           - pulso:release_pin_unavailable
           - pulso:release_revoked
+          - pulso:release_settings_not_allowed
           - pulso:run_not_found
           - pulso:sandbox_required
           - pulso:stage_agent_mismatch
@@ -900,11 +898,6 @@ components:
           - pulso:task_unknown
           - pulso:tenant_mismatch
           - pulso:unknown_input_slot
-          - pulso:alias_unknown
-          - pulso:base_release_unknown
-          - pulso:compile_violation
-          - pulso:dry_run_unavailable
-          - pulso:release_settings_not_allowed
           type: string
         details:
           type: object
@@ -1732,7 +1725,7 @@ info:
   version: pulso-two-teams-1
   x-contract-revision: pulso-two-teams-1
   x-pin:
-    agent_core_sha: 789d6c89b2fca90fc10e2abf157da51dc81c5d51
+    agent_core_sha: 894fa65575d83420523f33ec1c6919b8965f7ebe
     contracts_version: 1.3.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 openapi: 3.1.0
@@ -1817,7 +1810,6 @@ paths:
         purposes:
         - authoring_dry_run
         tenant_required: true
-      x-status: pending-implementation
   /internal/v1/core-credentials/issue:
     post:
       operationId: post_issue_credential
@@ -1971,7 +1963,6 @@ paths:
         purposes:
         - alias_read
         tenant_required: true
-      x-status: pending-implementation
   /internal/v1/core-tasks/invoke:
     post:
       operationId: post_invoke

@@ -31,7 +31,6 @@ TARGET = os.environ.get("CONTRACT_TARGET", "real")
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "needs(cap): the test needs a target capability (world.caps)")
-    config.addinivalue_line("markers", "pending_route: covers a route marked x-status pending-implementation")
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

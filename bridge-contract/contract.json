@@ -203,7 +203,6 @@
       },
       "pulso:alias_unknown": {
         "doc": "Alias not set for the agent.",
-        "pending": true,
         "retryable": false,
         "routes": [
           "read_alias"
@@ -234,7 +233,6 @@
       },
       "pulso:base_release_unknown": {
         "doc": "base_release_id does not exist for the agent.",
-        "pending": true,
         "retryable": false,
         "routes": [
           "authoring_dry_run"
@@ -305,17 +303,6 @@
           409
         ]
       },
-      "pulso:compile_violation": {
-        "doc": "Dry-run `violations` non-empty: HTTP 200 with violations is NOT success.",
-        "pending": true,
-        "retryable": false,
-        "routes": [
-          "authoring_dry_run"
-        ],
-        "status": [
-          200
-        ]
-      },
       "pulso:core_unavailable": {
         "doc": "Core not reachable.",
         "retryable": true,
@@ -358,7 +345,6 @@
       },
       "pulso:dry_run_unavailable": {
         "doc": "The dry-run engine is unavailable.",
-        "pending": true,
         "retryable": true,
         "routes": [
           "authoring_dry_run"
@@ -523,7 +509,7 @@
         ]
       },
       "pulso:not_implemented": {
-        "doc": "Route authenticated but no handler is wired (pending routes).",
+        "doc": "Route authenticated but no handler is wired.",
         "retryable": false,
         "routes": [
           "*"
@@ -606,7 +592,6 @@
       },
       "pulso:release_settings_not_allowed": {
         "doc": "A change targets release_settings (default deny, CAP-23).",
-        "pending": true,
         "retryable": false,
         "routes": [
           "authoring_dry_run"
@@ -761,7 +746,7 @@
     "result_cap_bytes": 262144
   },
   "pin": {
-    "agent_core_sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51",
+    "agent_core_sha": "894fa65575d83420523f33ec1c6919b8965f7ebe",
     "contracts_version": "1.3.0"
   },
   "receipt_reasons": [
@@ -846,8 +831,7 @@
       "purposes": [
         "authoring_dry_run"
       ],
-      "tenant_required": true,
-      "x-status": "pending-implementation"
+      "tenant_required": true
     },
     {
       "audience": "core-bridge",
@@ -867,8 +851,7 @@
       "purposes": [
         "alias_read"
       ],
-      "tenant_required": true,
-      "x-status": "pending-implementation"
+      "tenant_required": true
     },
     {
       "audience": "core-bridge",

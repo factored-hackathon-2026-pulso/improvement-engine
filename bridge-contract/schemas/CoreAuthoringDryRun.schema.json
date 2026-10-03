@@ -2,7 +2,7 @@
   "$id": "CoreAuthoringDryRun.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
-  "description": "PENDING (x-status): V3 CAP-16/17 dry-run result. HTTP 200 with non-empty `violations` is not success (candidate_hash null); `release_id_preview` = 'rel-' + candidate_hash[:16]; no proposal is created.",
+  "description": "V3 CAP-16/17 dry-run result. HTTP 200 with non-empty `violations` is not success (candidate_hash null); `release_id_preview` = 'rel-' + candidate_hash[:16]; no proposal is created.",
   "properties": {
     "auto_bumped": {
       "type": "array"
@@ -93,6 +93,5 @@
     "candidate_hash"
   ],
   "title": "CoreAuthoringDryRun",
-  "type": "object",
-  "x-status": "pending-implementation"
+  "type": "object"
 }

@@ -2,7 +2,7 @@
   "$id": "AliasState.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
-  "description": "PENDING (x-status): V3 CAP-08/33 AliasState; optional fields mirror the in-flight runtime implementation and are not final.",
+  "description": "V3 CAP-08/33 AliasState (read-only observation of an alias; no write path).",
   "properties": {
     "agent_id": {
       "type": "string"
@@ -47,6 +47,5 @@
     "release_id"
   ],
   "title": "AliasState",
-  "type": "object",
-  "x-status": "pending-implementation"
+  "type": "object"
 }

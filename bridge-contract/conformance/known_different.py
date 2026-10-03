@@ -36,7 +36,7 @@ DIVERGENCES: dict[str, str] = {
     "MOCK-GOLDEN": "the goldens are recorded from the runtime: every step the mock answers with its own DTO/codes "
                    "differs (see the other MOCK-* ids); flows the mock cannot run are skipped by capability",
     "MOCK-DRYRUN": "mock dry-run request/closed-DTO and tenant-mismatch handling differ from the runtime's "
-                   "(bare codes, 400 for schema errors)",
+                   "(bare codes, 400 for schema errors, no base-release existence check: unknown base is a 200)",
 }
 
 
@@ -85,7 +85,8 @@ MOCK |= _group("MOCK-CRED", "test_credential_issue_succeeds_for_policy_rows",
 MOCK |= _group("MOCK-ALIAS", "test_alias_read_returns_a_valid_alias_state",
                "test_alias_read_of_an_unknown_agent_is_404_alias_unknown", "test_alias_name_outside_staging_prod_is_422")
 MOCK |= _group("MOCK-GOLDEN", "test_golden_flow")
-MOCK |= _group("MOCK-DRYRUN", "test_dry_run_body_tenant_must_equal_the_claim", "test_dry_run_request_is_a_closed_dto")
+MOCK |= _group("MOCK-DRYRUN", "test_dry_run_body_tenant_must_equal_the_claim", "test_dry_run_request_is_a_closed_dto",
+               "test_dry_run_with_an_unknown_base_release_is_404_base_release_unknown")
 
 KNOWN_DIFFERENT: dict[str, dict[str, tuple[str, str]]] = {"real": {}, "mock": MOCK}
 

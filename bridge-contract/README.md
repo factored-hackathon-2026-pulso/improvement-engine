@@ -13,7 +13,7 @@ double.
 | Conformance suite | `conformance/` | hand-written, schema-driven |
 | Mock-vs-contract divergence report | `divergences/mock-vs-contract.json` | `divergence.py` |
 
-`contract_revision = pulso-two-teams-1`. Our pin: agent-core `789d6c89b2fca90fc10e2abf157da51dc81c5d51`, contracts
+`contract_revision = pulso-two-teams-1`. Our pin: agent-core `894fa65575d83420523f33ec1c6919b8965f7ebe`, contracts
 `1.3.0` (the constants of `pulso_core_runtime`; `GET /version` must report exactly these). Adding replies or journal
 entries does not bump the wire; a DTO, code, limit or auth change does (see "Change policy").
 
@@ -85,12 +85,13 @@ checks (`tests/test_mock_divergence.py`, `conformance/test_golden_flows.py`).
 
 * `contract_revision` names the agreed wire (`pulso-two-teams-1`). The OpenAPI `info.version` carries it.
 * **Compatible (no bump):** new optional response fields inside documented `additionalProperties: true` objects, new
-  examples, clarified docs, new pending routes.
+  examples, clarified docs, new routes.
 * **Breaking (needs a journal entry accepted by both teams and a new revision):** a new required request field, a
   removed/renamed field, a new status for an existing code, a changed limit/TTL/purpose/claim, a new member of a closed
   list that the client must handle (a new error code, a new receipt state), a changed idempotency formula.
-* Routes/DTOs marked `x-status: pending-implementation` (alias read, authoring dry-run) are specified from V3
-  CAP-08/16/17/33 and mirror the runtime's in-flight implementation; they are not frozen until the marker is removed.
+* Alias read and authoring dry-run are implemented, reviewed and frozen like every other route (the former
+  `x-status: pending-implementation` markers are gone; the never-emitted `pulso:compile_violation` code was dropped:
+  violations travel inside the HTTP 200 body).
 * Our pin changes only with the agent-core pin bump; `GET /version` is the runtime check, `contract.json.pin` the
   expected value.
 
@@ -110,8 +111,8 @@ payload `iss=control-api, aud=core-bridge, sub=worker:<id>, tenant_id, purpose, 
 | `POST /evaluation/arms/run` (also `/{arm_id}/run`) | `evaluation_arm_run` | `ArmRequest` (closed: no oracle/gold fields); the key is `body.idempotency_key` | `200` `ArmReport` (a failure INSIDE the run is `status=failed_infra`/`candidate_failed`/`unknown` with `reason`, not an HTTP error); `409 idempotency_conflict\|mixed_world_rejected\|sandbox_required\|supersedes_invalid`; after a timeout read back, never re-run |
 | `GET /evaluation/arms/{execution_id}` and `/by-key/{key}` | `evaluation_arm_read` | `execution_id = arm-sha256_hex(tenant\|key)[:32]` | `200` the stored report (an interrupted run reads back `unknown`), `404` |
 | `GET /version` | `version_probe` (no tenant claim needed) | nothing | `CoreVersion`; compare `agent_core_sha`/`contracts_version` with the pin; `doubles` must be empty in a real deployment |
-| `GET /core-state/aliases/{agent_id}/{alias}` (pending) | `alias_read` | alias in `staging\|prod` | `AliasState`, `404 alias_unknown`, `422` |
-| `POST /core-authoring/dry-run` (pending) | `authoring_dry_run` | `CoreAuthoringDryRunRequest` (tenant in body == claim) | `200` with non-empty `violations` is NOT success (`candidate_hash` null); `release_id_preview = "rel-" + candidate_hash[:16]` |
+| `GET /core-state/aliases/{agent_id}/{alias}` | `alias_read` | alias in `staging\|prod` | `AliasState`, `404 alias_unknown`, `422` |
+| `POST /core-authoring/dry-run` | `authoring_dry_run` | `CoreAuthoringDryRunRequest` (tenant in body == claim) | `200` with non-empty `violations` is NOT success (`candidate_hash` null); `release_id_preview = "rel-" + candidate_hash[:16]` |
 
 Receipt state machine (`contract.json.receipt_state_machine`): `prepared -> sent -> binding_confirmed ->
 terminal_ok | terminal_failed`, with `unknown` and `manual_reconcile` reachable after `sent`; terminal states have no
@@ -128,7 +129,7 @@ the task receipt keeps its own outcome.
 ```text
 gen.py  divergence.py  contract.json  openapi/  schemas/  examples/flows/  divergences/
 conformance/   kit.py (signer, JCS, schemas, client)  conftest.py  known_different.py  flows.py (golden flows)
-               test_auth.py test_validation.py test_invoke.py test_evaluation.py test_pending.py test_golden_flows.py
+               test_auth.py test_validation.py test_invoke.py test_evaluation.py test_authoring.py test_golden_flows.py
                worlds/ real.py (in-process runtime + PG16)  mock.py  external.py
 tests/         test_gen_drift.py  test_contract_static.py  test_mock_divergence.py
 ```

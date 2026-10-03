@@ -2,7 +2,7 @@
   "$id": "CoreAuthoringDryRunRequest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "PENDING (x-status): V3 CAP-16 L2 request (generated from authoring.service.DryRunRequest). More than 50 changes / 262144 canonical bytes per entity is a REG-LIMIT violation in the response, not a 4xx.",
+  "description": "V3 CAP-16 L2 request (generated from authoring.service.DryRunRequest). More than 50 changes / 262144 canonical bytes per entity is a REG-LIMIT violation in the response, not a 4xx.",
   "properties": {
     "agent_id": {
       "maxLength": 255,
@@ -77,6 +77,5 @@
     "changes"
   ],
   "title": "CoreAuthoringDryRunRequest",
-  "type": "object",
-  "x-status": "pending-implementation"
+  "type": "object"
 }
