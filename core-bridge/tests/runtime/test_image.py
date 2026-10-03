@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import re
 import subprocess
@@ -138,9 +140,6 @@ def test_build_image_cleans_up_its_context() -> None:
 
 
 # ---- key delivery from env (Fargate-injected secrets, ADR 0009) ----
-
-import base64
-import json
 
 
 def _b64(b: bytes) -> str:
