@@ -1,8 +1,13 @@
 # Cumulative implementation status
 
-This document is the entry point for the long-lived cumulative implementation
-PR. It distinguishes merged capability from work in progress; it never treats a
-green unit test as proof that a broader product flow is complete.
+This document describes capabilities present in the consolidated code tree.
+It distinguishes an implemented boundary from an integrated product flow;
+a green unit test does not prove the broader product is complete.
+
+PRs #69 and #71 originally merged into feature branches after their parent PRs
+had already merged into main. The restore-main consolidation ports their unique
+commits onto main's #68 baseline, preserving unrelated main capabilities and
+repairing the malformed/duplicated source privacy fixture. See journal 0055.
 
 ## Integrated into `main`
 
@@ -18,7 +23,7 @@ green unit test as proof that a broader product flow is complete.
   receipts. Its present in-memory adapter is not production-durability proof;
   the U33 corrective slice covers an overflow atomicity regression.
 
-## Implemented in the cumulative branch (not yet merged)
+## Implemented boundaries and remaining integration limits
 
 - U07 durable V2 run-event persistence: new `pulso_jobs` / `pulso_run_events`
   migration and PostgreSQL ledger atomically compare-and-sets a child job

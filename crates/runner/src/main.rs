@@ -472,7 +472,6 @@ struct Options {
     observed_cutoff: String,
     arranque_cases: usize,
     minimum_recurring_query_support: u64,
-    minimum_contact_cell_count: u64,
     progress_jsonl: bool,
     help: bool,
 }
@@ -488,7 +487,6 @@ impl Options {
             observed_cutoff: "".into(),
             arranque_cases: 200,
             minimum_recurring_query_support: 20,
-            minimum_contact_cell_count: 5,
             progress_jsonl: false,
             help: false,
         };
@@ -553,7 +551,7 @@ impl Options {
 
 fn print_help() {
     println!(
-        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20] [--min-contact-cell-count 5] [--progress-jsonl]"
+        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20] [--progress-jsonl]"
     );
 }
 
@@ -666,7 +664,7 @@ mod tests {
 
     #[test]
     fn original_contact_snapshot_counts_reach_local_motor_without_event_claims() {
-        let root = env::temp_dir().join(make_run_id().unwrap());
+        let root = env::temp_dir().join(format!("snapshot_{}", make_run_id().unwrap()));
         let table = root.join("call_center_interactions");
         fs::create_dir_all(&table).unwrap();
         fs::write(
@@ -718,7 +716,7 @@ mod tests {
 
     #[test]
     fn persistence_publishes_result_and_timeline_together_and_never_overwrites() {
-        let output = env::temp_dir().join(make_run_id().unwrap());
+        let output = env::temp_dir().join(format!("persistence_{}", make_run_id().unwrap()));
         let result = LocalRunResult {
             run_id: "run_persistence_test".into(),
             tenant_id: "pulso_local".into(),
