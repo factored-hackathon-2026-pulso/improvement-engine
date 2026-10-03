@@ -16,8 +16,11 @@ if ($head -ne $PinSha) { Write-Error "pulso:image_build_failed checkout HEAD $he
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Resolve-Path (Join-Path $here '..')
 $pulso = (git -C $root rev-parse --short=7 HEAD).Trim()
+# Upstream's .dockerignore excludes `contracts` (and tests/docs): build from a clean `git archive` context instead.
+$ctx = (& (Join-Path $here 'prepare-core-context.ps1') -Checkout $Checkout -PinSha $PinSha | Select-Object -Last 1).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $ctx) { exit 2 }
 $tag = "pulso-core-runtime:$($PinSha.Substring(0,7))-$pulso"
-& $Podman --connection $Connection build --build-context "core=$Checkout" --build-arg "CORE_SHA=$PinSha" `
+& $Podman --connection $Connection build --build-context "core=$ctx" --build-arg "CORE_SHA=$PinSha" `
     --build-arg "PULSO_SHA=$pulso" -f (Join-Path $root 'Dockerfile') -t $tag $root
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $id = (& $Podman --connection $Connection image inspect $tag --format '{{.Id}}').Trim()

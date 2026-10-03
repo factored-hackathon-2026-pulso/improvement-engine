@@ -78,3 +78,31 @@ def test_entrypoint_offers_exactly_the_modules_that_exist() -> None:
     assert (src / "main.py").is_file() and (src / "exporter" / "__main__.py").is_file()
     for gone in ("seed", "bootstrap", "sweep"):
         assert gone not in script.split("case", 1)[1]
+
+
+def test_build_context_is_prepared_without_upstream_dockerignore() -> None:
+    """agent-core 789d6c8 ships a .dockerignore that excludes `contracts`; the build must not depend on it."""
+    script = (Path(__file__).resolve().parents[2] / "scripts" / "build-image.ps1").read_text()
+    assert "prepare-core-context.ps1" in script and "core=$ctx" in script and "core=$Checkout" not in script
+
+
+def test_prepare_core_context_exports_contracts_version(tmp_path: Path) -> None:
+    import os
+    import shutil
+    import subprocess
+
+    checkout = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-789d6c8"))
+    pwsh = shutil.which("pwsh")
+    if pwsh is None or not (checkout / ".git").exists():
+        pytest.skip("pwsh or the pinned checkout is not available")
+    sha = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    script = Path(__file__).resolve().parents[2] / "scripts" / "prepare-core-context.ps1"
+    out = tmp_path / "ctx"
+    r = subprocess.run([pwsh, "-NoProfile", "-File", str(script), "-Checkout", str(checkout), "-PinSha", sha, "-Out", str(out)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert (out / "contracts" / "VERSION").is_file() and not (out / ".dockerignore").exists()
+    assert (out / "pyproject.toml").is_file() and (out / "uv.lock").is_file()
+    bad = subprocess.run([pwsh, "-NoProfile", "-File", str(script), "-Checkout", str(checkout), "-PinSha", "0" * 40,
+                          "-Out", str(tmp_path / "x")], capture_output=True, text=True)
+    assert bad.returncode != 0

@@ -10,7 +10,8 @@
     "Core PostgreSQL 16 is REAL (throwaway container)"
   ],
   "failed": [],
-  "not_run": [
+  "not_run": [],
+  "passed": [
     "tests/l6/test_exporter.py::test_401_stops_partition_and_keeps_pending",
     "tests/l6/test_exporter.py::test_429_backoff_then_success_and_422_quarantine_stops",
     "tests/l6/test_exporter.py::test_audit_batches_never_span_a_utc_day",
@@ -19,6 +20,7 @@
     "tests/l6/test_exporter.py::test_exporter_role_privileges",
     "tests/l6/test_exporter.py::test_hole_filled_before_grace_is_exported_in_order",
     "tests/l6/test_exporter.py::test_large_chain_uses_chunks_and_manifest",
+    "tests/l6/test_exporter.py::test_ndjson_exact_bytes_and_chunking",
     "tests/l6/test_exporter.py::test_new_events_with_bad_hash_exclude_only_that_run",
     "tests/l6/test_exporter.py::test_outbox_exported_without_mark_delivered_and_unprojectable_registry_skipped",
     "tests/l6/test_exporter.py::test_rescan_never_advances_checkpoint_and_dedupes",
@@ -55,16 +57,13 @@
     "tests/l6/test_review.py::test_sweep_detects_content_tamper_behind_an_intact_hash_column",
     "tests/l6/test_review.py::test_token_minted_per_attempt_and_per_route_class",
     "tests/l6/test_review.py::test_two_exporters_race_on_the_same_partition",
-    "tests/l6/test_review.py::test_upload_ref_digest_mismatch_is_not_trusted"
-  ],
-  "passed": [
-    "tests/l6/test_exporter.py::test_ndjson_exact_bytes_and_chunking",
+    "tests/l6/test_review.py::test_upload_ref_digest_mismatch_is_not_trusted",
     "tests/l6/test_runner.py::test_loop_schedules_poll_rescan_and_24h_sweep",
     "tests/l6/test_runner.py::test_loop_survives_closed_errors_and_stops",
     "tests/l6/test_runner.py::test_report_shape"
   ],
   "schema_version": "1",
-  "sha": "2c1bc83f5870c3977224e9e72c8e754f7310b2b9",
+  "sha": "8ee031d3e9bfb14ec0ea87405a4e7bd1dbc43299",
   "suite": "exporter",
   "target": "fixture"
 }

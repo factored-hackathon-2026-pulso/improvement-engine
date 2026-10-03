@@ -162,10 +162,14 @@ services:
       AGENTCORE_KEYS_FINGERPRINT: ${AGENTCORE_KEYS_FINGERPRINT:-}
       AGENTCORE_KEYS_TOKEN_MAP: ${AGENTCORE_KEYS_TOKEN_MAP:-}
       AGENTCORE_JEV_API_KEY: ${AGENTCORE_JEV_API_KEY:-}
-      # LLM gateway (agent_core LLM_ENDPOINTS: JSON {alias: {base_url, api_key_env}}); an alias's api_key_env may name
-      # PULSO_LLM_API_KEY. Empty = no endpoints. Values come from the env file, never from this repo.
-      LLM_ENDPOINTS: ${LLM_ENDPOINTS:-}
-      PULSO_LLM_API_KEY: ${PULSO_LLM_API_KEY:-}
+      # External llm-gateway (agent-core 789d6c8, POST /v1/generate): URL and token go together or not at all. With
+      # neither set the runtime starts with an UnconfiguredLLMGateway (fail closed: every generation fails `unavailable`,
+      # so task stages fail; conversational M8 falls back to templates, upstream behaviour). Values come from the env
+      # file, never from this repo. LLM_ENDPOINTS/PULSO_LLM_API_KEY no longer exist upstream.
+      AGENTCORE_LLM_GATEWAY_URL: ${AGENTCORE_LLM_GATEWAY_URL:-}
+      AGENTCORE_LLM_GATEWAY_TOKEN: ${AGENTCORE_LLM_GATEWAY_TOKEN:-}
+      # Static budget file for evaluation (path inside the container; empty = every budget_ref fails closed).
+      PULSO_EVAL_BUDGETS: ${PULSO_EVAL_BUDGETS:-}
     volumes:
       - core-keys:/run/pulso-keys:ro
     depends_on:
