@@ -91,8 +91,11 @@ def build_handlers(deps: EvaluationDeps) -> dict[str, Callable[[Request, Claims]
         job_id = str(claims.raw.get("job_id", ""))
         if not tenant or not job_id:
             return _err("pulso:auth_denied", 403)
-        derived = derive_context_ref(tenant, job_id, body.binding_ref, body.proposal_id, body.candidate_hash,
-                                     body.evaluation_attempt)
+        try:
+            derived = derive_context_ref(tenant, job_id, body.binding_ref, body.proposal_id, body.candidate_hash,
+                                         body.evaluation_attempt)
+        except ValueError:
+            return _err("pulso:invalid_request", 422)  # a `|` in a field would let two admissions share one ref
         if body.evaluation_context_ref is not None and body.evaluation_context_ref != derived:
             return _err("pulso:evaluation_context_invalid", 422)  # client-chosen refs are not annex D.4
         body = body.model_copy(update={"evaluation_context_ref": derived})

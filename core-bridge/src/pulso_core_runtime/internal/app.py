@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -76,6 +77,22 @@ async def _read_capped(request: Request) -> bool:
     return True
 
 
+def _unparsable_depth(request: Request) -> bool:
+    """Parses the buffered body once for every handler (`request.json()` reuses it). Pathological nesting raises
+    `RecursionError`, which is not a `ValueError` and would surface as a 500; ordinary malformed JSON is left to
+    each handler's own 422."""
+    body = getattr(request, "_body", b"")
+    if not body:
+        return False
+    try:
+        request._json = json.loads(body)
+    except RecursionError:
+        return True
+    except ValueError:
+        pass
+    return False
+
+
 def build_internal_app(verifier: ServiceJwtVerifier, *, version_info: Callable[[], dict[str, Any]],
                        handlers: dict[str, Callable[[Request, Claims], Any]] | None = None,
                        l3: Any | None = None, allowed_tenants: frozenset[str] | None = None) -> FastAPI:
@@ -123,8 +140,13 @@ def build_internal_app(verifier: ServiceJwtVerifier, *, version_info: Callable[[
             handler = route.handler or handlers.get(f"{route.method} {route.path}")
             if handler is None:
                 return envelope("pulso:not_implemented", trace_id=trace, status=501)
+            if len(request.headers.getlist("idempotency-key")) > 1:  # two keys is ambiguous: never pick one
+                return envelope("pulso:invalid_request", trace_id=trace, details={"fields": ["Idempotency-Key"]},
+                                status=422)
             if not await _read_capped(request):
                 return envelope("pulso:payload_too_large", trace_id=trace, status=413)
+            if _unparsable_depth(request):
+                return envelope("pulso:invalid_request", trace_id=trace, status=422)
             result = handler(request, claims)
             if hasattr(result, "__await__"):
                 result = await result

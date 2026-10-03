@@ -33,6 +33,9 @@ def derive_context_ref(tenant_id: str, job_id: str, binding_ref: str, proposal_i
     """Annex D.4: the bridge, not the client, names an admission. `evc-` + the first 40 hex of
     `sha256('{tenant}|{job}|{binding}|{proposal}|{candidate_hash}|{attempt}')`; deterministic, so a replayed
     admission is the same admission and Rust can compute it before dispatch."""
+    fields = [tenant_id, job_id, binding_ref, proposal_id, candidate_hash]
+    if any("|" in f for f in fields):  # the joined string must be unambiguous: refuse the delimiter in a field
+        raise ValueError("evaluation context field contains the `|` delimiter")
     raw = "|".join([tenant_id, job_id, binding_ref, proposal_id, candidate_hash, str(evaluation_attempt)])
     return "evc-" + hashlib.sha256(raw.encode()).hexdigest()[:40]
 
