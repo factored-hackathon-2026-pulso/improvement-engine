@@ -1,12 +1,13 @@
 """The seven `module:attr` factories passed to `resolve_ports` (called as `fn(DemoContext)`).
 
 Core lists none of them in `ServePorts.doubles` outside demo, so stand-ins are reported by us through
-`STAND_INS` (-> `/internal/v1/version.doubles[]`). Every factory is fail-closed."""
+`stand_ins()` (-> `/internal/v1/version.doubles[]`). Every factory is fail-closed. `tools` is the L3b dispatcher
+(`tools.factory.tools`), backed by the `ToolRuntime` that `main._compose` configures before `resolve_ports`."""
 
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -14,15 +15,15 @@ from agent_core.composition.serve_ports import DemoContext
 from agent_core.decision.calibration.artifact import CalibrationArtifact, DirectoryCalibrationSource
 from agent_core.decision.providers.classifier import ClassifierProvider
 from agent_core.decision.types import ProviderError
-from agent_core.domain import EntityRef, JsonValue, ToolDef
 from agent_core.domain.entities import Agent
 from agent_core.domain.identity import OnBehalfOf, Principal, PrincipalType, SubjectRef
 from agent_core.domain.knowledge import KnowledgeView, Purpose
-from agent_core.domain.shared import ToolStatus, TranscriptEntry
-from agent_core.ports import AuthzDecision, ToolCallContext, ToolResult
-from agent_core.ports.ids import IdKind
+from agent_core.domain.shared import TranscriptEntry
+from agent_core.ports import AuthzDecision
 from agent_core.views import FieldClassifier
 from agent_core.views.classification import FieldRule
+
+from pulso_core_runtime.tools.factory import tools  # noqa: F401  (`pulso_core_runtime.factories:tools`)
 
 # (factory attribute, public name). The closed set of seven pieces.
 FACTORIES: tuple[tuple[str, str], ...] = (
@@ -32,40 +33,28 @@ FACTORIES: tuple[tuple[str, str], ...] = (
 FACTORY_NAMES: tuple[str, ...] = tuple(name for _, name in FACTORIES)
 DEFAULT_PATHS: dict[str, str] = {name: f"pulso_core_runtime.factories:{attr}" for attr, name in FACTORIES}
 
-# Pieces that are stand-ins in this build (reported in version.doubles[]). L3 removes `tools` when its
-# `pulso/*` handlers land.
-STAND_INS: dict[str, str] = {"tools": "no pulso/* handlers registered (L3)"}
 
-BUILDER_ROLES = frozenset({"constructor", "aprobador"})
+def stand_ins(env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Pieces that are stand-ins in THIS process (reported in `/internal/v1/version.doubles[]`). Computed from the
+    real configuration, never hard-coded: a piece disappears from the list only when its real backing exists."""
+    env = os.environ if env is None else env
+    out: dict[str, str] = {
+        "transcript": "null transcript (task-only runtime: conversational runs are rejected)",
+        "grant-active": "always false (no grant lookup; subject/OBO flows unsupported)"}
+    if not Path(env.get("PULSO_CALIBRATIONS_DIR") or "/opt/pulso/assets/calibrations").is_dir():
+        out["calibration"] = "calibrations directory absent (live decision path blocked)"
+    if not Path(env.get("PULSO_CLASSIFIER_DIR") or "/opt/pulso/assets/classifiers").is_dir():
+        out["classifier"] = "classifier assets directory absent"
+    return out
+
+
+BUILDER_ROLES = frozenset({"constructor", "aprobador", "stage_task"})
 REPORTABLE_ATTRS = frozenset({"stage", "pin_release_id"})
-
-ToolHandler = Callable[[dict[str, JsonValue], ToolCallContext], ToolResult]
-
-
-class PulsoToolDispatcher:
-    """Dispatch by `tool.id@version` to registered `pulso/*` handlers; unknown -> `error unregistered_tool`."""
-
-    def __init__(self, ctx: DemoContext, handlers: dict[str, ToolHandler] | None = None) -> None:
-        self._registry, self._ids = ctx.registry, ctx.ids
-        self._handlers = dict(handlers or {})
-
-    def register(self, tool_key: str, handler: ToolHandler) -> None:
-        self._handlers[tool_key] = handler
-
-    def execute(self, tool: EntityRef, args: dict[str, JsonValue], bound_params: dict[str, str],
-                ctx: ToolCallContext, idempotency_key: str | None = None) -> ToolResult:
-        handler = self._handlers.get(f"{tool.id}@{tool.version}")
-        if handler is None:
-            return ToolResult(status=ToolStatus.error, error="unregistered_tool",
-                              call_id=self._ids.new_id(IdKind.call))
-        return handler(args, ctx)
-
-    def definition(self, tool: EntityRef) -> ToolDef:
-        return self._registry.get(tool, ToolDef)
 
 
 class PulsoAuthz:
-    """Admits builder principals carrying a stage role; never a subject; closed reportable attrs."""
+    """Admits builder principals carrying a stage role (`stage_task` for scout/verifier/builder_design,
+    `constructor` for the writer); never a subject; closed reportable attrs."""
 
     def authorize_agent(self, principal: Principal, agent: Agent, subject: SubjectRef | None) -> AuthzDecision:
         if principal.type is not PrincipalType.builder:
@@ -147,10 +136,6 @@ LAB_CATALOG: dict[str, FieldRule] = {
     "amount": FieldRule(field_class="financial"),
     "free_text": FieldRule(field_class="untrusted_text"),
 }
-
-
-def tools(ctx: DemoContext) -> PulsoToolDispatcher:
-    return PulsoToolDispatcher(ctx)
 
 
 def authz(ctx: DemoContext) -> PulsoAuthz:

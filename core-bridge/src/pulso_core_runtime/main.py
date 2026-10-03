@@ -19,10 +19,14 @@ from pulso_core_runtime.errors import (
     DemoDoubleInRealMode,
     RuntimeConfigError,
 )
-from pulso_core_runtime.factories import DEFAULT_PATHS, FACTORIES, FACTORY_NAMES, STAND_INS
+from pulso_core_runtime.factories import DEFAULT_PATHS, FACTORIES, FACTORY_NAMES, stand_ins
 
 DEMO_ENV = "AGENTCORE_ALLOW_DEMO"
 KEYS_DIR = "/run/pulso-keys"
+# (env var, default file stem under KEYS_DIR): the bridge's own private signers (see `invoke.wiring.build_l3`).
+SIGNER_FILES: tuple[tuple[str, str], ...] = (
+    ("PULSO_BRIDGE_IDENTITY_SIGNER", "bridge-identity"), ("PULSO_BRIDGE_STAFF_SIGNER", "bridge-staff"),
+    ("PULSO_BRIDGE_CALLBACK_SIGNER", "bridge-callback"))
 
 
 def preflight(env: Mapping[str, str]) -> None:
@@ -57,12 +61,13 @@ def synthesise_args(env: Mapping[str, str], paths: Mapping[str, str]) -> argpars
     return argparse.Namespace(**ns)
 
 
-def version_info(env: Mapping[str, str]) -> Callable[[], dict[str, Any]]:
+def version_info(env: Mapping[str, str], doubles: list[str] | None = None) -> Callable[[], dict[str, Any]]:
     def info() -> dict[str, Any]:
         return {"agent_core_sha": PIN_SHA, "contracts_version": CONTRACTS_VERSION,
                 "pulso_sha": env.get("PULSO_SHA", "unknown"), "image_digest": env.get("PULSO_IMAGE_DIGEST", "unknown"),
                 "runtime_profile": "agent_core_real",
-                "doubles": [f"{k}: {v}" for k, v in sorted(STAND_INS.items())]}
+                "doubles": list(doubles if doubles is not None
+                                else [f"{k}: {v}" for k, v in sorted(stand_ins(env).items())])}
     return info
 
 
@@ -79,56 +84,168 @@ def run(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = No
     return _compose(env, err, paths, serve, resolve)
 
 
+class _Lazy:
+    """Attribute proxy resolved at first use: breaks the `resolve_ports` -> factories -> L3 -> registry cycle
+    (the tool runtime must exist before `resolve_ports`, the registry only exists after it)."""
+
+    def __init__(self, holder: dict[str, Any], key: str) -> None:
+        self._holder, self._key = holder, key
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            target = self._holder[self._key]
+        except KeyError:
+            raise RuntimeError(f"runtime piece `{self._key}` is not composed yet") from None
+        return getattr(target, name)
+
+
+def _required_urls(env: Mapping[str, str]) -> list[str]:
+    return [f"{var} is empty" for var in ("PULSO_LAB_BROKER_URL", "PULSO_CONTROL_API_URL")
+            if not env.get(var, "").strip()]
+
+
+def _constructor_principal(ic: Any) -> Any:
+    """Bot constructor principal of the writer (never the run principal): `pulso-constructor:<tenant>`."""
+    from datetime import UTC, datetime, timedelta
+
+    from agent_core.domain.identity import AuthInfo, AuthLevel, Principal, PrincipalType
+
+    now = datetime.now(UTC)
+    return Principal(type=PrincipalType.builder, id=f"pulso-constructor:{ic.tenant_id}", roles=["constructor"],
+                     attrs={"tenant": ic.tenant_id}, auth=AuthInfo(level=AuthLevel.session, at=now),
+                     exp=now + timedelta(minutes=15))
+
+
+def _path(value: str | None) -> Path | None:
+    return Path(value) if value else None
+
+
+def _wiring_stand_ins(budgets: Any) -> dict[str, str]:
+    """Stand-ins decided by the composition itself (not by a factory)."""
+    out = {"evaluation-sandbox": "absent: task arm modes are refused (`sandbox_required`); native arms only",
+           "arm-artifact-port": "absent: arm scenario manifests cannot be fetched (`manifest_missing`)"}
+    out["eval-budgets"] = ("static file resolver (control-api budget contract not defined)" if budgets.configured
+                           else "no PULSO_EVAL_BUDGETS file: every budget_ref resolves to None (fails closed)")
+    return out
+
+
+def _fail(err: TextIO, *problems: str) -> int:
+    print("pulso-core-runtime cannot start:", file=err)
+    for problem in problems:
+        print(f"  - pulso:runtime_config_invalid: {problem}", file=err)
+    return EXIT_CONFIG
+
+
 def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Callable[..., None] | None,
              resolve: Callable[..., Any] | None) -> int:
+    import psycopg
     from agent_core.adapters.system_clock import SystemClock
     from agent_core.api.app import create_app
     from agent_core.api.limits import RateLimitConfig
     from agent_core.composition.observability import ObservabilityConfigError, setup_observability
     from agent_core.composition.serve import GATEWAY_TRACER, build_api_deps
     from agent_core.composition.serve_ports import ServeConfigError, resolve_ports
-    from agent_core.composition.serve_registry import build_registry_service_for_serve
     from agent_core.composition.telemetry import OtelTurnTelemetry
 
+    from pulso_core_runtime.adapters import (
+        BrokerAuthPort,
+        EvalTranscript,
+        NoArtifactPort,
+        ServiceWriteProbe,
+        SpendMeteringGateway,
+        StaticBudgetResolver,
+    )
+    from pulso_core_runtime.evaluation.arms import ArmRunner
+    from pulso_core_runtime.evaluation.native import EvaluationGate
+    from pulso_core_runtime.evaluation.report import PgArmStore, ensure_eval_schema
+    from pulso_core_runtime.evaluation.routes import EvaluationDeps
+    from pulso_core_runtime.evaluation.routes import register as register_evaluation
+    from pulso_core_runtime.evaluation.targets import TargetLoader
     from pulso_core_runtime.ids import PulsoIds
     from pulso_core_runtime.internal.app import build_internal_app
     from pulso_core_runtime.internal.auth import ServiceJwtVerifier, load_service_keys
-    from pulso_core_runtime.internal.store import PgJtiStore
+    from pulso_core_runtime.internal.store import PgJtiStore, ensure_schema
+    from pulso_core_runtime.invoke.wiring import build_l3, install_tools
     from pulso_core_runtime.pin import PinnedRegistryPort
     from pulso_core_runtime.readiness import bridge_schema_check, factories_ok_check, key_files_check
+    from pulso_core_runtime.registry_service import FlowEvaluationGate, build_evaluation_runtime
+    from pulso_core_runtime.tools.factory import protected_builder_factory
+    from pulso_core_runtime.tools.guard import BindingGuardGateway, BindingGuardProvider
 
     try:
         observability = setup_observability(env)
     except ObservabilityConfigError as exc:
-        print("pulso-core-runtime cannot start:", file=err)
-        for problem in exc.problems:
-            print(f"  - pulso:runtime_config_invalid: {problem}", file=err)
-        return EXIT_CONFIG
+        return _fail(err, *exc.problems)
     try:
         args = synthesise_args(env, paths)
+        dsn = env.get("AGENTCORE_REGISTRY_DSN", "")
+        eval_dsn = env.get("AGENTCORE_EVAL_DSN", "")
+        service_path = Path(env.get("PULSO_SERVICE_KEYS", f"{KEYS_DIR}/service.json"))
+        signer_paths = [Path(env.get(var, f"{KEYS_DIR}/{name}.json")) for var, name in SIGNER_FILES]
+        key_paths = [args.identity_keys, args.staff_keys, service_path, *signer_paths]
+        try:
+            service_keys = load_service_keys(service_path)
+        except ValueError as exc:
+            print(f"pulso-core-runtime cannot start: pulso:runtime_config_invalid: {exc}", file=err)
+            return EXIT_CONFIG
+        missing = _required_urls(env)
+        if missing:
+            return _fail(err, *missing)
+
+        holder: dict[str, Any] = {}
+        # Bridge schemas + migrations (idempotent, advisory-locked) before anything can take traffic.
+        try:
+            ensure_schema(dsn)
+            ensure_eval_schema(dsn)
+            l3 = build_l3(env, dsn=dsn, registry=_Lazy(holder, "registry"), app_getter=lambda: holder["app"],
+                          migrate=True, writes=ServiceWriteProbe(lambda: holder["service"]))
+        except psycopg.Error as exc:
+            return _fail(err, f"bridge database unavailable ({type(exc).__name__})")
+        except ValueError as exc:  # signer file unreadable: names the file, never the value
+            print(f"pulso-core-runtime cannot start: {exc}", file=err)
+            return EXIT_CONFIG
+        # The tool runtime must exist BEFORE `resolve_ports` calls `factories.tools`; its builder factory is
+        # late-bound (the registry service needs the resolved ports).
+        tool_runtime = install_tools(l3, env, builder_factory=lambda ic: holder["builder_factory"](ic))
+
         try:
             ports = (resolve or resolve_ports)(args, env, SystemClock(), PulsoIds(),
                                                tracer=observability.tracer(GATEWAY_TRACER))
         except ServeConfigError as exc:
-            print("pulso-core-runtime cannot start:", file=err)
-            for problem in exc.problems:
-                print(f"  - pulso:runtime_config_invalid: {problem}", file=err)
-            return EXIT_CONFIG
-        dsn = env.get("AGENTCORE_REGISTRY_DSN", "")
-        service_path = Path(env.get("PULSO_SERVICE_KEYS", f"{KEYS_DIR}/service.json"))
-        key_paths = [args.identity_keys, args.staff_keys, service_path]
+            return _fail(err, *exc.problems)
+        pinned = PinnedRegistryPort(ports.registry)
+        holder["registry"] = pinned
+        ports = dataclasses.replace(ports, registry=pinned)
+
+        # Evaluation composes from the UNGUARDED gateway/providers (synthetic principals, own budget meter);
+        # only the live path below is wrapped by the binding guards.
+        broker = BrokerAuthPort(tool_runtime.broker)
+        budgets = StaticBudgetResolver(_path(env.get("PULSO_EVAL_BUDGETS")))
+        gate = EvaluationGate(permits=int(env.get("PULSO_EVAL_PERMITS", "1")))
         try:
-            service_keys = load_service_keys(key_paths[2])
+            evaluation = build_evaluation_runtime(dataclasses.replace(ports, transcript=EvalTranscript()),
+                                                  runtime_dsn=dsn, eval_dsn=eval_dsn, broker=broker,
+                                                  budgets=budgets, gate=gate)
         except ValueError as exc:
-            print(f"pulso-core-runtime cannot start: pulso:runtime_config_invalid: {exc}", file=err)
-            return EXIT_CONFIG
-        ports = dataclasses.replace(
-            ports, registry=PinnedRegistryPort(ports.registry),
-            readiness=(*ports.readiness,))
-        service = build_registry_service_for_serve(ports)  # L5 swaps in Quotas/PulsoScenarioHarness
-        deps = build_api_deps(ports, registry_service=service, telemetry=OtelTurnTelemetry())
+            return _fail(err, str(exc))
+        holder["service"] = evaluation.service
+        arms = ArmRunner(store=PgArmStore(dsn), broker=broker, artifacts=NoArtifactPort(), budgets=budgets,
+                         loader=TargetLoader(ports.registry_api.store), composition=evaluation.port._comp,
+                         gate=gate, sandbox=None)
+        holder["builder_factory"] = protected_builder_factory(
+            evaluation.service, _constructor_principal, ports.ids, l3.registry, tool_runtime.broker,
+            gate=FlowEvaluationGate(evaluation, _constructor_principal), admissions=evaluation.admissions)
+
+        live = dataclasses.replace(
+            ports, gateway=BindingGuardGateway(SpendMeteringGateway(ports.gateway, l3.registry, l3.store), l3.registry),
+            providers={name: BindingGuardProvider(p, l3.registry) for name, p in ports.providers.items()})
+        deps = build_api_deps(live, registry_service=evaluation.service, telemetry=OtelTurnTelemetry())
+        handlers: dict[str, Any] = {}
+        register_evaluation(handlers, EvaluationDeps(evaluation, arms, broker, budgets))
+        doubles = [f"{k}: {v}" for k, v in sorted({**stand_ins(env), **_wiring_stand_ins(budgets)}.items())]
+        doubles += [f"core:{name}" for name in ports.doubles]
         verifier = ServiceJwtVerifier(service_keys, PgJtiStore(dsn))
-        internal = build_internal_app(verifier, version_info=version_info(env))
+        internal = build_internal_app(verifier, version_info=version_info(env, doubles), handlers=handlers, l3=l3)
 
         def internal_extension(app: Any, authenticate: Any) -> None:
             app.mount("/internal/v1", internal)
@@ -141,6 +258,7 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
             deps, limits=RateLimitConfig(), extensions=(*deps.extensions, internal_extension),
             readiness=(*deps.readiness, *extra))
         app = create_app(deps)
+        holder["app"] = app
         if serve is None:
             import uvicorn
             serve = uvicorn.run

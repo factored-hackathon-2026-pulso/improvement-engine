@@ -27,6 +27,7 @@ markers = [
     "parity: registry-wire-contract (mock / a2 / real)",
     "runtime: L2 composed runtime (preflight, factories, pin, internal API)",
     "l3a: L3a invoke, credentials, reconcile, bridge store",
+    "integration: composed runtime (main._compose) on real PG16 with real Core",
     "pg: needs real Postgres 16 (PULSO_TEST_PG_DSN)",
 ]
 

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pulso_core_runtime.adapters import ReceiptBindingLookup, expected_write_keys
 from pulso_core_runtime.credentials.issuer import CredentialIssuer, load_signer
 from pulso_core_runtime.invoke.binding import BindingService
 from pulso_core_runtime.invoke.context import ConfirmingRegistry, InvocationRegistry
@@ -45,7 +46,7 @@ class L3:
 
 
 def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Callable[[], Any],
-             projector: FactProjector | None = None, reconciler: Reconciler | None = None,
+             projector: FactProjector | None = None, reconciler: Reconciler | None = None, writes: Any = None,
              settings: InvokeSettings | None = None, migrate: bool = True) -> L3:
     """Signer files: `PULSO_BRIDGE_IDENTITY_SIGNER` (run principals, matches `--identity-keys`),
     `PULSO_BRIDGE_STAFF_SIGNER` (registry bot, matches `--staff-keys`), `PULSO_BRIDGE_CALLBACK_SIGNER`
@@ -68,7 +69,9 @@ def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Cal
     service = InvokeService(
         store=store, core=AsgiCoreClient(app_getter), releases=RegistryReleaseChecker(registry), signer=identity,
         runs=runs, registry=inv_registry, settings=cfg, projector=projector,
-        reconciler=reconciler or Reconciler(store=store, runs=runs, projector=projector))
+        reconciler=reconciler or Reconciler(
+            store=store, runs=runs, projector=projector, writes=writes, bindings=ReceiptBindingLookup(store),
+            expected_writes=expected_write_keys(store)))
     binding = BindingService(
         store=store, registry=inv_registry, control_api_url=env.get("PULSO_CONTROL_API_URL", ""),
         signing_key=callback._key, kid=callback.kid, bridge_instance_id=env.get("PULSO_BRIDGE_INSTANCE", "bridge-1"))

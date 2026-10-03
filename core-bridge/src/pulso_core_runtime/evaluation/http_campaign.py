@@ -30,8 +30,14 @@ def _denied(exc: AdmissionDenied) -> Response:
     return _Problem(dumps(body), status_code=exc.status)
 
 
+def default_tenant_of(actor: Principal) -> str | None:
+    return actor.attrs.get("tenant")
+
+
 def evaluation_admission_extension(runtime: EvaluationRuntime,
-                                   who: Callable[[Request, str | None], Principal]) -> Callable[[FastAPI, Any], None]:
+                                   who: Callable[[Request, str | None], Principal],
+                                   tenant_of: Callable[[Principal], str | None] = default_tenant_of,
+                                   ) -> Callable[[FastAPI, Any], None]:
     def install(app: FastAPI, authenticate: Any) -> None:
         @app.post(PATH)
         def evaluate(request: Request, pid: str, body: dict[str, Any]) -> Response:
@@ -42,6 +48,8 @@ def evaluation_admission_extension(runtime: EvaluationRuntime,
             adm = runtime.admissions.get(ref)
             if adm is None:
                 return _denied(AdmissionDenied("admission_missing", 403))
+            if tenant_of(actor) != adm.tenant_id:  # the tenant comes from the admission; the actor must match it
+                return _denied(AdmissionDenied("admission_cross_tenant", 403))
             ctx = InvocationContext(tenant_id=adm.tenant_id, job_id=adm.job_id, binding_ref=adm.binding_ref,
                                     binding_confirmed=True, evaluate_enabled=True, evaluation_context_ref=ref,
                                     evaluation_attempt=adm.evaluation_attempt)

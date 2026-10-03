@@ -29,7 +29,7 @@ def _app(w: World) -> FastAPI:
     def authenticate(request: Request, authorization: str | None) -> Any:
         return actor
 
-    evaluation_admission_extension(w.rt, authenticate)(app, authenticate)
+    evaluation_admission_extension(w.rt, authenticate, tenant_of=lambda a: "t1")(app, authenticate)
     registry_extension(w.rt.service)(app, authenticate)
     single_handler_cleanup(app, authenticate)
     return app
@@ -79,3 +79,17 @@ def test_upstream_gate_failed_problem_json_is_unchanged(pg) -> None:  # type: ig
     assert bad.status_code == 409 and bad.headers["content-type"].startswith("application/problem+json")
     assert bad.json()["code"] == "gate_failed" and "items" in str(bad.json())
     assert w.rt.reports.list_for(pid)[0].gate_failed  # the bridge copy exists too
+
+
+def test_campaign_actor_tenant_must_equal_admission_tenant(pg) -> None:  # type: ignore[no-untyped-def]
+    w = World(pg)
+    pid, chash = w.frozen_proposal()
+    w.admit(pid, chash)  # admission tenant t1
+    app = FastAPI()
+    actor = bot_actor()
+    auth = lambda request, authorization: actor  # noqa: E731
+    evaluation_admission_extension(w.rt, auth, tenant_of=lambda a: "t2")(app, auth)
+    registry_extension(w.rt.service)(app, auth)
+    single_handler_cleanup(app, auth)
+    r = _post(TestClient(app, raise_server_exceptions=False), pid, "ctx-1")
+    assert r.status_code == 403 and r.json()["code"] == "admission_cross_tenant" and w.storage.jobs == 0

@@ -78,6 +78,11 @@ class Reconciler:
                                proven_no_effect=bool(extra.get("proven_no_effect")),
                                adopted_writes=list(extra.get("adopted") or []), core_run_id=final.core_run_id)
 
+    def _binding_proven(self, receipt: Receipt) -> bool:
+        if receipt.state == "binding_confirmed":
+            return True
+        return bool(self._bindings is not None and self._bindings.lookup(receipt.tenant_id, receipt.idempotency_key))
+
     def _reconcile(self, receipt: Receipt) -> ReconcileResult:
         # (1) the stored RunResult wins
         stored = self._runs.get_run_idempotency(receipt.principal_id, receipt.idempotency_key)
@@ -88,7 +93,8 @@ class Reconciler:
                 return self._move(receipt, "terminal_failed", RELEASE_DRIFT.removeprefix("pulso:"),
                                   core_run_id=run_id)
             if outcome not in ("completed", "failed"):
-                return self._move(receipt, "terminal_failed", "unexpected_outcome", core_run_id=run_id,
+                return self._move(receipt, "manual_reconcile" if receipt.stage == "writer" else "terminal_failed",
+                                  "unexpected_outcome", core_run_id=run_id,
                                   outcome=outcome, receipt={"core_outcome": outcome})
             envelope = None
             if self._projector is not None:
@@ -99,7 +105,11 @@ class Reconciler:
                 except BridgeError as exc:
                     return self._move(receipt, "terminal_failed", exc.code.removeprefix("pulso:"),
                                       core_run_id=run_id, outcome=outcome)
-            state = "terminal_ok" if outcome == "completed" else "terminal_failed"
+            if outcome == "completed" and not self._binding_proven(receipt):
+                return self._move(receipt, "manual_reconcile", "binding_unconfirmed", core_run_id=run_id,
+                                  outcome=outcome)
+            failed = "manual_reconcile" if receipt.stage == "writer" else "terminal_failed"
+            state = "terminal_ok" if outcome == "completed" else failed
             return self._move(receipt, state, "adopted_core_result", core_run_id=run_id, outcome=outcome,
                               receipt={"result": envelope, "trace_id": _get(result, "trace_id")})
         # (4) no evidence of a send at all

@@ -84,9 +84,10 @@ def _denied(code: str) -> tuple[ToolStatus, JsonValue, str]:
 
 class ProtectedBuilderToolExecutor:
     def __init__(self, inner: Any, contexts: InvocationRegistry, broker: BrokerClient, *,
-                 gate: EvaluationGate | None = None, ids: Any = None) -> None:
+                 gate: EvaluationGate | None = None, ids: Any = None, admissions: Any = None) -> None:
         self._inner, self._contexts, self._broker, self._gate = inner, contexts, broker, gate
         self._ids = ids
+        self._admissions = admissions  # `AdmissionStore`-like (`get(ref)`); needed for the canonical digest
 
     def definition(self, tool: EntityRef) -> ToolDef:
         found = BUILDER_TOOL_DEFS.get(tool.id)
@@ -198,7 +199,14 @@ class ProtectedBuilderToolExecutor:
             return _denied("commitment_mismatch")
         if self._gate is None:
             return _denied("pulso:evaluation_gate_unavailable")  # fail-closed
-        digest = hashlib.sha256(canonical_bytes({"proposal_id": pid, "evaluation_context_ref": ref})).hexdigest()
+        adm = self._admissions.get(ref) if self._admissions is not None else None
+        if adm is None:
+            return _denied("pulso:admission_missing")
+        from pulso_core_runtime.evaluation.digests import native_evaluate_digest
+
+        digest = native_evaluate_digest(
+            proposal_id=pid, evaluation_context_ref=ref, candidate_hash=adm.candidate_hash,
+            suite_id=adm.suite_id, suite_version=adm.suite_version, suite_digest=adm.suite_digest)
         denial = authcheck.check(self._contexts, self._broker, ic, "native_evaluate", [pid, ref], digest)
         if denial:
             return _denied(denial)

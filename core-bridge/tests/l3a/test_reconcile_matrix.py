@@ -66,8 +66,8 @@ def store(pg: PgDbs) -> ReceiptStore:
     return ReceiptStore(pg.runtime)
 
 
-def _sent(store: ReceiptStore, state: str = "sent") -> Any:
-    store.begin(tenant_id="t", key="k", digest="d", stage="writer", job_id="j", attempt=1, release_id="r",
+def _sent(store: ReceiptStore, state: str = "sent", stage: str = "writer") -> Any:
+    store.begin(tenant_id="t", key="k", digest="d", stage=stage, job_id="j", attempt=1, release_id="r",
                 task_binding_ref="ref", principal_id="p")
     if state != "prepared":
         store.transition("t", "k", "sent")
@@ -83,18 +83,30 @@ def _rec(store: ReceiptStore, runs: Runs, writes: Writes, bindings: Bindings, **
 
 def test_core_201_but_process_died_stored_result_wins(store: ReceiptStore) -> None:
     runs = Runs(stored={("p", "k"): ("h", RESULT)}, runs={"run-7": FakeRunState("run-7")})
-    res = _rec(store, runs, Writes(), Bindings()).reconcile(_sent(store))
+    res = _rec(store, runs, Writes(), Bindings()).reconcile(_sent(store, "binding_confirmed"))
     assert (res.state, res.core_run_id) == ("terminal_ok", "run-7")
+
+
+def test_completed_run_with_unconfirmed_binding_is_never_terminal_ok(store: ReceiptStore) -> None:
+    runs = Runs(stored={("p", "k"): ("h", RESULT)}, runs={"run-7": FakeRunState("run-7")})
+    res = _rec(store, runs, Writes(), Bindings()).reconcile(_sent(store, stage="scout"))
+    assert (res.state, res.reason) == ("manual_reconcile", "binding_unconfirmed")
+
+
+def test_writer_failed_outcome_after_effects_is_manual_reconcile_other_stages_terminal_failed(
+        store: ReceiptStore) -> None:
+    runs = Runs(stored={("p", "k"): ("h", {**RESULT, "outcome": "failed"})})
+    assert _rec(store, runs, Writes(), Bindings()).reconcile(_sent(store)).state == "manual_reconcile"
 
 
 def test_timeout_after_effect_with_committed_run_adopts_failed_outcome(store: ReceiptStore) -> None:
     runs = Runs(stored={("p", "k"): ("h", {**RESULT, "outcome": "failed"})})
-    assert _rec(store, runs, Writes(), Bindings()).reconcile(_sent(store)).state == "terminal_failed"
+    assert _rec(store, runs, Writes(), Bindings()).reconcile(_sent(store, stage="scout")).state == "terminal_failed"
 
 
 def test_deadline_exceeded_stays_failed_not_unknown(store: ReceiptStore) -> None:
     runs = Runs(stored={("p", "k"): ("h", {**RESULT, "outcome": "failed", "status": "deadline_exceeded"})})
-    assert _rec(store, runs, Writes(), Bindings()).reconcile(_sent(store)).state == "terminal_failed"
+    assert _rec(store, runs, Writes(), Bindings()).reconcile(_sent(store, stage="scout")).state == "terminal_failed"
 
 
 def test_release_drift_in_stored_result_is_terminal_failed(store: ReceiptStore) -> None:
@@ -155,7 +167,7 @@ def test_prepared_never_sent_is_proven_no_effect(store: ReceiptStore) -> None:
 
 def test_terminal_receipts_are_never_reopened(store: ReceiptStore) -> None:
     rec = _rec(store, Runs(stored={("p", "k"): ("h", RESULT)}), Writes(), Bindings())
-    assert rec.reconcile(_sent(store)).state == "terminal_ok"
+    assert rec.reconcile(_sent(store, "binding_confirmed")).state == "terminal_ok"
     other = _rec(store, Runs(), Writes(), Bindings())
     assert other.reconcile(store.get("t", "k")).state == "terminal_ok"  # type: ignore[arg-type]
 
@@ -163,5 +175,5 @@ def test_terminal_receipts_are_never_reopened(store: ReceiptStore) -> None:
 def test_adopted_result_with_projection_missing_fact_fails_the_stage(store: ReceiptStore) -> None:
     proj = WhitelistProjector({"writer": {"pulso_writer_receipts": FactSpec()}})
     runs = Runs(stored={("p", "k"): ("h", RESULT)}, runs={"run-7": FakeRunState("run-7")})
-    res = _rec(store, runs, Writes(), Bindings(), projector=proj).reconcile(_sent(store))
+    res = _rec(store, runs, Writes(), Bindings(), projector=proj).reconcile(_sent(store, "binding_confirmed"))
     assert res.state == "terminal_failed" and res.reason == "output_missing"

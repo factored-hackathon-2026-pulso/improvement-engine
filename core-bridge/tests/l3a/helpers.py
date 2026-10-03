@@ -30,8 +30,28 @@ def body(tenant: str = "t1", job: str = "j1", stage: str = "scout", attempt: int
 def build_service(dsn: str, core: FakeCore | None = None, **kw: Any) -> tuple[InvokeService, FakeCore]:
     core = core or FakeCore()
     settings = kw.pop("settings", InvokeSettings(max_inflight=8))
+    store = ReceiptStore(dsn)
+    from pulso_core_runtime.adapters import ReceiptBindingLookup
+    from pulso_core_runtime.reconcile.reconciler import Reconciler
+    kw.setdefault("reconciler", Reconciler(store=store, runs=core, bindings=ReceiptBindingLookup(store)))
     svc = InvokeService(
-        store=ReceiptStore(dsn), core=core, releases=kw.pop("releases", FakeReleases()),
+        store=store, core=core, releases=kw.pop("releases", FakeReleases()),
         signer=PrincipalSigner("id1", Ed25519PrivateKey.generate()), runs=core,
         registry=kw.pop("registry", InvocationRegistry()), settings=settings, **kw)
+    attach_binder(core, svc._registry, svc._store)
     return svc, core
+
+
+def attach_binder(core: FakeCore, registry: Any, store: ReceiptStore) -> None:
+    """The fake Core stands in for the run in which `pulso/bind_context` confirms the binding."""
+    from pulso_core_runtime.invoke.context import current_binding
+
+    def bind(run_id: str) -> None:
+        ref = current_binding()
+        if ref is None:
+            return
+        ctx = registry.lookup(ref)
+        registry.confirm(ref)
+        store.transition(ctx.tenant_id, ctx.command_key, "binding_confirmed", core_run_id=run_id)
+
+    core.binder = bind

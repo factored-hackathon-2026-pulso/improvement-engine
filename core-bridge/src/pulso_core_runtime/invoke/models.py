@@ -3,14 +3,35 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import Any, Literal
 
 from agent_core.domain import canonical_bytes
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 STAGES = ("scout", "verifier", "builder_design", "writer")
 MAX_INPUT_BYTES = 256 * 1024
 DIGEST_EXCLUDED = ("request_digest", "credentials", "trace")
+
+
+class RegistryMutationCommitmentDTO(BaseModel):
+    """Codex-sealed writer commitment (D.2 writer row, CL-0002/CX-0007, CLQ-10). Not a separate annex-D field:
+    it travels inside the digested `CoreTaskInvocation` body, so the same-key/other-body check also covers it.
+    `operations` is the ordered list of committed non-evaluate writes; a write's key ordinal is its index."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["write", "evaluate_only"]
+    proposal_id: str | None = Field(default=None, max_length=200)
+    expected_rev: int | None = Field(default=None, ge=0)
+    base_release_id: str | None = Field(default=None, max_length=200)
+    evaluate_enabled: bool = False
+    evaluation_context_ref: str | None = Field(default=None, max_length=200)
+    create_agent_id: str | None = Field(default=None, max_length=128)
+    create_origin: str | None = Field(default=None, max_length=32)
+    create_title: str | None = Field(default=None, max_length=512)
+    put_draft_digest: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
+    operations: list[Literal["create_proposal", "put_draft", "validate", "freeze", "reopen"]] = Field(
+        default_factory=list, max_length=32)
 
 
 class CoreTaskInvocation(BaseModel):
@@ -34,10 +55,19 @@ class CoreTaskInvocation(BaseModel):
     logical_key: str = Field(min_length=1, max_length=256)
     lang: str | None = None
     closure_digest: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
+    memory_snapshot_ref: str | None = Field(default=None, max_length=256)  # D.2 context refs, sealed in the digest
+    extract_manifest_ref: str | None = Field(default=None, max_length=256)
+    registry_mutation_commitment: RegistryMutationCommitmentDTO | None = None  # writer stage only
     # accepted for convenience, excluded from the digest
     request_digest: str | None = None
     credentials: dict[str, Any] | None = None
     trace: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _commitment_is_writer_only(self) -> CoreTaskInvocation:
+        if self.registry_mutation_commitment is not None and self.stage != "writer":
+            raise ValueError("registry_mutation_commitment is only valid for the writer stage")
+        return self
 
 
 def request_digest(raw_body: dict[str, Any]) -> str:

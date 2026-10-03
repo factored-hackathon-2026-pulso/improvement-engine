@@ -32,6 +32,11 @@ def _pub(key: Ed25519PrivateKey) -> str:
     return b64url_encode(key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw))
 
 
+def _seed(key: Ed25519PrivateKey) -> str:
+    from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
+    return b64url_encode(key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption()))
+
+
 @pytest.fixture
 def keys(tmp_path: Path) -> dict[str, Any]:
     ident, staff, svc = (Ed25519PrivateKey.generate() for _ in range(3))
@@ -40,6 +45,9 @@ def keys(tmp_path: Path) -> dict[str, Any]:
     (tmp_path / "staff.json").write_text(json.dumps({"principal_keys": {"st1": _pub(staff)}}))
     (tmp_path / "service.json").write_text(json.dumps(
         {"keys": {"cp1": {"iss": "control-api", "aud": "core-bridge", "key": _pub(svc)}}}))
+    for name, kid, key in (("bridge-identity", "id1", ident), ("bridge-staff", "st1", staff),
+                           ("bridge-callback", "cb1", Ed25519PrivateKey.generate())):
+        (tmp_path / f"{name}.json").write_text(json.dumps({"kid": kid, "key": _seed(key)}))
     return {"dir": tmp_path, "svc": svc}
 
 
@@ -50,6 +58,10 @@ def _env(pg: PgDbs, keys: dict[str, Any], **extra: str) -> dict[str, str]:
             "AGENTCORE_KEYS_TOKEN_MAP": "k1:" + b64url_encode(b"m" * 32).replace("-", "A").replace("_", "B") + "=",
             "PULSO_IDENTITY_KEYS": str(d / "identity.json"), "PULSO_STAFF_KEYS": str(d / "staff.json"),
             "PULSO_SERVICE_KEYS": str(d / "service.json"), "PULSO_PORT": "0",
+            "PULSO_BRIDGE_IDENTITY_SIGNER": str(d / "bridge-identity.json"),
+            "PULSO_BRIDGE_STAFF_SIGNER": str(d / "bridge-staff.json"),
+            "PULSO_BRIDGE_CALLBACK_SIGNER": str(d / "bridge-callback.json"),
+            "PULSO_LAB_BROKER_URL": "http://127.0.0.1:9", "PULSO_CONTROL_API_URL": "http://127.0.0.1:9",
             "PULSO_SHA": "abc1234", "PULSO_IMAGE_DIGEST": "sha256:" + "a" * 64, **extra}
 
 
@@ -88,8 +100,10 @@ def test_composed_app_ready_and_version(pg: PgDbs, keys: dict[str, Any]) -> None
 
 
 def test_readyz_503_names_bridge_schema_when_missing(pg: PgDbs, keys: dict[str, Any]) -> None:
-    code, app, _ = _compose(_env(pg, keys))  # schema never ensured
+    code, app, _ = _compose(_env(pg, keys))  # startup migrates the bridge schema itself
     assert code == 0
+    with psycopg.connect(pg.runtime, autocommit=True) as conn:
+        conn.execute("DROP SCHEMA pulso_bridge CASCADE")
     r = TestClient(app).get("/readyz")
     assert r.status_code == 503 and r.json()["failed"] == ["bridge_schema"]
 

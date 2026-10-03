@@ -112,6 +112,14 @@ def tcx(ic: InvocationContext, **kw: Any) -> ToolCallContext:
     return ToolCallContext(run_id="run-" + ic.binding_ref, release="rel-1", principal=principal(ic, **kw))
 
 
+class AnyAdmission:
+    """Double: every `evaluation_context_ref` resolves to an admission (L3b tests do not exercise L5)."""
+
+    def get(self, ref: str) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(candidate_hash="c" * 64, suite_id="s", suite_version="1.0.0", suite_digest="d" * 64)
+
+
 class Env:
     def __init__(self, evaluate_gate: Any = None) -> None:
         self.backend = FakeBackend()
@@ -121,6 +129,7 @@ class Env:
         self.control = ControlApiClient(BASE, lambda scope: "jwt-" + scope, http=self.http)
         self.inner = RecordingInner()
         self.gate = evaluate_gate
+        self.admissions: Any = AnyAdmission()
         self.dispatcher = PulsoToolDispatcher(
             StubRegistry(), SeqIds(), contexts=self.contexts, broker=self.broker, control=self.control,
             builder_factory=self._builder)
@@ -131,7 +140,8 @@ class Env:
 
     def _builder(self, ic: InvocationContext) -> Any:
         from pulso_core_runtime.tools.builder import ProtectedBuilderToolExecutor
-        return ProtectedBuilderToolExecutor(self.inner, self.contexts, self.broker, gate=self.gate)
+        return ProtectedBuilderToolExecutor(self.inner, self.contexts, self.broker, gate=self.gate,
+                                            admissions=self.admissions)
 
     def invocation(self, stage: str = "scout", *, tenant: str | None = None, job: str | None = None,
                    commitment: RegistryMutationCommitment | None = None, confirmed: bool = False,

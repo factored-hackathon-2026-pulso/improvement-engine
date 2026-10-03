@@ -46,12 +46,12 @@ def current_runtime() -> ToolRuntime | None:
 
 def protected_builder_factory(service: Any, actor_for: Callable[[InvocationContext], Principal], ids: Any,
                               contexts: InvocationRegistry, broker: BrokerClient,
-                              gate: EvaluationGate | None = None) -> BuilderFactory:
+                              gate: EvaluationGate | None = None, admissions: Any = None) -> BuilderFactory:
     """`actor_for(ic)` returns the bot constructor principal (own credential, never the run's principal)."""
 
     def factory(ic: InvocationContext) -> ProtectedBuilderToolExecutor:
         return ProtectedBuilderToolExecutor(BuilderToolExecutor(service, actor_for(ic), ids), contexts, broker,
-                                            gate=gate, ids=ids)
+                                            gate=gate, ids=ids, admissions=admissions)
 
     return factory
 

@@ -38,6 +38,7 @@ class FakeCore:
         self.run_facts: dict[str, Any] = {}
         self.release_override: str | None = None
         self._n = 0
+        self.binder: Any = None  # simulates `pulso/bind_context` confirming the binding inside the run
 
     async def start_run(self, bearer: str, key: str, body: dict[str, Any]) -> CoreResponse:
         principal_id = _principal_id(bearer)
@@ -58,6 +59,8 @@ class FakeCore:
                   "status": "done", "outcome": "completed", "handoff_ref": None, "trace_id": "t" * 32}
         self.stored[(principal_id, key)] = (h, result)
         self.runs[run_id] = FakeRunState(run_id, facts=dict(self.run_facts))
+        if self.binder is not None:
+            self.binder(run_id)
         if self.mode == "timeout_after_effect":
             raise httpx.ReadTimeout("t")
         return CoreResponse(201, result)

@@ -57,6 +57,24 @@ class InvokeOutcome:
     body: dict[str, Any]
 
 
+def _failed_state(inv: CoreTaskInvocation) -> str:
+    """After `sent`, a failed writer may already have changed the registry: it is never provably `terminal_failed`."""
+    return "manual_reconcile" if inv.stage == "writer" else "terminal_failed"
+
+
+def _commitment(dto: Any) -> Any:
+    if dto is None:
+        return None
+    from pulso_core_runtime.tools.context import RegistryMutationCommitment
+
+    return RegistryMutationCommitment(
+        mode=dto.mode, proposal_id=dto.proposal_id, expected_rev=dto.expected_rev,
+        base_release_id=dto.base_release_id, evaluate_enabled=dto.evaluate_enabled,
+        evaluation_context_ref=dto.evaluation_context_ref, create_agent_id=dto.create_agent_id,
+        create_origin=dto.create_origin, create_title=dto.create_title, put_draft_digest=dto.put_draft_digest,
+        operations=tuple(dto.operations))
+
+
 def error_body(exc: BridgeError, trace_id: str = "") -> dict[str, Any]:
     return {"schema_version": "1", "code": exc.code, "retryable": exc.retryable, "trace_id": trace_id,
             "details": exc.details}
@@ -211,7 +229,9 @@ class InvokeService:
         ctx = InvocationContext(
             tenant_id=tenant, job_id=inv.job_id, stage=inv.stage, attempt=inv.attempt, binding_ref=ref,
             command_key=key, request_digest=digest, bridge_instance_id=self._settings.bridge_instance_id,
-            expires_at=now + self._settings.context_ttl)
+            expires_at=now + self._settings.context_ttl,
+            memory_snapshot_ref=inv.memory_snapshot_ref, extract_manifest_ref=inv.extract_manifest_ref,
+            commitment=_commitment(inv.registry_mutation_commitment))
         try:
             self._registry.register(ctx)
         except ValueError:  # same key re-entering after a lost CAS: keep the first frozen context
@@ -220,7 +240,9 @@ class InvokeService:
                  "cutoff": inv.cutoff, "deadline": inv.deadline, "expires_at": ctx.expires_at.isoformat()}
         await asyncio.to_thread(self._store.save_context, ref, tenant, inv.job_id, key,
                                 {"tenant_id": tenant, "job_id": inv.job_id, "stage": inv.stage,
-                                 "attempt": inv.attempt, **extra}, ctx.expires_at)
+                                 "attempt": inv.attempt, **extra,
+                                 "operations": list(ctx.commitment.operations) if ctx.commitment else [],
+                                 "evaluation_context_ref": ctx.evaluation_context_ref}, ctx.expires_at)
         sent = await asyncio.to_thread(self._store.transition, tenant, key, "sent")
         if sent is None:  # lost the CAS: someone else owns this key
             self._registry.remove(ref)
@@ -278,18 +300,18 @@ class InvokeService:
             return InvokeOutcome(409, {**_state_body(current), "code": "pulso:digest_conflict"})
         if status != 201:
             http = 503 if status == 429 else 403 if status in (401, 403) else 409 if status == 404 else 422
-            return await self._terminal(inv, key, ref, "terminal_failed", f"core_rejected_{status}", http=http)
+            return await self._terminal(inv, key, ref, _failed_state(inv), f"core_rejected_{status}", http=http)
         data = resp.body
         run_id = str(data.get("run_id", ""))
         # 9. release drift: the result is discarded
         if data.get("release") != inv.release_id:
-            return await self._terminal(inv, key, ref, "terminal_failed", RELEASE_DRIFT.removeprefix("pulso:"),
+            return await self._terminal(inv, key, ref, _failed_state(inv), RELEASE_DRIFT.removeprefix("pulso:"),
                                         run_id=run_id or None, http=409)
         outcome = str(data.get("outcome"))
         if outcome not in ("completed", "failed"):
             # Core committed a terminal run that is neither completed nor failed (e.g. escalated): known and not
             # a success, so the stage fails closed with the Core outcome recorded; no facts are promoted.
-            return await self._terminal(inv, key, ref, "terminal_failed", "unexpected_outcome", run_id=run_id,
+            return await self._terminal(inv, key, ref, _failed_state(inv), "unexpected_outcome", run_id=run_id,
                                         outcome=outcome, receipt={"core_outcome": outcome,
                                                                   "core_status": data.get("status")})
         current = await asyncio.to_thread(self._store.get, inv.tenant_id, key)
@@ -317,7 +339,11 @@ class InvokeService:
                 {"input": inv.input, "refs": inv.input_artifact_refs})).hexdigest(),
             "output_refs": [], "output_digest": (envelope or {}).get("output_digest"), "audit_refs": [],
             "budget": {"known": bool(meter and meter["usage_known"] and meter["calls"] > 0)}}
-        state = "terminal_ok" if outcome == "completed" else "terminal_failed"
+        if outcome == "completed" and (current is None or current.state != "binding_confirmed"):
+            # A completed run whose binding was never confirmed cannot be trusted as ok: reconcile by hand.
+            return await self._terminal(inv, key, ref, "manual_reconcile", "binding_unconfirmed", run_id=run_id,
+                                        outcome=outcome, http=202)
+        state = "terminal_ok" if outcome == "completed" else _failed_state(inv)
         return await self._terminal(inv, key, ref, state, "completed" if state == "terminal_ok" else "run_failed",
                                     run_id=run_id, outcome=outcome, receipt={"receipt": receipt, "result": envelope})
 

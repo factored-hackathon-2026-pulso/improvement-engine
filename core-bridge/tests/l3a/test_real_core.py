@@ -89,44 +89,37 @@ def world(pg: PgDbs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
     (tmp_path / "staff.json").write_text(json.dumps({"principal_keys": {"st1": _pub(Ed25519PrivateKey.generate())}}))
     (tmp_path / "service.json").write_text(json.dumps(
         {"keys": {"cp1": {"iss": "control-api", "aud": "core-bridge", "key": _pub(svc)}}}))
+    from cryptography.hazmat.primitives.serialization import Encoding as Enc, NoEncryption, PrivateFormat
+    for name, kid in (("bridge-identity", "id1"), ("bridge-staff", "st1"), ("bridge-callback", "cb1")):
+        seed = (ident if name == "bridge-identity" else Ed25519PrivateKey.generate()).private_bytes(
+            Enc.Raw, PrivateFormat.Raw, NoEncryption())
+        (tmp_path / f"{name}.json").write_text(json.dumps({"kid": kid, "key": b64url_encode(seed)}))
     w.ident = ident  # type: ignore[attr-defined]
     w.dir = tmp_path  # type: ignore[attr-defined]
     w.pg = pg  # type: ignore[attr-defined]
 
-    registry = InvocationRegistry()
-    w.inv_registry = registry  # type: ignore[attr-defined]
-    store_l3 = ReceiptStore(pg.runtime)
-    w.store = store_l3  # type: ignore[attr-defined]
+    w.store = ReceiptStore(pg.runtime)  # type: ignore[attr-defined]
 
-    def callback(req: httpx.Request) -> httpx.Response:
-        w.callbacks.append(json.loads(req.content))
-        return httpx.Response(w.callback_status, json={})
-
-    binding = BindingService(store=store_l3, registry=registry, control_api_url="http://control.test",
-                             bridge_instance_id="b1", signing_key=Ed25519PrivateKey.generate(), kid="cb1",
-                             transport=httpx.MockTransport(callback))
-    w.binding = binding  # type: ignore[attr-defined]
+    from integration.loopback import Loopback
+    loop = Loopback()
+    w.loop = loop  # type: ignore[attr-defined]
+    w.binding = None  # type: ignore[attr-defined]
 
     def resolve(args: Any, env: Any, clock: Any, ids: Any, **kw: Any) -> Any:
         from agent_core.composition.serve_ports import resolve_ports
-        from agent_core.domain import ToolStatus
-        from agent_core.ports import ToolResult
-        ports = resolve_ports(args, env, clock, ids, **kw)
-
-        def bind_context(a: dict[str, Any], ctx: Any) -> ToolResult:
-            res = binding.bind(run_id=ctx.run_id, principal_attrs=dict(ctx.principal.attrs))
-            return ToolResult(status=ToolStatus.ok if res.ok else ToolStatus.denied,
-                              result_full=res.facts or {}, call_id=ids.new_id(__import__(
-                                  "agent_core.ports.ids", fromlist=["IdKind"]).IdKind.call), error=res.reason)
-
-        ports.tools.register("pulso/bind_context@1.0.0", bind_context)
+        ports = resolve_ports(args, env, clock, ids, **kw)  # real `pulso/bind_context` via the loopback control-api
+        w.inv_registry = ports.tools._contexts  # type: ignore[attr-defined]  # the composed (shared) registry
         return ports
 
     env = {"AGENTCORE_REGISTRY_DSN": pg.runtime, "AGENTCORE_EVAL_DSN": pg.eval,
            "AGENTCORE_KEYS_FINGERPRINT": "k1:" + b64url_encode(b"f" * 32).replace("-", "A").replace("_", "B") + "=",
            "AGENTCORE_KEYS_TOKEN_MAP": "k1:" + b64url_encode(b"m" * 32).replace("-", "A").replace("_", "B") + "=",
            "PULSO_IDENTITY_KEYS": str(tmp_path / "identity.json"), "PULSO_STAFF_KEYS": str(tmp_path / "staff.json"),
-           "PULSO_SERVICE_KEYS": str(tmp_path / "service.json"), "PULSO_PORT": "0"}
+           "PULSO_SERVICE_KEYS": str(tmp_path / "service.json"), "PULSO_PORT": "0",
+           "PULSO_BRIDGE_IDENTITY_SIGNER": str(tmp_path / "bridge-identity.json"),
+           "PULSO_BRIDGE_STAFF_SIGNER": str(tmp_path / "bridge-staff.json"),
+           "PULSO_BRIDGE_CALLBACK_SIGNER": str(tmp_path / "bridge-callback.json"),
+           "PULSO_LAB_BROKER_URL": loop.url, "PULSO_CONTROL_API_URL": loop.url}
     captured: list[Any] = []
     err = io.StringIO()
     code = runtime_main.run([], env=env, stderr=err, serve=lambda app, **kw: captured.append(app), resolve=resolve)
@@ -163,15 +156,15 @@ async def test_real_core_run_pinned_binding_confirmed_and_idempotent(world: Worl
     out = await svc.invoke("t1", _k(), _scout_body(world))
     # Real Core ran the real flow: bind_context confirmed, then the first absent tool stopped the stage.
     assert out.body["core_run_id"], out.body
-    assert world.callbacks and world.callbacks[0]["core_run_id"] == out.body["core_run_id"]
-    assert world.callbacks[0]["task_binding_ref"] == out.body["task_binding_ref"]
+    assert world.loop.bindings and world.loop.bindings[0]["core_run_id"] == out.body["core_run_id"]
+    assert world.loop.bindings[0]["task_binding_ref"] == out.body["task_binding_ref"]
     print("REAL CORE RECEIPT", {k: out.body.get(k) for k in ("state", "outcome", "reason", "receipt")})
     assert out.body["state"] in {"terminal_failed", "terminal_ok", "manual_reconcile"}, out.body
     stored = world.store.get("t1", _k())
     assert stored is not None and stored.core_run_id == out.body["core_run_id"]
     # Same key + same body: Core's own idempotency gives the same run; the bridge replays the receipt.
     again = await svc.invoke("t1", _k(), _scout_body(world))
-    assert again.body["core_run_id"] == out.body["core_run_id"] and len(world.callbacks) == 1
+    assert again.body["core_run_id"] == out.body["core_run_id"] and len(world.loop.bindings) == 1
     # Same key, other digest: 409 from the bridge, still exactly one callback and one run.
     clash = await svc.invoke("t1", _k(), _scout_body(world, input={"briefing_ref": "artifact:OTHER"}))
     assert clash.status == 409 and clash.body["code"] == "pulso:digest_conflict"
@@ -190,7 +183,7 @@ async def test_real_core_alias_moved_after_authorisation_still_runs_the_pinned_r
 
 
 async def test_real_core_binding_denied_means_tools_denied_and_no_confirmation(world: World) -> None:
-    world.callback_status = 409
+    world.loop.backend.bind_mode = "conflict"
     svc = _service(world)
     out = await svc.invoke("t1", _k(logical="den"), _scout_body(world, logical="den"))
     assert out.body["state"] != "terminal_ok"
@@ -234,4 +227,4 @@ async def test_real_core_pin_to_another_agents_release_never_starts_a_run(world:
     assert out.status == 409 and out.body["code"] == "pulso:release_pin_unavailable"
     with __import__("psycopg").connect(world.pg.runtime) as conn:  # type: ignore[attr-defined]
         n = conn.execute("SELECT count(*) FROM runs").fetchone()
-    assert n is not None and n[0] == 0 and world.callbacks == []
+    assert n is not None and n[0] == 0 and world.loop.bindings == []

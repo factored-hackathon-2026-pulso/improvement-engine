@@ -25,6 +25,7 @@ def _setup(pg: Any, ref: str = "ctx-real") -> tuple[World, Env, Any, str]:
     commitment = C(mode="evaluate_only", proposal_id=pid, expected_rev=None, base_release_id="rel-0",
                    evaluate_enabled=True, evaluation_context_ref=ref, create_agent_id=None, create_origin=None,
                    create_title=None, put_draft_digest=None)
+    env.admissions = w.rt.admissions  # the REAL store: both broker checks derive the digest from it
     ic = env.invocation("writer", commitment=commitment)
     assert env.bind(ic).status is ToolStatus.ok
     digest = w.rt._suite_digest(pid, "disputas-suite", "1.0.0") or "x"

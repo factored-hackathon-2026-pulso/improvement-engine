@@ -36,6 +36,9 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/version", CORE_BRIDGE, frozenset({"version_probe"})),
     Route("POST", "/core-credentials/issue", CORE_BRIDGE, frozenset({"credential_issue"})),
     Route("POST", "/evaluation/admissions", CORE_BRIDGE, frozenset({"evaluation_admit"})),
+    # Static segments first: Starlette matches in registration order, so `by-key` is never read as an `{arm_id}`.
+    Route("POST", "/evaluation/arms/run", CORE_BRIDGE, frozenset({"evaluation_arm_run"})),
+    Route("GET", "/evaluation/arms/by-key/{key}", CORE_BRIDGE, frozenset({"evaluation_arm_read"})),
     Route("POST", "/evaluation/arms/{arm_id}/run", CORE_BRIDGE, frozenset({"evaluation_arm_run"})),
     Route("GET", "/evaluation/arms/{arm_id}", CORE_BRIDGE, frozenset({"evaluation_arm_read"})),
 )
