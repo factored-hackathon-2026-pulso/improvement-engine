@@ -41,3 +41,6 @@
   exhausted; treat this remote red status as quota-blocked, not as a code
   failure. Local CI passed first; the PR remains reviewable, with merge gated
   by the team's policy for the exhausted-quota checks.
+
+## 2026-10-03T00:00:00Z CLAUDE: PL-L3/PL-L2 platform-contract and platform_live simulator
+platform-contract/ (schemas, event catalog, golden, conformance; 19 tests) and platform-sim/platform_live/ (11-table simulator with fault injection; 18 tests) added. See platform-contract/docs/journal-pl-0001.md.
