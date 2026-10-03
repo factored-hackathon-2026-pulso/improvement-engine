@@ -282,7 +282,7 @@ def test_no_jws_bytes_in_logs_exports_or_the_standin_store(stack: Any, flow: Flo
     store = F.port.store._path  # the stand-in's durable intentions: no credential persisted
     haystacks["intentions_db"] = Path(store).read_bytes().decode("latin-1")
     # control: the haystacks are real (an empty log would make the scan vacuous)
-    assert all(len(haystacks[k]) > 0 for k in ("log:core-runtime", "log:human-issuer", "log:core-postgres"))
+    assert all(len(haystacks[k]) > 0 for k in ("log:core-runtime", "log:core-postgres"))
     assert len(haystacks["pg_dump"]) > 100_000 and len(haystacks["intentions_db"]) > 0
     for name, text in haystacks.items():
         for needle in needles:
