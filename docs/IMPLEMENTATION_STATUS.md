@@ -200,10 +200,13 @@ green unit test as proof that a broader product flow is complete.
   single static allowlisted U15 `Create` transform. Scope/access are exact
   Frozen bindings with `allowed_at == cutoff`; output is opaque commitments
   only, never pages, workspace/text, publication, memory use or an artifact.
-  U33-E publication exists locally; U23-E admission now re-attests the exact
-  published revision against the same U33-E sidecar/head and creates one
-  opaque receipt per publication/scope/run. This remains a crate-private
-  semantic contract, not wired into the CLI runtime.
+  U33-E publication exists locally; U23-E admission re-attests the exact
+  published revision against the exact U33-E publication sidecar and creates one
+  opaque receipt per publication/scope/run. The trusted crate composition can
+  now read a page for the later run only with the admitted run/grant/scope/
+  snapshot/clock binding, while the scratch authority rechecks grant liveness.
+  This remains a crate-private local semantic path, not wired into the CLI or
+  durable runtime.
 - U33-E: Frozen E0 summary publication boundary. A crate-private composer
   redeems only the opaque U15-EQ preparation after recomputing the exact
   U13-A/U14-E/U14-EQ/U04-B and canonical U15 transform chain. It emits an
@@ -216,8 +219,9 @@ green unit test as proof that a broader product flow is complete.
   receipts, but have no U33-E publication record and accept grant reference as
   a string rather than resolving its authority. U23-E is the sole consumer
   allowed to attest governed use:
-  its local path checks exact revision/head, tenant/world/scope, replay cutoff,
-  grant liveness and revocation, and makes retries idempotent by
+  its local path checks the exact immutable publication revision,
+  tenant/world/scope, replay cutoff, current grant liveness and explicit
+  snapshot/ancestor revocation, and makes retries idempotent by
   `(publication_commitment, scope, run_id)`. A changed grant or access time for
   the same semantic use conflicts without a second receipt. Durable admission
   remains `DependencyUnavailable` until one database transaction can lock and
