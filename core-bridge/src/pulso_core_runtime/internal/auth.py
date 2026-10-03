@@ -100,7 +100,9 @@ class ServiceJwtVerifier:
                  now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
         self._keys, self._jti, self._now = keys, jti, now
 
-    def verify(self, token: str, *, audience: str, purposes: frozenset[str], require_tenant: bool = True) -> Claims:
+    def verify(self, token: str, *, audience: str, purposes: frozenset[str], require_tenant: bool = True,
+               sub_prefix: str | None = None) -> Claims:
+        """`sub_prefix`: when set, `sub` must be `<prefix><non-empty id>` (class (i): `worker:<id>`, annex D/A03)."""
         parts = token.split(".")
         if len(parts) != 3:
             raise AuthError("malformed")
@@ -147,6 +149,8 @@ class ServiceJwtVerifier:
             raise AuthError("purpose_denied", status=403)
         if not isinstance(sub, str) or not sub:
             raise AuthError("missing_claims")
+        if sub_prefix is not None and not (sub.startswith(sub_prefix) and len(sub) > len(sub_prefix)):
+            raise AuthError("sub_not_worker", status=403)
         # Consume last, so a rejected token never burns its jti.
         if not self._jti.consume(iss, jti, datetime.fromtimestamp(exp, UTC)):
             raise AuthError("jti_replayed")

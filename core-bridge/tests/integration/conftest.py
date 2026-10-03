@@ -111,7 +111,7 @@ class Composed:
         now = int(time.time())
         return sign_service_jwt(self.svc_key, kid="cp1", claims={
             "iss": "control-api", "aud": aud, "sub": "worker:1", "tenant_id": tenant, "purpose": purpose,
-            "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex, **extra})
+            "job_id": "j1", "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex, **extra})
 
     def headers(self, purpose: str, **kw: Any) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token(purpose, **kw)}"}

@@ -36,7 +36,9 @@
     ],
     "reason_status": {
       "*": 401,
+      "job_mismatch": 403,
       "purpose_denied": 403,
+      "sub_not_worker": 403,
       "tenant_required": 403
     },
     "reasons": [
@@ -52,6 +54,8 @@
       "ttl_too_long",
       "tenant_required",
       "purpose_denied",
+      "sub_not_worker",
+      "job_mismatch",
       "jti_replayed"
     ],
     "tenant_exempt_purposes": [
@@ -79,11 +83,13 @@
         "typ"
       ],
       "iss": "control-api",
+      "job_id_rule": "invoke: claim job_id must equal body job_id (403 pulso:auth_denied reason job_mismatch)",
       "jti": "receiver-owned durable replay store; (iss, jti) consumed atomically AFTER all other checks pass (a rejected token never burns its jti); every HTTP attempt uses a fresh jti",
       "key_binding": "each kid is bound to exactly one (iss, aud)",
       "max_exp_skew_seconds": 30,
       "max_ttl_seconds": 300,
       "scope_claim": "absent (class i has no scope)",
+      "sub_pattern": "^worker:.+ (else 403 pulso:auth_denied reason sub_not_worker)",
       "typ": "JWT"
     }
   },

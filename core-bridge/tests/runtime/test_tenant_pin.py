@@ -29,7 +29,7 @@ def _client(allowed: Any, calls: list[str]) -> TestClient:
 def _tok(purpose: str, tenant: str) -> dict[str, str]:
     now = int(time.time())
     return {"Authorization": "Bearer " + sign_service_jwt(CP, kid="cp1", claims={
-        "iss": "control-api", "aud": "core-bridge", "sub": "w", "tenant_id": tenant, "purpose": purpose,
+        "iss": "control-api", "aud": "core-bridge", "sub": "worker:w", "tenant_id": tenant, "purpose": purpose,
         "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex})}
 
 

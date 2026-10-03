@@ -17,6 +17,7 @@ from pulso_core_runtime.internal.auth import AuthError, Claims, ServiceJwtVerifi
 
 CORE_BRIDGE = "core-bridge"
 TENANT_EXEMPT = frozenset({"version_probe"})  # the only route with no tenant data
+WORKER_SUB_PREFIX = "worker:"  # A02/A03 class (i): control-api -> bridge tokens are worker tokens
 MAX_BODY_BYTES = 1024 * 1024  # invoke inputs are capped at 256 KiB; nothing legitimate is larger
 
 
@@ -111,7 +112,8 @@ def build_internal_app(verifier: ServiceJwtVerifier, *, version_info: Callable[[
                 if scheme.lower() != "bearer" or not token:
                     raise AuthError("missing_token")
                 claims = verifier.verify(token, audience=route.audience, purposes=route.purposes,
-                                         require_tenant=not route.purposes <= TENANT_EXEMPT)
+                                         require_tenant=not route.purposes <= TENANT_EXEMPT,
+                                         sub_prefix=WORKER_SUB_PREFIX if route.audience == CORE_BRIDGE else None)
             except AuthError as exc:
                 return envelope("pulso:auth_denied" if exc.status == 403 else "pulso:auth_invalid",
                                 trace_id=trace, details={"reason": exc.reason}, status=exc.status)

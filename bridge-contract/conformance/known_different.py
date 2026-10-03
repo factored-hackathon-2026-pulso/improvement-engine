@@ -33,6 +33,7 @@ DIVERGENCES: dict[str, str] = {
                  "policy is role-only (no (purpose, role) table)",
     "MOCK-ALIAS": "mock alias reader answers unset aliases with bare alias_unknown and lacks status/source/"
                   "observed_at; request validation of the alias name differs",
+    "MOCK-WORKER-SUB": "mock accepts any non-empty `sub` and does not compare the token `job_id` claim with the body",
     "MOCK-GOLDEN": "the goldens are recorded from the runtime: every step the mock answers with its own DTO/codes "
                    "differs (see the other MOCK-* ids); flows the mock cannot run are skipped by capability",
     "MOCK-DRYRUN": "mock dry-run request/closed-DTO and tenant-mismatch handling differ from the runtime's "
@@ -84,6 +85,8 @@ MOCK |= _group("MOCK-CRED", "test_credential_issue_succeeds_for_policy_rows",
                "test_credential_issue_for_another_tenant_is_tenant_mismatch", "test_credential_request_is_closed")
 MOCK |= _group("MOCK-ALIAS", "test_alias_read_returns_a_valid_alias_state",
                "test_alias_read_of_an_unknown_agent_is_404_alias_unknown", "test_alias_name_outside_staging_prod_is_422")
+MOCK |= _group("MOCK-WORKER-SUB", "test_class_i_subject_must_be_a_worker",
+               "test_invoke_token_job_must_equal_the_body_job")
 MOCK |= _group("MOCK-GOLDEN", "test_golden_flow")
 MOCK |= _group("MOCK-DRYRUN", "test_dry_run_body_tenant_must_equal_the_claim", "test_dry_run_request_is_a_closed_dto",
                "test_dry_run_with_an_unknown_base_release_is_404_base_release_unknown")

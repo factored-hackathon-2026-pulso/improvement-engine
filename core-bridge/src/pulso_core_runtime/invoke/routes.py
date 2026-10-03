@@ -47,6 +47,10 @@ def make_handlers(service: InvokeService, issuer: CredentialIssuer | None = None
             return _respond(*_bad(trace), trace)
         if not isinstance(raw, dict):
             return _respond(*_bad(trace), trace)
+        job = claims.raw.get("job_id")
+        if not isinstance(job, str) or job != raw.get("job_id"):  # A03 (i): the signed job is the invoked job
+            return _respond(403, error_body(BridgeError("pulso:auth_denied", 403, details={"reason": "job_mismatch"}),
+                                            trace), trace)
         out = await service.invoke(claims.tenant_id, request.headers.get("idempotency-key"), raw)
         return _respond(out.status, out.body, trace)
 

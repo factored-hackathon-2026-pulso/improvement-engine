@@ -184,3 +184,18 @@ def test_signer_claim_shape_matches_the_published_schema(world: World) -> None:
     claims = {k: v for k, v in claims.items() if k != "purpose"} | {"purpose": "core_task_invoke"}
     assert_valid("ServiceJwtClaims", claims)
     assert isinstance(world.signer, Signer)
+
+
+@pytest.mark.parametrize("r", ROUTES, ids=ids)
+@pytest.mark.parametrize("sub", ["bridge:1", "worker:", "w"])
+def test_class_i_subject_must_be_a_worker(world: World, r: dict, sub: str) -> None:
+    resp = send(world, r, token=tok(world, r, sub=sub))
+    body = assert_error(resp, 403, "pulso:auth_denied", retryable=False)
+    assert body["details"]["reason"] == "sub_not_worker"
+
+
+def test_invoke_token_job_must_equal_the_body_job(world: World) -> None:
+    body = {"schema_version": "1", "tenant_id": world.tenant, "job_id": "job-body"}
+    resp = world.api.call("POST", "/core-tasks/invoke", purpose="core_task_invoke", body=body, job_id="job-token",
+                          headers={"Idempotency-Key": "k"})
+    assert assert_error(resp, 403, "pulso:auth_denied")["details"]["reason"] == "job_mismatch"
