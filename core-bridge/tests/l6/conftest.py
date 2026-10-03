@@ -19,6 +19,41 @@ from ingest_fixture.app import IngestState, create_app
 
 from pulso_core_runtime.exporter import CoreReader, Exporter, ExporterConfig, ExporterState
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "l6: L6 exporter (real Postgres 16 for Core; ingest endpoint is a double)")
+
+
+_OUTCOMES: dict[str, str] = {}
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    if "tests/l6" not in report.nodeid.replace("\\", "/"):
+        return
+    if report.when == "call" or (report.when == "setup" and report.outcome != "passed"):
+        _OUTCOMES[report.nodeid] = report.outcome if report.when == "call" else (
+            "skipped" if report.skipped else "error")
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Evidence `exporter-report.json` (passed/failed/not_run, target, sha, doubles[]) for the L6 suite."""
+    if not _OUTCOMES:
+        return
+    import subprocess
+
+    from pulso_core_runtime.exporter.report import build_report, write_report
+
+    try:
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+                             cwd=str(session.config.rootpath)).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        sha = "unknown"
+    out = Path(os.environ.get("PULSO_EXPORTER_REPORT") or session.config.rootpath / ".reports" / "exporter-report.json")
+    write_report(out, build_report(
+        _OUTCOMES, target=os.environ.get("PULSO_EXPORTER_TARGET", "fixture"), sha=sha,
+        doubles=["ingest_fixture (platform-sim/ingest_fixture; in-process ASGI or uvicorn loopback; always a double)",
+                 "FakeClock (tests)", "Core PostgreSQL 16 is REAL (throwaway container)"]))
+
+
 RO_ROLE = "exporter_ro"
 RO_PASSWORD = "ro-test-only"
 

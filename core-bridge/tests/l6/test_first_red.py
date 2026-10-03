@@ -11,7 +11,7 @@ from pulso_core_runtime.exporter import SimulatedCrash
 from .conftest import Rig
 from .seed import append_events, seed_run
 
-pytestmark = [pytest.mark.pg]  # `l6` marker needs adding to pyproject (L3a owns it)
+pytestmark = [pytest.mark.pg, pytest.mark.l6]
 
 
 def _raise_once():

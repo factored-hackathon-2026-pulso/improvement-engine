@@ -13,13 +13,17 @@ from typing import Any
 import psycopg
 from psycopg import IsolationLevel
 
-from .config import EVAL_MISCONFIGURED, SCHEMA_DRIFT, ExporterConfig
+from .config import EVAL_MISCONFIGURED, OVERPRIVILEGED, SCHEMA_DRIFT, ExporterConfig
 
 EXPECTED_COLUMNS: dict[str, set[str]] = {
     "audit_events": {"run_id", "seq", "event_id", "type", "release", "ts", "prev_hash", "hash", "event_json"},
     "reg_events": {"seq", "event_json"},
     "outbox": {"message_id", "seq", "message_json", "delivered_at"},
 }
+
+
+READ_ONLY_TABLES = ("audit_events", "reg_events", "outbox")
+FORBIDDEN_TABLES = ("runs", "usage", "reg_blobs", "reg_proposals")
 
 
 class ExporterError(RuntimeError):
@@ -70,12 +74,15 @@ class Snapshot:
         q = f"SELECT seq, {col} FROM {table} WHERE seq>%s ORDER BY seq LIMIT %s"
         return [SeqRow(*r) for r in self._c.execute(q, (after, limit)).fetchall()]  # type: ignore[arg-type]
 
-    def seq_rows_in(self, table: str, seqs: list[int]) -> list[SeqRow]:
-        if not seqs:
+    def seq_rows_in_ranges(self, table: str, ranges: list[tuple[int, int]], limit: int) -> list[SeqRow]:
+        """Rows whose seq lies inside any inclusive [lo, hi] range (skipped holes that finally committed)."""
+        if not ranges:
             return []
         col = {"reg_events": "event_json", "outbox": "message_json"}[table]
-        q = f"SELECT seq, {col} FROM {table} WHERE seq = ANY(%s) ORDER BY seq"
-        return [SeqRow(*r) for r in self._c.execute(q, (seqs,)).fetchall()]  # type: ignore[arg-type]
+        q = (f"SELECT t.seq, t.{col} FROM {table} t JOIN unnest(%s::bigint[], %s::bigint[]) AS r(lo, hi) "
+             "ON t.seq BETWEEN r.lo AND r.hi ORDER BY t.seq LIMIT %s")
+        return [SeqRow(*r) for r in self._c.execute(
+            q, ([lo for lo, _ in ranges], [hi for _, hi in ranges], limit)).fetchall()]  # type: ignore[arg-type]
 
 
 class CoreReader:
@@ -83,14 +90,19 @@ class CoreReader:
         self._dsn, self._cfg = dsn, cfg
 
     def _guard(self, conn: psycopg.Connection[Any]) -> None:
-        db, user, role = conn.execute(
+        db, user, role, soft = conn.execute(
             "SELECT current_database(), current_user, "
-            "(SELECT rolsuper OR rolbypassrls OR rolcreatedb FROM pg_roles WHERE rolname=current_user)").fetchone()  # type: ignore[misc]
+            "(SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user), "
+            "(SELECT rolcreatedb OR rolcreaterole OR rolreplication FROM pg_roles WHERE rolname=current_user)"
+        ).fetchone()  # type: ignore[misc]
         cfg = self._cfg
         if db != cfg.expected_runtime_db or db == cfg.expected_eval_db:
             raise ExporterError(EVAL_MISCONFIGURED, f"connected to {db}")
         if role:
             raise ExporterError(EVAL_MISCONFIGURED, "exporter role is over-privileged")
+        if soft:
+            raise ExporterError(OVERPRIVILEGED, "role has CREATEDB/CREATEROLE/REPLICATION")
+        self._check_grants(conn)
         exists = conn.execute("SELECT 1 FROM pg_database WHERE datname=%s", (cfg.expected_eval_db,)).fetchone()
         if exists and conn.execute("SELECT has_database_privilege(current_user, %s, 'CONNECT')",
                                    (cfg.expected_eval_db,)).fetchone()[0]:  # type: ignore[index]
@@ -102,6 +114,21 @@ class CoreReader:
             cols.setdefault(t, set()).add(c)
         if cols != EXPECTED_COLUMNS:
             raise ExporterError(SCHEMA_DRIFT, "core tables differ from the pinned schema")
+
+    @staticmethod
+    def _check_grants(conn: psycopg.Connection[Any]) -> None:
+        """Least privilege is verified, not assumed: SELECT on exactly the three tables, nothing else."""
+        for table in READ_ONLY_TABLES:
+            for priv in ("INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
+                if conn.execute("SELECT has_table_privilege(current_user, to_regclass(%s), %s)",
+                                (f"public.{table}", priv)).fetchone()[0]:  # type: ignore[index]
+                    raise ExporterError(OVERPRIVILEGED, f"{priv} on {table}")
+        for table in FORBIDDEN_TABLES:
+            if conn.execute("SELECT to_regclass(%s) IS NOT NULL AND (has_table_privilege(current_user, "
+                            "to_regclass(%s), 'SELECT') OR has_table_privilege(current_user, to_regclass(%s), "
+                            "'INSERT') OR has_table_privilege(current_user, to_regclass(%s), 'UPDATE'))",
+                            (f"public.{table}",) * 4).fetchone()[0]:  # type: ignore[index]
+                raise ExporterError(OVERPRIVILEGED, f"privilege on {table}")
 
     @contextmanager
     def snapshot(self) -> Iterator[Snapshot]:

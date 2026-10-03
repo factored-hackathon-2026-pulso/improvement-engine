@@ -1,6 +1,6 @@
 """Exporter local state: SQLite (WAL) on its own volume, never inside Core databases.
 
-Tables: run_head, ledger (exported run/seq/hash), partition_cursor, holes, partition_status, pending_batch.
+Tables: run_head, ledger (exported run/seq/hash), partition_cursor, hole_ranges (inclusive seq ranges), partition_status, pending_batch.
 `commit_ack` applies a batch's delta in ONE transaction together with the pending-batch delete."""
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS run_head(run_id TEXT PRIMARY KEY, last_seq INTEGER NO
 CREATE TABLE IF NOT EXISTS ledger(run_id TEXT NOT NULL, seq INTEGER NOT NULL, hash TEXT NOT NULL,
   PRIMARY KEY(run_id, seq));
 CREATE TABLE IF NOT EXISTS partition_cursor(partition TEXT PRIMARY KEY, cursor TEXT, revision INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS holes(partition TEXT NOT NULL, seq INTEGER NOT NULL, first_seen REAL NOT NULL,
-  skipped INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(partition, seq));
+CREATE TABLE IF NOT EXISTS hole_ranges(partition TEXT NOT NULL, lo INTEGER NOT NULL, hi INTEGER NOT NULL,
+  first_seen REAL NOT NULL, skipped INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(partition, lo));
 CREATE TABLE IF NOT EXISTS partition_status(partition TEXT PRIMARY KEY, status TEXT NOT NULL, reason TEXT);
 CREATE TABLE IF NOT EXISTS pending_batch(id INTEGER PRIMARY KEY CHECK(id=1), partition TEXT NOT NULL,
   scan_mode TEXT NOT NULL, idem_key TEXT NOT NULL, body BLOB NOT NULL, delta TEXT NOT NULL);
@@ -86,19 +86,19 @@ class ExporterState:
         self._db.execute("INSERT INTO partition_cursor VALUES(?,?,?) ON CONFLICT(partition) DO UPDATE SET "
                          "cursor=excluded.cursor, revision=excluded.revision", (partition, cursor, revision))
 
-    # --- holes ---
-    def note_hole(self, partition: str, seq: int, now: float) -> float:
-        self._db.execute("INSERT OR IGNORE INTO holes(partition, seq, first_seen) VALUES(?,?,?)",
-                         (partition, seq, now))
-        return float(self._db.execute("SELECT first_seen FROM holes WHERE partition=? AND seq=?",
-                                      (partition, seq)).fetchone()[0])
+    # --- holes (inclusive seq ranges: a bigserial jump of billions is one row, never enumerated) ---
+    def note_hole_range(self, partition: str, lo: int, hi: int, now: float) -> float:
+        self._db.execute("INSERT OR IGNORE INTO hole_ranges(partition, lo, hi, first_seen) VALUES(?,?,?,?)",
+                         (partition, lo, hi, now))
+        return float(self._db.execute("SELECT first_seen FROM hole_ranges WHERE partition=? AND lo=?",
+                                      (partition, lo)).fetchone()[0])
 
-    def skipped_holes(self, partition: str) -> list[int]:
-        return [r[0] for r in self._db.execute(
-            "SELECT seq FROM holes WHERE partition=? AND skipped=1 ORDER BY seq", (partition,))]
+    def skipped_ranges(self, partition: str) -> list[tuple[int, int]]:
+        return [(r[0], r[1]) for r in self._db.execute(
+            "SELECT lo, hi FROM hole_ranges WHERE partition=? AND skipped=1 ORDER BY lo", (partition,))]
 
     def any_skipped(self) -> bool:
-        return self._db.execute("SELECT 1 FROM holes WHERE skipped=1 LIMIT 1").fetchone() is not None
+        return self._db.execute("SELECT 1 FROM hole_ranges WHERE skipped=1 LIMIT 1").fetchone() is not None
 
     # --- partition status ---
     def stop(self, partition: str, reason: str) -> None:
@@ -148,11 +148,20 @@ class ExporterState:
                     (run_id, h["last_seq"], h["last_hash"], int(h["closed"])))
             for run_id, seq, hsh in d.get("ledger", []):
                 self._db.execute("INSERT OR IGNORE INTO ledger VALUES(?,?,?)", (run_id, seq, hsh))
-            for seq in d.get("holes_skipped", []):
-                self._db.execute("INSERT INTO holes VALUES(?,?,?,1) ON CONFLICT(partition, seq) DO UPDATE SET "
-                                 "skipped=1", (p.partition, seq, 0.0))
-            for seq in d.get("holes_cleared", []):
-                self._db.execute("DELETE FROM holes WHERE partition=? AND seq=?", (p.partition, seq))
+            for lo, hi in d.get("holes_skipped", []):
+                self._db.execute("INSERT INTO hole_ranges VALUES(?,?,?,0.0,1) ON CONFLICT(partition, lo) DO UPDATE "
+                                 "SET skipped=1, hi=excluded.hi", (p.partition, lo, hi))
+            if "holes_unskipped_below" in d:  # grace-period notes below an advanced position are obsolete
+                self._db.execute("DELETE FROM hole_ranges WHERE partition=? AND skipped=0 AND lo<=?",
+                                 (p.partition, d["holes_unskipped_below"]))
+            for seq in d.get("holes_cleared", []):  # a skipped hole finally exported: split its range
+                for lo, hi in self._db.execute("SELECT lo, hi FROM hole_ranges WHERE partition=? AND skipped=1 "
+                                               "AND lo<=? AND hi>=?", (p.partition, seq, seq)).fetchall():
+                    self._db.execute("DELETE FROM hole_ranges WHERE partition=? AND lo=?", (p.partition, lo))
+                    if lo < seq:
+                        self._db.execute("INSERT INTO hole_ranges VALUES(?,?,?,0.0,1)", (p.partition, lo, seq - 1))
+                    if seq < hi:
+                        self._db.execute("INSERT INTO hole_ranges VALUES(?,?,?,0.0,1)", (p.partition, seq + 1, hi))
             if p.scan_mode == "fast_poll":
                 self._db.execute("INSERT INTO partition_cursor VALUES(?,?,?) ON CONFLICT(partition) DO UPDATE SET "
                                  "cursor=excluded.cursor, revision=excluded.revision",

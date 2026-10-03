@@ -24,7 +24,7 @@ from pulso_core_runtime.exporter import (
 from .conftest import Rig
 from .seed import insert_outbox, insert_reg_event, seed_run
 
-pytestmark = [pytest.mark.pg]
+pytestmark = [pytest.mark.pg, pytest.mark.l6]
 
 
 def _admin(rig: Rig, autocommit: bool = True) -> psycopg.Connection[Any]:
@@ -42,7 +42,7 @@ def test_two_runs_batched_receipts_and_no_payload_leak(rig: Rig) -> None:
     for ev in rows:
         o = by_id[ev.event_id]
         assert (o["source_event_digest"], o["source_run_ref"], o["source_sequence"]) == (ev.hash, ev.run_id, ev.seq)
-        assert o["source_event"] is None and o["source_event_ref"].endswith(f"#seq={ev.seq}")
+        assert o["source_event"] is None and o["source_event_ref"]["media_type"] == "application/x-ndjson"
     # a verification receipt per closed run, bound to the exact bytes of the uploaded chain
     assert {r["run_id"] for r in rig.ingest.verification_receipts} == {"run-a", "run-b"}
     for r in rig.ingest.verification_receipts:
@@ -300,9 +300,9 @@ def test_exporter_role_privileges(rig: Rig) -> None:
             with pytest.raises(psycopg.errors.Error):
                 c.execute(stmt)
             c.rollback()
-    with pytest.raises(psycopg.errors.Error):
-        psycopg.connect(rig.pg.eval_ro if hasattr(rig.pg, "eval_ro") else rig.pg.eval.replace(
-            "postgres:l6test", "exporter_ro:ro-test-only"))
+    eval_as_ro = rig.pg.runtime_ro.rsplit("/", 1)[0] + "/" + rig.pg.eval_db
+    with pytest.raises(psycopg.errors.Error):  # CONNECT revoked from PUBLIC and never granted
+        psycopg.connect(eval_as_ro)
 
 
 def test_eval_db_misconfigured_fails_closed(rig: Rig) -> None:
