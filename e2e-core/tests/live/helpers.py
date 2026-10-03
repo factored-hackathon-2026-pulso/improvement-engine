@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 from types import SimpleNamespace
 from typing import Any
 
 import yaml
 
-from codex_standin.dto import admission, digest_json
+from codex_standin.dto import admission, digest_json, idempotency_key
 from codex_standin.engine import (
     ASSETS,
     DESIGN,
@@ -101,16 +102,23 @@ def run_pipeline(e: Engine, db: Any) -> SimpleNamespace:
     p.suite_digest = suite_digest(p.changes)
     # -- evaluation admission, then the evaluate-only invocation
     p.ctx_ref = f"ctx-{n}"
-    p.admission_body = admission(ref=p.ctx_ref, binding_ref=p.writer.out["task_binding_ref"],
+    # The admission is bound to the evaluate-only invocation's OWN (job_id, binding_ref): the runtime derives that
+    # binding_ref as sha256_text("tenant|Idempotency-Key") before the invocation runs, so the stand-in computes it.
+    p.eval_job = f"job-evalonly-{n}"
+    p.eval_key = idempotency_key(TENANT, p.eval_job, "writer", 1, "evalonly")
+    p.eval_binding_ref = hashlib.sha256(f"{TENANT}|{p.eval_key}".encode()).hexdigest()
+    p.admission_body = admission(ref=p.ctx_ref, binding_ref=p.eval_binding_ref,
                                  proposal_id=p.proposal_id, candidate_hash=p.candidate_hash, suite_id="pulso-smoke",
                                  suite_version="1.1.0", suite_digest=p.suite_digest, budget_ref="bud-e2e")
-    p.admit = e.bridge.admit(TENANT, f"job-writer-{n}", p.admission_body)
-    p.eval_only = e.stage("writer", f"job-evalonly-{n}", "evalonly", "pulso-writer", {
+    p.admit = e.bridge.admit(TENANT, p.eval_job, p.admission_body)
+    p.eval_only = e.stage("writer", p.eval_job, "evalonly", "pulso-writer", {
         "draft_plan_ref": f"plan-{n}", "proposal_id": p.proposal_id, "base_release_id": p.base_rel,
         "evaluate_enabled": True, "evaluation_suite_id": "pulso-smoke", "evaluation_suite_version": "1.1.0"},
         registry_mutation_commitment={"mode": "evaluate_only", "proposal_id": p.proposal_id,
                                       "base_release_id": p.base_rel, "evaluate_enabled": True,
                                       "evaluation_context_ref": p.ctx_ref, "operations": []})
+    assert p.eval_only.key == p.eval_key
+    p.eval_facts = e.facts(p.eval_only.out["core_run_id"]) if p.eval_only.out.get("core_run_id") else {}
     # -- arms with the fixture bank: published base (native + task_builder) and the frozen candidate
     scen = smoke_scenarios()
     e.seal(f"manifest-{n}", {"scenarios": scen, "entries": {s["id"]: {} for s in scen}})

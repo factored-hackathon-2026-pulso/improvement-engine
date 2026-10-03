@@ -108,21 +108,16 @@ def test_unknown_release_and_wrong_stage_release_are_refused_before_a_run(stack:
     assert after["receipts"] == before["receipts"] + 2  # the two refusals are recorded as closed terminal_failed receipts
 
 
-def test_stage_and_agent_must_pair_up_before_a_run(stack: Any, pipeline: Any, gap: Any) -> None:
-    """Probe: `stage=writer` (constructor authority) naming the scout agent must be refused before a Core run. The
-    runtime currently starts the run (it escalates, never terminal_ok): recorded as a gap, xfail so it cannot pass
-    silently."""
+def test_stage_and_agent_must_pair_up_before_a_run(stack: Any, pipeline: Any, effect: Any) -> None:
+    """`stage=writer` (constructor authority) naming the scout agent is refused 422 pulso:stage_agent_mismatch before
+    the receipt CAS: zero effects (no receipt, no Core run, no binding)."""
     e = stack.engine
+    before = _counts(stack)
     key, body = invocation(tenant=TENANT, job=f"job-mm-{pipeline.n}", stage="writer", agent_id="pulso-scout",
                            release_id=e.releases["pulso-scout"], logical="mm")
     r = stack.bridge.invoke(TENANT, key, body)
-    assert r.json().get("outcome") != "completed"  # never a success
-    if r.status_code in (409, 422):
-        return
-    gap("stage_agent_mismatch_accepted",
-        f"POST /core-tasks/invoke stage=writer agent_id=pulso-scout was accepted (HTTP {r.status_code}, "
-        f"state={r.json().get('state')}): a Core run of the scout Flow started with the writer stage identity and "
-        "binding; only the later escalation stopped it.",
-        "L3a: validate stage <-> agent_id/flow against stages.catalog.CATALOG before the receipt CAS and answer "
-        "422 pulso:stage_agent_mismatch with zero effects.")
-    pytest.xfail("stage/agent mismatch accepted (gap stage_agent_mismatch_accepted)")
+    assert r.status_code == 422, r.text
+    assert r.json()["code"] == "pulso:stage_agent_mismatch", r.json()
+    assert _counts(stack) == before  # zero effects, not even a receipt
+    assert e.state()["binding_effects"].get(f"{TENANT}|job-mm-{pipeline.n}", 0) == 0
+    effect("stage_agent_mismatch_code", r.json()["code"])

@@ -26,35 +26,13 @@ REPO = Path(__file__).resolve().parents[3]
 # Stack-level gaps found while building this E2E (each has an owner request). Always listed: they are properties of
 # the stack as delivered, independent of which test ran.
 KNOWN_STACK_GAPS: list[dict[str, str]] = [
-    {"code": "core_app_engine_table_grants_missing",
-     "detail": "`agentcore migrate --app-role core_app` grants only audit_events (+registry tables); local/core/init/*.sql "
-               "never grants runs, run_idempotency, turn_leases, turn_results, usage, handoffs, outbox, so the first "
-               "POST /v1/runs dies with InsufficientPrivilege (HTTP 500, invoke `unknown core_call_failed`).",
-     "request": "L8: add GRANT SELECT,INSERT,UPDATE,DELETE on those tables (+ sequences) to core_app in "
-                "local/core/init/10-exporter-grants.sql or a new 12-app-grants.sql. This harness applies it as the "
-                "declared double `db_grants:workaround`."},
-    {"code": "eval_sequences_grant_missing",
-     "detail": "15-eval-grants.sql grants ALL ON ALL TABLES to core_eval_app but no sequence: the first evaluation run "
-               "fails `permission denied for sequence runs_run_seq_seq` (arms `failed_infra infra_InsufficientPrivilege`).",
-     "request": "L8: GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO core_eval_app (core_eval)."},
-    {"code": "no_control_api_to_bridge_service_key",
-     "detail": "core-keygen's service.json holds only exporter keys and smoke-probe (iss pulso-smoke); no key lets "
-               "iss=control-api (A03 class i) call the bridge. The harness overlays PULSO_SERVICE_KEYS with its own "
-               "test key (declared double `runtime-config-overlay`).",
-     "request": "L8: emit a control-api -> core-bridge kid (iss control-api, aud core-bridge) and keep its seed "
-                "readable by stand-ins (e.g. control-api-core-bridge.key), as done for the exporter."},
-    {"code": "exporter_key_issuer_mismatch",
-     "detail": "core-keygen registers exporter-* keys with iss `pulso-exporter`, but the exporter signs iss=core-bridge "
-               "(A03); a receiver that trusts keygen's service.json rejects every exporter call (wrong_audience, "
-               "exporter stuck in `deferred`).",
-     "request": "L8/L6: make keygen's iss equal what the exporter signs (or the exporter's iss configurable); the "
-               "fixture registers iss=core-bridge."},
-    {"code": "llm_env_not_passed_through_compose",
-     "detail": "compose.core.yaml core-runtime has no LLM_ENDPOINTS / key env, so a scripted OpenAI-compatible provider "
-               "cannot be injected through start.ps1; the runtime image has no scripted-provider hook. Workaround: "
-               "thin config overlay image (ENV only) passed via start.ps1 -Image.",
-     "request": "L8: pass LLM_ENDPOINTS and the api_key_env variable names through core-runtime environment (names "
-               "only, values from the env file). MINIMAL hook, no runtime code change needed."},
+    {"code": "eval_budgets_not_passed_through_compose",
+     "detail": "compose.core.yaml core-runtime has no PULSO_EVAL_BUDGETS (nor a budgets file in the keys volume), so "
+               "every budget_ref resolves to None and admission fails closed. The harness adds a thin image overlay "
+               "(ENV + one static budgets.json, same runtime layers) via start.ps1 -Image (declared "
+               "`runtime-config-overlay`).",
+     "request": "L8: pass PULSO_EVAL_BUDGETS through core-runtime environment (and seed a budgets file for local "
+                "real_local), or define the control-api budget contract."},
     {"code": "jev_base_url_not_configurable",
      "detail": "agent_core HttpJevTransport uses a fixed DEFAULT_BASE_URL (no env), so decision-provider scenarios "
                "(atencion/disputas-suite) cannot be scripted in the real image; E2E uses LLM-only pulso agents.",
@@ -77,6 +55,18 @@ def target_of(*, sim_info_status: int, sha: str, reported_digest: str | None, ex
     ok = (sim_info_status == 404 and sha == PIN_SHA and bool(reported_digest) and reported_digest == expected_digest
           and ready)
     return "real_local" if ok else "evidence_target_unproven"
+
+
+def declared_doubles(fx_pieces: list[str]) -> list[dict[str, str]]:
+    """What this harness itself still declares as a double: the fixtures pieces (scripted llm, control-api, lab-broker,
+    bank, ingest), the engine stand-in, and the budgets-only config overlay image."""
+    declared = [{"piece": p, "kind": "fixture", "declared_by": "e2e-core/fixtures_app"} for p in fx_pieces]
+    declared += [
+        {"piece": "codex-standin", "kind": "engine_stand_in", "declared_by": "e2e-core/codex_standin"},
+        {"piece": "runtime-config-overlay", "kind": "image_overlay",
+         "declared_by": "e2e-core/stack.py: same layers as the runtime image; adds ONLY PULSO_EVAL_BUDGETS + a static "
+                        "budgets.json (the stack does not pass it through; see gap eval_budgets_not_passed_through_compose)"}]
+    return declared
 
 
 def double_containers(ns: str) -> list[dict[str, str]]:

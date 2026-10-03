@@ -68,25 +68,18 @@ def test_binding_applied_then_answer_lost_is_never_reported_as_success_and_never
     effect("fault_bind_lost_answer_state", s.out["state"])
 
 
-def test_unproven_binding_is_reported_as_unknown_not_as_a_definitive_failure(stack: Any, gap: Any, effect: Any) -> None:
-    """Strict expectation (A02/D.1): a binding answer lost after the platform applied it leaves the effect unproven,
-    so the receipt must stay `unknown`/`manual_reconcile` for reconciliation; `terminal_failed` invites a redispatch
-    that the platform (same job, other command key) will refuse as binding_conflict forever. Today the Flow path
-    (`pulso/bind_context` -> denied -> escalation) ends `terminal_failed`: recorded as a gap, xfail."""
+def test_unproven_binding_is_reported_as_manual_reconcile_not_as_a_definitive_failure(stack: Any, effect: Any) -> None:
+    """A02/D.1: a binding answer lost after the platform applied it leaves the effect unproven, so the receipt must
+    be `manual_reconcile` (never `terminal_failed`, which invites a redispatch the platform refuses as
+    binding_conflict forever)."""
     e, n = stack.engine, tag()
     _only_scout_script(e, n)
     e.configure(faults={"bind": ["applied_then_503"]})
     s = _scout(e, n, "lost-strict")
     assert e.state()["binding_effects"][f"{TENANT}|job-f-{n}"] == 1
-    if s.out["state"] in ("unknown", "manual_reconcile"):
-        return
-    gap("binding_5xx_reported_as_terminal_failed",
-        f"binding callback answered 503 after the platform applied the binding: invoke state={s.out['state']} "
-        f"reason={s.out.get('reason')} (the effect exists, so the outcome is unknown, not failed).",
-        "L3a/L3b: when `pulso/bind_context` hits a 5xx/timeout (effect unproven) transition the receipt to "
-        "manual_reconcile (BindingService._unproven already does) instead of letting the escalation close it as "
-        "terminal_failed.")
-    pytest.xfail("unproven binding closed as terminal_failed (gap binding_5xx_reported_as_terminal_failed)")
+    assert s.out["state"] == "manual_reconcile", s.out
+    assert s.out.get("outcome") != "completed"
+    effect("unproven_binding_state", s.out["state"])
 
 
 def test_unscripted_model_call_fails_closed_and_is_counted(stack: Any, effect: Any) -> None:

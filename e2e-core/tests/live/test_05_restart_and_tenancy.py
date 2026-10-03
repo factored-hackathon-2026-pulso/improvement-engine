@@ -53,24 +53,22 @@ def test_receipts_and_jti_store_survive_a_runtime_restart_without_second_effects
     effect("restart_replay_extra_effects", {k: after[k] != before[k] for k in before})
 
 
-def test_runtime_refuses_a_tenant_it_is_not_configured_for(stack: Any, pipeline: Any, gap: Any, effect: Any) -> None:
-    """Probe, runs LAST: the stack is configured for one tenant (PULSO_TENANT_ID) and the exporter exports the whole
-    Core DB under that tenant. A runtime that accepts another tenant's signed claim would start a run whose audit
-    events the exporter ships as this tenant's (cross-tenant leak). Today the runtime accepts any tenant claim equal
-    to the body tenant: recorded as a gap, asserted as a failing expectation (xfail) so it cannot pass silently."""
+def test_runtime_refuses_a_tenant_it_is_not_configured_for(stack: Any, pipeline: Any, effect: Any) -> None:
+    """Runs LAST: the stack is configured for one tenant (PULSO_TENANT_ID) and the exporter exports the whole Core DB
+    under it. A valid service JWT for another tenant must be refused 403 pulso:tenant_mismatch before the receipt CAS:
+    no receipt, no Core run, no binding, no model call for the intruder."""
     e, n = stack.engine, tag()
     e.configure(llm_replace=True, llm_rules=[])
     e.script_stage_model(f"scout-o-{n}", RESEARCH, hypotheses_output(OTHER))
+    receipts = stack.runtime_db.one("select count(*) from pulso_bridge.receipts where tenant_id=%s", OTHER)
+    runs = stack.runtime_db.one("select count(*) from runs")
+    calls = len(e.state()["llm_calls"])
     s = e.stage("scout", f"job-o-{n}", "o", "pulso-scout", {"briefing_ref": "wiki/o.md"}, tenant=OTHER,
                 memory_snapshot_ref="m", extract_manifest_ref="x")
-    if s.response.status_code in (401, 403):
-        return  # fixed: the runtime pins its tenant
-    run = s.out.get("core_run_id")
-    gap("runtime_accepts_foreign_tenant_claims",
-        f"POST /core-tasks/invoke with a valid service JWT for tenant '{OTHER}' ran a real Core run "
-        f"(state={s.out.get('state')}) on the runtime configured with PULSO_TENANT_ID={TENANT}; its audit events live in "
-        "the same Core DB the exporter ships under the single configured tenant.",
-        "L2/L3a: reject (403 pulso:tenant_mismatch) any tenant claim different from the runtime's configured "
-        "PULSO_TENANT_ID (or give the exporter per-tenant sources) before the receipt CAS.")
-    effect("foreign_tenant_run_started", bool(run))
-    pytest.xfail("runtime accepted a foreign tenant claim (gap runtime_accepts_foreign_tenant_claims)")
+    assert s.response.status_code == 403, s.response.text
+    assert s.out["code"] == "pulso:tenant_mismatch", s.out
+    assert stack.runtime_db.one("select count(*) from pulso_bridge.receipts where tenant_id=%s", OTHER) == receipts
+    assert stack.runtime_db.one("select count(*) from runs") == runs  # no Core run started
+    assert len(e.state()["llm_calls"]) == calls
+    assert not [b for b in e.state()["bindings"] if b["tenant"] == OTHER]
+    effect("foreign_tenant_refused", s.out["code"])

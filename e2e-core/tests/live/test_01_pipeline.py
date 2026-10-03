@@ -89,42 +89,47 @@ def test_writer_commits_create_put_freeze_with_derived_keys_and_exactly_one_prop
 def test_evaluation_admission_is_created_and_a_replay_is_the_same_admission(stack: Any, pipeline: Any) -> None:
     assert pipeline.admit.status_code == 201, pipeline.admit.text
     assert pipeline.admit.json()["state"] == "admitted"
-    again = stack.bridge.admit(TENANT, pipeline.writer.body["job_id"], pipeline.admission_body)
+    again = stack.bridge.admit(TENANT, pipeline.eval_job, pipeline.admission_body)
     assert again.status_code == 200 and again.json()["state"] == "admitted"
     assert stack.runtime_db.one("select count(*) from pulso_bridge.eval_admissions where evaluation_context_ref=%s",
                                 pipeline.ctx_ref) == 1
     stale = {**pipeline.admission_body, "evaluation_context_ref": pipeline.ctx_ref + "-b",
              "candidate_hash": "0" * 64}
-    r = stack.bridge.admit(TENANT, pipeline.writer.body["job_id"], stale)
+    r = stack.bridge.admit(TENANT, pipeline.eval_job, stale)
     assert r.status_code == 409 and r.json()["code"] == "pulso:candidate_changed"
     unknown_budget = {**pipeline.admission_body, "evaluation_context_ref": pipeline.ctx_ref + "-c",
                       "budget_ref": "bud-nope"}
-    assert stack.bridge.admit(TENANT, pipeline.writer.body["job_id"], unknown_budget).status_code == 403
+    assert stack.bridge.admit(TENANT, pipeline.eval_job, unknown_budget).status_code == 403
 
 
-def test_evaluate_only_invocation_is_unreachable_with_the_seeded_writer_flow_and_fails_closed(stack: Any, pipeline: Any, gap: Any, effect: Any) -> None:
-    """GAP (documented, asserted as the current honest behaviour): the evaluate-only invocation drives the SAME
-    pulso-writer@1.0.0 Flow, whose `chk_state` routes a frozen proposal to `registry/reopen`; the protected executor
-    denies every mutator in evaluate_only mode, so the Flow escalates before `registry/evaluate`. Nothing may leak
-    through: no evaluation run, admission still `admitted`, the invocation is NOT terminal_ok."""
-    out = pipeline.eval_only.out
-    assert out["state"] != "terminal_ok", out
-    assert out.get("outcome") != "completed"
-    assert stack.runtime_db.one("select count(*) from reg_eval_runs where proposal_id=%s", pipeline.proposal_id) == 0
-    state = stack.runtime_db.one("select state from pulso_bridge.eval_admissions where evaluation_context_ref=%s",
-                                 pipeline.ctx_ref)
-    assert state == "admitted"
-    assert stack.runtime_db.one("select proposal_json::json->>'state' from reg_proposals where proposal_id=%s",
-                                pipeline.proposal_id) == "candidate"  # not reopened
-    gap("native_evaluate_unreachable_over_http",
-        "POST /core-tasks/invoke stage=writer mode=evaluate_only escalates: pulso-writer@1.0.0 chk_state sends a frozen "
-        "proposal (candidate_hash != null) to registry/reopen, denied in evaluate_only; registry/evaluate is never "
-        "called, so the native evaluate path (A04 conditions b/c/e, report recovery) cannot be exercised end-to-end "
-        "through the real runtime image.",
-        "L4 (agent-core-assets): add a branch before `reopen` in pulso-writer@1.0.0: when binding.evaluate_enabled "
-        "== true and proposal.candidate_hash != null go to `evaluate` (then verify_evaluate/done), keep `reopen` for "
-        "iteration; or accept a distinct Flow id for evaluate-only (L3 catalog change).")
-    effect("evaluate_only_state", out["state"])
+def test_evaluate_only_invocation_runs_the_native_evaluation_end_to_end_and_never_reopens(stack: Any, pipeline: Any, effect: Any) -> None:
+    """A04 path through the real runtime: the writer Flow in evaluate-only mode (frozen proposal + evaluate_enabled)
+    goes to `registry/evaluate` (never `reopen`), the native evaluation runs against the admission bound to THIS
+    invocation's job_id/binding_ref, and the receipts projection carries eval_run_ref, report_digest and the
+    candidate hash."""
+    out = _ok(pipeline.eval_only)
+    assert out["task_binding_ref"] == pipeline.eval_binding_ref  # the ref the admission was bound to
+    wr = pipeline.eval_facts["pulso_writer_receipts"]["value"]
+    native = wr["native_evaluation"]
+    assert native and native["verdict"] in ("pass", "fail"), wr
+    assert native["eval_run_ref"] and native["report_digest"], native  # the native report was produced
+    assert wr["candidate_hash"] == pipeline.candidate_hash and wr["proposal_id"] == pipeline.proposal_id
+    ops = [r["op"] for r in wr["write_receipts"]]
+    assert "reopen" not in ops and "evaluate" in ops, ops
+    db = stack.runtime_db
+    assert db.one("select count(*) from reg_eval_runs where proposal_id=%s", pipeline.proposal_id) == 1
+    writes = [r[0] for r in db.rows("select op from reg_draft_writes where proposal_id=%s order by created_at",
+                                    pipeline.proposal_id)]
+    assert writes == ["create_proposal", "put_draft", "freeze"], writes  # evaluate-only wrote nothing, no reopen
+    assert db.one("select proposal_json::json->>'state' from reg_proposals where proposal_id=%s",
+                  pipeline.proposal_id) == "candidate"  # still frozen
+    authz = [r["body"]["operation"] for r in stack.engine.state()["requests"]
+             if r["route"] == "authz" and r["body"].get("binding_ref") == pipeline.eval_binding_ref]
+    assert authz, "the evaluate-only invocation was authorised through its own binding"
+    assert "registry/reopen" not in authz
+    effect("evaluate_only_native_evaluation", {"verdict": native["verdict"], "eval_run_ref": native["eval_run_ref"],
+                                               "report_digest": native["report_digest"],
+                                               "candidate_hash": wr["candidate_hash"]})
 
 
 def test_arms_run_against_the_bank_fixture_and_the_report_is_fetchable_by_key(stack: Any, pipeline: Any, effect: Any) -> None:

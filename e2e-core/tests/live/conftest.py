@@ -125,14 +125,7 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
         return
     ver = st.bridge.version()
     fx_pieces = st.fx.get("/_e2e/info").json()["pieces"]
-    declared = [{"piece": p, "kind": "fixture", "declared_by": "e2e-core/fixtures_app"} for p in fx_pieces]
-    declared += [
-        {"piece": "codex-standin", "kind": "engine_stand_in", "declared_by": "e2e-core/codex_standin"},
-        {"piece": "runtime-config-overlay", "kind": "image_overlay",
-         "declared_by": "e2e-core/stack.py: same layers as " + os.environ.get("E2E_BASE_IMAGE", "?")
-         + "; adds env (PULSO_SERVICE_KEYS with a control-api->bridge test key, budgets, LLM endpoint) and test key files"},
-        {"piece": "db_grants:workaround", "kind": "stack_workaround",
-         "declared_by": "e2e-core/stack.py: GRANTs missing from local/core init (see gaps)"}]
+    declared = report.declared_doubles(fx_pieces)
     suites = [{"name": mod, "total": r["passed"] + r["failed"] + len(r["skipped"]) + len(r["xfailed"]),
                "passed": r["passed"], "failed": r["failed"], "not_run": len(r["skipped"]),
                "skipped": r["skipped"], "known_gaps_xfailed": r["xfailed"]} for mod, r in sorted(OUTCOMES.items())]
