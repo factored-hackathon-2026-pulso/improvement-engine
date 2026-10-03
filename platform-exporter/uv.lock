@@ -276,6 +276,7 @@ name = "pulso-platform-exporter"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "rfc8785" },
@@ -292,6 +293,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=43" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "rfc8785", specifier = ">=0.1.4" },
