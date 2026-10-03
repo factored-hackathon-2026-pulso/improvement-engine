@@ -241,3 +241,10 @@ def test_exporter_requires_both_key_seeds_and_never_echoes_them() -> None:
 def test_migrate_needs_no_key_material() -> None:
     r = _run(["migrate", "--help"], env={})
     assert "pulso:runtime_config_invalid" not in r.stderr
+
+
+def test_dockerfile_core_sha_args_equal_the_runtime_pin() -> None:
+    from pulso_core_runtime import PIN_SHA
+
+    shas = re.findall(r"^ARG CORE_SHA=([0-9a-f]{40})$", DOCKERFILE, re.M)
+    assert len(shas) == 2 and set(shas) == {PIN_SHA}

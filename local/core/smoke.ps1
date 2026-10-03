@@ -50,7 +50,7 @@ try {
         if ($raw -is [byte[]]) { $raw = [Text.Encoding]::UTF8.GetString($raw) }
     }
     $ver = $raw | ConvertFrom-Json
-    Add-Check 'version_pin' $(if ($ver.agent_core_sha -eq '789d6c89b2fca90fc10e2abf157da51dc81c5d51') { 'pass' } else { 'fail' }) "sha=$($ver.agent_core_sha) contracts=$($ver.contracts_version)"
+    Add-Check 'version_pin' $(if ($ver.agent_core_sha -eq '894fa65575d83420523f33ec1c6919b8965f7ebe') { 'pass' } else { 'fail' }) "sha=$($ver.agent_core_sha) contracts=$($ver.contracts_version)"
 
     # 3. double detection
     $sim = $false

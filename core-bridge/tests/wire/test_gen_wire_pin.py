@@ -77,7 +77,7 @@ class _Tx:
 
 
 def test_seeded_release_id_is_derived_from_the_prod_alias_not_hard_coded(gw) -> None:
-    """The id changes on every pin that touches release content (rel-98130317... -> rel-e26df007...): derive it."""
+    """The id changes on every pin that touches release content (it was rel-e26df007... at 894fa65): derive it."""
     assert gw.seeded_release_id(_Tx({("atencion", "prod"): "rel-anything"})) == "rel-anything"
     with pytest.raises(SystemExit):
         gw.seeded_release_id(_Tx({}))

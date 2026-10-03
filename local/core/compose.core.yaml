@@ -196,7 +196,7 @@ services:
       AGENTCORE_KEYS_FINGERPRINT: ${AGENTCORE_KEYS_FINGERPRINT:-}
       AGENTCORE_KEYS_TOKEN_MAP: ${AGENTCORE_KEYS_TOKEN_MAP:-}
       AGENTCORE_JEV_API_KEY: ${AGENTCORE_JEV_API_KEY:-}
-      # External llm-gateway (agent-core 789d6c8, POST /v1/generate): URL and token go together or not at all. With
+      # External llm-gateway (agent-core 894fa65, POST /v1/generate): URL and token go together or not at all. With
       # neither set the runtime starts with an UnconfiguredLLMGateway (fail closed: every generation fails `unavailable`,
       # so task stages fail; conversational M8 falls back to templates, upstream behaviour). Values come from the env
       # file, never from this repo. LLM_ENDPOINTS/PULSO_LLM_API_KEY no longer exist upstream.
@@ -206,6 +206,12 @@ services:
       PULSO_EVAL_BUDGETS: ${PULSO_EVAL_BUDGETS:-}
       # Same table inline (no file mount needed; no secrets in it). A readable PULSO_EVAL_BUDGETS file wins.
       PULSO_EVAL_BUDGETS_JSON: ${PULSO_EVAL_BUDGETS_JSON:-}
+      # Core per-principal limits (agent-core 894fa65 rate_limits_from_env; values = Core defaults). Only spending
+      # operations count; our builder principal gets no service multiplier. Malformed values abort startup (exit 78).
+      AGENTCORE_RATE_MAX_HITS: ${AGENTCORE_RATE_MAX_HITS:-30}
+      AGENTCORE_RATE_WINDOW_SECONDS: ${AGENTCORE_RATE_WINDOW_SECONDS:-60}
+      AGENTCORE_DAILY_BUDGET_USD: ${AGENTCORE_DAILY_BUDGET_USD:-5.00}
+      AGENTCORE_RATE_SERVICE_MULTIPLIER: ${AGENTCORE_RATE_SERVICE_MULTIPLIER:-10}
     volumes:
       - core-keys:/run/pulso-keys:ro
     depends_on:

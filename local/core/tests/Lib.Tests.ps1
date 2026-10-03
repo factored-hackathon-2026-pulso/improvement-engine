@@ -83,7 +83,7 @@ Describe 'ports' {
 }
 
 Describe 'evidence' {
-    $pin = '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
+    $pin = '894fa65575d83420523f33ec1c6919b8965f7ebe'
     It 'stamps target, runtime_profile, machine and doubles' {
         $s = New-EvidenceStamp -Target 'mock' -RuntimeProfile 'contract_mock' -Namespace 'claude-1' -Machine 'pulso-dev' `
             -Connection 'pulso-dev' -Doubles @('registry-mock')
