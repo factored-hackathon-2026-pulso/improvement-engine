@@ -454,6 +454,159 @@ fn binary_persists_simulated_result_and_timeline_without_source_identifiers() {
 }
 
 #[test]
+fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_candidate() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("original-bank");
+    let contacts = input.join("call_center_interactions");
+    let output = temp.path().join("runs-original");
+    fs::create_dir_all(&contacts).expect("contact table directory");
+    let mut csv =
+        String::from("interaction_id,customer_id,interaction_date,contact_reason,channel\n");
+    for (month, day) in [("2027-03", 1), ("2027-04", 1)] {
+        for offset in 0..5 {
+            csv.push_str(&format!(
+                "private-interaction-{month}-{offset},private-customer-{month}-{offset},{month}-{day:02} 10:00:00,Complaint,Phone\n"
+            ));
+        }
+    }
+    for offset in 0..4 {
+        csv.push_str(&format!(
+            "private-suppressed-{offset},private-suppressed-customer-{offset},2027-05-01 10:00:00,Technical,Chat\n"
+        ));
+    }
+    csv.push_str(
+        "private-rejected-channel,private-customer-rejected-channel,2027-06-01 10:00:00,Complaint,\n",
+    );
+    csv.push_str(
+        "private-rejected-timestamp,private-customer-rejected-timestamp,not-a-date,Complaint,Phone\n",
+    );
+    fs::write(contacts.join("part-000.csv"), csv).expect("write synthetic contacts");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run original source CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result JSON");
+    let serialized = result.to_string();
+    let envelope = &result["snapshot_descriptive_envelope"];
+    assert!(!serialized.contains("\"rejected_rows\""));
+    assert!(!serialized.contains("\"suppressed_cells\""));
+    assert_eq!(
+        result["terminal_status"],
+        "snapshot_descriptive_finding_ready"
+    );
+    assert_eq!(result["formal_route"], "do_nothing");
+    assert_eq!(
+        envelope["finding"]["literal_months"],
+        serde_json::json!(["2027-03", "2027-04"])
+    );
+    assert_eq!(
+        envelope["finding"]["temporal_basis"],
+        "literal_source_wall_clock_month"
+    );
+    assert_eq!(
+        envelope["finding"]["value_semantics"],
+        "final_extract_facts_only"
+    );
+    assert_eq!(envelope["finding"]["coverage"], "partial");
+    assert_eq!(envelope["finding"]["minimum_cell_count"], 5);
+    assert!(envelope["finding"].get("rejected_rows").is_none());
+    assert!(envelope["finding"].get("suppressed_cells").is_none());
+    assert_eq!(envelope["finding"]["complaint_contact_count"], 10);
+    assert_eq!(
+        envelope["agent_core_candidate"],
+        "dependency_blocked_snapshot_semantics"
+    );
+    assert_eq!(envelope["proposal"]["status"], "simulated_unverified");
+    assert_eq!(envelope["proposal"]["execution_status"], "not_executed");
+    assert_eq!(envelope["proposal"]["publication_eligible"], false);
+    for forbidden in [
+        "private-interaction",
+        "private-customer",
+        "private-suppressed",
+        "technical",
+        "chat",
+        "rejected_rows",
+        "suppressed_cells",
+        "observed_cutoff",
+    ] {
+        assert!(!envelope.to_string().contains(forbidden));
+        if forbidden != "observed_cutoff" {
+            assert!(
+                !serialized.contains(forbidden),
+                "unexpected disclosure in result.json: {forbidden}"
+            );
+        }
+    }
+    assert!(!envelope.to_string().contains("2025-07-01T00:00:00Z"));
+}
+
+#[test]
+fn original_cli_does_not_allow_per_run_contact_k_override() {
+    let temp = TempDir::new().expect("temp directory");
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+        ])
+        .arg(temp.path().join("source-does-not-need-to-exist"))
+        .args(["--output"])
+        .arg(temp.path().join("out"))
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+            "--min-contact-cell-count",
+            "10",
+        ])
+        .output()
+        .expect("run CLI with unsupported k override");
+    assert!(!completed.status.success());
+    assert!(
+        String::from_utf8_lossy(&completed.stderr)
+            .contains("unknown option --min-contact-cell-count")
+    );
+}
+
+#[test]
 fn binary_emits_no_opportunity_when_discovery_has_no_positive_support() {
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("e0-no-positive-signal");

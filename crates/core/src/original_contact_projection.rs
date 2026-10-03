@@ -29,8 +29,20 @@ pub enum ProjectionCoverage {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectionPolicy {
-    pub version: u32,
-    pub minimum_cell_count: u64,
+    version: u32,
+    minimum_cell_count: u64,
+}
+
+impl ProjectionPolicy {
+    /// Fixed disclosure policy for discovery-facing snapshot projections.
+    /// Changing k requires a new policy version and release, not a run option.
+    #[must_use]
+    pub const fn v1() -> Self {
+        Self {
+            version: 1,
+            minimum_cell_count: 5,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,8 +211,6 @@ pub struct Projection<T> {
     pub observed_cutoff: String,
     pub coverage: ProjectionCoverage,
     pub policy_version: u32,
-    pub suppressed_count: u64,
-    pub rejected_rows: u64,
     pub aggregates: Vec<T>,
 }
 
@@ -216,8 +226,6 @@ pub struct SnapshotDescriptiveProjection<T> {
     pub manifest_digest: String,
     pub coverage: ProjectionCoverage,
     pub policy_version: u32,
-    pub suppressed_count: u64,
-    pub rejected_rows: u64,
     pub aggregates: Vec<T>,
 }
 
@@ -395,7 +403,8 @@ impl SnapshotDescriptiveManifest {
         table: ProjectionTable,
         partitions: Vec<ManifestPartition>,
         coverage: ProjectionCoverage,
-        policy: ProjectionPolicy,
+        // Snapshot discovery policy is fixed; changing k requires a new policy
+        // version and release, not a per-run request.
     ) -> Result<Self, ProjectionError> {
         let verified = ProjectionManifest::new(
             repository,
@@ -403,7 +412,7 @@ impl SnapshotDescriptiveManifest {
             table,
             partitions,
             coverage,
-            policy,
+            ProjectionPolicy::v1(),
         )?;
         let digest = snapshot_descriptive_manifest_digest(&verified.digest);
         Ok(Self { verified, digest })
@@ -533,13 +542,11 @@ pub fn project_contacts_descriptive<R: Read>(
             missing_fields: missing_fields.into_iter().collect(),
         }
     };
-    let mut suppressed_count = 0;
     let aggregates = if status == SupportStatus::Supported {
         grouped
             .into_iter()
             .filter_map(|((period, category, channel), values)| {
                 if values.contact_count < manifest.policy.minimum_cell_count {
-                    suppressed_count += 1;
                     None
                 } else {
                     Some(SnapshotDescriptiveContactAggregate {
@@ -568,8 +575,6 @@ pub fn project_contacts_descriptive<R: Read>(
         manifest_digest: descriptive_manifest_digest,
         coverage: manifest.coverage,
         policy_version: manifest.policy.version,
-        suppressed_count,
-        rejected_rows,
         aggregates,
     })
 }
@@ -689,13 +694,11 @@ pub fn project_complaints_descriptive<R: Read>(
             missing_fields: missing_fields.into_iter().collect(),
         }
     };
-    let mut suppressed_count = 0;
     let aggregates = if status == SupportStatus::Supported {
         grouped
             .into_iter()
             .filter_map(|((period, category, channel), values)| {
                 if values.complaint_count < manifest.policy.minimum_cell_count {
-                    suppressed_count += 1;
                     None
                 } else {
                     Some(SnapshotDescriptiveComplaintAggregate {
@@ -726,8 +729,6 @@ pub fn project_complaints_descriptive<R: Read>(
         manifest_digest: descriptive_manifest_digest,
         coverage: manifest.coverage,
         policy_version: manifest.policy.version,
-        suppressed_count,
-        rejected_rows,
         aggregates,
     })
 }
@@ -852,13 +853,11 @@ pub fn project_contacts<R: Read>(
             missing_fields: missing_fields.into_iter().collect(),
         }
     };
-    let mut suppressed_count = 0;
     let aggregates = if status == SupportStatus::Supported {
         grouped
             .into_iter()
             .filter_map(|((period, category, channel), values)| {
                 if values.contact_count < manifest.policy.minimum_cell_count {
-                    suppressed_count += 1;
                     None
                 } else {
                     Some(ContactAggregate {
@@ -887,8 +886,6 @@ pub fn project_contacts<R: Read>(
         observed_cutoff: manifest.observed_cutoff.clone(),
         coverage: manifest.coverage,
         policy_version: manifest.policy.version,
-        suppressed_count,
-        rejected_rows,
         aggregates,
     })
 }
@@ -1011,13 +1008,11 @@ pub fn project_complaints<R: Read>(
             missing_fields: missing_fields.into_iter().collect(),
         }
     };
-    let mut suppressed_count = 0;
     let aggregates = if status == SupportStatus::Supported {
         grouped
             .into_iter()
             .filter_map(|((period, category, channel), values)| {
                 if values.complaint_count < manifest.policy.minimum_cell_count {
-                    suppressed_count += 1;
                     None
                 } else {
                     Some(ComplaintAggregate {
@@ -1051,8 +1046,6 @@ pub fn project_complaints<R: Read>(
         observed_cutoff: manifest.observed_cutoff.clone(),
         coverage: manifest.coverage,
         policy_version: manifest.policy.version,
-        suppressed_count,
-        rejected_rows,
         aggregates,
     })
 }
@@ -1131,7 +1124,7 @@ fn elapsed_timestamp_days(start: &str, end: &str) -> Option<f64> {
 
 /// Returns the calendar month exactly as represented in a source timestamp.
 /// No timezone is inferred and no cutoff comparison is possible in this path.
-fn source_wall_clock_month(value: Option<&str>) -> Option<String> {
+pub fn source_wall_clock_month(value: Option<&str>) -> Option<String> {
     let value = value?;
     if value.len() != 19 || !matches!(value.as_bytes().get(10), Some(b' ' | b'T')) {
         return None;

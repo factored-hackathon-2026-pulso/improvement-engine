@@ -8,8 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use improvement_engine_core::local_simulation::{
     LocalContactVolumeCell, LocalContactVolumeProjection, LocalObservedEvent, LocalObservedQuery,
-    LocalRunInput, LocalRunMetadata, LocalRunResult, LocalSourceKind, RunEvent,
-    run_local_simulation,
+    LocalRunInput, LocalRunMetadata, LocalRunResult, LocalSnapshotContactAggregate,
+    LocalSnapshotContactProjection, LocalSourceKind, RunEvent, run_local_simulation,
 };
 use improvement_engine_source_adapters::{
     CasePhase, E0Fact, E0HoldoutEvaluation, E0HoldoutPolicy, E0HoldoutStatus, PreparationConfig,
@@ -36,7 +36,6 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
         options.observed_cutoff,
         options.arranque_cases,
     )
-    .and_then(|config| config.with_minimum_contact_cell_count(options.minimum_contact_cell_count))
     .map_err(|error| format!("invalid source preparation config: {error}"))?;
     let prepared = match options.source.as_str() {
         "e0" => prepare_e0_package(&options.input, &config),
@@ -240,6 +239,7 @@ fn to_run_input(
     )
     .with_queries(queries)
     .with_query_table_available(prepared.agent_inputs().has_available_table("copilot_query"));
+    let mut input = input;
     if let Some(projection) = prepared.agent_inputs().contact_projection() {
         let cells = prepared
             .agent_inputs()
@@ -257,15 +257,36 @@ fn to_run_input(
             projection.policy_version(),
             projection.minimum_cell_count(),
             projection.included_record_count(),
-            projection.rejected_rows(),
-            projection.suppressed_cells(),
             cells,
         )
         .map_err(|_| "source adapter emitted an invalid contact projection".to_owned())?;
-        Ok(input.with_contact_volume_projection(projection))
-    } else {
-        Ok(input)
+        input = input.with_contact_volume_projection(projection);
     }
+    if let Some(projection) = prepared.agent_inputs().descriptive_contact_projection() {
+        let aggregates = projection
+            .aggregates()
+            .iter()
+            .map(|cell| {
+                LocalSnapshotContactAggregate::new(
+                    cell.period(),
+                    cell.reason(),
+                    cell.channel(),
+                    cell.contact_count(),
+                )
+            })
+            .collect();
+        let projection = LocalSnapshotContactProjection::new(
+            projection.policy_version(),
+            projection.minimum_cell_count(),
+            projection.included_contact_count(),
+            aggregates,
+        )
+        .map_err(|_| {
+            "source adapter emitted an invalid descriptive contact projection".to_owned()
+        })?;
+        input = input.with_snapshot_descriptive_contact_projection(projection);
+    }
+    Ok(input)
 }
 
 fn safe_code(value: &str) -> Result<String, String> {
@@ -365,7 +386,6 @@ struct Options {
     observed_cutoff: String,
     arranque_cases: usize,
     minimum_recurring_query_support: u64,
-    minimum_contact_cell_count: u64,
     help: bool,
 }
 
@@ -380,7 +400,6 @@ impl Options {
             observed_cutoff: "".into(),
             arranque_cases: 200,
             minimum_recurring_query_support: 20,
-            minimum_contact_cell_count: 5,
             help: false,
         };
         let mut args = args.into_iter();
@@ -420,17 +439,6 @@ impl Options {
                         );
                     }
                 }
-                "--min-contact-cell-count" => {
-                    options.minimum_contact_cell_count = value.parse().map_err(|_| {
-                        "--min-contact-cell-count must be an integer from 5 to 10000".to_owned()
-                    })?;
-                    if !(5..=10_000).contains(&options.minimum_contact_cell_count) {
-                        return Err(
-                            "--min-contact-cell-count must be an integer from 5 to 10000"
-                                .to_owned(),
-                        );
-                    }
-                }
                 _ => return Err(format!("unknown option {key}")),
             }
         }
@@ -451,7 +459,7 @@ impl Options {
 
 fn print_help() {
     println!(
-        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20] [--min-contact-cell-count 5]"
+        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20]"
     );
 }
 
@@ -566,11 +574,16 @@ mod tests {
             table.join("part-000.csv"),
             concat!(
                 "interaction_id,customer_id,interaction_date,contact_reason,channel\n",
-                "id-1,c-1,2025-01-01T10:00:00,Complaint,Phone\n",
-                "id-2,c-2,2025-01-02T10:00:00,Complaint,Phone\n",
-                "id-3,c-3,2025-01-03T10:00:00,Complaint,Phone\n",
-                "id-4,c-4,2099-01-04T10:00:00,Complaint,Phone\n",
-                "id-5,c-5,2025-01-05T10:00:00,Complaint,Phone\n",
+                "id-1,c-1,2027-01-01 10:00:00,Complaint,Phone\n",
+                "id-2,c-2,2027-01-02 10:00:00,Complaint,Phone\n",
+                "id-3,c-3,2027-01-03 10:00:00,Complaint,Phone\n",
+                "id-4,c-4,2027-01-04 10:00:00,Complaint,Phone\n",
+                "id-5,c-5,2027-01-05 10:00:00,Complaint,Phone\n",
+                "id-6,c-6,2027-02-01 10:00:00,Complaint,Phone\n",
+                "id-7,c-7,2027-02-02 10:00:00,Complaint,Phone\n",
+                "id-8,c-8,2027-02-03 10:00:00,Complaint,Phone\n",
+                "id-9,c-9,2027-02-04 10:00:00,Complaint,Phone\n",
+                "id-10,c-10,2027-02-05 10:00:00,Complaint,Phone\n",
             ),
         )
         .unwrap();
@@ -580,13 +593,22 @@ mod tests {
         let input = to_run_input(&prepared, "run-original-snapshot", "pulso_local").unwrap();
         let result = run_local_simulation(input).unwrap();
 
-        assert_eq!(result.terminal_status, "snapshot_projection_complete");
+        assert_eq!(result.terminal_status, "snapshot_descriptive_finding_ready");
         assert_eq!(result.source_kind, LocalSourceKind::OriginalBank);
         assert!(result.signal.is_none());
         assert!(result.proposal.is_none());
+        let envelope = result.snapshot_descriptive_envelope.as_ref().unwrap();
+        assert_eq!(
+            envelope.agent_core_candidate,
+            "dependency_blocked_snapshot_semantics"
+        );
+        assert_eq!(envelope.finding.literal_months, ["2027-01", "2027-02"]);
+        assert_eq!(envelope.finding.complaint_contact_count, 10);
+        assert_eq!(envelope.proposal.status, "simulated_unverified");
+        assert!(!envelope.proposal.publication_eligible);
         let contact_projection = result.contact_volume_projection.as_ref().unwrap();
-        assert_eq!(contact_projection.included_record_count(), 5);
-        assert_eq!(contact_projection.cells()[0].record_count(), 5);
+        assert_eq!(contact_projection.included_record_count(), 10);
+        assert_eq!(contact_projection.cells()[0].record_count(), 10);
         assert!(
             !serde_json::to_string(&result)
                 .unwrap()
@@ -627,6 +649,7 @@ mod tests {
             proposal: None,
             evaluation: None,
             contact_volume_projection: None,
+            snapshot_descriptive_envelope: None,
             events: Vec::new(),
         };
 

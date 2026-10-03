@@ -52,6 +52,9 @@ const TOOL_RETRY_POLICY: &str = "e0_tool_retry_case_rate_v1";
 const LOCAL_PRIMARY_SIGNAL_POLICY: &str = "local_primary_signal_v3";
 const RETRY_ERROR_OVERLAP_POLICY_ID: &str = "e0_retry_error_overlap_k_v2";
 const MIN_REPORTABLE_RETRY_ERROR_OVERLAP_CASES: u64 = 5;
+const SNAPSHOT_CONTACT_POLICY: &str = "original_contact_literal_month_k_v1";
+const SNAPSHOT_CONTACT_POLICY_VERSION: u32 = 1;
+const SNAPSHOT_CONTACT_MINIMUM_CELL_COUNT: u64 = 5;
 
 /// Minimal, treated event projection passed from a local source adapter.
 /// Identity, prompts, transcripts, customer values and evaluator labels have
@@ -116,6 +119,144 @@ pub struct LocalRunInput {
     query_table_available: bool,
     minimum_recurring_query_support: u64,
     contact_volume_projection: Option<LocalContactVolumeProjection>,
+    snapshot_descriptive_contact_projection: Option<LocalSnapshotContactProjection>,
+}
+
+/// Safe aggregate projection of an original-bank final extract. This is a
+/// separate contract from the UTC as-of contact projection: literal source
+/// calendar months are descriptive only and never establish eligibility.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct LocalSnapshotContactAggregate {
+    pub period: String,
+    pub reason_category: String,
+    pub channel: String,
+    pub contact_count: u64,
+}
+
+impl LocalSnapshotContactAggregate {
+    #[must_use]
+    pub fn new(
+        period: impl Into<String>,
+        reason_category: impl Into<String>,
+        channel: impl Into<String>,
+        contact_count: u64,
+    ) -> Self {
+        Self {
+            period: period.into(),
+            reason_category: reason_category.into(),
+            channel: channel.into(),
+            contact_count,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct LocalSnapshotContactProjection {
+    temporal_basis: String,
+    value_semantics: String,
+    coverage: String,
+    policy_version: u32,
+    minimum_cell_count: u64,
+    included_contact_count: u64,
+    aggregates: Vec<LocalSnapshotContactAggregate>,
+}
+
+impl LocalSnapshotContactProjection {
+    pub fn new(
+        policy_version: u32,
+        minimum_cell_count: u64,
+        included_contact_count: u64,
+        aggregates: Vec<LocalSnapshotContactAggregate>,
+    ) -> Result<Self, LocalRunError> {
+        let projection = Self {
+            temporal_basis: "literal_source_wall_clock_month".into(),
+            value_semantics: "final_extract_facts_only".into(),
+            coverage: "partial".into(),
+            policy_version,
+            minimum_cell_count,
+            included_contact_count,
+            aggregates,
+        };
+        let unique_cells = projection
+            .aggregates
+            .iter()
+            .map(|cell| {
+                (
+                    cell.period.as_str(),
+                    cell.reason_category.as_str(),
+                    cell.channel.as_str(),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        let count_sum = projection
+            .aggregates
+            .iter()
+            .try_fold(0_u64, |sum, cell| sum.checked_add(cell.contact_count));
+        if projection.policy_version != SNAPSHOT_CONTACT_POLICY_VERSION
+            || projection.minimum_cell_count != SNAPSHOT_CONTACT_MINIMUM_CELL_COUNT
+            || unique_cells.len() != projection.aggregates.len()
+            || count_sum != Some(projection.included_contact_count)
+            || projection.aggregates.iter().any(|cell| {
+                !is_literal_month(&cell.period)
+                    || !matches!(
+                        cell.reason_category.as_str(),
+                        "complaint"
+                            | "transactional"
+                            | "technical"
+                            | "general_inquiry"
+                            | "product"
+                            | "account"
+                            | "card"
+                            | "loan"
+                            | "other"
+                            | "unclassified"
+                    )
+                    || !matches!(
+                        cell.channel.as_str(),
+                        "phone" | "web" | "chat" | "email" | "branch" | "mobile_app" | "other"
+                    )
+                    || cell.contact_count < projection.minimum_cell_count
+            })
+        {
+            return Err(LocalRunError::InvalidEventProjection);
+        }
+        Ok(projection)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SnapshotDescriptiveFinding {
+    pub signal_id: String,
+    pub source_snapshot_digest: String,
+    pub source_manifest_digest: String,
+    pub projection_digest: String,
+    pub temporal_basis: String,
+    pub value_semantics: String,
+    pub coverage: String,
+    pub policy_id: String,
+    pub policy_version: u32,
+    pub minimum_cell_count: u64,
+    pub supported_contact_count: u64,
+    pub complaint_contact_count: u64,
+    pub literal_months: Vec<String>,
+    pub claim_scope: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SnapshotDescriptiveProposal {
+    pub status: String,
+    pub execution_status: String,
+    pub publication_eligible: bool,
+    pub formal_route: String,
+    pub hypothesis: String,
+    pub proposed_artifact_intent: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SnapshotDescriptiveEnvelope {
+    pub agent_core_candidate: String,
+    pub finding: SnapshotDescriptiveFinding,
+    pub proposal: SnapshotDescriptiveProposal,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -158,8 +299,6 @@ pub struct LocalContactVolumeProjection {
     policy_version: u32,
     minimum_cell_count: u64,
     included_record_count: u64,
-    rejected_rows: u64,
-    suppressed_cells: u64,
     cells: Vec<LocalContactVolumeCell>,
 }
 
@@ -168,8 +307,6 @@ impl LocalContactVolumeProjection {
         policy_version: u32,
         minimum_cell_count: u64,
         included_record_count: u64,
-        rejected_rows: u64,
-        suppressed_cells: u64,
         cells: Vec<LocalContactVolumeCell>,
     ) -> Result<Self, LocalRunError> {
         let projection = Self {
@@ -177,8 +314,6 @@ impl LocalContactVolumeProjection {
             policy_version,
             minimum_cell_count,
             included_record_count,
-            rejected_rows,
-            suppressed_cells,
             cells,
         };
         let included_sum = projection
@@ -190,8 +325,8 @@ impl LocalContactVolumeProjection {
             .iter()
             .map(|cell| (cell.reason_category.as_str(), cell.channel.as_str()))
             .collect::<BTreeSet<_>>();
-        if projection.policy_version == 0
-            || !(5..=10_000).contains(&projection.minimum_cell_count)
+        if projection.policy_version != SNAPSHOT_CONTACT_POLICY_VERSION
+            || projection.minimum_cell_count != SNAPSHOT_CONTACT_MINIMUM_CELL_COUNT
             || unique_cells.len() != projection.cells.len()
             || projection.cells.iter().any(|cell| {
                 !matches!(
@@ -229,14 +364,6 @@ impl LocalContactVolumeProjection {
     #[must_use]
     pub fn minimum_cell_count(&self) -> u64 {
         self.minimum_cell_count
-    }
-    #[must_use]
-    pub fn suppressed_cells(&self) -> u64 {
-        self.suppressed_cells
-    }
-    #[must_use]
-    pub fn rejected_rows(&self) -> u64 {
-        self.rejected_rows
     }
     #[must_use]
     pub fn policy_version(&self) -> u32 {
@@ -300,6 +427,7 @@ impl LocalRunInput {
             query_table_available: false,
             minimum_recurring_query_support: DEFAULT_MIN_RECURRING_QUERY_CASES,
             contact_volume_projection: None,
+            snapshot_descriptive_contact_projection: None,
         }
     }
 
@@ -333,6 +461,15 @@ impl LocalRunInput {
         projection: LocalContactVolumeProjection,
     ) -> Self {
         self.contact_volume_projection = Some(projection);
+        self
+    }
+
+    #[must_use]
+    pub fn with_snapshot_descriptive_contact_projection(
+        mut self,
+        projection: LocalSnapshotContactProjection,
+    ) -> Self {
+        self.snapshot_descriptive_contact_projection = Some(projection);
         self
     }
 }
@@ -413,6 +550,8 @@ pub struct LocalRunResult {
     pub proposal: Option<ImprovementDraft>,
     pub evaluation: Option<EvaluationSummary>,
     pub contact_volume_projection: Option<LocalContactVolumeProjection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_descriptive_envelope: Option<SnapshotDescriptiveEnvelope>,
     pub events: Vec<RunEvent>,
 }
 
@@ -467,21 +606,44 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
 
     if input.metadata.source_kind == LocalSourceKind::OriginalBank {
         let contact_volume_projection = input.contact_volume_projection.clone();
-        let supported_snapshot = contact_volume_projection.is_some();
+        let descriptive_envelope = input
+            .snapshot_descriptive_contact_projection
+            .as_ref()
+            .and_then(|projection| build_snapshot_descriptive_envelope(&input, projection));
+        let supported_snapshot = contact_volume_projection.is_some()
+            || input.snapshot_descriptive_contact_projection.is_some();
         record_event(
             &mut events,
             "detection",
-            if supported_snapshot {
+            if descriptive_envelope.is_some() {
+                "descriptive_snapshot_signal"
+            } else if supported_snapshot {
                 "snapshot_projection_complete"
             } else {
                 "unsupported_source"
             },
-            if supported_snapshot {
+            if descriptive_envelope.is_some() {
+                "complaint volume is visible in literal snapshot months; descriptive evidence only"
+            } else if supported_snapshot {
                 "safe contact reason/channel counts are available as snapshot-extract facts only"
             } else {
                 "no currently allowlisted original-bank detector matches this projection"
             },
         );
+        if descriptive_envelope.is_some() {
+            record_event(
+                &mut events,
+                "improvement_draft",
+                "simulated_unverified",
+                "snapshot-only descriptive proposal; not executed, not publishable and not an Agent Core candidate",
+            );
+            record_event(
+                &mut events,
+                "agent_core_native",
+                "dependency_blocked_snapshot_semantics",
+                "Agent Core/U13 has no offline snapshot candidate contract",
+            );
+        }
         record_event(
             &mut events,
             "run_completed",
@@ -508,7 +670,9 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             simulation_version: SIMULATION_VERSION.into(),
             simulation_seed,
             determinism: "deterministic_given_identical_run_input".into(),
-            terminal_status: if supported_snapshot {
+            terminal_status: if descriptive_envelope.is_some() {
+                "snapshot_descriptive_finding_ready".into()
+            } else if supported_snapshot {
                 "snapshot_projection_complete".into()
             } else {
                 "unsupported_source".into()
@@ -525,6 +689,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             proposal: None,
             evaluation: None,
             contact_volume_projection,
+            snapshot_descriptive_envelope: descriptive_envelope,
             events,
         });
     }
@@ -619,6 +784,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             proposal: None,
             evaluation: None,
             contact_volume_projection: None,
+            snapshot_descriptive_envelope: None,
             events,
         });
     }
@@ -755,6 +921,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         proposal: Some(improvement_draft),
         evaluation: Some(evaluation),
         contact_volume_projection: None,
+        snapshot_descriptive_envelope: None,
         events,
     })
 }
@@ -769,6 +936,11 @@ fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
         || input.metadata.cutoff_unix_seconds == 0
     {
         return Err(LocalRunError::InvalidInput);
+    }
+    if input.snapshot_descriptive_contact_projection.is_some()
+        && input.metadata.source_kind != LocalSourceKind::OriginalBank
+    {
+        return Err(LocalRunError::InvalidEventProjection);
     }
     if input.events.len() > MAX_INPUT_EVENTS {
         return Err(LocalRunError::TooManyEvents);
@@ -1520,6 +1692,67 @@ fn is_digest(value: &str) -> bool {
         && value.as_bytes()[7..]
             .iter()
             .all(|byte| matches!(*byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn build_snapshot_descriptive_envelope(
+    input: &LocalRunInput,
+    projection: &LocalSnapshotContactProjection,
+) -> Option<SnapshotDescriptiveEnvelope> {
+    let complaint_contact_count = projection
+        .aggregates
+        .iter()
+        .filter(|cell| cell.reason_category == "complaint")
+        .try_fold(0_u64, |sum, cell| sum.checked_add(cell.contact_count))?;
+    if complaint_contact_count == 0 {
+        return None;
+    }
+    let projection_json = serde_json::to_string(projection).ok()?;
+    let literal_months = projection
+        .aggregates
+        .iter()
+        .map(|cell| cell.period.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    Some(SnapshotDescriptiveEnvelope {
+        agent_core_candidate: "dependency_blocked_snapshot_semantics".into(),
+        finding: SnapshotDescriptiveFinding {
+            signal_id: "original_contact_complaint_volume_by_literal_month_v1".into(),
+            source_snapshot_digest: input.metadata.snapshot_ref.digest.clone(),
+            source_manifest_digest: input.metadata.manifest_digest.clone(),
+            projection_digest: derive_digest(&projection_json),
+            temporal_basis: projection.temporal_basis.clone(),
+            value_semantics: projection.value_semantics.clone(),
+            coverage: projection.coverage.clone(),
+            policy_id: SNAPSHOT_CONTACT_POLICY.into(),
+            policy_version: projection.policy_version,
+            minimum_cell_count: projection.minimum_cell_count,
+            supported_contact_count: projection.included_contact_count,
+            complaint_contact_count,
+            literal_months,
+            claim_scope: "descriptive_only_no_causal_or_roi_claim".into(),
+        },
+        proposal: SnapshotDescriptiveProposal {
+            status: "simulated_unverified".into(),
+            execution_status: "not_executed".into(),
+            publication_eligible: false,
+            formal_route: "do_nothing".into(),
+            hypothesis: "Complaint contacts are present in the final extract; assess a bounded handling improvement as a hypothesis, without inferring cause or business impact.".into(),
+            proposed_artifact_intent: "agent_core_artifact_design_required_after_snapshot_contract_extension".into(),
+        },
+    })
+}
+
+fn is_literal_month(value: &str) -> bool {
+    value.len() == 7
+        && value.as_bytes().get(4) == Some(&b'-')
+        && value
+            .bytes()
+            .enumerate()
+            .all(|(index, byte)| index == 4 || byte.is_ascii_digit())
+        && value[5..7]
+            .parse::<u8>()
+            .is_ok_and(|month| (1..=12).contains(&month))
 }
 
 fn derive_digest(value: &str) -> String {

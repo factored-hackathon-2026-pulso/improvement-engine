@@ -1,6 +1,7 @@
 use improvement_engine_core::ArtifactReference;
 use improvement_engine_core::local_simulation::{
-    LocalObservedEvent, LocalObservedQuery, LocalRunInput, LocalRunMetadata, LocalSourceKind,
+    LocalObservedEvent, LocalObservedQuery, LocalRunError, LocalRunInput, LocalRunMetadata,
+    LocalSnapshotContactAggregate, LocalSnapshotContactProjection, LocalSourceKind,
     run_local_simulation,
 };
 
@@ -11,6 +12,124 @@ fn snapshot() -> ArtifactReference {
         revision: 1,
         digest: format!("sha256:{}", "a".repeat(64)),
     }
+}
+
+#[test]
+fn original_snapshot_emits_descriptive_non_publishable_improvement_envelope() {
+    let projection = LocalSnapshotContactProjection::new(
+        1,
+        5,
+        10,
+        vec![
+            LocalSnapshotContactAggregate::new("2026-08", "complaint", "phone", 5),
+            LocalSnapshotContactAggregate::new("2026-09", "complaint", "phone", 5),
+        ],
+    )
+    .unwrap();
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "original-snapshot-run",
+            "pulso_local",
+            LocalSourceKind::OriginalBank,
+            format!("sha256:{}", "b".repeat(64)),
+            snapshot(),
+            1_750_000_000,
+            "2025-07-01T00:00:00Z",
+        ),
+        Vec::new(),
+        0,
+        Vec::new(),
+    )
+    .with_snapshot_descriptive_contact_projection(projection);
+
+    let result = run_local_simulation(input).unwrap();
+    let envelope = result.snapshot_descriptive_envelope.unwrap();
+    assert_eq!(
+        envelope.finding.temporal_basis,
+        "literal_source_wall_clock_month"
+    );
+    assert_eq!(envelope.finding.value_semantics, "final_extract_facts_only");
+    assert_eq!(envelope.finding.coverage, "partial");
+    assert_eq!(envelope.finding.literal_months, ["2026-08", "2026-09"]);
+    assert_eq!(envelope.finding.supported_contact_count, 10);
+    assert_eq!(envelope.finding.minimum_cell_count, 5);
+    assert_eq!(
+        envelope.finding.source_snapshot_digest,
+        format!("sha256:{}", "a".repeat(64))
+    );
+    assert_eq!(
+        envelope.agent_core_candidate,
+        "dependency_blocked_snapshot_semantics"
+    );
+    assert_eq!(envelope.proposal.status, "simulated_unverified");
+    assert_eq!(envelope.proposal.execution_status, "not_executed");
+    assert!(!envelope.proposal.publication_eligible);
+    assert_eq!(result.formal_route, "do_nothing");
+
+    let json = serde_json::to_value(envelope).unwrap();
+    let serialized = serde_json::to_string(&json).unwrap();
+    assert!(json["finding"].get("rejected_rows").is_none());
+    assert!(json["finding"].get("suppressed_cells").is_none());
+    for forbidden in ["observed_cutoff", "customer_id", "interaction_id"] {
+        assert!(!serialized.to_ascii_lowercase().contains(forbidden));
+    }
+    assert_eq!(
+        json["finding"]["claim_scope"],
+        "descriptive_only_no_causal_or_roi_claim"
+    );
+}
+
+#[test]
+fn snapshot_projection_rejects_unsafe_k_invalid_month_and_duplicate_cells() {
+    let cell =
+        |month, count| LocalSnapshotContactAggregate::new(month, "complaint", "phone", count);
+    assert!(LocalSnapshotContactProjection::new(1, 4, 5, vec![cell("2026-08", 5)]).is_err());
+    assert!(LocalSnapshotContactProjection::new(1, 5, 5, vec![cell("2026-13", 5)]).is_err());
+    assert!(
+        LocalSnapshotContactProjection::new(
+            1,
+            5,
+            10,
+            vec![cell("2026-08", 5), cell("2026-08", 5)],
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn snapshot_projection_cannot_be_attached_to_e0_source() {
+    let projection = LocalSnapshotContactProjection::new(
+        1,
+        5,
+        5,
+        vec![LocalSnapshotContactAggregate::new(
+            "2026-08",
+            "complaint",
+            "phone",
+            5,
+        )],
+    )
+    .unwrap();
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "e0-wrong-source",
+            "pulso_local",
+            LocalSourceKind::E0,
+            format!("sha256:{}", "b".repeat(64)),
+            snapshot(),
+            1_750_000_000,
+            "2025-07-01T00:00:00Z",
+        ),
+        vec![1],
+        0,
+        vec![],
+    )
+    .with_snapshot_descriptive_contact_projection(projection);
+
+    assert!(matches!(
+        run_local_simulation(input),
+        Err(LocalRunError::InvalidEventProjection)
+    ));
 }
 
 fn event(
@@ -1063,8 +1182,6 @@ fn original_snapshot_contact_projection_is_reported_without_claiming_a_signal() 
         1,
         5,
         5,
-        1,
-        1,
         vec![LocalContactVolumeCell::new("complaint", "phone", 5)],
     )
     .unwrap();
@@ -1106,9 +1223,8 @@ fn original_snapshot_contact_projection_is_reported_without_claiming_a_signal() 
 fn contact_projection_enforces_versioned_k_bounds_at_the_core_boundary() {
     use improvement_engine_core::local_simulation::LocalContactVolumeProjection;
 
-    for minimum_cell_count in [1, 4, 10_001] {
-        assert!(
-            LocalContactVolumeProjection::new(1, minimum_cell_count, 0, 0, 0, Vec::new(),).is_err()
-        );
+    for minimum_cell_count in [1, 4, 6, 10_001] {
+        assert!(LocalContactVolumeProjection::new(1, minimum_cell_count, 0, Vec::new(),).is_err());
     }
+    assert!(LocalContactVolumeProjection::new(2, 5, 0, Vec::new(),).is_err());
 }

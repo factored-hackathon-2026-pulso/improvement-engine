@@ -36,6 +36,37 @@ must not mutate/repoint path components concurrently with validation or the
 run. The guarantee is limited to rejecting reparse-point components observed
 during the wrapper's preflight checks.
 
+## Original-bank snapshot-only discovery
+
+The E0 PowerShell wrapper does not accept the original-bank source. For a local
+original-bank run, invoke the binary directly with a fresh output directory:
+
+    cargo +1.98.1 run --locked --offline -p improvement-engine-runner -- local-sim --mode local-simulation --source original --input 'D:\data\bank-extract' --output '.\output\original-run-2026-10-02-a' --tenant-id pulso_local --observed-cutoff '2026-10-02T18:00:00Z' --arranque-cases 1
+
+The original contact adapter emits a second, distinct projection for
+descriptive final-extract facts. It groups only rows with a valid literal
+source timestamp month and usable reason/channel codes. The `k` denominator is
+the count within each such month × reason × channel cell before suppression;
+only cells with at least the fixed policy-v1 floor (`k=5`) contribute to
+`supported_contact_count`. Rejected rows and suppressed cells do not contribute
+to that denominator, and their exact totals are not exposed in agent inputs or
+run results. Coverage is always
+`partial`; visible month labels are source wall-clock calendar text, not a
+timezone-normalized event time. No `observed_cutoff` is attached to this
+projection or its finding.
+
+When supported complaint cells exist, the run may emit a descriptive finding
+and an unverified, non-publishable local hypothesis envelope, bound to the source snapshot, source manifest,
+and projection digests. This envelope is explicitly not a U13/Agent Core
+candidate: `agent_core_candidate=dependency_blocked_snapshot_semantics`,
+proposal status `simulated_unverified`, execution `not_executed`,
+`publication_eligible=false`, and formal route `do_nothing`. It does not create
+an Agent Core query receipt, compile an artifact, or prove cause, ROI, efficacy,
+or improvement. Agent Core/U13 currently has no offline snapshot-candidate
+contract; an output adapter requires a future contract extension. The top-level
+run may still carry its required invocation cutoff as run metadata, but that
+cutoff is not evidence for the snapshot-only finding or proposal.
+
 ## Output and safety
 
 The wrapper prints only allowlisted run status, discovery counts, and a

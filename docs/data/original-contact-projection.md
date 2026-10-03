@@ -31,12 +31,13 @@ these snapshot counts against it. An input record dated after that cutoff is
 still part of the static snapshot projection; this is not evidence it was
 observable at the cutoff.
 
-Small category/channel cells are suppressed using `--min-contact-cell-count`
-(default 5, configurable from 5 to 10,000). Policy version 1 and the exact
-threshold are committed into the immutable prepared-source manifest. Output
-reports included count, rejected-row count, and suppressed-cell count without
-revealing suppressed values or their counts. This is a technical small-cell
-disclosure control, not a formal anonymity or legal guarantee.
+Small category/channel cells are suppressed with policy version 1 and fixed
+`k=5` on the discovery-facing CLI path. The policy version and threshold are
+committed into the immutable prepared-source manifest; callers cannot vary `k`
+between comparable discovery runs. Exact rejected-row and suppressed-cell
+counts are not serialized to agent inputs or `result.json`; suppressed values
+and their counts are not disclosed. This is a technical small-cell disclosure
+control, not a formal anonymity or legal guarantee.
 
 The local motor can consume and report this descriptive projection, but this
 slice does not calculate repeat-contact rates, PQR/SLA measures, technical
@@ -56,8 +57,9 @@ particular, `customer_id` is not used to calculate recurrence.
 Grouping labels are closed enums. Recognized Spanish/English spellings map to
 stable lower-case labels; any unrecognized, null, or PII-like category maps to
 `unclassified`. Channel values map through a closed list; an absent/blank
-channel rejects that row and increments `rejected_rows` rather than mapping it
-to `other`. Only non-empty unrecognized channel values map to `other`. Raw
+channel rejects that row rather than mapping it to `other`; no exact rejected
+row total is retained in the agent-facing projection. Only non-empty
+unrecognized channel values map to `other`. Raw
 values are never stored in result types or error details.
 `subcategory`, `contact_reason` free text when `reason_category` exists,
 descriptions, IDs, product/customer/agent attributes, claims, compensation,
@@ -77,9 +79,10 @@ learned the fact. The distinct `SnapshotDescriptiveProjection<T>` type has no
 `observed_cutoff`; its `LiteralSourceWallClockMonth` and
 `FinalExtractFactsOnly` tags prevent the output being described as as-of or
 online-eligible. Offsets, fractional seconds, date-only values, malformed
-dates, and impossible clock values remain rejected. Invalid/missing timestamps
-are counted as rejected, not emitted. If no valid source wall-clock timestamps
-remain, status is `unsupported` and no aggregates are emitted.
+dates, and impossible clock values remain rejected from grouping, not emitted.
+Exact rejection totals are not exposed on the public projection. If no valid
+source wall-clock timestamps remain, status is `unsupported` and no aggregates
+are emitted.
 Boolean values accept `true/false`, `1/0`, `yes/no`; other values are missing.
 Durations and resolution days must be finite and non-negative. Satisfaction is
 included only on the assumed common 1–5 scale; confirm the scale against the
@@ -94,20 +97,20 @@ Means use only rows with valid values, with no imputation. Every numeric and boo
 denominator. Boolean metrics also expose positive count, and numeric means use
 only valid values. Missing values never silently become false or zero.
 
-The public manifest rejects thresholds below k=5 or above 10,000; callers
-cannot lower the disclosure floor at the core boundary. Cells below the
-versioned `minimum_cell_count` policy are suppressed; `suppressed_count` reports omitted cells without
-revealing their contents or counts. This is a technical disclosure-control
-heuristic, not a formal anonymity or legal guarantee. The policy version and
-threshold are included in the projection manifest digest.
+Discovery uses the immutable version-1 policy with k=5; public callers cannot
+provide an alternate per-run threshold. Cells below that floor are suppressed.
+Exact suppressed-cell and rejected-row counts are not fields on public
+projection results or agent-facing outputs. This is a technical disclosure-
+control heuristic, not a formal anonymity or legal guarantee. The policy
+version and threshold are included in the projection manifest digest; changing
+k requires a new policy version and release.
 
 ## Availability and interpretation
 
-The local original-bank runner currently consumes the snapshot-count
-projection above. The monthly snapshot-descriptive APIs are separate core
-outputs; they are not yet adapted into the discovery runner's signal input.
-That requires an explicit follow-up adapter that carries the snapshot binding,
-coverage, and descriptive-only semantics without assigning an as-of cutoff.
+The local original-bank runner consumes the separate snapshot-only descriptive
+projection for discovery and retains the flat contact-volume projection for
+basic counts. The descriptive output carries snapshot binding, coverage, and
+literal-month/final-extract semantics without assigning an as-of cutoff.
 
 The projection is `unsupported` and emits no aggregates if any input partition
 lacks a required grouping/date field, no partition is provided, or there is no
@@ -209,7 +212,9 @@ The smoke test verifies both behaviors: the UTC as-of projector remains
 unsupported on naive timestamps, while the snapshot-descriptive projector
 produces disclosure-controlled aggregates for valid literal source months. The
 sample has partial coverage and is not a full-history prevalence estimate. It
-prints only partition/rejection/visible-cell/suppressed-cell counts and the
-coverage label; it prints no row, identifier, category source string, path, or
-metric value. This is descriptive discovery evidence, not a point-in-time or
-online signal. Historical source files remain outside Git.
+prints bounded partition counts, visible k-qualified aggregate totals/cell
+counts and coverage; exact rejected-row/suppressed-cell totals are neither
+fields on public projection types nor printed. It prints no row, identifier,
+category source string, path, or sub-k metric. This is descriptive discovery
+evidence, not a point-in-time or online signal. Historical source files remain
+outside Git.
