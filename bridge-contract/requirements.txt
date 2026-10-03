@@ -1,0 +1,9 @@
+# Conformance suite only (no pulso code needed to run it against an HTTP target).
+pytest>=8.3
+httpx>=0.27
+jsonschema>=4.23
+referencing>=0.35
+cryptography>=43
+pyyaml>=6
+# Only for the in-process real target / regeneration (gen.py): the pinned agent-core + core-bridge/src on PYTHONPATH,
+# psycopg[binary]>=3.2, uvicorn>=0.30, fastapi>=0.115, pydantic>=2.9.

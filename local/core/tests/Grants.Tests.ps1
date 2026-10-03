@@ -26,12 +26,21 @@ Describe 'core_eval_app sequences (15-eval-grants.sql)' {
     }
 }
 
-Describe 'LLM gateway pass-through (agent-core 789d6c8)' {
+Describe 'LLM gateway pass-through (agent-core 894fa65)' {
     It 'forwards the external llm-gateway URL/token and the eval budgets file, not the removed LLM_ENDPOINTS' {
         $compose | Should Match 'AGENTCORE_LLM_GATEWAY_URL: \$\{AGENTCORE_LLM_GATEWAY_URL:-\}'
         $compose | Should Match 'AGENTCORE_LLM_GATEWAY_TOKEN: \$\{AGENTCORE_LLM_GATEWAY_TOKEN:-\}'
         $compose | Should Match 'PULSO_EVAL_BUDGETS: \$\{PULSO_EVAL_BUDGETS:-\}'
         $compose | Should Not Match 'LLM_ENDPOINTS: '
         $compose | Should Not Match 'PULSO_LLM_API_KEY: '
+    }
+}
+
+Describe 'Core rate-limit knobs (agent-core 894fa65 rate_limits_from_env)' {
+    It 'forwards the four AGENTCORE_RATE_*/DAILY_BUDGET knobs with Core default values' {
+        $compose | Should Match 'AGENTCORE_RATE_MAX_HITS: \$\{AGENTCORE_RATE_MAX_HITS:-30\}'
+        $compose | Should Match 'AGENTCORE_RATE_WINDOW_SECONDS: \$\{AGENTCORE_RATE_WINDOW_SECONDS:-60\}'
+        $compose | Should Match 'AGENTCORE_DAILY_BUDGET_USD: \$\{AGENTCORE_DAILY_BUDGET_USD:-5\.00\}'
+        $compose | Should Match 'AGENTCORE_RATE_SERVICE_MULTIPLIER: \$\{AGENTCORE_RATE_SERVICE_MULTIPLIER:-10\}'
     }
 }

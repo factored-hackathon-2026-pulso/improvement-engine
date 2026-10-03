@@ -2,7 +2,7 @@
 
 Doubles and contract tests for the two wires Pulso does not own at runtime. Everything here is a **double**: it must be
 reported in `doubles[]` of any evidence and must never be claimed as the real Core, control-api or lab-broker.
-Contract revision: `pulso-two-teams-1`. Agent Core pin `789d6c89b2fca90fc10e2abf157da51dc81c5d51` (contracts 1.3.0).
+Contract revision: `pulso-two-teams-1`. Agent Core pin `894fa65575d83420523f33ec1c6919b8965f7ebe` (contracts 1.3.0).
 
 | Piece | Path | What it is |
 |---|---|---|
@@ -10,7 +10,7 @@ Contract revision: `pulso-two-teams-1`. Agent Core pin `789d6c89b2fca90fc10e2abf
 | a2 harness | `registry_mock/a2_app.py` | the REAL `RegistryService` over `InMemoryRegistryStore`, sim staff verifier, scripted `EvalPort`; no `testing` import. The parity oracle. |
 | Bridge mock (CAP-53) | `bridge_mock/` | the `/internal/v1` routes of `pulso-core-runtime` (invoke, read, aliases, dry-run, version, credentials) with `runtime_profile=contract_mock`; bodies validated against `bridge_mock/schemas/*.json`. |
 | Ingest fixture | `ingest_fixture/` | server semantics of `pulso-observations-2` for the exporter: unknown fields rejected, server-side JCS digest, `Idempotency-Key == batch_digest`, `fast_poll` CAS on `expected_cursor_revision`, rescan never advances a checkpoint, dedup identity, 1 MiB artifacts. Not Codex's control-api. |
-| Fixtures | `fixtures/agent_core_wire/789d6c8/*.json` | wire cases recorded against a2 (LF line endings, CRLF-proof digest). |
+| Fixtures | `fixtures/agent_core_wire/894fa65/*.json` | wire cases recorded against a2 (LF line endings, CRLF-proof digest). |
 | Tests | `tests/parity`, `tests/bridge_contract` | `registry-wire-contract` (about 100 YAML cases, 102 reported) and 60 bridge contract tests against a real HTTP process. |
 
 Fault injection exists only under `/_sim/*` and is off by default. Evaluation in the registry mock is
@@ -40,8 +40,11 @@ limits, 201-scenario REG-SCHEMA); other rules are covered only by a2. Cases need
 the real target. No real-PG recording was done (`record` is manual). The bridge mock does not execute Flows, validate
 registry content beyond limits/kind, or simulate the real broker. Details: `core-bridge/docs/journal/claude-0001-l1-wire-mock.md`.
 
-## Pin 789d6c8 notes
-Fixtures were re-recorded at `789d6c8` for a2, `real_local` and `real_pg_scripted` (`python -m parity.record --target a2|real|real_scripted`
+## Pin 894fa65 notes
+Fixtures were re-recorded at `894fa65` (the old `789d6c8` dir was removed: no test needs a dual pin) for a2, `real_local` and `real_pg_scripted` (`python -m parity.record --target a2|real|real_scripted`
 from `platform-sim/` with `PYTHONPATH=.;tests`; the real targets need `PULSO_TEST_PG_ADMIN`). Array bodies (`GET /versions/...`) now record
-`length` and item shape. The mock does NOT simulate the `release_settings` draft kind (N-07), `/version` or the export routes; a2/real are the
-authority there. `ReleaseDetail` values of the seed come from `golden/hash_vectors.json::release_detail`.
+`length` and item shape. At 894fa65 the mock simulates the `release_settings` draft kind (N-07) with the PR #29 guards: `Interrupt.locked`,
+admin-only `interrupts` (`forbidden_role`), the `max_input_chars <= 100000` cap (REG-SCHEMA), REG-LOCKED,
+`ApprovalReview.release_changes`, `Agent.input_schema` (task agents only) and a subset of AG-04 (drafted flows reading
+`slots.X` that no `collect` node, `input_schema` or `accepts` writes); cases in `tests/parity/cases/release_settings.yaml`.
+It does NOT simulate `/version` or the export routes; a2/real are the authority there. `ReleaseDetail` values of the seed come from `golden/hash_vectors.json::release_detail`.

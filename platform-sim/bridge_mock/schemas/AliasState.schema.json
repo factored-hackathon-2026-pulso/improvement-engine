@@ -14,26 +14,43 @@
         "prod"
       ]
     },
+    "observed_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "type": "string"
+    },
     "release_id": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "minLength": 1,
+      "type": "string"
     },
     "runtime_profile": {
-      "const": "contract_mock"
+      "enum": [
+        "contract_mock",
+        "agent_core_real"
+      ]
     },
     "schema_version": {
       "const": "1",
       "type": "string"
+    },
+    "source": {
+      "const": "core_store"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "revoked"
+      ]
     }
   },
   "required": [
-    "schema_version",
     "agent_id",
     "alias",
+    "observed_at",
     "release_id",
-    "runtime_profile"
+    "runtime_profile",
+    "schema_version",
+    "source",
+    "status"
   ],
   "title": "AliasState",
   "type": "object"

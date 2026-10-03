@@ -1,0 +1,128 @@
+{
+  "$id": "ArmReport.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "ArmReport. `usage=null` is 'not available'; `cost_known=false` is not free. A denied/interrupted arm reads back as the minimal {execution_id,status,reason}.",
+  "properties": {
+    "arm": {
+      "type": "string"
+    },
+    "case_ref": {
+      "type": "string"
+    },
+    "closed_early": {
+      "type": "boolean"
+    },
+    "closed_early_runs": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "cost_known": {
+      "type": "boolean"
+    },
+    "detail": {
+      "type": "string"
+    },
+    "effect_receipts": {
+      "type": "array"
+    },
+    "event_refs": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "execution_id": {
+      "pattern": "^arm-[0-9a-f]{32}$",
+      "type": "string"
+    },
+    "final_state_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "initial_state_digest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "oracle_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "repetition": {
+      "type": "integer"
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "string"
+      ]
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "candidate_failed",
+        "failed_infra",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "target_commitment": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "execution_id",
+    "status"
+  ],
+  "title": "ArmReport",
+  "type": "object",
+  "x-reasons": [
+    "broker_denied",
+    "commitment_mismatch",
+    "closure_invalid",
+    "unknown_target_kind",
+    "release_not_active",
+    "proposal_not_frozen",
+    "proposal_mismatch",
+    "draft_plan_digest_mismatch",
+    "base_release_missing",
+    "candidate_invalid",
+    "candidate_hash_mismatch",
+    "target_load_failed",
+    "manifest_missing",
+    "manifest_empty",
+    "budget_unknown",
+    "mixed_world_rejected",
+    "sandbox_timeout_after_send",
+    "schema_violation",
+    "action_without_readback",
+    "interrupted",
+    "runner_error"
+  ]
+}

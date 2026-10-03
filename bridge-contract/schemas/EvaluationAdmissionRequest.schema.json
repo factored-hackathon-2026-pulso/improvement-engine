@@ -1,0 +1,79 @@
+{
+  "$id": "EvaluationAdmissionRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "D.4 admission request.",
+  "properties": {
+    "binding_ref": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "budget_ref": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "candidate_hash": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "deadline": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "evaluation_attempt": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "evaluation_context_ref": {
+      "pattern": "^[A-Za-z0-9_.:-]{1,200}$",
+      "type": "string"
+    },
+    "proposal_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "request_digest": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1",
+      "type": "string"
+    },
+    "suite_digest": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "suite_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "suite_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "evaluation_context_ref",
+    "binding_ref",
+    "proposal_id",
+    "candidate_hash",
+    "suite_id",
+    "suite_version",
+    "suite_digest",
+    "evaluation_attempt",
+    "budget_ref",
+    "deadline",
+    "request_digest"
+  ],
+  "title": "EvaluationAdmissionRequest",
+  "type": "object"
+}

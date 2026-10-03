@@ -353,9 +353,15 @@ def create_app() -> Any:
     async def alias_state(request: Request, agent_id: str, alias: str) -> Response:
         authenticate(request, "alias")
         if alias not in ("staging", "prod"):
-            raise BridgeError(404, "not_found")
-        return j({"schema_version": "1", "agent_id": agent_id, "alias": alias,
-                  "release_id": st().aliases.get((agent_id, alias)), "runtime_profile": PROFILE})
+            raise BridgeError(400, "invalid_request")
+        release_id = st().aliases.get((agent_id, alias))
+        release = st().releases.get(release_id) if release_id else None
+        if release is None:  # unknown agent, unset alias or dangling release: one indistinguishable answer
+            raise BridgeError(404, "alias_unknown")
+        observed = st().clock.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        return j({"schema_version": "1", "agent_id": agent_id, "alias": alias, "release_id": release_id,
+                  "status": release["status"], "source": "core_store", "observed_at": observed,
+                  "runtime_profile": PROFILE})
 
     @app.post("/internal/v1/core-authoring/dry-run")
     async def dry_run(request: Request) -> Response:
@@ -364,25 +370,44 @@ def create_app() -> Any:
         check_schema("CoreAuthoringDryRunRequest", body)
         if claims["tenant_id"] != body["tenant_id"]:
             raise BridgeError(403, "tenant_mismatch")
+        digest = service_jws.request_digest(body)
+        if body.get("request_digest", digest) != digest:
+            raise BridgeError(400, "invalid_request", {"fields": ["request_digest"]})
+        if any(c["kind"] == "release_settings" for c in body["changes"]):  # CAP-23 / N-07: default deny
+            raise BridgeError(422, "release_settings_not_allowed")
         violations: list[dict[str, Any]] = []
+
+        def violation(rule: str, path: str | None, message: str) -> None:
+            violations.append({"rule": rule, "path": path, "flow": None, "node_id": None, "message": message})
+
         if len(body["changes"]) > MAX_CHANGES:
-            violations.append({"rule": "REG-LIMIT", "path": None,
-                               "message": f"{len(body['changes'])} changes; max {MAX_CHANGES}"})
+            violation("REG-LIMIT", None, f"{len(body['changes'])} changes; max {MAX_CHANGES}")
         else:
             for c in body["changes"]:
                 where = f"{c['kind'][:40]}:{str(c['content'].get('id'))[:80]}"
                 if c["kind"] not in KINDS:
-                    violations.append({"rule": "REG-KIND", "path": where, "message": "unknown entity kind"})
+                    violation("REG-KIND", where, "unknown entity kind")
                 try:
                     size = len(service_jws.canonical(c["content"]))
                 except ValueError:
                     size = 0
                 if size > MAX_ENTITY_BYTES:
-                    violations.append({"rule": "REG-LIMIT", "path": where, "message": f"{size} bytes; max {MAX_ENTITY_BYTES}"})
-        cand = None if violations else _sha({"agent": body["agent_id"], "base": body["base_release_id"],
-                                               "changes": body["changes"]})
-        return j({"schema_version": "1", "valid": not violations, "candidate_hash": cand, "violations": violations,
-                  "proposal_created": False, "runtime_profile": PROFILE})
+                    violation("REG-LIMIT", where, f"{size} bytes; max {MAX_ENTITY_BYTES}")
+        ok: dict[str, Any] = {"candidate_hash": None, "release_hash": None, "release_id_preview": None,
+                              "new_versions": [], "auto_bumped": [], "content_hashes": {}}
+        if not violations:  # fake but deterministic: same input, same hashes; NOT Core's real candidate_hash
+            versions = sorted(({"kind": c["kind"], "id": str(c["content"].get("id")),
+                                "version": str(c["content"].get("version"))} for c in body["changes"]),
+                              key=lambda r: (r["kind"], r["id"], r["version"]))
+            candidate = _sha({"agent": body["agent_id"], "base": body["base_release_id"], "changes": body["changes"]})
+            ok = {"candidate_hash": candidate, "release_hash": _sha({"release_of": candidate}),
+                  "release_id_preview": "rel-" + candidate[:16], "new_versions": versions, "auto_bumped": [],
+                  "content_hashes": {f"{r['kind']}:{r['id']}@{r['version']}": _sha([r, c["content"]])
+                                     for r, c in zip(versions, sorted(
+                                         body["changes"], key=lambda c: (c["kind"], str(c["content"].get("id")),
+                                                                         str(c["content"].get("version")))))}}
+        return j({"schema_version": "1", "valid": not violations, **ok, "violations": violations,
+                  "request_digest": digest, "proposal_created": False, "runtime_profile": PROFILE})
 
     @app.get("/internal/v1/version")
     async def version(request: Request) -> Response:

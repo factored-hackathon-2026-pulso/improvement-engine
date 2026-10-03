@@ -34,7 +34,7 @@ def die(msg: str) -> None:
     raise SystemExit(2)
 
 
-FALLBACK_PIN = {"sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51", "contract_version": "1.3.0"}
+FALLBACK_PIN = {"sha": "894fa65575d83420523f33ec1c6919b8965f7ebe", "contract_version": "1.3.0"}
 SUPPORTED_CONTRACT = "1.3.0"
 
 
@@ -88,7 +88,7 @@ def preflight(checkout: Path, expected: str) -> str:
         die(f"checkout HEAD {head!r} != pin {expected}")
     version = (checkout / "contracts" / "VERSION").read_text().strip()
     if version != SUPPORTED_CONTRACT:
-        # Not a gate: upstream did not move VERSION across N-01..N-11 (agent-core 789d6c8). The pin is the SHA plus the
+        # Not a gate: upstream did not move VERSION across N-01..N-11 (agent-core 789d6c8..894fa65). The pin is the SHA plus the
         # MANIFEST digest; a VERSION change is only flagged so a human reviews it.
         print(f"pulso:wire_note contracts/VERSION {version} != reviewed {SUPPORTED_CONTRACT}", file=sys.stderr)
     exe = Path(sys.executable).with_name("agentcore.exe")
@@ -146,6 +146,15 @@ def derived(out: Path, files: list[dict], app) -> None:
     files.append({"path": "derived/registry_openapi.json", "sha256": sha(data), "derived_by_pulso": True})
 
 
+def seeded_release_id(tx, agent_id: str = "atencion", alias: str = "prod") -> str:
+    """The seeded demo release is whatever `atencion:prod` points at. Its id is a content hash that moves on every pin
+    touching release content (789d6c8 -> 894fa65 added `Interrupt.locked`), so it must never be hard-coded."""
+    rel_id = tx.get_alias(agent_id, alias)
+    if not rel_id:
+        die(f"seeded alias {agent_id}:{alias} has no release")
+    return rel_id
+
+
 def golden(out: Path, files: list[dict], checkout: Path, world, client) -> None:
     import yaml
 
@@ -155,11 +164,11 @@ def golden(out: Path, files: list[dict], checkout: Path, world, client) -> None:
 
     seed = checkout / "tests" / "fixtures" / "registry-demo"
     entities = []
-    rel_id = "rel-98130317a1003849"
     with world.store.transaction() as tx:
+        rel_id = seeded_release_id(tx)
         stored_rel = tx.get_release(rel_id)
         if stored_rel is None:
-            die("seeded release rel-98130317a1003849 missing")
+            die(f"seeded release {rel_id} missing")
         for ref in sorted(tx.release_refs(rel_id), key=lambda r: (r.kind, r.id, r.version)):
             sv = tx.get_version(ref)
             entity = decode_entity(ref.kind, tx.blobs.get(sv.content_hash))

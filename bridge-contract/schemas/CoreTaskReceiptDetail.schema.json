@@ -1,0 +1,82 @@
+{
+  "$id": "CoreTaskReceiptDetail.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "CAP-33 CoreTaskReceipt detail stored with a terminal receipt (`receipt` of the state body).",
+  "properties": {
+    "audit_refs": {
+      "type": "array"
+    },
+    "budget": {
+      "additionalProperties": false,
+      "properties": {
+        "known": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "known"
+      ],
+      "type": "object"
+    },
+    "core_run_id": {
+      "type": "string"
+    },
+    "idempotency_key_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "input_commitment": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "outcome": {
+      "type": "string"
+    },
+    "output_digest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "output_refs": {
+      "type": "array"
+    },
+    "release_id": {
+      "type": "string"
+    },
+    "request_digest": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "task_binding_ref": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "core_run_id",
+    "release_id",
+    "outcome",
+    "trace_id",
+    "idempotency_key_digest",
+    "request_digest",
+    "task_binding_ref",
+    "input_commitment",
+    "output_refs",
+    "output_digest",
+    "audit_refs",
+    "budget"
+  ],
+  "title": "CoreTaskReceiptDetail",
+  "type": "object"
+}

@@ -120,7 +120,7 @@ Describe 'smoke.ps1' {
                 if ($null -eq $t) { $t = $l.GetContextAsync() }
                 if (-not $t.Wait(500)) { continue }
                 $c = $t.Result; $t = $null; $p = $c.Request.Url.AbsolutePath; $body = '{}'
-                if ($p -eq '/internal/v1/version') { $body = '{"agent_core_sha":"789d6c89b2fca90fc10e2abf157da51dc81c5d51","contracts_version":"1.3.0","runtime_profile":"agent_core_real","doubles":["tools: stand-in"],"image_digest":"unknown"}' }
+                if ($p -eq '/internal/v1/version') { $body = '{"agent_core_sha":"894fa65575d83420523f33ec1c6919b8965f7ebe","contracts_version":"1.3.0","runtime_profile":"agent_core_real","doubles":["tools: stand-in"],"image_digest":"unknown"}' }
                 if ($p -eq '/_sim/info') { $c.Response.StatusCode = 404 }
                 $c.Response.ContentType = 'application/json'; $b = [Text.Encoding]::UTF8.GetBytes($body); $c.Response.OutputStream.Write($b, 0, $b.Length); $c.Response.Close()
             }
@@ -133,7 +133,7 @@ Describe 'smoke.ps1' {
             $r.out | Should Match 'smoke: pass'
             $j = Get-Content $rep -Raw | ConvertFrom-Json
             $j.runtime_profile | Should Be 'agent_core_real'
-            $j.agent_core_sha | Should Be '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
+            $j.agent_core_sha | Should Be '894fa65575d83420523f33ec1c6919b8965f7ebe'
             (@($j.doubles).Count -ge 1) | Should Be $true
             $j.target | Should Not Be 'real_local'
         } finally { Stop-Job $job -ErrorAction SilentlyContinue; Remove-Job $job -Force -ErrorAction SilentlyContinue }

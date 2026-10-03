@@ -1,0 +1,68 @@
+{
+  "$id": "AuditAgentStepFailedEvidence.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "CX-0073/0075: ONLY a correlated audit `agent_step` with kind=failed + error_kind classifies a model dependency failure; the task receipt keeps its own outcome. Prompts/inputs never appear.",
+  "properties": {
+    "event_id": {
+      "type": "string"
+    },
+    "hash": {
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": false,
+      "properties": {
+        "error_kind": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "failed"
+        },
+        "latency_ms": {
+          "type": "integer"
+        },
+        "node_id": {
+          "type": "string"
+        },
+        "step": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "error_kind",
+        "node_id",
+        "step",
+        "latency_ms"
+      ],
+      "type": "object"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "seq": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "type": {
+      "const": "agent_step"
+    }
+  },
+  "required": [
+    "event_id",
+    "hash",
+    "payload",
+    "run_id",
+    "seq",
+    "type"
+  ],
+  "title": "AuditAgentStepFailedEvidence",
+  "type": "object"
+}

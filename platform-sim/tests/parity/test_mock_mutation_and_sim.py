@@ -75,14 +75,14 @@ H = {"Authorization": "Bearer " + jws.issue("bot")}
 
 def test_faults_are_off_by_default(mock: httpx.Client) -> None:
     for _ in range(5):
-        assert mock.get("/v1/registry/releases/rel-98130317a1003849", headers=H).status_code == 200
+        assert mock.get("/v1/registry/releases/rel-e26df0070f6be82f", headers=H).status_code == 200
 
 
 def test_fault_500_once_then_normal(mock: httpx.Client) -> None:
     mock.post("/_sim/fault", json={"mode": "status500"})
-    r = mock.get("/v1/registry/releases/rel-98130317a1003849", headers=H)
+    r = mock.get("/v1/registry/releases/rel-e26df0070f6be82f", headers=H)
     assert r.status_code == 500 and r.json()["code"] == "internal_error"
-    assert mock.get("/v1/registry/releases/rel-98130317a1003849", headers=H).status_code == 200
+    assert mock.get("/v1/registry/releases/rel-e26df0070f6be82f", headers=H).status_code == 200
 
 
 def test_fault_drop_after_commit_loses_the_response_but_keeps_the_state(mock: httpx.Client) -> None:
@@ -105,7 +105,7 @@ def test_fault_latency(mock: httpx.Client) -> None:
 
     mock.post("/_sim/fault", json={"mode": "latency", "seconds": 0.4})
     t = time.perf_counter()
-    mock.get("/v1/registry/releases/rel-98130317a1003849", headers=H)
+    mock.get("/v1/registry/releases/rel-e26df0070f6be82f", headers=H)
     assert time.perf_counter() - t >= 0.35
 
 
@@ -119,26 +119,26 @@ def test_clock_is_injectable_never_wall_time(mock: httpx.Client) -> None:
     assert before.startswith("2026-01-01T00:00:00") and after.startswith("2026-01-01T01:00:00")
     # a token minted at the epoch with a 1 h TTL is valid at epoch and expired after the advance
     short = jws.issue("bot", exp=jws.SIM_EPOCH.replace(minute=30))
-    assert mock.get("/v1/registry/releases/rel-98130317a1003849", headers={"Authorization": f"Bearer {short}"}).status_code == 401
+    assert mock.get("/v1/registry/releases/rel-e26df0070f6be82f", headers={"Authorization": f"Bearer {short}"}).status_code == 401
 
 
 def test_info_exposes_pin(mock: httpx.Client) -> None:
     info = mock.get("/_sim/info").json()
     assert set(info) >= {"pinned_sha", "contract_version", "fixtures_digest"}
-    assert info["pinned_sha"] == "789d6c89b2fca90fc10e2abf157da51dc81c5d51" and info["contract_version"] == "1.3.0"
+    assert info["pinned_sha"] == "894fa65575d83420523f33ec1c6919b8965f7ebe" and info["contract_version"] == "1.3.0"
 
 
 # --- a2: the golden case of V3 31.4.12 reproduces the hashes of the wire snapshot --------------------------
 
 def test_a2_golden_candidate_matches_wire_vectors() -> None:
-    if not Path(os.environ.get("PULSO_CORE_PYTHON", "") or (Path(os.environ.get("TEMP", ".")) / "pulso-wire-venv-789d6c8" / "Scripts" / "python.exe")).exists():
+    if not Path(os.environ.get("PULSO_CORE_PYTHON", "") or (Path(os.environ.get("TEMP", ".")) / "pulso-wire-venv-894fa65" / "Scripts" / "python.exe")).exists():
         pytest.skip("pinned venv missing; run core-bridge/scripts/gen-wire.ps1")
     vectors = json.loads((runner.WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))
     with serve("a2") as base, httpx.Client(base_url=base, timeout=60) as c:
         pid = c.post("/v1/registry/proposals", headers=H, json={"agent_id": "atencion", "title": "golden"}).json()["proposal_id"]
         c.put(f"/v1/registry/proposals/{pid}/draft", headers=H, json=runner._golden_draft(0)).raise_for_status()
         frozen = c.post(f"/v1/registry/proposals/{pid}/freeze", headers=H).json()
-        base_rel = c.get("/v1/registry/releases/rel-98130317a1003849", headers=H).json()
+        base_rel = c.get("/v1/registry/releases/rel-e26df0070f6be82f", headers=H).json()
     assert frozen["candidate_hash"] == vectors["candidate"]["candidate_hash"]
     assert frozen["release_id_preview"] == vectors["candidate"]["release_id_preview"]
     flow = next(e for e in base_rel["entities"] if e["ref"]["id"] == "disputa-cargo")

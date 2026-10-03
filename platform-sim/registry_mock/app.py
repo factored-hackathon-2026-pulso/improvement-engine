@@ -1,6 +1,6 @@
 """Faithful registry wire mock (CAP-52): a real HTTP process, in-memory state, no SQL, no agent_core, no Pulso adapter.
 
-Reproduces the 18 routes of `/v1/registry` (16 + the N-02 alias/versions reads at agent-core 789d6c8), EdDSA JWS auth, the 12 registry error codes, `application/problem+json`
+Reproduces the 18 routes of `/v1/registry` (16 + the N-02 alias/versions reads at agent-core 894fa65), EdDSA JWS auth, the 12 registry error codes, `application/problem+json`
 envelopes, the mandatory `Idempotency-Key` on publish, state machine, CAS, limits and quotas with an injectable
 clock. Candidate validation is a documented SUBSET of the real rules (REG-KIND, REG-VERSION, REG-VERSION-TAKEN,
 REG-LIMIT); everything else is the a2 level's job. Fault injection lives only under `/_sim/*` (default off).
@@ -40,6 +40,9 @@ from registry_mock.sim_common import (
 WIRE = Path(os.environ.get("PULSO_WIRE_DIR") or Path(__file__).resolve().parents[2] / "core-bridge" / "wire" / f"agent_core@{PIN_SHA[:7]}")
 KINDS = frozenset({"agent", "flow", "policy", "template", "prompt", "tool", "decision_model", "model_profile",
                    "language_detection", "injection_ruleset", "knowledge_snapshot", "eval_suite"})
+SETTINGS_KIND = "release_settings"  # N-07 reserved draft kind (not an entity)
+MAX_INPUT_CHARS_CEILING = 100_000  # 894fa65: a proposal cannot disable the input-length guard
+SETTINGS_FIELDS = ("interrupts", "language_detection", "injection_ruleset", "max_input_chars")
 ERROR_STATUS = {
     "validation_failed": 422, "gate_failed": 409, "proposal_stale": 409, "candidate_changed": 409,
     "illegal_transition": 409, "forbidden_role": 403, "step_up_required": 403, "integrity_error": 500,
@@ -95,6 +98,8 @@ class EntityDraft(BaseModel):
 
     @model_validator(mode="after")
     def _has_identity(self) -> "EntityDraft":
+        if self.kind == SETTINGS_KIND:  # N-07: the reserved draft has no identity of its own
+            return self
         if not isinstance(self.content.get("id"), str) or not isinstance(self.content.get("version"), str):
             raise ValueError("content needs id and version as text")
         return self
@@ -176,6 +181,109 @@ class _PrincipalModel(BaseModel):
     attrs: dict[str, str] = {}
     auth: dict[str, Any]
     exp: datetime
+
+
+def interrupt_norm(i: dict[str, Any]) -> dict[str, Any]:
+    """An interrupt as `ReleaseDetail` serves it: every optional field present (`locked` defaults to false)."""
+    return {"id": i["id"], "priority": i["priority"], "action": copy.deepcopy(i["action"]),
+            "signal_policy": i.get("signal_policy"), "locked": bool(i.get("locked", False))}
+
+
+def _same_action(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    if a["action"].get("type") == "start_flow" and b["action"].get("type") == "start_flow":
+        return (a["action"].get("flow") or {}).get("id") == (b["action"].get("flow") or {}).get("id")
+    return a["action"] == b["action"]
+
+
+def locked_interrupt_violations(base: dict[str, Any] | None, wanted: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """REG-LOCKED: `wanted` replaces the base interrupts, but the base's `locked` ones must stay, with the same action,
+    at least the same priority and `locked`. `wanted is None` inherits the base."""
+    if base is None or wanted is None:
+        return []
+    kept = {i["id"]: i for i in wanted}
+    found: list[dict[str, Any]] = []
+    for locked in (i for i in base.get("interrupts", []) if i.get("locked")):
+        now = kept.get(locked["id"])
+        if now is None:
+            found.append(violation("REG-LOCKED", f"la interrupcion {str(locked['id'])[:80]} es de plataforma: no se quita",
+                                   SETTINGS_KIND))
+        elif not now.get("locked") or now["priority"] < locked["priority"] or not _same_action(now, locked):
+            found.append(violation("REG-LOCKED", f"la interrupcion {str(locked['id'])[:80]} es de plataforma: no se le baja "
+                                   "la prioridad, no se le cambia la accion ni se le quita el bloqueo", SETTINGS_KIND))
+    return found
+
+
+def settings_schema_problems(content: dict[str, Any]) -> list[str]:
+    """Subset of `ReleaseSettings` (extra=forbid): the field names, `max_input_chars` in (0, ceiling] and the shape of
+    each interrupt (id, int priority, escalate | start_flow action). Returns schema messages."""
+    out: list[str] = []
+    for key in sorted(content):
+        if key not in SETTINGS_FIELDS:
+            out.append(f"{key}: Extra inputs are not permitted")
+    mic = content.get("max_input_chars")
+    if mic is not None:
+        if isinstance(mic, bool) or not isinstance(mic, int):
+            out.append("max_input_chars: Input should be a valid integer")
+        elif mic <= 0:
+            out.append("max_input_chars: Input should be greater than 0")
+        elif mic > MAX_INPUT_CHARS_CEILING:
+            out.append(f"max_input_chars: Input should be less than or equal to {MAX_INPUT_CHARS_CEILING}")
+    for key in ("language_detection", "injection_ruleset"):
+        if content.get(key) is not None and not isinstance(content[key], str):
+            out.append(f"{key}: Input should be a valid string")
+    interrupts = content.get("interrupts")
+    if interrupts is not None:
+        if not isinstance(interrupts, list):
+            out.append("interrupts: Input should be a valid list")
+        else:
+            for n, i in enumerate(interrupts):
+                ok = (isinstance(i, dict) and isinstance(i.get("id"), str) and isinstance(i.get("priority"), int)
+                      and isinstance(i.get("action"), dict) and i["action"].get("type") in ("escalate", "start_flow")
+                      and isinstance(i.get("locked", False), bool))
+                if not ok:
+                    out.append(f"interrupts.{n}: Input should be a valid Interrupt")
+    return out
+
+
+def settings_draft(drafts: list[Any]) -> list[Any]:
+    return [d for d in drafts if d.kind == SETTINGS_KIND]
+
+
+def _slot_reads(flow: dict[str, Any]) -> dict[str, str]:
+    """Slots a flow reads (`slots.<name>` anywhere in its content) -> first node that reads it (subset of AG-04)."""
+    found: dict[str, str] = {}
+
+    def walk(value: Any, node_id: str) -> None:
+        if isinstance(value, dict):
+            for v in value.values():
+                walk(v, node_id)
+        elif isinstance(value, list):
+            for v in value:
+                walk(v, node_id)
+        elif isinstance(value, str):
+            m = re.match(r"slots\.([A-Za-z0-9_]+)", value)
+            if m:
+                found.setdefault(m.group(1), node_id)
+
+    for node in flow.get("nodes") or []:
+        walk(node, str(node.get("id")))
+    return found
+
+
+def ag04_violations(flow: dict[str, Any], agent: dict[str, Any]) -> list[dict[str, Any]]:
+    """AG-04: the flow reads `slots.X` and nothing can leave it `validated`: only a `collect` node, the agent's
+    `input_schema` (task agents) or the `accepts` contract of a transfer write validated slots."""
+    writable = {(n.get("config") or {}).get("slot") for n in flow.get("nodes") or [] if n.get("type") == "collect"}
+    writable |= set(agent.get("input_schema") or {})
+    writable |= set(((agent.get("accepts") or {}).get("slots")) or {})
+    label = f"{flow.get('id')}@{flow.get('version')}"[:160]
+    out = []
+    for name, node_id in sorted(_slot_reads(flow).items()):
+        if name not in writable:
+            out.append({**violation("AG-04", f"el flow lee slots.{name} y {agent.get('id')}@{agent.get('version')} no tiene "
+                                    "como dejarlo validado (un nodo collect, input_schema o accepts)"),
+                        "flow": label, "node_id": node_id})
+    return out
 
 
 @dataclass
@@ -277,6 +385,7 @@ class Candidate:
     drafts: dict[tuple[str, str, str], EntityDraft]
     hash: str
     derived_agent: dict[str, Any] | None = None
+    settings: dict[str, Any] | None = None  # the `release_settings` draft content (N-07); None = inherit the base
 
 
 def _mentioned_ids(value: Any, out: set[str]) -> None:
@@ -307,7 +416,21 @@ def build_candidate(st: State, p: ProposalRec) -> tuple[list[dict[str, Any]], Ca
     base_versions = {(r[0], r[1]): r[2] for r in base.refs} if base else {}
     problems: list[dict[str, Any]] = []
     by_ref: dict[tuple[str, str, str], EntityDraft] = {}
+    wanted_settings: dict[str, Any] | None = None
+    sets = settings_draft(drafts)
+    if len(sets) > 1:
+        problems.append(violation("REG-DUPLICATE", "release_settings aparece dos veces en el borrador", SETTINGS_KIND))
+    elif sets:
+        schema = settings_schema_problems(sets[0].content)
+        if schema:
+            problems.append(violation("REG-SCHEMA", "el contenido no cumple el esquema: " + "; ".join(schema), SETTINGS_KIND))
+        else:
+            wanted_settings = sets[0].content
+            if wanted_settings.get("interrupts") is not None:
+                problems.extend(locked_interrupt_violations(base.settings if base else None, wanted_settings["interrupts"]))
     for d in drafts:
+        if d.kind == SETTINGS_KIND:
+            continue
         where = f"{d.kind}:{d.content['id']}"
         if d.kind not in KINDS:
             problems.append(violation("REG-KIND", f"unknown entity kind {d.kind[:40]}", where))
@@ -340,6 +463,19 @@ def build_candidate(st: State, p: ProposalRec) -> tuple[list[dict[str, Any]], Ca
         if ref[0] not in ("agent", "eval_suite", "flow") and (ref[0], ref[1]) not in base_versions                 and not any(ref[1] in _ids_of(x) for x in by_ref.values() if x is not d):
             problems.append(violation("REG-UNREFERENCED", f"{ref_str(ref)} has no consumer in the candidate",
                                       f"{ref[0]}:{ref[1]}"))
+    agent_ref = next((r for r in by_ref if r[0] == "agent" and r[1] == p.agent_id), None)
+    if agent_ref is not None and by_ref[agent_ref].content.get("input_schema") is not None \
+            and by_ref[agent_ref].content.get("mode") != "task":
+        problems.append(violation("REG-SCHEMA", "el contenido no cumple el esquema: : Value error, input_schema solo aplica a "
+                                  "agentes de modo task", f"agent:{p.agent_id}"))
+    # M1 AG-04 (subset): each drafted flow against the agent it will run under (the drafted one, else the base's)
+    agent_content = by_ref[agent_ref].content if agent_ref else (
+        st.versions[("agent", p.agent_id, base_versions[("agent", p.agent_id)])].content
+        if ("agent", p.agent_id) in base_versions else None)
+    if agent_content is not None and not any(pr["rule"] in ("REG-KIND", "REG-SCHEMA") for pr in problems):
+        for ref, d in by_ref.items():
+            if ref[0] == "flow":
+                problems.extend(ag04_violations(d.content, agent_content))
     if problems:
         return problems, None
     refs = {k: (k[0], k[1], v) for k, v in base_versions.items()}
@@ -364,8 +500,9 @@ def build_candidate(st: State, p: ProposalRec) -> tuple[list[dict[str, Any]], Ca
     release_refs = sorted(r for k, r in refs.items() if k[0] != "eval_suite")
     digest = sha256_hex(canonical({"agent": p.agent_id, "base": p.base_release_id,
                                    "refs": [ref_str(r) for r in release_refs],
-                                   "hashes": sorted(sha256_hex(canonical(d.content)) for d in by_ref.values())}))
-    cand = Candidate(refs, sorted(new_versions), auto, by_ref, digest, derived)
+                                   "hashes": sorted(sha256_hex(canonical(d.content)) for d in by_ref.values()),
+                                   **({"settings": wanted_settings} if wanted_settings is not None else {})}))
+    cand = Candidate(refs, sorted(new_versions), auto, by_ref, digest, derived, wanted_settings)
     return [], cand
 
 
@@ -529,6 +666,23 @@ def create_app(limits: Limits | None = None) -> FastAPI:
         s.proposals[p.proposal_id] = p
         return j(proposal_json(p), 201)
 
+    def release_changes(s: State, p: ProposalRec, changes: list[EntityDraft]) -> list[dict[str, Any]]:
+        """What `release_settings` changes against the base (N-07); without a base, against the defaults."""
+        sets = settings_draft(changes)
+        if not sets or settings_schema_problems(sets[0].content):
+            return []
+        base = s.releases.get(p.base_release_id) if p.base_release_id else None
+        current: dict[str, Any] = {
+            "interrupts": base.settings["interrupts"] if base else [],
+            "language_detection": (base.settings["language_detection"] or {}).get("id") if base else None,
+            "injection_ruleset": (base.settings["injection_ruleset"] or {}).get("id") if base and base.settings.get("injection_ruleset") else None,
+            "max_input_chars": base.settings["max_input_chars"] if base else 4000}
+        wanted = dict(sets[0].content)
+        if wanted.get("interrupts") is not None:
+            wanted["interrupts"] = [interrupt_norm(i) for i in wanted["interrupts"]]
+        return [{"field": f, "before": current[f], "after": wanted[f]}
+                for f in SETTINGS_FIELDS if wanted.get(f) is not None and wanted[f] != current[f]]
+
     @router.get("/proposals/{pid}")
     def show(request: Request, pid: str, authorization: Auth = None) -> Response:
         who(authorization)
@@ -539,6 +693,7 @@ def create_app(limits: Limits | None = None) -> FastAPI:
         review = None
         if last is not None:
             review = {"functional_changes": [c.model_dump() for c in changes if c.kind != "eval_suite"],
+                      "release_changes": release_changes(s, p, changes),
                       "suite": last["suite"],
                       "suite_changes": [c.model_dump() for c in changes if c.kind == "eval_suite"],
                       "gate": last["report"]["items"], "yardstick_loosened": last["report"]["yardstick_changes"]}
@@ -557,10 +712,13 @@ def create_app(limits: Limits | None = None) -> FastAPI:
             for d in body.changes:
                 size = len(canonical(d.content))
                 if size > s.limits.max_entity_bytes:
-                    where = f"{d.kind[:40]}:{str(d.content['id'])[:80]}"
+                    where = f"{d.kind[:40]}:{str(d.content.get('id'))[:80]}"
                     problems.append(violation("REG-LIMIT", f"{where} is {size} bytes; max {s.limits.max_entity_bytes}", where))
         if problems:
             raise RegistryError("validation_failed", "draft exceeds the limits", problems)
+        if any(d.kind == SETTINGS_KIND and d.content.get("interrupts") is not None for d in body.changes) \
+                and "admin" not in actor.roles:
+            raise RegistryError("forbidden_role", "cambiar las interrupciones de la release exige el rol admin")
         p = get_p(pid)
         expect(p, "draft")
         if p.rev != body.expected_rev:
@@ -715,7 +873,15 @@ def create_app(limits: Limits | None = None) -> FastAPI:
                      "changelog": ", ".join(f"{r[1]}@{r[2]}" for r in cand.new_versions if r[0] != "agent")}, p.created_by, now)
         refs = sorted((r for k, r in cand.refs.items() if k[0] != "eval_suite"), key=ref_str)
         suite_ref = (run["suite"]["kind"], run["suite"]["id"], run["suite"]["version"])
-        base_settings = s.releases[p.base_release_id].settings if p.base_release_id in s.releases else {}
+        base_settings = copy.deepcopy(s.releases[p.base_release_id].settings) if p.base_release_id in s.releases else {}
+        for key, value in (cand.settings or {}).items():
+            if key == "interrupts":
+                base_settings[key] = [interrupt_norm(i) for i in value]
+            elif key in ("language_detection", "injection_ruleset"):
+                version = next((r[2] for k, r in cand.refs.items() if k == (key, value)), None)
+                base_settings[key] = {"id": value, "spec": version} if version else base_settings.get(key)
+            else:
+                base_settings[key] = value
         s.releases[rid] = Release(rid, p.agent_id, refs, p.base_release_id, pid, who_id, now, [suite_ref],
                                   settings=copy.deepcopy(base_settings))
         s.aliases[(p.agent_id, "staging")] = rid

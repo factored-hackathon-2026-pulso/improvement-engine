@@ -1,0 +1,49 @@
+{
+  "$id": "CoreVersion.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Plan 4.1: `GET /version`. The real runtime reports runtime_profile=agent_core_real; a mock reports its own.",
+  "properties": {
+    "agent_core_sha": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "contracts_version": {
+      "type": "string"
+    },
+    "doubles": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "image_digest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "keys_reload_error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pulso_sha": {
+      "type": "string"
+    },
+    "runtime_profile": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_core_sha",
+    "contracts_version",
+    "pulso_sha",
+    "image_digest",
+    "runtime_profile",
+    "doubles"
+  ],
+  "title": "CoreVersion",
+  "type": "object"
+}

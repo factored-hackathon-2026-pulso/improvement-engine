@@ -1,6 +1,6 @@
 # agent-core-assets
 
-Versioned Core assets (YAML entities) for the pinned agent-core (SHA `789d6c89b2fca90fc10e2abf157da51dc81c5d51`, contracts
+Versioned Core assets (YAML entities) for the pinned agent-core (SHA `894fa65575d83420523f33ec1c6919b8965f7ebe`, contracts
 1.3.0), plus the validator that keeps them honest. Contract revision: `pulso-two-teams-1`.
 
 ## Worlds
@@ -13,7 +13,7 @@ Versioned Core assets (YAML entities) for the pinned agent-core (SHA `789d6c89b2
   generated from `BUILDER_TOOL_DEFS` (`tools/gen_builder_tooldefs.py`) and the smoke suite `pulso-smoke`. Flows read run
   inputs from `facts.binding.value.*` produced by `pulso/bind_context` (ADR `core-bridge/docs/adr/0004`).
 - `manifest.yaml`: pin, per-world `files_digest`, `capability_catalog_digest`, `expected_state_digest`, release ids
-  (`atencion` `rel-98130317a1003849`, `pulso-scout` `rel-1cddd55d1fe8f19f`, `pulso-verifier` `rel-db71ae5ed04c6131`,
+  (`atencion` `rel-e26df0070f6be82f`, `pulso-scout` `rel-1cddd55d1fe8f19f`, `pulso-verifier` `rel-db71ae5ed04c6131`,
   `pulso-builder-design` `rel-5f152bbf73ea31b4`, `pulso-writer` `rel-bf3f06148962dabb`) and `expected-state.json`. Both
   are generated (`assetcheck.py write-state`) and must change in the same change as the asset.
 

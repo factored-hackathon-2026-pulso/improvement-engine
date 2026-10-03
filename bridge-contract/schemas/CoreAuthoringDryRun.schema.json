@@ -1,0 +1,97 @@
+{
+  "$id": "CoreAuthoringDryRun.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "V3 CAP-16/17 dry-run result. HTTP 200 with non-empty `violations` is not success (candidate_hash null); `release_id_preview` = 'rel-' + candidate_hash[:16]; no proposal is created.",
+  "properties": {
+    "auto_bumped": {
+      "type": "array"
+    },
+    "candidate_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "content_hashes": {
+      "type": "object"
+    },
+    "new_versions": {
+      "type": "array"
+    },
+    "proposal_created": {
+      "const": false
+    },
+    "release_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "release_id_preview": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "request_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "runtime_profile": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "violations": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "flow": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule",
+          "message"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "violations",
+    "candidate_hash"
+  ],
+  "title": "CoreAuthoringDryRun",
+  "type": "object"
+}

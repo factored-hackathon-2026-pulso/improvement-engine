@@ -1,0 +1,2615 @@
+components:
+  parameters:
+    IdempotencyKey:
+      description: sha256_hex(tenant|job|stage|attempt|logical_key)
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema:
+        pattern: ^[0-9a-f]{64}$
+        type: string
+    Traceparent:
+      in: header
+      name: traceparent
+      required: false
+      schema:
+        type: string
+  schemas:
+    AliasState:
+      additionalProperties: true
+      description: V3 CAP-08/33 AliasState (read-only observation of an alias; no write path).
+      properties:
+        agent_id:
+          type: string
+        alias:
+          enum:
+          - prod
+          - staging
+        observed_at:
+          pattern: ^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$
+          type: string
+        release_id:
+          type:
+          - string
+          - 'null'
+        runtime_profile:
+          type: string
+        schema_version:
+          const: '1'
+          type: string
+        source:
+          type: string
+        status:
+          type:
+          - string
+          - 'null'
+      required:
+      - schema_version
+      - agent_id
+      - alias
+      - release_id
+      title: AliasState
+      type: object
+    ArmReport:
+      additionalProperties: false
+      description: ArmReport. `usage=null` is 'not available'; `cost_known=false` is not free. A denied/interrupted
+        arm reads back as the minimal {execution_id,status,reason}.
+      properties:
+        arm:
+          type: string
+        case_ref:
+          type: string
+        closed_early:
+          type: boolean
+        closed_early_runs:
+          items:
+            type: string
+          type: array
+        cost_known:
+          type: boolean
+        detail:
+          type: string
+        effect_receipts:
+          type: array
+        event_refs:
+          items:
+            type: string
+          type: array
+        execution_id:
+          pattern: ^arm-[0-9a-f]{32}$
+          type: string
+        final_state_ref:
+          type:
+          - string
+          - 'null'
+        initial_state_digest:
+          type:
+          - string
+          - 'null'
+        oracle_ref:
+          type:
+          - string
+          - 'null'
+        reason:
+          type:
+          - string
+          - 'null'
+        repetition:
+          type: integer
+        seed:
+          type:
+          - integer
+          - string
+        status:
+          enum:
+          - completed
+          - candidate_failed
+          - failed_infra
+          - unknown
+          type: string
+        target_commitment:
+          type:
+          - string
+          - 'null'
+        trace_id:
+          type: string
+        usage:
+          type:
+          - object
+          - 'null'
+      required:
+      - execution_id
+      - status
+      title: ArmReport
+      type: object
+      x-reasons:
+      - broker_denied
+      - commitment_mismatch
+      - closure_invalid
+      - unknown_target_kind
+      - release_not_active
+      - proposal_not_frozen
+      - proposal_mismatch
+      - draft_plan_digest_mismatch
+      - base_release_missing
+      - candidate_invalid
+      - candidate_hash_mismatch
+      - target_load_failed
+      - manifest_missing
+      - manifest_empty
+      - budget_unknown
+      - mixed_world_rejected
+      - sandbox_timeout_after_send
+      - schema_violation
+      - action_without_readback
+      - interrupted
+      - runner_error
+    ArmRequest:
+      additionalProperties: false
+      description: D.4 arm request (generated from evaluation.arms.ArmRequest).
+      properties:
+        agent_id:
+          type: string
+        arm:
+          maxLength: 64
+          minLength: 1
+          type: string
+        binding_ref:
+          maxLength: 200
+          minLength: 1
+          type: string
+        budget_ref:
+          type: string
+        campaign_ref:
+          anyOf:
+          - maxLength: 200
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+        case_ref:
+          maxLength: 200
+          minLength: 1
+          type: string
+        idempotency_key:
+          pattern: ^[A-Za-z0-9_.:-]{1,200}$
+          type: string
+        mode:
+          enum:
+          - native
+          - task_builder
+          - stateful_attention
+          type: string
+        oracle_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+        repetition:
+          minimum: 0
+          type: integer
+        scenario_manifest_ref:
+          type: string
+        schema_version:
+          const: '1'
+          default: '1'
+          type: string
+        seed:
+          anyOf:
+          - type: integer
+          - type: string
+        seed_manifest_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+        supersedes_execution_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+        target:
+          additionalProperties: true
+          type: object
+        target_commitment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+      required:
+      - idempotency_key
+      - binding_ref
+      - case_ref
+      - arm
+      - repetition
+      - seed
+      - mode
+      - agent_id
+      - target
+      - scenario_manifest_ref
+      - budget_ref
+      title: ArmRequest
+      type: object
+    ArtifactRef:
+      additionalProperties: false
+      description: 'Annex D.1 ArtifactRef: treated data only, never a path/DSN/URL.'
+      properties:
+        digest:
+          type: string
+        id:
+          type: string
+        media_type:
+          type: string
+      required:
+      - id
+      - digest
+      - media_type
+      title: ArtifactRef
+      type: object
+    AuditAgentStepFailedEvidence:
+      additionalProperties: false
+      description: 'CX-0073/0075: ONLY a correlated audit `agent_step` with kind=failed + error_kind classifies
+        a model dependency failure; the task receipt keeps its own outcome. Prompts/inputs never appear.'
+      properties:
+        event_id:
+          type: string
+        hash:
+          type: string
+        payload:
+          additionalProperties: false
+          properties:
+            error_kind:
+              type: string
+            kind:
+              const: failed
+            latency_ms:
+              type: integer
+            node_id:
+              type: string
+            step:
+              type: integer
+          required:
+          - kind
+          - error_kind
+          - node_id
+          - step
+          - latency_ms
+          type: object
+        run_id:
+          type: string
+        schema_version:
+          type:
+          - string
+          - 'null'
+        seq:
+          minimum: 0
+          type: integer
+        type:
+          const: agent_step
+      required:
+      - event_id
+      - hash
+      - payload
+      - run_id
+      - seq
+      - type
+      title: AuditAgentStepFailedEvidence
+      type: object
+    CoreAuthoringDryRun:
+      additionalProperties: true
+      description: V3 CAP-16/17 dry-run result. HTTP 200 with non-empty `violations` is not success (candidate_hash
+        null); `release_id_preview` = 'rel-' + candidate_hash[:16]; no proposal is created.
+      properties:
+        auto_bumped:
+          type: array
+        candidate_hash:
+          pattern: ^[0-9a-f]{64}$
+          type:
+          - string
+          - 'null'
+        content_hashes:
+          type: object
+        new_versions:
+          type: array
+        proposal_created:
+          const: false
+        release_hash:
+          type:
+          - string
+          - 'null'
+        release_id_preview:
+          type:
+          - string
+          - 'null'
+        request_digest:
+          pattern: ^[0-9a-f]{64}$
+          type: string
+        runtime_profile:
+          type: string
+        schema_version:
+          const: '1'
+          type: string
+        valid:
+          type: boolean
+        violations:
+          items:
+            additionalProperties: true
+            properties:
+              flow:
+                type:
+                - string
+                - 'null'
+              message:
+                type: string
+              node_id:
+                type:
+                - string
+                - 'null'
+              path:
+                type:
+                - string
+                - 'null'
+              rule:
+                type: string
+            required:
+            - rule
+            - message
+            type: object
+          type: array
+      required:
+      - schema_version
+      - violations
+      - candidate_hash
+      title: CoreAuthoringDryRun
+      type: object
+    CoreAuthoringDryRunRequest:
+      additionalProperties: false
+      description: V3 CAP-16 L2 request (generated from authoring.service.DryRunRequest). More than 50
+        changes / 262144 canonical bytes per entity is a REG-LIMIT violation in the response, not a 4xx.
+      properties:
+        agent_id:
+          maxLength: 255
+          minLength: 1
+          type: string
+        base_release_id:
+          anyOf:
+          - maxLength: 255
+            type: string
+          - type: 'null'
+        changes:
+          items:
+            additionalProperties: false
+            properties:
+              content:
+                additionalProperties: true
+                type: object
+              docs:
+                additionalProperties: true
+                type: object
+              kind:
+                maxLength: 64
+                minLength: 1
+                type: string
+            required:
+            - kind
+            - content
+            - docs
+            type: object
+          type: array
+        request_digest:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+        schema_version:
+          const: '1'
+          type: string
+        tenant_id:
+          maxLength: 255
+          minLength: 1
+          type: string
+      required:
+      - schema_version
+      - tenant_id
+      - agent_id
+      - base_release_id
+      - changes
+      title: CoreAuthoringDryRunRequest
+      type: object
+    CoreCredentialIssue:
+      additionalProperties: false
+      description: 'Principal JWS (typ=principal+jws), TTL <= 900 s, `Cache-Control: no-store`. Never
+        persist or log `jws`.'
+      properties:
+        exp:
+          type: integer
+        jws:
+          type: string
+        kid:
+          type: string
+      required:
+      - jws
+      - kid
+      - exp
+      title: CoreCredentialIssue
+      type: object
+    CoreCredentialIssueRequest:
+      additionalProperties: false
+      description: CAP-33 credential request.
+      properties:
+        purpose:
+          type: string
+        role:
+          type: string
+        tenant_id:
+          type: string
+      required:
+      - tenant_id
+      - role
+      - purpose
+      title: CoreCredentialIssueRequest
+      type: object
+      x-policy:
+      - purpose: core_task
+        role: constructor
+        signer: identity
+      - purpose: registry_write
+        role: constructor
+        signer: staff
+    CoreTaskInvocation:
+      additionalProperties: false
+      allOf:
+      - if:
+          properties:
+            stage:
+              const: scout
+          required:
+          - stage
+        then:
+          properties:
+            agent_id:
+              const: pulso-scout
+            input:
+              additionalProperties: false
+              properties:
+                briefing_ref: {}
+              type: object
+            registry_mutation_commitment:
+              type: 'null'
+      - if:
+          properties:
+            stage:
+              const: verifier
+          required:
+          - stage
+        then:
+          properties:
+            agent_id:
+              const: pulso-verifier
+            input:
+              additionalProperties: false
+              properties:
+                hypotheses_ref: {}
+              type: object
+            registry_mutation_commitment:
+              type: 'null'
+      - if:
+          properties:
+            stage:
+              const: builder_design
+          required:
+          - stage
+        then:
+          properties:
+            agent_id:
+              const: pulso-builder-design
+            input:
+              additionalProperties: false
+              properties:
+                design_input_ref: {}
+              type: object
+            registry_mutation_commitment:
+              type: 'null'
+      - if:
+          properties:
+            stage:
+              const: writer
+          required:
+          - stage
+        then:
+          properties:
+            agent_id:
+              const: pulso-writer
+            input:
+              additionalProperties: false
+              properties:
+                base_release_id: {}
+                draft_plan_ref: {}
+                evaluate_enabled: {}
+                evaluation_suite_id: {}
+                evaluation_suite_version: {}
+                proposal_id: {}
+              type: object
+      description: CAP-25 invocation (generated from invoke.models.CoreTaskInvocation).
+      properties:
+        agent_id:
+          maxLength: 128
+          minLength: 1
+          type: string
+        agent_version:
+          pattern: ^\d+\.\d+\.\d+$
+          type: string
+        attempt:
+          maximum: 1000
+          minimum: 1
+          type: integer
+        budget:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+        closure_digest:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+        credentials:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+        cutoff:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+        deadline:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+        extract_manifest_ref:
+          anyOf:
+          - maxLength: 256
+            type: string
+          - type: 'null'
+          default: null
+        input:
+          additionalProperties: true
+          type: object
+        input_artifact_refs:
+          items:
+            type: string
+          maxItems: 64
+          type: array
+        job_id:
+          maxLength: 128
+          minLength: 1
+          type: string
+        lab_grant_ref:
+          maxLength: 256
+          minLength: 1
+          type: string
+        lang:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+        logical_key:
+          maxLength: 256
+          minLength: 1
+          type: string
+        memory_snapshot_ref:
+          anyOf:
+          - maxLength: 256
+            type: string
+          - type: 'null'
+          default: null
+        pulso_run_ref:
+          maxLength: 256
+          minLength: 1
+          type: string
+        registry_mutation_commitment:
+          default: null
+          oneOf:
+          - $ref: '#/components/schemas/RegistryMutationCommitment'
+          - type: 'null'
+        release_id:
+          maxLength: 128
+          minLength: 1
+          type: string
+        request_digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+        schema_version:
+          pattern: ^1$
+          type: string
+        stage:
+          enum:
+          - scout
+          - verifier
+          - builder_design
+          - writer
+          type: string
+        tenant_id:
+          maxLength: 128
+          minLength: 1
+          type: string
+        trace:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+      required:
+      - schema_version
+      - tenant_id
+      - pulso_run_ref
+      - job_id
+      - stage
+      - attempt
+      - agent_id
+      - agent_version
+      - release_id
+      - lab_grant_ref
+      - logical_key
+      title: CoreTaskInvocation
+      type: object
+      x-digest-excluded:
+      - request_digest
+      - credentials
+      - trace
+      x-max-input-bytes: 262144
+    CoreTaskReceipt:
+      additionalProperties: false
+      description: Body of invoke 200/202 and read 200. HTTP 202 = non-terminal (state in sent|binding_confirmed|unknown|manual_reconcile|prepared);
+        200 = terminal_ok|terminal_failed or a read. `code`/`trace_id` appear only on a non-terminal read.
+      properties:
+        adopted_writes:
+          type: array
+        code:
+          enum:
+          - pulso:task_unknown
+          - pulso:task_in_progress
+          type: string
+        core_run_id:
+          type:
+          - string
+          - 'null'
+        outcome:
+          type:
+          - string
+          - 'null'
+        proven_no_effect:
+          type: boolean
+        reason:
+          type:
+          - string
+          - 'null'
+        receipt:
+          $ref: '#/components/schemas/CoreTaskReceiptDetail'
+        result:
+          $ref: '#/components/schemas/ReadRunResult'
+        schema_version:
+          const: '1'
+          type: string
+        state:
+          enum:
+          - prepared
+          - sent
+          - binding_confirmed
+          - terminal_ok
+          - terminal_failed
+          - unknown
+          - manual_reconcile
+          type: string
+        task_binding_ref:
+          type: string
+        trace_id:
+          type: string
+      required:
+      - schema_version
+      - state
+      - core_run_id
+      - reason
+      - outcome
+      - task_binding_ref
+      title: CoreTaskReceipt
+      type: object
+      x-reasons:
+      - completed
+      - run_failed
+      - unexpected_outcome
+      - core_call_failed
+      - post_send_exception
+      - projection_failed
+      - binding_unconfirmed
+      - binding_unproven
+      - core_idempotency_conflict
+      - core_http_*
+      - core_rejected_*
+      - release_drift
+      - release_pin_unavailable
+      - release_revoked
+      - output_missing
+      - output_too_large
+      - fact_schema_violation
+      - canary_detected
+    CoreTaskReceiptDetail:
+      additionalProperties: false
+      description: CAP-33 CoreTaskReceipt detail stored with a terminal receipt (`receipt` of the state
+        body).
+      properties:
+        audit_refs:
+          type: array
+        budget:
+          additionalProperties: false
+          properties:
+            known:
+              type: boolean
+          required:
+          - known
+          type: object
+        core_run_id:
+          type: string
+        idempotency_key_digest:
+          pattern: ^[0-9a-f]{64}$
+          type: string
+        input_commitment:
+          pattern: ^[0-9a-f]{64}$
+          type: string
+        outcome:
+          type: string
+        output_digest:
+          type:
+          - string
+          - 'null'
+        output_refs:
+          type: array
+        release_id:
+          type: string
+        request_digest:
+          type: string
+        schema_version:
+          const: '1'
+          type: string
+        task_binding_ref:
+          type: string
+        trace_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - schema_version
+      - core_run_id
+      - release_id
+      - outcome
+      - trace_id
+      - idempotency_key_digest
+      - request_digest
+      - task_binding_ref
+      - input_commitment
+      - output_refs
+      - output_digest
+      - audit_refs
+      - budget
+      title: CoreTaskReceiptDetail
+      type: object
+    CoreVersion:
+      additionalProperties: true
+      description: 'Plan 4.1: `GET /version`. The real runtime reports runtime_profile=agent_core_real;
+        a mock reports its own.'
+      properties:
+        agent_core_sha:
+          pattern: ^[0-9a-f]{40}$
+          type: string
+        contracts_version:
+          type: string
+        doubles:
+          items:
+            type: string
+          type: array
+        image_digest:
+          type:
+          - string
+          - 'null'
+        keys_reload_error:
+          type:
+          - string
+          - 'null'
+        pulso_sha:
+          type: string
+        runtime_profile:
+          type: string
+      required:
+      - agent_core_sha
+      - contracts_version
+      - pulso_sha
+      - image_digest
+      - runtime_profile
+      - doubles
+      title: CoreVersion
+      type: object
+    ErrorEnvelope:
+      additionalProperties: false
+      description: Annex D.1 private error envelope (DR-34); `code` is a closed list. Core problem+json
+        never appears here.
+      properties:
+        code:
+          enum:
+          - pulso:admission_attempt_mismatch
+          - pulso:admission_cross_tenant
+          - pulso:admission_expired
+          - pulso:admission_missing
+          - pulso:admission_not_admitted
+          - pulso:admission_proposal_mismatch
+          - pulso:alias_unknown
+          - pulso:auth_denied
+          - pulso:auth_invalid
+          - pulso:base_release_unknown
+          - pulso:binding_not_confirmed
+          - pulso:bridge_busy
+          - pulso:broker_denied
+          - pulso:budget_unknown
+          - pulso:canary_detected
+          - pulso:candidate_changed
+          - pulso:core_unavailable
+          - pulso:credential_not_issuable
+          - pulso:credential_signing_unavailable
+          - pulso:digest_conflict
+          - pulso:dry_run_unavailable
+          - pulso:evaluate_disabled
+          - pulso:evaluation_attempt_exists
+          - pulso:evaluation_context_invalid
+          - pulso:evaluation_context_missing
+          - pulso:evaluation_in_progress
+          - pulso:evaluation_unknown
+          - pulso:fact_schema_violation
+          - pulso:http_error
+          - pulso:idempotency_conflict
+          - pulso:idempotency_key_invalid
+          - pulso:input_too_large
+          - pulso:internal_error
+          - pulso:invalid_request
+          - pulso:mixed_world_rejected
+          - pulso:not_found
+          - pulso:not_implemented
+          - pulso:output_missing
+          - pulso:output_too_large
+          - pulso:payload_too_large
+          - pulso:proposal_not_found
+          - pulso:release_drift
+          - pulso:release_pin_unavailable
+          - pulso:release_revoked
+          - pulso:release_settings_not_allowed
+          - pulso:run_not_found
+          - pulso:sandbox_required
+          - pulso:stage_agent_mismatch
+          - pulso:stage_unknown
+          - pulso:suite_mismatch
+          - pulso:supersedes_invalid
+          - pulso:task_in_progress
+          - pulso:task_unknown
+          - pulso:tenant_mismatch
+          - pulso:unknown_input_slot
+          type: string
+        details:
+          type: object
+        retryable:
+          type: boolean
+        schema_version:
+          const: '1'
+          type: string
+        trace_id:
+          type: string
+      required:
+      - schema_version
+      - code
+      - retryable
+      - trace_id
+      - details
+      title: ErrorEnvelope
+      type: object
+    EvaluationAdmission:
+      additionalProperties: false
+      description: 201 on first admission, 200 on an identical replay.
+      properties:
+        evaluation_context_ref:
+          type: string
+        schema_version:
+          const: '1'
+          type: string
+        state:
+          enum:
+          - admitted
+          - consumed
+          - expired
+          - unknown
+          type: string
+      required:
+      - schema_version
+      - evaluation_context_ref
+      - state
+      title: EvaluationAdmission
+      type: object
+    EvaluationAdmissionRequest:
+      additionalProperties: false
+      description: D.4 admission request.
+      properties:
+        binding_ref:
+          maxLength: 200
+          minLength: 1
+          type: string
+        budget_ref:
+          maxLength: 200
+          minLength: 1
+          type: string
+        candidate_hash:
+          maxLength: 128
+          minLength: 1
+          type: string
+        deadline:
+          format: date-time
+          type: string
+        evaluation_attempt:
+          minimum: 1
+          type: integer
+        evaluation_context_ref:
+          pattern: ^[A-Za-z0-9_.:-]{1,200}$
+          type: string
+        proposal_id:
+          maxLength: 200
+          minLength: 1
+          type: string
+        request_digest:
+          maxLength: 128
+          minLength: 1
+          type: string
+        schema_version:
+          default: '1'
+          type: string
+        suite_digest:
+          maxLength: 128
+          minLength: 1
+          type: string
+        suite_id:
+          maxLength: 200
+          minLength: 1
+          type: string
+        suite_version:
+          maxLength: 64
+          minLength: 1
+          type: string
+      required:
+      - evaluation_context_ref
+      - binding_ref
+      - proposal_id
+      - candidate_hash
+      - suite_id
+      - suite_version
+      - suite_digest
+      - evaluation_attempt
+      - budget_ref
+      - deadline
+      - request_digest
+      title: EvaluationAdmissionRequest
+      type: object
+    FactPolicy:
+      const:
+        stage_agent:
+          builder_design: pulso-builder-design
+          scout: pulso-scout
+          verifier: pulso-verifier
+          writer: pulso-writer
+        stage_fact:
+          builder_design: pulso_change_spec
+          scout: pulso_hypotheses
+          verifier: pulso_verification
+          writer: pulso_writer_receipts
+        stage_input_slots:
+          builder_design:
+          - design_input_ref
+          scout:
+          - briefing_ref
+          verifier:
+          - hypotheses_ref
+          writer:
+          - draft_plan_ref
+          - proposal_id
+          - base_release_id
+          - evaluate_enabled
+          - evaluation_suite_id
+          - evaluation_suite_version
+      description: Stage -> agent / fact / input slots as the catalogue defines them (informational constant).
+      title: FactPolicy
+      type: object
+    Fact_pulso_change_spec:
+      additionalProperties: false
+      description: D.2 fact `pulso_change_spec` of stage `builder_design` (facts/schemas/pulso_change_spec.strict.json).
+      properties:
+        alternatives:
+          contains:
+            properties:
+              kind:
+                const: do_nothing
+            required:
+            - kind
+            type: object
+          items:
+            additionalProperties: false
+            properties:
+              id:
+                maxLength: 128
+                minLength: 1
+                type: string
+              kind:
+                enum:
+                - do_nothing
+                - proposed_change
+                type: string
+              limitations:
+                items:
+                  maxLength: 2000
+                  type: string
+                maxItems: 50
+                type: array
+              summary:
+                maxLength: 2000
+                minLength: 1
+                type: string
+            required:
+            - id
+            - kind
+            - summary
+            type: object
+          maxItems: 20
+          minItems: 1
+          type: array
+        change_spec:
+          maxProperties: 64
+          minProperties: 1
+          type: object
+        evidence_refs:
+          items:
+            additionalProperties: false
+            properties:
+              digest:
+                pattern: ^[0-9a-f]{64}$
+                type: string
+              id:
+                maxLength: 200
+                minLength: 1
+                pattern: ^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$
+                type: string
+              media_type:
+                maxLength: 128
+                minLength: 1
+                type: string
+            required:
+            - id
+            - digest
+            - media_type
+            type: object
+          maxItems: 50
+          minItems: 1
+          type: array
+        rationale:
+          maxLength: 8000
+          minLength: 1
+          type: string
+        schema_version:
+          enum:
+          - '1'
+          type: string
+      required:
+      - schema_version
+      - change_spec
+      - rationale
+      - evidence_refs
+      - alternatives
+      title: Fact_pulso_change_spec
+      type: object
+    Fact_pulso_hypotheses:
+      additionalProperties: false
+      description: D.2 fact `pulso_hypotheses` of stage `scout` (facts/schemas/pulso_hypotheses.strict.json).
+      properties:
+        hypotheses:
+          items:
+            additionalProperties: false
+            properties:
+              counterevidence_refs:
+                items:
+                  additionalProperties: false
+                  properties:
+                    digest:
+                      pattern: ^[0-9a-f]{64}$
+                      type: string
+                    id:
+                      maxLength: 200
+                      minLength: 1
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$
+                      type: string
+                    media_type:
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                  required:
+                  - id
+                  - digest
+                  - media_type
+                  type: object
+                maxItems: 50
+                minItems: 0
+                type: array
+              evidence_refs:
+                items:
+                  additionalProperties: false
+                  properties:
+                    digest:
+                      pattern: ^[0-9a-f]{64}$
+                      type: string
+                    id:
+                      maxLength: 200
+                      minLength: 1
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$
+                      type: string
+                    media_type:
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                  required:
+                  - id
+                  - digest
+                  - media_type
+                  type: object
+                maxItems: 50
+                minItems: 1
+                type: array
+              id:
+                maxLength: 128
+                minLength: 1
+                type: string
+              mechanism:
+                maxLength: 4000
+                minLength: 1
+                type: string
+              missing_evidence:
+                items:
+                  maxLength: 2000
+                  type: string
+                maxItems: 50
+                type: array
+              next_queries:
+                items:
+                  maxLength: 4000
+                  type: string
+                maxItems: 50
+                type: array
+              statement:
+                maxLength: 2000
+                minLength: 1
+                type: string
+            required:
+            - id
+            - statement
+            - mechanism
+            - evidence_refs
+            - counterevidence_refs
+            - missing_evidence
+            - next_queries
+            type: object
+          maxItems: 50
+          minItems: 1
+          type: array
+        schema_version:
+          enum:
+          - '1'
+          type: string
+      required:
+      - schema_version
+      - hypotheses
+      title: Fact_pulso_hypotheses
+      type: object
+    Fact_pulso_verification:
+      additionalProperties: false
+      description: D.2 fact `pulso_verification` of stage `verifier` (facts/schemas/pulso_verification.strict.json).
+      properties:
+        assessments:
+          items:
+            additionalProperties: false
+            allOf:
+            - if:
+                properties:
+                  verdict:
+                    const: supported
+                required:
+                - verdict
+              then:
+                properties:
+                  evidence_refs:
+                    minItems: 1
+            - if:
+                properties:
+                  verdict:
+                    const: refuted
+                required:
+                - verdict
+              then:
+                properties:
+                  counterevidence_refs:
+                    minItems: 1
+            properties:
+              counterevidence_refs:
+                items:
+                  additionalProperties: false
+                  properties:
+                    digest:
+                      pattern: ^[0-9a-f]{64}$
+                      type: string
+                    id:
+                      maxLength: 200
+                      minLength: 1
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$
+                      type: string
+                    media_type:
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                  required:
+                  - id
+                  - digest
+                  - media_type
+                  type: object
+                maxItems: 50
+                minItems: 0
+                type: array
+              evidence_refs:
+                items:
+                  additionalProperties: false
+                  properties:
+                    digest:
+                      pattern: ^[0-9a-f]{64}$
+                      type: string
+                    id:
+                      maxLength: 200
+                      minLength: 1
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$
+                      type: string
+                    media_type:
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                  required:
+                  - id
+                  - digest
+                  - media_type
+                  type: object
+                maxItems: 50
+                minItems: 0
+                type: array
+              hypothesis_id:
+                maxLength: 128
+                minLength: 1
+                type: string
+              limitations:
+                items:
+                  maxLength: 2000
+                  type: string
+                maxItems: 50
+                type: array
+              verdict:
+                enum:
+                - supported
+                - refuted
+                - inconclusive
+                type: string
+            required:
+            - hypothesis_id
+            - verdict
+            - evidence_refs
+            - counterevidence_refs
+            - limitations
+            type: object
+          maxItems: 50
+          minItems: 1
+          type: array
+        schema_version:
+          enum:
+          - '1'
+          type: string
+      required:
+      - schema_version
+      - assessments
+      title: Fact_pulso_verification
+      type: object
+    Fact_pulso_writer_receipts:
+      additionalProperties: false
+      description: D.2 fact `pulso_writer_receipts` of stage `writer` (facts/schemas/pulso_writer_receipts.strict.json).
+      properties:
+        candidate_hash:
+          pattern: ^[A-Za-z0-9:_-]{1,128}$
+          type:
+          - string
+          - 'null'
+        native_evaluation:
+          oneOf:
+          - type: 'null'
+          - additionalProperties: false
+            properties:
+              eval_run_ref:
+                maxLength: 200
+                type:
+                - string
+                - 'null'
+              report_digest:
+                pattern: ^[0-9a-f]{64}$
+                type:
+                - string
+                - 'null'
+              verdict:
+                enum:
+                - pass
+                - fail
+                - failed_infra
+                type: string
+            required:
+            - verdict
+            - eval_run_ref
+            - report_digest
+            type: object
+        proposal_id:
+          maxLength: 128
+          minLength: 1
+          type: string
+        rev:
+          minimum: 0
+          type: integer
+        schema_version:
+          enum:
+          - '1'
+          type: string
+        state:
+          enum:
+          - confirmed
+          - unknown
+          type: string
+        write_receipts:
+          items:
+            additionalProperties: false
+            properties:
+              key_digest:
+                pattern: ^[0-9a-f]{64}$
+                type: string
+              op:
+                enum:
+                - create_proposal
+                - put_draft
+                - freeze
+                - reopen
+                - evaluate
+                type: string
+              request_hash:
+                maxLength: 128
+                minLength: 1
+                type: string
+              rev_after:
+                minimum: 0
+                type: integer
+              verified:
+                type: boolean
+            required:
+            - op
+            - key_digest
+            - rev_after
+            - request_hash
+            - verified
+            type: object
+          maxItems: 16
+          type: array
+      required:
+      - schema_version
+      - proposal_id
+      - rev
+      - candidate_hash
+      - native_evaluation
+      - write_receipts
+      - state
+      title: Fact_pulso_writer_receipts
+      type: object
+    ObservationBatch:
+      additionalProperties: false
+      description: POST /internal/v1/platform/observations body; `batch_digest` = sha256(JCS(body without
+        it)); ACK only after commit.
+      properties:
+        batch_digest:
+          pattern: ^[0-9a-f]{64}$
+          type: string
+        contract_version:
+          const: pulso-observations-2
+        cursor:
+          type: string
+        cut_ref:
+          type: 'null'
+        events:
+          items:
+            $ref: '#/components/schemas/ObservationEvent'
+          type: array
+        expected_cursor_revision:
+          type:
+          - integer
+          - 'null'
+        from_seq:
+          type:
+          - integer
+          - 'null'
+        partition:
+          type: string
+        scan_mode:
+          enum:
+          - fast_poll
+          - rescan
+        source_id:
+          type: string
+        tenant_id:
+          type: string
+        to_seq:
+          type:
+          - integer
+          - 'null'
+        verification_receipts:
+          type: array
+      required:
+      - contract_version
+      - source_id
+      - tenant_id
+      - partition
+      - scan_mode
+      - expected_cursor_revision
+      - from_seq
+      - to_seq
+      - cursor
+      - cut_ref
+      - events
+      - verification_receipts
+      title: ObservationBatch
+      type: object
+    ObservationEvent:
+      additionalProperties: false
+      description: 'Exporter-side observation DTO (`pulso-observations-2`): audit rows carry source_event=null
+        + source_event_digest(hash) + source_event_ref; registry/outbox rows carry the public projection.'
+      properties:
+        coverage_marker:
+          type:
+          - string
+          - 'null'
+        episode_ref:
+          type: 'null'
+        goal_ref:
+          type: 'null'
+        kind:
+          const: core_event
+        layer_mapping_ref:
+          type: 'null'
+        level:
+          enum:
+          - engine_event
+          - outbound_event
+        native_event_id:
+          type: string
+        observed_at:
+          pattern: ^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$
+          type: string
+        source_event:
+          type:
+          - object
+          - 'null'
+        source_event_digest:
+          type: string
+        source_event_ref:
+          oneOf:
+          - $ref: '#/components/schemas/ArtifactRef'
+          - type: 'null'
+        source_run_ref:
+          type:
+          - string
+          - 'null'
+        source_schema_ref:
+          $ref: '#/components/schemas/ArtifactRef'
+        source_sequence:
+          minimum: 0
+          type:
+          - integer
+          - 'null'
+        trace_refs:
+          type: array
+      required:
+      - kind
+      - level
+      - source_event
+      - native_event_id
+      - source_event_digest
+      - source_event_ref
+      - source_schema_ref
+      - source_run_ref
+      - source_sequence
+      - episode_ref
+      - goal_ref
+      - layer_mapping_ref
+      - observed_at
+      - trace_refs
+      - coverage_marker
+      title: ObservationEvent
+      type: object
+    ReadRunResult:
+      additionalProperties: false
+      description: 'CAP-28 projection: whitelisted facts only; each fact <= 131072 B, result <= 262144
+        B (JCS).'
+      properties:
+        core_run_id:
+          type: string
+        facts:
+          additionalProperties:
+            additionalProperties: false
+            properties:
+              digest:
+                pattern: ^[0-9a-f]{64}$
+                type: string
+              source_kind:
+                type: string
+              value: {}
+            required:
+            - value
+            - source_kind
+            - digest
+            type: object
+          propertyNames:
+            enum:
+            - pulso_hypotheses
+            - pulso_verification
+            - pulso_change_spec
+            - pulso_writer_receipts
+          type: object
+        outcome:
+          type: string
+        output_digest:
+          pattern: ^[0-9a-f]{64}$
+          type: string
+        schema_version:
+          const: '1'
+          type: string
+        status:
+          type: string
+      required:
+      - schema_version
+      - core_run_id
+      - status
+      - outcome
+      - facts
+      - output_digest
+      title: ReadRunResult
+      type: object
+    RegistryMutationCommitment:
+      additionalProperties: false
+      description: 'Codex-sealed writer commitment (D.2 writer row, CL-0002/CX-0007, CLQ-10). Not a separate
+        annex-D field:
+
+        it travels inside the digested `CoreTaskInvocation` body, so the same-key/other-body check also
+        covers it.
+
+        `operations` is the ordered list of committed non-evaluate writes; a write''s key ordinal is its
+        index.'
+      properties:
+        base_release_id:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          default: null
+        create_agent_id:
+          anyOf:
+          - maxLength: 128
+            type: string
+          - type: 'null'
+          default: null
+        create_origin:
+          anyOf:
+          - maxLength: 32
+            type: string
+          - type: 'null'
+          default: null
+        create_title:
+          anyOf:
+          - maxLength: 512
+            type: string
+          - type: 'null'
+          default: null
+        evaluate_enabled:
+          default: false
+          type: boolean
+        evaluation_context_ref:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          default: null
+        expected_rev:
+          anyOf:
+          - minimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+        mode:
+          enum:
+          - write
+          - evaluate_only
+          type: string
+        operations:
+          items:
+            enum:
+            - create_proposal
+            - put_draft
+            - validate
+            - freeze
+            - reopen
+            type: string
+          maxItems: 32
+          type: array
+        proposal_id:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          default: null
+        put_draft_digest:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+      required:
+      - mode
+      title: RegistryMutationCommitment
+      type: object
+    ServiceJwtClaims:
+      additionalProperties: false
+      description: Rust -> bridge JWT payload (A03 class i). No `scope`. `tenant_id` is optional only
+        on version_probe; `job_id` is required by evaluation_admit.
+      properties:
+        aud:
+          const: core-bridge
+        exp:
+          type: integer
+        iat:
+          type: integer
+        iss:
+          const: control-api
+        job_id:
+          type: string
+        jti:
+          minLength: 1
+          type: string
+        purpose:
+          type: string
+        sub:
+          minLength: 1
+          type: string
+        tenant_id:
+          minLength: 1
+          type: string
+      required:
+      - iss
+      - aud
+      - sub
+      - tenant_id
+      - purpose
+      - iat
+      - exp
+      - jti
+      title: ServiceJwtClaims
+      type: object
+  securitySchemes:
+    serviceJwt:
+      bearerFormat: JWT
+      description: Compact JWS typ=JWT alg=EdDSA, header exactly {alg,kid,typ}; see contract.json auth.
+      scheme: bearer
+      type: http
+info:
+  description: Generated by bridge-contract/gen.py from core-bridge/src. Do not edit by hand.
+  title: Pulso core-bridge /internal/v1
+  version: pulso-two-teams-1
+  x-contract-revision: pulso-two-teams-1
+  x-pin:
+    agent_core_sha: 894fa65575d83420523f33ec1c6919b8965f7ebe
+    contracts_version: 1.3.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+openapi: 3.1.0
+paths:
+  /internal/v1/core-authoring/dry-run:
+    post:
+      operationId: post_authoring_dry_run
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreAuthoringDryRunRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreAuthoringDryRun'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:base_release_unknown'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:invalid_request, pulso:release_settings_not_allowed'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:dry_run_unavailable'
+      security:
+      - serviceJwt: []
+      summary: authoring_dry_run
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - authoring_dry_run
+        tenant_required: true
+  /internal/v1/core-credentials/issue:
+    post:
+      operationId: post_issue_credential
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreCredentialIssueRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreCredentialIssue'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:credential_not_issuable,
+            pulso:tenant_mismatch'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:invalid_request'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:credential_signing_unavailable'
+      security:
+      - serviceJwt: []
+      summary: issue_credential
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - credential_issue
+        tenant_required: true
+  /internal/v1/core-state/aliases/{agent_id}/{alias}:
+    get:
+      operationId: get_read_alias
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      - in: path
+        name: agent_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: alias
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasState'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:alias_unknown'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:invalid_request'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+      security:
+      - serviceJwt: []
+      summary: read_alias
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - alias_read
+        tenant_required: true
+  /internal/v1/core-tasks/invoke:
+    post:
+      operationId: post_invoke
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreTaskInvocation'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreTaskReceipt'
+          description: OK
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreTaskReceipt'
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:stage_unknown, pulso:unknown_input_slot'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:run_not_found'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:digest_conflict, pulso:release_drift, pulso:release_pin_unavailable,
+            pulso:release_revoked'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:input_too_large, pulso:output_too_large,
+            pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:canary_detected, pulso:fact_schema_violation,
+            pulso:invalid_request, pulso:output_missing, pulso:stage_agent_mismatch'
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:bridge_busy'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:core_unavailable'
+      security:
+      - serviceJwt: []
+      summary: invoke
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - core_task_invoke
+        tenant_required: true
+  /internal/v1/core-tasks/{task_id}:
+    get:
+      operationId: get_read_task
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      - in: path
+        name: task_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreTaskReceipt'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_found, pulso:run_not_found'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:output_too_large, pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:canary_detected, pulso:fact_schema_violation,
+            pulso:invalid_request, pulso:output_missing'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+      security:
+      - serviceJwt: []
+      summary: read_task
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - core_task_read
+        tenant_required: true
+  /internal/v1/evaluation/admissions:
+    post:
+      operationId: post_admit_evaluation
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationAdmissionRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationAdmission'
+          description: OK
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationAdmission'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:admission_attempt_mismatch, pulso:admission_cross_tenant,
+            pulso:admission_missing, pulso:admission_proposal_mismatch, pulso:auth_denied, pulso:binding_not_confirmed,
+            pulso:broker_denied, pulso:budget_unknown, pulso:evaluate_disabled, pulso:evaluation_context_missing,
+            pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:proposal_not_found'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:admission_expired, pulso:admission_not_admitted,
+            pulso:candidate_changed, pulso:evaluation_attempt_exists, pulso:evaluation_in_progress, pulso:evaluation_unknown,
+            pulso:idempotency_conflict, pulso:suite_mismatch'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:evaluation_context_invalid, pulso:invalid_request'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+      security:
+      - serviceJwt: []
+      summary: admit_evaluation
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - evaluation_admit
+        tenant_required: true
+  /internal/v1/evaluation/arms/by-key/{key}:
+    get:
+      operationId: get_read_arm_by_key
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      - in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArmReport'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_found'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:invalid_request'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+      security:
+      - serviceJwt: []
+      summary: read_arm
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - evaluation_arm_read
+        tenant_required: true
+  /internal/v1/evaluation/arms/run:
+    post:
+      operationId: post_run_arm
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArmRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArmReport'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:broker_denied, pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_found'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:idempotency_conflict, pulso:mixed_world_rejected,
+            pulso:sandbox_required, pulso:supersedes_invalid'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:idempotency_key_invalid, pulso:invalid_request'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+      security:
+      - serviceJwt: []
+      summary: run_arm
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - evaluation_arm_run
+        tenant_required: true
+  /internal/v1/evaluation/arms/{arm_id}:
+    get:
+      operationId: get_read_arm_by_id
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      - in: path
+        name: arm_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArmReport'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_found'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:invalid_request'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+      security:
+      - serviceJwt: []
+      summary: read_arm
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - evaluation_arm_read
+        tenant_required: true
+  /internal/v1/evaluation/arms/{arm_id}/run:
+    post:
+      operationId: post_run_arm_by_id
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      - in: path
+        name: arm_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArmRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArmReport'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:broker_denied, pulso:tenant_mismatch'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_found'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:idempotency_conflict, pulso:mixed_world_rejected,
+            pulso:sandbox_required, pulso:supersedes_invalid'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:idempotency_key_invalid, pulso:invalid_request'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+      security:
+      - serviceJwt: []
+      summary: run_arm
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - evaluation_arm_run
+        tenant_required: true
+  /internal/v1/version:
+    get:
+      operationId: get_version
+      parameters:
+      - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreVersion'
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_invalid'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:auth_denied, pulso:tenant_mismatch'
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:http_error'
+        '413':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:payload_too_large'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:invalid_request'
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:internal_error'
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+          description: 'Error envelope. Possible codes: pulso:not_implemented'
+      security:
+      - serviceJwt: []
+      summary: version
+      x-pulso-auth:
+        audience: core-bridge
+        purposes:
+        - version_probe
+        tenant_required: false
+servers:
+- url: http://127.0.0.1:8000

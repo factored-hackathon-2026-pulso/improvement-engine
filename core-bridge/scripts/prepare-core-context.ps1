@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Exports the pinned agent-core checkout (git archive of HEAD == pin) into a clean build context WITHOUT upstream's
-  .dockerignore (agent-core 789d6c8 ignores `contracts`, `tests`, `docs`; our Dockerfile reads contracts/VERSION).
+  .dockerignore (agent-core 894fa65 ignores `contracts`, `tests`, `docs`; our Dockerfile reads contracts/VERSION).
   Prints the context directory. Fails closed when HEAD != -PinSha.
 #>
 [CmdletBinding()]

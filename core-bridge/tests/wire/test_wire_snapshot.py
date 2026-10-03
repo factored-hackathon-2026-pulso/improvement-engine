@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
+PIN_SHA = "894fa65575d83420523f33ec1c6919b8965f7ebe"
 WIRE = ROOT / "wire" / f"agent_core@{PIN_SHA[:7]}"
 pytestmark = pytest.mark.wire
 
@@ -77,7 +77,7 @@ def test_golden_hash_of_disputa_cargo_matches_v3_cap12() -> None:
 def test_golden_vectors_carry_the_seeded_release_detail_n03() -> None:
     v = json.loads((WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))
     d = v["release_detail"]
-    assert d["release_id"] == v["release_id"] == "rel-98130317a1003849"
+    assert d["release_id"] == v["release_id"] == "rel-e26df0070f6be82f"
     assert d["max_input_chars"] == 4000 and d["language_detection"]["id"] == "lang-es-pt"
     assert d["injection_ruleset"]["id"] == "injection-rules"
     assert [i["id"] for i in d["interrupts"]] == ["fraude"]
@@ -86,8 +86,8 @@ def test_golden_vectors_carry_the_seeded_release_detail_n03() -> None:
 
 def test_golden_release_demo_values() -> None:
     vectors = json.loads((WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))
-    assert vectors["release_id"] == "rel-98130317a1003849"
-    assert vectors["release_hash"].startswith("98130317a1003849")
+    assert vectors["release_id"] == "rel-e26df0070f6be82f"
+    assert vectors["release_hash"].startswith("e26df0070f6be82f")
     assert len(vectors["entities"]) == 26
     assert vectors["candidate"]["candidate_hash"]
 

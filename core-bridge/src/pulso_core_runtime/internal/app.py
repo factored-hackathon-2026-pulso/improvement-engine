@@ -33,7 +33,7 @@ class Route:
 ROUTES: tuple[Route, ...] = (
     Route("POST", "/core-tasks/invoke", CORE_BRIDGE, frozenset({"core_task_invoke"})),
     Route("GET", "/core-tasks/{task_id}", CORE_BRIDGE, frozenset({"core_task_read"})),
-    Route("GET", "/core-state/aliases", CORE_BRIDGE, frozenset({"alias_read"})),
+    Route("GET", "/core-state/aliases/{agent_id}/{alias}", CORE_BRIDGE, frozenset({"alias_read"})),
     Route("POST", "/core-authoring/dry-run", CORE_BRIDGE, frozenset({"authoring_dry_run"})),
     Route("GET", "/version", CORE_BRIDGE, frozenset({"version_probe"})),
     Route("POST", "/core-credentials/issue", CORE_BRIDGE, frozenset({"credential_issue"})),

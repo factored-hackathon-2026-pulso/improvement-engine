@@ -6,7 +6,7 @@
 
 # ---- builder: wheelhouse from the pin + our package ----
 FROM docker.io/library/python:3.12-slim AS builder
-ARG CORE_SHA=789d6c89b2fca90fc10e2abf157da51dc81c5d51
+ARG CORE_SHA=894fa65575d83420523f33ec1c6919b8965f7ebe
 ARG UV_VERSION=0.7.22
 ENV UV_LINK_MODE=copy PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN pip install --no-cache-dir "uv==${UV_VERSION}"
@@ -22,7 +22,7 @@ RUN test "$(cat contracts/VERSION)" = "1.3.0" \
 
 # ---- runtime: slim, non-root, read-only rootfs friendly ----
 FROM docker.io/library/python:3.12-slim AS runtime
-ARG CORE_SHA=789d6c89b2fca90fc10e2abf157da51dc81c5d51
+ARG CORE_SHA=894fa65575d83420523f33ec1c6919b8965f7ebe
 ARG PULSO_SHA=unknown
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PULSO_SHA=${PULSO_SHA} PULSO_CORE_SHA=${CORE_SHA} \
     PULSO_CALIBRATIONS_DIR=/opt/pulso/assets/calibrations PULSO_CLASSIFIER_DIR=/opt/pulso/assets/classifiers
@@ -30,7 +30,9 @@ COPY --from=builder /wheelhouse /wheelhouse
 RUN pip install --no-cache-dir --no-index --find-links /wheelhouse agent-core jsonschema referencing \
  && rm -rf /wheelhouse \
  && useradd --system --uid 10001 --no-create-home pulso \
- && install -d -m 0700 -o 10001 /run/pulso-keys
+ && install -d -m 0700 -o 10001 /run/pulso-keys /var/lib/pulso-exporter
+# Writable state dirs are pre-created: a Fargate ephemeral volume inherits ownership from the image path.
+# /var/lib/pulso-exporter is the exporter cursor dir (PULSO_EXPORTER_STATE_DIR in the infra task definition).
 # Only our package is copied (no testing/, tests/, contracts/ sources, dev group, Core compose).
 COPY src/pulso_core_runtime /opt/pulso/lib/pulso_core_runtime
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

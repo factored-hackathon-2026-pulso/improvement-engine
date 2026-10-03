@@ -186,3 +186,35 @@ def test_adopted_write_without_a_commitment_check_is_never_trusted(store: Receip
     res = rec.reconcile(_sent(store))
     assert (res.state, res.reason) == ("manual_reconcile", "commitment_mismatch")
     assert res.adopted_writes == ["w-create"]
+
+
+# ---- Agent Core 894fa65: a reserved-but-uncommitted run is invisible to `get_run_idempotency` --------------------
+
+def _in_flight_unknown(store: ReceiptStore) -> Any:
+    _sent(store, stage="scout")
+    store.transition("t", "k", "unknown", reason="core_idempotency_in_flight")
+    return store.get("t", "k")
+
+
+def test_reservation_window_never_concludes_no_effect_while_core_may_still_hold_the_key(store: ReceiptStore) -> None:
+    from datetime import timedelta
+    row = _in_flight_unknown(store)
+    rec = _rec(store, Runs(), Writes(), Bindings(), now=lambda: row.updated_at + timedelta(seconds=5))
+    res = rec.reconcile(row)
+    assert (res.state, res.reason) == ("unknown", "core_reservation_pending")
+    assert store.get("t", "k").state == "unknown"
+
+
+def test_after_the_reservation_window_the_normal_rules_apply(store: ReceiptStore) -> None:
+    from datetime import timedelta
+    row = _in_flight_unknown(store)
+    rec = _rec(store, Runs(), Writes(), Bindings(), now=lambda: row.updated_at + timedelta(seconds=76))
+    assert rec.reconcile(row).reason == "sent_without_binding"
+
+
+def test_a_stored_result_wins_even_inside_the_reservation_window(store: ReceiptStore) -> None:
+    from datetime import timedelta
+    row = _in_flight_unknown(store)
+    runs = Runs(stored={("p", "k"): ("h", {**RESULT, "outcome": "failed"})})
+    res = _rec(store, runs, Writes(), Bindings(), now=lambda: row.updated_at + timedelta(seconds=1)).reconcile(row)
+    assert (res.state, res.reason) == ("terminal_failed", "adopted_core_result")

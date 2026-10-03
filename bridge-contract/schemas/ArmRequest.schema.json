@@ -1,0 +1,139 @@
+{
+  "$id": "ArmRequest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "D.4 arm request (generated from evaluation.arms.ArmRequest).",
+  "properties": {
+    "agent_id": {
+      "type": "string"
+    },
+    "arm": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    },
+    "binding_ref": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "budget_ref": {
+      "type": "string"
+    },
+    "campaign_ref": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "case_ref": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "idempotency_key": {
+      "pattern": "^[A-Za-z0-9_.:-]{1,200}$",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "native",
+        "task_builder",
+        "stateful_attention"
+      ],
+      "type": "string"
+    },
+    "oracle_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "repetition": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "scenario_manifest_ref": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "type": "string"
+    },
+    "seed": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "seed_manifest_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "supersedes_execution_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "target": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "target_commitment": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "binding_ref",
+    "case_ref",
+    "arm",
+    "repetition",
+    "seed",
+    "mode",
+    "agent_id",
+    "target",
+    "scenario_manifest_ref",
+    "budget_ref"
+  ],
+  "title": "ArmRequest",
+  "type": "object"
+}

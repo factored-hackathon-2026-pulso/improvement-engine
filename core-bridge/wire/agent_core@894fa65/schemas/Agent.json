@@ -1,0 +1,721 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "AcceptedSlot": {
+      "additionalProperties": false,
+      "description": "One slot of the input contract: its type and whether the packet must carry it.",
+      "properties": {
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "decimal",
+            "date",
+            "boolean"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "AcceptedSlot",
+      "type": "object"
+    },
+    "AlertThreshold": {
+      "additionalProperties": false,
+      "description": "Production alert threshold. It is not the gate threshold.",
+      "properties": {
+        "breach_when": {
+          "enum": [
+            "above",
+            "below"
+          ],
+          "title": "Breach When",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "breach_when",
+        "value"
+      ],
+      "title": "AlertThreshold",
+      "type": "object"
+    },
+    "AuthLevel": {
+      "description": "Nivel de autenticación; se compara por rango (`anonymous < session < step_up`).",
+      "enum": [
+        "anonymous",
+        "session",
+        "step_up"
+      ],
+      "title": "AuthLevel",
+      "type": "string"
+    },
+    "Budgets": {
+      "additionalProperties": false,
+      "description": "Presupuestos duros de un agente por turno y por run (M0 §2.4).",
+      "properties": {
+        "max_cost_per_run": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Max Cost Per Run"
+        },
+        "max_model_calls_per_turn": {
+          "exclusiveMinimum": 0,
+          "title": "Max Model Calls Per Turn",
+          "type": "integer"
+        },
+        "max_nodes_per_turn": {
+          "exclusiveMinimum": 0,
+          "title": "Max Nodes Per Turn",
+          "type": "integer"
+        },
+        "max_tokens_per_run": {
+          "exclusiveMinimum": 0,
+          "title": "Max Tokens Per Run",
+          "type": "integer"
+        },
+        "max_wall_ms_per_turn": {
+          "exclusiveMinimum": 0,
+          "title": "Max Wall Ms Per Turn",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_nodes_per_turn",
+        "max_model_calls_per_turn",
+        "max_tokens_per_run",
+        "max_cost_per_run",
+        "max_wall_ms_per_turn"
+      ],
+      "title": "Budgets",
+      "type": "object"
+    },
+    "EngineTemplates": {
+      "additionalProperties": false,
+      "description": "Plantillas que usa el motor fuera de los flows (M4, M6, M10).",
+      "properties": {
+        "abstain": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "clarify": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "handoff": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "input_too_large": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "pending_ack": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "pending_offer": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "unsupported_language": {
+          "$ref": "#/$defs/RefSpec"
+        }
+      },
+      "required": [
+        "clarify",
+        "abstain",
+        "handoff",
+        "pending_ack",
+        "pending_offer",
+        "unsupported_language",
+        "input_too_large"
+      ],
+      "title": "EngineTemplates",
+      "type": "object"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "description": "Referencia exacta de runtime: `id@X.Y.Z`.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "JudgeExpr": {
+      "additionalProperties": false,
+      "description": "Metric graded by an LLM judge: the only non-deterministic kind (ADR 0020).",
+      "properties": {
+        "judge_profile": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "rubric": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Rubric",
+          "type": "string"
+        },
+        "target_event": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Target Event",
+          "type": "string"
+        }
+      },
+      "required": [
+        "judge_profile",
+        "rubric",
+        "target_event"
+      ],
+      "title": "JudgeExpr",
+      "type": "object"
+    },
+    "MetricDef": {
+      "additionalProperties": false,
+      "description": "One agent metric, with the role it plays in the gate and in production.",
+      "properties": {
+        "alert": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AlertThreshold"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "description": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expr": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricExpr"
+            },
+            {
+              "$ref": "#/$defs/JudgeExpr"
+            }
+          ],
+          "title": "Expr"
+        },
+        "higher_is_better": {
+          "title": "Higher Is Better",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "guardrail",
+            "gate",
+            "monitor"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description",
+        "role",
+        "higher_is_better",
+        "expr"
+      ],
+      "title": "MetricDef",
+      "type": "object"
+    },
+    "MetricExpr": {
+      "additionalProperties": false,
+      "description": "Deterministic metric over events: event, filter, aggregation, window and grouping.",
+      "properties": {
+        "aggregation": {
+          "enum": [
+            "count",
+            "sum",
+            "avg",
+            "percentile",
+            "rate"
+          ],
+          "title": "Aggregation",
+          "type": "string"
+        },
+        "denominator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricExpr"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "event": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Event",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "group_by": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Group By",
+          "type": "array"
+        },
+        "percentile": {
+          "anyOf": [
+            {
+              "maximum": 99,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Percentile"
+        },
+        "where": {
+          "items": {
+            "$ref": "#/$defs/Predicate"
+          },
+          "maxItems": 8,
+          "title": "Where",
+          "type": "array"
+        },
+        "window": {
+          "anyOf": [
+            {
+              "enum": [
+                "scenario",
+                "run"
+              ],
+              "type": "string"
+            },
+            {
+              "format": "duration",
+              "type": "string"
+            }
+          ],
+          "title": "Window"
+        }
+      },
+      "required": [
+        "event",
+        "aggregation",
+        "window"
+      ],
+      "title": "MetricExpr",
+      "type": "object"
+    },
+    "Predicate": {
+      "additionalProperties": false,
+      "description": "Filter on a field of the event catalog.",
+      "properties": {
+        "field": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "ne",
+            "in",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "title": "Predicate",
+      "type": "object"
+    },
+    "PrincipalType": {
+      "description": "Tipo de principal que invoca el motor (ADR 0006, M0 §2.3).",
+      "enum": [
+        "customer",
+        "advisor",
+        "service",
+        "builder"
+      ],
+      "title": "PrincipalType",
+      "type": "string"
+    },
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    },
+    "RoutingCard": {
+      "additionalProperties": false,
+      "description": "What a specialist solves, as shown to the reception agent (spec §3.1).",
+      "properties": {
+        "directory": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Directory",
+          "type": "string"
+        },
+        "examples": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Examples",
+          "type": "array"
+        },
+        "summary": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory",
+        "summary"
+      ],
+      "title": "RoutingCard",
+      "type": "object"
+    },
+    "TransferContract": {
+      "additionalProperties": false,
+      "description": "The slots a specialist accepts in a transfer packet (spec §3.1, D6).",
+      "properties": {
+        "slots": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AcceptedSlot"
+          },
+          "title": "Slots",
+          "type": "object"
+        }
+      },
+      "title": "TransferContract",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Agente descrito como datos versionados: flow de entrada, límites y plantillas (M0 §2.4).",
+  "properties": {
+    "accepts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TransferContract"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "budgets": {
+      "$ref": "#/$defs/Budgets"
+    },
+    "default_locale": {
+      "pattern": "^[a-z]{2}$",
+      "title": "Default Locale",
+      "type": "string"
+    },
+    "default_target_queue": {
+      "minLength": 1,
+      "title": "Default Target Queue",
+      "type": "string"
+    },
+    "entry_flow": {
+      "$ref": "#/$defs/RefSpec"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "inactivity_ttl": {
+      "default": "PT30M",
+      "format": "duration",
+      "title": "Inactivity Ttl",
+      "type": "string"
+    },
+    "input_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/AcceptedSlot"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input Schema"
+    },
+    "invocable_by": {
+      "items": {
+        "$ref": "#/$defs/PrincipalType"
+      },
+      "minItems": 1,
+      "title": "Invocable By",
+      "type": "array"
+    },
+    "max_clarifications": {
+      "minimum": 0,
+      "title": "Max Clarifications",
+      "type": "integer"
+    },
+    "max_repair_turns_per_run": {
+      "default": 8,
+      "exclusiveMinimum": 0,
+      "title": "Max Repair Turns Per Run",
+      "type": "integer"
+    },
+    "metrics": {
+      "items": {
+        "$ref": "#/$defs/MetricDef"
+      },
+      "maxItems": 32,
+      "title": "Metrics",
+      "type": "array"
+    },
+    "min_auth_level": {
+      "$ref": "#/$defs/AuthLevel"
+    },
+    "mode": {
+      "enum": [
+        "conversational",
+        "task"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "on_clarify_exhausted": {
+      "enum": [
+        "end",
+        "escalate"
+      ],
+      "title": "On Clarify Exhausted",
+      "type": "string"
+    },
+    "routing": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RoutingCard"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "slots_model": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RefSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "subject_kinds": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Subject Kinds",
+      "type": "array"
+    },
+    "supported_locales": {
+      "items": {
+        "pattern": "^[a-z]{2}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Supported Locales",
+      "type": "array"
+    },
+    "templates": {
+      "$ref": "#/$defs/EngineTemplates"
+    },
+    "tools_allowed": {
+      "items": {
+        "$ref": "#/$defs/RefSpec"
+      },
+      "title": "Tools Allowed",
+      "type": "array"
+    },
+    "understand": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RefSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "version": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "mode",
+    "entry_flow",
+    "invocable_by",
+    "min_auth_level",
+    "subject_kinds",
+    "supported_locales",
+    "default_locale",
+    "budgets",
+    "templates",
+    "max_clarifications",
+    "on_clarify_exhausted",
+    "default_target_queue"
+  ],
+  "title": "Agent",
+  "type": "object"
+}

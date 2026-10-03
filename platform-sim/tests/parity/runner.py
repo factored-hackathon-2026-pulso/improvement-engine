@@ -189,6 +189,27 @@ def _body(spec: Any, env: dict[str, Any]) -> Any:
             suite["content"]["scenarios"] = [{**copy.deepcopy(scen[i % len(scen)]), "id": f"sc{i}"}
                                              for i in range(int(arg["count"]))]
             return draft
+        if key == "$settings":  # one `release_settings` draft (N-07), optionally next to the golden draft
+            change = {"kind": "release_settings", "docs": _docs("settings"), "content": copy.deepcopy(arg["content"])}
+            if arg.get("with_golden"):
+                draft = _golden_draft(int(arg.get("expected_rev", 0)))
+                draft["changes"].append(change)
+                return draft
+            return {"expected_rev": int(arg.get("expected_rev", 0)), "changes": [change]}
+        if key == "$agent_input_schema":  # the seeded agent as a new version carrying `input_schema` (task only)
+            vectors = json.loads((WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))
+            agent = copy.deepcopy(next(e for e in vectors["entities"] if e["ref"].startswith("agent:"))["normalized_dump_json"])
+            agent["version"] = "1.0.1"
+            agent["input_schema"] = copy.deepcopy(arg["schema"])
+            return {"expected_rev": int(arg.get("expected_rev", 0)),
+                    "changes": [{"kind": "agent", "docs": _docs("agent"), "content": agent}]}
+        if key == "$golden_unwritable_slot":  # golden draft whose `collect` node writes another slot than the one read
+            draft = _golden_draft(int(arg.get("expected_rev", 0)))
+            flow = next(c for c in draft["changes"] if c["kind"] == "flow")
+            for node in flow["content"]["nodes"]:
+                if node["type"] == "collect":
+                    node["config"]["slot"] = arg["slot"]
+            return draft
         if key == "$title":
             return {"agent_id": AGENT_ID, "origin": arg.get("origin", "manual"), "title": "t" * int(arg["length"])}
         if key == "$one_template":
@@ -228,6 +249,14 @@ def _scalars(body: Any, only_rules: list[str] | None = None) -> dict[str, Any]:
                 found[f"{key}.id"] = body[key]["id"]
         if isinstance(body.get("interrupts"), list):
             found["interrupt_ids"] = sorted(str(i.get("id")) for i in body["interrupts"] if isinstance(i, dict))
+            # 894fa65: `Interrupt.locked` (platform guardrail) and the priority it must keep
+            found["interrupts"] = sorted(f"{i.get('id')}:{i.get('priority')}:locked={i.get('locked')}"
+                                         for i in body["interrupts"] if isinstance(i, dict))
+        review = body.get("review")
+        if isinstance(review, dict) and isinstance(review.get("release_changes"), list):  # 894fa65 `ApprovalReview`
+            found["release_changes"] = [f"{c.get('field')}:{json.dumps(c.get('before'), sort_keys=True)}->"
+                                        f"{json.dumps(c.get('after'), sort_keys=True)}"
+                                        for c in review["release_changes"] if isinstance(c, dict)]
         if isinstance(body.get("proposal"), dict):
             for k, v in _scalars(body["proposal"]).items():
                 found[f"proposal.{k}"] = v

@@ -1,0 +1,65 @@
+{
+  "$id": "ReadRunResult.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "CAP-28 projection: whitelisted facts only; each fact <= 131072 B, result <= 262144 B (JCS).",
+  "properties": {
+    "core_run_id": {
+      "type": "string"
+    },
+    "facts": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "source_kind": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "required": [
+          "value",
+          "source_kind",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "propertyNames": {
+        "enum": [
+          "pulso_hypotheses",
+          "pulso_verification",
+          "pulso_change_spec",
+          "pulso_writer_receipts"
+        ]
+      },
+      "type": "object"
+    },
+    "outcome": {
+      "type": "string"
+    },
+    "output_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "core_run_id",
+    "status",
+    "outcome",
+    "facts",
+    "output_digest"
+  ],
+  "title": "ReadRunResult",
+  "type": "object"
+}

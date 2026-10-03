@@ -153,6 +153,15 @@ def _constructor_principal(ic: Any) -> Any:
                      exp=now + timedelta(minutes=15))
 
 
+def limits_from_env(env: Mapping[str, str]) -> Any:
+    """Core's per-principal limits from AGENTCORE_RATE_* / AGENTCORE_DAILY_BUDGET_USD (agent-core >= 894fa65).
+    Raises ValueError on a malformed value. At 789d6c8 (no `rate_limits_from_env`) the defaults apply."""
+    from agent_core.api.limits import RateLimitConfig
+    from agent_core.composition import serve
+    reader = getattr(serve, "rate_limits_from_env", None)
+    return reader(env) if reader is not None else RateLimitConfig()
+
+
 def _path(value: str | None) -> Path | None:
     return Path(value) if value else None
 
@@ -177,7 +186,6 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
     import psycopg
     from agent_core.adapters.system_clock import SystemClock
     from agent_core.api.app import create_app
-    from agent_core.api.limits import RateLimitConfig
     from agent_core.composition.observability import (
         ObservabilityConfigError,
         setup_observability,
@@ -193,6 +201,9 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         SpendMeteringGateway,
         StaticBudgetResolver,
     )
+    from pulso_core_runtime.authoring.routes import AuthoringDeps
+    from pulso_core_runtime.authoring.routes import register as register_authoring
+    from pulso_core_runtime.authoring.service import AuthoringService
     from pulso_core_runtime.evaluation.arms import ArmRunner
     from pulso_core_runtime.evaluation.broker_clients import (
         BrokerArtifactPort,
@@ -244,6 +255,10 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         core_sha = env.get("PULSO_CORE_SHA", "").strip()
         if core_sha and core_sha != PIN_SHA:  # Core's `/version` build sha must be the pinned one
             return _fail(err, "PULSO_CORE_SHA must equal the pinned agent-core sha (or be unset)")
+        try:
+            limits = limits_from_env(env)
+        except ValueError as exc:
+            return _fail(err, str(exc))
         dsn = env.get("AGENTCORE_REGISTRY_DSN", "")
         eval_dsn = env.get("AGENTCORE_EVAL_DSN", "")
         service_path = Path(env.get("PULSO_SERVICE_KEYS", f"{KEYS_DIR}/service.json"))
@@ -320,6 +335,9 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
                               build_sha=env.get("PULSO_CORE_SHA") or PIN_SHA)
         handlers: dict[str, Any] = {}
         register_evaluation(handlers, EvaluationDeps(evaluation, arms, broker, budgets))
+        # CAP-08 alias reads and CAP-16 L2 dry-run: pure reads over the same store/service Core uses (no quota).
+        register_authoring(handlers, AuthoringDeps(AuthoringService(
+            ports.registry_api.store, evaluation.service, runtime_profile="agent_core_real")))
         doubles = [f"{k}: {v}" for k, v in sorted({**stand_ins(env), **_wiring_stand_ins(budgets)}.items())]
         doubles += llm_doubles(llm_cfg)
         doubles += [f"core:{name}" for name in ports.doubles]
@@ -337,10 +355,11 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
               if llm_cfg.mode == "gateway" else ()),
         )
         deps = dataclasses.replace(
-            deps, limits=RateLimitConfig(), extensions=(*deps.extensions, internal_extension),
+            deps, limits=limits, extensions=(*deps.extensions, internal_extension),
             readiness=(*deps.readiness, *extra))
         app = create_app(deps)
         holder["app"] = app
+        app.state.pulso_limits = limits
         app.state.pulso_arms = arms  # introspection handle for composition tests (no secrets, in-process only)
         if serve is None:
             import uvicorn

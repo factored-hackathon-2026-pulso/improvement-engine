@@ -1,0 +1,97 @@
+{
+  "$id": "CoreTaskReceipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Body of invoke 200/202 and read 200. HTTP 202 = non-terminal (state in sent|binding_confirmed|unknown|manual_reconcile|prepared); 200 = terminal_ok|terminal_failed or a read. `code`/`trace_id` appear only on a non-terminal read.",
+  "properties": {
+    "adopted_writes": {
+      "type": "array"
+    },
+    "code": {
+      "enum": [
+        "pulso:task_unknown",
+        "pulso:task_in_progress"
+      ],
+      "type": "string"
+    },
+    "core_run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outcome": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "proven_no_effect": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "receipt": {
+      "$ref": "CoreTaskReceiptDetail.schema.json"
+    },
+    "result": {
+      "$ref": "ReadRunResult.schema.json"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "prepared",
+        "sent",
+        "binding_confirmed",
+        "terminal_ok",
+        "terminal_failed",
+        "unknown",
+        "manual_reconcile"
+      ],
+      "type": "string"
+    },
+    "task_binding_ref": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "state",
+    "core_run_id",
+    "reason",
+    "outcome",
+    "task_binding_ref"
+  ],
+  "title": "CoreTaskReceipt",
+  "type": "object",
+  "x-reasons": [
+    "completed",
+    "run_failed",
+    "unexpected_outcome",
+    "core_call_failed",
+    "post_send_exception",
+    "projection_failed",
+    "binding_unconfirmed",
+    "binding_unproven",
+    "core_idempotency_conflict",
+    "core_http_*",
+    "core_rejected_*",
+    "release_drift",
+    "release_pin_unavailable",
+    "release_revoked",
+    "output_missing",
+    "output_too_large",
+    "fact_schema_violation",
+    "canary_detected"
+  ]
+}

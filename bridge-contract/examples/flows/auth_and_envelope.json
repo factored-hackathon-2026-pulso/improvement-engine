@@ -1,0 +1,342 @@
+{
+  "contract_revision": "pulso-two-teams-1",
+  "description": "Auth failures, replay and the error envelope on every denial.",
+  "flow": "auth_and_envelope",
+  "steps": [
+    {
+      "case": "version_ok",
+      "description": "Authenticated version probe; no tenant claim is required on this route.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": null,
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "version_probe",
+          "tenant_id": null,
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/version"
+      },
+      "response": {
+        "body": {
+          "agent_core_sha": "894fa65575d83420523f33ec1c6919b8965f7ebe",
+          "contracts_version": "1.3.0",
+          "doubles": [
+            "calibration: calibrations directory absent (live decision path blocked)",
+            "classifier: classifier assets directory absent",
+            "eval-budgets: static file resolver (control-api budget contract not defined)",
+            "grant-active: always false (no grant lookup; subject/OBO flows unsupported)",
+            "transcript: null transcript (task-only runtime: conversational runs are rejected)",
+            "llm-model-policy: unpinned (registry ModelProfile price is trusted; set PULSO_LLM_STAGE_POLICY_JSON to pin per-stage alias/model/price)"
+          ],
+          "image_digest": "unknown",
+          "keys_reload_error": null,
+          "pulso_sha": "integ",
+          "runtime_profile": "agent_core_real"
+        },
+        "content_type": "application/json",
+        "schema": "CoreVersion",
+        "status": 200
+      }
+    },
+    {
+      "case": "missing_token",
+      "description": "No Authorization header: 401 pulso:auth_invalid reason=missing_token.",
+      "request": {
+        "auth": {
+          "note": "no token"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/version"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:auth_invalid",
+          "details": {
+            "reason": "missing_token"
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 401
+      }
+    },
+    {
+      "case": "malformed_token",
+      "description": "A syntactically wrong token is refused with a closed reason.",
+      "request": {
+        "auth": {
+          "note": "intentionally malformed or foreign token (not stored)"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-tasks/run-1"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:auth_invalid",
+          "details": {
+            "reason": "malformed"
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 401
+      }
+    },
+    {
+      "case": "bad_signature",
+      "description": "Signature by another key.",
+      "request": {
+        "auth": {
+          "note": "intentionally malformed or foreign token (not stored)"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/version"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:auth_invalid",
+          "details": {
+            "reason": "bad_signature"
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 401
+      }
+    },
+    {
+      "case": "expired_token",
+      "description": "exp in the past.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "version_probe",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/version"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:auth_invalid",
+          "details": {
+            "reason": "expired"
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 401
+      }
+    },
+    {
+      "case": "wrong_purpose",
+      "description": "Valid token, purpose not allowed on this route.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "version_probe",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-tasks/run-1"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:auth_denied",
+          "details": {
+            "reason": "purpose_denied"
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 403
+      }
+    },
+    {
+      "case": "tenant_not_deployed",
+      "description": "Tenant claim outside the deployment tenant set.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_read",
+          "tenant_id": "t-not-deployed",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-tasks/run-1"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:tenant_mismatch",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 403
+      }
+    },
+    {
+      "case": "jti_first_use",
+      "description": "",
+      "request": {
+        "auth": {
+          "note": "intentionally malformed or foreign token (not stored)"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/version"
+      },
+      "response": {
+        "body": {
+          "agent_core_sha": "894fa65575d83420523f33ec1c6919b8965f7ebe",
+          "contracts_version": "1.3.0",
+          "doubles": [
+            "calibration: calibrations directory absent (live decision path blocked)",
+            "classifier: classifier assets directory absent",
+            "eval-budgets: static file resolver (control-api budget contract not defined)",
+            "grant-active: always false (no grant lookup; subject/OBO flows unsupported)",
+            "transcript: null transcript (task-only runtime: conversational runs are rejected)",
+            "llm-model-policy: unpinned (registry ModelProfile price is trusted; set PULSO_LLM_STAGE_POLICY_JSON to pin per-stage alias/model/price)"
+          ],
+          "image_digest": "unknown",
+          "keys_reload_error": null,
+          "pulso_sha": "integ",
+          "runtime_profile": "agent_core_real"
+        },
+        "content_type": "application/json",
+        "schema": "CoreVersion",
+        "status": 200
+      }
+    },
+    {
+      "case": "jti_replay",
+      "description": "Second use of the same (iss, jti): 401 reason=jti_replayed.",
+      "request": {
+        "auth": {
+          "note": "intentionally malformed or foreign token (not stored)"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/version"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:auth_invalid",
+          "details": {
+            "reason": "jti_replayed"
+          },
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 401
+      }
+    },
+    {
+      "case": "unknown_path",
+      "description": "Core problem+json never appears under /internal/v1.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "version_probe",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/no-such-route"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:not_found",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 404
+      }
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "$id": "ObservationEvent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Exporter-side observation DTO (`pulso-observations-2`): audit rows carry source_event=null + source_event_digest(hash) + source_event_ref; registry/outbox rows carry the public projection.",
+  "properties": {
+    "coverage_marker": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "episode_ref": {
+      "type": "null"
+    },
+    "goal_ref": {
+      "type": "null"
+    },
+    "kind": {
+      "const": "core_event"
+    },
+    "layer_mapping_ref": {
+      "type": "null"
+    },
+    "level": {
+      "enum": [
+        "engine_event",
+        "outbound_event"
+      ]
+    },
+    "native_event_id": {
+      "type": "string"
+    },
+    "observed_at": {
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ$",
+      "type": "string"
+    },
+    "source_event": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "source_event_digest": {
+      "type": "string"
+    },
+    "source_event_ref": {
+      "oneOf": [
+        {
+          "$ref": "ArtifactRef.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source_run_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_schema_ref": {
+      "$ref": "ArtifactRef.schema.json"
+    },
+    "source_sequence": {
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "trace_refs": {
+      "type": "array"
+    }
+  },
+  "required": [
+    "kind",
+    "level",
+    "source_event",
+    "native_event_id",
+    "source_event_digest",
+    "source_event_ref",
+    "source_schema_ref",
+    "source_run_ref",
+    "source_sequence",
+    "episode_ref",
+    "goal_ref",
+    "layer_mapping_ref",
+    "observed_at",
+    "trace_refs",
+    "coverage_marker"
+  ],
+  "title": "ObservationEvent",
+  "type": "object"
+}

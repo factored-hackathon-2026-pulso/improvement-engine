@@ -1,0 +1,161 @@
+{
+  "$id": "Fact_pulso_verification.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "D.2 fact `pulso_verification` of stage `verifier` (facts/schemas/pulso_verification.strict.json).",
+  "properties": {
+    "assessments": {
+      "items": {
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "verdict": {
+                  "const": "supported"
+                }
+              },
+              "required": [
+                "verdict"
+              ]
+            },
+            "then": {
+              "properties": {
+                "evidence_refs": {
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "verdict": {
+                  "const": "refuted"
+                }
+              },
+              "required": [
+                "verdict"
+              ]
+            },
+            "then": {
+              "properties": {
+                "counterevidence_refs": {
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        ],
+        "properties": {
+          "counterevidence_refs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "digest": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "id": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$",
+                  "type": "string"
+                },
+                "media_type": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "digest",
+                "media_type"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "minItems": 0,
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "digest": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "id": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$",
+                  "type": "string"
+                },
+                "media_type": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "digest",
+                "media_type"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "minItems": 0,
+            "type": "array"
+          },
+          "hypothesis_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "verdict": {
+            "enum": [
+              "supported",
+              "refuted",
+              "inconclusive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "hypothesis_id",
+          "verdict",
+          "evidence_refs",
+          "counterevidence_refs",
+          "limitations"
+        ],
+        "type": "object"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema_version": {
+      "enum": [
+        "1"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "assessments"
+  ],
+  "title": "Fact_pulso_verification",
+  "type": "object"
+}

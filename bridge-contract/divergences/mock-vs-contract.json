@@ -1,0 +1,239 @@
+{
+  "error_codes": {
+    "mock_codes_in_contract_only_with_prefix": [
+      "alias_unknown",
+      "bridge_busy",
+      "core_unavailable",
+      "digest_conflict",
+      "input_too_large",
+      "internal_error",
+      "invalid_request",
+      "output_missing",
+      "release_drift",
+      "release_pin_unavailable",
+      "release_revoked",
+      "release_settings_not_allowed",
+      "run_not_found",
+      "stage_unknown",
+      "tenant_mismatch"
+    ],
+    "mock_codes_not_in_contract": [
+      "binding_failed",
+      "credentials_invalid",
+      "forbidden",
+      "request_digest_invalid"
+    ]
+  },
+  "purposes": {
+    "admit_evaluation": {
+      "contract": [
+        "evaluation_admit"
+      ],
+      "mock": null
+    },
+    "invoke": {
+      "contract": [
+        "core_task_invoke"
+      ],
+      "mock": "task_invoke"
+    },
+    "read_alias": {
+      "contract": [
+        "alias_read"
+      ],
+      "mock": "state_read"
+    },
+    "read_arm": {
+      "contract": [
+        "evaluation_arm_read"
+      ],
+      "mock": null
+    },
+    "read_task": {
+      "contract": [
+        "core_task_read"
+      ],
+      "mock": "task_read"
+    },
+    "run_arm": {
+      "contract": [
+        "evaluation_arm_run"
+      ],
+      "mock": null
+    },
+    "version": {
+      "contract": [
+        "version_probe"
+      ],
+      "mock": "version_read"
+    }
+  },
+  "routes": {
+    "only_in_contract": [
+      "GET /internal/v1/core-tasks/{task_id}",
+      "GET /internal/v1/evaluation/arms/by-key/{key}",
+      "GET /internal/v1/evaluation/arms/{arm_id}",
+      "POST /internal/v1/evaluation/admissions",
+      "POST /internal/v1/evaluation/arms/run",
+      "POST /internal/v1/evaluation/arms/{arm_id}/run"
+    ],
+    "only_in_mock": [
+      "GET /internal/v1/core-tasks/{core_run_id}"
+    ]
+  },
+  "schemas": {
+    "AliasState": {
+      "additional_properties": {
+        "contract": true,
+        "mock": false
+      },
+      "required_only_in_mock": [
+        "observed_at",
+        "runtime_profile",
+        "source",
+        "status"
+      ]
+    },
+    "CoreAuthoringDryRun": {
+      "additional_properties": {
+        "contract": true,
+        "mock": false
+      },
+      "required_only_in_mock": [
+        "auto_bumped",
+        "content_hashes",
+        "new_versions",
+        "proposal_created",
+        "release_hash",
+        "release_id_preview",
+        "request_digest",
+        "runtime_profile",
+        "valid"
+      ]
+    },
+    "CoreAuthoringDryRunRequest": {},
+    "CoreCredentialIssue": {
+      "only_in_mock": [
+        "runtime_profile",
+        "schema_version"
+      ],
+      "required_only_in_mock": [
+        "runtime_profile",
+        "schema_version"
+      ]
+    },
+    "CoreCredentialIssueRequest": {
+      "only_in_mock": [
+        "schema_version"
+      ],
+      "required_only_in_mock": [
+        "schema_version"
+      ]
+    },
+    "CoreTaskInvocation": {
+      "only_in_contract": [
+        "budget",
+        "closure_digest",
+        "credentials",
+        "extract_manifest_ref",
+        "input_artifact_refs",
+        "lang",
+        "logical_key",
+        "pulso_run_ref",
+        "registry_mutation_commitment",
+        "trace"
+      ],
+      "only_in_mock": [
+        "budget_ref",
+        "config_ref",
+        "information_partition",
+        "input_refs"
+      ],
+      "required_only_in_contract": [
+        "logical_key",
+        "pulso_run_ref"
+      ],
+      "required_only_in_mock": [
+        "budget_ref",
+        "config_ref",
+        "cutoff",
+        "deadline",
+        "information_partition",
+        "input",
+        "input_refs",
+        "memory_snapshot_ref",
+        "request_digest"
+      ]
+    },
+    "CoreTaskReceipt": {
+      "only_in_contract": [
+        "adopted_writes",
+        "code",
+        "proven_no_effect",
+        "reason",
+        "receipt",
+        "task_binding_ref"
+      ],
+      "only_in_mock": [
+        "attempt",
+        "bridge_instance_id",
+        "error_code",
+        "idempotency_key",
+        "job_id",
+        "release_id",
+        "request_digest",
+        "runtime_profile",
+        "stage",
+        "tenant_id"
+      ],
+      "required_only_in_contract": [
+        "reason",
+        "task_binding_ref"
+      ],
+      "required_only_in_mock": [
+        "attempt",
+        "bridge_instance_id",
+        "error_code",
+        "idempotency_key",
+        "job_id",
+        "release_id",
+        "request_digest",
+        "result",
+        "runtime_profile",
+        "stage",
+        "tenant_id",
+        "trace_id"
+      ]
+    },
+    "CoreVersion": {
+      "additional_properties": {
+        "contract": true,
+        "mock": false
+      },
+      "only_in_contract": [
+        "doubles",
+        "keys_reload_error"
+      ],
+      "only_in_mock": [
+        "bridge_instance_id",
+        "schema_version"
+      ],
+      "required_only_in_contract": [
+        "doubles"
+      ],
+      "required_only_in_mock": [
+        "bridge_instance_id",
+        "schema_version"
+      ]
+    },
+    "ErrorEnvelope": {},
+    "ReadRunResult": {
+      "only_in_mock": [
+        "runtime_profile"
+      ],
+      "required_only_in_mock": [
+        "runtime_profile"
+      ]
+    }
+  }
+}

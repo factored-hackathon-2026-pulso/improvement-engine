@@ -241,3 +241,45 @@ def test_exporter_requires_both_key_seeds_and_never_echoes_them() -> None:
 def test_migrate_needs_no_key_material() -> None:
     r = _run(["migrate", "--help"], env={})
     assert "pulso:runtime_config_invalid" not in r.stderr
+
+
+def test_dockerfile_core_sha_args_equal_the_runtime_pin() -> None:
+    from pulso_core_runtime import PIN_SHA
+
+    shas = re.findall(r"^ARG CORE_SHA=([0-9a-f]{40})$", DOCKERFILE, re.M)
+    assert len(shas) == 2 and set(shas) == {PIN_SHA}
+
+
+# ---- writable state dirs (Fargate ephemeral volumes inherit ownership from the image path) ----
+
+STATE_DIR = "/var/lib/pulso-exporter"
+
+
+def test_dockerfile_precreates_the_exporter_state_dir_owned_by_the_app_uid() -> None:
+    assert re.search(rf"install -d -m 0700 -o 10001 .*{STATE_DIR}", DOCKERFILE)
+
+
+@needs_image
+def test_exporter_state_dir_is_0700_uid_10001_in_the_image() -> None:
+    r = _run(["-c", f"stat -c %a:%u {STATE_DIR}"], entrypoint="sh")
+    assert r.returncode == 0 and r.stdout.strip() == "700:10001", (r.stdout, r.stderr[-300:])
+
+
+@needs_image
+def test_exporter_can_write_its_state_file_on_a_fresh_volume_under_a_read_only_root() -> None:
+    """A fresh named volume mounted at the state dir (what a Fargate ephemeral volume is) must be writable by uid 10001."""
+    import uuid
+
+    conn = os.environ.get("PULSO_PODMAN_CONNECTION", "pulso-dev")
+    vol = f"pulso-test-state-{uuid.uuid4().hex[:8]}"
+    base = [PODMAN, "--connection", conn]
+    subprocess.run([*base, "volume", "create", vol], check=True, capture_output=True)
+    try:
+        code = ("import sqlite3; from pathlib import Path; from pulso_core_runtime.exporter.state import ExporterState; "
+                f"s = ExporterState(Path('{STATE_DIR}/state.sqlite')); s.set_meta('k', 'v'); s.close(); print('wrote')")
+        r = subprocess.run([*base, "run", "--rm", "--cgroups=disabled", "--read-only", "-u", "10001",
+                            "-v", f"{vol}:{STATE_DIR}", "--entrypoint", "python", os.environ["PULSO_TEST_IMAGE"], "-c", code],
+                           capture_output=True, text=True, timeout=120)
+        assert r.returncode == 0 and "wrote" in r.stdout, r.stderr[-500:]
+    finally:
+        subprocess.run([*base, "volume", "rm", "-f", vol], capture_output=True)

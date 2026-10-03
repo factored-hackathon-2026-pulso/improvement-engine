@@ -1,0 +1,24 @@
+{
+  "$id": "ArtifactRef.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Annex D.1 ArtifactRef: treated data only, never a path/DSN/URL.",
+  "properties": {
+    "digest": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "media_type": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "digest",
+    "media_type"
+  ],
+  "title": "ArtifactRef",
+  "type": "object"
+}

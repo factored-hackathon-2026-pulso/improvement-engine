@@ -1,0 +1,133 @@
+{
+  "$id": "Fact_pulso_hypotheses.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "D.2 fact `pulso_hypotheses` of stage `scout` (facts/schemas/pulso_hypotheses.strict.json).",
+  "properties": {
+    "hypotheses": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "counterevidence_refs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "digest": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "id": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$",
+                  "type": "string"
+                },
+                "media_type": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "digest",
+                "media_type"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "minItems": 0,
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "digest": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "id": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}$",
+                  "type": "string"
+                },
+                "media_type": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "digest",
+                "media_type"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "mechanism": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "missing_evidence": {
+            "items": {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "next_queries": {
+            "items": {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "statement": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "statement",
+          "mechanism",
+          "evidence_refs",
+          "counterevidence_refs",
+          "missing_evidence",
+          "next_queries"
+        ],
+        "type": "object"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema_version": {
+      "enum": [
+        "1"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "hypotheses"
+  ],
+  "title": "Fact_pulso_hypotheses",
+  "type": "object"
+}

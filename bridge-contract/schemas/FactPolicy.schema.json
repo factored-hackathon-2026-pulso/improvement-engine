@@ -1,0 +1,40 @@
+{
+  "$id": "FactPolicy.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "const": {
+    "stage_agent": {
+      "builder_design": "pulso-builder-design",
+      "scout": "pulso-scout",
+      "verifier": "pulso-verifier",
+      "writer": "pulso-writer"
+    },
+    "stage_fact": {
+      "builder_design": "pulso_change_spec",
+      "scout": "pulso_hypotheses",
+      "verifier": "pulso_verification",
+      "writer": "pulso_writer_receipts"
+    },
+    "stage_input_slots": {
+      "builder_design": [
+        "design_input_ref"
+      ],
+      "scout": [
+        "briefing_ref"
+      ],
+      "verifier": [
+        "hypotheses_ref"
+      ],
+      "writer": [
+        "draft_plan_ref",
+        "proposal_id",
+        "base_release_id",
+        "evaluate_enabled",
+        "evaluation_suite_id",
+        "evaluation_suite_version"
+      ]
+    }
+  },
+  "description": "Stage -> agent / fact / input slots as the catalogue defines them (informational constant).",
+  "title": "FactPolicy",
+  "type": "object"
+}

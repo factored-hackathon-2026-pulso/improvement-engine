@@ -1,0 +1,195 @@
+{
+  "$comment": "GENERADO por `uv run agentcore contracts`; no editar a mano.",
+  "$defs": {
+    "EscalateAction": {
+      "additionalProperties": false,
+      "description": "Acción de una interrupción que escala a una cola (M0 §2.4).",
+      "properties": {
+        "priority": {
+          "title": "Priority",
+          "type": "string"
+        },
+        "target_queue": {
+          "title": "Target Queue",
+          "type": "string"
+        },
+        "type": {
+          "const": "escalate",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "target_queue",
+        "priority"
+      ],
+      "title": "EscalateAction",
+      "type": "object"
+    },
+    "Interrupt": {
+      "additionalProperties": false,
+      "description": "Interrupción de una release: prioridad y acción (escalar o iniciar un flow) (M0 §2.4).",
+      "properties": {
+        "action": {
+          "discriminator": {
+            "mapping": {
+              "escalate": "#/$defs/EscalateAction",
+              "start_flow": "#/$defs/StartFlowAction"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EscalateAction"
+            },
+            {
+              "$ref": "#/$defs/StartFlowAction"
+            }
+          ],
+          "title": "Action"
+        },
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "locked": {
+          "default": false,
+          "title": "Locked",
+          "type": "boolean"
+        },
+        "priority": {
+          "title": "Priority",
+          "type": "integer"
+        },
+        "signal_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RefSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "priority",
+        "action"
+      ],
+      "title": "Interrupt",
+      "type": "object"
+    },
+    "RefSpec": {
+      "additionalProperties": false,
+      "description": "Referencia de autoría: exacta, rango (`^1`, `~1.2`, `1`) o sin versión.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_/-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "pattern": "^(?:(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)|[\\^~](?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){0,2}|(?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*))?)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "RefSpec",
+      "type": "object"
+    },
+    "StartFlowAction": {
+      "additionalProperties": false,
+      "description": "Acción de una interrupción que inicia un flow (M0 §2.4).",
+      "properties": {
+        "flow": {
+          "$ref": "#/$defs/RefSpec"
+        },
+        "type": {
+          "const": "start_flow",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "flow"
+      ],
+      "title": "StartFlowAction",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Contenido del borrador `release_settings`. Un campo omitido conserva el valor de la base; no hay forma\nde quitar el `injection_ruleset` ni la detección de idioma, solo de cambiarlos por otros del registry.",
+  "properties": {
+    "injection_ruleset": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Injection Ruleset"
+    },
+    "interrupts": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Interrupt"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Interrupts"
+    },
+    "language_detection": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language Detection"
+    },
+    "max_input_chars": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Input Chars"
+    }
+  },
+  "title": "ReleaseSettings",
+  "type": "object"
+}

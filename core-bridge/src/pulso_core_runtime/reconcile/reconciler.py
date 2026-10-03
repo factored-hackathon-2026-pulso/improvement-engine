@@ -9,6 +9,7 @@ commitment; (4) no binding and `sent` -> `manual_reconcile`. Anything unreadable
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -52,9 +53,14 @@ class Reconciler:
     def __init__(self, *, store: ReceiptStore, runs: RunReader, writes: WriteProbe | None = None,
                  bindings: BindingLookup | None = None, projector: FactProjector | None = None,
                  commitment_check: Callable[[Receipt, str, dict[str, Any]], bool] | None = None,
-                 expected_writes: Callable[[Receipt], Sequence[str]] = lambda r: ()) -> None:
+                 expected_writes: Callable[[Receipt], Sequence[str]] = lambda r: (),
+                 now: Callable[[], datetime] = lambda: datetime.now(UTC),
+                 reservation_hold: timedelta = timedelta(seconds=75)) -> None:
         self._store, self._runs, self._writes, self._bindings = store, runs, writes, bindings
         self._projector, self._check, self._expected = projector, commitment_check, expected_writes
+        # Core >= 894fa65 keeps a run reservation for `lease_ttl` (60 s) that no read port can see: do not conclude
+        # "no effect" before lease + margin has passed since the invoke gave up waiting on it.
+        self._now, self._hold = now, reservation_hold
 
     def reconcile(self, receipt: Receipt) -> ReconcileResult:
         if receipt.terminal:
@@ -117,6 +123,9 @@ class Reconciler:
             state = "terminal_ok" if outcome == "completed" else failed
             return self._move(receipt, state, "adopted_core_result", core_run_id=run_id, outcome=outcome,
                               receipt={"result": envelope, "trace_id": _get(result, "trace_id")})
+        if (receipt.reason == "core_idempotency_in_flight" and receipt.updated_at is not None
+                and self._now() - receipt.updated_at < self._hold):
+            return ReconcileResult(receipt.state, "core_reservation_pending", core_run_id=receipt.core_run_id)
         # (4) no evidence of a send at all
         if receipt.state == "prepared":
             return self._move(receipt, "terminal_failed", "never_sent", proven_no_effect=True)

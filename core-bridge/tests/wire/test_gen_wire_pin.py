@@ -5,12 +5,13 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-FALLBACK_SHA = "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
+FALLBACK_SHA = "894fa65575d83420523f33ec1c6919b8965f7ebe"
 pytestmark = pytest.mark.wire
 
 
@@ -65,3 +66,19 @@ def test_committed_manifest_matches_pin_if_present_in_repo() -> None:
     assert manifest.exists(), "pin.json points to a sha with no committed wire snapshot"
     if pin.get("manifest_sha256"):
         assert hashlib.sha256(manifest.read_bytes()).hexdigest() == pin["manifest_sha256"]
+
+
+class _Tx:
+    def __init__(self, aliases: dict) -> None:
+        self.aliases = aliases
+
+    def get_alias(self, agent_id: str, alias: str, *, for_update: bool = False):
+        return self.aliases.get((agent_id, alias))
+
+
+def test_seeded_release_id_is_derived_from_the_prod_alias_not_hard_coded(gw) -> None:
+    """The id changes on every pin that touches release content (it was rel-e26df007... at 894fa65): derive it."""
+    assert gw.seeded_release_id(_Tx({("atencion", "prod"): "rel-anything"})) == "rel-anything"
+    with pytest.raises(SystemExit):
+        gw.seeded_release_id(_Tx({}))
+    assert not re.search(r"rel-[0-9a-f]{16}", (ROOT / "scripts" / "gen_wire.py").read_text(encoding="utf-8"))
