@@ -79,7 +79,7 @@ def test_writer_commits_create_put_freeze_with_derived_keys_and_exactly_one_prop
     assert [o for o in ops if o != "evaluate"] == ["create_proposal", "put_draft", "freeze"]  # one effect per write
     # (the evaluate-only invocation of the same proposal later appends its single `evaluate` op: asserted below)
     assert db.one("select proposal_json::json->>'state' from reg_proposals where proposal_id=%s",
-                  pipeline.proposal_id) == "candidate"
+                  pipeline.proposal_id) in ("candidate", "evaluated")  # frozen; `evaluated` after the evaluate-only run
     authz = [r["body"]["operation"] for r in stack.engine.state()["requests"] if r["route"] == "authz"]
     for op in ("registry/create_proposal", "registry/put_draft", "registry/freeze"):
         assert op in authz  # every effect was authorised by the broker first
@@ -125,7 +125,7 @@ def test_evaluate_only_invocation_runs_the_native_evaluation_end_to_end_and_neve
                                     pipeline.proposal_id)]
     assert writes == ["create_proposal", "put_draft", "freeze", "evaluate"], writes  # one evaluate, no reopen/put
     assert db.one("select proposal_json::json->>'state' from reg_proposals where proposal_id=%s",
-                  pipeline.proposal_id) == "candidate"  # still frozen
+                  pipeline.proposal_id) == "evaluated"  # frozen then evaluated, never reopened to draft
     authz = [r["body"]["operation"] for r in stack.engine.state()["requests"]
              if r["route"] == "authz" and r["body"].get("binding_ref") == pipeline.eval_binding_ref]
     assert authz, "the evaluate-only invocation was authorised through its own binding"
