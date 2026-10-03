@@ -26,11 +26,11 @@ describe('sources demo model', () => {
     for (const f of FAMILIES.filter((x) => x.kind === 'operational')) expect(fam('platform_live', f.id).status).toBe('eligible');
   });
   it('every non-eligible family names at least one missing capability', () => {
-    for (const s of DEMO_SOURCES) for (const e of eligibility(s)) if (e.status !== 'eligible') expect(e.missing.length, `${s.id}/${e.family}`).toBeGreaterThan(0);
+    for (const s of DEMO_SOURCES) for (const e of eligibility(s)) if (e.status !== 'eligible' && e.kind === 'ai_layer') expect(e.missing.length, `${s.id}/${e.family}`).toBeGreaterThan(0);
   });
   it('platform_live counters use the exporter vocabulary; other sources have no exporter', () => {
     const c = src('platform_live').counters!;
-    expect(Object.keys(c)).toEqual(['events_exported', 'unknown_event_type', 'denied_event_type', 'gap_suspected', 'late_event', 'window_revisions', 'team_generated_excluded']);
+    expect(Object.keys(c)).toEqual(['events_sent', 'unknown_event_type', 'denied_event_type', 'gap_suspected', 'late_event']);
     expect(src('e0_enriched').counters).toBeNull();
     expect(src('bank_original').counters).toBeNull();
   });

@@ -36,7 +36,8 @@ export const SOURCES_ES = {
   'sources.cap.identity_check': 'Verificación de identidad', 'sources.cap.routing_step': 'Pasos de enrutamiento',
   'sources.cap.copilot_query': 'Consultas al copiloto', 'sources.cap.tool_call': 'Llamadas a herramientas',
   'sources.cap.approval': 'Aprobaciones', 'sources.cap.suggestion': 'Sugerencias', 'sources.cap.case_close.resolved': 'Cierre con resolución',
-  'sources.cap.csat': 'Satisfacción (CSAT)', 'sources.cap.teams': 'Equipos', 'sources.cap.event_log': 'Registro de eventos',
+  'sources.cap.csat': 'Satisfacción (CSAT)', 'sources.cap.teams': 'Equipos', 'sources.teamGen': 'Filas de simulador excluidas (team_generated): {n}',
+  'sources.noTimeline': 'requiere línea de tiempo de eventos',
   'sources.fam.first_response_sla': 'Primera respuesta y SLA', 'sources.fam.queue_wait': 'Espera en cola',
   'sources.fam.language_starvation': 'Inanición por idioma', 'sources.fam.load_imbalance': 'Carga desbalanceada',
   'sources.fam.reassignment_churn': 'Rotación de reasignaciones', 'sources.fam.close_reason_mix': 'Mezcla de motivos de cierre',
@@ -44,10 +45,9 @@ export const SOURCES_ES = {
   'sources.fam.identity_friction': 'Fricción de identidad', 'sources.fam.approval_bottleneck': 'Cuellos de botella de aprobación',
   'sources.fam.routing_misroute': 'Enrutamiento erróneo', 'sources.fam.suggestion_quality': 'Calidad de sugerencias',
   'sources.fam.topic_drift': 'Deriva de temas', 'sources.fam.human_resolution_verified': 'Resolución humana verificada',
-  'sources.counter.events_exported': 'Eventos exportados', 'sources.counter.unknown_event_type': 'Tipos de evento desconocidos en cuarentena',
+  'sources.counter.events_sent': 'Eventos exportados', 'sources.counter.unknown_event_type': 'Tipos de evento desconocidos en cuarentena',
   'sources.counter.denied_event_type': 'Tipos de evento denegados', 'sources.counter.gap_suspected': 'Huecos sospechados',
-  'sources.counter.late_event': 'Eventos tardíos', 'sources.counter.window_revisions': 'Revisiones de ventana',
-  'sources.counter.team_generated_excluded': 'Filas de simulador excluidas (team_generated)',
+  'sources.counter.late_event': 'Eventos tardíos',
 } as const;
 export type SourcesKey = keyof typeof SOURCES_ES;
 export const SOURCES_EN: Record<SourcesKey, string> = {
@@ -71,7 +71,8 @@ export const SOURCES_EN: Record<SourcesKey, string> = {
   'sources.cap.identity_check': 'Identity check', 'sources.cap.routing_step': 'Routing steps', 'sources.cap.copilot_query': 'Copilot queries',
   'sources.cap.tool_call': 'Tool calls', 'sources.cap.approval': 'Approvals', 'sources.cap.suggestion': 'Suggestions',
   'sources.cap.case_close.resolved': 'Close with resolution', 'sources.cap.csat': 'Satisfaction (CSAT)', 'sources.cap.teams': 'Teams',
-  'sources.cap.event_log': 'Event log',
+  'sources.teamGen': 'Simulator rows excluded (team_generated): {n}',
+  'sources.noTimeline': 'requires an event timeline',
   'sources.fam.first_response_sla': 'First response and SLA', 'sources.fam.queue_wait': 'Queue wait',
   'sources.fam.language_starvation': 'Language starvation', 'sources.fam.load_imbalance': 'Unbalanced load',
   'sources.fam.reassignment_churn': 'Reassignment churn', 'sources.fam.close_reason_mix': 'Close reason mix',
@@ -79,10 +80,9 @@ export const SOURCES_EN: Record<SourcesKey, string> = {
   'sources.fam.identity_friction': 'Identity friction', 'sources.fam.approval_bottleneck': 'Approval bottlenecks',
   'sources.fam.routing_misroute': 'Routing misroutes', 'sources.fam.suggestion_quality': 'Suggestion quality',
   'sources.fam.topic_drift': 'Topic drift', 'sources.fam.human_resolution_verified': 'Verified human resolution',
-  'sources.counter.events_exported': 'Events exported', 'sources.counter.unknown_event_type': 'Unknown event types quarantined',
+  'sources.counter.events_sent': 'Events exported', 'sources.counter.unknown_event_type': 'Unknown event types quarantined',
   'sources.counter.denied_event_type': 'Denied event types', 'sources.counter.gap_suspected': 'Suspected gaps',
-  'sources.counter.late_event': 'Late events', 'sources.counter.window_revisions': 'Window revisions',
-  'sources.counter.team_generated_excluded': 'Simulator rows excluded (team_generated)',
+  'sources.counter.late_event': 'Late events',
 };
 export function tl(locale: Locale, key: SourcesKey, params: Record<string, string | number> = {}): string {
   const s: string = (locale === 'en' ? SOURCES_EN : SOURCES_ES)[key];

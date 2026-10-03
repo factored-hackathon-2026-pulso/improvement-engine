@@ -32,7 +32,7 @@ function SourceSection({ s, locale }: { s: Source; locale: Locale }) {
             <tr key={e.family} data-testid={`fam-${s.id}-${e.family}`} data-status={e.status}>
               <th scope="row">{L(K(`sources.fam.${e.family}`))} <small><code>{e.family}</code></small></th>
               <td>{L(K(`sources.${e.status}`))} <code>{e.status}</code></td>
-              <td>{e.missing.length === 0 ? L('sources.none') : e.missing.map((m) => <code key={m}>{m} </code>)}</td>
+              <td>{e.missing.length === 0 ? (e.status === 'eligible' ? L('sources.none') : L('sources.noTimeline')) : e.missing.map((m) => <code key={m}>{m} </code>)}</td>
             </tr>
           ))}
         </tbody>
@@ -46,6 +46,7 @@ function SourceSection({ s, locale }: { s: Source; locale: Locale }) {
             ))}
           </dl>
         )}
+        {s.teamGeneratedExcluded !== null && <p data-testid="team-generated">{L('sources.teamGen', { n: s.teamGeneratedExcluded })}</p>}
       </div>
       {s.id === 'platform_live' && (
         <div>

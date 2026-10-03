@@ -42,3 +42,7 @@ a { color: #0b3d91; }
 .source tr[data-status="unsupported"] td, .source tr[data-status="insufficient_human_evidence"] td { border-left: 6px solid #8a5a00; }
 .source tr[data-status="eligible"] td { border-left: 6px solid #1b7f3b; }
 .card[data-status] { border-left: 6px solid #8a5a00; list-style: none; }
+.source dl > div { flex-wrap: wrap; } .source dt { min-width: 0; flex: 1 1 200px; }
+.source table { display: block; max-width: 100%; overflow-x: auto; }
+.source, .source p, .source code { overflow-wrap: anywhere; }
+.source .card { min-width: 0; }

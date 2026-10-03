@@ -38,7 +38,7 @@ describe('SourcesView', () => {
   it('exporter counters render for platform_live; sources without exporter say unknown', () => {
     render(<SourcesView />);
     const c = within(screen.getByTestId('counters-platform_live'));
-    for (const k of ['events_exported', 'unknown_event_type', 'gap_suspected', 'late_event', 'window_revisions', 'team_generated_excluded']) expect(c.getByTestId(`counter-${k}`)).toBeTruthy();
+    for (const k of ['events_sent', 'unknown_event_type', 'gap_suspected', 'late_event']) expect(c.getByTestId(`counter-${k}`)).toBeTruthy();
     expect(screen.getByTestId('counters-e0_enriched').textContent).toContain('unknown');
   });
   it('insight cards are read-only: no buttons, links or publish wording, terminal status shown', () => {

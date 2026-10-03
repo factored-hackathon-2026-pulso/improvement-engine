@@ -2,8 +2,8 @@
 
 - New hash route `#/sources` (nav "Fuentes"/"Sources"), `src/features/SourcesView.tsx`, demo model `sourcesModel.ts`, strings `src/i18n/sources.ts` (es-419 default + en, key parity tested).
 - Everything is a `stand_in` demo model mirroring platform-exporter vocabulary (profile.py capabilities; finding/counter names unknown_event_type, denied_event_type, gap_suspected, late_event). Not read from a real API; banner says so.
-- Added a pseudo-capability `event_log` (not in the exporter capability manifest) so operational families are `unsupported` on sources without events. Exporter has no `window_revisions` or `events_exported` counter by those names (PollReport has events_sent, late_events); the demo names are console-side. Reconcile when a real endpoint exists.
-- Insight statuses `insufficient_core_target` / reason `no_core_artifact_in_phase1` are consumer proposals, not codes confirmed by Codex.
+- Vocabulary reconciled with the exporter (follow-up): counters are real names only (events_sent, unknown_event_type, denied_event_type, gap_suspected, late_event); no `window_revisions` counter exists (only `window_revision_required` on late_event findings). Simulator exclusion is shown as a separate model field (observations carry evidence_kind=team_generated / population_excluded), not a counter. `event_log` pseudo-capability removed; operational families on sources without an event timeline are `unsupported` with a "requires an event timeline" note. `tests/unit/exporterVocabulary.test.ts` pins counter and capability names to lists copied from the exporter.
+- Reason `no_core_artifact_in_phase1` is proposed vocabulary, pending Codex; statuses use only spec 32.3 codes (waiting_dependency / insufficient_human_evidence).
 - View is read-only by construction (no buttons/links). The console has no role/permission pattern yet (session has `scopes` but nothing gates on them).
 
 ## Backoffice follow-ups (not done)
