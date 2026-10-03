@@ -111,4 +111,10 @@ the full core library suite (97 passed, 1 ignored),
 `cargo +1.98.1 clippy --locked -p improvement-engine-core --all-targets --
 -D warnings`; `git diff --check` passed. The ignored live PostgreSQL test is
 not represented as locally passing; the corrected real-database fixture is
-queued for the new PR CI run.
+validated by the subsequent PR CI run recorded below.
+
+The corrected live PostgreSQL gate passed in GitHub Actions run `37084025313`
+(job `111090475290`), including the U24 V2 tenant-scoped sequence timeline
+test. Ubuntu verification passed; Windows verification also passed (including
+integration tests and pinned Pester). This confirms the real database fixture
+and current feature head in CI; the merge decision remains with the reviewers.
