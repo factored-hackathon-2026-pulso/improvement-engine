@@ -18,7 +18,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $lib = Join-Path $PSScriptRoot 'lib'
-foreach ($f in 'errors', 'machine', 'namespace', 'ports', 'evidence', 'secrets', 'runner', 'memory') { . (Join-Path $lib "$f.ps1") }
+foreach ($f in 'errors', 'machine', 'namespace', 'ports', 'evidence', 'secrets', 'runner', 'memory', 'humanissuer') { . (Join-Path $lib "$f.ps1") }
 if (-not $SecretsRoot) { $SecretsRoot = Join-Path $PSScriptRoot '..\.secrets' }
 try {
     if (-not $Namespace) { $Namespace = New-PulsoNamespace }
@@ -52,12 +52,16 @@ try {
     if (-not $DryRun) { $digest = 'sha256:' + (Invoke-Podman -Connection $conn image inspect $Image --format '{{.Id}}').Trim() }
     $simImage = 'localhost/pulso-platform-sim:dry-run'
     if (-not $DryRun) { $simImage = Ensure-SimImage -Connection $conn -BaseImage $Image }
+    # Local human issuer (sandbox-only double): its image is content-addressed and built here; keys are generated INSIDE the
+    # stack (human-issuer-keygen) so no private key ever touches the host or the repo.
+    $humanImage = 'localhost/pulso-local-identity:dry-run'
+    if (-not $DryRun) { $humanImage = Ensure-HumanIssuerImage -Connection $conn }
     $coreEnv = Initialize-LocalSecrets -Root $SecretsRoot -Namespace $Namespace
-    $portsEnv = Write-PortsEnv -Root $SecretsRoot -Namespace $Namespace -Ports $plan -Image $Image -ImageDigest $digest -SimImage $simImage
+    $portsEnv = Write-PortsEnv -Root $SecretsRoot -Namespace $Namespace -Ports $plan -Image $Image -ImageDigest $digest -SimImage $simImage -HumanIssuerImage $humanImage
 
     $model = Get-ComposeModel -Namespace $Namespace -Profile $Profile -EnvFiles @($coreEnv, $portsEnv)
     $runtimeProfile = if ($Profile -eq 'fixture') { 'contract_mock' } else { 'from /internal/v1/version' }
-    $doubles = if ($Profile -eq 'fixture') { @('platform-sim', 'core-synth') } else { @('platform-sim') }
+    $doubles = if ($Profile -eq 'fixture') { @('platform-sim', 'core-synth') } else { @('platform-sim', 'human-issuer') }
 
     Write-Output "namespace=$Namespace project=$project profile=$Profile machine=$($m.name)"
     Write-Output "runtime_profile=$runtimeProfile"

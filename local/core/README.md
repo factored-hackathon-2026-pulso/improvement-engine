@@ -63,3 +63,14 @@ generated into the `core-keys` volume only, so `reset.ps1` rotates them. The ima
 The scripted-task smoke step was `not_run` when the stack was first delivered (needed invoke wiring and a model script);
 `AGENTCORE_JEV_API_KEY` is a local placeholder; root `local/compose.yaml` inclusion and a non-internal `core-egress` network
 are Codex-owned and unverified. Details: `core-bridge/docs/journal/claude-0008-l8-local-stack.md`.
+
+## Local human issuer (demo steps 8-9)
+
+`human-issuer` (local-identity, sandbox-only DOUBLE, `com.pulso.role=double`, `real_local` profile) runs on the core network as
+`human-issuer:8083`, **internal only** (`expose`, no host port; doctor `human_issuer_internal_only` fails if one appears).
+`human-issuer-keygen` generates its keyset into the private `human-issuer-keys` volume (idempotent) and publishes ONLY the public
+staff fragment into `human-issuer-public`; `core-keygen` merges it into the LOCAL `staff.json` next to the bridge bot key
+(`PULSO_HUMAN_STAFF_FRAGMENT`; kid must be `local-sim-human-*`, never added to `identity.json`). The image is content-addressed
+and built by `start.ps1` (`Ensure-HumanIssuerImage`). Doctor and smoke run the CAP-63 scan (`cap63_remote_simulation`): no
+`local-sim-*` kid and no `auth.simulated=true` in any remote (staging/prod) configuration. The e2e proof is
+`e2e-core/tests/live/test_07_human_approval.py`.

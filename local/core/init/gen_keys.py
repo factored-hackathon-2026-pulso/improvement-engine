@@ -10,6 +10,11 @@ Idempotent: existing key files are kept (a second run changes nothing). Files (n
   service.json                       public service keys (internal.auth.load_service_keys format)
   exporter-control-api.key / exporter-lab-broker.key   exporter private seeds (b64url, one line)
 Runs as root inside the image, then hands ownership to the runtime uid (10001).
+
+Local human issuer (plan 17.3.2, LOCAL stack only): when PULSO_HUMAN_STAFF_FRAGMENT names a file
+`{"principal_keys": {"local-sim-human-*": <public key>}}` (PUBLIC keys only, written by local_identity.keys), it is merged into
+staff.json next to the bridge bot key. The merge also applies to an already generated set and is idempotent. A kid that is not
+a `local-sim-human-` kid, or that collides with an existing key, is refused (exit 2). identity.json never gets a human key.
 """
 
 from __future__ import annotations
@@ -43,12 +48,46 @@ def write(path: Path, text: str, mode: int = 0o640) -> None:
     os.chown(path, UID, UID)
 
 
+HUMAN_KID_PREFIX = "local-sim-human-"
+
+
+def merge_human_fragment(out: Path, fragment: Path) -> int:
+    """Adds the public human kid(s) to staff.json. 0 ok / unchanged, 2 refused (names the problem, never a key)."""
+    try:
+        keys = json.loads(fragment.read_text(encoding="ascii"))["principal_keys"]
+        assert isinstance(keys, dict) and keys
+    except (OSError, ValueError, KeyError, AssertionError):
+        print(f"core-keygen: human fragment unreadable ({fragment.name})", file=sys.stderr)
+        return 2
+    staff_path = out / "staff.json"
+    staff = json.loads(staff_path.read_text(encoding="ascii"))
+    current = staff["principal_keys"]
+    changed = False
+    for kid, pub in keys.items():
+        if not (isinstance(kid, str) and kid.startswith(HUMAN_KID_PREFIX) and isinstance(pub, str) and pub):
+            print("core-keygen: human fragment kid must start with local-sim-human-", file=sys.stderr)
+            return 2
+        if kid in current and current[kid] != pub:
+            print("core-keygen: human fragment kid collides with an existing staff key", file=sys.stderr)
+            return 2
+        if pub in current.values() and current.get(kid) != pub:
+            print("core-keygen: human fragment key equals an existing staff key", file=sys.stderr)
+            return 2
+        if kid not in current:
+            current[kid] = pub
+            changed = True
+    if changed:
+        write(staff_path, json.dumps(staff))
+    return 0
+
+
 def main(out: Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
+    fragment = os.environ.get("PULSO_HUMAN_STAFF_FRAGMENT", "").strip()
     marker = out / "service.json"
     if marker.exists():
         print("core-keygen: keys already present, nothing written")
-        return 0
+        return merge_human_fragment(out, Path(fragment)) if fragment else 0
     signers: dict[str, tuple[str, str, str]] = {}
     for name in ("bridge-identity", "bridge-staff", "bridge-callback", "bridge-executor"):
         seed, pub = new_pair()
@@ -78,6 +117,10 @@ def main(out: Path) -> int:
     state = Path(os.environ.get("PULSO_EXPORTER_STATE_DIR", "/var/lib/exporter"))
     if state.is_dir():
         os.chown(state, UID, UID)
+    if fragment:
+        rc = merge_human_fragment(out, Path(fragment))
+        if rc:
+            return rc
     print("core-keygen: wrote", len(list(out.iterdir())), "files")
     return 0
 

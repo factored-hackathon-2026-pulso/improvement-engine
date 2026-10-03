@@ -90,3 +90,56 @@ def test_control_api_trust_holds_only_the_callback_public_key(keys: Path) -> Non
     assert list(trust) == [cb["kid"]]
     assert (trust[cb["kid"]]["iss"], trust[cb["kid"]]["aud"]) == ("core-bridge", "control-api")
     assert cb["key"] not in (keys / "control-api-trust.json").read_text(encoding="ascii")
+
+
+# --- local human issuer public key (plan 17.3.2): merged into the LOCAL Core staff verifier set only -----------------
+HUMAN_KID = "local-sim-human-1"
+
+
+def _fragment(tmp_path: Path, kid: str = HUMAN_KID) -> Path:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    pub = Ed25519PrivateKey.generate().public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    path = tmp_path / "fragment.json"
+    path.write_text(json.dumps({"principal_keys": {kid: base64.urlsafe_b64encode(pub).rstrip(b"=").decode()}}), encoding="ascii")
+    return path
+
+
+def test_staff_set_has_no_human_key_without_a_fragment(keys: Path) -> None:
+    assert not any(k.startswith("local-sim-") for k in _load(keys / "staff.json")["principal_keys"])
+
+
+def test_human_fragment_is_merged_next_to_the_bridge_staff_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os, "chown", lambda *a, **k: None, raising=False)
+    monkeypatch.setenv("PULSO_EXPORTER_STATE_DIR", str(tmp_path / "nostate"))
+    frag = _fragment(tmp_path)
+    monkeypatch.setenv("PULSO_HUMAN_STAFF_FRAGMENT", str(frag))
+    out = tmp_path / "keys"
+    assert gen_keys.main(out) == 0
+    staff = _load(out / "staff.json")["principal_keys"]
+    assert set(staff) == {"bridge-staff-local", HUMAN_KID}  # bot key and human key stay distinct entries
+    assert staff[HUMAN_KID] == _load(frag)["principal_keys"][HUMAN_KID]
+    assert staff["bridge-staff-local"] != staff[HUMAN_KID]
+    assert HUMAN_KID not in _load(out / "identity.json")["principal_keys"]  # run principals never trust the human key
+
+
+def test_merge_is_idempotent_and_also_applies_to_an_already_generated_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os, "chown", lambda *a, **k: None, raising=False)
+    monkeypatch.setenv("PULSO_EXPORTER_STATE_DIR", str(tmp_path / "nostate"))
+    out = tmp_path / "keys"
+    assert gen_keys.main(out) == 0  # set generated without the human key
+    monkeypatch.setenv("PULSO_HUMAN_STAFF_FRAGMENT", str(_fragment(tmp_path)))
+    assert gen_keys.main(out) == 0
+    first = (out / "staff.json").read_text(encoding="ascii")
+    assert HUMAN_KID in json.loads(first)["principal_keys"]
+    assert gen_keys.main(out) == 0
+    assert (out / "staff.json").read_text(encoding="ascii") == first
+
+
+@pytest.mark.parametrize("kid", ["bridge-staff-local", "prod-human-1", ""])
+def test_a_fragment_kid_that_is_not_a_local_sim_human_kid_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kid: str) -> None:
+    monkeypatch.setattr(os, "chown", lambda *a, **k: None, raising=False)
+    monkeypatch.setenv("PULSO_EXPORTER_STATE_DIR", str(tmp_path / "nostate"))
+    monkeypatch.setenv("PULSO_HUMAN_STAFF_FRAGMENT", str(_fragment(tmp_path, kid)))
+    assert gen_keys.main(tmp_path / "keys") == 2

@@ -18,7 +18,8 @@ $pinSha = (Select-String -Path (Join-Path $root 'agent-core-assets\manifest.yaml
 $pin7 = $pinSha.Substring(0, 7)
 $py = Join-Path $env:TEMP "pulso-wire-venv-$pin7\Scripts\python.exe"
 if (-not (Test-Path $py)) { Write-Error "pulso:e2e_toolchain_missing: pinned venv %TEMP%\pulso-wire-venv-$pin7 not found"; exit 3 }
-$env:PYTHONPATH = (Join-Path $here 'src') + ';' + (Join-Path $root 'core-bridge\src')
+# local-identity/src: the real client (`assert_bound`, LocalIdentityClient) the HumanAuthorizationPort stand-in uses.
+$env:PYTHONPATH = (Join-Path $here 'src') + ';' + (Join-Path $root 'core-bridge\src') + ';' + (Join-Path $root 'local-identity\src')
 $out = Join-Path $here '.out'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 Push-Location $here
@@ -37,9 +38,14 @@ try {
     $base = if ($BaseImage) { $BaseImage } else { "localhost/pulso-core-runtime:$pin7-$head7" }
     & $podman --connection pulso-dev image inspect $base 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Write-Output "run: base image $base absent; building (core-bridge/scripts/build-image.ps1)"
-        & pwsh -NoProfile -File (Join-Path $root 'core-bridge\scripts\build-image.ps1')
-        if ($LASTEXITCODE -ne 0) { throw 'image build failed' }
+        # The image is ALWAYS built from a clean worktree of the COMMITTED HEAD (never the shared, possibly dirty tree).
+        Write-Output "run: base image $base absent; building from a clean worktree of HEAD $head7 (core-bridge/scripts/build-image.ps1)"
+        $wt = Join-Path ([IO.Path]::GetTempPath()) ("pulso-img-$head7-" + [guid]::NewGuid().ToString('N').Substring(0, 6))
+        git -C $root worktree add --detach $wt HEAD | Out-Null
+        try {
+            & pwsh -NoProfile -File (Join-Path $wt 'core-bridge\scripts\build-image.ps1')
+            if ($LASTEXITCODE -ne 0) { throw 'image build failed' }
+        } finally { git -C $root worktree remove --force $wt 2>$null | Out-Null }
     }
     # The runtime and the exporter read these URLs from compose interpolation; both point at the fixtures double.
     $env:PULSO_CONTROL_API_URL = 'http://e2e-fixtures:8700'

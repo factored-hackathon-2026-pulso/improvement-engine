@@ -10,7 +10,7 @@
 param([switch]$Json, [switch]$SkipEngine, [string]$Machine = 'pulso-dev', [string]$Namespace,
       [string]$Checkout = 'D:\.codex\factored\references\agent-core-789d6c8', [string]$Profile = 'real_local')
 $ErrorActionPreference = 'Stop'
-foreach ($f in 'errors', 'machine', 'namespace', 'ports', 'runner', 'memory', 'keys') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
+foreach ($f in 'errors', 'machine', 'namespace', 'ports', 'runner', 'memory', 'keys', 'humanissuer') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
 $PinSha = '789d6c89b2fca90fc10e2abf157da51dc81c5d51'
 $checks = New-Object System.Collections.Generic.List[object]
 function Add-C([string]$check, [string]$status, $code, [string]$detail) { $checks.Add([pscustomobject]@{ check = $check; status = $status; code = $code; detail = $detail }) }
@@ -35,6 +35,10 @@ $mf = Join-Path $PSScriptRoot '..\..\agent-core-assets\manifest.yaml'
 if ((Test-Path $mf) -and ((Get-Content $mf -Raw) -match "sha:\s*$PinSha")) { Add-C 'assets_pin' 'pass' $null 'manifest pins the same SHA' }
 else { Add-C 'assets_pin' 'fail' 'assets_drift' 'agent-core-assets/manifest.yaml missing or pins another SHA' }
 
+# CAP-63: static, no engine needed. A local-sim kid or auth.simulated=true in remote (staging/prod) config is a hard failure.
+$cap63 = Get-RemoteSimulationVerdict
+Add-C 'cap63_remote_simulation' $cap63.status $(if ($cap63.status -eq 'pass') { $null } else { 'simulated_identity_in_remote_config' }) $cap63.detail
+
 # toolchain
 $missing = @()
 try { if (-not (Test-Path -LiteralPath (Get-PodmanPath))) { $missing += 'podman' } } catch { $missing += 'podman' }
@@ -44,7 +48,8 @@ else { Add-C 'toolchain' 'fail' 'core_toolchain_missing' ("missing: " + ($missin
 
 # engine checks
 $engine = @('port_conflict', 'insufficient_memory', 'runtime_cgroup_unavailable', 'core_postgres_unavailable', 'core_migrate_failed',
-            'core_not_ready', 'core_demo_doubles_active', 'core_unreachable_from_stack', 'bridge_executor_key')
+            'core_not_ready', 'core_demo_doubles_active', 'core_unreachable_from_stack', 'bridge_executor_key',
+            'human_issuer_ready', 'human_issuer_internal_only')
 if ($SkipEngine -or -not $conn) {
     foreach ($e in $engine) { Add-C $e 'skipped' $e 'engine not contacted' }
 } else {
@@ -73,12 +78,18 @@ if ($SkipEngine -or -not $conn) {
         if ($rt -and $rt.status -eq 'running') {
             try { $probe = Get-ExecutorKeyProbeArgs; $ek = Get-ExecutorKeyVerdict -ProbeOutput ((Invoke-Podman -Connection $conn exec "$project-core-runtime-1" @probe) -join '') } catch { $ek = [pscustomobject]@{ status = 'fail'; detail = 'executor key probe failed to run' } }
         } else { $ek = [pscustomobject]@{ status = 'fail'; detail = 'runtime container not running (fails closed without bridge-executor.json)' } }
+        # local human issuer (sandbox-only double): running+healthy, and NEVER published to the host
+        $hi = Get-ContainerState -Connection $conn -Name "$project-human-issuer-1"
+        Add-C 'human_issuer_ready' $(if ($hi -and $hi.health -eq 'healthy') { 'pass' } else { 'fail' }) $(if ($hi -and $hi.health -eq 'healthy') { $null } else { 'core_not_ready' }) "human-issuer: $($hi.status)/$($hi.health) (a labelled double)"
+        $hp = if ($hi) { ((Invoke-Podman -Connection $conn port "$project-human-issuer-1" 2>$null) -join ' ') } else { '' }
+        $hv = Get-HumanIssuerExposureVerdict -PublishedPorts $hp
+        Add-C 'human_issuer_internal_only' $(if (-not $hi) { 'fail' } else { $hv.status }) $(if ($hi -and $hv.status -eq 'pass') { $null } else { 'core_not_ready' }) $(if ($hi) { $hv.detail } else { 'human-issuer container missing' })
         Add-C 'bridge_executor_key' $ek.status $(if ($ek.status -eq 'pass') { $null } else { 'core_not_ready' }) $ek.detail
         Add-C 'port_conflict' 'pass' $null 'ports were probed at start'
         Add-C 'runtime_cgroup_unavailable' 'pass' $null 'workaround encoded (--cgroups=disabled)'
         Add-C 'core_unreachable_from_stack' 'skipped' 'core_unreachable_from_stack' 'needs the Pulso assembly network (Codex)'
     } else {
-        foreach ($e in 'bridge_executor_key', 'port_conflict', 'runtime_cgroup_unavailable', 'core_postgres_unavailable', 'core_migrate_failed', 'core_not_ready', 'core_demo_doubles_active', 'core_unreachable_from_stack') {
+        foreach ($e in 'human_issuer_ready', 'human_issuer_internal_only', 'bridge_executor_key', 'port_conflict', 'runtime_cgroup_unavailable', 'core_postgres_unavailable', 'core_migrate_failed', 'core_not_ready', 'core_demo_doubles_active', 'core_unreachable_from_stack') {
             Add-C $e 'skipped' $e 'no -Namespace given'
         }
     }
