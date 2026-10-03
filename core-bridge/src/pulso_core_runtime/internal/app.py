@@ -77,7 +77,11 @@ async def _read_capped(request: Request) -> bool:
 
 def build_internal_app(verifier: ServiceJwtVerifier, *, version_info: Callable[[], dict[str, Any]],
                        handlers: dict[str, Callable[[Request, Claims], Any]] | None = None,
-                       l3: Any | None = None) -> FastAPI:
+                       l3: Any | None = None, allowed_tenants: frozenset[str] | None = None) -> FastAPI:
+    """`allowed_tenants` is the deployment's tenant set (config); a verified tenant claim outside it is refused 403
+    `pulso:tenant_mismatch` before any handler runs. Defaults to `l3.allowed_tenants`; None = not enforced."""
+    if allowed_tenants is None and l3 is not None:
+        allowed_tenants = getattr(l3, "allowed_tenants", None)
     app = FastAPI(title="pulso-internal", docs_url=None, redoc_url=None, openapi_url=None)
     handlers = dict(handlers or {})
     if l3 is not None:  # L3a/L3b composition (`invoke.wiring.build_l3`): invoke, read, credentials
@@ -111,6 +115,9 @@ def build_internal_app(verifier: ServiceJwtVerifier, *, version_info: Callable[[
             except AuthError as exc:
                 return envelope("pulso:auth_denied" if exc.status == 403 else "pulso:auth_invalid",
                                 trace_id=trace, details={"reason": exc.reason}, status=exc.status)
+            if (allowed_tenants is not None and not route.purposes <= TENANT_EXEMPT
+                    and claims.tenant_id not in allowed_tenants):
+                return envelope("pulso:tenant_mismatch", trace_id=trace, status=403)
             handler = route.handler or handlers.get(f"{route.method} {route.path}")
             if handler is None:
                 return envelope("pulso:not_implemented", trace_id=trace, status=501)

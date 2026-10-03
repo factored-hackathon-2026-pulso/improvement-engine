@@ -33,6 +33,12 @@ class BankBackend(FakeBackend):
         self.act_mode = "ok"  # ok | lose_response (effect applied, answer lost) | refuse
         self.open_mode = "ok"  # ok | 503
 
+    def _bind(self, request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        if self.bind_mode == "applied_then_503":  # the platform recorded the binding, the answer is a 5xx
+            self.bound.append((body["tenant_id"], body["job_id"]))
+            return httpx.Response(503, json={"code": "unavailable"})
+        return super()._bind(request, body)
+
     def handle(self, request: httpx.Request) -> httpx.Response:
         if not request.url.path.startswith(SANDBOX):
             return super().handle(request)

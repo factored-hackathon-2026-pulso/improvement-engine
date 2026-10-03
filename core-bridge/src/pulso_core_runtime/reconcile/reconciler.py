@@ -59,6 +59,11 @@ class Reconciler:
     def reconcile(self, receipt: Receipt) -> ReconcileResult:
         if receipt.terminal:
             return ReconcileResult(receipt.state, receipt.reason or "terminal", core_run_id=receipt.core_run_id)
+        if receipt.state == "manual_reconcile" and receipt.reason == "binding_unproven":
+            # The binding callback was a 5xx/timeout: the platform may have applied it, and nothing the bridge can
+            # read proves otherwise. Closing it (even as a failure) would invite a redispatch the platform refuses
+            # as binding_conflict forever, so it waits for control-api evidence / an operator.
+            return ReconcileResult(receipt.state, "binding_unproven", core_run_id=receipt.core_run_id)
         try:
             return self._reconcile(receipt)
         except Exception:  # unreadable evidence is never proof of anything

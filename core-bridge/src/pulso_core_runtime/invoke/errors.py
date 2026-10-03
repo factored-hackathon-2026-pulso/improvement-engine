@@ -23,6 +23,10 @@ def stage_unknown(stage: str) -> BridgeError:
     return BridgeError("pulso:stage_unknown", 400, details={"stage": stage})
 
 
+def stage_agent_mismatch(stage: str, agent_id: str) -> BridgeError:
+    return BridgeError("pulso:stage_agent_mismatch", 422, details={"stage": stage, "agent_id": agent_id})
+
+
 def digest_conflict() -> BridgeError:
     return BridgeError("pulso:digest_conflict", 409)
 

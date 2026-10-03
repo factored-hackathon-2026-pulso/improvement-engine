@@ -48,6 +48,17 @@ class L3:
     store: ReceiptStore
     callback_signer: Any = None
     executor_signer: Any = None
+    allowed_tenants: frozenset[str] | None = None
+
+
+def allowed_tenants_from_env(env: Mapping[str, str]) -> frozenset[str]:
+    """Deployment tenant set: `PULSO_TENANT_ID` (required) plus optional comma-separated `PULSO_ALLOWED_TENANTS`.
+    Fail closed: a runtime without a configured tenant must not start."""
+    primary = env.get("PULSO_TENANT_ID", "").strip()
+    if not primary:
+        raise ValueError("pulso:runtime_config_invalid: PULSO_TENANT_ID is empty (deployment tenant set required)")
+    extra = {t.strip() for t in env.get("PULSO_ALLOWED_TENANTS", "").split(",") if t.strip()}
+    return frozenset({primary, *extra})
 
 
 def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Callable[[], Any],
@@ -56,6 +67,7 @@ def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Cal
     """Signer files: `PULSO_BRIDGE_IDENTITY_SIGNER` (run principals, matches `--identity-keys`),
     `PULSO_BRIDGE_STAFF_SIGNER` (registry bot, matches `--staff-keys`), `PULSO_BRIDGE_CALLBACK_SIGNER`
     (control-api service JWTs). Each `{"kid", "key"}`; errors name the file only."""
+    allowed = allowed_tenants_from_env(env)
     if migrate:
         apply_l3(dsn)
     identity = load_signer(Path(env.get("PULSO_BRIDGE_IDENTITY_SIGNER", f"{KEYS_DIR}/bridge-identity.json")))
@@ -86,7 +98,7 @@ def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Cal
         store=store, registry=inv_registry, control_api_url=env.get("PULSO_CONTROL_API_URL", ""),
         signing_key=callback._key, kid=callback.kid, bridge_instance_id=env.get("PULSO_BRIDGE_INSTANCE", "bridge-1"))
     issuer = CredentialIssuer({"identity": identity, "staff": staff})
-    return L3(make_handlers(service, issuer), service, binding, inv_registry, store, callback, executor)
+    return L3(make_handlers(service, issuer), service, binding, inv_registry, store, callback, executor, allowed)
 
 
 def _seed(signer: Any) -> bytes:

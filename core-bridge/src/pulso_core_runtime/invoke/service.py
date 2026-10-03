@@ -31,6 +31,7 @@ from pulso_core_runtime.invoke.models import (
 from pulso_core_runtime.invoke.pin import RELEASE_DRIFT, ReleaseChecker
 from pulso_core_runtime.invoke.projection import FactProjector
 from pulso_core_runtime.reconcile.reconciler import Reconciler, RunReader
+from pulso_core_runtime.stages.catalog import CATALOG
 from pulso_core_runtime.store.receipts import Receipt, ReceiptStore
 
 NON_TERMINAL_REENTRY = frozenset({"sent", "binding_confirmed", "unknown", "manual_reconcile"})
@@ -164,6 +165,8 @@ class InvokeService:
             raise BridgeError("pulso:invalid_request", 422, details={"fields": ["Idempotency-Key"]})
         if inv.stage not in STAGES:
             raise errors.stage_unknown(inv.stage)
+        if CATALOG[inv.stage].agent_id != inv.agent_id:  # before the receipt CAS: zero effects
+            raise errors.stage_agent_mismatch(inv.stage, inv.agent_id)
         if len(canonical_bytes({"input": inv.input, "refs": inv.input_artifact_refs})) > MAX_INPUT_BYTES:
             raise errors.input_too_large()
         declared = (self._settings.stage_slots or {}).get(inv.stage)
@@ -288,6 +291,11 @@ class InvokeService:
     async def _terminal(self, inv: CoreTaskInvocation, key: str, ref: str, state: str, reason: str, *,
                         run_id: str | None = None, outcome: str | None = None,
                         receipt: dict[str, Any] | None = None, http: int | None = None) -> InvokeOutcome:
+        held = await asyncio.to_thread(self._store.get, inv.tenant_id, key)
+        if held is not None and held.state == "manual_reconcile" and held.reason == "binding_unproven":
+            # The binding callback hit a 5xx/timeout: the platform may have applied it. Whatever the run did next
+            # (escalation, failure), the effect stays unproven, so the receipt is never closed as a failure.
+            return InvokeOutcome(202, _state_body(held))
         moved = await asyncio.to_thread(self._store.transition, inv.tenant_id, key, state, reason=reason,
                                         core_run_id=run_id, outcome=outcome, receipt=receipt)
         current = moved or await asyncio.to_thread(self._store.get, inv.tenant_id, key)

@@ -63,7 +63,7 @@ def _env(pg: PgDbs, keys: dict[str, Any], **extra: str) -> dict[str, str]:
             "PULSO_BRIDGE_STAFF_SIGNER": str(d / "bridge-staff.json"),
             "PULSO_BRIDGE_CALLBACK_SIGNER": str(d / "bridge-callback.json"),
             "PULSO_BRIDGE_EXECUTOR_SIGNER": str(d / "bridge-executor.json"),
-            "PULSO_LAB_BROKER_URL": "http://127.0.0.1:9", "PULSO_CONTROL_API_URL": "http://127.0.0.1:9",
+            "PULSO_LAB_BROKER_URL": "http://127.0.0.1:9", "PULSO_CONTROL_API_URL": "http://127.0.0.1:9", "PULSO_TENANT_ID": "t1",
             "PULSO_SHA": "abc1234", "PULSO_IMAGE_DIGEST": "sha256:" + "a" * 64, **extra}
 
 

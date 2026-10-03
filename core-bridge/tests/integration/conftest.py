@@ -129,7 +129,7 @@ def build_env(c: Composed, extra: dict[str, str] | None = None) -> dict[str, str
             "PULSO_BRIDGE_EXECUTOR_SIGNER": str(d / "bridge-executor.json"),
             "PULSO_LAB_BROKER_URL": c.loop.url, "PULSO_CONTROL_API_URL": c.loop.url,
             "PULSO_EVAL_BUDGETS": str(d / "budgets.json"), "PULSO_EVAL_PERMITS": "1",
-            "PULSO_SHA": "integ", **(extra or {})}
+            "PULSO_SHA": "integ", "PULSO_TENANT_ID": TENANT, **(extra or {})}
 
 
 def boot(c: Composed, extra: dict[str, str] | None = None) -> Composed:

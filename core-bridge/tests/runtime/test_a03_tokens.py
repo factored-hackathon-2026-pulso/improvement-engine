@@ -26,7 +26,7 @@ def _env(tmp: Path) -> tuple[dict[str, str], dict[str, Ed25519PrivateKey]]:
     keys = {n: _write(tmp / f"{n}.json", f"{n}-kid") for n in ("i", "s", "c", "e")}
     return ({"PULSO_BRIDGE_IDENTITY_SIGNER": str(tmp / "i.json"), "PULSO_BRIDGE_STAFF_SIGNER": str(tmp / "s.json"),
              "PULSO_BRIDGE_CALLBACK_SIGNER": str(tmp / "c.json"), "PULSO_BRIDGE_EXECUTOR_SIGNER": str(tmp / "e.json"),
-             "PULSO_CONTROL_API_URL": "http://control.test", "PULSO_LAB_BROKER_URL": "http://broker.test"}, keys)
+             "PULSO_CONTROL_API_URL": "http://control.test", "PULSO_LAB_BROKER_URL": "http://broker.test", "PULSO_TENANT_ID": "t1"}, keys)
 
 
 def _l3(env: dict[str, str]) -> Any:
