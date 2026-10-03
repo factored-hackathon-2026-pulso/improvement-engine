@@ -346,7 +346,7 @@ def checkout_path() -> Path:
     if env:
         return Path(env)
     for parent in Path(__file__).resolve().parents:
-        cand = parent / "references" / "agent-core"
+        cand = parent / "references" / "agent-core-789d6c8"
         if cand.is_dir():
             return cand
     raise FileNotFoundError("agent-core checkout not found; set AGENT_CORE_CHECKOUT")

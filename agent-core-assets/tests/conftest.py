@@ -20,7 +20,7 @@ def find_checkout() -> Path | None:
     if env:
         return Path(env)
     for parent in ASSETS.parents:
-        cand = parent / "references" / "agent-core"
+        cand = parent / "references" / "agent-core-789d6c8"
         if cand.is_dir():
             return cand
     return None
