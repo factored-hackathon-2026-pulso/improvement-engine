@@ -4,6 +4,10 @@
 //! tenant-scoped repository. U30 never reconstructs a batch or coverage claim
 //! from raw data.
 
+use improvement_engine_core::core_task::CoreTaskScope;
+use improvement_engine_core::platform_discovery::{
+    PlatformDiscoveryInput, PlatformDiscoveryInputError,
+};
 use improvement_engine_core::platform_observations::{
     Coverage, CoverageState, EvidenceKind, InMemoryObservationRepository, InteractionEventKind,
     Layer, ObservationAccess, ObservationAuthorizationPort, ObservationBatchContext,
@@ -24,6 +28,16 @@ struct Authority;
 impl ObservationAuthorizationPort for Authority {
     fn authorize(&self, access: &ObservationAccess) -> bool {
         access.tenant_id() == "bank_demo"
+            && access.grant_id() == "grant-platform"
+            && access.purpose() == "platform_observation"
+    }
+}
+
+struct OtherTenantAuthority;
+
+impl ObservationAuthorizationPort for OtherTenantAuthority {
+    fn authorize(&self, access: &ObservationAccess) -> bool {
+        access.tenant_id() == "other_bank"
             && access.grant_id() == "grant-platform"
             && access.purpose() == "platform_observation"
     }
@@ -80,6 +94,15 @@ fn repository() -> InMemoryObservationRepository {
     .unwrap()
 }
 
+fn other_tenant_repository() -> InMemoryObservationRepository {
+    InMemoryObservationRepository::authorized(
+        ObservationAccess::new("other_bank", "grant-platform", "platform_observation").unwrap(),
+        Box::new(OtherTenantAuthority),
+        registry(),
+    )
+    .unwrap()
+}
+
 fn event(
     id: &str,
     run: &str,
@@ -108,9 +131,20 @@ fn batch(
     coverage: Coverage,
     events: Vec<ObservationEvent>,
 ) -> PlatformObservationBatch {
+    batch_for_tenant("bank_demo", source, contract, sequence, coverage, events)
+}
+
+fn batch_for_tenant(
+    tenant_id: &str,
+    source: &str,
+    contract: &str,
+    sequence: u64,
+    coverage: Coverage,
+    events: Vec<ObservationEvent>,
+) -> PlatformObservationBatch {
     PlatformObservationBatch::new(
         ObservationBatchContext::new(
-            "bank_demo",
+            tenant_id,
             source,
             format!("partition-{sequence}"),
             contract,
@@ -150,6 +184,136 @@ fn measure_signal(
 
 fn sensor() -> PlatformLayerSensor {
     PlatformLayerSensor::for_platform_audit()
+}
+
+#[test]
+fn measured_platform_signal_becomes_provenance_bound_discovery_input() {
+    let mut repository = repository();
+    repository
+        .ingest(batch(
+            "attention-platform",
+            "contract:attention-v1",
+            1,
+            complete_coverage("tree_goals", 4),
+            vec![event(
+                "handoff-1",
+                "run-1",
+                TargetSystem::Attention,
+                InteractionEventKind::Handoff,
+                Layer::Tree,
+            )],
+        ))
+        .unwrap();
+
+    let signal = measure_signal(&mut repository);
+    let scope = CoreTaskScope::new("bank_demo", "job-a", "grant-platform", "authority-a").unwrap();
+    let input = PlatformDiscoveryInput::from_measured_signal(&signal, &scope).unwrap();
+
+    assert_eq!(input.metric_id(), "tree_handoff_rate");
+    assert_eq!(input.tenant_id(), "bank_demo");
+    assert_eq!(input.numerator(), 1);
+    assert_eq!(input.denominator(), 4);
+    assert_eq!(input.source_id(), "attention-platform");
+    assert_eq!(input.contract_ref(), "contract:attention-v1");
+    assert_eq!(input.signal_digest(), signal.digest());
+    assert_eq!(signal.tenant_id(), "bank_demo");
+    assert_eq!(input.projection_digest(), signal.projection_digest());
+    assert_eq!(
+        input.mapping_resolution_digest(),
+        signal.mapping_resolution_digest()
+    );
+    assert!(input.has_valid_commitment());
+}
+
+#[test]
+fn platform_signal_without_measured_coverage_cannot_enter_discovery() {
+    let mut repository = repository();
+    repository
+        .ingest(batch(
+            "attention-platform",
+            "contract:attention-v1",
+            1,
+            Coverage::new(
+                CoverageState::Partial,
+                "tree_goals",
+                WINDOW_START,
+                WINDOW_END,
+                Some(4),
+                Some("source reports partial coverage".into()),
+            )
+            .unwrap(),
+            vec![],
+        ))
+        .unwrap();
+
+    let signal = measure_signal(&mut repository);
+    assert_eq!(signal.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert_eq!(
+        PlatformDiscoveryInput::from_measured_signal(
+            &signal,
+            &CoreTaskScope::new("bank_demo", "job-a", "grant-platform", "authority-a").unwrap(),
+        ),
+        Err(PlatformDiscoveryInputError::InsufficientEvidence)
+    );
+}
+
+#[test]
+fn platform_discovery_scope_is_tenant_bound_and_rejects_cross_tenant_replay() {
+    let mut tenant_a = repository();
+    let mut tenant_b = other_tenant_repository();
+    let events = || {
+        vec![event(
+            "handoff-1",
+            "run-1",
+            TargetSystem::Attention,
+            InteractionEventKind::Handoff,
+            Layer::Tree,
+        )]
+    };
+    tenant_a
+        .ingest(batch(
+            "attention-platform",
+            "contract:attention-v1",
+            1,
+            complete_coverage("tree_goals", 4),
+            events(),
+        ))
+        .unwrap();
+    tenant_b
+        .ingest(batch_for_tenant(
+            "other_bank",
+            "attention-platform",
+            "contract:attention-v1",
+            1,
+            complete_coverage("tree_goals", 4),
+            events(),
+        ))
+        .unwrap();
+
+    let projection_a = tenant_a
+        .window_projection("bank_demo", WINDOW_START, WINDOW_END, AS_OF)
+        .unwrap();
+    let projection_b = tenant_b
+        .window_projection("other_bank", WINDOW_START, WINDOW_END, AS_OF)
+        .unwrap();
+    let spec =
+        LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Tree, "tree_goals").unwrap();
+    let signal_a = sensor().measure(&spec, &projection_a).unwrap();
+    let signal_b = sensor().measure(&spec, &projection_b).unwrap();
+    assert_eq!(signal_a.status(), signal_b.status());
+    assert_ne!(signal_a.digest(), signal_b.digest());
+
+    let scope_a =
+        CoreTaskScope::new("bank_demo", "job-a", "grant-platform", "authority-a").unwrap();
+    let scope_b =
+        CoreTaskScope::new("other_bank", "job-b", "grant-platform", "authority-b").unwrap();
+    let input_a = PlatformDiscoveryInput::from_measured_signal(&signal_a, &scope_a).unwrap();
+    let input_b = PlatformDiscoveryInput::from_measured_signal(&signal_b, &scope_b).unwrap();
+    assert_ne!(input_a.commitment(), input_b.commitment());
+    assert_eq!(
+        PlatformDiscoveryInput::from_measured_signal(&signal_a, &scope_b),
+        Err(PlatformDiscoveryInputError::TenantScopeMismatch)
+    );
 }
 
 fn measure(repository: &mut InMemoryObservationRepository) -> PlatformSignalStatus {

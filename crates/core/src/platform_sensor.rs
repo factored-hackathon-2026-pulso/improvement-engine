@@ -129,10 +129,11 @@ pub enum PlatformSignalStatus {
 /// ```compile_fail
 /// use improvement_engine_core::platform_observations::Layer;
 /// use improvement_engine_core::platform_sensor::{PlatformLayerSignal, PlatformSignalStatus};
-/// let _forged = PlatformLayerSignal { metric_id: "tree_handoff_rate".to_owned(), metric_version: 1, layer: Layer::Tree, population_ref: "tree_goals".to_owned(), status: PlatformSignalStatus::InsufficientEvidence, window_start_ms: 1, window_end_ms: 2, received_as_of_ms: 2, projection_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(), source_id: None, contract_ref: None, batch_digest: None, coverage_evidence_digest: None, metric_mapping_digest: None, digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned() };
+/// let _forged = PlatformLayerSignal { tenant_id: "bank_demo".to_owned(), metric_id: "tree_handoff_rate".to_owned(), metric_version: 1, layer: Layer::Tree, population_ref: "tree_goals".to_owned(), status: PlatformSignalStatus::InsufficientEvidence, window_start_ms: 1, window_end_ms: 2, received_as_of_ms: 2, projection_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(), source_id: None, contract_ref: None, batch_digest: None, coverage_evidence_digest: None, metric_mapping_digest: None, digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned() };
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct PlatformLayerSignal {
+    tenant_id: String,
     metric_id: String,
     metric_version: u16,
     layer: Layer,
@@ -152,6 +153,10 @@ pub struct PlatformLayerSignal {
 }
 
 impl PlatformLayerSignal {
+    /// Tenant scope bound by U29's repository-produced projection.
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
     pub fn metric_id(&self) -> &str {
         &self.metric_id
     }
@@ -385,6 +390,7 @@ impl PlatformLayerSensor {
         registry_digest: &str,
     ) -> PlatformLayerSignal {
         let mut signal = PlatformLayerSignal {
+            tenant_id: projection.tenant_id().to_owned(),
             metric_id: spec.metric_id.clone(),
             metric_version: spec.metric_version,
             layer: spec.layer,
@@ -424,6 +430,7 @@ struct Provenance {
 
 #[derive(Serialize)]
 struct SignalCommitment<'a> {
+    tenant_id: &'a str,
     metric_id: &'a str,
     metric_version: u16,
     layer: Layer,
@@ -443,6 +450,7 @@ struct SignalCommitment<'a> {
 
 fn signal_digest(signal: &PlatformLayerSignal) -> String {
     let commitment = SignalCommitment {
+        tenant_id: &signal.tenant_id,
         metric_id: &signal.metric_id,
         metric_version: signal.metric_version,
         layer: signal.layer,

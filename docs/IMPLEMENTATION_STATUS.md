@@ -31,6 +31,15 @@ green unit test as proof that a broader product flow is complete.
   run/sequence cursor without a versioned contract change. See ADR 0004 and
   journal 0051; the isolated PostgreSQL test requires explicit DB opt-in.
 
+- P1 platform discovery-input seam (current feature branch): measured U30
+  signals can be converted to a non-forgeable, provenance-preserving typed
+  input for hypothesis generation, bound to the tenant in the U29 projection
+  and checked against the active task scope; insufficient evidence and
+  cross-tenant replay are rejected. This is not yet U13 Scout integration or an Opportunity/proposal. U13 currently
+  requires U08/U09/U10 receipts or E0-specific U04/U08/U12 evidence; a trusted
+  platform-specific invocation/receipt contract is still required before the
+  input can traverse Scout. See journal 0052.
+
 - Local E2E composition/runner (new vertical): opt-in `local-sim` CLI joins
   immutable source provenance to the safe event projection and invokes local
   detection. Only positive supported signal evidence proceeds into the local
@@ -124,6 +133,13 @@ green unit test as proof that a broader product flow is complete.
 - U30 / Issue #41: deterministic platform sensor. It consumes the U29 safe
   projection and emits only sealed, mapping-resolution-bound signals; it never
   reconstructs observation batches or coverage.
+- P1 platform discovery-input seam (current feature branch): measured U30
+  signals can be converted to a non-forgeable, provenance-preserving typed
+  input for hypothesis generation; insufficient U30 results are rejected. This
+  is not yet U13 Scout integration or an Opportunity/proposal. U13 currently
+  requires U08/U09/U10 receipts or E0-specific U04/U08/U12 evidence; a trusted
+  platform-specific invocation/receipt contract is still required before the
+  input can traverse Scout. See journal 0052.
 - U14: independent verifier. It accepts only the U13-A opaque capability and
   emits a provenance-bound supported/refuted/uncertain report; persistent
   reports and U11 Jev-adapter wiring remain later dependent work.

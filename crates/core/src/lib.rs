@@ -39,6 +39,7 @@ pub mod memory_store;
 pub mod memory_temporal_protocol;
 pub mod model_provider;
 pub mod native_evaluation;
+pub mod platform_discovery;
 pub mod platform_observations;
 pub mod platform_sensor;
 pub mod quota_grant;
