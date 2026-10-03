@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as S from './schemas';
 import type { DebugEvent } from '../state/runStore';
+import { scrubAndReport } from '../security/clientScrubber';
 import { backoffDelay, classifyClose, parseSseFrames, type CloseAction } from './reconnect';
 
 export const DEBUG = '/internal/v1/debug';
@@ -17,7 +18,7 @@ async function request<T>(schema: z.ZodType<T>, path: string, init?: RequestInit
     const p = S.Problem.safeParse(body);
     throw new ApiError(res.status, p.success ? p.data.code : 'unrecognised_error');
   }
-  return schema.parse(body);
+  return schema.parse(scrubAndReport(body, path.split('?')[0] ?? path));
 }
 const post = <T,>(schema: z.ZodType<T>, path: string, body: unknown, key?: string) =>
   request(schema, path, {
@@ -96,7 +97,7 @@ export function streamEvents(runId: string, h: StreamHandlers, opts: StreamOptio
             for (const f of r.frames) {
               let json: unknown;
               try { json = JSON.parse(f.data); } catch { continue; }
-              const parsed = S.DebugEventSchema.safeParse(json);
+              const parsed = S.DebugEventSchema.safeParse(scrubAndReport(json, 'sse'));
               if (parsed.success) h.onEvent(parsed.data);
             }
           }
