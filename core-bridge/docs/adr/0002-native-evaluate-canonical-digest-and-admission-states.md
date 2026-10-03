@@ -28,6 +28,11 @@ inside `PulsoScenarioHarness` was swallowed silently.
    body) carries `pulso_evidence{closed_early, closed_early_runs, runs}`. Codex scores; the bridge never turns an early
    close into a silent pass.
 
+## Update (documentation pass, HEAD 4984d92)
+The open wiring item for L3b is closed: `tools/builder.py::_evaluate` loads the admission through the injected admission
+store and calls `native_evaluate_digest(...)` with the admission's candidate hash and suite, so both paths use the
+broad digest. See ADR 0007 for the `evaluation_context_ref` format.
+
 ## Consequences
 Digest field names are contract. A stuck `consumed` row blocks until its deadline, then `unknown` (retry needs a new
 admission with `evaluation_attempt+1`).
