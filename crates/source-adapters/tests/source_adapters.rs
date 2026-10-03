@@ -40,13 +40,13 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
         table.join("part-000.csv"),
         concat!(
             "interaction_id,customer_id,interaction_date,contact_reason,channel,was_resolved,requires_followup,agent_id,duration_seconds,wait_time_seconds\n",
-            "id-1,c-1,2025-01-01T10:00:00,Queja,Phone,true,false,a-1,30,5\n",
-            "id-2,c-2,2025-01-02T10:00:00,Queja,Phone,true,false,a-2,40,6\n",
-            "id-3,c-3,2025-01-03T10:00:00,Queja,Phone,false,true,a-3,50,7\n",
-            "id-4,c-4,2025-01-04T10:00:00,Queja,Phone,true,false,a-4,60,8\n",
-            "id-5,c-5,2025-01-05T10:00:00,Queja,Phone,true,false,a-5,70,9\n",
-            "id-6,c-6,2099-01-06T10:00:00,person@example.test,Phone,true,false,a-6,80,10\n",
-            "id-7,c-7,2025-01-07T10:00:00,Queja,,true,false,a-7,80,10\n",
+            "interaction-identifier-pii-sentinel-0001,customer-identifier-pii-sentinel-0001,2025-01-01T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0001,30,5\n",
+            "interaction-identifier-pii-sentinel-0002,customer-identifier-pii-sentinel-0002,2025-01-02T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0002,40,6\n",
+            "interaction-identifier-pii-sentinel-0003,customer-identifier-pii-sentinel-0003,2025-01-03T10:00:00,Queja,Phone,false,true,agent-identifier-pii-sentinel-0003,50,7\n",
+            "interaction-identifier-pii-sentinel-0004,customer-identifier-pii-sentinel-0004,2025-01-04T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0004,60,8\n",
+            "interaction-identifier-pii-sentinel-0005,customer-identifier-pii-sentinel-0005,2025-01-05T10:00:00,Queja,Phone,true,false,agent-identifier-pii-sentinel-0005,70,9\n",
+            "interaction-identifier-pii-sentinel-0006,customer-identifier-pii-sentinel-0006,2099-01-06T10:00:00,person@example.test,Phone,true,false,agent-identifier-pii-sentinel-0006,80,10\n",
+            "interaction-identifier-pii-sentinel-0007,customer-identifier-pii-sentinel-0007,2025-01-07T10:00:00,Queja,,true,false,agent-identifier-pii-sentinel-0007,80,10\n",
         ),
     )
     .unwrap();
@@ -67,10 +67,41 @@ fn original_contacts_expose_only_suppressed_snapshot_counts_by_safe_categories()
     assert_eq!(summary.rejected_rows(), 1);
     assert_eq!(summary.suppressed_cells(), 1);
     let serialized = serde_json::to_string(&prepared).unwrap();
-    for forbidden in ["id-1", "c-1", "a-1", "person@example.test", "2025-01-01"] {
+    for forbidden in [
+        "interaction-identifier-pii-sentinel-0001",
+        "customer-identifier-pii-sentinel-0001",
+        "agent-identifier-pii-sentinel-0001",
+        "person@example.test",
+        "2025-01-01T10:00:00",
+        "Queja",
+        "Phone",
+    ] {
         assert!(!serialized.contains(forbidden));
     }
-    assert!(!serialized.contains("true"));
+    let serialized_json: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+    fn contains_key(value: &serde_json::Value, expected: &str) -> bool {
+        match value {
+            serde_json::Value::Object(object) => {
+                object.contains_key(expected)
+                    || object.values().any(|child| contains_key(child, expected))
+            }
+            serde_json::Value::Array(items) => {
+                items.iter().any(|child| contains_key(child, expected))
+            }
+            _ => false,
+        }
+    }
+    for forbidden_key in [
+        "interaction_id",
+        "customer_id",
+        "agent_id",
+        "was_resolved",
+        "requires_followup",
+        "duration_seconds",
+        "wait_time_seconds",
+    ] {
+        assert!(!contains_key(&serialized_json, forbidden_key));
+    }
 }
 
 #[test]
