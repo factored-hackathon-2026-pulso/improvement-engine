@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { makeWorld } from '../fixtures/world.mjs';
 
 let world = makeWorld();
+let faults = { stream: null }; // 'gone' (410 once) | 'unauthorized' (401 until reset)
 const sseClients = new Set();
 const CSRF = 'fixture-csrf-token';
 const PORT = Number(process.env.FIXTURE_PORT ?? 4010);
@@ -15,7 +16,7 @@ const env = (entity_ref, rev, status, extra = {}) => ({
   coverage: { status: 'complete', observed_count: null, expected_count: null, reason_code: null }, ...extra,
 });
 const send = (res, code, body) => {
-  res.writeHead(code, { 'content-type': 'application/json' });
+  res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' });
   res.end(JSON.stringify(body));
 };
 const problem = (res, code, status, extra = {}) => send(res, status, {
@@ -54,12 +55,24 @@ const server = http.createServer(async (req, res) => {
       for (const c of sseClients) c.res.end();
       sseClients.clear();
       world = makeWorld();
+      faults = { stream: null };
       return send(res, 200, { ok: true });
     }
     if (p === '/__fixture/emit') {
       const b = await readBody(req);
       const ev = b && emit(b.run_id, b.node_id, b.status);
       return ev ? send(res, 200, ev) : send(res, 400, { code: 'bad_emit' });
+    }
+    if (p === '/__fixture/fault') {
+      const b = await readBody(req);
+      if (!b || !['gone', 'unauthorized', null].includes(b.stream ?? null)) return send(res, 400, { code: 'bad_fault' });
+      faults.stream = b.stream ?? null;
+      return send(res, 200, { ok: true });
+    }
+    if (p === '/__fixture/cut') { // simulate a dropped transport / API restart: end every open stream
+      for (const c of sseClients) c.res.end();
+      sseClients.clear();
+      return send(res, 200, { ok: true });
     }
     if (p === '/__fixture/state') return send(res, 200, world);
     return send(res, 404, { code: 'not_found' });
@@ -101,9 +114,15 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ...env(ref, run.revision, 'ok'), ...inv });
     }
     if (kind === 'gates') return send(res, 200, { ...env(ref, run.revision, 'ok'), ...world.gates });
+    if (faults.stream === 'unauthorized') return problem(res, 'session_expired', 401);
+    if (faults.stream === 'gone') { faults.stream = null; return problem(res, 'cursor_purged', 410); }
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(': open\n\n');
-    const c = { res, runId: run.run_id };
+    const resumeFrom = Number(req.headers['last-event-id'] ?? 0);
+    if (resumeFrom > 0) {
+      for (const e of world.events[run.run_id]) if (e.sequence > resumeFrom) res.write(`id: ${e.sequence}\ndata: ${JSON.stringify(e)}\n\n`);
+    }
+    const c ={ res, runId: run.run_id };
     sseClients.add(c);
     const hb = setInterval(() => res.write(': hb\n\n'), 5000);
     req.on('close', () => { clearInterval(hb); sseClients.delete(c); });

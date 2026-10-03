@@ -9,12 +9,18 @@ import { DecisionPanel } from './DecisionPanel';
 
 type GraphT = z.infer<typeof S.Graph>;
 const KNOWN_NODE = ['planned', 'queued', 'running', 'complete', 'dead', 'cancelled', 'superseded', 'retry_wait', 'deferred', 'waiting_dependency', 'unknown'];
+const CONN_TEXT = {
+  connecting: 'Conectando al flujo en vivo…',
+  live: 'Flujo en vivo conectado',
+  reconnecting: 'Flujo en vivo interrumpido: reconectando; los datos pueden estar desactualizados.',
+  session_expired: 'La sesión expiró: inicia sesión de nuevo. El flujo en vivo se cerró.',
+  forbidden: 'Sin acceso a este run.',
+} as const;
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: string | null; onNode: (id: string | null) => void }) {
   const [graph, setGraph] = useState<GraphT | null>(null);
   const [failed, setFailed] = useState(false);
-  const [stale, setStale] = useState(false);
   const [pulse, setPulse] = useState<string[]>([]);
   const rev = useRef(-1);
   const stream = useRef<StreamState>(initStream(0));
@@ -43,23 +49,30 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
     }
   }, [animate, reload, runId]);
 
+  const [conn, setConn] = useState<'connecting' | 'live' | 'reconnecting' | 'session_expired' | 'forbidden'>('connecting');
+
   useEffect(() => {
     rev.current = -1; stream.current = initStream(0); ready.current = false; early.current = [];
-    setGraph(null); setFailed(false); setStale(false);
-    const stop = streamEvents(
-      runId,
-      (e) => { if (ready.current) handle(e, true); else early.current.push(e); },
-      (status) => { if (status !== 0 || ready.current) setStale(true); },
-      () => {
-        // Baseline after the stream is open, so no event can fall between snapshot and subscription.
-        void Promise.all([reload(), api.events(runId, 0)]).then(([, p]) => {
-          stream.current = initStream(p.items.reduce((m, e) => Math.max(m, e.sequence), 0));
-          ready.current = true;
-          early.current.forEach((e) => handle(e, true));
-          early.current = [];
-        }).catch(() => setFailed(true));
+    setGraph(null); setFailed(false); setConn('connecting');
+    const baseline = () => Promise.all([reload(), api.events(runId, 0)]).then(([, p]) => {
+      stream.current = initStream(p.items.reduce((m, e) => Math.max(m, e.sequence), 0));
+      ready.current = true;
+      early.current.forEach((e) => handle(e, true));
+      early.current = [];
+    }).catch(() => setFailed(true));
+    const stop = streamEvents(runId, {
+      onEvent: (e) => { if (ready.current) handle(e, true); else early.current.push(e); },
+      onOpen: (reconnect) => {
+        setConn('live');
+        if (!reconnect) { void baseline(); return; }
+        // Resume: re-read the projection and catch up from the last applied sequence (no live animation).
+        void reload();
+        void api.events(runId, stream.current.lastSeq).then((p) => p.items.forEach((e) => handle(e, false)));
       },
-    );
+      onDrop: () => setConn('reconnecting'),
+      onResnapshot: () => { ready.current = false; early.current = []; stream.current = initStream(0); rev.current = -1; setConn('reconnecting'); },
+      onFatal: (a) => setConn(a),
+    }, { lastEventId: () => stream.current.lastSeq });
     return stop;
   }, [runId, handle, reload]);
 
@@ -69,7 +82,7 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
   return (
     <div>
       <h1>Run {runId} <small>({graph.status})</small></h1>
-      {stale && <p role="status">Flujo en vivo interrumpido: los datos pueden estar desactualizados.</p>}
+      <p role="status" data-testid="stream-status" data-state={conn}>{CONN_TEXT[conn]}</p>
       <div className="graph" role="group" aria-label="Grafo del run">
         {graph.nodes.map((n) => (
           <button

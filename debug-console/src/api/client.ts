@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as S from './schemas';
 import type { DebugEvent } from '../state/runStore';
+import { backoffDelay, classifyClose, parseSseFrames, type CloseAction } from './reconnect';
 
 export const DEBUG = '/internal/v1/debug';
 export class ApiError extends Error {
@@ -10,7 +11,7 @@ let csrf = '';
 export const setCsrf = (t: string) => { csrf = t; };
 
 async function request<T>(schema: z.ZodType<T>, path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { credentials: 'same-origin', ...init });
+  const res = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init });
   const body: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
     const p = S.Problem.safeParse(body);
@@ -42,35 +43,77 @@ export const api = {
   command: (path: string) => request(S.CommandStatus, path),
 };
 
-/** Own SSE reader over fetch (native EventSource hides HTTP status). Returns a stop function. */
-export function streamEvents(
-  runId: string, onEvent: (e: DebugEvent) => void, onClose: (status: number) => void, onOpen: () => void = () => {},
-): () => void {
+export interface StreamHandlers {
+  onEvent: (e: DebugEvent) => void;
+  /** Called every time a connection is established; `reconnect` is true after a drop. */
+  onOpen: (reconnect: boolean) => void;
+  /** Transport dropped; a retry is scheduled. */
+  onDrop: (attempt: number) => void;
+  /** 410: the cursor was purged; caller must re-read the snapshot (a new connection follows). */
+  onResnapshot: () => void;
+  /** Terminal: 401 / 403 / 404. No retry. */
+  onFatal: (action: Exclude<CloseAction, 'retry' | 'resnapshot'>) => void;
+}
+export interface StreamOptions {
+  lastEventId?: () => number;
+  random?: () => number;
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+}
+const defaultSleep = (ms: number, signal: AbortSignal) => new Promise<void>((ok) => {
+  const t = setTimeout(ok, ms);
+  signal.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true });
+});
+
+/**
+ * Own SSE reader over fetch (native EventSource hides HTTP status). Reconnects with jittered
+ * backoff and `Last-Event-ID`; 410 asks for a fresh snapshot; 401/403/404 are terminal. Returns a stop function.
+ */
+export function streamEvents(runId: string, h: StreamHandlers, opts: StreamOptions = {}): () => void {
   const ctl = new AbortController();
+  const sleep = opts.sleep ?? defaultSleep;
   void (async () => {
-    try {
-      const res = await fetch(`${DEBUG}/runs/${runId}/events/stream`, { signal: ctl.signal, credentials: 'same-origin' });
-      if (!res.ok || !res.body) return onClose(res.status);
-      onOpen();
-      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-      let buf = '';
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) return onClose(0);
-        buf += value;
-        let i = buf.indexOf('\n\n');
-        while (i >= 0) {
-          const frame = buf.slice(0, i);
-          buf = buf.slice(i + 2);
-          i = buf.indexOf('\n\n');
-          const data = frame.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim()).join('');
-          if (!data) continue;
-          const parsed = S.DebugEventSchema.safeParse(JSON.parse(data));
-          if (parsed.success) onEvent(parsed.data);
+    let attempt = 0;
+    let opened = false;
+    let gone = 0; // consecutive 410s: the second one backs off instead of hammering
+    while (!ctl.signal.aborted) {
+      let status = 0;
+      try {
+        const last = opts.lastEventId?.() ?? 0;
+        const res = await fetch(`${DEBUG}/runs/${runId}/events/stream`, {
+          signal: ctl.signal, credentials: 'same-origin', cache: 'no-store', headers: last > 0 ? { 'last-event-id': String(last) } : {},
+        });
+        if (!res.ok || !res.body) {
+          status = res.status;
+        } else {
+          h.onOpen(opened); opened = true; attempt = 0; gone = 0;
+          const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+          let buf = '';
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const r = parseSseFrames(buf + value);
+            buf = r.rest;
+            for (const f of r.frames) {
+              let json: unknown;
+              try { json = JSON.parse(f.data); } catch { continue; }
+              const parsed = S.DebugEventSchema.safeParse(json);
+              if (parsed.success) h.onEvent(parsed.data);
+            }
+          }
         }
+      } catch {
+        if (ctl.signal.aborted) return;
       }
-    } catch {
-      if (!ctl.signal.aborted) onClose(0);
+      if (ctl.signal.aborted) return;
+      const action = classifyClose(status);
+      if (action === 'session_expired' || action === 'forbidden') return h.onFatal(action);
+      if (action === 'resnapshot') {
+        opened = false; h.onResnapshot(); gone += 1;
+        if (gone === 1) continue;
+      }
+      h.onDrop(attempt);
+      await sleep(backoffDelay(attempt, opts.random), ctl.signal);
+      attempt += 1;
     }
   })();
   return () => ctl.abort();
