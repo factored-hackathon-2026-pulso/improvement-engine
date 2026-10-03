@@ -74,6 +74,16 @@ def test_golden_hash_of_disputa_cargo_matches_v3_cap12() -> None:
     assert hashlib.sha256(bytes.fromhex(entity["canonical_bytes_hex"])).hexdigest() == entity["content_hash"]
 
 
+def test_golden_vectors_carry_the_seeded_release_detail_n03() -> None:
+    v = json.loads((WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))
+    d = v["release_detail"]
+    assert d["release_id"] == v["release_id"] == "rel-98130317a1003849"
+    assert d["max_input_chars"] == 4000 and d["language_detection"]["id"] == "lang-es-pt"
+    assert d["injection_ruleset"]["id"] == "injection-rules"
+    assert [i["id"] for i in d["interrupts"]] == ["fraude"]
+    assert len(d["entities"]) == len(v["entities"])
+
+
 def test_golden_release_demo_values() -> None:
     vectors = json.loads((WIRE / "golden" / "hash_vectors.json").read_text(encoding="utf-8"))
     assert vectors["release_id"] == "rel-98130317a1003849"

@@ -1,7 +1,7 @@
 {
-  "cases_both": 109,
-  "cases_ran": 75,
-  "cases_total": 110,
+  "cases_both": 120,
+  "cases_ran": 84,
+  "cases_total": 121,
   "claims_real_local": true,
   "doubles": [
     "eval_port:fixed_pass (not programmable)",
@@ -12,17 +12,17 @@
     "agent_core_sha equals the pin (checkout verified by the pin test)"
   ],
   "failed": [],
-  "fixtures_digest": "50f3f24779d114a9625d9b97be7417b703bd60b1a02106cc2dab886e8ca27ea8",
+  "fixtures_digest": "0b16b15f57b37830d5c9428a065c2316c64a8b897a653e523972b645d33e7e0f",
   "label": "real_local",
   "mock_only": [
     "sim-info-contract"
   ],
-  "passed": 75,
+  "passed": 84,
   "postgres_version": "16.15 (Debian 16.15-1.pgdg13+2)",
   "real_vs_a2_differences": {},
-  "route_table_digest": "3e48d6b6a9b45189f778b7eee88d57ff148495ef782ec69dfd3eda4b9a284079",
+  "route_table_digest": "9e8e4b819b07707e7b304e7f8f43fa044bd7d399202dc00fc117d4cc62ed6ab4",
   "runtime_profile": "registry_extension_over_pg_registry_store",
-  "sha": "86a767474042a566a0dbd6ed23588959f27ebdb3",
+  "sha": "789d6c89b2fca90fc10e2abf157da51dc81c5d51",
   "skipped": [
     "approve-bot-is-forbidden",
     "approve-bot-with-aprobador-role-is-forbidden",
@@ -54,6 +54,8 @@
     "quota-manual-proposals-are-not-limited",
     "quota-window-is-rolling-24h",
     "read-after-publish-release-and-diff",
+    "read-alias-after-publish-and-revoke",
+    "read-versions-after-publish",
     "reject-bot-is-forbidden",
     "reject-ok",
     "reopen-from-approved-invalidates",
@@ -92,6 +94,8 @@
     "quota-manual-proposals-are-not-limited",
     "quota-window-is-rolling-24h",
     "read-after-publish-release-and-diff",
+    "read-alias-after-publish-and-revoke",
+    "read-versions-after-publish",
     "reject-bot-is-forbidden",
     "reject-ok",
     "reopen-from-approved-invalidates",

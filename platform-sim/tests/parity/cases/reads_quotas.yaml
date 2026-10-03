@@ -72,3 +72,29 @@
     - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
     - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$suite_scenarios: {count: 201}}}
     - {method: POST, path: "/v1/registry/proposals/{pid}/validate", only_rules: [REG-LIMIT, REG-SCHEMA]}
+# N-02 (agent-core 789d6c8): alias read route and per-entity versions route (pure reads: no proposal, no quota).
+- {id: read-alias-staging, rule: reads, steps: [{method: GET, path: /v1/registry/aliases/atencion/staging}]}
+- {id: read-alias-prod, rule: reads, steps: [{method: GET, path: /v1/registry/aliases/atencion/prod}]}
+- {id: read-alias-unset-is-not-found, rule: errors, steps: [{method: GET, path: /v1/registry/aliases/atencion/canary}]}
+- {id: read-alias-unknown-agent-is-not-found, rule: errors, steps: [{method: GET, path: /v1/registry/aliases/ghost/prod}]}
+- {id: read-alias-without-bearer, rule: auth, steps: [{method: GET, path: /v1/registry/aliases/atencion/prod, as: none}]}
+- id: read-alias-after-publish-and-revoke
+  rule: reads
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: GET, path: /v1/registry/aliases/atencion/staging}
+    - {method: GET, path: /v1/registry/aliases/atencion/prod}
+    - {method: POST, path: "/v1/registry/releases/{rel2}/revoke", as: admin, json: {reason: x}}
+    - {method: GET, path: /v1/registry/aliases/atencion/staging}
+- {id: read-versions-flow, rule: reads, steps: [{method: GET, path: /v1/registry/versions/flow/disputa-cargo}]}
+- {id: read-versions-slash-id, rule: reads, steps: [{method: GET, path: /v1/registry/versions/template/t/aclarar}]}
+- {id: read-versions-unknown-id, rule: errors, steps: [{method: GET, path: /v1/registry/versions/flow/no-existe}]}
+- {id: read-versions-unknown-kind, rule: errors, steps: [{method: GET, path: /v1/registry/versions/gadget/x}]}
+- id: read-versions-after-publish
+  rule: reads
+  requires_sim: true
+  steps:
+    - {use: golden_published}
+    - {method: GET, path: /v1/registry/versions/flow/disputa-cargo}
+    - {method: GET, path: /v1/registry/versions/template/t/aviso_monto}

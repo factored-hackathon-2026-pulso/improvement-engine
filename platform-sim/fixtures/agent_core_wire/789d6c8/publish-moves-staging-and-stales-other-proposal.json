@@ -425,7 +425,11 @@
         "base_release_id",
         "entities",
         "eval_suite_refs",
+        "injection_ruleset",
+        "interrupts",
         "knowledge_snapshot",
+        "language_detection",
+        "max_input_chars",
         "proposal_id",
         "published_at",
         "published_by",
@@ -449,7 +453,19 @@
         "eval_suite_refs": [
           "[][\"id\", \"kind\", \"version\"]"
         ],
+        "injection_ruleset": {
+          "id": "scalar",
+          "version": "scalar"
+        },
+        "interrupts": [
+          "[][\"action\", \"id\", \"priority\", \"signal_policy\"]"
+        ],
         "knowledge_snapshot": "null",
+        "language_detection": {
+          "id": "scalar",
+          "version": "scalar"
+        },
+        "max_input_chars": "scalar",
         "proposal_id": "scalar",
         "published_at": "scalar",
         "published_by": "scalar",

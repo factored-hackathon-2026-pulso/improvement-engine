@@ -1,6 +1,6 @@
 """Faithful registry wire mock (CAP-52): a real HTTP process, in-memory state, no SQL, no agent_core, no Pulso adapter.
 
-Reproduces the 16 routes of `/v1/registry`, EdDSA JWS auth, the 12 registry error codes, `application/problem+json`
+Reproduces the 18 routes of `/v1/registry` (16 + the N-02 alias/versions reads at agent-core 789d6c8), EdDSA JWS auth, the 12 registry error codes, `application/problem+json`
 envelopes, the mandatory `Idempotency-Key` on publish, state machine, CAS, limits and quotas with an injectable
 clock. Candidate validation is a documented SUBSET of the real rules (REG-KIND, REG-VERSION, REG-VERSION-TAKEN,
 REG-LIMIT); everything else is the a2 level's job. Fault injection lives only under `/_sim/*` (default off).
@@ -199,6 +199,9 @@ class Release:
     published_at: datetime
     eval_suite_refs: list[tuple[str, str, str]] = field(default_factory=list)
     status: str = "active"
+    # N-03: release-level settings served by `ReleaseDetail`. A published release inherits its base's (N-07
+    # `release_settings` drafts are not simulated by the mock: a2/real are the authority for them).
+    settings: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -250,8 +253,11 @@ class State:
             self.versions[ref] = Version(ref, e["normalized_dump_json"], e["content_hash"],
                                          {"description": "Importado desde YAML", "rationale": "semilla",
                                           "changelog": ""}, "root", self.clock.now())
+        detail = vectors["release_detail"]  # recorded by gen-wire from a2 at the pin (N-03 fields)
+        settings = {k: detail[k] for k in ("interrupts", "language_detection", "injection_ruleset", "max_input_chars")}
         self.releases[vectors["release_id"]] = Release(vectors["release_id"], AGENT_ID, sorted(refs, key=ref_str),
-                                                       None, None, "root", self.clock.now())
+                                                       None, None, "root", self.clock.now(),
+                                                       settings=settings)
         assert vectors["release_id"] == BASE_RELEASE_ID
         for alias in ("staging", "prod"):
             self.aliases[(AGENT_ID, alias)] = BASE_RELEASE_ID
@@ -488,7 +494,7 @@ def create_app(limits: Limits | None = None) -> FastAPI:
                              for ref in r.refs],
                 "knowledge_snapshot": None, "proposal_id": r.proposal_id, "base_release_id": r.base_release_id,
                 "published_by": r.published_by, "published_at": iso(r.published_at),
-                "eval_suite_refs": [ref_json(x) for x in r.eval_suite_refs]}
+                "eval_suite_refs": [ref_json(x) for x in r.eval_suite_refs], **copy.deepcopy(r.settings)}
 
     def violations_for(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return items
@@ -631,7 +637,8 @@ def create_app(limits: Limits | None = None) -> FastAPI:
             save(p, state="evaluated")
         elif verdict == "fail":
             save(p, state="draft", candidate_hash=None, rev=p.rev + 1)
-            raise RegistryError("gate_failed", "candidate does not pass the gate", report)
+            # N-10: the failing EvalRun id travels in the 409 body (the run itself has no read route upstream)
+            raise RegistryError("gate_failed", "candidate does not pass the gate", {**report, "eval_run_id": run["eval_run_id"]})
         return j(report)
 
     @router.post("/proposals/{pid}/approve")
@@ -708,7 +715,9 @@ def create_app(limits: Limits | None = None) -> FastAPI:
                      "changelog": ", ".join(f"{r[1]}@{r[2]}" for r in cand.new_versions if r[0] != "agent")}, p.created_by, now)
         refs = sorted((r for k, r in cand.refs.items() if k[0] != "eval_suite"), key=ref_str)
         suite_ref = (run["suite"]["kind"], run["suite"]["id"], run["suite"]["version"])
-        s.releases[rid] = Release(rid, p.agent_id, refs, p.base_release_id, pid, who_id, now, [suite_ref])
+        base_settings = s.releases[p.base_release_id].settings if p.base_release_id in s.releases else {}
+        s.releases[rid] = Release(rid, p.agent_id, refs, p.base_release_id, pid, who_id, now, [suite_ref],
+                                  settings=copy.deepcopy(base_settings))
         s.aliases[(p.agent_id, "staging")] = rid
         save(p, state="published")
         s.publish_keys[idempotency_key] = (pid, rid)
@@ -781,6 +790,24 @@ def create_app(limits: Limits | None = None) -> FastAPI:
         v = found[-1]
         return j({"ref": ref_json(v.ref), "content": v.content, "content_hash": v.content_hash, "docs": v.docs,
                   "created_by": v.created_by, "created_at": iso(v.created_at)})
+
+    @router.get("/aliases/{agent_id}/{alias}")
+    def read_alias(request: Request, agent_id: str, alias: str, authorization: Auth = None) -> Response:
+        who(authorization)  # same permission as the other reads: any builder, no proposal, no quota (N-02)
+        s = st()
+        release_id = s.aliases.get((agent_id, alias))
+        if release_id is None or release_id not in s.releases:
+            raise RegistryError("not_found", "the alias does not point to any release")
+        return j({"agent_id": agent_id, "alias": alias, "release_id": release_id,
+                  "status": s.releases[release_id].status})
+
+    @router.get("/versions/{kind}/{eid:path}")
+    def read_versions(request: Request, kind: str, eid: str, authorization: Auth = None) -> Response:
+        who(authorization)
+        found = sorted((v for r, v in st().versions.items() if r[0] == kind and r[1] == eid),
+                       key=lambda v: semver(v.ref[2]) or (0, 0, 0))
+        return j([{"ref": ref_json(v.ref), "content_hash": v.content_hash, "docs": v.docs,
+                   "created_by": v.created_by, "created_at": iso(v.created_at)} for v in found])  # unknown id/kind: []
 
     @router.get("/runs/{run_id}/lineage")
     def lineage(request: Request, run_id: str, authorization: Auth = None) -> Response:

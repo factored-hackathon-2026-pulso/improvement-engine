@@ -247,6 +247,10 @@ def normalise(method: str, path_tpl: str, resp: httpx.Response, only_rules: list
         out["shape"] = _shape(body, 2)
         out["trace_id_present"] = bool(body.get("trace_id")) if "trace_id" in body else None
         out["scalars"] = _scalars(body, only_rules)
+    elif isinstance(body, list):  # N-02 `GET /versions/...` returns a bare array: pin its length and item shape
+        out["keys"] = None
+        out["length"] = len(body)
+        out["shape"] = _shape(body, 2)
     else:
         out["keys"] = None
     return out

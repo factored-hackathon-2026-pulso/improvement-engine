@@ -163,7 +163,7 @@ def test_route_table_equals_a2_snapshot(client) -> None:
     actual = _route_table(client.get("/openapi.json").json())
     _route_digest.append(hashlib.sha256(chr(10).join(actual).encode()).hexdigest())
     assert actual == expected, {"missing": sorted(set(expected) - set(actual)), "extra": sorted(set(actual) - set(expected))}
-    assert len(expected) == 16
+    assert len(expected) == 18
 
 
 def _route_table(openapi: dict) -> list[str]:

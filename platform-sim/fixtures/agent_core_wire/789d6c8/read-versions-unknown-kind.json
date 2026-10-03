@@ -1,0 +1,17 @@
+{
+  "case": "read-versions-unknown-kind",
+  "steps": [
+    {
+      "content_type": "application/json",
+      "headers": {},
+      "keys": null,
+      "length": 0,
+      "method": "GET",
+      "path": "/v1/registry/versions/gadget/x",
+      "shape": [
+        "[]"
+      ],
+      "status": 200
+    }
+  ]
+}

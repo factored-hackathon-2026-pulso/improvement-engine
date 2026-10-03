@@ -1549,6 +1549,404 @@
       "ref": "tool:seleccionar@1.0.0"
     }
   ],
+  "release_detail": {
+    "agent_id": "atencion",
+    "base_release_id": null,
+    "entities": [
+      {
+        "changed_vs_base": false,
+        "content_hash": "f94fef3588265b627d184932f0a774ac8e37f4be5d343c9bd39d3ddfb7ef1add",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "atencion",
+          "kind": "agent",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "e3f2936729678f764e5e24cf26fb65b02e9d8c4043f68592dd6a003b73e6e75d",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "match-cargo",
+          "kind": "decision_model",
+          "version": "2.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "011cdc30f5e4a0763f7b0920faeb187689d4d56bc7daa8a575474ced1729ec0b",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "understand-turno",
+          "kind": "decision_model",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "6b5b579464f54370d2eed81b5c1a460c6a3ab270c0c8244fe17ed0a80d953b11",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "disputa-cargo",
+          "kind": "flow",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "172c1c4c0a20480fff9d2221e1df155bd5765b3a87e2d5591d42ba5ef82e361f",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "injection-rules",
+          "kind": "injection_ruleset",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "819529d6716a28ce54252f7975958b38790c7d05b4fe972516020d0a4e674d6c",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "lang-es-pt",
+          "kind": "language_detection",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "d685c8c3161a94542e3337a8c5950a3d90bdc9ea180b8a09805311219d7a4129",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "perfil-generacion",
+          "kind": "model_profile",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "e67997e2d2a2356ad1d1e4fd6733a7c33b4754a8a54054c43e15fe897f37b6bf",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "escalamiento-disputa-monto",
+          "kind": "policy",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "26389427d9931d33d38fb69d86959b0c95e162664fd964f8f898b38cda50d639",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "p/resumen_radicado",
+          "kind": "prompt",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "cc0289873212eaaa029239618c0e10a037f8656892c8a677364f79338f763705",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/abstencion",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "56206672b53310b8c4cb1c30bd33bcee1d6abfbfd89cbe470d2fd658fd248179",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/aclarar",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "543147ce52f54cea888536f6296a1b957ee0c9ccbddc5ca43c9555c07430b968",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/aclarar_cargo",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "9061fefb66a06575d9941f7b2dcd83efa5765ed1c5954e07b1d86e74a05d0fce",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/acuse",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "63a73d2237109534ada31082b64486dda7c498b5a7d5fb19659594ccfc6f3ef5",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/idioma_no_soportado",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "93427eb0c1696c0e9fad0a9eb60ed950c2928d2813c7e6e4a939f3fd22d1020f",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/mensaje_largo",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "19eb7f8d529389961ff1ed14ec66283cd303128435d41dfe78623b2071abf754",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/no_confirmado",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "cdcd2ac3f37ecbb0fd3cf052764980d36276cdd602f9b216b31e3b77e43e8eab",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/oferta",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "d916ce88da49e354d7f9cc89247da6bc7167a2fabfab9b1b6399a0baaa944def",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/pedir_cargo",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "b9a7fed3a2be46a9fb33e8890216e1876f1d5923bfb3ad571c93c0841f498dff",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/pqr_radicado",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "9895ee51f07535ed517dd468d6168387cb5248139b4587be6c8595f91d7baf5c",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/resumen_pqr",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "aa993133401ef31c971efdd2a0c3a74881663df95299dabd83bb700c4c04a481",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "t/traspaso",
+          "kind": "template",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "a7e05d1d46c07c8add95eba12f6fc200e973dad31b659dd7c800b35948903deb",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "buscar_transacciones",
+          "kind": "tool",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "3b0addb9f12b20cd58beda0958a04ebb397ad62f8a0f82f5e6760f7f9953a86b",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "convertir_moneda",
+          "kind": "tool",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "72446b11c64d7eccc6f6e22244f7a0aa983be10a844d12eeac534d37e326d27b",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "obtener_pqr",
+          "kind": "tool",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "e0f54302e353c787b15a1e738147ede6b7c5eeeab1c06fd39a94694c220d810f",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "radicar_pqr",
+          "kind": "tool",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "changed_vs_base": false,
+        "content_hash": "087dc355351dd0b082f72996af259de5748a16c13f0d4a3d95e5b270c0faba36",
+        "docs": {
+          "changelog": "",
+          "description": "Importado desde YAML",
+          "rationale": "semilla"
+        },
+        "ref": {
+          "id": "seleccionar",
+          "kind": "tool",
+          "version": "1.0.0"
+        }
+      }
+    ],
+    "eval_suite_refs": [],
+    "injection_ruleset": {
+      "id": "injection-rules",
+      "version": "1.0.0"
+    },
+    "interrupts": [
+      {
+        "action": {
+          "priority": "critical",
+          "target_queue": "fraude",
+          "type": "escalate"
+        },
+        "id": "fraude",
+        "priority": 100,
+        "signal_policy": null
+      }
+    ],
+    "knowledge_snapshot": null,
+    "language_detection": {
+      "id": "lang-es-pt",
+      "version": "1.0.0"
+    },
+    "max_input_chars": 4000,
+    "proposal_id": null,
+    "published_at": "2026-01-01T00:00:00Z",
+    "published_by": "root",
+    "release_id": "rel-98130317a1003849",
+    "status": "active"
+  },
   "release_hash": "98130317a10038497cb752062500d056425c7be0225452e28a606ac9a1ed8549",
   "release_id": "rel-98130317a1003849"
 }

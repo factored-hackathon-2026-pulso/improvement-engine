@@ -1,0 +1,17 @@
+{
+  "case": "read-versions-slash-id",
+  "steps": [
+    {
+      "content_type": "application/json",
+      "headers": {},
+      "keys": null,
+      "length": 1,
+      "method": "GET",
+      "path": "/v1/registry/versions/template/t/aclarar",
+      "shape": [
+        "[]{\"content_hash\": \"scalar\", \"created_at\": \"scalar\", \"created_by\": \"scalar\", \"docs\": [\"changelog\", \"description\", \"rationale\"], \"ref\": [\"id\", \"kind\", \"version\"]}"
+      ],
+      "status": 200
+    }
+  ]
+}

@@ -172,6 +172,7 @@
         "detail": "scalar",
         "payload": {
           "detail": "scalar",
+          "eval_run_id": "scalar",
           "items": [
             "[]"
           ],

@@ -181,6 +181,9 @@ def golden(out: Path, files: list[dict], checkout: Path, world, client) -> None:
     vectors = {
         "_note": "Recorded from the real RegistryService at the pinned SHA (a2 in-memory). Reproducible by gen-wire.",
         "release_id": rel_id, "release_hash": release_hash, "entities": entities,
+        # N-03: the seeded release exactly as `GET /v1/registry/releases/{id}` serves it (interrupts, language_detection,
+        # injection_ruleset, max_input_chars). With the entity vectors above, `release_hash` is reconstructible locally.
+        "release_detail": client.get(f"/v1/registry/releases/{rel_id}", headers=h).json(),
         "candidate": {"candidate_hash": freeze["candidate_hash"],
                       "release_id_preview": freeze["release_id_preview"], "validation": val.json(),
                       "new_versions": freeze["new_versions"], "auto_bumped": freeze["auto_bumped"]},

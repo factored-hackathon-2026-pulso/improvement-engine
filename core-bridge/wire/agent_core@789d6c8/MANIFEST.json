@@ -117,7 +117,7 @@
     {
       "derived_by_pulso": true,
       "path": "golden/hash_vectors.json",
-      "sha256": "c5cf195e8ad01fdc0974450ea206ffc7ca8b8ba03c9599257d993a4cfb963aed"
+      "sha256": "35655ce6b62fe69970ca366a617ec6406613eb456ba4d4ba4c1e1d6a7d267438"
     },
     {
       "path": "openapi.json",
