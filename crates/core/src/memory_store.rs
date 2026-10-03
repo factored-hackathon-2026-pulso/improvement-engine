@@ -116,6 +116,8 @@ pub struct MemoryUseReceipt {
     pub grant_id: String,
     pub grant_revision: u64,
     pub purpose: String,
+    /// Caller-provided replay/as-of value used by this adapter's policy check.
+    /// It is not independently authenticated as current wall-clock time.
     pub allowed_at_unix_seconds: u64,
     /// Opaque commitment emitted by the U23 temporal evidence issuer. `None`
     /// is retained only for pre-U23/U22 uses.
@@ -139,6 +141,7 @@ pub enum MemoryError {
     ScopeMismatch,
     SnapshotMismatch,
     SnapshotRevoked,
+    SnapshotExpired,
     SnapshotInvalid,
     TransformDigestMismatch,
     ReceiptConflict,
@@ -267,13 +270,12 @@ impl InMemoryMemoryRegistry {
         &self.receipts
     }
 
-    fn verify_live_snapshot<R: ArtifactRepository>(
+    fn verify_snapshot<R: ArtifactRepository>(
         &self,
         artifacts: &mut R,
         scope: &MemoryScope,
         reference: &ArtifactReference,
-        allowed_at_unix_seconds: u64,
-    ) -> Result<ArtifactDraft, MemoryError> {
+    ) -> Result<(ArtifactDraft, DecodedWiki), MemoryError> {
         if self.is_revoked_or_descends_from_tombstone(reference) {
             return Err(MemoryError::SnapshotRevoked);
         }
@@ -287,10 +289,28 @@ impl InMemoryMemoryRegistry {
             return Err(MemoryError::SnapshotMismatch);
         }
         let decoded = decode_wiki(&snapshot.payload)?;
-        if decoded.purpose != scope.purpose
-            || decoded.available_at_unix_seconds > allowed_at_unix_seconds
-        {
+        if decoded.purpose != scope.purpose {
             return Err(MemoryError::ScopeMismatch);
+        }
+        Ok((snapshot, decoded))
+    }
+
+    fn verify_live_snapshot<R: ArtifactRepository>(
+        &self,
+        artifacts: &mut R,
+        scope: &MemoryScope,
+        reference: &ArtifactReference,
+        allowed_at_unix_seconds: u64,
+    ) -> Result<ArtifactDraft, MemoryError> {
+        let (snapshot, decoded) = self.verify_snapshot(artifacts, scope, reference)?;
+        if decoded.available_at_unix_seconds > allowed_at_unix_seconds {
+            return Err(MemoryError::ScopeMismatch);
+        }
+        if decoded
+            .expires_at_unix_seconds
+            .is_some_and(|expires_at| allowed_at_unix_seconds >= expires_at)
+        {
+            return Err(MemoryError::SnapshotExpired);
         }
         Ok(snapshot)
     }
@@ -430,7 +450,11 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
         {
             return Err(MemoryError::SnapshotAlreadyBound);
         }
-        self.verify_live_snapshot(artifacts, &scope, &snapshot_ref, u64::MAX)?;
+        // Seeding establishes the immutable head; it does not represent a
+        // read at an invented future clock. Authorized use checks availability
+        // and expiry against the trusted caller-provided replay/as-of value.
+        // This adapter does not authenticate that value against a wall clock.
+        self.verify_snapshot(artifacts, &scope, &snapshot_ref)?;
         let head = MemoryHead {
             scope: scope.clone(),
             snapshot_ref: snapshot_ref.clone(),
@@ -512,11 +536,15 @@ impl MemoryPublisher for InMemoryMemoryRegistry {
             .head_version
             .checked_add(1)
             .ok_or(MemoryError::SnapshotInvalid)?;
-        let next_payload = json!({
+        let base_expiry = decode_wiki(&base.payload)?.expires_at_unix_seconds;
+        let mut next_payload = json!({
             "available_at_unix_seconds": request.access.allowed_at_unix_seconds,
             "purpose": request.scope.purpose,
             "pages": request.transform.pages,
         });
+        if let Some(expires_at_unix_seconds) = base_expiry {
+            next_payload["expires_at_unix_seconds"] = json!(expires_at_unix_seconds);
+        }
         let next = artifacts.append(
             Some(base.revision),
             ArtifactDraft::new(
@@ -757,12 +785,14 @@ impl MemoryUseReceiptAttestationPort for InMemoryMemoryRegistry {
 
 struct DecodedWiki {
     available_at_unix_seconds: u64,
+    expires_at_unix_seconds: Option<u64>,
     purpose: String,
 }
 
 fn decode_wiki(payload: &Value) -> Result<DecodedWiki, MemoryError> {
     let object = payload.as_object().ok_or(MemoryError::SnapshotInvalid)?;
-    if object.len() != 3
+    let has_expiry = object.contains_key("expires_at_unix_seconds");
+    if object.len() != if has_expiry { 4 } else { 3 }
         || !object.contains_key("available_at_unix_seconds")
         || !object.contains_key("purpose")
         || !object.contains_key("pages")
@@ -773,6 +803,17 @@ fn decode_wiki(payload: &Value) -> Result<DecodedWiki, MemoryError> {
         .get("available_at_unix_seconds")
         .and_then(Value::as_u64)
         .ok_or(MemoryError::SnapshotInvalid)?;
+    let expires_at_unix_seconds = if has_expiry {
+        Some(
+            object
+                .get("expires_at_unix_seconds")
+                .and_then(Value::as_u64)
+                .filter(|expiry| *expiry > available_at_unix_seconds)
+                .ok_or(MemoryError::SnapshotInvalid)?,
+        )
+    } else {
+        None
+    };
     let purpose = object
         .get("purpose")
         .and_then(Value::as_str)
@@ -784,6 +825,7 @@ fn decode_wiki(payload: &Value) -> Result<DecodedWiki, MemoryError> {
     }
     Ok(DecodedWiki {
         available_at_unix_seconds,
+        expires_at_unix_seconds,
         purpose,
     })
 }

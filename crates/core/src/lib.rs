@@ -18,6 +18,10 @@ pub mod debug_console;
 pub mod deterministic_sensor;
 pub mod durable_jobs;
 pub mod durable_run_events;
+#[cfg(feature = "local-simulation")]
+pub mod e0_builder_design;
+#[cfg(feature = "local-simulation")]
+pub mod e0_core_draft_binding;
 pub mod e0_deterministic_sensor;
 pub(crate) mod e0_frozen_memory_cycle;
 pub mod e0_frozen_memory_publication;

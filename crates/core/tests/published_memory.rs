@@ -219,6 +219,138 @@ fn tombstone_blocks_new_use_and_survives_registry_restore() {
 }
 
 #[test]
+fn expired_snapshot_cannot_create_a_memory_use_receipt() {
+    let mut artifacts = InMemoryArtifactRepository::default();
+    let expiring = ArtifactDraft::new(
+        TENANT,
+        WIKI_ID,
+        1,
+        ArtifactKind::MemoryWiki,
+        json!({
+            "available_at_unix_seconds": 100,
+            "expires_at_unix_seconds": 150,
+            "purpose": "investigation",
+            "pages": {"index.md": "expired"}
+        }),
+        None,
+    );
+    let initial = artifacts.append(None, expiring).unwrap();
+    let mut expired_access = access(initial.reference());
+    expired_access.allowed_at_unix_seconds = 151;
+    expired_access.run_id = "run-expired".to_owned();
+    expired_access.grant_id = "grant-expired".to_owned();
+    let authority = InMemoryWikiGrantAuthority::default();
+    authority.issue(WikiGrant::new_scoped(
+        "grant-expired",
+        "run-expired",
+        TENANT,
+        "investigation",
+        initial.reference(),
+        MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train"),
+    ));
+    let mut registry = InMemoryMemoryRegistry::default();
+    registry
+        .seed_head(&mut artifacts, scope(), initial.reference())
+        .expect("head seeding validates structure but does not imply a read");
+
+    assert_eq!(
+        registry
+            .record_allowed_use(
+                &mut artifacts,
+                &authority,
+                scope(),
+                expired_access,
+                None,
+                initial.reference(),
+            )
+            .unwrap_err(),
+        MemoryError::SnapshotExpired
+    );
+    assert!(registry.receipts().is_empty());
+}
+
+#[test]
+fn published_memory_preserves_the_base_expiry_without_extending_retention() {
+    let mut artifacts = InMemoryArtifactRepository::default();
+    let expiring = ArtifactDraft::new(
+        TENANT,
+        WIKI_ID,
+        1,
+        ArtifactKind::MemoryWiki,
+        json!({
+            "available_at_unix_seconds": 100,
+            "expires_at_unix_seconds": 150,
+            "purpose": "investigation",
+            "pages": {"index.md": "before"}
+        }),
+        None,
+    );
+    let initial = artifacts.append(None, expiring).unwrap();
+    let request_access = access(initial.reference());
+    let mut authority = authority(initial.reference());
+    let mut workspace = authority
+        .mount(&mut artifacts, request_access.clone())
+        .unwrap();
+    let transform = authority
+        .transform(
+            &mut workspace,
+            &request_access,
+            WikiTransform::new(vec![WikiTransformOperation::replace("index.md", "after")]),
+        )
+        .unwrap();
+    let mut registry = InMemoryMemoryRegistry::default();
+    registry
+        .seed_head(&mut artifacts, scope(), initial.reference())
+        .unwrap();
+
+    let mut at_expiry = request_access.clone();
+    at_expiry.allowed_at_unix_seconds = 150;
+    assert_eq!(
+        registry
+            .publish(
+                &mut artifacts,
+                &authority,
+                MemoryPublishRequest::new(scope(), 1, at_expiry, transform.clone()),
+            )
+            .unwrap_err(),
+        MemoryError::SnapshotExpired
+    );
+    assert!(artifacts.get(TENANT, WIKI_ID, 2).unwrap().is_none());
+
+    let published = registry
+        .publish(
+            &mut artifacts,
+            &authority,
+            MemoryPublishRequest::new(scope(), 1, request_access, transform),
+        )
+        .unwrap();
+
+    assert_eq!(published.snapshot.payload["expires_at_unix_seconds"], 150);
+    let expired_access = WikiAccess::new_scoped(
+        "run-after-expiry",
+        TENANT,
+        "investigation",
+        "grant-after-expiry",
+        published.snapshot.reference(),
+        151,
+        MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train"),
+    );
+    let mut publisher = InMemoryWikiGrantAuthority::default();
+    publisher.issue(WikiGrant::new_scoped(
+        "grant-after-expiry",
+        "run-after-expiry",
+        TENANT,
+        "investigation",
+        published.snapshot.reference(),
+        MemoryScopeBinding::new("world-a", "campaign-a", "continuous", "train"),
+    ));
+    assert!(matches!(
+        publisher.mount(&mut artifacts, expired_access),
+        Err(improvement_engine_core::wiki_scratch::WikiError::SnapshotExpired { .. })
+    ));
+}
+
+#[test]
 fn publication_rejects_a_tampered_result_and_cross_scope_head() {
     let mut artifacts = InMemoryArtifactRepository::default();
     let initial = artifacts.append(None, initial_wiki()).unwrap();

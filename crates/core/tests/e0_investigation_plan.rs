@@ -48,7 +48,7 @@ fn recurring_candidate_with_signature(
                 LocalSourceKind::E0,
                 format!("sha256:{}", "b".repeat(64)),
                 source_snapshot(),
-                1_775_000_000,
+                1_775_001_600,
                 "2026-04-01T00:00:00Z",
             ),
             (1..=20).collect(),
@@ -246,8 +246,14 @@ fn mapped_catalog_suggests_only_read_only_exact_flow_investigation() {
         format!("sha256:{}", "f".repeat(64)),
     )
     .expect("pinned synthetic Flow reference");
-    let mapping = E0RouteMapping::new(packet.metric_id(), packet.pattern_ref(), flow_ref)
-        .expect("explicit exact mapping");
+    let mapping = E0RouteMapping::new(
+        packet.metric_id(),
+        packet.pattern_ref(),
+        "flow/recurring-query",
+        "recurring-query",
+        flow_ref,
+    )
+    .expect("explicit exact mapping");
     let catalog = E0RouteCatalog::new(
         ArtifactReference {
             tenant_id: "pulso_local".into(),
@@ -316,8 +322,14 @@ fn mapped_resolution_for_another_packet_cannot_be_rebound_to_candidate_a() {
         format!("sha256:{}", "f".repeat(64)),
     )
     .expect("pinned synthetic Flow reference");
-    let mapping = E0RouteMapping::new(packet_b.metric_id(), packet_b.pattern_ref(), flow_ref)
-        .expect("explicit exact mapping for packet B");
+    let mapping = E0RouteMapping::new(
+        packet_b.metric_id(),
+        packet_b.pattern_ref(),
+        "flow/packet-b",
+        "packet-b",
+        flow_ref,
+    )
+    .expect("explicit exact mapping for packet B");
     let catalog = E0RouteCatalog::new(
         ArtifactReference {
             tenant_id: "pulso_local".into(),

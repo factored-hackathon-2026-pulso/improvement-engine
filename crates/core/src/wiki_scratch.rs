@@ -9,6 +9,7 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -50,6 +51,11 @@ impl MemoryScopeBinding {
 }
 
 /// An exact snapshot and caller context submitted at every workspace operation.
+///
+/// `allowed_at_unix_seconds` is a trusted composition-provided replay/as-of
+/// value. This adapter checks policy against that value but has no authenticated
+/// wall clock and cannot detect caller backdating; it is not a security or
+/// retention clock.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WikiAccess {
     pub run_id: String,
@@ -60,11 +66,16 @@ pub struct WikiAccess {
     /// A later grant replacement or revocation must not authorize this access.
     pub grant_revision: u64,
     pub snapshot_ref: ArtifactReference,
+    /// Trusted caller-provided replay/as-of timestamp used for temporal checks.
+    /// This adapter does not obtain wall-clock time or authenticate this value;
+    /// callers must not treat it as a retention or security clock.
     pub allowed_at_unix_seconds: u64,
     pub memory_scope: MemoryScopeBinding,
 }
 
 impl WikiAccess {
+    /// Creates access claims for the supplied replay/as-of timestamp.
+    /// The timestamp is not validated against wall-clock time by this adapter.
     #[must_use]
     pub fn new(
         run_id: impl Into<String>,
@@ -85,6 +96,8 @@ impl WikiAccess {
         )
     }
 
+    /// Creates scoped access claims for the supplied replay/as-of timestamp.
+    /// The timestamp is not validated against wall-clock time by this adapter.
     #[must_use]
     pub fn new_scoped(
         run_id: impl Into<String>,
@@ -176,7 +189,12 @@ impl WikiGrant {
     }
 }
 
-/// Narrow authorization seam retained at mount, read and transform boundaries.
+/// Narrow grant-authorization seam retained at mount, read and transform boundaries.
+///
+/// Implementations authorize the exact grant/snapshot claims. This port does
+/// not establish the authenticity or currentness of
+/// `WikiAccess::allowed_at_unix_seconds`; temporal checks use the trusted
+/// caller-provided replay/as-of value described on [`WikiAccess`].
 pub trait WikiAuthorizationPort {
     fn authorize(&self, access: &WikiAccess, snapshot_ref: &ArtifactReference) -> bool;
 }
@@ -248,7 +266,7 @@ impl MemoryUseCommitAuthority for InMemoryWikiGrantAuthority {
 }
 
 /// The sole stateful object of one scratch mount. It is never persisted by U15.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct WikiWorkspace {
     workspace_id: String,
     run_id: String,
@@ -256,7 +274,25 @@ pub struct WikiWorkspace {
     purpose: String,
     memory_scope: MemoryScopeBinding,
     snapshot_available_at_unix_seconds: u64,
+    snapshot_expires_at_unix_seconds: Option<u64>,
     pages: BTreeMap<String, String>,
+}
+
+impl fmt::Debug for WikiWorkspace {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("WikiWorkspace")
+            .field("page_count", &self.pages.len())
+            .field(
+                "snapshot_available_at_unix_seconds",
+                &self.snapshot_available_at_unix_seconds,
+            )
+            .field(
+                "snapshot_expires_at_unix_seconds",
+                &self.snapshot_expires_at_unix_seconds,
+            )
+            .finish()
+    }
 }
 
 impl WikiWorkspace {
@@ -265,9 +301,15 @@ impl WikiWorkspace {
         &self.workspace_id
     }
 
-    #[must_use]
-    pub fn pages(&self) -> &BTreeMap<String, String> {
-        &self.pages
+    /// Returns the scratch pages only while the exact grant and caller-provided
+    /// replay/as-of time remain valid. This is not wall-clock expiry enforcement.
+    pub fn pages<'a, A: WikiAuthorizationPort>(
+        &'a self,
+        authority: &A,
+        access: &WikiAccess,
+    ) -> Result<&'a BTreeMap<String, String>, WikiError> {
+        validate_workspace_access(authority, self, access)?;
+        Ok(&self.pages)
     }
 }
 
@@ -278,6 +320,7 @@ pub struct WikiMountReceipt {
     pub snapshot_ref: ArtifactReference,
     pub purpose: String,
     pub grant_id: String,
+    /// Replay/as-of value supplied by the caller; not a wall-clock attestation.
     pub allowed_at_unix_seconds: u64,
 }
 
@@ -366,6 +409,10 @@ pub enum WikiError {
         available_at_unix_seconds: u64,
         allowed_at_unix_seconds: u64,
     },
+    SnapshotExpired {
+        expires_at_unix_seconds: u64,
+        allowed_at_unix_seconds: u64,
+    },
     WorkspaceAccessDenied,
     InvalidPath {
         path: String,
@@ -436,6 +483,10 @@ pub(crate) fn verify_transform_result_against_snapshot<R: ArtifactRepository>(
             allowed_at_unix_seconds: access.allowed_at_unix_seconds,
         });
     }
+    ensure_snapshot_not_expired(
+        decoded.expires_at_unix_seconds,
+        access.allowed_at_unix_seconds,
+    )?;
     if decoded.purpose != access.purpose {
         return Err(WikiError::AuthorizationDenied);
     }
@@ -485,6 +536,10 @@ impl WikiScratchPort for InMemoryWikiGrantAuthority {
                 allowed_at_unix_seconds: access.allowed_at_unix_seconds,
             });
         }
+        ensure_snapshot_not_expired(
+            decoded.expires_at_unix_seconds,
+            access.allowed_at_unix_seconds,
+        )?;
         if decoded.purpose != access.purpose {
             return Err(WikiError::AuthorizationDenied);
         }
@@ -495,6 +550,7 @@ impl WikiScratchPort for InMemoryWikiGrantAuthority {
             purpose: decoded.purpose,
             memory_scope: access.memory_scope,
             snapshot_available_at_unix_seconds: decoded.available_at_unix_seconds,
+            snapshot_expires_at_unix_seconds: decoded.expires_at_unix_seconds,
             pages: decoded.pages,
         })
     }
@@ -556,6 +612,7 @@ impl WikiScratchPort for InMemoryWikiGrantAuthority {
 
 struct DecodedSnapshot {
     available_at_unix_seconds: u64,
+    expires_at_unix_seconds: Option<u64>,
     purpose: String,
     pages: BTreeMap<String, String>,
 }
@@ -564,7 +621,8 @@ fn decode_snapshot(payload: &Value) -> Result<DecodedSnapshot, WikiError> {
     let object = payload
         .as_object()
         .ok_or(WikiError::SnapshotPayloadInvalid)?;
-    if object.len() != 3
+    let has_expiry = object.contains_key("expires_at_unix_seconds");
+    if object.len() != if has_expiry { 4 } else { 3 }
         || !object.contains_key("available_at_unix_seconds")
         || !object.contains_key("purpose")
         || !object.contains_key("pages")
@@ -575,6 +633,16 @@ fn decode_snapshot(payload: &Value) -> Result<DecodedSnapshot, WikiError> {
         .get("available_at_unix_seconds")
         .and_then(Value::as_u64)
         .ok_or(WikiError::SnapshotPayloadInvalid)?;
+    let expires_at_unix_seconds = if has_expiry {
+        let expiry = object
+            .get("expires_at_unix_seconds")
+            .and_then(Value::as_u64)
+            .filter(|expiry| *expiry > available_at_unix_seconds)
+            .ok_or(WikiError::SnapshotPayloadInvalid)?;
+        Some(expiry)
+    } else {
+        None
+    };
     let purpose = object
         .get("purpose")
         .and_then(Value::as_str)
@@ -596,6 +664,7 @@ fn decode_snapshot(payload: &Value) -> Result<DecodedSnapshot, WikiError> {
         .collect::<Result<BTreeMap<_, _>, _>>()?;
     Ok(DecodedSnapshot {
         available_at_unix_seconds,
+        expires_at_unix_seconds,
         purpose,
         pages,
     })
@@ -621,6 +690,25 @@ fn validate_workspace_access<A: WikiAuthorizationPort>(
             available_at_unix_seconds: workspace.snapshot_available_at_unix_seconds,
             allowed_at_unix_seconds: access.allowed_at_unix_seconds,
         });
+    }
+    ensure_snapshot_not_expired(
+        workspace.snapshot_expires_at_unix_seconds,
+        access.allowed_at_unix_seconds,
+    )?;
+    Ok(())
+}
+
+fn ensure_snapshot_not_expired(
+    expires_at_unix_seconds: Option<u64>,
+    allowed_at_unix_seconds: u64,
+) -> Result<(), WikiError> {
+    if let Some(expires_at_unix_seconds) = expires_at_unix_seconds {
+        if allowed_at_unix_seconds >= expires_at_unix_seconds {
+            return Err(WikiError::SnapshotExpired {
+                expires_at_unix_seconds,
+                allowed_at_unix_seconds,
+            });
+        }
     }
     Ok(())
 }

@@ -39,6 +39,23 @@ impl E0SafetyOracle {
         false
     }
 
+    /// Read-only binding check for trusted builder composition. A matching
+    /// oracle remains a safety reference only; it does not authorize execution.
+    #[allow(dead_code)] // Used by the deferred trusted E0→builder composition.
+    pub(crate) fn is_bound_to_plan(&self, plan: &EvaluationPlan) -> bool {
+        self.plan_binding.commitment() == plan.commitment()
+            && self.plan_binding.source_snapshot_ref() == plan.source_snapshot_ref_for_builder()
+            && self.tenant_id == plan.source_snapshot_ref_for_builder().tenant_id
+            && self.source_snapshot_digest == plan.source_snapshot_binding_digest_for_builder()
+    }
+
+    /// Exact replay cutoff sealed by U20-E, exposed only to the internal
+    /// digest-bound builder input.
+    #[allow(dead_code)] // Used by the deferred trusted E0→builder composition.
+    pub(crate) fn cutoff_at_unix_seconds(&self) -> u64 {
+        self.cutoff_at_unix_seconds
+    }
+
     /// Revalidates an already sealed context against fresh, trusted U04-B,
     /// U20 and U36 inputs. It has no effects and fails closed if any exact
     /// reference, profile, cutoff or commitment has drifted.

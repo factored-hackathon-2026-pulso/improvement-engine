@@ -138,3 +138,86 @@ unavailable recurrence, disposition coverage, finite reason codes, policy
 code validation, threshold/state recomputation and invalid run envelopes.
 Public CLI integration tests verify E0 fan-out and source isolation in
 persisted results. Full local CI and real-data E2E are not yet claimed.
+
+## Draft-binding foundation (not native proposal/evaluation)
+
+`e0_core_draft_binding` defines a deliberately narrow, non-wire seam for
+binding an already-compiled Core Flow draft to one descriptive E0 candidate,
+its exact declared pattern-to-Flow mapping, and declared base-release and
+evaluation-suite references. Route mapping declarations and format-valid
+artifact references are **unverified** until trusted Core readback exists.
+Candidate provenance is content-bound, and the readback-shaped test seam
+recomputes its digest to detect field drift; that digest does not authenticate
+Agent Core. The emitted status is always
+`unverified_draft_and_refs_bound_not_submitted_or_evaluated`.
+
+This does **not** compile the E0 opportunity into a `ChangeSpec`, submit a Core
+Proposal, run `validate`/`freeze`/`evaluate`, or assert improvement. Unit tests
+use an explicitly unverified declaration solely to exercise the pure binding
+boundary; no production bridge verifier can mint trusted evidence yet. The
+mapping declares the exact compiler `candidate_route` and `mechanism`; both
+must match the compiled authorization.
+
+The next executable chain still requires, in order:
+
+1. A durable Core registry snapshot plus exact persisted candidate-to-Flow
+   mapping and fresh registry readback (the current E0 mapping catalog is a
+   team-generated fixture).
+2. A supported candidate-to-`ChangeSpec` design, including how a recurring
+   descriptive E0 signal informs a safe Flow/Agent/EvalSuite change without
+   inventing customer outcomes or reusing a stale flow version.
+3. End-to-end Rust integration of U17 compilation, U18 governed registry
+   writes, U19 admission, U20 sealing, and U26 isolated scenario execution.
+4. The frozen, versioned bridge DTO/pin owned by the Core-bridge lane; this
+   module intentionally defines no wire representation.
+5. A real local Agent Core registry `create → put_draft → validate → freeze →
+   evaluate` run, with paired baseline/candidate execution, persisted native
+   receipts, and a passing combined gate before saying `eligible_for_human_review`.
+
+Until that chain passes against the pinned local Core stack, E0 output remains
+descriptive and this binding foundation is not evidence of a magical E2E.
+
+## E0 design-intent adapter v1 (exploration only)
+
+`e0_builder_design` adds an internal, versioned Pulso contract for preparing a
+model-input envelope and validating externally supplied response JSON for a
+qualifying E0 signal after an exact U20 plan and E0 safety oracle have been
+supplied. The adapter rechecks candidate/packet/run, source snapshot, tenant,
+signal commitments and the RFC3339-to-U20 replay cutoff before sealing its
+input digest. The serialized model-input envelope omits the tenant identifier,
+source run identifier, and opaque U20 commitments; it contains aggregate
+evidence only and no contact text or row-level data.
+
+An unlinked route does **not** prevent preparation of this exploration input.
+Its envelope states `route_status=unlinked` and has no Flow reference. A future
+provider caller could use that context to ask for a bounded design intent or
+honest `do_nothing` response. A public E0 route catalog and its mappings are
+untrusted declarations, not proof that a Flow exists in Agent Core. When such
+a declaration matches, the envelope contains only
+`route_status=catalog_declared` and the catalog digest; it never contains the
+declared Flow id, version, or content digest. In both states, no Flow existence
+is implied. Trusted U35 admission plus exact Core registry readback is required
+before any authoring, compilation, or evaluation may rely on a Flow identity.
+
+This slice does **not** invoke an LLM/provider and does not implement provider
+tracing, cost handling, retries, or lifecycle management. It only prepares a
+privacy-minimized input and validates response JSON supplied by a caller.
+
+The strict response schema rejects unknown fields (including an injected
+`flow_ref`) and requires the input digest and evidence digests to match the
+allowlisted request. The result is only `ReviewRequired(UntrustedDesignIntent)`
+or `DoNothing`; there is no compiler, registry, evaluation, release, or native
+Agent Core conversion in this module. The model cannot supply tenant/snapshot
+lineage, base/version, grant, role, or other authority. Future conversion to
+`UntrustedChangeSpec` must be a separate trusted U35-gated slice after an
+identity/version derivation contract exists.
+
+The unit tests compose a real sealed plan through the existing test U20
+composer and a real E0 safety oracle through `TrustedE0SafetyOracleComposer`.
+They assert that unlinked and catalog-declared cases can prepare review-only
+input without exposing a Flow reference or identity; supplied response JSON
+remains review-only. This does not prove provider invocation, a native
+proposal, business lift, or Core execution. Contract DTO/schema pinning for
+Core remains outside this internal adapter and must wait for the upstream
+bridge contract. Final focused validation is recorded in the technical journal
+for this slice.
