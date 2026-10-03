@@ -31,7 +31,7 @@ param(
     [string]$Job = 'all',
     [string]$PostgresAdmin = $env:PULSO_TEST_PG_ADMIN,
     [string]$PostgresTestUrl,
-    [string]$Checkout = 'D:\.codex\factored\references\agent-core',
+    [string]$Checkout = 'D:\.codex\factored\references\agent-core-789d6c8',
     [switch]$AllowSkipReal,
     [switch]$Mypy
 )

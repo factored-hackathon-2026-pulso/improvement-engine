@@ -5,7 +5,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Checkout = 'D:\.codex\factored\references\agent-core',
+    [string]$Checkout = 'D:\.codex\factored\references\agent-core-789d6c8',
     [string]$Connection = 'pulso-dev',
     [string]$Podman = 'C:\Users\alexg\AppData\Local\Programs\Podman\podman.exe'
 )

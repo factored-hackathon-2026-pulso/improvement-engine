@@ -11,7 +11,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Checkout = 'D:\.codex\factored\references\agent-core',
+    [string]$Checkout = 'D:\.codex\factored\references\agent-core-789d6c8',
     [switch]$Check
 )
 $ErrorActionPreference = 'Stop'
