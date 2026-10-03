@@ -12,7 +12,7 @@ DOUBLES = [
     {"id": "fixture_api", "what": "debug-console fixture API/SSE server fed from translated results; not the Rust control API"},
     {"id": "lab_query_rows", "what": "the e2e-fixtures lab double returns fixed rows for lab_query; the data-derived SQL results come from the "
                                     "demo's local sqlite dataset (recorded SQL and digests)"},
-    {"id": "improvement_judge", "what": "demo's data-derived mechanism_proxy judge and reviser; stand-in for the Codex improvement judge"},
+    {"id": "improvement_judge", "what": "demo's data-derived mechanism_proxy judge and guard-breach-steered reviser; stand-in for the Codex improvement judge"},
     {"id": "human_decision", "what": "approve/publish hook not connected: pending until a human decision flow runs"},
 ]
 

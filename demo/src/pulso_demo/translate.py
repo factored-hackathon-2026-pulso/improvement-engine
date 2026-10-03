@@ -77,7 +77,7 @@ def _hyp_text(h: dict[str, Any]) -> str:
 
 
 def _diff(final_cand: dict[str, Any], core_att: dict[str, Any] | None) -> list[dict[str, str]]:
-    lines = [{"op": "ctx", "text": "# business view of the change spec (stand-in builder)"}, {"op": "ctx", "text": f"retry_policy:   # scope: {final_cand['scope']}"},
+    lines = [{"op": "ctx", "text": "# business view of the change spec (stand-in builder)"}, {"op": "ctx", "text": f"retry_policy:   # scope: {final_cand['scope']}" + "".join(f", excl {x['dimension']}={x['value']}" for x in final_cand.get("exclude_segments", []))},
              {"op": "del", "text": f"  max_retries: {final_cand['from_retries']}"}, {"op": "add", "text": f"  max_retries: {final_cand['max_retries']}"},
              {"op": "ctx", "text": f"  step: {final_cand['step']}"}, {"op": "ctx", "text": "# Core entities written by the writer (real receipts)"}]
     if core_att:
@@ -117,13 +117,15 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         _eval_node(1, ["change"], core_att[0] if core_att else None, an_att[0] if an_att else None),
     ]
     prev = "evaluate_1"
-    if not two and an_att and an_att[0]["improvement"]["status"] == "fail":
-        nodes.append(_node("revise", LABELS["revise"], "proposal", "dead", ["evaluate_1"], "no_revision_within_bounds"))
-        nodes.append(_node("evaluate_2", LABELS["evaluate_2"], "evaluation", "planned", ["revise"], "no_revision"))
-        prev = "evaluate_1"
+    if an_att and an_att[final]["improvement"]["status"] == "fail":  # bounded stop: the revision (if any) did not clear the gate either
+        why = "no_revision_within_bounds" if not two else "revision_exhausted"
+        nodes.append(_node("revise", LABELS["revise"], "proposal", "dead", ["evaluate_1"], why))
+        nodes.append(_eval_node(2, ["revise"], core_att[final] if len(core_att) > final else None, an_att[final]) if two
+                     else _node("evaluate_2", LABELS["evaluate_2"], "evaluation", "planned", ["revise"], "no_revision"))
+        prev = "evaluate_2" if two else "evaluate_1"
     elif two:
         nodes.append(_node("revise", LABELS["revise"], "proposal", "complete", ["evaluate_1"], "proposal_revised"))
-        nodes.append(_eval_node(2, ["revise"], core_att[1] if len(core_att) > 1 else None, an_att[1]))
+        nodes.append(_eval_node(2, ["revise"], core_att[final] if len(core_att) > final else None, an_att[final]))
         prev = "evaluate_2"
     else:
         nodes.append(_node("revise", LABELS["revise"], "proposal", "planned", ["evaluate_1"], "not_needed"))
@@ -229,7 +231,9 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         nstat, nreason = _native_status(core_att[i] if i < len(core_att) else None)
         attempts.append({"attempt": i + 1, "candidate_id": a["candidate"]["id"], "revision_of": a["candidate"].get("revision_of"),
                          "scope": a["candidate"]["scope"], "max_retries": a["candidate"]["max_retries"], "native": nstat, "native_reason": nreason,
-                         "improvement": a["improvement"]})
+                         "exclude_segments": a["candidate"].get("exclude_segments", []), "hypothesis_key": a["candidate"].get("hypothesis_key"),
+                         "improvement": a["improvement"], "failure": a["improvement"].get("breach") and {"reason_code": a["improvement"]["reason_code"], **a["improvement"]["breach"]},
+                         "revision": a["candidate"].get("revision")})
     memory = _memory(scout_h, assess, succ if mem_ok else None)
     stage = dec["stage"] if dec else "pending"
     decision = {"decision_id": "dec-1", "available_commands": ["approve", "reject"], "needs_step_up": True, "stepped_up": False, "revision": 1}

@@ -9,24 +9,70 @@
     "summary": "Keep the current retry policy"
    },
    {
-    "expected_abandoned": 1029,
+    "expected_abandoned": 1117,
     "id": "alt-1",
     "kind": "proposed_change",
-    "risk": "guard exposure 0.0025",
-    "summary": "max_retries 2 -> 3 (flow:transfer_limit)"
+    "risk": "guard exposure 0.0016",
+    "summary": "max_retries 2 -> 5 (flow:transfer_limit, excl device=mobile)"
    }
   ],
   "attempts": [
    {
     "candidate": {
+     "derived_from": {
+      "hypothesis": "transfer_limit/otp_verify",
+      "query": {
+       "columns": [
+        "max(retries_allowed)",
+        "max(case when retry_exhausted = 1 then extra_needed end)"
+       ],
+       "id": "q-design-transfer_limit",
+       "params": [
+        "transfer_limit"
+       ],
+       "rows": [
+        [
+         2,
+         5
+        ]
+       ],
+       "rows_digest": "6f302a27a86d44bfa9c3e032dc1b5ba050a3fe01b21193c97cb7ca33db104e33",
+       "sql": "select max(retries_allowed), max(case when retry_exhausted = 1 then extra_needed end) from sessions where flow = ?"
+      }
+     },
+     "exclude_segments": [],
      "from_retries": 2,
+     "hypothesis_key": "transfer_limit/otp_verify",
      "id": "cand-1",
      "max_retries": 5,
      "revision_of": null,
-     "scope": "all_flows",
+     "scope": "flow:transfer_limit",
      "step": "otp_verify"
     },
     "improvement": {
+     "breach": {
+      "affected_segment": {
+       "dimension": "device",
+       "value": "mobile"
+      },
+      "direction": "above_limit",
+      "limit": 0.0035,
+      "magnitude": 0.00037,
+      "metric": "risky_exposure",
+      "observed": 0.00387,
+      "segments": [
+       {
+        "dimension": "device",
+        "exposure": 0.00225,
+        "value": "mobile"
+       },
+       {
+        "dimension": "device",
+        "exposure": 0.00162,
+        "value": "web"
+       }
+      ]
+     },
      "exposure": 0.00387,
      "guard_max_exposure": 0.0035,
      "lift": 0.0855,
@@ -41,19 +87,89 @@
    },
    {
     "candidate": {
+     "derived_from": {
+      "hypothesis": "transfer_limit/otp_verify",
+      "query": {
+       "columns": [
+        "max(retries_allowed)",
+        "max(case when retry_exhausted = 1 then extra_needed end)"
+       ],
+       "id": "q-design-transfer_limit",
+       "params": [
+        "transfer_limit"
+       ],
+       "rows": [
+        [
+         2,
+         5
+        ]
+       ],
+       "rows_digest": "6f302a27a86d44bfa9c3e032dc1b5ba050a3fe01b21193c97cb7ca33db104e33",
+       "sql": "select max(retries_allowed), max(case when retry_exhausted = 1 then extra_needed end) from sessions where flow = ?"
+      }
+     },
+     "exclude_segments": [
+      {
+       "dimension": "device",
+       "value": "mobile"
+      }
+     ],
      "from_retries": 2,
+     "hypothesis_key": "transfer_limit/otp_verify",
      "id": "cand-2",
-     "max_retries": 3,
-     "reason": "guard_breach",
+     "max_retries": 5,
+     "revision": {
+      "action": "exclude_segment",
+      "delta": [
+       {
+        "field": "exclude_segments",
+        "from": [],
+        "to": [
+         {
+          "dimension": "device",
+          "value": "mobile"
+         }
+        ]
+       }
+      ],
+      "of": "cand-1",
+      "rationale": "risky_exposure 0.0039 is 0.0004 above the 0.0035 limit, carried mostly by device=mobile: exclude device=mobile from the scope of flow:transfer_limit",
+      "trigger": {
+       "breach": {
+        "affected_segment": {
+         "dimension": "device",
+         "value": "mobile"
+        },
+        "direction": "above_limit",
+        "limit": 0.0035,
+        "magnitude": 0.00037,
+        "metric": "risky_exposure",
+        "observed": 0.00387,
+        "segments": [
+         {
+          "dimension": "device",
+          "exposure": 0.00225,
+          "value": "mobile"
+         },
+         {
+          "dimension": "device",
+          "exposure": 0.00162,
+          "value": "web"
+         }
+        ]
+       },
+       "reason_code": "guard_breach"
+      }
+     },
      "revision_of": "cand-1",
      "scope": "flow:transfer_limit",
      "step": "otp_verify"
     },
     "improvement": {
-     "exposure": 0.0025,
+     "exposure": 0.00162,
      "guard_max_exposure": 0.0035,
-     "lift": 0.04825,
-     "lift_lo": 0.04355,
+     "lift": 0.03725,
+     "lift_lo": 0.0331,
      "reason_code": null,
      "status": "pass"
     },

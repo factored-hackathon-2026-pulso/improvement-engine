@@ -45,19 +45,28 @@ Open run `run-demo` (main path), `run-demo-refuted` (refuted hypothesis kept vis
 ## Scripted vs derived (read this before believing the demo)
 
 Derived from the data (mutation-tested: swapping the planted mechanism to another flow moves the finding; no mechanism, noise and a second
-mechanism change hypotheses, verdicts and the candidate; see `tests/unit/test_driver.py`): scout hypotheses (measured excess abandonment, lower
-confidence bound), verifier verdicts (per-week stability + pooled test; the device-mix decoy is refuted by that test, not by name), the gate verdicts
-on each candidate, the revised candidate's scope/limit, the second-batch contradiction and the successor target.
+mechanism change hypotheses, verdicts and the candidate; planting the guard breach in another segment changes the revision, no breach means no
+revision, an unfixable breach is a bounded stop; see `tests/unit/test_driver.py`, `tests/unit/test_revision.py`): scout hypotheses (measured excess
+abandonment, lower confidence bound), verifier verdicts (per-week stability + pooled test; the device-mix decoy is refuted by that test, not by
+name), **candidate 1** (scope = the flow of the top SUPPORTED otp_verify hypothesis, `max_retries` = current + the max extra attempts exhausted users
+needed in that flow, capped by the policy ceiling; no supported hypothesis means no candidate, outcome `no_opportunity`, gate `hold`; a candidate on
+a flow without a supported hypothesis is refused by `check_supported`), the gate verdicts on each candidate, the **structured guard breach** (metric,
+direction, observed vs limit, magnitude, per-device exposure, affected segment), and the **revision**, which is steered by that breach: exclude the
+affected segment, then (if nothing is left to exclude) lower the retry ceiling by one, never leaving the supported flow, at most `--max-revisions`
+(default 2). `world.demo.attempts[]` records failure (`failure`) -> rationale (`revision.rationale`) -> ChangeSpec delta (`revision.delta`), so the
+console shows WHY candidate 2 differs. Only a `guard_breach` is steerable; `insufficient_lift` or an exhausted bound stops with step 7 `failed`
+and nobody is asked to approve. The second-batch contradiction and the successor target are also derived.
 
 Scripted / canned (honest limits):
 * The dataset is synthetic and its generator PLANTS the mechanism (OTP retry exhaustion in one flow, a decoy incident) and the second-batch change
   (`dataset.py`). The pipeline finds what was planted; it is not evidence that the method works on real data.
-* Candidate 1 (global retry raise to 5, step `otp_verify`) is a CANNED aggressive first draft, as is the fixed candidate shape (retry policy). It is
-  not generated from the hypothesis. The judge's mechanism_proxy reads the planted `retry_exhausted/extra_needed/risky` columns.
-* The automatic revision is a bounded GRID SEARCH (scope = one flow x retry limit) re-judged on the data; the failing gate's reason is only recorded,
-  not used to steer the search, and the revised scope is not constrained to flows with a supported hypothesis. It is not an LLM reviser.
-* Revision is triggered only when candidate 1 fails; a candidate is only designed when the verifier supports something; if the bounded search finds
-  nothing the report says `no_candidate_passed_gates` and nobody is asked to approve. No-human / pending / rejected outcomes are reported as such
+* The candidate SHAPE is fixed (a retry policy on `otp_verify`: scope, excluded segments, `max_retries`), the policy ceiling (5) and the guard limit
+  are constants, and the revision menu is two rule-based moves (exclude segment, lower ceiling), not an LLM reviser. The judge's mechanism_proxy
+  reads the planted `retry_exhausted/extra_needed/risky` columns; the breach is segmented by device and cohort only, and the planted default
+  breach is spread over devices (mobile carries slightly more), so which segment gets excluded is a measurement, not a story. The `risk_hot`
+  dataset option exists only for the mutation tests.
+* Revision is triggered only by a failing improvement gate with a steerable (guard_breach) failure; if the bounded revision does not clear it the
+  report says `no_candidate_passed_gates` and nobody is asked to approve. No-human / pending / rejected outcomes are reported as such
   (`outcome` = `awaiting_human_decision`, `rejected_by_human`, `no_opportunity`, ...), never as ok.
 * The LLM is scripted (answers built from the analysis); `lab_query` rows from the e2e double are fixed, the SQL that matters runs on the sqlite dataset.
 * Step 5 and 9 are `real` only because the Core registry receipts / staging alias READ come from the real stack; with `--offline` they are `simulated`.

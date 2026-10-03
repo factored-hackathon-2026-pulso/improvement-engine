@@ -17,7 +17,8 @@ SCHEMA = """create table sessions(session_id integer primary key, flow text, ste
   retries_allowed integer, retry_exhausted integer, extra_needed integer, risky integer, outcome text, week integer)"""
 
 
-def build(n: int = 8000, seed: int = 20260101, plant: bool = True, post: bool = False) -> sqlite3.Connection:
+def build(n: int = 8000, seed: int = 20260101, plant: bool = True, post: bool = False,
+          risk_hot: tuple[str, str] | None = None) -> sqlite3.Connection:
     """`post=True` is the scripted SECOND batch of observations (after the staged change): the OTP exhaustion in transfer_limit is largely
     gone and a different, new pattern appears (address_change on web). Batch 1 (post=False) is unchanged."""
     rnd = random.Random(seed)
@@ -47,4 +48,8 @@ def build(n: int = 8000, seed: int = 20260101, plant: bool = True, post: bool = 
         abandoned = rnd.random() < p_abandon
         rows.append((sid, flow, step, device, cohort, 2, exhausted, extra, risky, "abandoned" if abandoned else "completed", week))
     conn.executemany("insert into sessions values (?,?,?,?,?,?,?,?,?,?,?)", rows)
+    if risk_hot is not None:  # mutation-test hook: concentrate the 'risky' sessions that retry exhaustion exposes in ONE segment (deterministic, no rng shift)
+        col, val = risk_hot
+        assert col in ("device", "cohort")
+        conn.execute(f"update sessions set risky = 1 where flow = 'transfer_limit' and retry_exhausted = 1 and {col} = ? and session_id % 3 <> 0", (val,))
     return conn

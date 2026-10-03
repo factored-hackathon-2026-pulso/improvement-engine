@@ -16,7 +16,7 @@ def test_scripted_model_answers_derive_from_analysis_not_constants():
     sc = analysis.scout(conn)
     ver = analysis.verify(conn, sc["hypotheses"])
     ref = {"id": "r", "digest": "d", "media_type": "application/json"}
-    outs = driver.model_outputs(sc, ver, analysis.alternatives(conn, analysis.first_candidate()), ref)
+    outs = driver.model_outputs(sc, ver, analysis.alternatives(conn, analysis.design_candidate(conn, sc, ver)), ref)
     h = outs[driver.RESEARCH]["hypotheses"]
     assert h[0]["statement"].startswith("transfer_limit otp_verify")
     verdicts = {a["hypothesis_id"]: a["verdict"] for a in outs[driver.VERIFY]["assessments"]}
@@ -117,9 +117,9 @@ def test_dataset_without_the_mechanism_never_reaches_the_human(tmp_path, monkeyp
     monkeypatch.setattr(dataset, "build", lambda *a, **k: real(*a, **{**k, "plant": False}))
     rc, rep, world = run_offline_any(tmp_path)
     st = {s["n"]: s["outcome"] for s in rep["steps"]}
-    assert rc == 0 and rep["outcome"] == "no_candidate_passed_gates"  # the unplanted flow still shows a (weaker) real effect; candidate 1 fails, no revision clears
-    assert st[7] == "failed" and st[8] == "pending" and st[9] == "not_run" and st[10] == "not_run" and rep["human"] is None
-    assert world["gates"]["combined"]["decision"] == "revise"
+    assert rc == 0 and rep["outcome"] == "no_opportunity"  # no supported otp_verify hypothesis: no candidate is designed at all
+    assert st[8] == "pending" and st[9] == "not_run" and st[10] == "not_run" and rep["human"] is None
+    assert world["gates"]["combined"]["decision"] == "hold"
     assert "transfer_limit/otp_verify" not in json.dumps(world["investigation"])
 
 

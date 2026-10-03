@@ -263,8 +263,8 @@ def step_status(i: int, world: dict[str, Any], core: dict[str, Any], exporter: d
     if i == 6:
         return "stand-in", OUTCOME.get(nodes["evaluate_2"], nodes["evaluate_2"]), "native evaluation real; improvement judge is a stand-in"
     if i == 7:
-        why = {"complete": "candidate 1 failed a gate; the bounded revision search found a candidate (see attempts[])",
-               "dead": "candidate 1 failed a gate and no revision within bounds cleared it"}.get(nodes["revise"], "no gate failed (or no candidate): no revision needed")
+        why = {"complete": "the improvement gate failed with a structured guard breach; the revision was steered by it (failure -> rationale -> delta in attempts[])",
+               "dead": "the gate failure could not be steered away within max_revisions / the supported hypothesis scope (bounded stop, nobody is asked)"}.get(nodes["revise"], "no gate failed (or no candidate): no revision needed")
         return "stand-in", {"complete": "shown", "dead": "failed"}.get(nodes["revise"], "not_triggered"), why
     stage = decision["stage"] if decision else None
     if i == 8:
@@ -352,6 +352,7 @@ def main(argv: list[str] | None = None, hook: DecisionHook | None = None) -> int
     ap.add_argument("--human-mode", choices=["scripted", "manual"], default="scripted",
                     help="scripted = labelled SIMULATED human supervisor approves; manual = pause until `python -m pulso_demo.decide --out <out> approve`")
     ap.add_argument("--human-timeout", type=float, default=900.0, help="manual mode: seconds to wait for the person before leaving the decision pending")
+    ap.add_argument("--max-revisions", type=int, default=2, help="bound of automatic steered revisions after a failing improvement gate")
     ap.add_argument("--promote", action="store_true", help="explicitly promote the staged release to prod (default: staging only)")
     a = ap.parse_args(argv)
     out = Path(a.out)
@@ -360,20 +361,12 @@ def main(argv: list[str] | None = None, hook: DecisionHook | None = None) -> int
     conn = dataset.build()
     sc = analysis.scout(conn)
     ver = analysis.verify(conn, sc["hypotheses"])
-    assess = {x["key"]: x["verdict"] for x in ver["assessments"]}
     attempts: list[dict[str, Any]] = []
     alts: list[dict[str, Any]] = []
     analysis_notes: list[str] = []
-    if any(v == "supported" for v in assess.values()):  # a candidate is only designed when the verifier supports something
-        c1 = analysis.first_candidate()  # canned aggressive first draft (see README: scripted); the gate verdict on it is derived from the data
-        j1 = analysis.judge(conn, c1)
-        attempts.append(j1)
-        if j1["improvement"]["status"] != "pass":  # revision is triggered ONLY by a failing gate
-            try:
-                c2 = analysis.revise(conn, c1, j1)
-                attempts.append(analysis.judge(conn, c2))
-            except RuntimeError as exc:
-                analysis_notes.append(f"automatic revision exhausted its bounds: {exc}")
+    judged, analysis_notes = analysis.design_loop(conn, sc, ver, a.max_revisions)  # candidate only from a supported hypothesis; revision steered by the guard breach
+    attempts = list(judged)
+    if attempts:
         alts = analysis.alternatives(conn, attempts[-1]["candidate"])
     attempts = [{"candidate": j["candidate"], "improvement": j["improvement"], "native_proxy": j["native_proxy"]} for j in attempts]
     obs = analysis.observe(dataset.build(seed=20260102, post=True), sc["hypotheses"], ver)  # the scripted second batch of observations (step 10)

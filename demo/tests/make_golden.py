@@ -14,9 +14,9 @@ def main() -> None:
     conn = dataset.build()
     sc = analysis.scout(conn)
     ver = analysis.verify(conn, sc["hypotheses"])
-    c1 = analysis.first_candidate()
+    c1 = analysis.design_candidate(conn, sc, ver)
     j1 = analysis.judge(conn, c1)
-    c2 = analysis.revise(conn, c1, j1)
+    c2 = analysis.revise(conn, c1, j1, sc, ver)
     j2 = analysis.judge(conn, c2)
     attempts = [{"candidate": j["candidate"], "improvement": j["improvement"], "native_proxy": j["native_proxy"]} for j in (j1, j2)]
     ok = {"state": "terminal_ok", "core_run_id": "run-sample", "release_id": "rel-sample"}

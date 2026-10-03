@@ -20,18 +20,67 @@
     "summary": "Keep the current retry policy"
    },
    {
-    "expected_abandoned": 1029,
+    "expected_abandoned": 1117,
     "id": "alt-1",
     "kind": "proposed_change",
-    "risk": "guard exposure 0.0025",
-    "summary": "max_retries 2 -> 3 (flow:transfer_limit)"
+    "risk": "guard exposure 0.0016",
+    "summary": "max_retries 2 -> 5 (flow:transfer_limit, excl device=mobile)"
    }
   ],
   "attempts": [
    {
     "attempt": 1,
     "candidate_id": "cand-1",
+    "exclude_segments": [],
+    "failure": {
+     "affected_segment": {
+      "dimension": "device",
+      "value": "mobile"
+     },
+     "direction": "above_limit",
+     "limit": 0.0035,
+     "magnitude": 0.00037,
+     "metric": "risky_exposure",
+     "observed": 0.00387,
+     "reason_code": "guard_breach",
+     "segments": [
+      {
+       "dimension": "device",
+       "exposure": 0.00225,
+       "value": "mobile"
+      },
+      {
+       "dimension": "device",
+       "exposure": 0.00162,
+       "value": "web"
+      }
+     ]
+    },
+    "hypothesis_key": "transfer_limit/otp_verify",
     "improvement": {
+     "breach": {
+      "affected_segment": {
+       "dimension": "device",
+       "value": "mobile"
+      },
+      "direction": "above_limit",
+      "limit": 0.0035,
+      "magnitude": 0.00037,
+      "metric": "risky_exposure",
+      "observed": 0.00387,
+      "segments": [
+       {
+        "dimension": "device",
+        "exposure": 0.00225,
+        "value": "mobile"
+       },
+       {
+        "dimension": "device",
+        "exposure": 0.00162,
+        "value": "web"
+       }
+      ]
+     },
      "exposure": 0.00387,
      "guard_max_exposure": 0.0035,
      "lift": 0.0855,
@@ -42,23 +91,75 @@
     "max_retries": 5,
     "native": "pass",
     "native_reason": null,
+    "revision": null,
     "revision_of": null,
-    "scope": "all_flows"
+    "scope": "flow:transfer_limit"
    },
    {
     "attempt": 2,
     "candidate_id": "cand-2",
+    "exclude_segments": [
+     {
+      "dimension": "device",
+      "value": "mobile"
+     }
+    ],
+    "failure": null,
+    "hypothesis_key": "transfer_limit/otp_verify",
     "improvement": {
-     "exposure": 0.0025,
+     "exposure": 0.00162,
      "guard_max_exposure": 0.0035,
-     "lift": 0.04825,
-     "lift_lo": 0.04355,
+     "lift": 0.03725,
+     "lift_lo": 0.0331,
      "reason_code": null,
      "status": "pass"
     },
-    "max_retries": 3,
+    "max_retries": 5,
     "native": "pass",
     "native_reason": null,
+    "revision": {
+     "action": "exclude_segment",
+     "delta": [
+      {
+       "field": "exclude_segments",
+       "from": [],
+       "to": [
+        {
+         "dimension": "device",
+         "value": "mobile"
+        }
+       ]
+      }
+     ],
+     "of": "cand-1",
+     "rationale": "risky_exposure 0.0039 is 0.0004 above the 0.0035 limit, carried mostly by device=mobile: exclude device=mobile from the scope of flow:transfer_limit",
+     "trigger": {
+      "breach": {
+       "affected_segment": {
+        "dimension": "device",
+        "value": "mobile"
+       },
+       "direction": "above_limit",
+       "limit": 0.0035,
+       "magnitude": 0.00037,
+       "metric": "risky_exposure",
+       "observed": 0.00387,
+       "segments": [
+        {
+         "dimension": "device",
+         "exposure": 0.00225,
+         "value": "mobile"
+        },
+        {
+         "dimension": "device",
+         "exposure": 0.00162,
+         "value": "web"
+        }
+       ]
+      },
+      "reason_code": "guard_breach"
+     }
+    },
     "revision_of": "cand-1",
     "scope": "flow:transfer_limit"
    }
@@ -128,7 +229,7 @@
    },
    {
     "op": "ctx",
-    "text": "retry_policy:   # scope: flow:transfer_limit"
+    "text": "retry_policy:   # scope: flow:transfer_limit, excl device=mobile"
    },
    {
     "op": "del",
@@ -136,7 +237,7 @@
    },
    {
     "op": "add",
-    "text": "  max_retries: 3"
+    "text": "  max_retries: 5"
    },
    {
     "op": "ctx",
@@ -338,10 +439,10 @@
   "improvement": {
    "attempt": 2,
    "checked_at": "2026-01-01T00:00:00Z",
-   "exposure": 0.0025,
+   "exposure": 0.00162,
    "guard_max_exposure": 0.0035,
-   "lift": 0.04825,
-   "lift_lo": 0.04355,
+   "lift": 0.03725,
+   "lift_lo": 0.0331,
    "reason_code": null,
    "receipt_refs": [],
    "status": "pass"
