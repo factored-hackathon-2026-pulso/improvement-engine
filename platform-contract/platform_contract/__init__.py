@@ -108,17 +108,14 @@ def _source_event_schema(name: str) -> dict:
     if name == "exporter_finding":
         props = {
             "kind": {"const": "exporter_finding"}, **common,
-            "source_id": {"type": "string", "minLength": 1},
-            "native_event_id": {"type": "string", "pattern": FINDING_IDENTITY_PATTERN},
-            "observed_at": _dt(),
             "finding_code": {"type": "string", "enum": list(FINDING_CODES)},
             "severity": {"type": "string", "enum": list(FINDING_SEVERITIES)},
             "described_native_event_id": {"type": ["string", "null"]},
             "described_source_sequence": {"type": ["integer", "null"], "minimum": 0},
             "details": {"type": "object", "maxProperties": MAX_FINDING_DETAILS_PROPERTIES},
         }
-        desc = ("Exporter metadata (quality/coverage/profile). Identity is (tenant_id, source_id, native_event_id); "
-                "never a domain row and never part of source-sequence continuity. `details` is inline and bounded "
+        desc = ("Exporter metadata (quality/coverage/profile). Identity (tenant_id, source_id, native_event_id) and "
+                "observed_at live on the observation envelope, outside the digest; never a domain row and never part of source-sequence continuity. `details` is inline and bounded "
                 f"(<= {MAX_FINDING_DETAILS_BYTES} serialized bytes, checked by conformance).")
     else:
         props = {
@@ -179,6 +176,11 @@ def build_source_schema(name: str) -> dict:
         },
         "required": ["tenant_id", "source_id", "native_event_id", "source_sequence", "observed_at", "source_event"],
         "additionalProperties": False,
+        "allOf": [{
+            "if": {"properties": {"source_event": {"properties": {"kind": {"const": "exporter_finding"}},
+                                                    "required": ["kind"]}}},
+            "then": {"properties": {"native_event_id": {"pattern": FINDING_IDENTITY_PATTERN}}},
+        }],
         "$defs": defs,
         "x-contract-version": CONTRACT_VERSION,
     }

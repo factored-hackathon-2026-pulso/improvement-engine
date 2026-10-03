@@ -166,9 +166,6 @@ def validate_source_observations(records) -> list[str]:
         if se["tenant_id"] != r["tenant_id"]:
             errs.append(f"source_observation[{i}].source_event.tenant_id: differs from envelope")
         if se["kind"] == "exporter_finding":
-            for f in ("source_id", "native_event_id", "observed_at"):
-                if se[f] != r[f]:
-                    errs.append(f"source_observation[{i}].source_event.{f}: differs from envelope")
             size = len(json.dumps(se["details"], separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
             if size > MAX_FINDING_DETAILS_BYTES:
                 errs.append(f"source_observation[{i}].source_event.details: exceeds {MAX_FINDING_DETAILS_BYTES} bytes")

@@ -49,10 +49,35 @@
     "source_event"
   ],
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source_event": {
+            "properties": {
+              "kind": {
+                "const": "exporter_finding"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "native_event_id": {
+            "pattern": "^(finding|profile|dimensions):.+$"
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "exporter_finding": {
       "title": "exporter_finding",
-      "description": "Exporter metadata (quality/coverage/profile). Identity is (tenant_id, source_id, native_event_id); never a domain row and never part of source-sequence continuity. `details` is inline and bounded (<= 32768 serialized bytes, checked by conformance).",
+      "description": "Exporter metadata (quality/coverage/profile). Identity (tenant_id, source_id, native_event_id) and observed_at live on the observation envelope, outside the digest; never a domain row and never part of source-sequence continuity. `details` is inline and bounded (<= 32768 serialized bytes, checked by conformance).",
       "type": "object",
       "properties": {
         "kind": {
@@ -68,19 +93,6 @@
         "tenant_id": {
           "type": "string",
           "minLength": 1
-        },
-        "source_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "native_event_id": {
-          "type": "string",
-          "pattern": "^(finding|profile|dimensions):.+$"
-        },
-        "observed_at": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
         },
         "finding_code": {
           "type": "string",
@@ -126,9 +138,6 @@
         "source_namespace",
         "catalog_version",
         "tenant_id",
-        "source_id",
-        "native_event_id",
-        "observed_at",
         "finding_code",
         "severity",
         "described_native_event_id",

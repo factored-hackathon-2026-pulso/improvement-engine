@@ -52,13 +52,13 @@ quarantined with a quality finding; they never fail the batch.
 
 `source_event.kind` separates exporter metadata from domain rows:
 
-- `exporter_finding`: `schemas/exporter_finding.schema.json`. Envelope: `kind`, `source_namespace`, `catalog_version`,
-  `tenant_id`, `source_id`, `native_event_id` (identity, `finding:|profile:|dimensions:` prefix), `observed_at` (wall
-  clock), `finding_code` (closed list), `severity` (info|warning|error), `described_native_event_id` and
-  `described_source_sequence` (nullable), `details` (inline, <= 32 KiB serialized, <= 64 keys). Never a domain row,
-  never part of source-sequence continuity or population/window projections. Dedup key
-  `(tenant_id, source_id, native_event_id)`; the observation `source_sequence` is null, or equals
-  `described_source_sequence` (a finding about a late row reuses that row's sequence).
+- `exporter_finding`: `schemas/exporter_finding.schema.json`. Body: `kind`, `source_namespace`, `catalog_version`,
+  `tenant_id`, `finding_code` (closed list), `severity` (info|warning|error), `described_native_event_id` and
+  `described_source_sequence` (nullable), `details` (inline, <= 32 KiB serialized, <= 64 keys). Observation envelope
+  (outside the digest, so re-emission stays idempotent): `source_id`, `native_event_id` (identity, must be
+  `finding:|profile:|dimensions:` prefixed), `observed_at` (wall clock), `source_sequence` (null, or equal to
+  `described_source_sequence`: a finding about a late row reuses that row's sequence). Never a domain row, never part
+  of source-sequence continuity or population/window projections. Dedup key `(tenant_id, source_id, native_event_id)`.
 - `domain_event`: `schemas/domain_event.schema.json`; `event_type` must not start with `exporter.`.
 - `schemas/source_observation.schema.json`: self-contained observation view (identity + nullable sequence +
   discriminated `source_event`). Wire `kind` stays `platform_event` (pulso-observations-2 is unchanged).

@@ -40,8 +40,11 @@ def test_new_schemas_exist_and_are_valid(name):
 def test_exporter_finding_schema_envelope_fields():
     s = pc.load_source_schema("exporter_finding")
     assert set(s["required"]) == {
-        "kind", "source_namespace", "catalog_version", "tenant_id", "source_id", "native_event_id", "observed_at",
-        "finding_code", "severity", "described_native_event_id", "described_source_sequence", "details"}
+        "kind", "source_namespace", "catalog_version", "tenant_id", "finding_code", "severity",
+        "described_native_event_id", "described_source_sequence", "details"}
+    # identity (source_id, native_event_id) and observed_at live on the observation envelope, outside the digest
+    obs = pc.load_source_schema("source_observation")
+    assert {"tenant_id", "source_id", "native_event_id", "source_sequence", "observed_at"} <= set(obs["required"])
     assert s["properties"]["kind"] == {"const": "exporter_finding"}
     assert s["properties"]["described_source_sequence"]["type"] == ["integer", "null"]
     assert s["additionalProperties"] is False
@@ -106,10 +109,11 @@ def test_dedup_keeps_first_and_flags_identity_conflicts():
     assert len(uniq) == 1 and [d["code"] for d in dups] == ["identity_conflict"]
 
 
-def test_envelope_identity_must_match_source_event():
+def test_envelope_tenant_must_match_source_event_and_finding_identity_is_prefixed():
     doc = _load(ROOT / "examples" / "source_events" / "valid" / "exporter_finding.valid.json")
-    bad = dict(doc["records"][0], native_event_id="finding:other")
-    assert conformance.validate_source_observations([bad])
+    f = [r for r in doc["records"] if r["source_event"]["kind"] == "exporter_finding"][0]
+    assert conformance.validate_source_observations([dict(f, tenant_id="other")])
+    assert conformance.validate_source_observations([dict(f, native_event_id="EVT-0003")])
 
 
 def test_details_are_bounded():
