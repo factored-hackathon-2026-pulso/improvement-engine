@@ -2,7 +2,7 @@ import { z } from 'zod';
 import * as S from './schemas';
 import type { DebugEvent } from '../state/runStore';
 import { scrubAndReport } from '../security/clientScrubber';
-import { backoffDelay, classifyClose, parseSseFrames, type CloseAction } from './reconnect';
+import { backoffDelay, classifyClose, parseGone, parseSseFrames, type CloseAction } from './reconnect';
 
 export const DEBUG = '/internal/v1/debug';
 export class ApiError extends Error {
@@ -50,8 +50,10 @@ export interface StreamHandlers {
   onOpen: (reconnect: boolean) => void;
   /** Transport dropped; a retry is scheduled. */
   onDrop: (attempt: number) => void;
-  /** 410: the cursor was purged; caller must re-read the snapshot (a new connection follows). */
-  onResnapshot: () => void;
+  /** 410: the cursor was purged; caller must re-read the snapshot and use `recoveryCursor` as the floor (a new connection follows). */
+  onResnapshot: (info: { recoveryCursor: number | null }) => void;
+  /** Any bytes received (events or comment-only heartbeats): the stream is alive. */
+  onActivity?: () => void;
   /** Terminal: 401 / 403 / 404. No retry. */
   onFatal: (action: Exclude<CloseAction, 'retry' | 'resnapshot'>) => void;
 }
@@ -78,6 +80,7 @@ export function streamEvents(runId: string, h: StreamHandlers, opts: StreamOptio
     let gone = 0; // consecutive 410s: the second one backs off instead of hammering
     while (!ctl.signal.aborted) {
       let status = 0;
+      let recoveryCursor: number | null = null;
       try {
         const last = opts.lastEventId?.() ?? 0;
         const res = await fetch(`${DEBUG}/runs/${runId}/events/stream`, {
@@ -85,13 +88,15 @@ export function streamEvents(runId: string, h: StreamHandlers, opts: StreamOptio
         });
         if (!res.ok || !res.body) {
           status = res.status;
+          if (status === 410) recoveryCursor = parseGone(await res.json().catch(() => null)).recoveryCursor;
         } else {
-          h.onOpen(opened); opened = true; attempt = 0; gone = 0;
+          h.onOpen(opened); opened = true; attempt = 0; gone = 0; h.onActivity?.();
           const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
           let buf = '';
           for (;;) {
             const { value, done } = await reader.read();
             if (done) break;
+            h.onActivity?.();
             const r = parseSseFrames(buf + value);
             buf = r.rest;
             for (const f of r.frames) {
@@ -109,7 +114,7 @@ export function streamEvents(runId: string, h: StreamHandlers, opts: StreamOptio
       const action = classifyClose(status);
       if (action === 'session_expired' || action === 'forbidden') return h.onFatal(action);
       if (action === 'resnapshot') {
-        opened = false; h.onResnapshot(); gone += 1;
+        opened = false; h.onResnapshot({ recoveryCursor }); gone += 1;
         if (gone === 1) continue;
       }
       h.onDrop(attempt);

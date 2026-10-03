@@ -32,3 +32,13 @@ export function parseSseFrames(input: string): { frames: SseFrame[]; rest: strin
   }
   return { frames, rest: buf };
 }
+
+/** "Silence is not completion": no signal (event or heartbeat comment) for more than 2x the heartbeat means stale. */
+export const isStale = (lastSignalAt: number | null, now: number, heartbeatMs: number): boolean =>
+  lastSignalAt !== null && now - lastSignalAt > 2 * heartbeatMs;
+
+/** 410 `cursor_expired` body -> floor for the snapshot. An unusable cursor is null; events are never invented. */
+export function parseGone(body: unknown): { recoveryCursor: number | null } {
+  const v = typeof body === 'object' && body !== null ? (body as { recovery_after_sequence?: unknown }).recovery_after_sequence : undefined;
+  return { recoveryCursor: typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null };
+}
