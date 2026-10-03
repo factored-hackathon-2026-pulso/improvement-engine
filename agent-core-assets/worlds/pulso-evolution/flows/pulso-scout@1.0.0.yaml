@@ -4,7 +4,7 @@ priority: 50
 nodes:
   - {id: bind, type: tool, config: {tool: pulso/bind_context@1, args: {}, save_as: binding},
      next: {ok: read_briefing, error: esc_binding, timeout: esc_binding, denied: esc_binding}}
-  - {id: read_briefing, type: tool, config: {tool: pulso/wiki_read@1, args: {path: slots.briefing_ref}, save_as: briefing},
+  - {id: read_briefing, type: tool, config: {tool: pulso/wiki_read@1, args: {path: facts.binding.value.briefing_ref}, save_as: briefing},
      next: {ok: investigate, error: esc_read, timeout: esc_read, denied: esc_read}}
   - id: investigate
     type: agent

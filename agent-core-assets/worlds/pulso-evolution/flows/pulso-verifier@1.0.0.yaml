@@ -4,7 +4,7 @@ priority: 50
 nodes:
   - {id: bind, type: tool, config: {tool: pulso/bind_context@1, args: {}, save_as: binding},
      next: {ok: read_hypotheses, error: esc_binding, timeout: esc_binding, denied: esc_binding}}
-  - {id: read_hypotheses, type: tool, config: {tool: pulso/artifact_get@1, args: {artifact_ref: slots.hypotheses_ref}, save_as: hypotheses},
+  - {id: read_hypotheses, type: tool, config: {tool: pulso/artifact_get@1, args: {artifact_ref: facts.binding.value.hypotheses_ref}, save_as: hypotheses},
      next: {ok: verify_hypotheses, error: esc_read, timeout: esc_read, denied: esc_read}}
   - id: verify_hypotheses
     type: agent

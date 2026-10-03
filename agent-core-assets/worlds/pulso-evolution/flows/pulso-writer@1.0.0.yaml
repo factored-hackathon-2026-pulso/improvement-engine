@@ -4,22 +4,22 @@ priority: 50
 nodes:
   - {id: bind, type: tool, config: {tool: pulso/bind_context@1, args: {}, save_as: binding},
      next: {ok: fetch_plan, error: esc_binding, timeout: esc_binding, denied: esc_binding}}
-  - {id: fetch_plan, type: tool, config: {tool: pulso/artifact_get@1, args: {artifact_ref: slots.draft_plan_ref}, save_as: draft_plan},
+  - {id: fetch_plan, type: tool, config: {tool: pulso/artifact_get@1, args: {artifact_ref: facts.binding.value.draft_plan_ref}, save_as: draft_plan},
      next: {ok: chk_proposal, error: esc_read, timeout: esc_read, denied: esc_read}}
-  - {id: chk_proposal, type: rule, config: {expr: {"==": [{var: slots.proposal_id}, null]}}, next: {true: create, false: load_proposal}}
-  - {id: load_proposal, type: tool, config: {tool: registry/get_proposal@1, args: {proposal_id: slots.proposal_id}, save_as: proposal},
+  - {id: chk_proposal, type: rule, config: {expr: {"==": [{var: facts.binding.value.proposal_id}, null]}}, next: {true: create, false: load_proposal}}
+  - {id: load_proposal, type: tool, config: {tool: registry/get_proposal@1, args: {proposal_id: facts.binding.value.proposal_id}, save_as: proposal},
      next: {ok: chk_state, error: esc_read, timeout: esc_read, denied: esc_denied}}
   - {id: chk_state, type: rule, config: {expr: {"==": [{var: facts.proposal.value.candidate_hash}, null]}}, next: {true: chk_base, false: reopen}}
   - {id: reopen, type: tool, config: {draft: true, tool: registry/reopen@1, args: {proposal_id: facts.proposal.value.proposal_id}, save_as: proposal},
      next: {ok: verify_reopen, uncertain: verify_reopen, denied: esc_denied}}
   - {id: verify_reopen, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "reopen"]}, save_as: reopen_verified},
      next: {verified: chk_base, failed: esc_verify}}
-  - {id: create, type: tool, config: {draft: true, tool: registry/create_proposal@1, args: {agent_id: facts.draft_plan.value.agent_id, origin: builder_chat, title: facts.draft_plan.value.title}, save_as: proposal},
+  - {id: create, type: tool, config: {draft: true, tool: registry/create_proposal@1, args: {agent_id: facts.draft_plan.value.content.agent_id, origin: builder_chat, title: facts.draft_plan.value.content.title}, save_as: proposal},
      next: {ok: verify_create, uncertain: verify_create, denied: esc_denied}}
   - {id: verify_create, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "create_proposal"]}, save_as: created},
      next: {verified: chk_base, failed: esc_verify}}
-  - {id: chk_base, type: rule, config: {expr: {"==": [{var: facts.proposal.value.base_release_id}, {var: slots.base_release_id}]}}, next: {true: put, false: esc_base_mismatch}}
-  - {id: put, type: tool, config: {draft: true, tool: registry/put_draft@1, args: {proposal_id: facts.proposal.value.proposal_id, expected_rev: facts.proposal.value.rev, changes: facts.draft_plan.value.changes}, save_as: drafted},
+  - {id: chk_base, type: rule, config: {expr: {"==": [{var: facts.proposal.value.base_release_id}, {var: facts.binding.value.base_release_id}]}}, next: {true: put, false: esc_base_mismatch}}
+  - {id: put, type: tool, config: {draft: true, tool: registry/put_draft@1, args: {proposal_id: facts.proposal.value.proposal_id, expected_rev: facts.proposal.value.rev, changes: facts.draft_plan.value.content.changes}, save_as: drafted},
      next: {ok: verify_put, uncertain: verify_put, denied: esc_denied}}
   - {id: verify_put, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "put_draft"]}, save_as: put_verified},
      next: {verified: validate, failed: esc_verify}}
@@ -30,8 +30,8 @@ nodes:
      next: {ok: verify_freeze, uncertain: verify_freeze, denied: esc_denied}}
   - {id: verify_freeze, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "freeze"]}, save_as: freeze_verified},
      next: {verified: chk_evaluate, failed: esc_verify}}
-  - {id: chk_evaluate, type: rule, config: {expr: {"==": [{var: slots.evaluate_enabled}, true]}}, next: {true: evaluate, false: done}}
-  - {id: evaluate, type: tool, config: {draft: true, tool: registry/evaluate@1, args: {proposal_id: facts.proposal.value.proposal_id, suite_id: slots.evaluation_suite_id, suite_version: slots.evaluation_suite_version}, save_as: evaluation},
+  - {id: chk_evaluate, type: rule, config: {expr: {"==": [{var: facts.binding.value.evaluate_enabled}, true]}}, next: {true: evaluate, false: done}}
+  - {id: evaluate, type: tool, config: {draft: true, tool: registry/evaluate@1, args: {proposal_id: facts.proposal.value.proposal_id, suite_id: facts.binding.value.evaluation_suite_id, suite_version: facts.binding.value.evaluation_suite_version}, save_as: evaluation},
      next: {ok: verify_evaluate, uncertain: verify_evaluate, denied: esc_denied}}
   - {id: verify_evaluate, type: verify, config: {readback: registry/get_write@1, by: idempotency_key, predicate: {"==": [{var: readback.op}, "evaluate"]}, save_as: evaluate_verified},
      next: {verified: done, failed: esc_verify}}

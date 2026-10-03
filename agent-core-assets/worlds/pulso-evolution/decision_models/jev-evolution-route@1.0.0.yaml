@@ -7,6 +7,6 @@ output_schema:
   properties:
     route: {enum: [proceed, insufficient_input]}
 calibrated_fields: [route]
-input_view: [slots.briefing_ref]
+input_view: [facts.binding.value.briefing_ref]
 providers: [{provider: jev}]
 calibration: {method: none}

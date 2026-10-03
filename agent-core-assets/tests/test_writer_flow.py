@@ -27,8 +27,8 @@ def _tools(nodes: dict) -> list[str]:
 def test_writer_has_proposal_exists_rule_before_create() -> None:
     nodes = _nodes()
     rules = [n for n in nodes.values() if n["type"] == "rule"]
-    exists = [n for n in rules if "slots.proposal_id" in yaml.safe_dump(n["config"])]
-    assert exists, "no rule on slots.proposal_id"
+    exists = [n for n in rules if "facts.binding.value.proposal_id" in yaml.safe_dump(n["config"])]
+    assert exists, "no rule on facts.binding.value.proposal_id"
     nxt = exists[0]["next"]
     assert nodes[nxt[True]]["config"].get("tool") == "registry/create_proposal@1"
     assert nodes[nxt[False]]["config"].get("tool") == "registry/get_proposal@1"
@@ -37,7 +37,7 @@ def test_writer_has_proposal_exists_rule_before_create() -> None:
 def test_writer_checks_base_release_id_before_put_draft() -> None:
     nodes = _nodes()
     base = [n for n in nodes.values() if n["type"] == "rule" and "base_release_id" in yaml.safe_dump(n["config"])]
-    assert base and "slots.base_release_id" in yaml.safe_dump(base[0]["config"])
+    assert base and "facts.binding.value.base_release_id" in yaml.safe_dump(base[0]["config"])
     nxt = base[0]["next"]
     assert nodes[nxt[True]]["config"]["tool"] == "registry/put_draft@1"
     assert nodes[nxt[False]]["type"] == "escalate"

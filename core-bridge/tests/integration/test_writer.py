@@ -247,3 +247,35 @@ def test_production_reconciler_is_wired_with_binding_lookup_and_write_probe(comp
     assert probe.get_write(write_key("cmd-w1", "writer", 0)) is not None  # create_proposal key is readable
     assert probe.get_write(write_key("cmd-w1", "writer", 9)) is None
     assert callable(expected_write_keys(store)) and pid
+
+
+@pytest.mark.skipif(not WORLD.is_dir(), reason="agent-core-assets world absent")
+def test_writer_flow_reads_inputs_from_bind_facts_end_to_end(composed: Composed) -> None:
+    """Core 1.3.0 never validates run-input slots: the writer Flow reads `proposal_id`, `base_release_id`,
+    `evaluate_enabled` and the draft-plan ref from the `binding` fact provided by `pulso/bind_context`, then runs
+    the committed create -> put -> validate -> freeze sequence and ends without evaluating (evaluate_enabled=false)."""
+    changes = _changes()
+    plan = {"agent_id": "atencion", "title": "pulso-key:flow", "changes": changes}
+    from agent_core.domain.json import canonical_bytes
+    digest = hashlib.sha256(canonical_bytes(plan)).hexdigest()
+    composed.loop.backend.artifacts["plan-1"] = {
+        "schema_version": "1", "artifact": {"id": "plan-1", "digest": digest, "media_type": "application/json"},
+        "encoding": "json", "content": plan, "byte_length": len(canonical_bytes(plan))}
+    payload = body(stage="writer", agent_id="pulso-writer", agent_version="1.0.0",
+                   release_id=composed.release_ids["writer"], logical="wflow", memory_snapshot_ref=None,
+                   input={"draft_plan_ref": "plan-1", "proposal_id": None, "base_release_id": "rel-demo",
+                          "evaluate_enabled": False},
+                   registry_mutation_commitment={
+                       "mode": "write", "base_release_id": "rel-demo", "create_agent_id": "atencion",
+                       "create_origin": "builder_chat", "create_title": "pulso-key:flow",
+                       "put_draft_digest": put_draft_digest(None, None, changes), "operations": list(OPS)})
+    key = idem_key("t1", "j1", "writer", 1, "wflow")
+    r = composed.client.post("/internal/v1/core-tasks/invoke", json=payload,
+                             headers={**composed.headers("core_task_invoke"), "Idempotency-Key": key})
+    out = r.json()
+    ops = [b["operation"] for rq, b in zip(composed.loop.backend.requests, composed.loop.backend.bodies, strict=True)
+           if rq.url.path.endswith("/authorizations/check") and b]
+    assert out["state"] == "terminal_ok", (out, ops)
+    assert [o for o in ops if o.startswith("registry/")][:3] == [
+        "registry/create_proposal", "registry/put_draft", "registry/freeze"]
+    assert "native_evaluate" not in ops  # evaluate_enabled=false: the Flow ended at `chk_evaluate`

@@ -8,7 +8,7 @@ tool args. A ContextVar alone is NOT enough: worker threads of a pool do not inh
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -69,6 +69,9 @@ class InvocationContext:
     memory_snapshot_ref: str | None = None
     extract_manifest_ref: str | None = None
     commitment: RegistryMutationCommitment | None = None
+    # Declared run inputs of the stage (briefing_ref, proposal_id, ...). Core 1.3.0 keeps run-input slots `claimed`
+    # and never lets Flows read them, so `pulso/bind_context` re-exposes them as tool-origin facts.
+    inputs: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def evaluation_context_ref(self) -> str | None:

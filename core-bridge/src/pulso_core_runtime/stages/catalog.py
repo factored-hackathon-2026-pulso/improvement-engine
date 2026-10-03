@@ -55,7 +55,7 @@ class StageSpec:
     flow_id: str
     fact: str  # whitelisted fact / projection name
     tools_allowed: tuple[str, ...]  # agent-level allow-list (Agent.tools_allowed)
-    input_slots: tuple[str, ...]  # `slots.X` read by the Flow
+    input_slots: tuple[str, ...]  # run inputs read by the Flow as `facts.binding.value.X`
     node_tools: tuple[str, ...]  # tool ids usable by the engine's tool nodes of the Flow
     agent_node: str | None  # node id of the single agent node (None for the writer)
     agent_node_tools: tuple[str, ...] = ()
@@ -100,18 +100,23 @@ def stage_allows(stage: str, tool_id: str) -> bool:
 
 
 # -- CI: catalogue vs Flows/Agents in agent-core-assets ---------------------------------------------
-def _slots(node: Any, acc: set[str]) -> None:
+_INPUT_PREFIX = "facts.binding.value."
+
+
+def _slots(node: Any, acc: set[str], legacy: set[str] | None = None) -> None:
+    """Collects the run inputs a Flow reads. Core 1.3.0 never validates run-input slots, so Flows must read them
+    from `facts.binding.value.X` (provided by `pulso/bind_context`); any `slots.X` read lands in `legacy`."""
     if isinstance(node, str):
-        if node.startswith("slots."):
-            acc.add(node.split(".", 1)[1])
+        if node.startswith(_INPUT_PREFIX):
+            acc.add(node[len(_INPUT_PREFIX):].split(".", 1)[0])
+        elif node.startswith("slots.") and legacy is not None:
+            legacy.add(node)
     elif isinstance(node, dict):
-        for k, v in node.items():
-            if k == "var" and isinstance(v, str) and v.startswith("slots."):
-                acc.add(v.split(".", 1)[1])
-            _slots(v, acc)
+        for v in node.values():
+            _slots(v, acc, legacy)
     elif isinstance(node, list):
         for v in node:
-            _slots(v, acc)
+            _slots(v, acc, legacy)
 
 
 def check_against_assets(world_root: Path) -> list[str]:
@@ -137,7 +142,10 @@ def check_against_assets(world_root: Path) -> list[str]:
         if agent.get("mode") != "task" or agent.get("invocable_by") != ["builder"]:
             problems.append(f"{spec.stage}: Agent must be mode=task, invocable_by=[builder]")
         slots: set[str] = set()
-        _slots(nodes, slots)
+        legacy: set[str] = set()
+        _slots(nodes, slots, legacy)
+        if legacy:
+            problems.append(f"{spec.stage}: reads claimed slots {sorted(legacy)} (use facts.binding.value.*)")
         if slots != set(spec.input_slots):
             problems.append(f"{spec.stage}: slots {sorted(slots)} != catalogue {sorted(spec.input_slots)}")
         tool_nodes = {n["config"]["tool"] for n in nodes if n.get("type") == "tool"}

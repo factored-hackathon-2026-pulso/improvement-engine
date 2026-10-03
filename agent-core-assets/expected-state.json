@@ -179,7 +179,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "befc272aea64857ae7666eb3a6e0cb65622919b6693e6c5de7b811de4b44087a",
+        "content_hash": "ee3d549c8db72b784a43e20167188806696a280ac1de9a5416b3c379a7b7c43e",
         "id": "pulso-builder-design",
         "kind": "flow",
         "version": "1.0.0"
@@ -289,7 +289,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "1b797ed723e38893660389e105e934018ed6fa18a232f94db9ba0ff13581e26b",
+        "content_hash": "8b6cc31694101fcc439c752b249a9394d10b62fee5fe13805b94f9f85eb789b9",
         "id": "pulso-scout",
         "kind": "flow",
         "version": "1.0.0"
@@ -411,7 +411,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "70959eb0e8496cd36d25ba26c4bb511121608bd9c1131db096eed82bc878e9f2",
+        "content_hash": "aefad65e79ae060a2019b5a59a620fbe59294bce56c406f70f441db5b6571186",
         "id": "pulso-verifier",
         "kind": "flow",
         "version": "1.0.0"
@@ -533,7 +533,7 @@
         "version": "1.0.0"
       },
       {
-        "content_hash": "5b05ef2cd63f52d06d51bc2f55c8bc9842ccbe3a138b8215f4243f97b2c4c87e",
+        "content_hash": "7862bbe7c914908b5ea9cdff2e965515db9ef4ba7afb09b9aa766bbd776a025c",
         "id": "pulso-writer",
         "kind": "flow",
         "version": "1.0.0"

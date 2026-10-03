@@ -39,7 +39,10 @@ def test_bind_context_posts_cap27_body_and_returns_stage_facts() -> None:
     r = env.bind(ic)
     assert r.status is ToolStatus.ok
     assert r.result_full == {"binding_state": "confirmed", "tenant_id": ic.tenant_id, "job_id": ic.job_id,
-                             "is_scout": False, "is_verifier": False, "is_builder": True, "is_writer": True}
+                             "is_scout": False, "is_verifier": False, "is_builder": True, "is_writer": True,
+                             **{k: None for k in ("draft_plan_ref", "proposal_id", "base_release_id",
+                                                  "evaluation_suite_id", "evaluation_suite_version")},
+                             "evaluate_enabled": False}
     body = next(b for b in env.backend.bodies if b and "task_binding_ref" in b)
     assert set(body) == {"schema_version", "tenant_id", "job_id", "command_key", "request_digest", "attempt",
                          "core_run_id", "bridge_instance_id", "task_binding_ref"}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent_core.domain.shared import ToolStatus
 
+from pulso_core_runtime.stages.catalog import CATALOG
 from pulso_core_runtime.tools._common import Args, Deps, Outcome, err, ok
 from pulso_core_runtime.tools.broker import BrokerError, BrokerTimeout, BrokerUnavailable
 from pulso_core_runtime.tools.context import InvocationContext
@@ -39,4 +40,10 @@ def _facts(ic: InvocationContext) -> dict[str, object]:
     out: dict[str, object] = {"binding_state": "confirmed", "tenant_id": ic.tenant_id, "job_id": ic.job_id}
     for name in ("is_scout", "is_verifier", "is_builder", "is_writer"):
         out[name] = name in flags
+    # Core 1.3.0 never validates run-input slots, so Flows read the declared inputs from `facts.binding.value.*`.
+    # Only the stage's declared slots are exposed; absent ones are null (writer: evaluate_enabled false).
+    for slot in CATALOG[ic.stage].input_slots if ic.stage in CATALOG else ():
+        out[slot] = ic.inputs.get(slot)
+    if ic.stage == "writer":
+        out["evaluate_enabled"] = out.get("evaluate_enabled") is True
     return out

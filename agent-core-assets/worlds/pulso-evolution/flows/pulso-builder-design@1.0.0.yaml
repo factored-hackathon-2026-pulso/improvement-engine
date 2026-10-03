@@ -4,7 +4,7 @@ priority: 50
 nodes:
   - {id: bind, type: tool, config: {tool: pulso/bind_context@1, args: {}, save_as: binding},
      next: {ok: read_inputs, error: esc_binding, timeout: esc_binding, denied: esc_binding}}
-  - {id: read_inputs, type: tool, config: {tool: pulso/artifact_get@1, args: {artifact_ref: slots.design_input_ref}, save_as: design_input},
+  - {id: read_inputs, type: tool, config: {tool: pulso/artifact_get@1, args: {artifact_ref: facts.binding.value.design_input_ref}, save_as: design_input},
      next: {ok: design, error: esc_read, timeout: esc_read, denied: esc_read}}
   - id: design
     type: agent
