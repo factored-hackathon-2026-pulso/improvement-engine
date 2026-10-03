@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.1.0/domain_event.schema.json",
+  "title": "domain_event",
+  "description": "Domain row of the platform event_log (event_type must not use the legacy `exporter.` prefix).",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "const": "domain_event"
+    },
+    "source_namespace": {
+      "const": "platform_live"
+    },
+    "catalog_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "pattern": "^exporter\\."
+      }
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^EVT-.+$"
+    },
+    "event_time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+    },
+    "ingested_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+    },
+    "available_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+    },
+    "case_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "entity": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "entity_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "actor_role": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "actor_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "redacted_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_kind": {
+      "type": "string",
+      "enum": [
+        "observed",
+        "team_generated"
+      ]
+    },
+    "population_excluded": {
+      "type": "boolean"
+    },
+    "late": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "kind",
+    "source_namespace",
+    "catalog_version",
+    "tenant_id",
+    "event_type",
+    "event_id",
+    "event_time",
+    "ingested_at",
+    "available_at",
+    "case_id",
+    "entity",
+    "entity_id",
+    "actor_role",
+    "actor_ref",
+    "payload",
+    "redacted_fields",
+    "evidence_kind",
+    "population_excluded",
+    "late"
+  ],
+  "additionalProperties": false,
+  "x-contract-version": "1.1.0"
+}

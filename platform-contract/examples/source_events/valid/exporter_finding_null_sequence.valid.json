@@ -1,0 +1,120 @@
+{
+  "description": "Gap/turn findings are not tied to a row: source_sequence and described_source_sequence are null.",
+  "records": [
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "EVT-0004",
+      "source_sequence": 4,
+      "observed_at": "2026-03-02T14:00:01Z",
+      "source_event": {
+        "kind": "domain_event",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "event_type": "case.opened",
+        "event_id": "EVT-0004",
+        "event_time": "2026-03-02T14:00:00Z",
+        "ingested_at": "2026-03-02T14:00:01Z",
+        "available_at": "2026-03-02T14:00:01Z",
+        "case_id": "CASE-0001",
+        "entity": "case",
+        "entity_id": "CASE-0001",
+        "actor_role": "customer",
+        "actor_ref": "CUS-0001",
+        "payload": {},
+        "redacted_fields": [],
+        "evidence_kind": "observed",
+        "population_excluded": false,
+        "late": false
+      }
+    },
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "finding:gap_suspected:5-6",
+      "source_sequence": null,
+      "observed_at": "2026-03-02T14:05:00Z",
+      "source_event": {
+        "kind": "exporter_finding",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "source_id": "plat-a.events",
+        "native_event_id": "finding:gap_suspected:5-6",
+        "observed_at": "2026-03-02T14:05:00Z",
+        "finding_code": "gap_suspected",
+        "severity": "warning",
+        "described_native_event_id": null,
+        "described_source_sequence": null,
+        "details": {
+          "from_sequence": 5,
+          "to_sequence": 6,
+          "backfill_requested": true
+        }
+      }
+    },
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "EVT-0007",
+      "source_sequence": 7,
+      "observed_at": "2026-03-02T14:00:01Z",
+      "source_event": {
+        "kind": "domain_event",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "event_type": "case.opened",
+        "event_id": "EVT-0007",
+        "event_time": "2026-03-02T14:00:00Z",
+        "ingested_at": "2026-03-02T14:00:01Z",
+        "available_at": "2026-03-02T14:00:01Z",
+        "case_id": "CASE-0001",
+        "entity": "case",
+        "entity_id": "CASE-0001",
+        "actor_role": "customer",
+        "actor_ref": "CUS-0001",
+        "payload": {},
+        "redacted_fields": [],
+        "evidence_kind": "observed",
+        "population_excluded": false,
+        "late": false
+      }
+    },
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "finding:turn_sequence_gap:CASE-0001:2-2",
+      "source_sequence": null,
+      "observed_at": "2026-03-02T14:05:00Z",
+      "source_event": {
+        "kind": "exporter_finding",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "source_id": "plat-a.events",
+        "native_event_id": "finding:turn_sequence_gap:CASE-0001:2-2",
+        "observed_at": "2026-03-02T14:05:00Z",
+        "finding_code": "turn_sequence_gap",
+        "severity": "warning",
+        "described_native_event_id": null,
+        "described_source_sequence": null,
+        "details": {
+          "case_id": "CASE-0001",
+          "missing": [
+            2
+          ]
+        }
+      }
+    }
+  ],
+  "unique_count": 4,
+  "sequence_findings": [
+    {
+      "code": "gap_suspected",
+      "after": 4,
+      "next": 7
+    }
+  ]
+}

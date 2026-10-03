@@ -116,3 +116,106 @@ def check_database(conn: sqlite3.Connection) -> dict:
         violations += validate_rows(t, data[t])
     findings = check_event_stream(data["event_log"]) + check_turn_sequences(data["turns"])
     return {"violations": violations, "findings": findings, "rows": {t: len(v) for t, v in data.items()}}
+
+
+# --------------------------------------------------------------------------------------------------------------
+# Revision 1.1.0: source_event discriminator (exporter_finding vs domain_event) and observation-level checks.
+
+import hashlib  # noqa: E402
+
+from . import LEGACY_EXPORTER_PREFIX, MAX_FINDING_DETAILS_BYTES, load_source_schema  # noqa: E402
+
+_obs_validator: Draft202012Validator | None = None
+
+
+def classify_source_event(se) -> str:
+    """exporter_finding | domain_event (1.1.0 kinds), legacy_exporter_prefix | legacy_domain_event (1.0.0 shape, no
+    `kind`), or unsupported. Anything unsupported must be quarantined by the consumer with an explicit reason."""
+    if not isinstance(se, dict):
+        return "unsupported"
+    kind = se.get("kind")
+    if kind in ("exporter_finding", "domain_event"):
+        return kind
+    if kind is not None:
+        return "unsupported"
+    et = se.get("event_type")
+    if isinstance(et, str) and et:
+        return "legacy_exporter_prefix" if et.startswith(LEGACY_EXPORTER_PREFIX) else "legacy_domain_event"
+    return "unsupported"
+
+
+def _identity(r) -> tuple:
+    return (r.get("tenant_id"), r.get("source_id"), r.get("native_event_id"))
+
+
+def validate_source_observations(records) -> list[str]:
+    """Schema plus cross-field rules of the 1.1.0 observation view. Messages never echo row values."""
+    global _obs_validator
+    if _obs_validator is None:
+        _obs_validator = Draft202012Validator(load_source_schema("source_observation"), format_checker=_formats)
+    errs: list[str] = []
+    for i, r in enumerate(records):
+        n0 = len(errs)
+        for e in _obs_validator.iter_errors(r):
+            path = ".".join(str(p) for p in e.absolute_path) or "<row>"
+            detail = e.message if e.validator in ("required", "additionalProperties") else f"violates {e.validator}"
+            errs.append(f"source_observation[{i}].{path}: {detail}")
+        if len(errs) > n0 or not isinstance(r, dict):
+            continue
+        se = r["source_event"]
+        if se["tenant_id"] != r["tenant_id"]:
+            errs.append(f"source_observation[{i}].source_event.tenant_id: differs from envelope")
+        if se["kind"] == "exporter_finding":
+            for f in ("source_id", "native_event_id", "observed_at"):
+                if se[f] != r[f]:
+                    errs.append(f"source_observation[{i}].source_event.{f}: differs from envelope")
+            size = len(json.dumps(se["details"], separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+            if size > MAX_FINDING_DETAILS_BYTES:
+                errs.append(f"source_observation[{i}].source_event.details: exceeds {MAX_FINDING_DETAILS_BYTES} bytes")
+        else:
+            if se["event_id"] != r["native_event_id"]:
+                errs.append(f"source_observation[{i}].native_event_id: differs from source_event.event_id")
+            if r["source_sequence"] is None:
+                errs.append(f"source_observation[{i}].source_sequence: required for a domain_event")
+    return errs
+
+
+def _digest(se) -> str:
+    return hashlib.sha256(json.dumps(se, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
+def dedup_observations(records):
+    """Dedup on (tenant_id, source_id, native_event_id): first wins. Returns (unique, duplicates); a duplicate is
+    `duplicate_identical` (same source_event digest, safe to drop) or `identity_conflict` (same identity, different
+    content: must be rejected by the receiver, never silently merged)."""
+    seen: dict[tuple, str] = {}
+    unique, dups = [], []
+    for r in records:
+        k, d = _identity(r), _digest(r["source_event"])
+        if k not in seen:
+            seen[k] = d
+            unique.append(r)
+        else:
+            dups.append({"code": "duplicate_identical" if seen[k] == d else "identity_conflict", "identity": list(k)})
+    return unique, dups
+
+
+def check_observation_sequences(records) -> list[dict]:
+    """Continuity is evaluated over domain rows only. exporter_finding rows are excluded: they may carry a null
+    sequence or reuse the sequence of the row they describe, and may never fill a hole."""
+    findings: list[dict] = []
+    domain = sorted(
+        (r for r in records if classify_source_event(r["source_event"]) in ("domain_event", "legacy_domain_event")),
+        key=lambda r: r["source_sequence"])
+    for prev, cur in zip(domain, domain[1:]):
+        a, b = prev["source_sequence"], cur["source_sequence"]
+        if b == a:
+            findings.append({"code": "duplicate_sequence", "sequence": b})
+        elif b != a + 1:
+            findings.append({"code": "gap_suspected", "after": a, "next": b})
+    for r in records:
+        se = r["source_event"]
+        if classify_source_event(se) == "exporter_finding" and r["source_sequence"] is not None \
+                and r["source_sequence"] != se["described_source_sequence"]:
+            findings.append({"code": "finding_sequence_mismatch", "native_event_id": r["native_event_id"]})
+    return findings

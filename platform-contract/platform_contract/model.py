@@ -7,7 +7,8 @@ fails when the committed files differ from what this module generates.
 
 from __future__ import annotations
 
-CONTRACT_VERSION = "1.0.0"
+CONTRACT_VERSION = "1.1.0"
+PREVIOUS_CONTRACT_VERSION = "1.0.0"
 PROFILE = "platform_live.phase1"
 
 ARTIFACT_STAMP = {
@@ -184,7 +185,7 @@ TABLES: dict[str, dict] = {
 
 # Event catalog. status: admitted (ingest), denied (known, never ingest), planned (announced,
 # not yet admitted: quarantined like unknown until the versioned allow-list admits it).
-EVENT_CATALOG_VERSION = "1.0.0"
+EVENT_CATALOG_VERSION = "1.1.0"
 EVENT_TYPES = [
     ("case.opened", "cases", "case", "admitted"),
     ("case.queued", "cases", "case", "admitted"),
@@ -213,3 +214,25 @@ SQL_TYPES = {
     "string": "TEXT", "integer": "INTEGER", "boolean": "INTEGER",
     "datetime": "TEXT", "array": "TEXT", "object": "TEXT",
 }
+
+
+# --- Revision 1.1.0 (additive): exporter metadata gets its own discriminator. -----------------------------------
+# 1.0.0 identified exporter metadata by the `exporter.` event_type prefix inside `source_event`. That rule stays valid
+# as the documented interim for 1.0.0 (and for exporters configured with legacy_prefix=True). From 1.1.0 a
+# `source_event` carries `kind`: `exporter_finding` (exporter metadata, never a domain row) or `domain_event`.
+LEGACY_EXPORTER_PREFIX = "exporter."
+SOURCE_EVENT_KINDS = {
+    "domain_event": "row of the platform event_log, mapped to a domain observation",
+    "exporter_finding": "exporter-authored metadata (quality/coverage/profile): never a domain row, never part of "
+                        "source-sequence continuity",
+}
+# Closed list: a code outside it is unsupported and quarantined by the consumer.
+FINDING_CODES = (
+    "bad_row", "denied_event_type", "unknown_event_type", "late_event", "gap_suspected", "turn_sequence_gap",
+    "capability_profile", "dimension_snapshot",
+)
+FINDING_SEVERITIES = ("info", "warning", "error")
+FINDING_IDENTITY_PATTERN = r"^(finding|profile|dimensions):.+$"
+MAX_FINDING_DETAILS_BYTES = 32768  # serialized bound on `details` (checked by conformance, not JSON Schema)
+MAX_FINDING_DETAILS_PROPERTIES = 64
+EVIDENCE_KINDS = ["observed", "team_generated"]

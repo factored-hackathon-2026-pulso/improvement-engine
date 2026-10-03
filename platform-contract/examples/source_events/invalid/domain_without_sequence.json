@@ -1,0 +1,33 @@
+{
+  "description": "a domain_event requires a source_sequence",
+  "records": [
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "EVT-0001",
+      "source_sequence": null,
+      "observed_at": "2026-03-02T14:00:01Z",
+      "source_event": {
+        "kind": "domain_event",
+        "source_namespace": "platform_live",
+        "catalog_version": "platform_live.events/1",
+        "tenant_id": "tenant-1",
+        "event_type": "case.opened",
+        "event_id": "EVT-0001",
+        "event_time": "2026-03-02T14:00:00Z",
+        "ingested_at": "2026-03-02T14:00:01Z",
+        "available_at": "2026-03-02T14:00:01Z",
+        "case_id": "CASE-0001",
+        "entity": "case",
+        "entity_id": "CASE-0001",
+        "actor_role": "customer",
+        "actor_ref": "CUS-0001",
+        "payload": {},
+        "redacted_fields": [],
+        "evidence_kind": "observed",
+        "population_excluded": false,
+        "late": false
+      }
+    }
+  ]
+}

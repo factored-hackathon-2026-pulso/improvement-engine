@@ -1,0 +1,21 @@
+{
+  "description": "1.0.0 prefix shape has no kind: not valid against 1.1.0",
+  "records": [
+    {
+      "tenant_id": "tenant-1",
+      "source_id": "plat-a.events",
+      "native_event_id": "finding:x",
+      "source_sequence": null,
+      "observed_at": "2026-03-02T14:05:00Z",
+      "source_event": {
+        "event_type": "exporter.finding",
+        "source_namespace": "platform_live",
+        "tenant_id": "tenant-1",
+        "catalog_version": "platform_live.events/1",
+        "finding": {
+          "type": "x"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/1.1.0/exporter_finding.schema.json",
+  "title": "exporter_finding",
+  "description": "Exporter metadata (quality/coverage/profile). Identity is (tenant_id, source_id, native_event_id); never a domain row and never part of source-sequence continuity. `details` is inline and bounded (<= 32768 serialized bytes, checked by conformance).",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "const": "exporter_finding"
+    },
+    "source_namespace": {
+      "const": "platform_live"
+    },
+    "catalog_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "native_event_id": {
+      "type": "string",
+      "pattern": "^(finding|profile|dimensions):.+$"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+    },
+    "finding_code": {
+      "type": "string",
+      "enum": [
+        "bad_row",
+        "denied_event_type",
+        "unknown_event_type",
+        "late_event",
+        "gap_suspected",
+        "turn_sequence_gap",
+        "capability_profile",
+        "dimension_snapshot"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ]
+    },
+    "described_native_event_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "described_source_sequence": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "details": {
+      "type": "object",
+      "maxProperties": 64
+    }
+  },
+  "required": [
+    "kind",
+    "source_namespace",
+    "catalog_version",
+    "tenant_id",
+    "source_id",
+    "native_event_id",
+    "observed_at",
+    "finding_code",
+    "severity",
+    "described_native_event_id",
+    "described_source_sequence",
+    "details"
+  ],
+  "additionalProperties": false,
+  "x-contract-version": "1.1.0"
+}

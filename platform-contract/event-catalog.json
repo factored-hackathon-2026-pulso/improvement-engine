@@ -1,11 +1,46 @@
 {
-  "catalog_version": "1.0.0",
-  "contract_version": "1.0.0",
+  "catalog_version": "1.1.0",
+  "contract_version": "1.1.0",
   "profile": "platform_live.phase1",
   "statuses": {
     "admitted": "ingest",
     "denied": "known security/credential telemetry, never ingested",
     "planned": "announced by Product, not yet admitted: quarantine like unknown"
+  },
+  "source_event_kinds": {
+    "domain_event": "row of the platform event_log, mapped to a domain observation",
+    "exporter_finding": "exporter-authored metadata (quality/coverage/profile): never a domain row, never part of source-sequence continuity"
+  },
+  "exporter_finding": {
+    "finding_codes": [
+      "bad_row",
+      "denied_event_type",
+      "unknown_event_type",
+      "late_event",
+      "gap_suspected",
+      "turn_sequence_gap",
+      "capability_profile",
+      "dimension_snapshot"
+    ],
+    "severities": [
+      "info",
+      "warning",
+      "error"
+    ],
+    "schema": "schemas/exporter_finding.schema.json",
+    "identity": "(tenant_id, source_id, native_event_id)",
+    "excluded_from": [
+      "domain observations",
+      "population/window projections",
+      "source-sequence continuity"
+    ]
+  },
+  "legacy_exporter_prefix": {
+    "prefix": "exporter.",
+    "valid_for_contract_versions": [
+      "1.0.0"
+    ],
+    "status": "interim rule of 1.0.0; under 1.1.0 only exporters with legacy_prefix=True still emit it"
   },
   "unknown_policy": "count, quarantine with a quality finding, never fail the batch",
   "planned_prefixes": [
