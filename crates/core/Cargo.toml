@@ -28,6 +28,10 @@ name = "autonomous_scout"
 required-features = ["test-support"]
 
 [[test]]
+name = "platform_scout"
+required-features = ["test-support"]
+
+[[test]]
 name = "local_simulation"
 required-features = ["local-simulation"]
 

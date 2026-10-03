@@ -16,7 +16,8 @@ use improvement_engine_core::platform_observations::{
     TransportSequenceMode,
 };
 use improvement_engine_core::platform_sensor::{
-    LayerMetricSpec, PlatformLayerSensor, PlatformSensorError, PlatformSignalStatus,
+    ATTENTION_RUN_HANDOFF_RATE_METRIC_ID, ATTENTION_SOURCE_RUNS_POPULATION_REF, LayerMetricSpec,
+    PlatformLayerSensor, PlatformSensorError, PlatformSignalStatus,
 };
 
 const WINDOW_START: i64 = 1_759_320_000_000;
@@ -177,8 +178,13 @@ fn measure_signal(
     let projection = repository
         .window_projection("bank_demo", WINDOW_START, WINDOW_END, AS_OF)
         .unwrap();
-    let spec =
-        LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Tree, "tree_goals").unwrap();
+    let spec = LayerMetricSpec::handoff_rate(
+        ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+        1,
+        Layer::Tree,
+        ATTENTION_SOURCE_RUNS_POPULATION_REF,
+    )
+    .unwrap();
     sensor().measure(&spec, &projection).unwrap()
 }
 
@@ -194,7 +200,7 @@ fn measured_platform_signal_becomes_provenance_bound_discovery_input() {
             "attention-platform",
             "contract:attention-v1",
             1,
-            complete_coverage("tree_goals", 4),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 4),
             vec![event(
                 "handoff-1",
                 "run-1",
@@ -209,7 +215,7 @@ fn measured_platform_signal_becomes_provenance_bound_discovery_input() {
     let scope = CoreTaskScope::new("bank_demo", "job-a", "grant-platform", "authority-a").unwrap();
     let input = PlatformDiscoveryInput::from_measured_signal(&signal, &scope).unwrap();
 
-    assert_eq!(input.metric_id(), "tree_handoff_rate");
+    assert_eq!(input.metric_id(), ATTENTION_RUN_HANDOFF_RATE_METRIC_ID);
     assert_eq!(input.tenant_id(), "bank_demo");
     assert_eq!(input.numerator(), 1);
     assert_eq!(input.denominator(), 4);
@@ -235,7 +241,7 @@ fn platform_signal_without_measured_coverage_cannot_enter_discovery() {
             1,
             Coverage::new(
                 CoverageState::Partial,
-                "tree_goals",
+                ATTENTION_SOURCE_RUNS_POPULATION_REF,
                 WINDOW_START,
                 WINDOW_END,
                 Some(4),
@@ -275,7 +281,7 @@ fn platform_discovery_scope_is_tenant_bound_and_rejects_cross_tenant_replay() {
             "attention-platform",
             "contract:attention-v1",
             1,
-            complete_coverage("tree_goals", 4),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 4),
             events(),
         ))
         .unwrap();
@@ -285,7 +291,7 @@ fn platform_discovery_scope_is_tenant_bound_and_rejects_cross_tenant_replay() {
             "attention-platform",
             "contract:attention-v1",
             1,
-            complete_coverage("tree_goals", 4),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 4),
             events(),
         ))
         .unwrap();
@@ -296,8 +302,13 @@ fn platform_discovery_scope_is_tenant_bound_and_rejects_cross_tenant_replay() {
     let projection_b = tenant_b
         .window_projection("other_bank", WINDOW_START, WINDOW_END, AS_OF)
         .unwrap();
-    let spec =
-        LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Tree, "tree_goals").unwrap();
+    let spec = LayerMetricSpec::handoff_rate(
+        ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+        1,
+        Layer::Tree,
+        ATTENTION_SOURCE_RUNS_POPULATION_REF,
+    )
+    .unwrap();
     let signal_a = sensor().measure(&spec, &projection_a).unwrap();
     let signal_b = sensor().measure(&spec, &projection_b).unwrap();
     assert_eq!(signal_a.status(), signal_b.status());
@@ -328,7 +339,7 @@ fn measures_attention_handoffs_per_layer_from_one_complete_bound_denominator() {
             "attention-platform",
             "contract:attention-v1",
             1,
-            complete_coverage("tree_goals", 4),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 4),
             vec![
                 event(
                     "attention-handoff-1",
@@ -359,7 +370,7 @@ fn measures_attention_handoffs_per_layer_from_one_complete_bound_denominator() {
             "evolution-platform",
             "contract:evolution-v1",
             1,
-            complete_coverage("tree_goals", 99),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 99),
             vec![event(
                 "evolution-handoff",
                 "evolution-run-1",
@@ -403,8 +414,13 @@ fn measures_attention_handoffs_per_layer_from_one_complete_bound_denominator() {
     let projection = repository
         .window_projection("bank_demo", WINDOW_START, WINDOW_END, AS_OF)
         .unwrap();
-    let spec =
-        LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Tree, "tree_goals").unwrap();
+    let spec = LayerMetricSpec::handoff_rate(
+        ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+        1,
+        Layer::Tree,
+        ATTENTION_SOURCE_RUNS_POPULATION_REF,
+    )
+    .unwrap();
     assert_eq!(signal, sensor().measure(&spec, &projection).unwrap());
 
     let later_projection = repository
@@ -427,7 +443,7 @@ fn refuses_a_rate_when_coverage_is_partial_or_population_semantics_do_not_match(
             1,
             Coverage::new(
                 CoverageState::Partial,
-                "tree_goals",
+                ATTENTION_SOURCE_RUNS_POPULATION_REF,
                 WINDOW_START,
                 WINDOW_END,
                 None,
@@ -479,7 +495,7 @@ fn refuses_to_sum_overlapping_or_inconsistent_coverage_claims() {
                 "attention-platform",
                 "contract:attention-v1",
                 sequence,
-                complete_coverage("tree_goals", 1),
+                complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 1),
                 vec![event(
                     event_id,
                     format!("attention-run-{sequence}").as_str(),
@@ -504,7 +520,7 @@ fn refuses_a_rate_when_distinct_handoffs_exceed_the_trusted_population() {
             "attention-platform",
             "contract:attention-v1",
             1,
-            complete_coverage("tree_goals", 1),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 1),
             vec![
                 event(
                     "first-handoff",
@@ -538,7 +554,7 @@ fn refuses_a_rate_when_the_same_trusted_batch_contains_an_unknown_layer() {
             "attention-platform",
             "contract:attention-v1",
             1,
-            complete_coverage("tree_goals", 2),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 2),
             vec![
                 event(
                     "tree-handoff",
@@ -582,7 +598,7 @@ fn refuses_a_rate_when_the_trusted_batch_omits_a_layer_mapping() {
             "attention-platform",
             "contract:attention-v1",
             1,
-            complete_coverage("tree_goals", 2),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 2),
             vec![
                 event(
                     "tree-handoff",
@@ -605,15 +621,30 @@ fn refuses_a_rate_when_the_trusted_batch_omits_a_layer_mapping() {
 #[test]
 fn rejects_an_unknown_layer_or_an_unversioned_metric_spec_before_reading_evidence() {
     assert_eq!(
-        LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Unknown, "tree_goals"),
+        LayerMetricSpec::handoff_rate(
+            ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+            1,
+            Layer::Unknown,
+            ATTENTION_SOURCE_RUNS_POPULATION_REF,
+        ),
         Err(PlatformSensorError::InvalidSpec)
     );
     assert_eq!(
-        LayerMetricSpec::handoff_rate("Tree Handoff", 1, Layer::Tree, "tree_goals"),
+        LayerMetricSpec::handoff_rate(
+            "Tree Handoff",
+            1,
+            Layer::Tree,
+            ATTENTION_SOURCE_RUNS_POPULATION_REF,
+        ),
         Err(PlatformSensorError::InvalidSpec)
     );
     assert_eq!(
-        LayerMetricSpec::handoff_rate("tree_handoff_rate", 0, Layer::Tree, "tree_goals"),
+        LayerMetricSpec::handoff_rate(
+            ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+            0,
+            Layer::Tree,
+            ATTENTION_SOURCE_RUNS_POPULATION_REF,
+        ),
         Err(PlatformSensorError::InvalidSpec)
     );
 }
@@ -626,7 +657,7 @@ fn refuses_registered_but_unmapped_source_contracts_and_never_measures_zero_deno
             "other-attention-platform",
             "contract:attention-alt-v1",
             1,
-            complete_coverage("tree_goals", 1),
+            complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 1),
             vec![event(
                 "unmapped-source-handoff",
                 "attention-run-1",
@@ -646,7 +677,7 @@ fn refuses_registered_but_unmapped_source_contracts_and_never_measures_zero_deno
         "attention-platform",
         "contract:attention-v1",
         1,
-        complete_coverage("tree_goals", 0),
+        complete_coverage(ATTENTION_SOURCE_RUNS_POPULATION_REF, 0),
         vec![event(
             "zero-population-attempt",
             "attention-run-1",
@@ -668,29 +699,27 @@ fn commits_population_semantics_even_when_evidence_is_insufficient() {
     let projection = repository
         .window_projection("bank_demo", WINDOW_START, WINDOW_END, AS_OF)
         .unwrap();
-    let tree_goals =
-        LayerMetricSpec::handoff_rate("tree_handoff_rate", 1, Layer::Tree, "tree_goals").unwrap();
-    let different_population = LayerMetricSpec::handoff_rate(
-        "tree_handoff_rate",
+    let fixed_population = LayerMetricSpec::handoff_rate(
+        ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
         1,
         Layer::Tree,
-        "tree_goals_excluding_retries",
+        ATTENTION_SOURCE_RUNS_POPULATION_REF,
     )
     .unwrap();
     let sensor = sensor();
-    let first = sensor.measure(&tree_goals, &projection).unwrap();
-    let second = sensor.measure(&different_population, &projection).unwrap();
+    let first = sensor.measure(&fixed_population, &projection).unwrap();
     assert_eq!(first.status(), &PlatformSignalStatus::InsufficientEvidence);
-    assert_eq!(second.status(), &PlatformSignalStatus::InsufficientEvidence);
     assert!(first.metric_mapping_digest().is_some());
-    assert_eq!(second.metric_mapping_digest(), None);
     assert!(first.mapping_resolution_digest().starts_with("sha256:"));
-    assert!(second.mapping_resolution_digest().starts_with("sha256:"));
-    assert_ne!(
-        first.mapping_resolution_digest(),
-        second.mapping_resolution_digest(),
-        "the missing-mapping decision is a distinct, sealed receipt"
+    assert_eq!(first.population_ref(), ATTENTION_SOURCE_RUNS_POPULATION_REF);
+    assert_eq!(
+        LayerMetricSpec::handoff_rate(
+            ATTENTION_RUN_HANDOFF_RATE_METRIC_ID,
+            1,
+            Layer::Tree,
+            "tree_goals",
+        ),
+        Err(PlatformSensorError::InvalidSpec),
+        "V3 has no validated goal_ref grain yet, so a goal denominator cannot be requested"
     );
-    assert_ne!(first.population_ref(), second.population_ref());
-    assert_ne!(first.digest(), second.digest());
 }

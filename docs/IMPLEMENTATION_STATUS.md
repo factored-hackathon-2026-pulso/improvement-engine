@@ -23,6 +23,19 @@ repairing the malformed/duplicated source privacy fixture. See journal 0055.
   receipts. Its present in-memory adapter is not production-durability proof;
   the U33 corrective slice covers an overflow atomicity regression.
 
+- P2 signal portfolio (isolated composition boundary): preserves each
+  independently qualifying opaque E0 diagnostic signal as a stable,
+  provenance-bearing candidate record; rejects mixed tenant/run/grant/
+  authority/snapshot/cutoff scope; keeps unsupported and unknown metrics
+  explicit without fabricated zero counts; and distinguishes a measured
+  `no_qualifying_signals` result from `insufficient_evidence` when unavailable
+  metrics or a zero-known-denominator measurement leave no qualifying
+  candidate, and for an empty input portfolio (reason `no_signals_provided`;
+  never a negative finding). This boundary is not wired into
+  local_simulation, original-source discovery, or Agent Core. It currently
+  accepts the authenticated E0 diagnostic contract only; see
+  docs/data/signal-portfolio.md and journal 0057.
+
 ## Implemented boundaries and remaining integration limits
 
 - U07 durable V2 run-event persistence: new `pulso_jobs` / `pulso_run_events`
@@ -116,6 +129,45 @@ repairing the malformed/duplicated source privacy fixture. See journal 0055.
   configured cutoff and no known PII sentinels or evaluator labels.
   This demonstrates only bounded local detection/simulation behavior, not
   native Agent Core execution, causal validation, release, or business lift.
+  A separate P2 core API now deterministically assembles all qualifying E0
+  portfolio signals into descriptive proposal seeds with run/snapshot, signal,
+  and summary-commitment provenance. It validates three-metric disposition
+  coverage, recomputes qualification and coverage, and rejects stale summary
+  changes. The runner now persists the assembler output under
+  `proposal_assembly` for E0 only; OriginalBank does not receive an E0
+  portfolio or assembly. E0 also persists one sanitized aggregate
+  `proposal_assembly` RunEvent after any holdout event, identically in
+  `result.json` and `events.ndjson`; OriginalBank does not emit it. This is
+  local run observability, not a native Agent Core
+  artifact or a complete evaluation flow. The commitment is unkeyed staleness
+  detection, not authenticity; these seeds are not U08/U13 or Agent Core
+  evidence, evaluated changes, or business lift. Focused runner tests pass
+  24/24 for this slice. Prior actual-data E0 and OriginalBank smoke runs both
+  exited 0, and the full eight-gate local CI passed before this event addition.
+  See `docs/data/e0-proposal-assembly.md` and journals 0061–0063.
+  For a qualifying E0 recurring-query candidate, the runner now serializes
+  P3's candidate-bound mechanism evidence and exact route resolution in
+  `e0_mechanism_resolution`. Evidence is labeled `e0_local_run`; the empty
+  catalog is separately labeled `team_generated_empty_local_catalog_fixture`
+  with ephemeral durability. It returns `unlinked` because no exact mapping
+  was supplied. This is not a Core registry read, Flow existence/execution,
+  evaluation, or business-lift result. A run without a qualifying candidate
+  has no mechanism packet/event; OriginalBank remains without E0 output.
+  Focused runner tests pass 24/24 for this follow-on. See journal 0064.
+  A typed E0 `e0_investigation_proposal_plan` now composes the descriptive
+  proposal seed, exact candidate-bound evidence packet and exact route/catalog
+  resolution. It includes a deterministic content digest and a bounded
+  pending-review decision envelope: unlinked -> `investigate_mapping` or
+  `do_nothing`; mapped contract fixture -> read-only `investigate_mapped_flow`
+  or `do_nothing`. The artifact is explicitly not an Agent Core Proposal,
+  grants no authority and is non-executable. It is persisted with one
+  contiguous, privacy-safe event after mechanism resolution. Runs without a
+  qualifying recurring-query candidate and OriginalBank receive no plan/event.
+  No Core execution, evaluation, causality or lift is claimed. Focused Core and
+  Runner suites, core doctests, formatting, and all-target Clippy passed; full
+  local CI and actual-source smoke are pending. The resolver receipt is opaque,
+  resolver-minted, and bound to the exact evidence packet, so callers cannot
+  reconstruct it from public route fields. See journal 0065.
   The CLI additionally supports opt-in `--progress-jsonl` diagnostics on
   stderr: flushed phase-start/completion/skip/failure records with monotonic
   elapsed milliseconds and no source values, identifiers, paths, proposal
@@ -182,13 +234,13 @@ repairing the malformed/duplicated source privacy fixture. See journal 0055.
 - U30 / Issue #41: deterministic platform sensor. It consumes the U29 safe
   projection and emits only sealed, mapping-resolution-bound signals; it never
   reconstructs observation batches or coverage.
-- P1 platform discovery-input seam (current feature branch): measured U30
-  signals can be converted to a non-forgeable, provenance-preserving typed
-  input for hypothesis generation; insufficient U30 results are rejected. This
-  is not yet U13 Scout integration or an Opportunity/proposal. U13 currently
-  requires U08/U09/U10 receipts or E0-specific U04/U08/U12 evidence; a trusted
-  platform-specific invocation/receipt contract is still required before the
-  input can traverse Scout. See journal 0052.
+- P1 platform discovery-input seam: measured U30 signals are carried into a
+  bounded platform Scout candidate with tenant/job/grant/authority, metric,
+  window, source, and Core/model receipt provenance. P2 adds a deterministic
+  one-comparison descriptive-trend verifier. It does not implement full U14,
+  infer causes or business lift, create opportunities/proposals, or grant
+  execution authority. See
+  `docs/data/platform-discovery-verification.md` and journal 0058.
 - U14: independent verifier. It accepts only the U13-A opaque capability and
   emits a provenance-bound supported/refuted/uncertain report; persistent
   reports and U11 Jev-adapter wiring remain later dependent work.
@@ -377,6 +429,60 @@ repairing the malformed/duplicated source privacy fixture. See journal 0055.
 - The full stateful evaluation/release loop is not yet integrated end to end.
   U26 is an isolated synthetic-bank sandbox contract, not proof of a complete
   E0 candidate-vs-baseline deployment or canary flow.
+
+## Local consolidated E0 + OriginalBank run (2026-10-03)
+
+- The accumulated branch `feat/demo-e2e-proposal-resolution` passed all eight
+  gates in `scripts/verify-local-ci.ps1` on Windows with Cargo 1.98.1,
+  `CARGO_BUILD_JOBS=2`, and isolated target
+  `target-local-demo-e2e-consolidation`. This included format, workspace
+  Clippy, Rust unit/integration tests, runner/CLI tests, PowerShell contract
+  tests, and local CI preflight. One destructive real-PostgreSQL test remains
+  intentionally ignored unless its explicit isolated-database opt-in is set.
+- The documented combined runner completed on both local sources into separate
+  output directories under `output/snapshot-runs-2026-10-03-c`.
+- E0: 200 discovery cases; one candidate; recurring copilot-query recurrence
+  measured on all 200; selected holdout replicated 1,433/1,539 and explicitly
+  `descriptive_only`; one proposal seed with
+  `simulated_unverified/not_executed`; route `do_nothing`; the mechanism result
+  is `unlinked/no_exact_supported_flow_mapping` against an explicitly labeled
+  ephemeral empty catalog. Its result timeline has 15 contiguous activities,
+  ending with holdout → proposal assembly → mechanism resolution.
+- OriginalBank: all 7,671 source files (5,349,322,481 bytes) were inventoried;
+  the contact projection completed over 1,097 files. The run produced a
+  snapshot-only descriptive finding, no E0 proposal assembly and no E0
+  mechanism resolution. Its six-activity timeline ended `complete`.
+- These runs demonstrate an executable, source-separated local detection →
+  descriptive seed/evidence → explicit route disposition path. They do not
+  demonstrate a mapped Core artifact, real agent execution, causal resolution,
+  business lift, or autonomous improvement. The measured holdout is not an
+  outcome/efficacy test.
+
+### Final-head revalidation after the E0 investigation-plan slice
+
+- The complete eight-gate local CI was rerun on the final consolidated HEAD
+  `11615ae2718f1949619229df452bf8c3618ad524` and passed. The Core suite had
+  168 passed, 0 failed, and 1 intentionally ignored destructive PostgreSQL
+  integration test; the local CI script's Rust, Python contract, fixture, and
+  Pester gates were green.
+- The final-head E0 actual-data run completed as
+  `run_2588_1791058612421441700`: 200 discovery cases, 154 recurring-query
+  cases, one descriptive candidate, and selected holdout recurrence 1,433 /
+  1,539 (`descriptive_only`). The plan is
+  `e0_read_only_investigation_plan_not_agent_core_proposal`, recommends
+  `investigate_mapping`, is `pending_review` and `not_executable`, and records
+  `unlinked/no_exact_supported_flow_mapping`. The formal route remains
+  `do_nothing`; the timeline has 16 contiguous events and ends with the plan
+  event. No business lift or resolution is claimed.
+- A fresh OriginalBank rerun was started after E0, but the large source scan
+  was stopped before completion after unusually slow progress (3,696 / 7,671
+  files and about 610 MB / 5.35 GB). The completed OriginalBank smoke under
+  `output/snapshot-runs-2026-10-03-c` is from the preceding consolidated
+  revision, before the E0-only plan addition: it inventoried all 7,671 files,
+  projected contacts from 1,097 files, and emitted no E0 artifacts. On the
+  final HEAD, the full regression suite passed, including the explicit
+  OriginalBank/no-plan contract. Treat the final-head OriginalBank live scan as
+  not re-run, not as a failed test.
 
 ## Delivery discipline
 

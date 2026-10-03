@@ -85,6 +85,17 @@ la persistencia y el contrato de fuente confiable. Ningún evento se vuelve
 visible antes de la aceptación de su batch, aunque su reloj de origen sea
 anterior.
 
+The initial U30 handoff metric follows V3 §31.6.3: its ID is
+`attention_run_handoff_rate` and its fixed population is
+`attention_source_runs`. It counts distinct `source_run_ref` values with a
+handoff over all distinct eligible runs in the complete window. The trusted
+source contract must attest that `expected_population` counts exactly those
+eligible runs; U29 cannot derive that universe from observed events alone.
+Coverage labeled with a goal population, including `tree_goals`, or any other
+grain does not produce a measured rate. A `goal_id` grain remains unavailable
+until a validated `goal_ref` exists. The metric ID and population reference
+are included in the serialized spec, trusted mapping digest, and signal digest.
+
 ## Límites pendientes
 
 El registro de contratos y el puerto de autorización están inyectados en

@@ -45,20 +45,65 @@ The output path must not exist, must not overlap the input tree, and neither
 path may traverse an existing junction, symlink, or other reparse point in the
 path components inspected by the wrapper. Choose a new output path for each
 run. The wrapper never deletes or overwrites data. The engine writes its
-immutable run result and event timeline below that output directory.
+immutable run result and event timeline below that output directory. E0 runs
+append one aggregate-only `proposal_assembly` RunEvent after the optional
+post-selection holdout event; the same object appears in `result.json` and
+`events.ndjson`. OriginalBank runs do not emit this E0-specific activity.
+When the run contains a qualifying recurring-query candidate, E0 additionally
+persists a P3 `e0_mechanism_resolution` envelope and one matching timeline
+event after `proposal_assembly`. Its evidence provenance is `e0_local_run`; its
+catalog provenance is separately labeled
+`team_generated_empty_local_catalog_fixture` and
+`catalog_durability=ephemeral`. The fixture is an empty versioned catalog, so
+the honest resolution is `unlinked/no_exact_supported_flow_mapping`; it is not
+a Core registry read or evidence that any Flow exists. No candidate means no
+mechanism packet/event, and OriginalBank remains unchanged. The route receipt
+and event are descriptive local simulation only: they claim no Core execution,
+evaluation, or business lift. The event detail contains only catalog origin,
+durability, aggregate counts, and reason code; both persisted timeline views
+are identical. The typed resolver receipt also carries the exact lookup
+`metric_id` and opaque `pattern_ref`; the plan builder rejects a mismatch
+between that key and its candidate-bound packet. Internally this is an
+opaque, resolver-minted, serialize-only capability bound to the full packet;
+the private binding itself is not serialized and grants no action authority.
+The runner then persists a typed `e0_investigation_proposal_plan` and an
+`e0_investigation_proposal_plan` event. The plan is explicitly labeled
+`e0_read_only_investigation_plan_not_agent_core_proposal`, carries the exact
+candidate-bound packet and catalog resolution, and includes a deterministic
+content digest. For the current unlinked resolution, its pending-review
+suggestion is `investigate_mapping`, alongside `do_nothing`; a mapped contract
+fixture can only suggest read-only `investigate_mapped_flow`, alongside
+`do_nothing`. The envelope has no authority and is not executable. This is not
+a Core Proposal or a claim of cause, lift, compilation, evaluation or release.
+No qualifying recurring-query candidate, insufficient source evidence, or
+OriginalBank run produces the plan/event. The new event follows mechanism
+resolution with a contiguous sequence, and remains byte-equivalent as a JSON
+object in `result.json` and `events.ndjson`.
 
-For a direct CLI run, `--progress-jsonl` opts into live, sanitized phase
-progress on stderr. Each flushed JSONL record contains only schema version,
-one allowlisted phase (`source_preparation`, `detection`,
-`post_selection_holdout`, or `persist_outputs`), an allowlisted state
-(`started`, `completed`, `skipped`, or `failed`), and elapsed milliseconds
-since progress reporting began. It contains no run/tenant/source identifiers, paths,
-source values, proposal content, or underlying error text. A skipped holdout
-means the post-selection E0 holdout preconditions did not apply; it is not a
-zero result. This progress channel is diagnostic only: it does not change the
-atomic `result.json` / `events.ndjson` artifacts, and it is not a durable U07
-event ledger, OpenTelemetry exporter, health endpoint, or production monitor.
-The PowerShell wrapper does not currently expose this option.
+The PowerShell wrapper enables `--progress-jsonl` and displays only validated,
+sanitized progress while Cargo runs. Direct CLI users can pass that option to
+receive the same flushed JSONL records on stderr. Records contain schema
+version, allowlisted phase/status, and elapsed milliseconds. OriginalBank also
+reports fixed source-preparation stages (`inventory`, `manifest_scan`, and
+`contact_projection`) with aggregate completed/total file and byte counts.
+To keep large snapshots readable, each source stage emits at most 100
+intermediate aggregate updates, plus its start and terminal event; updates are
+deterministically spaced by completed-file count and always include exact final
+totals. A single large file therefore reports at its file boundary rather than
+as a byte-by-byte heartbeat.
+For a `started` record, zero totals are initialization placeholders until the
+inventory or size preflight is complete; they are not a measured zero-sized
+source. If writing progress to stderr fails, the observer records the failure
+and the current synchronous adapter stage may finish before the CLI aborts
+before detection or persistence. This avoids changing source preparation for
+an observer failure, but can spend time completing that stage.
+The stage records never include paths, table names, row/customer identifiers,
+hashes, source values, proposal content, or raw errors. A skipped holdout means
+the post-selection E0 holdout preconditions did not apply; it is not a zero
+result. Progress is diagnostic only: it does not change the manifest digest or
+the atomic `result.json` / `events.ndjson` artifacts, and it is not a durable
+U07 event ledger, OpenTelemetry exporter, health endpoint, or production
+monitor.
 
 This is not a defense against every filesystem alias or race: mapped-drive and
 UNC aliases are not canonicalized against one another, and another process
@@ -106,7 +151,17 @@ The wrapper prints only allowlisted run status, discovery counts, and a
 suppressed replay total for E0,
 allowlisted metric IDs with numerator/denominator/missing counts, proposal
 status/execution status, formal route, and (when present) a holdout status.
-Holdout matching/queried distinct-case counts are shown only when support meets
+For E0 it also prints the local-simulation portfolio status and aggregate
+disposition counts (`candidates`, `not_qualified`, `insufficient`, and
+`unavailable`). It does not print portfolio metric identifiers, digests,
+reasons, or per-signal values. Original-bank runs do not print or accept an E0
+portfolio.
+For E0, before printing the portfolio summary, the wrapper verifies a one-to-one
+mapping between signal metric IDs/digests and measured dispositions, rejects
+duplicate/missing dispositions, and checks that candidate and primary digest
+references point back to the signals. This is a consistency/safety boundary for
+the sanitized console summary; it does not independently recompute the Rust
+eligibility policy. Holdout matching/queried distinct-case counts are shown only when support meets
 the configured floor; `insufficient_support` prints `counts=suppressed`, and
 the engine always serializes the E0 top-level excluded-replay total as null,
 even when holdout evaluation is absent or unavailable. It must serialize all

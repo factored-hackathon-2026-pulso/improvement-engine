@@ -6,15 +6,24 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use improvement_engine_core::ArtifactReference;
+use improvement_engine_core::e0_investigation_plan::build_e0_investigation_plan;
+use improvement_engine_core::e0_mechanism_resolution::{
+    E0MechanismEvidencePacket, E0RouteCatalog, resolve_e0_mechanism_route,
+};
+use improvement_engine_core::e0_proposal_assembly::{
+    LocalProposalAssembly, LocalProposalAssemblyStatus, assemble_e0_proposals,
+};
 use improvement_engine_core::local_simulation::{
     LocalContactVolumeCell, LocalContactVolumeProjection, LocalObservedEvent, LocalObservedQuery,
     LocalRunInput, LocalRunMetadata, LocalRunResult, LocalSnapshotContactAggregate,
     LocalSnapshotContactProjection, LocalSourceKind, RunEvent, run_local_simulation,
 };
 use improvement_engine_source_adapters::{
-    CasePhase, E0Fact, E0HoldoutEvaluation, E0HoldoutPolicy, E0HoldoutStatus, PreparationConfig,
-    PreparedSource, SourceKind, attest_selected_e0_recurrence_candidate,
-    evaluate_e0_recurrence_holdout, prepare_e0_package, prepare_original_bank,
+    CasePhase, E0Fact, E0HoldoutEvaluation, E0HoldoutPolicy, E0HoldoutStatus,
+    OriginalPreparationProgress, PreparationConfig, PreparedSource, SourceKind,
+    attest_selected_e0_recurrence_candidate, evaluate_e0_recurrence_holdout, prepare_e0_package,
+    prepare_original_bank, prepare_original_bank_with_progress,
 };
 
 fn main() {
@@ -42,6 +51,18 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
     progress.stage("source_preparation", "started")?;
     let prepared_result = match options.source.as_str() {
         "e0" => prepare_e0_package(&options.input, &config),
+        "original" if options.progress_jsonl => {
+            let mut progress_error = None;
+            let prepared = prepare_original_bank_with_progress(&options.input, &config, |event| {
+                if progress_error.is_none() {
+                    progress_error = progress.source_progress(event).err();
+                }
+            });
+            if let Some(error) = progress_error {
+                return Err(error);
+            }
+            prepared
+        }
         "original" => prepare_original_bank(&options.input, &config),
         _ => return Err("--source must be e0 or original".into()),
     };
@@ -153,6 +174,33 @@ impl ProgressReporter {
             "event": "run_progress",
             "phase": phase,
             "status": status,
+            "elapsed_ms": self.started.elapsed().as_millis(),
+        });
+        let mut stderr = io::stderr().lock();
+        serde_json::to_writer(&mut stderr, &event)
+            .map_err(|_| "progress output failed".to_owned())?;
+        stderr
+            .write_all(b"\n")
+            .map_err(|_| "progress output failed".to_owned())?;
+        stderr
+            .flush()
+            .map_err(|_| "progress output failed".to_owned())
+    }
+
+    fn source_progress(&self, progress: OriginalPreparationProgress) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+        let event = serde_json::json!({
+            "schema_version": 1,
+            "event": "run_progress",
+            "phase": "source_preparation",
+            "stage": progress.stage,
+            "status": progress.status,
+            "files_completed": progress.files_completed,
+            "files_total": progress.files_total,
+            "bytes_completed": progress.bytes_completed,
+            "bytes_total": progress.bytes_total,
             "elapsed_ms": self.started.elapsed().as_millis(),
         });
         let mut stderr = io::stderr().lock();
@@ -405,15 +453,76 @@ fn persist_result(
     })?;
     let write_result = (|| {
         let mut result_json = serde_json::to_value(result).map_err(|error| error.to_string())?;
-        if result.source_kind == LocalSourceKind::E0 {
-            result_json["excluded_replay_case_count"] = serde_json::Value::Null;
-        }
+        let (proposal_event, mechanism_event, investigation_plan_event) =
+            if result.source_kind == LocalSourceKind::E0 {
+                result_json["excluded_replay_case_count"] = serde_json::Value::Null;
+                let proposal_assembly = assemble_e0_proposals(result).map_err(|_| {
+                    "E0 proposal assembly rejected invalid simulator evidence".to_owned()
+                })?;
+                let status = match proposal_assembly.status {
+                    LocalProposalAssemblyStatus::CandidatesReady => "candidates_ready",
+                    LocalProposalAssemblyStatus::InsufficientEvidence => "insufficient_evidence",
+                    LocalProposalAssemblyStatus::NoQualifyingSignals => "no_qualifying_signals",
+                    LocalProposalAssemblyStatus::Unsupported => "unsupported",
+                };
+                let event = RunEvent {
+                    sequence: next_persisted_event_sequence(&result.events, holdout_event)?,
+                    stage: "proposal_assembly".to_owned(),
+                    status: status.to_owned(),
+                    detail: format!(
+                        "candidate_count={}; disposition_count={}",
+                        proposal_assembly.candidates.len(),
+                        proposal_assembly.dispositions.len()
+                    ),
+                    observed_cutoff_rfc3339: result.observed_cutoff_rfc3339.clone(),
+                };
+                result_json["proposal_assembly"] = serde_json::to_value(&proposal_assembly)
+                    .map_err(|_| "E0 proposal assembly serialization failed".to_owned())?;
+                let mechanism = resolve_local_e0_mechanism(result, &proposal_assembly)?;
+                let mechanism_event = mechanism
+                    .as_ref()
+                    .map(|mechanism| make_mechanism_resolution_event(mechanism, &event))
+                    .transpose()?;
+                if let Some(mechanism) = &mechanism {
+                    result_json["e0_mechanism_resolution"] = mechanism.payload.clone();
+                    result_json["e0_investigation_proposal_plan"] =
+                        mechanism.investigation_plan.clone();
+                }
+                let investigation_plan_event = mechanism
+                    .as_ref()
+                    .zip(mechanism_event.as_ref())
+                    .map(|(mechanism, event)| {
+                        make_investigation_plan_event(&mechanism.investigation_plan, event)
+                    })
+                    .transpose()?;
+                (Some(event), mechanism_event, investigation_plan_event)
+            } else {
+                (None, None, None)
+            };
         result_json["e0_recurrence_holdout"] = match holdout {
             Some(evaluation) => serde_json::to_value(evaluation),
             None => Ok(serde_json::Value::Null),
         }
         .map_err(|error| error.to_string())?;
         if let Some(event) = holdout_event {
+            result_json["events"]
+                .as_array_mut()
+                .ok_or_else(|| "local result events are not an array".to_owned())?
+                .push(serde_json::to_value(event).map_err(|error| error.to_string())?);
+        }
+        if let Some(event) = &proposal_event {
+            result_json["events"]
+                .as_array_mut()
+                .ok_or_else(|| "local result events are not an array".to_owned())?
+                .push(serde_json::to_value(event).map_err(|error| error.to_string())?);
+        }
+        if let Some(event) = &mechanism_event {
+            result_json["events"]
+                .as_array_mut()
+                .ok_or_else(|| "local result events are not an array".to_owned())?
+                .push(serde_json::to_value(event).map_err(|error| error.to_string())?);
+        }
+        if let Some(event) = &investigation_plan_event {
             result_json["events"]
                 .as_array_mut()
                 .ok_or_else(|| "local result events are not an array".to_owned())?
@@ -431,6 +540,18 @@ fn persist_result(
             serde_json::to_writer(&mut ndjson, event).map_err(|error| error.to_string())?;
             ndjson.push(b'\n');
         }
+        if let Some(event) = &proposal_event {
+            serde_json::to_writer(&mut ndjson, event).map_err(|error| error.to_string())?;
+            ndjson.push(b'\n');
+        }
+        if let Some(event) = &mechanism_event {
+            serde_json::to_writer(&mut ndjson, event).map_err(|error| error.to_string())?;
+            ndjson.push(b'\n');
+        }
+        if let Some(event) = &investigation_plan_event {
+            serde_json::to_writer(&mut ndjson, event).map_err(|error| error.to_string())?;
+            ndjson.push(b'\n');
+        }
         write_new(&staging_dir.join("events.ndjson"), &ndjson)?;
         fs::rename(&staging_dir, &run_dir).map_err(io_message)
     })();
@@ -438,6 +559,144 @@ fn persist_result(
         let _ = fs::remove_dir_all(&staging_dir);
     }
     write_result
+}
+
+const LOCAL_E0_EMPTY_CATALOG_ID: &str = "0199b21c-7eab-7000-8000-000000000205";
+const LOCAL_E0_EVIDENCE_ORIGIN: &str = "e0_local_run";
+const LOCAL_E0_CATALOG_ORIGIN: &str = "team_generated_empty_local_catalog_fixture";
+const LOCAL_E0_MECHANISM_DURABILITY: &str = "ephemeral";
+
+struct LocalMechanismResolution {
+    payload: serde_json::Value,
+    investigation_plan: serde_json::Value,
+    status: &'static str,
+    reason: Option<&'static str>,
+}
+
+fn resolve_local_e0_mechanism(
+    result: &LocalRunResult,
+    assembly: &LocalProposalAssembly,
+) -> Result<Option<LocalMechanismResolution>, String> {
+    let Some(candidate) = assembly
+        .candidates
+        .iter()
+        .find(|candidate| candidate.metric_id == "e0_recurring_copilot_query_cases")
+    else {
+        return Ok(None);
+    };
+    let signal = result
+        .signals
+        .iter()
+        .find(|signal| {
+            signal.metric_id == candidate.metric_id && signal.digest == candidate.signal_digest
+        })
+        .ok_or_else(|| "E0 mechanism candidate has no corresponding signal".to_owned())?;
+    let packet = E0MechanismEvidencePacket::from_candidate(result, candidate, signal)
+        .map_err(|_| "E0 mechanism evidence rejected candidate binding".to_owned())?;
+    let catalog = E0RouteCatalog::empty(ArtifactReference {
+        tenant_id: result.tenant_id.clone(),
+        id: LOCAL_E0_EMPTY_CATALOG_ID.to_owned(),
+        revision: 1,
+        digest: E0RouteCatalog::content_digest(&[]),
+    })
+    .map_err(|_| "local E0 empty mechanism catalog is invalid".to_owned())?;
+    let resolution = resolve_e0_mechanism_route(&packet, &catalog);
+    let status = resolution.status();
+    let reason = resolution.reason();
+    let investigation_plan = build_e0_investigation_plan(candidate, &packet, &resolution)
+        .map_err(|_| "E0 investigation plan rejected candidate or route binding".to_owned())?;
+    investigation_plan
+        .validate_integrity()
+        .map_err(|_| "E0 investigation plan failed integrity validation".to_owned())?;
+    let investigation_plan = serde_json::to_value(&investigation_plan)
+        .map_err(|_| "E0 investigation plan serialization failed".to_owned())?;
+    let payload = serde_json::json!({
+        "evidence_origin": LOCAL_E0_EVIDENCE_ORIGIN,
+        "catalog_origin": LOCAL_E0_CATALOG_ORIGIN,
+        "catalog_durability": LOCAL_E0_MECHANISM_DURABILITY,
+        "evidence_packet": packet,
+        "resolution": resolution,
+    });
+    Ok(Some(LocalMechanismResolution {
+        payload,
+        investigation_plan,
+        status,
+        reason,
+    }))
+}
+
+fn make_investigation_plan_event(
+    plan: &serde_json::Value,
+    mechanism_event: &RunEvent,
+) -> Result<RunEvent, String> {
+    let sequence = increment_event_sequence(mechanism_event.sequence)?;
+    let recommendation = match plan["decision"]["recommended_option"].as_str() {
+        Some("investigate_mapping") => "investigate_mapping",
+        Some("investigate_mapped_flow") => "investigate_mapped_flow",
+        _ => return Err("E0 investigation plan has an unsupported recommendation".to_owned()),
+    };
+    if plan["artifact_kind"] != "e0_read_only_investigation_plan_not_agent_core_proposal"
+        || plan["decision"]["execution_state"] != "not_executable"
+        || plan["decision"]["authority"] != "none"
+    {
+        return Err("E0 investigation plan is not read-only".to_owned());
+    }
+    Ok(RunEvent {
+        sequence,
+        stage: "e0_investigation_proposal_plan".to_owned(),
+        status: "pending_review".to_owned(),
+        detail: format!(
+            "artifact_kind=e0_read_only_investigation_plan_not_agent_core_proposal; recommendation={recommendation}; execution=not_executable"
+        ),
+        observed_cutoff_rfc3339: mechanism_event.observed_cutoff_rfc3339.clone(),
+    })
+}
+
+fn make_mechanism_resolution_event(
+    mechanism: &LocalMechanismResolution,
+    proposal_event: &RunEvent,
+) -> Result<RunEvent, String> {
+    let sequence = increment_event_sequence(proposal_event.sequence)?;
+    let reason = mechanism
+        .reason
+        .map_or_else(|| "none".to_owned(), str::to_owned);
+    Ok(RunEvent {
+        sequence,
+        stage: "e0_mechanism_resolution".to_owned(),
+        status: mechanism.status.to_owned(),
+        detail: format!(
+            "catalog_origin={LOCAL_E0_CATALOG_ORIGIN}; catalog_durability={LOCAL_E0_MECHANISM_DURABILITY}; resolution_count=1; mapped_count={}; unlinked_count={}; reason={reason}",
+            u8::from(mechanism.status == "mapped"),
+            u8::from(mechanism.status == "unlinked")
+        ),
+        observed_cutoff_rfc3339: proposal_event.observed_cutoff_rfc3339.clone(),
+    })
+}
+
+fn next_persisted_event_sequence(
+    events: &[RunEvent],
+    holdout_event: Option<&RunEvent>,
+) -> Result<u32, String> {
+    let mut expected = 1_u32;
+    for event in events {
+        if event.sequence != expected {
+            return Err("local run event sequence is not contiguous".to_owned());
+        }
+        expected = increment_event_sequence(expected)?;
+    }
+    if let Some(event) = holdout_event {
+        if event.sequence != expected {
+            return Err("holdout event sequence is not contiguous".to_owned());
+        }
+        expected = increment_event_sequence(expected)?;
+    }
+    Ok(expected)
+}
+
+fn increment_event_sequence(sequence: u32) -> Result<u32, String> {
+    sequence
+        .checked_add(1)
+        .ok_or_else(|| "local run event sequence is exhausted".to_owned())
 }
 
 fn write_new(path: &PathBuf, bytes: &[u8]) -> Result<(), String> {
@@ -570,6 +829,16 @@ fn validate_mode(options: &Options) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    fn timeline_test_event(sequence: u32) -> RunEvent {
+        RunEvent {
+            sequence,
+            stage: "test".to_owned(),
+            status: "completed".to_owned(),
+            detail: "aggregate-only".to_owned(),
+            observed_cutoff_rfc3339: "2025-07-01T00:00:00Z".to_owned(),
+        }
+    }
+
     #[test]
     fn cli_requires_an_explicit_local_simulation_and_cutoff() {
         let args =
@@ -657,6 +926,23 @@ mod tests {
     }
 
     #[test]
+    fn persisted_event_sequence_requires_contiguous_values_and_checked_capacity() {
+        assert_eq!(next_persisted_event_sequence(&[], None), Ok(1));
+        assert_eq!(
+            next_persisted_event_sequence(&[timeline_test_event(1)], Some(&timeline_test_event(2))),
+            Ok(3)
+        );
+        assert_eq!(
+            next_persisted_event_sequence(&[timeline_test_event(1), timeline_test_event(3)], None),
+            Err("local run event sequence is not contiguous".to_owned())
+        );
+        assert_eq!(
+            increment_event_sequence(u32::MAX),
+            Err("local run event sequence is exhausted".to_owned())
+        );
+    }
+
+    #[test]
     fn safe_code_projection_rejects_arbitrary_text() {
         assert_eq!(safe_code("tool_lookup").unwrap(), "tool_lookup");
         assert!(safe_code("customer says private text").is_err());
@@ -741,6 +1027,7 @@ mod tests {
             excluded_replay_case_count: 0,
             signal: None,
             signals: Vec::new(),
+            local_simulation_portfolio: None,
             candidates: Vec::new(),
             verification_status: None,
             proposal: None,
@@ -754,6 +1041,18 @@ mod tests {
         let run_dir = output.join(&result.run_id);
         assert!(run_dir.join("result.json").is_file());
         assert!(run_dir.join("events.ndjson").is_file());
+        let persisted_result: serde_json::Value =
+            serde_json::from_slice(&fs::read(run_dir.join("result.json")).unwrap()).unwrap();
+        assert!(persisted_result.get("local_simulation_portfolio").is_none());
+        assert_eq!(persisted_result["events"][0]["stage"], "proposal_assembly");
+        assert_eq!(persisted_result["events"][0]["status"], "unsupported");
+        assert_eq!(
+            persisted_result["events"][0]["detail"],
+            "candidate_count=0; disposition_count=0"
+        );
+        let ndjson = fs::read_to_string(run_dir.join("events.ndjson")).unwrap();
+        let ndjson_event: serde_json::Value = serde_json::from_str(ndjson.trim()).unwrap();
+        assert_eq!(ndjson_event, persisted_result["events"][0]);
         assert!(persist_result(&output, &result, None, None).is_err());
         fs::remove_dir_all(output).unwrap();
     }

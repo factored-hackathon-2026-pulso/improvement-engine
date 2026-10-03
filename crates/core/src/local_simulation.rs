@@ -495,6 +495,29 @@ pub struct SignalSummary {
     pub coverage_basis_points: u16,
     pub pattern_ref: Option<String>,
     pub digest: String,
+    /// Deterministic commitment to this serialized projection. It detects
+    /// stale-field changes; it is not a signature or authenticity proof.
+    pub summary_commitment: String,
+}
+
+/// A local-only aggregate over E0 simulator signals. This is deliberately not
+/// the authenticated `SignalPortfolio` used by verified U08 evidence.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct LocalSimulationPortfolio {
+    pub source_family: String,
+    pub authority: String,
+    pub status: String,
+    pub dispositions: Vec<LocalSimulationSignalDisposition>,
+    pub candidate_signal_digests: Vec<String>,
+    pub primary_signal_digest: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct LocalSimulationSignalDisposition {
+    pub metric_id: String,
+    pub signal_digest: Option<String>,
+    pub state: String,
+    pub reason: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -545,6 +568,8 @@ pub struct LocalRunResult {
     pub excluded_replay_case_count: u64,
     pub signal: Option<SignalSummary>,
     pub signals: Vec<SignalSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_simulation_portfolio: Option<LocalSimulationPortfolio>,
     pub candidates: Vec<CandidateSummary>,
     pub verification_status: Option<String>,
     pub proposal: Option<ImprovementDraft>,
@@ -684,6 +709,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             excluded_replay_case_count: 0,
             signal: None,
             signals: Vec::new(),
+            local_simulation_portfolio: None,
             candidates: Vec::new(),
             verification_status: None,
             proposal: None,
@@ -704,6 +730,13 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         .map(|signal| summarize_signal(&input, signal))
         .collect::<Vec<_>>();
     let summary = summaries[primary_signal_index].clone();
+    let local_simulation_portfolio = build_local_simulation_portfolio(
+        &summaries,
+        &summary,
+        input.query_table_available,
+        input.minimum_recurring_query_support,
+    );
+    record_local_portfolio_event(&mut events, &local_simulation_portfolio);
     record_event(
         &mut events,
         "detection",
@@ -779,6 +812,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             excluded_replay_case_count: input.excluded_replay_cases,
             signal: Some(summary),
             signals: summaries,
+            local_simulation_portfolio: Some(local_simulation_portfolio),
             candidates: Vec::new(),
             verification_status: None,
             proposal: None,
@@ -916,6 +950,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         excluded_replay_case_count: input.excluded_replay_cases,
         signal: Some(summary),
         signals: summaries,
+        local_simulation_portfolio: Some(local_simulation_portfolio),
         candidates: candidate_summaries,
         verification_status: Some(verification_status),
         proposal: Some(improvement_draft),
@@ -1227,7 +1262,7 @@ fn recurrence_pattern_ref(input: &LocalRunInput) -> Option<String> {
 fn summarize_signal(input: &LocalRunInput, signal: &DeterministicSignal) -> SignalSummary {
     let recurrence = signal.metric_id == "e0_recurring_copilot_query_cases";
     let retry = signal.metric_id == "e0_tool_retry_case_rate";
-    SignalSummary {
+    let mut summary = SignalSummary {
         metric_id: signal.metric_id.clone(),
         detector_policy_id: if recurrence {
             RECURRING_QUERY_POLICY.to_owned()
@@ -1252,7 +1287,125 @@ fn summarize_signal(input: &LocalRunInput, signal: &DeterministicSignal) -> Sign
         coverage_basis_points: signal.coverage_basis_points,
         pattern_ref: recurrence.then(|| recurrence_pattern_ref(input)).flatten(),
         digest: signal.digest.clone(),
+        summary_commitment: String::new(),
+    };
+    summary.summary_commitment = signal_summary_commitment(&summary);
+    summary
+}
+
+/// Hashes every public summary field except this commitment itself. This is a
+/// staleness/integrity check for the local projection, not an authenticity
+/// boundary: callers able to rewrite all fields can recompute the hash.
+pub(crate) fn signal_summary_commitment(signal: &SignalSummary) -> String {
+    let mut unsigned = signal.clone();
+    unsigned.summary_commitment.clear();
+    let serialized = serde_json::to_string(&unsigned)
+        .expect("SignalSummary contains only infallibly serializable fields");
+    derive_digest(&serialized)
+}
+
+fn build_local_simulation_portfolio(
+    signals: &[SignalSummary],
+    primary: &SignalSummary,
+    query_table_available: bool,
+    minimum_recurring_query_support: u64,
+) -> LocalSimulationPortfolio {
+    let mut dispositions = Vec::with_capacity(signals.len() + usize::from(!query_table_available));
+    let mut candidate_signal_digests = Vec::new();
+
+    for signal in signals {
+        // `signals` comes directly from `measure_signals`, whose MetricKind
+        // variants are closed to these three IDs. Keep unknown IDs non-eligible
+        // defensively; they cannot be supplied through the public run input.
+        let qualifies = match signal.metric_id.as_str() {
+            "e0_technical_error_rate" | "e0_tool_retry_case_rate" => signal.numerator > 0,
+            "e0_recurring_copilot_query_cases" => {
+                signal.numerator >= minimum_recurring_query_support
+            }
+            _ => false,
+        };
+        let (state, reason) = if signal.denominator == 0 {
+            ("insufficient_evidence", "no_known_denominator")
+        } else if qualifies {
+            candidate_signal_digests.push(signal.digest.clone());
+            (
+                "candidate_for_simulated_investigation",
+                if signal.missing > 0 {
+                    "measured_threshold_met_with_missing_observations"
+                } else {
+                    "measured_threshold_met"
+                },
+            )
+        } else if signal.missing > 0 {
+            ("insufficient_evidence", "partial_missing_observations")
+        } else if signal.metric_id == "e0_recurring_copilot_query_cases"
+            && signal.numerator < minimum_recurring_query_support
+        {
+            ("not_qualified", "below_minimum_distinct_case_support")
+        } else {
+            ("not_qualified", "no_positive_measured_observation")
+        };
+        dispositions.push(LocalSimulationSignalDisposition {
+            metric_id: signal.metric_id.clone(),
+            signal_digest: Some(signal.digest.clone()),
+            state: state.into(),
+            reason: reason.into(),
+        });
     }
+
+    if !query_table_available {
+        dispositions.push(LocalSimulationSignalDisposition {
+            metric_id: "e0_recurring_copilot_query_cases".into(),
+            signal_digest: None,
+            state: "unavailable".into(),
+            reason: "source_table_unavailable".into(),
+        });
+    }
+
+    let status = if !candidate_signal_digests.is_empty() {
+        "candidates_ready"
+    } else if dispositions.is_empty()
+        || dispositions
+            .iter()
+            .any(|item| matches!(item.state.as_str(), "insufficient_evidence" | "unavailable"))
+    {
+        "insufficient_evidence"
+    } else {
+        "no_qualifying_signals"
+    };
+
+    LocalSimulationPortfolio {
+        source_family: "e0".into(),
+        authority: "simulator_only".into(),
+        status: status.into(),
+        dispositions,
+        candidate_signal_digests,
+        primary_signal_digest: Some(primary.digest.clone()),
+    }
+}
+
+fn record_local_portfolio_event(events: &mut Vec<RunEvent>, portfolio: &LocalSimulationPortfolio) {
+    let count_state = |state: &str| {
+        portfolio
+            .dispositions
+            .iter()
+            .filter(|item| item.state == state)
+            .count()
+    };
+    record_event(
+        events,
+        "signal_portfolio",
+        "simulator_only",
+        &format!(
+            "status={} dispositions={} candidates={} not_qualified={} insufficient={} unavailable={}",
+            portfolio.status,
+            portfolio.dispositions.len(),
+            count_state("candidate_for_simulated_investigation"),
+            count_state("not_qualified"),
+            count_state("insufficient_evidence"),
+            count_state("unavailable"),
+        ),
+    );
 }
 
 fn select_primary_signal_index(
