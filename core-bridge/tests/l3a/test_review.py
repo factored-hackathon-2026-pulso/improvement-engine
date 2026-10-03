@@ -122,9 +122,9 @@ def test_credential_issue_requires_tenant_claim() -> None:
 CHILD = textwrap.dedent("""
     import sys, psycopg
     from pulso_core_runtime.store.receipts import ReceiptStore
-    dsn, key = sys.argv[1], sys.argv[2]
+    dsn, key, dig = sys.argv[1], sys.argv[2], sys.argv[3]
     s = ReceiptStore(dsn)
-    s.begin(tenant_id="t1", key=key, digest="d"*64, stage="writer", job_id="j1", attempt=1, release_id="rel-1",
+    s.begin(tenant_id="t1", key=key, digest=dig, stage="writer", job_id="j1", attempt=1, release_id="rel-1",
             task_binding_ref="r", principal_id="p")
     assert s.transition("t1", key, "sent") is not None
     conn = psycopg.connect(dsn)  # the "registry write" + idempotency record: uncommitted when killed
@@ -137,8 +137,10 @@ CHILD = textwrap.dedent("""
 
 
 async def test_kill9_between_write_and_commit_reenters_without_rerun(dsn: str) -> None:
+    from pulso_core_runtime.invoke.models import request_digest
     K = idem_key("t1", "j1", "writer", 1, "k")
-    proc = subprocess.Popen([sys.executable, "-c", CHILD, dsn, K], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    b = body(stage="writer", agent_id="pulso-writer")
+    proc = subprocess.Popen([sys.executable, "-c", CHILD, dsn, K, request_digest(b)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             text=True,
                             env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
     assert proc.stdout is not None and proc.stdout.readline().strip() == "READY"
@@ -148,7 +150,7 @@ async def test_kill9_between_write_and_commit_reenters_without_rerun(dsn: str) -
     with psycopg.connect(dsn) as c:
         assert c.execute("SELECT count(*) FROM pulso_bridge.fake_effect").fetchone()[0] == 0  # rolled back
     svc, core = build_service(dsn)
-    out = await svc.invoke("t1", K, body(stage="writer", agent_id="pulso-writer"))
+    out = await svc.invoke("t1", K, b)
     assert core.start_calls == []  # never re-executes
     assert out.status == 202 and out.body["state"] in ("manual_reconcile", "unknown")
     assert ReceiptStore(dsn).get("t1", K).state != "terminal_ok"  # type: ignore[union-attr]
