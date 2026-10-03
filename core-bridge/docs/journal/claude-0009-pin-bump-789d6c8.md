@@ -41,3 +41,13 @@ scripted EvalPort + fake clock. Expand/contract: real binaries of both pins over
 - No test with `HttpLLMGateway` through `SpendMeteringGateway` (needs an llm-gateway double); deployment needs the new env.
 - Upstream HTTP export PG queries (`list_runs`, `read_after`) are not exercised (export off).
 - GitHub Actions budget unknown: results are local only.
+
+## Addendum (coordinator items)
+- `local/core/compose.core.yaml` core-runtime forwards `AGENTCORE_LLM_GATEWAY_URL/_TOKEN`, `PULSO_EVAL_BUDGETS` and the new inline
+  `PULSO_EVAL_BUDGETS_JSON` (no file mount; a readable file wins); `LLM_ENDPOINTS`/`PULSO_LLM_API_KEY` removed. Fail closed: with no
+  gateway configured upstream starts an `UnconfiguredLLMGateway` (generation fails `unavailable`, task stages fail; conversational
+  M8 falls back to templates, which upstream does not let us disable). Pester `Grants.Tests.ps1` updated.
+- `build-image.ps1` builds from a clean `git archive` context (`prepare-core-context.ps1`, drops upstream's `.dockerignore` that
+  excludes `contracts`); tests in `tests/runtime/test_image.py`.
+- e2e-core overlay image removed (core.env carries the gateway pair + inline budgets); `e2e-core/run.ps1` 30 passed, 1 skipped.
+- JEV base URL is not configurable upstream (`HttpJevTransport` fixed `DEFAULT_BASE_URL`): documented only.
