@@ -30,6 +30,19 @@ path components inspected by the wrapper. Choose a new output path for each
 run. The wrapper never deletes or overwrites data. The engine writes its
 immutable run result and event timeline below that output directory.
 
+For a direct CLI run, `--progress-jsonl` opts into live, sanitized phase
+progress on stderr. Each flushed JSONL record contains only schema version,
+one allowlisted phase (`source_preparation`, `detection`,
+`post_selection_holdout`, or `persist_outputs`), an allowlisted state
+(`started`, `completed`, `skipped`, or `failed`), and elapsed milliseconds
+since progress reporting began. It contains no run/tenant/source identifiers, paths,
+source values, proposal content, or underlying error text. A skipped holdout
+means the post-selection E0 holdout preconditions did not apply; it is not a
+zero result. This progress channel is diagnostic only: it does not change the
+atomic `result.json` / `events.ndjson` artifacts, and it is not a durable U07
+event ledger, OpenTelemetry exporter, health endpoint, or production monitor.
+The PowerShell wrapper does not currently expose this option.
+
 This is not a defense against every filesystem alias or race: mapped-drive and
 UNC aliases are not canonicalized against one another, and another process
 must not mutate/repoint path components concurrently with validation or the

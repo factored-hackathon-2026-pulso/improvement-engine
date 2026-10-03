@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use improvement_engine_core::local_simulation::{
     LocalContactVolumeCell, LocalContactVolumeProjection, LocalObservedEvent, LocalObservedQuery,
@@ -31,6 +31,7 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
         return Ok(());
     }
     validate_mode(&options)?;
+    let progress = ProgressReporter::new(options.progress_jsonl);
     let config = PreparationConfig::new(
         options.tenant_id.clone(),
         options.observed_cutoff,
@@ -38,23 +39,65 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
     )
     .and_then(|config| config.with_minimum_contact_cell_count(options.minimum_contact_cell_count))
     .map_err(|error| format!("invalid source preparation config: {error}"))?;
-    let prepared = match options.source.as_str() {
+    let run_id = make_run_id()?;
+    progress.stage("source_preparation", "started")?;
+    let prepared_result = match options.source.as_str() {
         "e0" => prepare_e0_package(&options.input, &config),
         "original" => prepare_original_bank(&options.input, &config),
         _ => return Err("--source must be e0 or original".into()),
-    }
-    .map_err(|error| format!("source preparation failed: {error}"))?;
+    };
+    let prepared = match prepared_result {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            progress.stage("source_preparation", "failed")?;
+            return Err(format!("source preparation failed: {error}"));
+        }
+    };
 
-    let run_id = make_run_id()?;
-    let input = to_run_input(&prepared, &run_id, &options.tenant_id)?
-        .with_minimum_recurring_query_support(options.minimum_recurring_query_support)
-        .map_err(|error| format!("invalid recurrence policy: {error:?}"))?;
-    let result = run_local_simulation(input).map_err(|error| format!("run failed: {error}"))?;
-    let holdout = evaluate_selected_recurrence_after_discovery(
+    let input = match to_run_input(&prepared, &run_id, &options.tenant_id).and_then(|input| {
+        input
+            .with_minimum_recurring_query_support(options.minimum_recurring_query_support)
+            .map_err(|error| format!("invalid recurrence policy: {error:?}"))
+    }) {
+        Ok(input) => input,
+        Err(error) => {
+            progress.stage("source_preparation", "failed")?;
+            return Err(error);
+        }
+    };
+    // Projection validation is part of preparation; retain both its provenance
+    // and the input until the phase is fully ready for detection.
+    progress.stage("source_preparation", "completed")?;
+    progress.stage("detection", "started")?;
+    let result = match run_local_simulation(input) {
+        Ok(result) => {
+            progress.stage("detection", "completed")?;
+            result
+        }
+        Err(error) => {
+            progress.stage("detection", "failed")?;
+            return Err(format!("run failed: {error}"));
+        }
+    };
+    progress.stage("post_selection_holdout", "started")?;
+    let holdout = match evaluate_selected_recurrence_after_discovery(
         &prepared,
         &result,
         options.minimum_recurring_query_support,
-    )?;
+    ) {
+        Ok(Some(holdout)) => {
+            progress.stage("post_selection_holdout", "completed")?;
+            Some(holdout)
+        }
+        Ok(None) => {
+            progress.stage("post_selection_holdout", "skipped")?;
+            None
+        }
+        Err(error) => {
+            progress.stage("post_selection_holdout", "failed")?;
+            return Err(error);
+        }
+    };
     let holdout_event = holdout.as_ref().map(|evaluation| {
         make_holdout_event(
             evaluation,
@@ -62,12 +105,19 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
             &result.observed_cutoff_rfc3339,
         )
     });
-    persist_result(
+    progress.stage("persist_outputs", "started")?;
+    let persist = persist_result(
         &options.output,
         &result,
         holdout.as_ref(),
         holdout_event.as_ref(),
-    )?;
+    );
+    if persist.is_ok() {
+        progress.stage("persist_outputs", "completed")?;
+    } else {
+        progress.stage("persist_outputs", "failed")?;
+    }
+    persist?;
     println!("run_id={run_id}");
     println!("status={}", result.terminal_status);
     println!("mode={}", result.execution_mode);
@@ -80,6 +130,42 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
         options.output.join(&run_id).join("events.ndjson").display()
     );
     Ok(())
+}
+
+struct ProgressReporter {
+    enabled: bool,
+    started: Instant,
+}
+
+impl ProgressReporter {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            started: Instant::now(),
+        }
+    }
+
+    fn stage(&self, phase: &str, status: &str) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+        let event = serde_json::json!({
+            "schema_version": 1,
+            "event": "run_progress",
+            "phase": phase,
+            "status": status,
+            "elapsed_ms": self.started.elapsed().as_millis(),
+        });
+        let mut stderr = io::stderr().lock();
+        serde_json::to_writer(&mut stderr, &event)
+            .map_err(|_| "progress output failed".to_owned())?;
+        stderr
+            .write_all(b"\n")
+            .map_err(|_| "progress output failed".to_owned())?;
+        stderr
+            .flush()
+            .map_err(|_| "progress output failed".to_owned())
+    }
 }
 
 fn evaluate_selected_recurrence_after_discovery(
@@ -366,6 +452,7 @@ struct Options {
     arranque_cases: usize,
     minimum_recurring_query_support: u64,
     minimum_contact_cell_count: u64,
+    progress_jsonl: bool,
     help: bool,
 }
 
@@ -381,6 +468,7 @@ impl Options {
             arranque_cases: 200,
             minimum_recurring_query_support: 20,
             minimum_contact_cell_count: 5,
+            progress_jsonl: false,
             help: false,
         };
         let mut args = args.into_iter();
@@ -391,6 +479,10 @@ impl Options {
             let key = arg.to_string_lossy();
             if key == "--help" || key == "-h" {
                 options.help = true;
+                continue;
+            }
+            if key == "--progress-jsonl" {
+                options.progress_jsonl = true;
                 continue;
             }
             let value = args
@@ -451,13 +543,16 @@ impl Options {
 
 fn print_help() {
     println!(
-        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20] [--min-contact-cell-count 5]"
+        "improvement-engine local-sim --mode local-simulation --source <e0|original> --input <path> --output <dir> [--tenant-id pulso_local] --observed-cutoff <UTC timestamp> [--arranque-cases 200] [--min-recurring-query-cases 20] [--min-contact-cell-count 5] [--progress-jsonl]"
     );
 }
 
 fn validate_mode(options: &Options) -> Result<(), String> {
     if options.mode == "local-simulation" {
-        Ok(())
+        match options.source.as_str() {
+            "e0" | "original" => Ok(()),
+            _ => Err("--source must be e0 or original".into()),
+        }
     } else {
         Err("only explicit --mode local-simulation is currently supported".into())
     }

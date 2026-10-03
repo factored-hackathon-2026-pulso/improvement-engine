@@ -111,6 +111,12 @@ green unit test as proof that a broader product flow is complete.
   configured cutoff and no known PII sentinels or evaluator labels.
   This demonstrates only bounded local detection/simulation behavior, not
   native Agent Core execution, causal validation, release, or business lift.
+  The CLI additionally supports opt-in `--progress-jsonl` diagnostics on
+  stderr: flushed phase-start/completion/skip/failure records with monotonic
+  elapsed milliseconds and no source values, identifiers, paths, proposal
+  text, or raw errors. This is live process progress only; the final domain
+  timeline remains atomically persisted, and no durable U07, OpenTelemetry,
+  health endpoint, or production-monitoring claim is added. See journal 0053.
   Original-bank local execution now supports an independently sealed,
   privacy-safe snapshot projection for call-center reason × channel. The API
   names its metric `record_count`: it counts CSV records and does not deduplicate
