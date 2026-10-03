@@ -1,9 +1,11 @@
 # Original contacts/PQR aggregate projection
 
-This first original-source projector reads partitioned `call_center_interactions`
-and `complaints` CSVs as streams and publishes only monthly aggregates. It is an
-exploratory measurement input for discovery; it is not a causal model, an
-operational SLA calculator, or a technical-error detector.
+The original-source projectors read partitioned `call_center_interactions` and
+`complaints` CSVs as streams and publish only monthly aggregates. They expose
+two deliberately different contracts: a UTC as-of projection for timezone-
+qualified data, and a snapshot-only descriptive projection for the supplied
+naive timestamp data. Neither is a causal model, an operational SLA
+calculator, nor a technical-error detector.
 
 ## Local motor: supported original-contact snapshot projection
 
@@ -29,12 +31,13 @@ these snapshot counts against it. An input record dated after that cutoff is
 still part of the static snapshot projection; this is not evidence it was
 observable at the cutoff.
 
-Small category/channel cells are suppressed using `--min-contact-cell-count`
-(default 5, configurable from 5 to 10,000). Policy version 1 and the exact
-threshold are committed into the immutable prepared-source manifest. Output
-reports included count, rejected-row count, and suppressed-cell count without
-revealing suppressed values or their counts. This is a technical small-cell
-disclosure control, not a formal anonymity or legal guarantee.
+Small category/channel cells are suppressed with policy version 1 and fixed
+`k=5` on the discovery-facing CLI path. The policy version and threshold are
+committed into the immutable prepared-source manifest; callers cannot vary `k`
+between comparable discovery runs. Exact rejected-row and suppressed-cell
+counts are not serialized to agent inputs or `result.json`; suppressed values
+and their counts are not disclosed. This is a technical small-cell disclosure
+control, not a formal anonymity or legal guarantee.
 
 The local motor can consume and report this descriptive projection, but this
 slice does not calculate repeat-contact rates, PQR/SLA measures, technical
@@ -42,61 +45,78 @@ errors, causal associations, or an improvement candidate/proposal. Such outputs
 remain unsupported rather than being inferred from contact volume. In
 particular, `customer_id` is not used to calculate recurrence.
 
-## Projection contract
+## Monthly projection contracts
 
 | Source | Grouping | Aggregates |
 | --- | --- | --- |
-| `call_center_interactions` | `interaction_date` month × normalized `reason_category` (fallback to `contact_reason` only if that column is absent) × normalized `channel` | Contact count; known/positive counts for `was_resolved`, `requires_followup`, `was_escalated`; mean `duration_seconds` and `wait_time_seconds` where valid values exist |
-| `complaints` | `creation_date` month × normalized `category` × normalized `reception_channel` | Creation-cohort PQR count; final-extract known/positive counts for `sla_breached`; mean `final_first_response_elapsed_days`; mean final `resolution_days` and `resolution_satisfaction` where valid values exist |
+| `call_center_interactions` (UTC as-of) | `interaction_date` month × normalized reason × normalized channel | Contact count; known/positive counts for `was_resolved`, `requires_followup`, `was_escalated`; mean durations |
+| `call_center_interactions` (snapshot descriptive) | Literal source wall-clock month × normalized reason × normalized channel | Same observed fields, typed separately as final-extract descriptive values |
+| `complaints` (UTC as-of) | `creation_date` month × normalized category × normalized reception channel | Creation-cohort count; final-extract SLA flags, elapsed first-response time, resolution days and satisfaction, all explicitly retrospective |
+| `complaints` (snapshot descriptive) | Literal source wall-clock month × normalized category × normalized reception channel | Complaint count; final-extract SLA flags, source-provided resolution days and satisfaction; no derived first-response duration |
 
 Grouping labels are closed enums. Recognized Spanish/English spellings map to
 stable lower-case labels; any unrecognized, null, or PII-like category maps to
 `unclassified`. Channel values map through a closed list; an absent/blank
-channel rejects that row and increments `rejected_rows` rather than mapping it
-to `other`. Only non-empty unrecognized channel values map to `other`. Raw
+channel rejects that row rather than mapping it to `other`; no exact rejected
+row total is retained in the agent-facing projection. Only non-empty
+unrecognized channel values map to `other`. Raw
 values are never stored in result types or error details.
 `subcategory`, `contact_reason` free text when `reason_category` exists,
 descriptions, IDs, product/customer/agent attributes, claims, compensation,
 and transcripts are not read into the projection.
 
-Event/creation timestamps are accepted only as exact UTC second timestamps
+The UTC as-of projection accepts only exact UTC second timestamps
 (`YYYY-MM-DDTHH:MM:SSZ`). Naive timestamps, offsets, fractional seconds, and
 date-only values are rejected; the projector never guesses a timezone or
-silently drops time precision. Aggregation period is the month from that
-event/creation timestamp, not a claim about when the bank learned the fact.
-Invalid/missing timestamps are counted as rejected, not emitted. If no valid
-timezone-qualified timestamps remain, status is `unsupported` and no
-aggregates are emitted.
+silently drops time precision. It filters rows at the snapshot cutoff and
+returns `Projection<T>`, which includes the applied `observed_cutoff`.
+
+The snapshot-only descriptive projection accepts exact naive wall-clock
+timestamps (`YYYY-MM-DD HH:MM:SS` or `YYYY-MM-DDTHH:MM:SS`) and groups by the
+literal `YYYY-MM` text in the source. It does not convert to UTC, compare to a
+cutoff, claim event-time ordering across time zones, or say when the bank
+learned the fact. The distinct `SnapshotDescriptiveProjection<T>` type has no
+`observed_cutoff`; its `LiteralSourceWallClockMonth` and
+`FinalExtractFactsOnly` tags prevent the output being described as as-of or
+online-eligible. Offsets, fractional seconds, date-only values, malformed
+dates, and impossible clock values remain rejected from grouping, not emitted.
+Exact rejection totals are not exposed on the public projection. If no valid
+source wall-clock timestamps remain, status is `unsupported` and no aggregates
+are emitted.
 Boolean values accept `true/false`, `1/0`, `yes/no`; other values are missing.
 Durations and resolution days must be finite and non-negative. Satisfaction is
 included only on the assumed common 1–5 scale; confirm the scale against the
-source dictionary before interpreting its magnitude. First response time is
-elapsed days between `creation_date` and `first_response_date`, at second
-precision, only when both timestamps are valid and ordered; it is not a
-business-hours or legally defined SLA calculation. Complaint outputs rename
-these fields with `final_` prefixes and declare
-`CreationCohortWithFinalOutcomes` temporal semantics. Means use only rows with valid values, with no
-imputation. Every numeric and boolean metric carries `valid_count` and
+source dictionary before interpreting its magnitude. Only the UTC as-of
+complaint projection derives elapsed first-response days, and only when both
+timestamps are valid and ordered; this is not business-hours or a legally
+defined SLA calculation. It labels these fields `final_` and declares
+`CreationCohortWithFinalOutcomes`. The snapshot descriptive complaint output
+omits that derived duration because the source has no shared-clock contract.
+Means use only rows with valid values, with no imputation. Every numeric and boolean metric carries `valid_count` and
 `missing_count` per visible aggregate cell; their sum is that cell's row
 denominator. Boolean metrics also expose positive count, and numeric means use
 only valid values. Missing values never silently become false or zero.
 
-Cells below the versioned `minimum_cell_count` policy are suppressed (default
-k=5 for local smoke); `suppressed_count` reports omitted cells without
-revealing their contents or counts. This is a technical disclosure-control
-heuristic, not a formal anonymity or legal guarantee. The policy version and
-threshold are included in the projection manifest digest.
+Discovery uses the immutable version-1 policy with k=5; public callers cannot
+provide an alternate per-run threshold. Cells below that floor are suppressed.
+Exact suppressed-cell and rejected-row counts are not fields on public
+projection results or agent-facing outputs. This is a technical disclosure-
+control heuristic, not a formal anonymity or legal guarantee. The policy
+version and threshold are included in the projection manifest digest; changing
+k requires a new policy version and release.
 
 ## Availability and interpretation
 
-The local original-bank runner uses the snapshot-count projection above. The
-monthly event-time projector below remains a separate API and is unsupported
-for the supplied naive-timestamp history until an explicit timezone contract
-exists.
+The local original-bank runner consumes the separate snapshot-only descriptive
+projection for discovery and retains the flat contact-volume projection for
+basic counts. The descriptive output carries snapshot binding, coverage, and
+literal-month/final-extract semantics without assigning an as-of cutoff.
 
 The projection is `unsupported` and emits no aggregates if any input partition
-lacks a required grouping/date field, no partition is provided, or no tracked
-metric field is present in every partition. `available_metrics` is the
+lacks a required grouping/date field, no partition is provided, or there is no
+row with a valid source timestamp and nonblank channel to group. `Supported`
+means at least one usable grouping row exists; rejected rows may coexist with
+usable rows. `available_metrics` is the
 intersection of fields present across all partitions; `missing_metrics` names
 fields absent in at least one partition. A metric denominator remains its
 explicit denominator; nulls do not become false/zero. Metric columns are
@@ -106,14 +126,15 @@ business reason.
 
 ## Provenance, cutoff, and coverage
 
-Each projection requires the existing immutable `ArtifactReference` to the
-source snapshot plus that snapshot's canonical byte binding, a cutoff, and an
-exact inventory of opaque partition IDs with SHA-256 digests. The projector
-fails closed on missing/extra/duplicate IDs, digest mismatch, duplicate
-headers, malformed/truncated records, or invalid manifest. Rows after the
-cutoff are excluded by exact UTC second comparison. The cutoff must use the
-same exact timestamp grammar; malformed or higher-precision cutoffs are
-rejected rather than rounded.
+Both monthly modes require the existing immutable `ArtifactReference` to the
+source snapshot, its canonical byte binding, and an exact inventory of opaque
+partition IDs with SHA-256 digests. They fail closed on missing/extra/duplicate
+IDs, digest mismatch, duplicate headers, malformed/truncated records, or an
+invalid manifest. Only the UTC as-of mode compares source timestamps with
+`observed_cutoff`, using exact UTC-second precision. The snapshot-descriptive
+mode retains the global snapshot artifact's UTC `observed_cutoff` only inside
+the source snapshot binding; it neither compares source rows to that field nor
+copies it into the result.
 
 The call-center source contract declares `interaction_date` as `timestamp`
 without a timezone, and the supplied contact values are naive. There is not
@@ -128,8 +149,13 @@ rows are a cohort selected by `creation_date <= observed_cutoff`, while
 final-extract outcomes that may occur after that cutoff. They are not as-of
 metrics and must not be used for online/as-of decisions or leakage-sensitive
 evaluation. No reliable outcome censoring is attempted until a timezone/same-
-clock contract exists. All current naive timestamps remain fail-closed, so the
-original-source projection emits no business aggregates.
+clock contract exists. The UTC as-of projection therefore remains fail-closed
+on current naive timestamps. The snapshot-descriptive complaint projection
+intentionally omits derived first-response elapsed time (which needs a
+shared-clock interpretation) and exposes only source-provided final
+`sla_breached`, `resolution_days`, and `resolution_satisfaction`, tagged as
+final-extract facts. Neither output supports a point-in-time or online claim
+for these fields.
 
 For call-center contacts, `EventDateCohort` means only that rows are selected
 by `interaction_date`; it does not claim the attached `was_resolved`,
@@ -182,9 +208,13 @@ path order (not the full history):
 cargo test --locked --offline -p improvement-engine-core --test original_contact_projection local_original_contacts_and_complaints_smoke_aggregates_only -- --ignored --nocapture
 ```
 
-The smoke test verifies the current source is reported as unsupported (naive
-timestamp semantics), counts rejected rows, and emits zero aggregate cells.
-It prints only partition/rejection/cell counts and the partial-coverage label;
-it prints no row, identifier, category source string, path, or metric value.
-This is a fail-closed compatibility check, not a successful business projection
-or prevalence estimate. Historical source files remain outside Git.
+The smoke test verifies both behaviors: the UTC as-of projector remains
+unsupported on naive timestamps, while the snapshot-descriptive projector
+produces disclosure-controlled aggregates for valid literal source months. The
+sample has partial coverage and is not a full-history prevalence estimate. It
+prints bounded partition counts, visible k-qualified aggregate totals/cell
+counts and coverage; exact rejected-row/suppressed-cell totals are neither
+fields on public projection types nor printed. It prints no row, identifier,
+category source string, path, or sub-k metric. This is descriptive discovery
+evidence, not a point-in-time or online signal. Historical source files remain
+outside Git.

@@ -103,19 +103,29 @@ green unit test as proof that a broader product flow is complete.
   This demonstrates only bounded local detection/simulation behavior, not
   native Agent Core execution, causal validation, release, or business lift.
   Original-bank local execution now supports an independently sealed,
-  privacy-safe snapshot projection for call-center reason × channel. The API
-  names its metric `record_count`: it counts CSV records and does not deduplicate
-  `interaction_id`. A nonblank `reason_category` takes precedence, then a
-  nonblank `contact_reason`; both blank maps to `unclassified`. It is not an
-  event-date cohort or cutoff-filtered result; naive source timestamps are not
-  compared to the run cutoff. The local motor reports this descriptively but
-  emits no signal, candidate, or proposal. Repeat contacts, PQR/SLA, technical
-  errors, causal relationships, and outcome claims remain unsupported; customer
-  IDs, row-level facts, free text, and contact outcomes are not used. `k`
-  defaults to 5 and is configurable via `--min-contact-cell-count` (5–10,000);
-  policy version and threshold are sealed into the prepared-source manifest and
-  validated again at the core boundary. Tests are synthetic only; no real-data
-  prevalence claim is made.
+  privacy-safe snapshot projection for call-center reason × channel. The flat
+  API metric `record_count` counts CSV records and does not deduplicate
+  `interaction_id`; it is still not an event-date cohort or cutoff-filtered
+  result. A separate descriptive projection groups valid literal source months
+  × reason × channel, with `coverage=partial` and `final_extract_facts_only`.
+  Naive timestamps are never assigned a timezone or compared with the run
+  cutoff. Its k threshold applies within each month × reason × channel cell;
+  only rows with valid month and usable grouping labels enter that cell, and
+  only k-qualified cells contribute to `supported_contact_count`. Rejected
+  rows and suppressed cells never increase a visible cell denominator; their
+  exact counts are omitted from agent-facing serialization and `result.json`.
+  When complaint cells qualify, the runner emits a finding
+  and a local descriptive proposal envelope bound to snapshot, manifest, and
+  projection digests. It is not a U13/Agent Core candidate:
+  `dependency_blocked_snapshot_semantics`, `simulated_unverified`,
+  `not_executed`, `publication_eligible=false`, formal route `do_nothing`.
+  Agent Core/U13 has no offline snapshot-candidate contract; no query receipt,
+  candidate admission, artifact compilation, release, cause, ROI, or outcome
+  claim is fabricated. Customer IDs, row-level facts, free text, and contact
+  outcomes are not used. `k=5` is fixed on the discovery-facing CLI path; no
+  per-run override is accepted, avoiding easy differencing across comparable
+  runs. Policy version and threshold are sealed into the source manifest and
+  revalidated at the core boundary. Synthetic CLI E2E verifies this boundary.
 - Windows local E0 convenience wrapper: scripts/run-local-e0-e2e.ps1 invokes
   the opt-in local simulation with locked/offline Cargo, required UTC cutoff,
   default Arranque/support settings and a fresh non-overlapping output path;
