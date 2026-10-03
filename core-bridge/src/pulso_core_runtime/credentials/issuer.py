@@ -74,7 +74,7 @@ class CredentialIssuer:
         self._ttl = min(ttl, MAX_TTL)
 
     def issue(self, *, claims_tenant: str | None, tenant_id: str, role: str, purpose: str) -> dict[str, Any]:
-        if claims_tenant is not None and claims_tenant != tenant_id:
+        if claims_tenant is None or claims_tenant != tenant_id:
             raise BridgeError("pulso:tenant_mismatch", 403)
         which = POLICY.get((purpose, role))
         if which is None:

@@ -150,6 +150,20 @@ class ReceiptStore:
                 " usage_known=budget_meter.usage_known AND EXCLUDED.usage_known, updated_at=now()",
                 (tenant_id, job_id, stage, attempt, calls, tokens, cost_usd, usage_known))
 
+    def meter_spend(self, tenant_id: str, job_id: str, stage: str, attempt: int, *, cost_usd: str, cap_usd: str,
+                    calls: int = 1, tokens: int = 0) -> bool:
+        """Atomic capped spend: one statement, applied only if the new total stays <= cap. Concurrent spenders
+        serialise on the row lock and re-check the cap, so the total can never exceed it."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "INSERT INTO pulso_bridge.budget_meter (tenant_id, job_id, stage, attempt, calls, tokens, cost_usd)"
+                " SELECT %s,%s,%s,%s,%s,%s,%s::numeric WHERE %s::numeric <= %s::numeric"
+                " ON CONFLICT (tenant_id, job_id, stage, attempt) DO UPDATE SET calls=budget_meter.calls+EXCLUDED.calls,"
+                " tokens=budget_meter.tokens+EXCLUDED.tokens, cost_usd=budget_meter.cost_usd+EXCLUDED.cost_usd,"
+                " updated_at=now() WHERE budget_meter.cost_usd+EXCLUDED.cost_usd <= %s::numeric RETURNING 1",
+                (tenant_id, job_id, stage, attempt, calls, tokens, cost_usd, cost_usd, cap_usd, cap_usd)).fetchone()
+        return row is not None
+
     def meter_get(self, tenant_id: str, job_id: str, stage: str, attempt: int) -> dict[str, Any] | None:
         with self._conn() as conn:
             return conn.execute(

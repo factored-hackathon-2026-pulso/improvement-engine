@@ -88,6 +88,7 @@ class InvokeService:
         self._reconciler = reconciler or Reconciler(store=store, runs=runs, projector=projector)
         self._now = now
         self._inflight = 0
+        self._live: set[tuple[str, str]] = set()  # keys whose Core call is in flight in this process
 
     # ---- public ----------------------------------------------------------------------------------------
 
@@ -166,10 +167,12 @@ class InvokeService:
             await asyncio.to_thread(self._store.discard_prepared, inv.tenant_id, key)
             raise errors.bridge_busy()
         self._inflight += 1
+        self._live.add((inv.tenant_id, key))
         try:
             return await self._execute(inv, key, digest, ref, principal_id)
         finally:
             self._inflight -= 1
+            self._live.discard((inv.tenant_id, key))
 
     async def _reenter(self, receipt: Receipt) -> InvokeOutcome:
         if receipt.terminal:
@@ -181,6 +184,8 @@ class InvokeService:
             await asyncio.to_thread(self._reconciler.reconcile, receipt)  # crashed before `sent`: nothing was sent
             fresh = await asyncio.to_thread(self._store.get, receipt.tenant_id, receipt.idempotency_key)
             return InvokeOutcome(_status_for(fresh or receipt), _state_body(fresh or receipt))
+        if (receipt.tenant_id, receipt.idempotency_key) in self._live:
+            return InvokeOutcome(202, _state_body(receipt))  # the original call is alive: never demote it
         # sent / binding_confirmed / unknown / manual_reconcile: re-read, never re-execute
         result = await asyncio.to_thread(self._reconciler.reconcile, receipt)
         fresh = await asyncio.to_thread(self._store.get, receipt.tenant_id, receipt.idempotency_key)
