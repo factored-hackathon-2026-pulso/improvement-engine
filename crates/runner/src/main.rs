@@ -631,29 +631,31 @@ mod tests {
     }
 
     #[test]
-    fn cli_rejects_contact_suppression_below_privacy_floor() {
-        let args = [
-            "local-sim",
-            "--mode",
-            "local-simulation",
-            "--source",
-            "original",
-            "--input",
-            "x",
-            "--output",
-            "y",
-            "--observed-cutoff",
-            "2026-10-02T12:00:00Z",
-            "--min-contact-cell-count",
-            "4",
-        ]
-        .map(OsString::from);
+    fn cli_rejects_contact_suppression_policy_overrides() {
+        for requested_minimum in ["4", "10000"] {
+            let args = [
+                "local-sim",
+                "--mode",
+                "local-simulation",
+                "--source",
+                "original",
+                "--input",
+                "x",
+                "--output",
+                "y",
+                "--observed-cutoff",
+                "2026-10-02T12:00:00Z",
+                "--min-contact-cell-count",
+                requested_minimum,
+            ]
+            .map(OsString::from);
 
-        assert!(
-            Options::parse(args)
-                .unwrap_err()
-                .contains("integer from 5 to 10000")
-        );
+            assert!(
+                Options::parse(args)
+                    .unwrap_err()
+                    .contains("unknown option --min-contact-cell-count")
+            );
+        }
     }
 
     #[test]
