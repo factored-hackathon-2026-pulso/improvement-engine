@@ -490,3 +490,20 @@ Changes enter this branch only after their own RED/GREEN evidence and an
 independent adversarial review. The branch is not evidence of release or merge
 readiness. See `docs/gaps/OPEN_GAPS.md` for dependencies that require a human
 owner; no such gap is currently recorded.
+
+## Current Codex consolidation (2026-10-03)
+
+The current-main integration branch contains the E0 review-only design seam
+and P4 in-memory expiry access safeguards. On the actual local E0 sample, the
+runner completed 200 discovery cases and persisted three candidates, the
+selected descriptive holdout result, and a pending-review / non-executable
+`investigate_mapping` plan. It still does not call a provider, create a native
+Agent Core proposal, or perform a native baseline/candidate evaluation.
+
+Windows local validation passed workspace Clippy, formatting, workspace Rust
+tests, Python contracts (10 passed, one Podman-dependent skip), fixture
+validation, and both Pester suites (5 and 20 passed). Destructive PostgreSQL
+integration tests remain ignored because a usable isolated Podman/Postgres
+backend is unavailable in this process. The next runner slice persists
+candidate-bound evidence status separately from builder readiness and records
+U20/E0 safety blockers without inventing authority or a proposal.

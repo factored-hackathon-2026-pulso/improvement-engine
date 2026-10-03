@@ -969,6 +969,8 @@ fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
         || !is_digest(&input.metadata.snapshot_ref.digest)
         || !is_digest(&input.metadata.manifest_digest)
         || input.metadata.cutoff_unix_seconds == 0
+        || parse_utc_seconds(&input.metadata.observed_cutoff_rfc3339)
+            != Some(input.metadata.cutoff_unix_seconds)
     {
         return Err(LocalRunError::InvalidInput);
     }
@@ -1967,7 +1969,33 @@ fn days_in_month(year: i64, month: i64) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_utc_seconds;
+    use super::{
+        LocalRunInput, LocalRunMetadata, LocalSourceKind, parse_utc_seconds, run_local_simulation,
+        validate_input,
+    };
+    use crate::ArtifactReference;
+
+    fn cutoff_input(cutoff_unix_seconds: u64, cutoff_rfc3339: &str) -> LocalRunInput {
+        LocalRunInput::new(
+            LocalRunMetadata::new(
+                "run_cutoff_test",
+                "tenant_a",
+                LocalSourceKind::E0,
+                format!("sha256:{}", "a".repeat(64)),
+                ArtifactReference {
+                    tenant_id: "tenant_a".to_owned(),
+                    id: "018f0f4e-7bbd-7000-8000-000000000600".to_owned(),
+                    revision: 1,
+                    digest: format!("sha256:{}", "b".repeat(64)),
+                },
+                cutoff_unix_seconds,
+                cutoff_rfc3339,
+            ),
+            Vec::new(),
+            0,
+            Vec::new(),
+        )
+    }
 
     #[test]
     fn parses_only_utc_whole_seconds_and_rejects_invalid_calendar_dates() {
@@ -1979,5 +2007,25 @@ mod tests {
         assert_eq!(parse_utc_seconds("2026-02-30T00:00:00Z"), None);
         assert_eq!(parse_utc_seconds("2026-08-01T00:00:00.123Z"), None);
         assert_eq!(parse_utc_seconds("2026-08-01T00:00:00-05:00"), None);
+    }
+
+    #[test]
+    fn run_ingress_rejects_numeric_cutoff_that_disagrees_with_rfc3339() {
+        let mismatch = cutoff_input(1_775_001_599, "2026-04-01T00:00:00Z");
+        assert_eq!(
+            run_local_simulation(mismatch),
+            Err(super::LocalRunError::InvalidInput)
+        );
+        let invalid_timestamp = cutoff_input(1_775_001_600, "2026-02-30T00:00:00Z");
+        assert_eq!(
+            run_local_simulation(invalid_timestamp),
+            Err(super::LocalRunError::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn run_ingress_accepts_matching_numeric_and_rfc3339_cutoffs() {
+        let matching = cutoff_input(1_775_001_600, "2026-04-01T00:00:00Z");
+        assert_eq!(validate_input(&matching), Ok(()));
     }
 }

@@ -67,7 +67,7 @@ fn recurring_query_candidate_without_explicit_core_mapping_is_unlinked() {
                 LocalSourceKind::E0,
                 format!("sha256:{}", "b".repeat(64)),
                 source_snapshot(),
-                1_775_000_000,
+                1_775_001_600,
                 "2026-04-01T00:00:00Z",
             ),
             (1..=20).collect(),
@@ -211,8 +211,14 @@ fn recurring_query_candidate_without_explicit_core_mapping_is_unlinked() {
         ),
         Err(E0RouteCatalogError::InvalidFlowReference)
     );
-    let mapping = E0RouteMapping::new(packet.metric_id(), packet.pattern_ref(), flow_ref)
-        .expect("explicit exact mapping");
+    let mapping = E0RouteMapping::new(
+        packet.metric_id(),
+        packet.pattern_ref(),
+        "flow/recurring-query",
+        "recurring-query",
+        flow_ref,
+    )
+    .expect("explicit exact mapping");
     let mapped_catalog_digest = E0RouteCatalog::content_digest(std::slice::from_ref(&mapping));
     let foreign_mapping = mapping.clone();
     let mapped_catalog = E0RouteCatalog::new(

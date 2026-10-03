@@ -372,6 +372,22 @@ impl TrustedEvaluationComposer {
 const _NO_PUBLIC_AUTHORITY_INJECTION: () = ();
 
 impl EvaluationPlan {
+    /// Read-only source lineage for internal proposal builders. This exposes
+    /// the already-sealed reference only; it cannot construct or alter a plan.
+    #[must_use]
+    #[allow(dead_code)] // Used by the deferred trusted E0→builder composition.
+    pub(crate) fn source_snapshot_ref_for_builder(&self) -> &ArtifactReference {
+        &self.source_snapshot_ref
+    }
+
+    /// Parsed-source binding digest used by U04-B/U20-E. This is distinct
+    /// from the artifact-content digest on the source snapshot reference.
+    #[must_use]
+    #[allow(dead_code)] // Used by the deferred trusted E0→builder composition.
+    pub(crate) fn source_snapshot_binding_digest_for_builder(&self) -> &str {
+        &self.source_snapshot_binding_digest
+    }
+
     /// Re-reads every immutable evaluation input, validates its sealed shared
     /// contract, and freezes only a comparison semantically identical to U16.
     fn seal_from_bridge<R: ArtifactRepository, A: EvaluationArtifactAuthorityPort + ?Sized>(

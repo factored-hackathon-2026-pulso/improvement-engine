@@ -39,6 +39,7 @@ pub struct E0MechanismEvidencePacket {
     metric_id: String,
     signal_digest: String,
     summary_commitment: String,
+    candidate_digest: String,
     pattern_ref: String,
     numerator: u64,
     denominator: u64,
@@ -99,6 +100,7 @@ impl E0MechanismEvidencePacket {
             metric_id: candidate.metric_id.clone(),
             signal_digest: signal.digest.clone(),
             summary_commitment: signal.summary_commitment.clone(),
+            candidate_digest: candidate_digest(candidate),
             pattern_ref: pattern_ref.to_owned(),
             numerator: signal.numerator,
             denominator: signal.denominator,
@@ -166,6 +168,19 @@ impl E0MechanismEvidencePacket {
     pub fn claim_level(&self) -> &str {
         &self.claim_level
     }
+
+    pub(crate) fn tenant_scope(&self) -> &str {
+        &self.tenant_scope
+    }
+
+    pub(crate) fn candidate_digest(&self) -> &str {
+        &self.candidate_digest
+    }
+}
+
+fn candidate_digest(candidate: &LocalProposalCandidate) -> String {
+    let bytes = serde_json::to_vec(candidate).expect("proposal candidate serializes");
+    format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -237,6 +252,8 @@ impl SupportedCoreFlowRef {
 pub struct E0RouteMapping {
     metric_id: String,
     pattern_ref: String,
+    candidate_route: String,
+    mechanism: String,
     flow_ref: SupportedCoreFlowRef,
 }
 
@@ -244,14 +261,22 @@ impl E0RouteMapping {
     pub fn new(
         metric_id: impl Into<String>,
         pattern_ref: impl Into<String>,
+        candidate_route: impl Into<String>,
+        mechanism: impl Into<String>,
         flow_ref: SupportedCoreFlowRef,
     ) -> Result<Self, E0RouteCatalogError> {
         let mapping = Self {
             metric_id: metric_id.into(),
             pattern_ref: pattern_ref.into(),
+            candidate_route: candidate_route.into(),
+            mechanism: mechanism.into(),
             flow_ref,
         };
-        if mapping.metric_id != RECURRING_QUERY_METRIC || !is_sha256(&mapping.pattern_ref) {
+        if mapping.metric_id != RECURRING_QUERY_METRIC
+            || !is_sha256(&mapping.pattern_ref)
+            || mapping.candidate_route.is_empty()
+            || mapping.mechanism.is_empty()
+        {
             return Err(E0RouteCatalogError::InvalidMapping);
         }
         Ok(mapping)
@@ -346,13 +371,10 @@ impl E0RouteCatalog {
         &self.reference
     }
 
-    fn resolve(&self, packet: &E0MechanismEvidencePacket) -> Option<&SupportedCoreFlowRef> {
-        self.mappings
-            .iter()
-            .find(|mapping| {
-                mapping.metric_id == packet.metric_id && mapping.pattern_ref == packet.pattern_ref
-            })
-            .map(|mapping| &mapping.flow_ref)
+    fn resolve(&self, packet: &E0MechanismEvidencePacket) -> Option<&E0RouteMapping> {
+        self.mappings.iter().find(|mapping| {
+            mapping.metric_id == packet.metric_id && mapping.pattern_ref == packet.pattern_ref
+        })
     }
 }
 
@@ -392,6 +414,8 @@ pub struct RouteResolution {
     kind: RouteResolutionKind,
     #[serde(skip)]
     packet_binding: E0MechanismEvidencePacket,
+    #[serde(skip)]
+    catalog_tenant_scope: String,
 }
 
 impl fmt::Debug for RouteResolution {
@@ -421,6 +445,8 @@ enum RouteResolutionKind {
         catalog_ref: E0RouteCatalogReference,
         metric_id: String,
         pattern_ref: String,
+        candidate_route: String,
+        mechanism: String,
         flow_ref: SupportedCoreFlowRef,
     },
 }
@@ -474,10 +500,30 @@ impl RouteResolution {
         }
     }
 
+    pub(crate) fn candidate_route(&self) -> &str {
+        match &self.kind {
+            RouteResolutionKind::Mapped {
+                candidate_route, ..
+            } => candidate_route,
+            RouteResolutionKind::Unlinked { .. } => "",
+        }
+    }
+
+    pub(crate) fn mechanism(&self) -> &str {
+        match &self.kind {
+            RouteResolutionKind::Mapped { mechanism, .. } => mechanism,
+            RouteResolutionKind::Unlinked { .. } => "",
+        }
+    }
+
     pub(crate) fn is_bound_to(&self, packet: &E0MechanismEvidencePacket) -> bool {
         &self.packet_binding == packet
             && self.metric_id() == packet.metric_id()
             && self.pattern_ref() == packet.pattern_ref()
+    }
+
+    pub(crate) fn catalog_tenant_scope(&self) -> &str {
+        &self.catalog_tenant_scope
     }
 
     /// A route mapping alone is never compile authority.
@@ -506,14 +552,17 @@ pub fn resolve_e0_mechanism_route(
                 reason: "catalog_tenant_mismatch",
             },
             packet_binding: packet.clone(),
+            catalog_tenant_scope: catalog.reference.tenant_id.clone(),
         };
     }
     let kind = match catalog.resolve(packet) {
-        Some(flow_ref) => RouteResolutionKind::Mapped {
+        Some(mapping) => RouteResolutionKind::Mapped {
             catalog_ref: E0RouteCatalogReference::from_artifact(&catalog.reference),
             metric_id: packet.metric_id.clone(),
             pattern_ref: packet.pattern_ref.clone(),
-            flow_ref: flow_ref.clone(),
+            candidate_route: mapping.candidate_route.clone(),
+            mechanism: mapping.mechanism.clone(),
+            flow_ref: mapping.flow_ref.clone(),
         },
         None => RouteResolutionKind::Unlinked {
             catalog_ref: E0RouteCatalogReference::from_artifact(&catalog.reference),
@@ -525,6 +574,7 @@ pub fn resolve_e0_mechanism_route(
     RouteResolution {
         kind,
         packet_binding: packet.clone(),
+        catalog_tenant_scope: catalog.reference.tenant_id.clone(),
     }
 }
 

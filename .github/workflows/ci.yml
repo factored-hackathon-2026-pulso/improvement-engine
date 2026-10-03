@@ -91,6 +91,8 @@ jobs:
         run: cargo +1.98.1 clippy --workspace --all-targets -- -D warnings
       - name: Unit-test harness
         run: cargo +1.98.1 test --workspace --lib --features test-support
+      - name: E0 builder design-intent boundary (local-simulation)
+        run: cargo +1.98.1 test --locked -p improvement-engine-core --features local-simulation --lib e0_builder_design::tests
       - name: Integration tests
         run: cargo +1.98.1 test --workspace --features test-support
       - name: Contract-fixture harness
