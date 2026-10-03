@@ -106,3 +106,32 @@ def test_prepare_core_context_exports_contracts_version(tmp_path: Path) -> None:
     bad = subprocess.run([pwsh, "-NoProfile", "-File", str(script), "-Checkout", str(checkout), "-PinSha", "0" * 40,
                           "-Out", str(tmp_path / "x")], capture_output=True, text=True)
     assert bad.returncode != 0
+
+
+def test_concurrent_prepares_for_the_same_sha_do_not_collide() -> None:
+    import shutil
+    import subprocess
+
+    checkout = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-789d6c8"))
+    pwsh = shutil.which("pwsh")
+    if pwsh is None or not (checkout / ".git").exists():
+        pytest.skip("pwsh or the pinned checkout is not available")
+    sha = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    script = Path(__file__).resolve().parents[2] / "scripts" / "prepare-core-context.ps1"
+    argv = [pwsh, "-NoProfile", "-File", str(script), "-Checkout", str(checkout), "-PinSha", sha]
+    procs = [subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(2)]
+    results = [p.communicate() for p in procs]
+    dirs = [Path(o.strip().splitlines()[-1]) for o, _ in results]
+    try:
+        assert [p.returncode for p in procs] == [0, 0], [e[-300:] for _, e in results]
+        assert dirs[0] != dirs[1]
+        for d in dirs:
+            assert (d / "contracts" / "VERSION").is_file()
+    finally:
+        for d in dirs:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def test_build_image_cleans_up_its_context() -> None:
+    script = (Path(__file__).resolve().parents[2] / "scripts" / "build-image.ps1").read_text()
+    assert "finally" in script and "Remove-Item" in script and "$ctx" in script.split("finally", 1)[1]
