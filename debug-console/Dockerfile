@@ -1,7 +1,8 @@
 # Debug console image: static SPA + same-origin proxy to the control API (plan 17.3.7).
-# Pin both base images by digest when the image is built for the LocalServiceManifest (digest is resolved at build time).
-ARG NODE_IMAGE=node:22.16-alpine
-ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.27-alpine
+# Base images are pinned by digest (resolved with podman on pulso-dev; refresh both digest and tag together).
+# Build with `podman build --format docker ...`: the default OCI format silently drops HEALTHCHECK.
+ARG NODE_IMAGE=node:22.16-alpine@sha256:11d923cca2138d844282dc0c333132bba72deb913d635c3c33e54523b455a4da
+ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.27-alpine@sha256:28d91bdce70ad09025ea901458fdd149259d8e05982ade79d4ef2c0d9470eb48
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app
