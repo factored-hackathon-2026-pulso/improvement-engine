@@ -1,0 +1,363 @@
+{
+ "schema": "pulso-demo-report/2",
+ "mode": "live_real_local_core",
+ "started_at": "2026-10-03T19:25:50.100012+00:00",
+ "finished_at": "2026-10-03T19:26:17.711365+00:00",
+ "namespace": "claude-demo-1791055458704",
+ "outcome": "ok",
+ "error": null,
+ "notes": [],
+ "claims": "Codex stand-in demo over a synthetic bank dataset; NOT the Rust engine, NOT a real model, NOT a causal/SLA claim (mechanism_proxy only)",
+ "doubles": [
+  {
+   "id": "stand_in_engine",
+   "what": "Codex engine stand-in (e2e-core codex_standin): drives the REAL Core runtime; not the Rust engine",
+   "until": "Rust engine HTTP API exists"
+  },
+  {
+   "id": "scripted_llm",
+   "what": "scripted llm-gateway double: tool calls/outputs are scripted from data-derived analysis, no real model"
+  },
+  {
+   "id": "fixture_api",
+   "what": "debug-console fixture API/SSE server fed from translated results; not the Rust control API"
+  },
+  {
+   "id": "lab_query_rows",
+   "what": "the e2e-fixtures lab double returns fixed rows for lab_query; the data-derived SQL results come from the demo's local sqlite dataset (recorded SQL and digests)"
+  },
+  {
+   "id": "improvement_judge",
+   "what": "demo's data-derived mechanism_proxy judge and reviser; stand-in for the Codex improvement judge"
+  },
+  {
+   "id": "human_decision",
+   "what": "SIMULATED human supervisor: --human-mode scripted approves automatically; no person decided anything"
+  },
+  {
+   "id": "human_issuer",
+   "what": "local-identity human-issuer: sandbox-only DOUBLE (com.pulso.role=double), internal network only; Core trusts only its public key in the LOCAL staff set (never remote staging/prod)",
+   "until": "real IdP/step-up"
+  }
+ ],
+ "steps": [
+  {
+   "n": 1,
+   "title": "Snapshot/E0/observations wake the engine; nobody picks the category",
+   "source": "analysis.scout",
+   "status": "stand-in",
+   "outcome": "shown",
+   "basis": "scout SQL over the synthetic dataset (scripted model)"
+  },
+  {
+   "n": 2,
+   "title": "Measured signal families, discarded candidates, investigation",
+   "source": "analysis.scout",
+   "status": "stand-in",
+   "outcome": "shown",
+   "basis": "scout SQL over the synthetic dataset (scripted model)"
+  },
+  {
+   "n": 3,
+   "title": "Scout uses SQL adaptively; separate verifier contradicts or supports",
+   "source": "core.verifier",
+   "status": "stand-in",
+   "outcome": "shown",
+   "basis": "Core verifier run with a scripted LLM + data-derived verdicts"
+  },
+  {
+   "n": 4,
+   "title": "Opportunity with population, mechanism, uncertainty, alternatives incl. do_nothing",
+   "source": "core.design",
+   "status": "stand-in",
+   "outcome": "shown",
+   "basis": "alternatives incl. do_nothing from the builder_design output"
+  },
+  {
+   "n": 5,
+   "title": "Concrete change: Core entities, versions, diff",
+   "source": "core.attempts.write_receipts",
+   "status": "real",
+   "outcome": "shown",
+   "basis": "writer receipts verified in the real Core registry (change spec is a stand-in)"
+  },
+  {
+   "n": 6,
+   "title": "Scenarios on base and candidate; two distinct gates",
+   "source": "core.attempts.native + analysis.attempts.improvement",
+   "status": "stand-in",
+   "outcome": "shown",
+   "basis": "native evaluation real; improvement judge is a stand-in"
+  },
+  {
+   "n": 7,
+   "title": "Failure triggers a bounded automatic revision",
+   "source": "analysis.attempts",
+   "status": "stand-in",
+   "outcome": "shown",
+   "basis": "candidate 1 failed the guard, revised automatically"
+  },
+  {
+   "n": 8,
+   "title": "Human decision/approve (authority)",
+   "source": "decision_hook / human_flow",
+   "status": "simulated",
+   "outcome": "shown",
+   "basis": "SIMULATED human supervisor (--human-mode scripted): credential from the local sandbox human issuer, bound to the durable intention; Core approve with operation/hash fixed"
+  },
+  {
+   "n": 9,
+   "title": "Staging confirmation / exposure",
+   "source": "core.registry alias read",
+   "status": "real",
+   "outcome": "shown",
+   "basis": "staging alias read confirms the release; prod unchanged (exposure needs the explicit promote)"
+  },
+  {
+   "n": 10,
+   "title": "New observations: exporter, chain verification, successor run",
+   "source": "exporter + analysis.observe",
+   "status": "stand-in",
+   "outcome": "shown",
+   "basis": "second batch of scripted observations -> exporter ingest fixture + chain verification; stand-in engine publishes/contradicts memory and starts a successor investigation"
+  }
+ ],
+ "gates": {
+  "native": {
+   "status": "pass",
+   "reason_code": null,
+   "checked_at": "2026-10-03T19:26:06Z",
+   "attempt": 2,
+   "report_ref": {
+    "id": "01a1033b-08eb-7716-89d4-d2e4aff7b29c",
+    "digest": "95f9776f7db521d9228d13efb6bc0934c9ae34b973e00da414ab54a002ff2ea1",
+    "media_type": "application/json"
+   }
+  },
+  "improvement": {
+   "status": "pass",
+   "reason_code": null,
+   "receipt_refs": [],
+   "checked_at": "2026-10-03T19:26:06Z",
+   "attempt": 2,
+   "lift": 0.04825,
+   "lift_lo": 0.04355,
+   "exposure": 0.0025,
+   "guard_max_exposure": 0.0035
+  },
+  "combined": {
+   "decision": "needs_human",
+   "reason_code": "human_decision_pending"
+  }
+ },
+ "attempts": [
+  {
+   "attempt": 1,
+   "candidate_id": "cand-1",
+   "revision_of": null,
+   "scope": "all_flows",
+   "max_retries": 5,
+   "native": "pass",
+   "native_reason": null,
+   "improvement": {
+    "status": "fail",
+    "reason_code": "guard_breach",
+    "lift": 0.0855,
+    "lift_lo": 0.07937,
+    "exposure": 0.00387,
+    "guard_max_exposure": 0.0035
+   }
+  },
+  {
+   "attempt": 2,
+   "candidate_id": "cand-2",
+   "revision_of": "cand-1",
+   "scope": "flow:transfer_limit",
+   "max_retries": 3,
+   "native": "pass",
+   "native_reason": null,
+   "improvement": {
+    "status": "pass",
+    "reason_code": null,
+    "lift": 0.04825,
+    "lift_lo": 0.04355,
+    "exposure": 0.0025,
+    "guard_max_exposure": 0.0035
+   }
+  }
+ ],
+ "decision_hook": "staging_confirmed",
+ "human": {
+  "mode": "scripted",
+  "simulated_human": true,
+  "actor": "local-supervisor",
+  "stage": "staging_confirmed",
+  "proposal_id": "01a1033b-038e-7330-ab1e-0b14e3b6eb92",
+  "candidate_hash": "884c6fdc435420e9a92a8e50254ba9251c4ee0807855bb2b6490695de94fdfd4",
+  "release_id": "rel-884c6fdc435420e9",
+  "staging_alias": "rel-884c6fdc435420e9",
+  "prod_alias": "rel-1cddd55d1fe8f19f",
+  "promoted": false,
+  "error": null,
+  "reason": null,
+  "label": "SIMULATED human supervisor (scripted)"
+ },
+ "decision_trail": [
+  {
+   "event": "decision_requested",
+   "at": "2026-10-03T19:26:09Z",
+   "operation": "approve",
+   "proposal_id": "01a1033b-038e-7330-ab1e-0b14e3b6eb92",
+   "candidate_hash": "884c6fdc435420e9a92a8e50254ba9251c4ee0807855bb2b6490695de94fdfd4",
+   "proposal_rev": 1,
+   "intention_id": "3bf74ca0e08d4572b44a15adfd5ae2df",
+   "command_ref": "cmd-c66cfc0705ed",
+   "waiting_for": "SIMULATED human supervisor (scripted demo mode, not a person)",
+   "staging_alias": "rel-1cddd55d1fe8f19f",
+   "prod_alias": "rel-1cddd55d1fe8f19f"
+  },
+  {
+   "event": "human_decided",
+   "at": "2026-10-03T19:26:09Z",
+   "decision": "approve",
+   "actor": "local-supervisor",
+   "simulated": true,
+   "label": "SIMULATED human supervisor (scripted demo mode, not a person)",
+   "mode": "scripted",
+   "reason": "scripted"
+  },
+  {
+   "event": "approved",
+   "at": "2026-10-03T19:26:11Z",
+   "operation": "approve",
+   "candidate_hash": "884c6fdc435420e9a92a8e50254ba9251c4ee0807855bb2b6490695de94fdfd4",
+   "proposal_rev": 1,
+   "intention_id": "3bf74ca0e08d4572b44a15adfd5ae2df",
+   "command_ref": "cmd-c66cfc0705ed",
+   "actor": "local-supervisor",
+   "credential_kid": "local-sim-human-1",
+   "proposal_state": "approved",
+   "published": false,
+   "staging_alias": "rel-1cddd55d1fe8f19f",
+   "prod_alias": "rel-1cddd55d1fe8f19f"
+  },
+  {
+   "event": "published",
+   "at": "2026-10-03T19:26:13Z",
+   "operation": "publish",
+   "release_id": "rel-884c6fdc435420e9",
+   "idempotency_key": "demo-publish-01a1033b-038e-7330-ab1e-0b14e3b6eb92-884c6fdc4354",
+   "intention_id": "994ec4521b944df6b56ce597e5a8fa5c",
+   "command_ref": "cmd-ef64cf42ca0b",
+   "credential_kid": "local-sim-human-1",
+   "staging_confirmed": false
+  },
+  {
+   "event": "staging_confirmed",
+   "at": "2026-10-03T19:26:13Z",
+   "release_id": "rel-884c6fdc435420e9",
+   "staging_alias": "rel-884c6fdc435420e9",
+   "prod_alias": "rel-1cddd55d1fe8f19f",
+   "prod_unchanged": true
+  }
+ ],
+ "successor": {
+  "batch": 2,
+  "core": {
+   "state": "terminal_ok",
+   "outcome": "completed",
+   "core_run_id": "01a1033b-3326-7d1a-bdf7-878f9ce1efff",
+   "release_id": "rel-1cddd55d1fe8f19f",
+   "task_binding_ref": "7345eebf9586a7b950635fe03d1f0edc8772756f0e14093af3da1a5ecc61159d",
+   "facts_keys": [
+    "pulso_hypotheses"
+   ]
+  },
+  "exporter": {
+   "batches_before": 8,
+   "batches_after": 11,
+   "audit_events_before": 167,
+   "audit_events_after": 184,
+   "verification_ok": true
+  },
+  "memory_updates": [
+   {
+    "key": "transfer_limit/otp_verify",
+    "prior_verdict": "supported",
+    "rate_before": 0.6922,
+    "rate_after": 0.0963,
+    "n_after": 187,
+    "status": "contradicted",
+    "query_id": "q-recheck-transfer_limit-otp_verify",
+    "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)"
+   },
+   {
+    "key": "transfer_limit/web",
+    "prior_verdict": "supported",
+    "rate_before": 0.334,
+    "rate_after": 0.0824,
+    "n_after": 922,
+    "status": "contradicted",
+    "query_id": "q-recheck-transfer_limit-web",
+    "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)"
+   },
+   {
+    "key": "transfer_limit/mobile",
+    "prior_verdict": "supported",
+    "rate_before": 0.2913,
+    "rate_after": 0.0921,
+    "n_after": 1434,
+    "status": "contradicted",
+    "query_id": "q-recheck-transfer_limit-mobile",
+    "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)"
+   }
+  ],
+  "new_hypotheses": [
+   "address_change/web",
+   "address_change/confirm"
+  ],
+  "successor_investigation": "address_change/web"
+ },
+ "chain_verification": [
+  {
+   "run_id": "01a1033a-e139-7b00-bb95-eaf91d680639",
+   "ok": true
+  },
+  {
+   "run_id": "01a1033a-e541-76db-898a-8b3919a9ce3b",
+   "ok": true
+  },
+  {
+   "run_id": "01a1033a-e98c-7890-b1dc-09411f4f532b",
+   "ok": true
+  },
+  {
+   "run_id": "01a1033a-ebf7-7a48-af89-7e0002694b0e",
+   "ok": true
+  },
+  {
+   "run_id": "01a1033a-fe36-71bc-a26e-0cf3698205e1",
+   "ok": true
+  },
+  {
+   "run_id": "01a1033b-02e9-7dc7-a46b-f2de52ccd00d",
+   "ok": true
+  },
+  {
+   "run_id": "01a1033b-063f-7e71-b723-ecaea385c17a",
+   "ok": true
+  },
+  {
+   "run_id": "01a1033b-3326-7d1a-bdf7-878f9ce1efff",
+   "ok": true
+  }
+ ],
+ "exported_audit_events": 184,
+ "lab_queries_through_core": 10,
+ "llm_unscripted_calls": 0,
+ "console_files": {
+  "world": "world.json",
+  "replay": "replay.json",
+  "results": "results.json"
+ }
+}

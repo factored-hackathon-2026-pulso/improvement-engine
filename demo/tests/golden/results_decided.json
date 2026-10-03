@@ -978,6 +978,66 @@
   "rows": 8000,
   "seed": 20260101
  },
+ "decision": {
+  "actor": "local-supervisor",
+  "candidate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "error": null,
+  "mode": "scripted",
+  "prod_alias": "rel-base",
+  "promoted": false,
+  "proposal_id": "prop-core-2",
+  "reason": "scripted",
+  "release_id": "rel-new",
+  "simulated_human": true,
+  "stage": "staging_confirmed",
+  "staging_alias": "rel-new",
+  "trail": [
+   {
+    "at": "2026-01-01T00:00:00Z",
+    "candidate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "command_ref": "cmd-approve",
+    "event": "decision_requested",
+    "intention_id": "int-approve",
+    "operation": "approve",
+    "prod_alias": "rel-base",
+    "proposal_rev": 3,
+    "staging_alias": "rel-base"
+   },
+   {
+    "at": "2026-01-01T00:00:01Z",
+    "decision": "approve",
+    "event": "human_decided",
+    "mode": "scripted",
+    "simulated": true
+   },
+   {
+    "at": "2026-01-01T00:00:02Z",
+    "candidate_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "event": "approved",
+    "intention_id": "int-approve",
+    "operation": "approve",
+    "prod_alias": "rel-base",
+    "published": false,
+    "staging_alias": "rel-base"
+   },
+   {
+    "at": "2026-01-01T00:00:03Z",
+    "event": "published",
+    "intention_id": "int-publish",
+    "operation": "publish",
+    "release_id": "rel-new",
+    "staging_confirmed": false
+   },
+   {
+    "at": "2026-01-01T00:00:04Z",
+    "event": "staging_confirmed",
+    "prod_alias": "rel-base",
+    "prod_unchanged": true,
+    "release_id": "rel-new",
+    "staging_alias": "rel-new"
+   }
+  ]
+ },
  "doubles": [
   {
    "id": "stand_in_engine",
@@ -1022,5 +1082,119 @@
  "generated_at": "2026-01-01T00:00:00Z",
  "namespace": "golden",
  "schema": "pulso-demo-results/1",
+ "successor": {
+  "batch": 2,
+  "core": {
+   "core_run_id": "run-successor-scout",
+   "state": "terminal_ok"
+  },
+  "evidence": [
+   {
+    "digest": "068e7f470f60e8b1ef678b0c6409cf4718f4367d0ae0ab0882bc1b5c7ebcd425",
+    "id": "q-overall"
+   },
+   {
+    "digest": "c696c267eb9942ff6a1877f51eaaac3a2356daf7afa8a1c3083342f165676084",
+    "id": "q-flow-step"
+   },
+   {
+    "digest": "1247a71f28841a79222c67fa0ea12b87adf50f97303253142133506933f6346b",
+    "id": "q-flow-device"
+   }
+  ],
+  "exporter": {
+   "batches_after": 5,
+   "batches_before": 3,
+   "verification_ok": true
+  },
+  "memory_updates": [
+   {
+    "key": "transfer_limit/otp_verify",
+    "n_after": 187,
+    "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)",
+    "prior_verdict": "supported",
+    "query_id": "q-recheck-transfer_limit-otp_verify",
+    "rate_after": 0.0963,
+    "rate_before": 0.6922,
+    "status": "contradicted"
+   },
+   {
+    "key": "transfer_limit/web",
+    "n_after": 922,
+    "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)",
+    "prior_verdict": "supported",
+    "query_id": "q-recheck-transfer_limit-web",
+    "rate_after": 0.0824,
+    "rate_before": 0.334,
+    "status": "contradicted"
+   },
+   {
+    "key": "transfer_limit/mobile",
+    "n_after": 1434,
+    "note": "re-measured on batch 2; not attributed to the staged change (prod was not exposed)",
+    "prior_verdict": "supported",
+    "query_id": "q-recheck-transfer_limit-mobile",
+    "rate_after": 0.0921,
+    "rate_before": 0.2913,
+    "status": "contradicted"
+   }
+  ],
+  "new_hypotheses": [
+   {
+    "abandoned": 257,
+    "baseline_rate": 0.1304,
+    "dim": "device",
+    "excess": 0.2638,
+    "excess_lo": 0.2256,
+    "flow": "address_change",
+    "key": "address_change/web",
+    "n": 652,
+    "query_ids": [
+     "q-flow-device",
+     "q-overall"
+    ],
+    "rate": 0.3942,
+    "value": "web",
+    "verdict": "supported",
+    "verify_query_id": "q-verify-address_change-web"
+   },
+   {
+    "abandoned": 312,
+    "baseline_rate": 0.1304,
+    "dim": "step",
+    "excess": 0.0807,
+    "excess_lo": 0.0586,
+    "flow": "address_change",
+    "key": "address_change/confirm",
+    "n": 1478,
+    "query_ids": [
+     "q-flow-step",
+     "q-overall"
+    ],
+    "rate": 0.2111,
+    "value": "confirm",
+    "verdict": "supported",
+    "verify_query_id": "q-verify-address_change-confirm"
+   }
+  ],
+  "successor_target": {
+   "abandoned": 257,
+   "baseline_rate": 0.1304,
+   "dim": "device",
+   "excess": 0.2638,
+   "excess_lo": 0.2256,
+   "flow": "address_change",
+   "key": "address_change/web",
+   "n": 652,
+   "query_ids": [
+    "q-flow-device",
+    "q-overall"
+   ],
+   "rate": 0.3942,
+   "value": "web",
+   "verdict": "supported",
+   "verify_query_id": "q-verify-address_change-web"
+  }
+ },
  "tenant": "tenant-local"
 }

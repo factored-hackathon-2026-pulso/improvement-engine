@@ -81,6 +81,34 @@ LLM gateway config (`pulso_core_runtime/llm/config.py`): `AGENTCORE_LLM_GATEWAY_
 `PULSO_LLM_STAGE_POLICY`, `PULSO_LLM_STAGE_POLICY_JSON`, `PULSO_LLM_POLICY_REQUIRED`.
 Exit code 2 means configuration error (demo double, missing factory, pin drift, unreadable key file, empty URL).
 
+## Key delivery from env (AWS / Fargate; ADR 0009)
+
+`docker-entrypoint.sh` materialises key files from env secrets into tmpfs (`$PULSO_KEYS_DIR`, default
+`/run/pulso-keys`, files 0400 owned by uid 10001; the directory must be writable: Fargate ephemeral/tmpfs volume,
+Podman `--read-only` gives `/run` as tmpfs), validates shape and length, exports the matching path variable
+(`PULSO_IDENTITY_KEYS`, `PULSO_BRIDGE_*_SIGNER`, ...), then `unset`s every secret variable before `exec`. A missing or
+malformed required variable exits 2 with `pulso:runtime_config_invalid: <VAR> ...` (variable names only, never values).
+The runtime also refuses to start when the executor signer key equals the callback signer key. File mode (local/core
+mounts the files and sets the path variables, or uses the default names under `/run/pulso-keys`) keeps working: a
+missing env variable is accepted when the corresponding key file is already present and valid. `AGENTCORE_ALLOW_DEMO`
+skips this step so the runtime's own demo-double refusal still fires.
+
+| Entrypoint | Required secret env var (content) | Materialised file | Shape |
+| --- | --- | --- | --- |
+| `runtime` | `PULSO_BRIDGE_IDENTITY_SIGNER_JSON` | `bridge-identity.json` | `{"kid", "key": b64url 32-byte Ed25519 seed}` |
+| `runtime` | `PULSO_BRIDGE_STAFF_SIGNER_JSON` | `bridge-staff.json` | same |
+| `runtime` | `PULSO_BRIDGE_CALLBACK_SIGNER_JSON` | `bridge-callback.json` | same |
+| `runtime` | `PULSO_BRIDGE_EXECUTOR_SIGNER_JSON` | `bridge-executor.json` | same; key must differ from callback |
+| `runtime` | `CORE_IDENTITY_KEYS_JSON` | `identity.json` | JSON object (agent-core identity keys) |
+| `runtime` | `CORE_STAFF_KEYS_JSON` | `staff.json` | JSON object (agent-core staff keys) |
+| `runtime` | `PULSO_SERVICE_KEYS_JSON` | `service.json` | `{"keys": {kid: {"iss", "aud", "key": b64url 32 bytes}}}` |
+| `exporter` | `PULSO_EXPORTER_KEY_CONTROL_API_SEED` | `exporter-control-api.key` | b64url 32-byte Ed25519 seed |
+| `exporter` | `PULSO_EXPORTER_KEY_LAB_BROKER_SEED` | `exporter-lab-broker.key` | same |
+| `migrate`, `agentcore` | none | none | |
+
+Non-secret configuration (DSNs without passwords aside, URLs, tenant, ids) stays as plain env; DSNs carrying
+passwords are secrets injected by the platform as ordinary env vars and are not touched by the entrypoint.
+
 ## Known gaps
 
 `mypy --strict` is not clean (agent_core ships no `py.typed`); budgets come from a static file; see the journals for the

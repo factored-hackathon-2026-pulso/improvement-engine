@@ -44,6 +44,7 @@ function ConvertTo-PodmanCreateArgs {
     foreach ($p in @($s.ports)) { if ($p) { $a += @('-p', "$($p.host_ip):$($p.published):$($p.target)") } }
     if ($s.mem_limit) { $a += @('--memory', "$($s.mem_limit)") }
     if ($s.user) { $a += @('--user', "$($s.user)") }
+    if ($s.read_only) { $a += '--read-only' }
     if ($s.healthcheck) {
         $h = $s.healthcheck
         $a += @('--health-cmd', (ConvertTo-Json @($h.test) -Compress))

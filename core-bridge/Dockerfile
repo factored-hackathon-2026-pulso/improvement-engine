@@ -29,7 +29,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PULSO_SHA=${PULSO_SHA} PULSO_CO
 COPY --from=builder /wheelhouse /wheelhouse
 RUN pip install --no-cache-dir --no-index --find-links /wheelhouse agent-core jsonschema referencing \
  && rm -rf /wheelhouse \
- && useradd --system --uid 10001 --no-create-home pulso
+ && useradd --system --uid 10001 --no-create-home pulso \
+ && install -d -m 0700 -o 10001 /run/pulso-keys
 # Only our package is copied (no testing/, tests/, contracts/ sources, dev group, Core compose).
 COPY src/pulso_core_runtime /opt/pulso/lib/pulso_core_runtime
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

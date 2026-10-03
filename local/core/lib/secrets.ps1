@@ -38,7 +38,7 @@ function Initialize-LocalSecrets {
     $file
 }
 function Write-PortsEnv {
-    param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Namespace, [hashtable]$Ports, [string]$Image, [string]$ImageDigest = 'unknown', [string]$SimImage = 'localhost/pulso-platform-sim:dry-run')
+    param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Namespace, [hashtable]$Ports, [string]$Image, [string]$ImageDigest = 'unknown', [string]$SimImage = 'localhost/pulso-platform-sim:dry-run', [string]$HumanIssuerImage = 'localhost/pulso-local-identity:dry-run')
     $dir = Join-Path $Root $Namespace
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $file = Join-Path $dir 'ports.env'
@@ -48,6 +48,7 @@ function Write-PortsEnv {
     $lines += "PULSO_CORE_IMAGE=$Image"
     $lines += "PULSO_IMAGE_DIGEST=$ImageDigest"
     $lines += "PULSO_SIM_IMAGE=$SimImage"
+    $lines += "PULSO_HUMAN_ISSUER_IMAGE=$HumanIssuerImage"
     [IO.File]::WriteAllText($file, (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
     $file
 }

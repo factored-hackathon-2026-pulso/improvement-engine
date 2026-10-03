@@ -12,7 +12,7 @@ param([Parameter(Mandatory)][string]$Namespace, [string]$BaseUrl, [string]$Token
       [string]$ReportPath, [string]$Machine = 'pulso-dev', [switch]$SkipSeedCheck, [switch]$SkipExporter,
       [string]$ExpectedImageDigest)
 $ErrorActionPreference = 'Stop'
-foreach ($f in 'errors', 'machine', 'namespace', 'evidence', 'runner', 'keys') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
+foreach ($f in 'errors', 'machine', 'namespace', 'evidence', 'runner', 'keys', 'humanissuer') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
 $started = [DateTime]::UtcNow
 $suites = New-Object System.Collections.Generic.List[object]
 $commands = New-Object System.Collections.Generic.List[string]
@@ -66,6 +66,17 @@ try {
         $probe = Get-ExecutorKeyProbeArgs
         $ek = Get-ExecutorKeyVerdict -ProbeOutput ((Invoke-Podman -Connection $conn exec "$project-core-runtime-1" @probe) -join '')
         Add-Check 'executor_key' $ek.status $ek.detail
+    }
+    # 4c. CAP-63 + local human issuer: no simulated identity in remote config; the issuer is a labelled, unpublished double
+    $c63 = Get-RemoteSimulationVerdict
+    Add-Check 'cap63_remote_simulation' $c63.status $c63.detail
+    if (-not $Exec) { Add-Check 'human_issuer' 'not_run' 'no engine access in this mode' } else {
+        $hs = Get-ContainerState -Connection $conn -Name "$project-human-issuer-1" 2>$null
+        if (-not $hs) { Add-Check 'human_issuer' 'not_run' 'no human-issuer container in this stack (profile without it)' } else {
+            $hv = Get-HumanIssuerExposureVerdict -PublishedPorts ((Invoke-Podman -Connection $conn port "$project-human-issuer-1" 2>$null) -join ' ')
+            $ok = ($hs.health -eq 'healthy' -and $hv.status -eq 'pass')
+            Add-Check 'human_issuer' $(if ($ok) { 'pass' } else { 'fail' }) "status=$($hs.status)/$($hs.health); $($hv.detail)"
+        }
     }
     # 5. scripted task: needs the L3 task route plus a model/broker; never claimed
     Add-Check 'scripted_task' 'not_run' 'no scripted task fixture: core-tasks/invoke needs L3 wiring and a broker double with a model script'

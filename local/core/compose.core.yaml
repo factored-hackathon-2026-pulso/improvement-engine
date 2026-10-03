@@ -23,6 +23,8 @@ x-labels: &labels
 
 x-runtime-image: &runtime-image ${PULSO_CORE_IMAGE:-localhost/pulso-core-runtime:unset}
 x-sim-image: &sim-image ${PULSO_SIM_IMAGE:-localhost/pulso-platform-sim:unset}
+# Local human issuer (local-identity, sandbox-only DOUBLE): its own image; built by start.ps1 (Ensure-HumanIssuerImage).
+x-human-image: &human-image ${PULSO_HUMAN_ISSUER_IMAGE:-localhost/pulso-local-identity:unset}
 
 x-admin-dsn: &admin-dsn postgresql://postgres:${POSTGRES_PASSWORD:-unset}@core-postgres:5432/core_runtime
 x-app-dsn: &app-dsn postgresql://core_app:${CORE_APP_PASSWORD:-unset}@core-postgres:5432/core_runtime
@@ -88,6 +90,33 @@ services:
       com.pulso.runner.copy: '[{"src":"init/10-exporter-grants.sql","dest":"/init/10-exporter-grants.sql"},{"src":"init/12-app-grants.sql","dest":"/init/12-app-grants.sql"},{"src":"init/15-eval-grants.sql","dest":"/init/15-eval-grants.sql"},{"src":"init/20-seed-state.sql","dest":"/init/20-seed-state.sql"}]'
     networks: [core-net]
 
+  human-issuer-keygen:
+    # LOCAL ONLY (plan 17.3.2): generates the human-issuer keyset into its own private volume (idempotent: an existing
+    # keyset is kept so the public key already merged into Core's staff set stays valid) and publishes ONLY the public
+    # staff fragment into a separate volume that core-keygen reads. Core never mounts the private volume.
+    image: *human-image
+    profiles: [real_local, fixture]
+    user: "0"
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -eu
+        d=/run/hi-keys; p=/run/human-issuer-public
+        [ -f $$d/identities.json ] || python -m local_identity.keys gen $$d "$$PULSO_TENANT_ID"
+        cp $$d/core-staff-keys.human-fragment.json $$p/core-staff-keys.human-fragment.json
+        chown -R 10002 $$d
+        chmod 0644 $$p/core-staff-keys.human-fragment.json
+    environment:
+      PULSO_TENANT_ID: ${PULSO_TENANT_ID:-tenant-local}
+    volumes:
+      - human-issuer-keys:/run/hi-keys
+      - human-issuer-public:/run/human-issuer-public
+    mem_limit: 128m
+    restart: "no"
+    labels: {<<: [*labels, *runner]}
+    networks: [core-net]
+
   core-keygen:
     image: *runtime-image
     profiles: [real_local, fixture]
@@ -96,9 +125,14 @@ services:
     environment:
       PULSO_KEYS_DIR: /run/pulso-keys
       PULSO_TENANT_ID: ${PULSO_TENANT_ID:-tenant-local}
+      # PUBLIC human key fragment (local stack only): merged into staff.json next to the bridge bot key.
+      PULSO_HUMAN_STAFF_FRAGMENT: /run/human-issuer-public/core-staff-keys.human-fragment.json
     volumes:
       - core-keys:/run/pulso-keys
       - core-exporter-state:/var/lib/exporter
+      - human-issuer-public:/run/human-issuer-public:ro
+    depends_on:
+      human-issuer-keygen: {condition: service_completed_successfully}
     mem_limit: 256m
     restart: "no"
     labels:
@@ -226,6 +260,44 @@ services:
       core-net:
         aliases: [platform-exporter, core-exporter]
 
+  human-issuer:
+    # DOUBLE (sandbox-only, plan 16.13.2 / 17.3.2): local human authority. INTERNAL ONLY: reachable as `human-issuer:8083`
+    # on the core network by the control-api stand-in; never published to the host or any browser proxy, never in a remote
+    # manifest. The local-profile switch is set here on purpose (the image does not bake it).
+    image: *human-image
+    profiles: [real_local]
+    entrypoint: ["python", "-m", "local_identity"]
+    read_only: true
+    user: "10002"
+    environment:
+      LOCAL_IDENTITY_PROFILE: local
+      LOCAL_IDENTITY_SERVICE_KEYS: /run/hi-keys/human-issuer-service-keys.json
+      LOCAL_IDENTITY_SESSION_SIGNER: /run/hi-keys/session-signer.json
+      LOCAL_IDENTITY_HUMAN_STAFF_SIGNER: /run/hi-keys/human-staff-signer.json
+      LOCAL_IDENTITY_IDENTITIES: /run/hi-keys/identities.json
+      LOCAL_IDENTITY_REPLAY_DB: /var/lib/local-identity/replay.sqlite3
+    volumes:
+      - human-issuer-keys:/run/hi-keys:ro
+      - human-issuer-replay:/var/lib/local-identity
+    depends_on:
+      human-issuer-keygen: {condition: service_completed_successfully}
+    expose: ["8083"]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8083/readyz', timeout=3).status == 200 else 1)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+    restart: "no"
+    labels:
+      <<: [*labels, *runner]
+      com.pulso.role: double
+      com.pulso.piece: human-issuer
+    networks:
+      core-net:
+        aliases: [human-issuer]
+
   platform-sim:
     # DOUBLE: registry mock + bridge mock + ingest fixture (broker/control-api semantics) in one process.
     image: *sim-image
@@ -265,3 +337,6 @@ volumes:
   core-pgdata: {labels: *labels}
   core-keys: {labels: *labels}
   core-exporter-state: {labels: *labels}
+  human-issuer-keys: {labels: *labels}
+  human-issuer-public: {labels: *labels}
+  human-issuer-replay: {labels: *labels}

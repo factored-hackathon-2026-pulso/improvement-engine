@@ -28,17 +28,38 @@ def test_verifier_supports_the_real_effect_and_refutes_the_confounded_one():
 
 def test_first_candidate_fails_a_gate_then_automatic_revision_passes_both():
     conn = dataset.build()
-    c1 = analysis.first_candidate()
+    sc = analysis.scout(conn)
+    ver = analysis.verify(conn, sc["hypotheses"])
+    c1 = analysis.design_candidate(conn, sc, ver)
     r1 = analysis.judge(conn, c1)
     assert r1["native_proxy"]["status"] == "pass" and r1["improvement"]["status"] == "fail"
     assert r1["improvement"]["reason_code"] == "guard_breach"
-    c2 = analysis.revise(conn, c1, r1)
-    assert c2["revision_of"] == c1["id"] and c2["scope"] != c1["scope"]
+    c2 = analysis.revise(conn, c1, r1, sc, ver)
+    assert c2["revision_of"] == c1["id"] and c2["exclude_segments"] != c1["exclude_segments"]
     r2 = analysis.judge(conn, c2)
     assert r2["improvement"]["status"] == "pass" and r2["improvement"]["lift_lo"] > 0
 
 
 def test_alternatives_always_include_do_nothing_with_a_measured_cost():
-    alts = analysis.alternatives(dataset.build(), analysis.first_candidate())
+    conn = dataset.build()
+    sc = analysis.scout(conn)
+    alts = analysis.alternatives(conn, analysis.design_candidate(conn, sc, analysis.verify(conn, sc["hypotheses"])))
     kinds = [a["kind"] for a in alts]
     assert "do_nothing" in kinds and next(a for a in alts if a["kind"] == "do_nothing")["expected_abandoned"] > 0
+
+
+def test_second_batch_contradicts_the_old_claim_and_starts_a_new_investigation():
+    """Step 10: batch 2 no longer shows transfer_limit/otp_verify (measured by SQL) and surfaces a hypothesis the memory never had."""
+    conn1 = dataset.build()
+    sc1 = analysis.scout(conn1)
+    ver1 = analysis.verify(conn1, sc1["hypotheses"])
+    obs = analysis.observe(dataset.build(seed=20260102, post=True), sc1["hypotheses"], ver1)
+    by = {u["key"]: u for u in obs["memory_updates"]}
+    assert by["transfer_limit/otp_verify"]["status"] == "contradicted"
+    assert by["transfer_limit/otp_verify"]["rate_after"] < 0.5 * by["transfer_limit/otp_verify"]["rate_before"]
+    assert obs["successor_target"]["key"].startswith("address_change") and obs["successor_target"]["verdict"] == "supported"
+    assert all(h["key"] != "transfer_limit/otp_verify" for h in obs["new_hypotheses"])
+
+
+def test_batch_one_is_unchanged_by_the_second_batch_option():
+    assert analysis.scout(dataset.build())["hypotheses"][0]["key"] == "transfer_limit/otp_verify"

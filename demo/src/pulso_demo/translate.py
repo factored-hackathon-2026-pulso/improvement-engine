@@ -77,7 +77,7 @@ def _hyp_text(h: dict[str, Any]) -> str:
 
 
 def _diff(final_cand: dict[str, Any], core_att: dict[str, Any] | None) -> list[dict[str, str]]:
-    lines = [{"op": "ctx", "text": "# business view of the change spec (stand-in builder)"}, {"op": "ctx", "text": f"retry_policy:   # scope: {final_cand['scope']}"},
+    lines = [{"op": "ctx", "text": "# business view of the change spec (stand-in builder)"}, {"op": "ctx", "text": f"retry_policy:   # scope: {final_cand['scope']}" + "".join(f", excl {x['dimension']}={x['value']}" for x in final_cand.get("exclude_segments", []))},
              {"op": "del", "text": f"  max_retries: {final_cand['from_retries']}"}, {"op": "add", "text": f"  max_retries: {final_cand['max_retries']}"},
              {"op": "ctx", "text": f"  step: {final_cand['step']}"}, {"op": "ctx", "text": "# Core entities written by the writer (real receipts)"}]
     if core_att:
@@ -117,9 +117,15 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         _eval_node(1, ["change"], core_att[0] if core_att else None, an_att[0] if an_att else None),
     ]
     prev = "evaluate_1"
-    if two:
+    if an_att and an_att[final]["improvement"]["status"] == "fail":  # bounded stop: the revision (if any) did not clear the gate either
+        why = "no_revision_within_bounds" if not two else "revision_exhausted"
+        nodes.append(_node("revise", LABELS["revise"], "proposal", "dead", ["evaluate_1"], why))
+        nodes.append(_eval_node(2, ["revise"], core_att[final] if len(core_att) > final else None, an_att[final]) if two
+                     else _node("evaluate_2", LABELS["evaluate_2"], "evaluation", "planned", ["revise"], "no_revision"))
+        prev = "evaluate_2" if two else "evaluate_1"
+    elif two:
         nodes.append(_node("revise", LABELS["revise"], "proposal", "complete", ["evaluate_1"], "proposal_revised"))
-        nodes.append(_eval_node(2, ["revise"], core_att[1] if len(core_att) > 1 else None, an_att[1]))
+        nodes.append(_eval_node(2, ["revise"], core_att[final] if len(core_att) > final else None, an_att[final]))
         prev = "evaluate_2"
     else:
         nodes.append(_node("revise", LABELS["revise"], "proposal", "planned", ["evaluate_1"], "not_needed"))
@@ -127,15 +133,19 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         prev = "evaluate_1"
     last_eval = next(n for n in nodes if n["node_id"] == prev)
     ready = last_eval["status"] == "complete"
+    dec = r.get("decision") if ready else None  # a human decision only exists for a candidate that passed BOTH gates
+    succ = r.get("successor")
+    d_stat, a_stat, p_stat, rel_stat = _decision_states(dec, ready)
+    mem_ok = bool(succ) and bool(succ.get("memory_updates") or succ.get("new_hypotheses")) and succ.get("core", {}).get("state") == "terminal_ok"
     nodes += [
-        _node("decision", LABELS["decision"], "decision", "waiting_dependency" if ready else "planned", [prev],
-              "human_decision_pending" if ready else "evaluation_not_passed"),
-        _node("approve", LABELS["approve"], "decision", "planned", ["decision"], "awaiting_human_authority"),
-        _node("publish", LABELS["publish"], "publish", "planned", ["approve"], "awaiting_human_authority"),
-        _node("release", LABELS["release"], "release", "planned", ["publish"], "awaiting_human_authority"),
+        _node("decision", LABELS["decision"], "decision", d_stat[0], [prev], d_stat[1]),
+        _node("approve", LABELS["approve"], "decision", a_stat[0], ["decision"], a_stat[1]),
+        _node("publish", LABELS["publish"], "publish", p_stat[0], ["approve"], p_stat[1]),
+        _node("release", LABELS["release"], "release", rel_stat[0], ["publish"], rel_stat[1]),
         _node("observation", LABELS["observation"], "observation", obs_status, [prev], None if obs_status == "complete" else
               ("chain_verification_failed" if obs_status == "dead" else "no_exported_observations")),
-        _node("memory", LABELS["memory"], "memory", "planned", ["observation"], "not_run_in_stand_in"),
+        _node("memory", LABELS["memory"], "memory", "complete" if mem_ok else "planned", ["observation"],
+              "memory_published_by_stand_in" if mem_ok else "not_run_in_stand_in"),
     ]
     assert [n["node_id"] for n in nodes] == ORDER
 
@@ -166,10 +176,31 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         investigation[REFUTED] = {"hypothesis": _hyp_text(h), "verifier": "refuted", "evidence": [
             _ev("q-flow-device", sq["q-flow-device"]["rows_digest"], "supports", f"Pooled rate looked elevated: {_hyp_text(h)}", t),
             _ev(ra["query_id"], next(q for q in an["verify"]["queries"] if q["id"] == ra["query_id"])["rows_digest"], "contradicts", ra["counterevidence"][0], t)]}
-    if exp.get("audit_events", 0) > 0:
+    tgt = (succ or {}).get("successor_target")
+    if succ and tgt:
+        runs[SUCCESSOR] = {"run_id": SUCCESSOR, "title": f"Successor investigation started by the stand-in engine: {tgt['key']}", "state": "running",
+                           "origin": "observation", "revision": 0, "nodes": [
+                               _node("scout", LABELS["scout"], "scout", st(succ.get("core", {}).get("state") == "terminal_ok"), [], "second_batch_scout"),
+                               _node("verify", LABELS["verify"], "verifier", "running", ["scout"], "successor_investigation_started")]}
+        ev2 = [_ev(e["id"], e["digest"], "supports", f"Batch 2 observation (scripted, stand-in): {_hyp_text(tgt)}", t, source="synthetic", validation="unverified")
+               for e in succ.get("evidence", [])[:1]]
+        investigation[SUCCESSOR] = {"hypothesis": _hyp_text(tgt), "verifier": "pending", "evidence": ev2}
+    elif exp.get("audit_events", 0) > 0:
         runs[SUCCESSOR] = {"run_id": SUCCESSOR, "title": "Successor investigation (planned; not started by the stand-in)", "state": "planned", "origin": "observation",
                            "revision": 0, "nodes": [_node("scout", LABELS["scout"], "scout", "planned", [], "successor_not_started_by_stand_in")]}
 
+    def _hyp(h: dict[str, Any], verdict: str, qid: str | None, digest: str | None) -> dict[str, Any]:
+        return {"hypothesis_id": f"hyp-{h['key'].replace('/', '-')}", "statement": _hyp_text(h), "verdict": verdict,
+                "evidence_refs": [_ref(qid, digest)] if qid and digest else []}
+
+    vq = {q["id"]: q["rows_digest"] for q in an["verify"]["queries"]}
+    if MAIN in investigation:
+        investigation[MAIN]["hypotheses"] = [_hyp(h, assess[h["key"]]["verdict"], assess[h["key"]]["query_id"], vq.get(assess[h["key"]]["query_id"]))
+                                             for h in scout_h if h["key"] in assess]
+    if REFUTED in investigation:
+        investigation[REFUTED]["hypotheses"] = [_hyp(refuted[0], "refuted", assess[refuted[0]["key"]]["query_id"], vq.get(assess[refuted[0]["key"]]["query_id"]))]
+    if SUCCESSOR in investigation and tgt:
+        investigation[SUCCESSOR]["hypotheses"] = [_hyp(tgt, "inconclusive", tgt.get("verify_query_id"), None)]
     events: dict[str, list[dict[str, Any]]] = {k: [] for k in runs}
     for run_id, run in runs.items():
         for n in run["nodes"]:
@@ -194,27 +225,92 @@ def build_world(r: dict[str, Any]) -> dict[str, Any]:
         "improvement": {"status": imp["status"], "reason_code": imp.get("reason_code"), "receipt_refs": [], "checked_at": t, "attempt": final + 1,
                         "lift": imp.get("lift"), "lift_lo": imp.get("lift_lo"), "exposure": imp.get("exposure"), "guard_max_exposure": imp.get("guard_max_exposure")},
         "combined": comb}
-    final_cand = an_att[final]["candidate"]
+    final_cand = an_att[final]["candidate"] if an_att else None
     attempts = []
     for i, a in enumerate(an_att):
         nstat, nreason = _native_status(core_att[i] if i < len(core_att) else None)
         attempts.append({"attempt": i + 1, "candidate_id": a["candidate"]["id"], "revision_of": a["candidate"].get("revision_of"),
                          "scope": a["candidate"]["scope"], "max_retries": a["candidate"]["max_retries"], "native": nstat, "native_reason": nreason,
-                         "improvement": a["improvement"]})
-    memory = [{"memory_id": f"mem-{h['key'].replace('/', '-')}", "title": f"{h['key']}: {assess[h['key']]['verdict']} (proposed, not published)",
-               "status": "proposed", "revoked": False} for h in scout_h if h["key"] in assess]
+                         "exclude_segments": a["candidate"].get("exclude_segments", []), "hypothesis_key": a["candidate"].get("hypothesis_key"),
+                         "improvement": a["improvement"], "failure": a["improvement"].get("breach") and {"reason_code": a["improvement"]["reason_code"], **a["improvement"]["breach"]},
+                         "revision": a["candidate"].get("revision")})
+    memory = _memory(scout_h, assess, succ if mem_ok else None)
+    stage = dec["stage"] if dec else "pending"
+    decision = {"decision_id": "dec-1", "available_commands": ["approve", "reject"], "needs_step_up": True, "stepped_up": False, "revision": 1}
+    if dec:
+        decision = {**decision, "available_commands": ["approve", "reject"] if stage == "requested" else [], "stepped_up": stage != "requested",
+                    "state": stage}
     return {
         "runs": runs, "events": events, "investigation": investigation,
-        "diff": {"proposal_id": "prop-1", "lines": _diff(final_cand, core_att[final] if core_att else None)},
+        "diff": {"proposal_id": "prop-1", "lines": _diff(final_cand, core_att[final] if core_att else None) if final_cand else []},
         "gates": gates, "memory": memory,
-        "decision": {"decision_id": "dec-1", "available_commands": ["approve", "reject"], "needs_step_up": True, "stepped_up": False, "revision": 1},
+        "decision": decision,
+        "gates_by_run": {MAIN: {"proposal_id": (core_att[final].get("proposal_id") if core_att else None), "attempts": [
+            {"attempt": x["attempt"], "native_pass": x["native"] == "pass", "improvement_pass": x["improvement"]["status"] == "pass",
+             "reason": x["improvement"].get("reason_code") or x["native_reason"], "revision_of": x["revision_of"]} for x in attempts]}},
         "commands": {},
         "demo": {"mode": "stand_in", "namespace": r["namespace"], "runtime_profile": "real_local_core_standin",
                  "doubles": [d["id"] for d in r["doubles"]], "doubles_detail": r["doubles"], "alternatives": an["alternatives"], "attempts": attempts,
-                 "decision_hook": "pending", "core": {"scout_run": (scout_core or {}).get("core_run_id"), "attempts": [
+                 "decision_hook": stage, "core": {"scout_run": (scout_core or {}).get("core_run_id"), "attempts": [
                      {"proposal_id": a.get("proposal_id"), "candidate_hash": a.get("candidate_hash")} for a in core_att]},
-                 "exporter": {"audit_events": exp.get("audit_events", 0), "chain_receipts_ok": chain_ok}},
+                 "exporter": {"audit_events": exp.get("audit_events", 0), "chain_receipts_ok": chain_ok},
+                 **({"human": {k: dec.get(k) for k in ("mode", "simulated_human", "actor", "stage", "proposal_id", "candidate_hash", "release_id",
+                                                        "staging_alias", "prod_alias", "promoted", "error", "reason")},
+                     "decision_timeline": dec["trail"]} if dec else {}),
+                 **({"successor": {k: succ[k] for k in ("batch", "core", "exporter", "memory_updates", "new_hypotheses") if k in succ}} if succ else {})},
     }
+
+
+_PENDING = ("planned", "awaiting_human_authority")
+
+
+def _decision_states(dec: dict[str, Any] | None, ready: bool) -> tuple[tuple[str, str], tuple[str, str], tuple[str, str], tuple[str, str]]:
+    """(decision, approve, publish, release) node (status, reason) from the REAL decision stage. `approved` != `published`; staging confirmed is not
+    exposure: the release node completes only on the explicit promote."""
+    if not ready:
+        return ("planned", "evaluation_not_passed"), _PENDING, _PENDING, _PENDING
+    if not dec or dec["stage"] in ("requested", "pending"):
+        return ("waiting_dependency", "human_decision_pending"), _PENDING, _PENDING, _PENDING
+    stage = dec["stage"]
+    if stage == "rejected":
+        return ("dead", "human_rejected"), ("planned", "not_approved"), ("planned", "not_approved"), ("planned", "not_approved")
+    if stage == "failed":
+        return ("unknown", "decision_flow_failed"), _PENDING, _PENDING, _PENDING
+    decided = ("complete", "human_decided_simulated" if dec.get("simulated_human") else "human_decided")
+    approved = ("complete", "approved_operation_hash_fixed")
+    if stage == "approved_not_published":
+        return decided, approved, ("waiting_dependency", "approved_not_published"), _PENDING
+    if stage == "published_unconfirmed":
+        return decided, approved, ("unknown", "staging_alias_not_confirmed"), _PENDING
+    published = ("complete", "published_staging_alias_confirmed")
+    if stage == "promoted":
+        return decided, approved, published, ("complete", "promoted_to_prod_explicit")
+    return decided, approved, published, ("waiting_dependency", "staging_confirmed_prod_unchanged")
+
+
+def _memory(scout_h: list[dict[str, Any]], assess: dict[str, Any], succ: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Memory items. First round: `proposed` (nothing is published by the demo's own analysis). After the second batch the stand-in engine
+    publishes them; a claim the new observations no longer show is `contradicted` (re-measured by SQL), never silently dropped."""
+    contra = {u["key"]: u for u in (succ or {}).get("memory_updates", []) if u["status"] == "contradicted"}
+    out: list[dict[str, Any]] = []
+    for h in scout_h:
+        if h["key"] not in assess:
+            continue
+        mid, verdict = f"mem-{h['key'].replace('/', '-')}", assess[h["key"]]["verdict"]
+        if succ is None:
+            out.append({"memory_id": mid, "title": f"{h['key']}: {verdict} (proposed, not published)", "status": "proposed", "revoked": False})
+        elif h["key"] in contra:
+            u = contra[h["key"]]
+            out.append({"memory_id": mid, "title": f"{h['key']}: {verdict} in batch 1, CONTRADICTED by batch 2 (abandonment {u['rate_before']:.1%} -> "
+                                                   f"{u['rate_after']:.1%}; not attributed to the staged change) [stand-in engine]",
+                        "status": "contradicted", "revoked": False})
+        else:
+            out.append({"memory_id": mid, "title": f"{h['key']}: {verdict} (published by stand-in engine)", "status": "published", "revoked": False})
+    for h in (succ or {}).get("new_hypotheses", []):
+        out.append({"memory_id": f"mem-{h['key'].replace('/', '-')}-b2", "title": f"{h['key']}: new in batch 2, {h['verdict']} by the batch-2 verifier "
+                                                                                    "(published by stand-in engine; investigation started)",
+                    "status": "published", "revoked": False})
+    return out
 
 
 def replay_world(world: dict[str, Any]) -> dict[str, Any]:
