@@ -1,0 +1,213 @@
+{
+ "schema": "pulso-demo-report/1",
+ "mode": "live_real_local_core",
+ "started_at": "2026-10-03T19:05:38.566243+00:00",
+ "finished_at": "2026-10-03T19:05:56.060633+00:00",
+ "namespace": "claude-demo-1791054263424",
+ "outcome": "ok",
+ "error": null,
+ "notes": [],
+ "claims": "Codex stand-in demo over a synthetic bank dataset; NOT the Rust engine, NOT a real model, NOT a causal/SLA claim (mechanism_proxy only)",
+ "doubles": [
+  {
+   "id": "stand_in_engine",
+   "what": "Codex engine stand-in (e2e-core codex_standin): drives the REAL Core runtime; not the Rust engine",
+   "until": "Rust engine HTTP API exists"
+  },
+  {
+   "id": "scripted_llm",
+   "what": "scripted llm-gateway double: tool calls/outputs are scripted from data-derived analysis, no real model"
+  },
+  {
+   "id": "fixture_api",
+   "what": "debug-console fixture API/SSE server fed from translated results; not the Rust control API"
+  },
+  {
+   "id": "lab_query_rows",
+   "what": "the e2e-fixtures lab double returns fixed rows for lab_query; the data-derived SQL results come from the demo's local sqlite dataset (recorded SQL and digests)"
+  },
+  {
+   "id": "improvement_judge",
+   "what": "demo's data-derived mechanism_proxy judge and reviser; stand-in for the Codex improvement judge"
+  },
+  {
+   "id": "human_decision",
+   "what": "approve/publish hook not connected: pending until local-identity is wired"
+  }
+ ],
+ "steps": [
+  {
+   "n": 1,
+   "title": "Snapshot/E0/observations wake the engine; nobody picks the category",
+   "source": "analysis.scout",
+   "status": "shown",
+   "basis": "scout SQL over the synthetic dataset"
+  },
+  {
+   "n": 2,
+   "title": "Measured signal families, discarded candidates, investigation",
+   "source": "analysis.scout",
+   "status": "shown",
+   "basis": "scout SQL over the synthetic dataset"
+  },
+  {
+   "n": 3,
+   "title": "Scout uses SQL adaptively; separate verifier contradicts or supports",
+   "source": "core.verifier",
+   "status": "shown",
+   "basis": "real Core verifier run + data-derived verdicts"
+  },
+  {
+   "n": 4,
+   "title": "Opportunity with population, mechanism, uncertainty, alternatives incl. do_nothing",
+   "source": "core.design",
+   "status": "shown",
+   "basis": "alternatives incl. do_nothing from builder_design output"
+  },
+  {
+   "n": 5,
+   "title": "Concrete change: Core entities, versions, diff",
+   "source": "core.attempts.write_receipts",
+   "status": "shown",
+   "basis": "writer receipts from Core (stand-in change spec)"
+  },
+  {
+   "n": 6,
+   "title": "Scenarios on base and candidate; two distinct gates",
+   "source": "core.attempts.native + analysis.attempts.improvement",
+   "status": "complete",
+   "basis": "native evaluation real; improvement judge is a stand-in"
+  },
+  {
+   "n": 7,
+   "title": "Failure triggers a bounded automatic revision",
+   "source": "analysis.attempts",
+   "status": "shown",
+   "basis": "candidate 1 failed the guard, revised automatically"
+  },
+  {
+   "n": 8,
+   "title": "Human decision/approve (authority)",
+   "source": "decision_hook",
+   "status": "hook_pending",
+   "basis": "waiting for local-identity; the demo never approves"
+  },
+  {
+   "n": 9,
+   "title": "Staging confirmation / exposure",
+   "source": null,
+   "status": "not_run",
+   "basis": "needs an approved operation and the staging alias receipt"
+  },
+  {
+   "n": 10,
+   "title": "New observations: exporter, chain verification, successor run",
+   "source": "exporter",
+   "status": "shown",
+   "basis": "exported observations + chain verification; successor run only planned"
+  }
+ ],
+ "gates": {
+  "native": {
+   "status": "pass",
+   "reason_code": null,
+   "checked_at": "2026-10-03T19:05:56Z",
+   "attempt": 2,
+   "report_ref": {
+    "id": "01a10328-84a0-7c6d-ad59-1badf74affe0",
+    "digest": "95f9776f7db521d9228d13efb6bc0934c9ae34b973e00da414ab54a002ff2ea1",
+    "media_type": "application/json"
+   }
+  },
+  "improvement": {
+   "status": "pass",
+   "reason_code": null,
+   "receipt_refs": [],
+   "checked_at": "2026-10-03T19:05:56Z",
+   "attempt": 2,
+   "lift": 0.04825,
+   "lift_lo": 0.04355,
+   "exposure": 0.0025,
+   "guard_max_exposure": 0.0035
+  },
+  "combined": {
+   "decision": "needs_human",
+   "reason_code": "human_decision_pending"
+  }
+ },
+ "attempts": [
+  {
+   "attempt": 1,
+   "candidate_id": "cand-1",
+   "revision_of": null,
+   "scope": "all_flows",
+   "max_retries": 5,
+   "native": "pass",
+   "native_reason": null,
+   "improvement": {
+    "status": "fail",
+    "reason_code": "guard_breach",
+    "lift": 0.0855,
+    "lift_lo": 0.07937,
+    "exposure": 0.00387,
+    "guard_max_exposure": 0.0035
+   }
+  },
+  {
+   "attempt": 2,
+   "candidate_id": "cand-2",
+   "revision_of": "cand-1",
+   "scope": "flow:transfer_limit",
+   "max_retries": 3,
+   "native": "pass",
+   "native_reason": null,
+   "improvement": {
+    "status": "pass",
+    "reason_code": null,
+    "lift": 0.04825,
+    "lift_lo": 0.04355,
+    "exposure": 0.0025,
+    "guard_max_exposure": 0.0035
+   }
+  }
+ ],
+ "decision_hook": "pending",
+ "chain_verification": [
+  {
+   "run_id": "01a10328-6795-744e-9ced-8bcc24430213",
+   "ok": true
+  },
+  {
+   "run_id": "01a10328-6b73-73bd-b475-f396137bdf61",
+   "ok": true
+  },
+  {
+   "run_id": "01a10328-6f5a-7690-8513-7757384eae89",
+   "ok": true
+  },
+  {
+   "run_id": "01a10328-71ac-7bc8-bae6-c966520ae3be",
+   "ok": true
+  },
+  {
+   "run_id": "01a10328-7a18-79f9-9aab-9545d2d1545f",
+   "ok": true
+  },
+  {
+   "run_id": "01a10328-7ed6-7bf9-845e-5999e7cbbcb7",
+   "ok": true
+  },
+  {
+   "run_id": "01a10328-822c-7ebf-8e3a-defcdb3aa3a1",
+   "ok": true
+  }
+ ],
+ "exported_audit_events": 167,
+ "lab_queries_through_core": 7,
+ "llm_unscripted_calls": 0,
+ "console_files": {
+  "world": "world.json",
+  "replay": "replay.json",
+  "results": "results.json"
+ }
+}
