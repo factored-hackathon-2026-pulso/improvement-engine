@@ -106,7 +106,6 @@ def _report():
     ran = [c for c in both if _results.get(c.id) in ("passed", "failed")]
     passed = [c.id for c in ran if _results[c.id] == "passed"]
     failed = [c.id for c in ran if _results[c.id] == "failed"]
-    table = hashlib.sha256("\n".join(_ROUTES).encode()).hexdigest() if (_ROUTES := globals().get("_ROUTES_LIST", [])) else None
     report = {
         "target": TARGET, "sha": PIN_SHA, "label": {"mock": "contract_mock", "a2": "a2_real_service_in_memory",
                                                     "real": "real_local"}[TARGET],

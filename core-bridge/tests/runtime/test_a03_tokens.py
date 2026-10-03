@@ -11,7 +11,6 @@ from typing import Any
 import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from pulso_core_runtime.internal.auth import b64url_decode, b64url_encode
 from pulso_core_runtime.invoke.wiring import build_l3, install_tools, lab_broker_minter
 from pulso_core_runtime.tools.context import InvocationContext
@@ -69,7 +68,7 @@ def test_lab_broker_minter_uses_executor_key_not_callback_key(tmp_path: Path) ->
 
 
 def test_executor_key_must_differ_from_callback_key(tmp_path: Path) -> None:
-    env, keys = _env(tmp_path)
+    env, _ = _env(tmp_path)
     (tmp_path / "e.json").write_text((tmp_path / "c.json").read_text())
     with pytest.raises(ValueError, match="distinct"):
         _l3(env)

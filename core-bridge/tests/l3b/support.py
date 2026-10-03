@@ -14,7 +14,6 @@ from agent_core.domain.identity import AuthInfo, AuthLevel, Principal, Principal
 from agent_core.ports import ToolCallContext, ToolResult
 from agent_core.ports.ids import IdKind
 from agent_core.ports.llm import GenerationResult
-
 from pulso_core_runtime.tools.broker import BrokerClient, ControlApiClient
 from pulso_core_runtime.tools.context import (
     InvocationContext,
@@ -142,7 +141,7 @@ class Env:
     def _identity(self, ref: str) -> tuple[str, str] | None:
         try:
             ic = self.contexts.lookup(ref)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
         return ic.tenant_id, ic.job_id
 

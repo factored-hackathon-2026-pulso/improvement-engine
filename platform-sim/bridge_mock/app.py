@@ -17,7 +17,7 @@ import asyncio
 import hashlib
 import json
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import Any

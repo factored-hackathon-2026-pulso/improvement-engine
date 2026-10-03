@@ -1,0 +1,4 @@
+# Runtime deps of pulso_core_runtime that the pinned agent-core lock does not carry (facts/whitelist.py validates
+# with jsonschema, which resolves schema refs through referencing). Resolved against the Core constraint set.
+jsonschema>=4.23
+referencing>=0.35

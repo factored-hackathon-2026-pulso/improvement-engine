@@ -117,6 +117,9 @@ class InvocationRegistry:
 
     def register(self, ctx: InvocationContext) -> None:
         with self._lock:
+            now = self._clock()  # expired contexts are unreachable (`_entry`); drop them so memory stays bounded
+            for ref in [r for r, e in self._entries.items() if e.ctx.expires_at <= now]:
+                del self._entries[ref]
             if ctx.binding_ref in self._entries:
                 raise ValueError("binding_ref already registered")
             self._entries[ctx.binding_ref] = _Entry(ctx)

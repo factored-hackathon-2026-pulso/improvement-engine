@@ -11,6 +11,7 @@ dependencies = [
     "jsonschema>=4.23",
     "psycopg>=3.2",
     "pydantic>=2.9,<3",
+    "referencing>=0.35",
     "pyyaml>=6.0.2,<7",
     "uvicorn>=0.30",
 ]

@@ -15,7 +15,7 @@ from agent_core.registry import PostgresRegistry
 from testing.builders import principal
 from testing.fakes.clock import FakeClock
 
-from l5.test_evaluate_path import FakeBroker, FixedBudgets, World
+from l5.test_evaluate_path import FixedBudgets, World
 from l5.world import AGENT, operative_counts, suite_with
 from pulso_core_runtime.evaluation.arms import ArmDenied, ArmRunner, execution_id_for
 from pulso_core_runtime.evaluation.report import InMemoryArmStore, PgArmStore

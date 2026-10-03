@@ -24,7 +24,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from registry_mock import jws
@@ -701,7 +701,6 @@ def create_app(limits: Limits | None = None) -> FastAPI:
                 s.versions[ref] = Version(ref, d.content, sha256_hex(canonical(d.content)), d.docs.model_dump(), p.created_by, now)
             else:  # derived agent version
                 assert cand.derived_agent is not None
-                old = cand.drafts and None
                 s.versions[ref] = Version(
                     ref, cand.derived_agent, sha256_hex(canonical(cand.derived_agent)),
                     {"description": f"Version derivada de {p.agent_id}",

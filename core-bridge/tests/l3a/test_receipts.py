@@ -57,7 +57,10 @@ def test_cas_has_one_winner_and_terminal_is_final(store: ReceiptStore) -> None:
 
     a = threading.Thread(target=race, args=("terminal_ok",))
     b = threading.Thread(target=race, args=("terminal_failed",))
-    a.start(); b.start(); a.join(); b.join()
+    a.start()
+    b.start()
+    a.join()
+    b.join()
     assert len(wins) == 1
     for target in ALLOWED_FROM:
         assert store.transition("t", "k", target) is None  # terminal: no outgoing edge

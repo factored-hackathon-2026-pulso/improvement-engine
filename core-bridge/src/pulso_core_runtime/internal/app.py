@@ -16,6 +16,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from pulso_core_runtime.internal.auth import AuthError, Claims, ServiceJwtVerifier
 
 CORE_BRIDGE = "core-bridge"
+TENANT_EXEMPT = frozenset({"version_probe"})  # the only route with no tenant data
+MAX_BODY_BYTES = 1024 * 1024  # invoke inputs are capped at 256 KiB; nothing legitimate is larger
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,23 @@ def _trace_id(request: Request) -> str:
     return parts[1] if len(parts) == 4 and len(parts[1]) == 32 else uuid.uuid4().hex
 
 
+async def _read_capped(request: Request) -> bool:
+    """Buffers the body (handlers then read the cached copy) refusing anything above `MAX_BODY_BYTES`, by
+    declared length and by actual bytes (chunked bodies have no length)."""
+    declared = request.headers.get("content-length")
+    if declared is not None and (not declared.isdigit() or int(declared) > MAX_BODY_BYTES):
+        return False
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_BODY_BYTES:
+            return False
+        chunks.append(chunk)
+    request._body = b"".join(chunks)
+    return True
+
+
 def build_internal_app(verifier: ServiceJwtVerifier, *, version_info: Callable[[], dict[str, Any]],
                        handlers: dict[str, Callable[[Request, Claims], Any]] | None = None,
                        l3: Any | None = None) -> FastAPI:
@@ -87,13 +106,16 @@ def build_internal_app(verifier: ServiceJwtVerifier, *, version_info: Callable[[
             try:
                 if scheme.lower() != "bearer" or not token:
                     raise AuthError("missing_token")
-                claims = verifier.verify(token, audience=route.audience, purposes=route.purposes)
+                claims = verifier.verify(token, audience=route.audience, purposes=route.purposes,
+                                         require_tenant=not route.purposes <= TENANT_EXEMPT)
             except AuthError as exc:
                 return envelope("pulso:auth_denied" if exc.status == 403 else "pulso:auth_invalid",
                                 trace_id=trace, details={"reason": exc.reason}, status=exc.status)
             handler = route.handler or handlers.get(f"{route.method} {route.path}")
             if handler is None:
                 return envelope("pulso:not_implemented", trace_id=trace, status=501)
+            if not await _read_capped(request):
+                return envelope("pulso:payload_too_large", trace_id=trace, status=413)
             result = handler(request, claims)
             if hasattr(result, "__await__"):
                 result = await result

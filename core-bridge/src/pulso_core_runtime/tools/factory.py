@@ -18,7 +18,10 @@ from agent_core.composition.builder_tools import BuilderToolExecutor
 from agent_core.domain.identity import Principal
 
 from pulso_core_runtime.tools.broker import BrokerClient, ControlApiClient
-from pulso_core_runtime.tools.builder import EvaluationGate, ProtectedBuilderToolExecutor
+from pulso_core_runtime.tools.builder import (
+    EvaluationGate,
+    ProtectedBuilderToolExecutor,
+)
 from pulso_core_runtime.tools.context import InvocationContext, InvocationRegistry
 from pulso_core_runtime.tools.dispatcher import BuilderFactory, PulsoToolDispatcher
 

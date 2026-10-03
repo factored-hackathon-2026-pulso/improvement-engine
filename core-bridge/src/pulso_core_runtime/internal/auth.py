@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -99,7 +100,7 @@ class ServiceJwtVerifier:
                  now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
         self._keys, self._jti, self._now = keys, jti, now
 
-    def verify(self, token: str, *, audience: str, purposes: frozenset[str]) -> Claims:
+    def verify(self, token: str, *, audience: str, purposes: frozenset[str], require_tenant: bool = True) -> Claims:
         parts = token.split(".")
         if len(parts) != 3:
             raise AuthError("malformed")
@@ -128,13 +129,19 @@ class ServiceJwtVerifier:
             raise AuthError("wrong_audience")
         if not isinstance(exp, int | float) or not isinstance(jti, str) or not jti or not isinstance(iss, str):
             raise AuthError("missing_claims")
+        iat = payload.get("iat")
+        # JSON `NaN`/`Infinity` and booleans must never reach the comparisons (NaN defeats every `>`/`<=`).
+        for stamp in (exp, iat):
+            if isinstance(stamp, bool) or not isinstance(stamp, int | float) or not math.isfinite(stamp):
+                raise AuthError("missing_claims")
         now = self._now().timestamp()
-        iat = payload.get("iat", now)
         if exp <= now:
             raise AuthError("expired")
-        if not isinstance(iat, int | float) or exp - iat > MAX_TTL_S or exp - now > MAX_TTL_S + 30:
+        if exp - iat > MAX_TTL_S or exp - now > MAX_TTL_S + 30:
             raise AuthError("ttl_too_long")
         sub, tenant = payload.get("sub"), payload.get("tenant_id")
+        if require_tenant and (not isinstance(tenant, str) or not tenant):
+            raise AuthError("tenant_required", status=403)  # every tenant route is scoped by a signed tenant claim
         purpose = payload.get("purpose")
         if purposes and purpose not in purposes:
             raise AuthError("purpose_denied", status=403)

@@ -18,7 +18,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pulso_core_runtime.adapters import ReceiptBindingLookup, expected_write_keys, sealed_commitment_check
+from pulso_core_runtime.adapters import (
+    ReceiptBindingLookup,
+    expected_write_keys,
+    sealed_commitment_check,
+)
 from pulso_core_runtime.credentials.issuer import CredentialIssuer, load_signer
 from pulso_core_runtime.invoke.binding import BindingService
 from pulso_core_runtime.invoke.context import ConfirmingRegistry, InvocationRegistry
@@ -135,7 +139,7 @@ def install_tools(l3: L3, env: Mapping[str, str], *, builder_factory: Any = None
     def identity(binding_ref: str) -> tuple[str, str] | None:
         try:
             ic = l3.registry.lookup(binding_ref)
-        except Exception:  # noqa: BLE001 - unknown/expired binding: no identity, so no token
+        except Exception:
             return None
         return ic.tenant_id, ic.job_id
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import psycopg
@@ -153,7 +154,14 @@ class ReceiptStore:
     def meter_spend(self, tenant_id: str, job_id: str, stage: str, attempt: int, *, cost_usd: str, cap_usd: str,
                     calls: int = 1, tokens: int = 0) -> bool:
         """Atomic capped spend: one statement, applied only if the new total stays <= cap. Concurrent spenders
-        serialise on the row lock and re-check the cap, so the total can never exceed it."""
+        serialise on the row lock and re-check the cap, so the total can never exceed it. A negative, non-finite or
+        unparsable amount is refused (it would refund the budget)."""
+        try:
+            amount = Decimal(cost_usd)
+        except (InvalidOperation, ValueError):
+            return False
+        if not amount.is_finite() or amount < 0:
+            return False
         with self._conn() as conn:
             row = conn.execute(
                 "INSERT INTO pulso_bridge.budget_meter (tenant_id, job_id, stage, attempt, calls, tokens, cost_usd)"

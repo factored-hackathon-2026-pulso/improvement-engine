@@ -41,7 +41,7 @@ from pulso_core_runtime.evaluation.admission import (
 from pulso_core_runtime.evaluation.budget import BudgetLimits
 from pulso_core_runtime.evaluation.digests import native_evaluate_digest
 from pulso_core_runtime.evaluation.native import BoundEvaluator, EvalComposition, EvaluationGate, PulsoEvalPort
-from pulso_core_runtime.evaluation.report import ReportStore, StoredReport, digest_of
+from pulso_core_runtime.evaluation.report import ReportStore, StoredReport
 
 from agent_core.registry.validation import DEFAULT_LIMITS
 
