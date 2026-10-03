@@ -131,6 +131,8 @@ Describe 'executor key verdict' {
     It 'probe args are python -c with no key values' {
         $a = Get-ExecutorKeyProbeArgs
         $a[0] | Should Be 'python'
-        $a[2] | Should Not Match '"key": "'
+        $a[2] | Should Not Match '["
+]'
+        $a[2] | Should Match '^exec\(__import__\(.base64.\)\.b64decode\(.[A-Za-z0-9+/=]+.\)\)$'
     }
 }

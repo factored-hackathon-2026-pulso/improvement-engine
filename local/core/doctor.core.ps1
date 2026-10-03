@@ -71,7 +71,7 @@ if ($SkipEngine -or -not $conn) {
         } else { Add-C 'core_demo_doubles_active' 'skipped' 'core_demo_doubles_active' 'no state file' }
         $ek = $null
         if ($rt -and $rt.status -eq 'running') {
-            try { $ek = Get-ExecutorKeyVerdict -ProbeOutput ((Invoke-Podman -Connection $conn exec "$project-core-runtime-1" @(Get-ExecutorKeyProbeArgs)) -join '') } catch { $ek = [pscustomobject]@{ status = 'fail'; detail = 'executor key probe failed to run' } }
+            try { $probe = Get-ExecutorKeyProbeArgs; $ek = Get-ExecutorKeyVerdict -ProbeOutput ((Invoke-Podman -Connection $conn exec "$project-core-runtime-1" @probe) -join '') } catch { $ek = [pscustomobject]@{ status = 'fail'; detail = 'executor key probe failed to run' } }
         } else { $ek = [pscustomobject]@{ status = 'fail'; detail = 'runtime container not running (fails closed without bridge-executor.json)' } }
         Add-C 'bridge_executor_key' $ek.status $(if ($ek.status -eq 'pass') { $null } else { 'core_not_ready' }) $ek.detail
         Add-C 'port_conflict' 'pass' $null 'ports were probed at start'

@@ -14,7 +14,11 @@ print(json.dumps({"executor_present": bool(ex), "callback_present": bool(cb),
     "trusted_by_lab_broker": bool(ex and tr and ex.get("kid") in tr.get("keys", {}))}))
 '@
 
-function Get-ExecutorKeyProbeArgs { @('python', '-c', $script:ExecutorProbePy) }
+# The program travels base64-encoded so no quote or newline has to survive native argument passing (podman exec).
+function Get-ExecutorKeyProbeArgs {
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(($script:ExecutorProbePy -replace "`r", '')))
+    @('python', '-c', "exec(__import__('base64').b64decode('$b64'))")
+}
 
 function Get-ExecutorKeyVerdict {
     [CmdletBinding()] param([string]$ProbeOutput)

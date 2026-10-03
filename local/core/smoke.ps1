@@ -63,7 +63,8 @@ try {
     }
     # 4b. executor key (A03 iii): present, distinct from the callback key, trusted by the lab-broker double
     if (-not $Exec) { Add-Check 'executor_key' 'not_run' 'no engine access in this mode' } else {
-        $ek = Get-ExecutorKeyVerdict -ProbeOutput ((Invoke-Podman -Connection $conn exec "$project-core-runtime-1" @(Get-ExecutorKeyProbeArgs)) -join '')
+        $probe = Get-ExecutorKeyProbeArgs
+        $ek = Get-ExecutorKeyVerdict -ProbeOutput ((Invoke-Podman -Connection $conn exec "$project-core-runtime-1" @probe) -join '')
         Add-Check 'executor_key' $ek.status $ek.detail
     }
     # 5. scripted task: needs the L3 task route plus a model/broker; never claimed
