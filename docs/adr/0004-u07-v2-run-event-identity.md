@@ -2,9 +2,9 @@
 
 ## Status
 
-Accepted for the durable persistence boundary. The existing public U07 cursor
-adapter remains blocked from consuming this boundary until its contract is
-revised explicitly.
+Accepted for the durable persistence boundary. Its former U24-consumer block
+is superseded by ADR 0005, which adds a separate sequence-native U24 contract;
+the existing U07 legacy cursor remains unchanged.
 
 ## Context
 
@@ -37,20 +37,16 @@ semantics and could expose inconsistent debug history.
   performs no job-status update.
 - Require caller-supplied UUIDv7 IDs; the database does not silently generate
   UUIDv4 IDs that conflict with the V2 contract.
-- Do not implement `RunActivityReadModel` for this store yet. Its job/timestamp
-  cursor cannot represent V2 run/sequence continuation. A future ADR must
-  version or replace that public read contract with `run_ref` plus
-  `after_sequence` before U24 consumes durable history.
-- Keep U24 API/auth/UI composition out of this persistence slice.
+- Do not implement `RunActivityReadModel` for this store. Its job/timestamp
+  cursor cannot represent V2 run/sequence continuation. U24 consumes the
+  ledger only through the distinct authenticated contract in ADR 0005.
 
 ## Consequences
 
 This provides an executable transactional persistence boundary and an isolated
 PostgreSQL test target. It does not claim that current U06 reducers, job
-admission, run activity API, or U24 are backed by this ledger. Existing
-`ActivityTimeline` and its tests remain an in-memory contract only. The first
-consumer integration must reconcile UUIDv7 job IDs and the current U06 job
-identifier format before deployment.
+admission, or the legacy `ActivityTimeline` are backed by this ledger. U24's
+V2 read projection is defined separately in ADR 0005.
 
 ## Validation required
 
