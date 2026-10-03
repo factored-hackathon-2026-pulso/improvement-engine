@@ -161,17 +161,33 @@ green unit test as proof that a broader product flow is complete.
   single static allowlisted U15 `Create` transform. Scope/access are exact
   Frozen bindings with `allowed_at == cutoff`; output is opaque commitments
   only, never pages, workspace/text, publication, memory use or an artifact.
-  U33-E publication and U23-E governed-memory linkage remain explicitly
-  pending.
+  U33-E publication exists locally; U23-E admission now re-attests the exact
+  published revision against the same U33-E sidecar/head and creates one
+  opaque receipt per publication/scope/run. This remains a crate-private
+  semantic contract, not wired into the CLI runtime.
 - U33-E: Frozen E0 summary publication boundary. A crate-private composer
   redeems only the opaque U15-EQ preparation after recomputing the exact
   U13-A/U14-E/U14-EQ/U04-B and canonical U15 transform chain. It emits an
   opaque publication capability, not MemoryUse, proposal, route or release
   authority. The local adapter models head-CAS/idempotent provenance-sidecar
   writes; the durable adapter is intentionally `DependencyUnavailable` until
-  a U05 grant revision/liveness fence can be evaluated in the same durable
-  transaction. U23-E remains pending and is the sole future consumer allowed
-  to attest governed use of this publication.
+  both the U33-E publication sidecar and transaction-bound U05 grant
+  revision/liveness contract exist. Current PostgreSQL migrations persist U02
+  revisions, generic U33 heads/tombstones/use receipts, and temporal cutoff
+  receipts, but have no U33-E publication record and accept grant reference as
+  a string rather than resolving its authority. U23-E is the sole consumer
+  allowed to attest governed use:
+  its local path checks exact revision/head, tenant/world/scope, replay cutoff,
+  grant liveness and revocation, and makes retries idempotent by
+  `(publication_commitment, scope, run_id)`. A changed grant or access time for
+  the same semantic use conflicts without a second receipt. Durable admission
+  remains `DependencyUnavailable` until one database transaction can lock and
+  resolve a U05 `GrantSnapshot`/`AuthorityDecision` (authority, tenant, grant
+  revision, liveness/validity, revocation epoch, action, scope/snapshot binding
+  and authorization digest), re-attest the U33-E publication/head and snapshot,
+  then append one payload-free receipt. A pre-read bool or parallel grant
+  table is not sufficient. The durable contract gap and required real-Postgres
+  acceptance tests are recorded in `docs/journal/0053-p4-u23e-frozen-memory-admission.md`.
 - U16: provisional WorkflowBridge. It accepts only a U14 verification report
   and sealed internal catalogue/source-validation facts, preserves its
   commitments and scope, includes `do_nothing`, and caps a supported route at

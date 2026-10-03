@@ -314,6 +314,42 @@ impl MemoryTemporalProtocol {
     }
 }
 
+/// U23-E uses the same U04-B trusted clock as U23-P, but carries the result to
+/// the E0-specific U33-E sidecar instead of the generic U22 memory ledger.
+/// This helper emits only the temporal commitment after the pure Frozen gate;
+/// U33-E still rechecks exact publication, head, liveness and grant at commit.
+#[allow(dead_code)] // Used by the trusted U23-E runtime composition once wired.
+pub(crate) fn attest_frozen_e0_reuse(
+    replay: &VerifiedReplayAvailability,
+    scope: &MemoryScope,
+    access: &crate::wiki_scratch::WikiAccess,
+) -> Result<String, TemporalProtocolError> {
+    if replay.tenant_id() != scope.tenant_id
+        || replay.world_ref() != scope.world
+        || access.tenant_id != scope.tenant_id
+        || access.purpose != scope.purpose
+        || access.memory_scope.world != scope.world
+        || access.memory_scope.campaign != scope.campaign
+        || access.memory_scope.protocol != scope.protocol
+        || access.memory_scope.partition != scope.partition
+    {
+        return Err(TemporalProtocolError::U04BReplayScopeMismatch);
+    }
+    let request = MemoryUseRequest::new(scope.clone(), access.clone());
+    let projection = VerifiedAvailabilityProjection {
+        cutoff_at_unix_seconds: replay.cutoff_at_unix_seconds(),
+        source_snapshot_digest: replay.source_snapshot_digest().to_owned(),
+        availability_profile_digest: replay.availability_profile_digest().to_owned(),
+        request,
+        outcome_available_at_unix_seconds: None,
+        outcome_provenance: None,
+    };
+    let evidence =
+        TrustedTemporalEvidenceIssuer { projection }.attest(MemoryTemporalProtocol::Frozen);
+    MemoryTemporalProtocol::Frozen.validate_evidence(scope, &evidence)?;
+    Ok(evidence.commitment)
+}
+
 #[allow(dead_code)]
 struct TemporalCommitmentInput<'a> {
     protocol: MemoryTemporalProtocol,
