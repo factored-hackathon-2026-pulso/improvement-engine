@@ -4,6 +4,7 @@ import { api, setCsrf } from '../api/client';
 import type * as S from '../api/schemas';
 import { RunView } from '../features/RunView';
 import { MemoryView } from '../features/Panels';
+import { bannerLevel } from './banner';
 import { t } from '../i18n/es419';
 
 type Profile = z.infer<typeof S.Profile>;
@@ -19,12 +20,13 @@ function useHash() {
   return h;
 }
 
-function ModeBanner({ profile, simulated }: { profile: Profile | null; simulated: boolean }) {
-  if (!profile) return <div className="banner bad" role="status">{t('banner.unverified')}</div>;
-  const bad = profile.doubles.length > 0 && profile.target === 'real';
+function ModeBanner({ profile, simulated, provider }: { profile: Profile | null; simulated: boolean; provider: string }) {
+  const level = bannerLevel(provider, profile);
+  if (!profile) return <div className="banner bad" role="status" data-testid="mode-banner" data-level={level}>{t('banner.unverified')}</div>;
   return (
-    <div className={bad ? 'banner bad' : 'banner'} data-testid="mode-banner">
+    <div className={level === 'unverified' ? 'banner bad' : 'banner'} data-testid="mode-banner" data-level={level}>
       {t('banner.mode', { target: profile.target, profile: profile.runtime_profile, doubles: profile.doubles.join(', ') || t('banner.none') })}
+      {level === 'unverified' && ` · ${t('banner.unverified')}`}
       {simulated && t('banner.simulated')}
     </div>
   );
@@ -50,7 +52,10 @@ export function App() {
   const hash = useHash();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [simulated, setSimulated] = useState(false);
+  const [provider, setProvider] = useState('unknown');
   useEffect(() => {
+    // public/config.json is the only source of the client provider (read at runtime, not baked into the bundle).
+    fetch('/config.json', { cache: 'no-store' }).then((r) => r.json()).then((c: { provider?: unknown }) => setProvider(typeof c.provider === 'string' ? c.provider : 'unknown')).catch(() => setProvider('unknown'));
     api.session().then((s) => { setCsrf(s.csrf_token); setSimulated(s.auth.simulated); }).catch(() => undefined);
     api.profile().then(setProfile).catch(() => setProfile(null));
   }, []);
@@ -60,7 +65,7 @@ export function App() {
   const node = new URLSearchParams(query).get('node');
   return (
     <>
-      <ModeBanner profile={profile} simulated={simulated} />
+      <ModeBanner profile={profile} simulated={simulated} provider={provider} />
       <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a></nav>
       <main>
         {run?.[1]

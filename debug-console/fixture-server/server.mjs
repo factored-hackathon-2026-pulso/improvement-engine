@@ -178,4 +178,4 @@ const server = http.createServer(async (req, res) => {
   }
   return problem(res, 'not_found', 404);
 });
-server.listen(PORT, '127.0.0.1', () => console.log(`fixture on ${PORT}`));
+server.listen(PORT, process.env.FIXTURE_HOST ?? '127.0.0.1', () => console.log(`fixture on ${PORT}`));

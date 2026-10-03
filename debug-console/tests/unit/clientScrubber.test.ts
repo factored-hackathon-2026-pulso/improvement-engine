@@ -34,3 +34,18 @@ describe('clientScrubber', () => {
     expect(r.hits).toEqual(['secret_key', 'secret_key']);
   });
 });
+
+describe('clientScrubber bypass attempts (reviewer)', () => {
+  it('masks lowercase bearer, percent-encoded bearer/DSN and secrets in object keys', () => {
+    const r = scrub({ a: 'bearer abcdefgh1234', b: 'Bearer%20abcdefgh1234', c: 'postgres%3A%2F%2Fu%3Apw%40host%2Fdb', 'CANARY_PII_123e4567-e89b-12d3-a456-426614174000': 1 });
+    expect(JSON.stringify(r.value)).not.toMatch(/abcdefgh1234|pw%40|CANARY_/i);
+  });
+  it('masks a secret-named key even when its value is an object or number', () => {
+    const r = scrub({ token: { v: 'x' }, password: 12345 });
+    expect(JSON.stringify(r.value)).not.toMatch(/"v":"x"|12345/);
+  });
+  it('masks JWS inside a nested JSON string and canaries mixed-case', () => {
+    const r = scrub({ n: JSON.stringify({ t: jws }), c: 'canary_final_123E4567-E89B-12D3-A456-426614174000' });
+    expect(JSON.stringify(r.value)).not.toMatch(/eyJ|canary_final/i);
+  });
+});

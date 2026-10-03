@@ -41,7 +41,7 @@ export function DecisionPanel() {
       {canApprove ? (
         <>
           <label>{t('dec.note')} <textarea value={note} onChange={(e) => setNote(e.target.value)} /></label>
-          <button type="button" onClick={() => void submit()}>{t('dec.approve')}</button>
+          <button type="button" disabled={phase === 'requested' || phase === 'running'} onClick={() => void submit()}>{t('dec.approve')}</button>
         </>
       ) : (
         // No role-name inference: the control is absent whenever the server does not offer the command.
