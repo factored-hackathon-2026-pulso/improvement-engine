@@ -610,9 +610,9 @@ mod tests {
             .execute(
                 "INSERT INTO pulso_jobs (id, tenant_id, run_ref, kind, logical_key, generation, \
                  parent_job_id, status, lane, due_at, input_ref, config_ref) VALUES \
-                 ($1::uuid, $2, $1::uuid, 'detect', 'run-a', 0, $1::uuid, 'queued', 'default', now(), 'input:a', 'config:a'), \
-                 ($3::uuid, $4, $3::uuid, 'detect', 'run-b', 0, $3::uuid, 'queued', 'default', now(), 'input:b', 'config:b'), \
-                 ($5::uuid, $2, $1::uuid, 'verify', 'child-a', 0, $1::uuid, 'queued', 'default', now(), 'input:a', 'config:a')",
+                 ($1::text::uuid, $2, $1::text::uuid, 'detect', 'run-a', 0, $1::text::uuid, 'queued', 'default', now(), 'input:a', 'config:a'), \
+                 ($3::text::uuid, $4, $3::text::uuid, 'detect', 'run-b', 0, $3::text::uuid, 'queued', 'default', now(), 'input:b', 'config:b'), \
+                 ($5::text::uuid, $2, $1::text::uuid, 'verify', 'child-a', 0, $1::text::uuid, 'queued', 'default', now(), 'input:a', 'config:a')",
                 &[&RUN_A, &TENANT_A, &RUN_B, &TENANT_B, &CHILD_A],
             )
             .unwrap();
@@ -643,7 +643,7 @@ mod tests {
         client
             .execute(
                 "INSERT INTO pulso_run_events (id, tenant_id, run_ref, job_ref, sequence, event_at, stage, event_code, status, reason_code, artifact_ref, trace_id, details_ref) \
-                 VALUES ($1::uuid, $2, $3::uuid, $4::uuid, $5, now(), $6, $7, $8, $9, 'secret/artifact/ref', 'secret-trace-id', 'secret/details/ref')",
+                 VALUES ($1::text::uuid, $2, $3::text::uuid, $4::text::uuid, $5, now(), $6, $7, $8, $9, 'secret/artifact/ref', 'secret-trace-id', 'secret/details/ref')",
                 &[&id, &tenant, &run_ref, &job_ref, &sequence, &stage, &event_code, &status, &reason_code],
             )
             .unwrap();

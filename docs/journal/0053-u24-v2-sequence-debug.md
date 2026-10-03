@@ -88,3 +88,27 @@ authentication. Any future cross-crate facade must take an auth-issued
 viewer/context, not a tenant string. The DB test remains real PostgreSQL (not a
 mock), ignored locally pending CI's ephemeral service; this Windows host's
 disposable PostgreSQL could not bind a socket.
+
+### CI follow-up — PostgreSQL fixture UUID parameter typing
+
+The first PR CI run compiled and reached the real PostgreSQL integration test,
+then failed at fixture setup with `ToSql(0) ... WrongType { postgres: Uuid,
+rust: "&str" }`. The test SQL cast UUID bind parameters directly as `$n::uuid`,
+which asks the Rust PostgreSQL client to encode a Rust string as PostgreSQL's
+UUID wire type. The fixture uses string UUID constants; changed those casts to
+`$n::text::uuid`, matching the existing storage adapter convention and making
+the text bind type explicit before PostgreSQL parses the UUID. Applies to root
+rows and event fixture inserts only; production read queries already use the
+text-to-UUID cast. The integration regression itself is the failing case and
+will be rerun by the PR's ephemeral-PostgreSQL CI gate. Local reproduction is
+not available because PostgreSQL cannot bind on this Windows host; no mock was
+used.
+
+After the correction, local verification passed: `cargo +1.98.1 test --locked
+-p improvement-engine-core --lib run_timeline_v2::tests` (3 passed, 1 ignored),
+the full core library suite (97 passed, 1 ignored),
+`cargo +1.98.1 fmt --all -- --check`, and
+`cargo +1.98.1 clippy --locked -p improvement-engine-core --all-targets --
+-D warnings`; `git diff --check` passed. The ignored live PostgreSQL test is
+not represented as locally passing; the corrected real-database fixture is
+queued for the new PR CI run.
