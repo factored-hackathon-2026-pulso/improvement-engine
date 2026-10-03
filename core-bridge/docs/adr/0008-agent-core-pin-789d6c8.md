@@ -18,7 +18,11 @@ Analysis: `docs/AGENT_CORE_PIN_BUMP_ANALYSIS_CLAUDE.md`; findings status: `docs/
    (`CandidateView`, `ValidationReport`, `ProposalDetail`, `EvalReport`) plus the models the mock/DTOs already read, and
    `registry_openapi.json`. Request bodies are published upstream as `CreateProposalBody, PutDraftBody, EvaluateBody,
    ApproveBody, PromoteBody, ReasonBody`; our derived `Create/Draft/Evaluate/Approve/Promote/Reason` keep their old names
-   (Python classes upstream are still `_Create` etc.). `golden/hash_vectors.json` hash values are byte-identical to the old
+   (Python classes upstream are still `_Create` etc.). Models Core **serves** (`Proposal, ValidationReport, CandidateView, ReleaseDetail, EntityVersion, ReleaseDiff, EvalReport,
+   ProposalDetail, WriteRecord, EvalRun`) are derived in *serialization* mode like upstream's `contracts/registry/` outputs; a
+   validation-mode output schema is looser (a Decimal metric also validates as a number). Every derived schema with an upstream
+   twin equals it modulo `$comment` (`tests/wire`). Review fix: this moved the MANIFEST digest from `79758b46...` to
+   `890edd7a...` (four derived files). `golden/hash_vectors.json` hash values are byte-identical to the old
    pin and now also carry `release_detail` (the seeded release as served with the N-03 fields).
 3. **Runtime composition (`pulso_core_runtime.main`)**: the tracer name is the literal `agent_core.adapters.llm`; `build_sha`
    is `PULSO_CORE_SHA` (fallback: the pinned SHA) so Core's native `/version` reports it; `keys_reload_seconds` is explicit
@@ -28,13 +32,23 @@ Analysis: `docs/AGENT_CORE_PIN_BUMP_ANALYSIS_CLAUDE.md`; findings status: `docs/
    our import of the private `_problem`. `/internal/v1/version` gains `keys_reload_error` (exception type only).
 4. **compat.py** (closed list) adds `ReloadingIdentityVerifier`, `ServePorts.run_export`, `build_api_deps(build_sha)`,
    `RegistryService.get_alias/list_events`, `RunExport/RunSummary`, `RELEASE_SETTINGS/ReleaseSettings`, `problem_response`,
-   `_Problem`; `assert_compat()` passes at the new SHA and each new entry is covered by a drift test.
+   `_Problem`; `assert_compat()` passes at the new SHA and each new entry is covered by a drift test. **Stability status (ADR 0022 s1):** upstream declares stable only
+   `resolve_ports`/`ServePorts`, `build_api_deps(..., build_sha)`/`ApiDeps`, `registry_extension`, `RegistryService`,
+   `ScenarioEvaluator`, `PgRegistryStore`, `InMemoryRegistryStore`. `ServePorts.run_export` and `build_sha` are stable (new
+   defaulted/keyword-only members). Everything else added here (`ReloadingIdentityVerifier`, `RunExport/RunSummary`,
+   `RELEASE_SETTINGS/ReleaseSettings`, `problem_response`, the underscore `_Problem`, `RegistryService.get_alias/list_events`) is
+   NOT promised: the closed list is a drift detector for what we touch, not a stability claim; ask upstream to make
+   `problem_response`/`last_reload_error` public or drop our use of them.
 5. **Mock/parity**: `platform-sim` mock gains the alias and versions reads (N-02), the four `ReleaseDetail` fields (N-03,
    inherited by published releases) and `eval_run_id` in the `gate_failed` body (N-10); 11 new parity cases; the route table
    is 18. Fixtures were re-recorded for a2, `real_local` and `real_pg_scripted` (all equal). Not simulated by the mock: the
    `release_settings` draft kind (N-07), `/version`, export; a2/real remain the authority for those.
 6. **Hot reload of keys (N-09)** does not remove our entrypoint materialisation: Fargate env secrets change only with a new
    task, so rotation still needs a refreshed key file. A corrupted file keeps the previous keys (it cannot revoke).
+   Consequence for revocation: a key removed from the file stays valid while the file is unreadable or invalid (upstream
+   NF-04); `last_reload_error` is only surfaced at `/internal/v1/version`, not in `/readyz`, and the `key_files` readiness check
+   only tests for a non-empty file. Until readiness fails on `last_reload_error`, confirm a revocation by reading that field or
+   by replacing the task. Our own signer/service keys are not hot-reloaded.
 7. **llm-gateway (PR #26)**: the runtime now needs `AGENTCORE_LLM_GATEWAY_URL` and `AGENTCORE_LLM_GATEWAY_TOKEN` (both or
    neither; neither = generation falls back to templates). Passed through untouched; deployment is an infra change.
    `AGENTCORE_DB_POOL_MAX`, the S3 blob bucket and the SNS publisher are pass-through and stay off.
@@ -45,6 +59,14 @@ Analysis: `docs/AGENT_CORE_PIN_BUMP_ANALYSIS_CLAUDE.md`; findings status: `docs/
 - Expand/contract (CAP-57) now has an executable proof for this bump (`tests/integration/test_expand_contract.py`): the old
   and the new binaries migrate/seed/operate against each other's schema (scripts are identical, fingerprints equal). Our own
   bridge schema is idempotent and unchanged in this bump and is not part of that proof.
+  Caveat found in review: "no `.sql` changed" is true, but upstream `agentcore migrate` with `AGENTCORE_BLOB_BUCKET` set runs a
+  python-embedded `ALTER TABLE reg_entity_versions DROP CONSTRAINT IF EXISTS ...` (PR #27; not an expand step, ADR 0022 s3 vetoes
+  it). We never set the bucket. If infra does, the fingerprint changes (pinned by `test_blob_bucket_migrate_...`), the old binary
+  still operates, but blobs written to S3 are unreadable by the old binary: rollback is then NOT trivial. Otherwise the proof is a
+  smoke (identical scripts make old-on-new migrate a no-op by construction).
+- Mock gap: published releases inherit the base release settings verbatim; real Core retargets `start_flow`/policy refs inside
+  inherited interrupts to the candidate's versions. The demo world's only interrupt is an `escalate`, so no parity case shows
+  it; do not rely on the mock for interrupts that start flows.
 - `release_settings` (N-07) replaces the whole interrupt list: a Pulso-side guardrail must exist before any builder emits it
   (upstream D-17). `ProtectedBuilderToolExecutor` therefore **denies by default** any `registry/put_draft` whose changes
   contain `kind: release_settings` (`pulso:release_settings_not_allowed`, zero effect, checked before the commitment so

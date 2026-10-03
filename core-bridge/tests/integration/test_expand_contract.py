@@ -62,11 +62,12 @@ def _run(tc: Toolchains, which: str, *args: str) -> dict:
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
-def _migrate(tc: Toolchains, which: str, dsn: str) -> None:
+def _migrate(tc: Toolchains, which: str, dsn: str, **extra_env: str) -> None:
     py, checkout = tc[which]
     exe = py.with_name("agentcore.exe") if py.with_name("agentcore.exe").exists() else py.with_name("agentcore")
+    env = {k: v for k, v in os.environ.items() if k != "AGENTCORE_BLOB_BUCKET"}  # never inherit an S3 bucket
     r = subprocess.run([str(exe), "migrate", "--dsn", dsn], capture_output=True, text=True,
-                       env={**os.environ, "PYTHONPATH": str(checkout)})
+                       env={**env, "PYTHONPATH": str(checkout), **extra_env})
     assert r.returncode == 0, f"{which} migrate failed: {r.stdout[-300:]} {r.stderr[-300:]}"
 
 
@@ -107,3 +108,22 @@ def test_old_schema_with_new_binary(toolchains: Toolchains, dsn: str) -> None:
     _run(tc, "new", "seed", dsn)
     assert _run(tc, "new", "exercise", dsn)["proposal_state"] == "draft"
     assert _run(tc, "old", "exercise", dsn)["entities"] >= 20
+
+
+def test_blob_bucket_migrate_is_the_one_non_expand_step_and_the_old_binary_survives_it(toolchains: Toolchains,
+                                                                                       dsn: str) -> None:
+    """The ONLY schema difference between the pins is python-embedded, not in a `.sql` script: `agentcore migrate` with
+    `AGENTCORE_BLOB_BUCKET` set runs `ALTER TABLE ... DROP CONSTRAINT` (ADR 0022 s3 vetoes DROP CONSTRAINT; upstream
+    findings PR27-04). We never set the bucket, but this pins what happens if infra does: the fingerprint changes (so the
+    ADR claim "no schema change to undo" holds only without the bucket) and the old binary still operates on it. Blobs
+    written to S3 afterwards would not be readable by the old binary (rollback hazard, not testable without S3)."""
+    tc = toolchains
+    _migrate(tc, "new", dsn)
+    plain = _run(tc, "new", "fingerprint", dsn)["fingerprint"]
+    _migrate(tc, "new", dsn, AGENTCORE_BLOB_BUCKET="unused-bucket-migrate-never-calls-s3")
+    detached = _run(tc, "new", "fingerprint", dsn)["fingerprint"]
+    assert detached != plain, "the bucket-enabled migrate no longer changes the schema: update ADR 0008"
+    _migrate(tc, "old", dsn)  # the old binary's migrate does not re-add the FK on an existing table
+    assert _run(tc, "old", "fingerprint", dsn)["fingerprint"] == detached
+    assert "rel-98130317a1003849" in _run(tc, "old", "seed", dsn)["releases"]
+    assert _run(tc, "old", "exercise", dsn)["proposal_state"] == "draft"

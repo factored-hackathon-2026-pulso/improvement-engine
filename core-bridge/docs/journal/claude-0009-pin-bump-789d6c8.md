@@ -51,3 +51,16 @@ scripted EvalPort + fake clock. Expand/contract: real binaries of both pins over
   excludes `contracts`); tests in `tests/runtime/test_image.py`.
 - e2e-core overlay image removed (core.env carries the gateway pair + inline budgets); `e2e-core/run.ps1` 30 passed, 1 skipped.
 - JEV base URL is not configurable upstream (`HttpJevTransport` fixed `DEFAULT_BASE_URL`): documented only.
+
+## Independent review addendum (reviewer: Claude, separate session)
+- Wire: regenerated twice, no drift. Defect: derived *output* schemas were validation-mode (looser than Core's serialization
+  output; `EntityVersion, EvalRun, EvalReport, ProposalDetail`). Now serialization-mode; MANIFEST digest `79758b46...` ->
+  `890edd7a...`; a test asserts every derived schema with an upstream twin equals it. Anything pinning the old digest (pin.json
+  `manifest_sha256`, BITACORA) must be updated.
+- `release_settings` deny: exact-kind was sound against upstream today (exact comparison, unknown kinds rejected); now also
+  case/width/punctuation/zero-width variants. A draft replace cannot smuggle it (the replace itself is the checked call).
+- Parity leniency: `release_id`, `max_input_chars`, `language_detection.id`, `injection_ruleset.id` and interrupt ids were
+  invisible at depth-2 shapes (an alias pointing at the wrong release passed). Now compared; fixtures/evidence re-recorded on
+  a2, real_local, real_pg_scripted; mock equal everywhere.
+- Expand/contract: sound as a smoke, tautological for SQL (identical scripts). Added the one real schema difference
+  (`AGENTCORE_BLOB_BUCKET` migrate drops an FK) as a pinned test and corrected the "trivial rollback" wording.
