@@ -1,0 +1,34 @@
+{
+  "case": "read-alias-staging",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "alias",
+        "release_id",
+        "status"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/aliases/atencion/staging",
+      "scalars": {
+        "agent_id": "atencion",
+        "alias": "staging",
+        "release_id": "rel-e26df0070f6be82f",
+        "status": "active"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "alias": "scalar",
+        "release_id": "scalar",
+        "status": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}

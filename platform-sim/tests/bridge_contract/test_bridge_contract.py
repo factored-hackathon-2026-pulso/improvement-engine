@@ -38,7 +38,7 @@ def test_version_is_labelled_contract_mock(bridge) -> None:
     assert r.status_code == 200
     validate("CoreVersion", r.json())
     assert r.json()["runtime_profile"] == "contract_mock"
-    assert r.json()["agent_core_sha"] == "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
+    assert r.json()["agent_core_sha"] == "894fa65575d83420523f33ec1c6919b8965f7ebe"
     assert r.json()["contracts_version"] == "1.3.0"
 
 
@@ -333,7 +333,7 @@ def test_alias_status_follows_the_release_status(bridge) -> None:
 
 
 def _dry(bridge, changes, tenant="tenant-a"):
-    body = {"schema_version": "1", "tenant_id": tenant, "agent_id": "atencion", "base_release_id": "rel-98130317a1003849",
+    body = {"schema_version": "1", "tenant_id": tenant, "agent_id": "atencion", "base_release_id": "rel-e26df0070f6be82f",
             "changes": changes}
     return bridge.c.post("/internal/v1/core-authoring/dry-run", json=body,
                          headers=bridge.headers("authoring_dry_run", tenant))
@@ -366,7 +366,7 @@ def test_dry_run_is_deterministic(bridge) -> None:
 
 def test_dry_run_binds_the_request_digest(bridge) -> None:
     body = {"schema_version": "1", "tenant_id": "tenant-a", "agent_id": "atencion",
-            "base_release_id": "rel-98130317a1003849", "changes": [_change()]}
+            "base_release_id": "rel-e26df0070f6be82f", "changes": [_change()]}
     digest = service_jws.request_digest(body)
     r = bridge.c.post("/internal/v1/core-authoring/dry-run", json=body, headers=bridge.headers("authoring_dry_run"))
     assert r.json()["request_digest"] == digest

@@ -1,0 +1,135 @@
+# 894fa65 (agent-core PR #29): release_settings drafts (N-07) and the guards added around them.
+# Interrupt.locked, admin-only interrupts, the max_input_chars ceiling, REG-LOCKED, ApprovalReview.release_changes,
+# Agent.input_schema and AG-04. The reference is a2 / real Core; the mock must match the recorded shape.
+- {id: rs-seed-interrupt-is-locked, rule: reads, steps: [{method: GET, path: "/v1/registry/releases/{base_release}"}]}
+- id: rs-interrupts-need-the-admin-role
+  rule: roles
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$settings: {content: {interrupts: []}}}}
+- id: rs-interrupts-by-admin-are-stored
+  rule: roles
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", as: admin, json: {$settings: {content: {interrupts: []}}}}
+- id: rs-other-settings-need-no-admin
+  rule: roles
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$settings: {content: {max_input_chars: 8000}}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: rs-locked-interrupt-cannot-be-removed
+  rule: REG-LOCKED
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", as: admin, json: {$settings: {content: {interrupts: []}}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", as: admin}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze", as: admin}
+- id: rs-locked-interrupt-cannot-be-lowered
+  rule: REG-LOCKED
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: "/v1/registry/proposals/{pid}/draft"
+      as: admin
+      json: {$settings: {content: {interrupts: [{id: fraude, priority: 50, locked: true, action: {type: escalate, target_queue: fraude, priority: critical}}]}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", as: admin}
+- id: rs-locked-interrupt-cannot-change-action
+  rule: REG-LOCKED
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: "/v1/registry/proposals/{pid}/draft"
+      as: admin
+      json: {$settings: {content: {interrupts: [{id: fraude, priority: 100, locked: true, action: {type: escalate, target_queue: otra, priority: critical}}]}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", as: admin}
+- id: rs-locked-interrupt-cannot-be-unlocked
+  rule: REG-LOCKED
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: "/v1/registry/proposals/{pid}/draft"
+      as: admin
+      json: {$settings: {content: {interrupts: [{id: fraude, priority: 100, action: {type: escalate, target_queue: fraude, priority: critical}}]}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", as: admin}
+- id: rs-locked-interrupt-can-be-raised-and-others-added
+  rule: REG-LOCKED
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: "/v1/registry/proposals/{pid}/draft"
+      as: admin
+      json: {$settings: {content: {interrupts: [{id: fraude, priority: 120, locked: true, action: {type: escalate, target_queue: fraude, priority: critical}}, {id: queja, priority: 10, action: {type: escalate, target_queue: quejas, priority: normal}}]}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", as: admin}
+- id: rs-max-input-chars-ceiling-ok
+  rule: REG-SCHEMA
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$settings: {content: {max_input_chars: 100000}}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: rs-max-input-chars-over-the-ceiling
+  rule: REG-SCHEMA
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$settings: {content: {max_input_chars: 100001}}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze"}
+- id: rs-max-input-chars-zero
+  rule: REG-SCHEMA
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$settings: {content: {max_input_chars: 0}}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: rs-unknown-settings-field
+  rule: REG-SCHEMA
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$settings: {content: {max_input_tokens: 5}}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: rs-review-shows-release-changes
+  rule: review
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$settings: {with_golden: true, content: {max_input_chars: 8000}}}}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze", save: {rel: release_id_preview}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/evaluate", json: {suite_id: disputas-suite}}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: rs-review-without-settings-has-no-release-changes
+  rule: review
+  steps:
+    - {use: golden_evaluated}
+    - {method: GET, path: "/v1/registry/proposals/{pid}"}
+- id: rs-published-settings-are-served
+  rule: reads
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - method: PUT
+      path: "/v1/registry/proposals/{pid}/draft"
+      as: admin
+      json: {$settings: {with_golden: true, content: {max_input_chars: 8000, interrupts: [{id: fraude, priority: 120, locked: true, action: {type: escalate, target_queue: fraude, priority: critical}}]}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate", as: admin, save: {ch: candidate_hash}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze", as: admin}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/evaluate", as: admin, json: {suite_id: disputas-suite}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/approve", as: admin, json: {candidate_hash: "{ch}"}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/publish", as: admin, headers: {Idempotency-Key: "k-{pid}"}, save: {rel2: release_id}}
+    - {method: GET, path: "/v1/registry/releases/{rel2}"}
+- id: ag-input-schema-applies-to-task-agents-only
+  rule: REG-SCHEMA
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$agent_input_schema: {schema: {x: {type: string, required: true}}}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+- id: ag-04-flow-reads-a-slot-nobody-validates
+  rule: AG-04
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$golden_unwritable_slot: {slot: otro}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/freeze"}
+- id: ag-04-collect-node-makes-the-slot-writable
+  rule: AG-04
+  steps:
+    - {method: POST, path: /v1/registry/proposals, json: {agent_id: atencion, title: t}, save: {pid: proposal_id}}
+    - {method: PUT, path: "/v1/registry/proposals/{pid}/draft", json: {$golden_draft: {expected_rev: 0}}}
+    - {method: POST, path: "/v1/registry/proposals/{pid}/validate"}

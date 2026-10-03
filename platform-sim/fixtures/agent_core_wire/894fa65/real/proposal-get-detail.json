@@ -1,0 +1,197 @@
+{
+  "case": "proposal-get-detail",
+  "steps": [
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "candidate_hash",
+        "created_by",
+        "origin",
+        "proposal_id",
+        "rev",
+        "state",
+        "title",
+        "updated_at"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-e26df0070f6be82f",
+        "created_by": "constructor-bot",
+        "origin": "manual",
+        "rev": 0,
+        "state": "draft",
+        "title": "golden"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "candidate_hash": "null",
+        "created_by": "scalar",
+        "origin": "scalar",
+        "proposal_id": "scalar",
+        "rev": "scalar",
+        "state": "scalar",
+        "title": "scalar",
+        "updated_at": "scalar"
+      },
+      "status": 201,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "agent_id",
+        "base_release_id",
+        "candidate_hash",
+        "created_by",
+        "origin",
+        "proposal_id",
+        "rev",
+        "state",
+        "title",
+        "updated_at"
+      ],
+      "method": "PUT",
+      "path": "/v1/registry/proposals/{pid}/draft",
+      "scalars": {
+        "agent_id": "atencion",
+        "base_release_id": "rel-e26df0070f6be82f",
+        "created_by": "constructor-bot",
+        "origin": "manual",
+        "rev": 1,
+        "state": "draft",
+        "title": "golden"
+      },
+      "shape": {
+        "agent_id": "scalar",
+        "base_release_id": "scalar",
+        "candidate_hash": "null",
+        "created_by": "scalar",
+        "origin": "scalar",
+        "proposal_id": "scalar",
+        "rev": "scalar",
+        "state": "scalar",
+        "title": "scalar",
+        "updated_at": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "auto_bumped",
+        "candidate_hash",
+        "violations"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/validate",
+      "scalars": {
+        "violation_paths": [],
+        "violation_rules": []
+      },
+      "shape": {
+        "auto_bumped": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "candidate_hash": "scalar",
+        "violations": [
+          "[]"
+        ]
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "auto_bumped",
+        "candidate_hash",
+        "new_versions",
+        "proposal_id",
+        "release_id_preview"
+      ],
+      "method": "POST",
+      "path": "/v1/registry/proposals/{pid}/freeze",
+      "scalars": {},
+      "shape": {
+        "auto_bumped": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "candidate_hash": "scalar",
+        "new_versions": [
+          "[][\"id\", \"kind\", \"version\"]"
+        ],
+        "proposal_id": "scalar",
+        "release_id_preview": "scalar"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    },
+    {
+      "code": null,
+      "content_type": "application/json",
+      "headers": {},
+      "keys": [
+        "changes",
+        "last_eval",
+        "proposal",
+        "review"
+      ],
+      "method": "GET",
+      "path": "/v1/registry/proposals/{pid}",
+      "scalars": {
+        "proposal.agent_id": "atencion",
+        "proposal.base_release_id": "rel-e26df0070f6be82f",
+        "proposal.created_by": "constructor-bot",
+        "proposal.origin": "manual",
+        "proposal.rev": 1,
+        "proposal.state": "candidate",
+        "proposal.title": "golden"
+      },
+      "shape": {
+        "changes": [
+          "[][\"content\", \"docs\", \"kind\"]"
+        ],
+        "last_eval": "null",
+        "proposal": {
+          "agent_id": "scalar",
+          "base_release_id": "scalar",
+          "candidate_hash": "scalar",
+          "created_by": "scalar",
+          "origin": "scalar",
+          "proposal_id": "scalar",
+          "rev": "scalar",
+          "state": "scalar",
+          "title": "scalar",
+          "updated_at": "scalar"
+        },
+        "review": "null"
+      },
+      "status": 200,
+      "title": null,
+      "trace_id_present": null,
+      "type": null
+    }
+  ]
+}
