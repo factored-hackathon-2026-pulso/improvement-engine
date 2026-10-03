@@ -30,7 +30,9 @@ COPY --from=builder /wheelhouse /wheelhouse
 RUN pip install --no-cache-dir --no-index --find-links /wheelhouse agent-core jsonschema referencing \
  && rm -rf /wheelhouse \
  && useradd --system --uid 10001 --no-create-home pulso \
- && install -d -m 0700 -o 10001 /run/pulso-keys
+ && install -d -m 0700 -o 10001 /run/pulso-keys /var/lib/pulso-exporter
+# Writable state dirs are pre-created: a Fargate ephemeral volume inherits ownership from the image path.
+# /var/lib/pulso-exporter is the exporter cursor dir (PULSO_EXPORTER_STATE_DIR in the infra task definition).
 # Only our package is copied (no testing/, tests/, contracts/ sources, dev group, Core compose).
 COPY src/pulso_core_runtime /opt/pulso/lib/pulso_core_runtime
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
