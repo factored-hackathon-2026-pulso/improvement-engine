@@ -134,6 +134,511 @@ fn retry_metric_counts_cases_with_known_counts_and_keeps_missing_explicit() {
 }
 
 #[test]
+fn simulated_proposal_reports_privacy_gated_retry_error_cooccurrence() {
+    let mut events = Vec::new();
+    for case_ordinal in 1..=5 {
+        let mut observed = event(case_ordinal, 1, Some(true), None, None, None);
+        observed.retry_count = Some(1);
+        events.push(observed);
+    }
+    for case_ordinal in 6..=10 {
+        let mut observed = event(case_ordinal, 1, Some(false), None, None, None);
+        observed.retry_count = Some(2);
+        events.push(observed);
+    }
+    let mut unknown_error = event(11, 1, None, None, None, None);
+    unknown_error.retry_count = Some(1);
+    events.push(unknown_error);
+    let mut known_no_retry_with_error = event(12, 1, Some(true), None, None, None);
+    known_no_retry_with_error.retry_count = Some(0);
+    events.push(known_no_retry_with_error);
+    let mut known_no_retry = event(13, 1, Some(false), None, None, None);
+    known_no_retry.retry_count = Some(0);
+    events.push(known_no_retry);
+
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:abababababababababababababababababababababababababababababababab",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=13).collect(),
+        0,
+        events,
+    ))
+    .expect("retry/error case overlap is summarized");
+
+    let proposal = result
+        .proposal
+        .expect("qualifying evidence produces a draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "reportable");
+    assert_eq!(overlap["policy_id"], "e0_retry_error_overlap_k_v2");
+    assert_eq!(overlap["policy_version"], 2);
+    assert_eq!(overlap["minimum_reportable_cases"], 5);
+    assert_eq!(overlap["retry_positive_cases_with_known_error_status"], 10);
+    assert_eq!(overlap["retry_and_technical_error_cases"], 5);
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        5000
+    );
+    assert_eq!(
+        overlap["unknown_error_status_policy"],
+        "retry-positive cases without explicit technical-error status are excluded; their count is not serialized"
+    );
+    assert!(
+        overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("co-occurrence")
+    );
+    assert!(
+        overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("not causal")
+    );
+}
+
+#[test]
+fn simulated_proposal_suppresses_small_retry_error_overlap_cells() {
+    let events = (1..=8)
+        .map(|case_ordinal| {
+            let technical_error = case_ordinal <= 5;
+            let mut observed = event(case_ordinal, 1, Some(technical_error), None, None, None);
+            observed.retry_count = Some(1);
+            observed
+        })
+        .collect();
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-small-cells",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:acacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=8).collect(),
+        0,
+        events,
+    ))
+    .expect("small overlap does not block the simulated proposal");
+
+    let proposal = result.proposal.expect("technical-error signal qualifies");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "suppressed_below_minimum_support");
+    assert_eq!(overlap["policy_id"], "e0_retry_error_overlap_k_v2");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+    assert!(
+        overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("withheld")
+    );
+}
+
+#[test]
+fn retry_error_overlap_hides_retry_support_when_error_status_is_missing() {
+    let mut events = Vec::new();
+    for case_ordinal in 1..=6 {
+        let mut observed = event(case_ordinal, 1, None, None, None, None);
+        observed.retry_count = Some(1);
+        events.push(observed);
+    }
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-missing-error-status",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:adadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=6).collect(),
+        0,
+        events,
+    ))
+    .expect("unknown error status does not become a no-retry observation");
+
+    let proposal = result.proposal.expect("positive retries qualify for draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "suppressed_below_minimum_support");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+    assert!(
+        overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("support")
+    );
+    assert!(
+        !overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("retry-positive")
+    );
+}
+
+#[test]
+fn retry_error_overlap_coarsens_sub_k_positive_with_missing_error_status() {
+    let mut events = Vec::new();
+    let mut positive_missing_error = event(1, 1, None, None, None, None);
+    positive_missing_error.retry_count = Some(1);
+    events.push(positive_missing_error);
+    for case_ordinal in 2..=6 {
+        let mut known_zero_with_error = event(case_ordinal, 1, Some(true), None, None, None);
+        known_zero_with_error.retry_count = Some(0);
+        events.push(known_zero_with_error);
+    }
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-sub-k-positive-missing-error",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=6).collect(),
+        0,
+        events,
+    ))
+    .expect("a small known retry with unknown error status must remain private");
+
+    let proposal = result
+        .proposal
+        .expect("known technical errors qualify for draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "suppressed_below_minimum_support");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+    assert!(
+        !overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("retry-positive")
+    );
+}
+
+#[test]
+fn retry_error_overlap_does_not_call_all_missing_retry_counts_no_retries() {
+    let events = (1..=6)
+        .map(|case_ordinal| event(case_ordinal, 1, Some(true), None, None, None))
+        .collect();
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-all-retry-status-missing",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:aeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeae",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=6).collect(),
+        0,
+        events,
+    ))
+    .expect("missing retry counts do not block the simulated proposal");
+
+    let proposal = result.proposal.expect("technical errors qualify for draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "insufficient_retry_status_coverage");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+    assert!(
+        overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("retry status coverage")
+    );
+}
+
+#[test]
+fn retry_error_overlap_does_not_call_partial_retry_coverage_no_retries() {
+    let mut events = (1..=6)
+        .map(|case_ordinal| {
+            let mut observed = event(case_ordinal, 1, Some(true), None, None, None);
+            observed.retry_count = Some(0);
+            observed
+        })
+        .collect::<Vec<_>>();
+    events.push(event(7, 1, Some(true), None, None, None));
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-partial-retry-status-missing",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:afafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=7).collect(),
+        0,
+        events,
+    ))
+    .expect("partial retry status does not block the simulated proposal");
+
+    let proposal = result.proposal.expect("technical errors qualify for draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "insufficient_retry_status_coverage");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+    assert!(
+        overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("retry status coverage")
+    );
+}
+
+#[test]
+fn retry_error_overlap_does_not_disclose_zero_retry_support_categorically() {
+    let events = (1..=6)
+        .map(|case_ordinal| {
+            let mut observed = event(case_ordinal, 1, Some(true), None, None, None);
+            observed.retry_count = Some(0);
+            observed
+        })
+        .collect();
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-known-no-retries",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=6).collect(),
+        0,
+        events,
+    ))
+    .expect("known zero retry counts remain an honest no-retry observation");
+
+    let proposal = result.proposal.expect("technical errors qualify for draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "suppressed_below_minimum_support");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+    assert!(
+        overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("support")
+    );
+    assert!(
+        !overlap["interpretation"]
+            .as_str()
+            .unwrap()
+            .contains("no retry")
+    );
+}
+
+#[test]
+fn retry_error_overlap_requires_complete_tool_call_counts_within_each_case() {
+    let mut events = Vec::new();
+    let mut known_zero = event(1, 1, Some(true), None, None, None);
+    known_zero.retry_count = Some(0);
+    events.push(known_zero);
+    events.push(event(1, 2, Some(true), None, None, None));
+    for case_ordinal in 2..=6 {
+        let mut observed = event(case_ordinal, 1, Some(true), None, None, None);
+        observed.retry_count = Some(0);
+        events.push(observed);
+    }
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-mixed-tool-call-coverage",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=6).collect(),
+        0,
+        events,
+    ))
+    .expect("partial ToolCall retry counts do not block proposal generation");
+
+    let proposal = result.proposal.expect("technical errors qualify for draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "insufficient_retry_status_coverage");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+}
+
+#[test]
+fn retry_error_overlap_keeps_incomplete_positive_tool_call_case_out_of_denominator() {
+    let mut events = Vec::new();
+    let mut known_positive = event(1, 1, Some(true), None, None, None);
+    known_positive.retry_count = Some(1);
+    events.push(known_positive);
+    events.push(event(1, 2, Some(true), None, None, None));
+    for case_ordinal in 2..=6 {
+        let mut observed = event(case_ordinal, 1, Some(true), None, None, None);
+        observed.retry_count = Some(0);
+        events.push(observed);
+    }
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-positive-incomplete-tool-call-case",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=6).collect(),
+        0,
+        events,
+    ))
+    .expect("known positive evidence does not hide incomplete call coverage");
+
+    let proposal = result.proposal.expect("technical errors qualify for draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "insufficient_retry_status_coverage");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+}
+
+#[test]
+fn retry_error_overlap_does_not_treat_cases_without_tool_calls_as_no_retries() {
+    let events = (1..=6)
+        .map(|case_ordinal| {
+            let mut observed = event(case_ordinal, 1, Some(true), None, None, None);
+            observed.event_kind = "turn".into();
+            observed
+        })
+        .collect();
+    let result = run_local_simulation(LocalRunInput::new(
+        LocalRunMetadata::new(
+            "run-retry-error-overlap-no-tool-calls",
+            "pulso_local",
+            LocalSourceKind::E0,
+            "sha256:b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3",
+            snapshot(),
+            1_785_542_403,
+            "2026-08-01T00:00:03Z",
+        ),
+        (1..=6).collect(),
+        0,
+        events,
+    ))
+    .expect("lack of ToolCall observations does not block proposal generation");
+
+    let proposal = result.proposal.expect("technical errors qualify for draft");
+    let overlap = &proposal.proposed_artifact["observed_evidence"]["retry_error_overlap"];
+    assert_eq!(overlap["status"], "insufficient_retry_status_coverage");
+    assert_eq!(
+        overlap["retry_positive_cases_with_known_error_status"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["retry_and_technical_error_cases"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        overlap["error_rate_within_retry_positive_known_error_status_basis_points"],
+        serde_json::Value::Null
+    );
+}
+
+#[test]
 fn local_simulation_runs_detection_to_proposal_without_claiming_native_execution_or_lift() {
     let input = LocalRunInput::new(
         LocalRunMetadata::new(

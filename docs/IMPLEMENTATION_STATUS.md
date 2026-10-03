@@ -72,6 +72,27 @@ green unit test as proof that a broader product flow is complete.
   null counts remain explicitly missing. Retries do not establish cause or
   savings. This signal is aggregate-only and may produce only the existing
   simulated, unverified, non-executable review draft.
+  Proposal evidence now includes a case-level retry/technical-error
+  co-occurrence diagnostic. It uses only cases with known retry-positive and
+  technical-error status; both the co-occurring and non-co-occurring cells
+  must meet a versioned minimum of five before counts/rates are emitted under
+  `e0_retry_error_overlap_k_v2`.
+  Unknown technical-error status among retry-positive cases is excluded from
+  the denominator and its count is not serialized. The diagnostic is
+  descriptive association, not cause or direction.
+  Its statuses distinguish incomplete retry-count coverage
+  (`insufficient_retry_status_coverage`), reportable support, and all other
+  complete-coverage cases (`suppressed_below_minimum_support`). Missing
+  technical-error status, zero support, and small support share the same
+  generic suppressed status; none exposes whether positive retries were
+  observed. No overlap status specifically names zero retries, and no
+  counts/rates/direction are emitted unless both cells meet k.
+  Completeness is per case over `tool_call` events: each discovery case must
+  contain at least one such event and every call must have a retry count. A
+  case with no `tool_call`, or with mixed known/missing call counts, is
+  incomplete even if a known call is positive. Any incomplete case makes
+  overlap values unavailable; missing status is never called no retries or no
+  errors.
   The primary-signal policy is versioned as `local_primary_signal_v3` because
   adding retries changes candidate-selection priority; v2 remains historical.
   If the optional `copilot_query` source table is absent, recurrence is marked
@@ -83,7 +104,9 @@ green unit test as proof that a broader product flow is complete.
   Actual local E0 smoke (2026-10-02) used 200 Arranque cases; the total
   Reproduccion population is intentionally suppressed. The leading opaque query signature recurred in
   154/200 cases (policy floor 20); technical errors remained 0/187 supported,
-  with 13 missing. The runner recorded three Scout candidates and one
+  with 13 missing. The overlap status is
+  `insufficient_retry_status_coverage`; it does not treat absent ToolCall rows
+  or missing call counts as zero retries. The runner recorded three Scout candidates and one
   exploratory proposal. Persisted output contains the exact
   configured cutoff and no known PII sentinels or evaluator labels.
   This demonstrates only bounded local detection/simulation behavior, not
