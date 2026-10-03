@@ -22,6 +22,8 @@ from pulso_core_runtime.errors import (
 from pulso_core_runtime.factories import DEFAULT_PATHS, FACTORIES, FACTORY_NAMES, stand_ins
 
 DEMO_ENV = "AGENTCORE_ALLOW_DEMO"
+# Literal: `agent_core.composition.serve.GATEWAY_TRACER` was removed upstream (PR #26); the value is unchanged.
+LLM_GATEWAY_TRACER = "agent_core.adapters.llm"
 KEYS_DIR = "/run/pulso-keys"
 # (env var, default file stem under KEYS_DIR): the bridge's own private signers (see `invoke.wiring.build_l3`).
 SIGNER_FILES: tuple[tuple[str, str], ...] = (
@@ -143,7 +145,7 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
     from agent_core.api.app import create_app
     from agent_core.api.limits import RateLimitConfig
     from agent_core.composition.observability import ObservabilityConfigError, setup_observability
-    from agent_core.composition.serve import GATEWAY_TRACER, build_api_deps
+    from agent_core.composition.serve import build_api_deps
     from agent_core.composition.serve_ports import ServeConfigError, resolve_ports
     from agent_core.composition.telemetry import OtelTurnTelemetry
 
@@ -210,7 +212,7 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
 
         try:
             ports = (resolve or resolve_ports)(args, env, SystemClock(), PulsoIds(),
-                                               tracer=observability.tracer(GATEWAY_TRACER))
+                                               tracer=observability.tracer(LLM_GATEWAY_TRACER))
         except ServeConfigError as exc:
             return _fail(err, *exc.problems)
         pinned = PinnedRegistryPort(ports.registry)
