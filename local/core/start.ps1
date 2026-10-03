@@ -62,7 +62,7 @@ try {
     Write-Output "namespace=$Namespace project=$project profile=$Profile machine=$($m.name)"
     Write-Output "runtime_profile=$runtimeProfile"
     Write-Output ("doubles: " + ($doubles -join ', '))
-    Write-Output "engine: podman --connection $conn (cgroups=disabled, pids-limit=0 encoded via x-pulso)"
+    Write-Output "engine: podman --connection $conn (cgroups=disabled, pids-limit=0 via runner labels)"
     foreach ($k in $plan.Keys) { Write-Output "publish 127.0.0.1:$($plan[$k]) -> $k" }
     foreach ($svc in (Get-StartOrder -Model $model)) { Write-Output "service $svc" }
 

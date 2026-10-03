@@ -25,6 +25,18 @@ Describe 'verify-fragments.ps1' {
     }
 }
 
+Describe 'verify-fragments rejection of unsafe patch entries' {
+    It 'rejects a target or fragment path that escapes the repository or is not allowlisted' {
+        $bad = Join-Path $env:TEMP 'pulso-bad-patch.json'
+        $p = Get-Content (Join-Path $core 'fragments\patch.json') -Raw | ConvertFrom-Json
+        $p.entries[0].target = '..\..\escape.yaml'
+        $p | ConvertTo-Json -Depth 6 | Set-Content $bad -Encoding utf8
+        $out = & $ps -NoProfile -File (Join-Path $repo 'scripts\core\verify-fragments.ps1') -PatchPath $bad 2>&1 | Out-String
+        $LASTEXITCODE | Should Not Be 0
+        $out | Should Match 'target_not_allowed'
+    }
+}
+
 Describe 'repository hygiene' {
     It 'git-ignores local/.secrets' {
         git -C $repo check-ignore -q 'local/.secrets/x/core.env'

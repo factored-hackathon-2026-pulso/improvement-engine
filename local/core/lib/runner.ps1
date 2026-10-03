@@ -86,6 +86,13 @@ function Wait-Dependency {
     throw (Get-FailureCode -Service $Dep -Detail "timeout waiting for $Condition")
 }
 
+function Get-StartFailureCode {
+    param([string]$Service, [string]$Output)
+    if ($Output -match 'address already in use|port is already allocated|bind:') { return "pulso:port_conflict: $Service could not bind its host port (taken after the probe); nothing else was touched" }
+    if ($Output -match 'controller .pids. is not available|cgroup') { return "pulso:runtime_cgroup_unavailable: $Service could not start" }
+    Get-FailureCode -Service $Service -Detail 'start failed'
+}
+
 function Get-FailureCode {
     param([string]$Service, [string]$Detail)
     switch ($Service) {
@@ -151,9 +158,7 @@ function Start-CoreStack {
         Copy-IntoContainer -Connection $Connection -Container $name -Copy $copy
         $out = Invoke-Podman -Connection $Connection start $name 2>&1
         if ($LASTEXITCODE -ne 0) {
-            $t = [string]$out
-            if ($t -match 'controller .pids. is not available|cgroup') { throw "pulso:runtime_cgroup_unavailable: $svc could not start" }
-            throw (Get-FailureCode -Service $svc -Detail "start failed")
+            throw (Get-StartFailureCode -Service $svc -Output ([string]$out))
         }
     }
 }

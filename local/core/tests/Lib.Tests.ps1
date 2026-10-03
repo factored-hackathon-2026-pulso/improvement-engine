@@ -102,6 +102,16 @@ Describe 'evidence' {
     It 'proves real_local when everything matches' {
         Test-RealLocalEvidence -SimInfoPresent $false -AgentCoreSha $pin -ImageDigest 'sha256:aa' -ExpectedImageDigest 'sha256:aa' -Ready $true | Should Be 'real_local'
     }
+    It 'refuses real_local when the observed container image differs from the expected digest (self-reported digest is not enough)' {
+        Test-RealLocalEvidence -SimInfoPresent $false -AgentCoreSha $pin -ImageDigest 'sha256:aa' -ExpectedImageDigest 'sha256:aa' -ObservedImageDigest 'sha256:cc' -Ready $true | Should Be 'evidence_target_unproven'
+        Test-RealLocalEvidence -SimInfoPresent $false -AgentCoreSha $pin -ImageDigest 'sha256:aa' -ExpectedImageDigest 'sha256:aa' -ObservedImageDigest 'sha256:aa' -Ready $true | Should Be 'real_local'
+    }
+    It 'never labels a running exporter container as a round trip' {
+        $c = @(New-ExporterChecks -Running $true)
+        (@($c | Where-Object { $_.name -eq 'exporter_round_trip' -and $_.status -eq 'pass' }).Count) | Should Be 0
+        (@($c | Where-Object { $_.name -eq 'exporter_container_running' -and $_.status -eq 'pass' }).Count) | Should Be 1
+        (@($c | Where-Object { $_.name -eq 'exporter_round_trip' -and $_.status -eq 'not_run' }).Count) | Should Be 1
+    }
     It 'unions the runtime doubles with labelled double containers' {
         @(Merge-Doubles -Runtime @('x: stand-in') -Containers @('platform-sim')).Count | Should Be 2
     }

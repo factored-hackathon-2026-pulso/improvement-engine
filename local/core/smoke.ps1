@@ -66,7 +66,7 @@ try {
     # 6. exporter round trip
     if ($SkipExporter -or -not $Exec) { Add-Check 'exporter_round_trip' 'not_run' 'skipped' } else {
         $st = Get-ContainerState -Connection $conn -Name "$project-core-exporter-1" 2>$null
-        Add-Check 'exporter_round_trip' $(if ($st -and $st.status -eq 'running') { 'pass' } else { 'fail' }) "exporter container status=$($st.status)"
+        foreach ($c in (New-ExporterChecks -Running ([bool]($st -and $st.status -eq 'running')) -Status "$($st.status)")) { Add-Check $c.name $c.status $c.detail }
     }
 
     $containers = @()
@@ -74,8 +74,14 @@ try {
         $containers = @(Invoke-Podman -Connection $conn ps --filter 'label=com.pulso.role=double' --filter "label=com.pulso.namespace=$Namespace" --format '{{.Label "com.docker.compose.service"}}' 2>$null)
     }
     $doubles = Merge-Doubles -Runtime @($ver.doubles) -Containers $containers
+    # Observed (not self-reported) image id of the running runtime container.
+    $observed = $null
+    if ($state -and $Exec) {
+        $o = (Invoke-Podman -Connection $conn inspect "$project-core-runtime-1" --format '{{.Image}}' 2>$null) -join ''
+        if ($o) { $observed = 'sha256:' + $o.Trim().Replace('sha256:', '') }
+    }
     $target = if ($ver.runtime_profile -eq 'contract_mock') { 'mock' } else {
-        Test-RealLocalEvidence -SimInfoPresent $sim -AgentCoreSha $ver.agent_core_sha -ImageDigest $ver.image_digest -ExpectedImageDigest $ExpectedImageDigest -Ready $ready }
+        Test-RealLocalEvidence -ObservedImageDigest $observed -SimInfoPresent $sim -AgentCoreSha $ver.agent_core_sha -ImageDigest $ver.image_digest -ExpectedImageDigest $ExpectedImageDigest -Ready $ready }
     $failed = @($suites | Where-Object status -eq 'fail').Count
     $manifest = Join-Path $PSScriptRoot '..\..\agent-core-assets\manifest.yaml'
     $report = [ordered]@{

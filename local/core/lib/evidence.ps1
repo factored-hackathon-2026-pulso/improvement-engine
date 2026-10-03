@@ -11,9 +11,10 @@ function New-EvidenceStamp {
 }
 
 function Test-RealLocalEvidence {
-    param([bool]$SimInfoPresent, [string]$AgentCoreSha, [string]$ImageDigest, [string]$ExpectedImageDigest, [bool]$Ready)
+    param([bool]$SimInfoPresent, [string]$AgentCoreSha, [string]$ImageDigest, [string]$ExpectedImageDigest, [bool]$Ready, [string]$ObservedImageDigest)
     if ($SimInfoPresent -or $AgentCoreSha -ne $script:PinSha -or -not $Ready -or
-        -not $ImageDigest -or $ImageDigest -eq 'unknown' -or $ImageDigest -ne $ExpectedImageDigest) { return 'evidence_target_unproven' }
+        -not $ImageDigest -or $ImageDigest -eq 'unknown' -or $ImageDigest -ne $ExpectedImageDigest -or
+        ($ObservedImageDigest -and $ObservedImageDigest -ne $ExpectedImageDigest)) { return 'evidence_target_unproven' }
     'real_local'
 }
 
@@ -21,4 +22,13 @@ function Test-RealLocalEvidence {
 function Merge-Doubles {
     param([string[]]$Runtime = @(), [string[]]$Containers = @())
     @(@($Runtime) + @($Containers | ForEach-Object { "container:$_" }) | Where-Object { $_ } | Select-Object -Unique)
+}
+
+# The exporter check only observes the container; a real exporter round trip is never claimed without a probe.
+function New-ExporterChecks {
+    param([bool]$Running, [string]$Status = '')
+    @(
+        [pscustomobject]@{ name = 'exporter_container_running'; status = $(if ($Running) { 'pass' } else { 'fail' }); detail = "exporter container status=$Status" }
+        [pscustomobject]@{ name = 'exporter_round_trip'; status = 'not_run'; detail = 'no exporter round-trip probe exists; only container liveness is observed' }
+    )
 }

@@ -6,11 +6,20 @@
   Exit 0 and `fragments: ok` on success.
 #>
 [CmdletBinding()]
-param([switch]$TamperForTest)
+param([switch]$TamperForTest, [string]$PatchPath)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$patch = Get-Content (Join-Path $repo 'local\core\fragments\patch.json') -Raw | ConvertFrom-Json
+if (-not $PatchPath) { $PatchPath = Join-Path $repo 'local\core\fragments\patch.json' }
+$patch = Get-Content $PatchPath -Raw | ConvertFrom-Json
 $errors = New-Object System.Collections.Generic.List[string]
+# Entries may only touch allowlisted Codex-owned targets and only read fragments from our own fragments directory.
+function Test-RelSafe([string]$p) { $p -and -not [IO.Path]::IsPathRooted($p) -and (($p -split '[\\/]') -notcontains '..') }
+$targetOk = '^(local/compose\.yaml|\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml|docs/[A-Za-z0-9_./-]+\.md|\.env\.example)$'
+foreach ($e in $patch.entries) {
+    if (-not (Test-RelSafe $e.target) -or (($e.target -replace '\\', '/') -notmatch $targetOk)) { $errors.Add("target_not_allowed: $($e.target)") }
+    if (-not (Test-RelSafe $e.fragment_path) -or (($e.fragment_path -replace '\\', '/') -notlike 'local/core/fragments/*')) { $errors.Add("fragment_path_not_allowed: $($e.fragment_path)") }
+}
+if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Output "fragments: FAIL $_" }; exit 1 }
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('pulso-frag-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
@@ -48,6 +57,8 @@ try {
         if ($py) { & python -c "import sys,yaml; yaml.safe_load(open(sys.argv[1], encoding='utf-8'))" $f 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { $errors.Add("yaml_invalid: $f") } }
     }
 
+    if (-not (Get-Command docker-compose -ErrorAction SilentlyContinue)) { Write-Output 'fragments: WARN docker-compose not found; compose render check skipped' }
+    if (-not (Get-Command docker-compose -ErrorAction SilentlyContinue)) { Write-Output 'fragments: WARN docker-compose not found; compose render check skipped' }
     # patched root compose must render with the include (podman compose provider = docker-compose here)
     $rootCompose = Join-Path $tmp 'local\compose.yaml'
     if ((Test-Path $rootCompose) -and (Get-Command docker-compose -ErrorAction SilentlyContinue)) {

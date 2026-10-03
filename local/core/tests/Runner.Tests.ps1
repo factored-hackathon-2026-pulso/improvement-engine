@@ -74,3 +74,11 @@ Describe 'secrets' {
         [IO.Directory]::Delete($root, $true)
     }
 }
+
+Describe 'start failure mapping' {
+    It 'maps a bind race to port_conflict and cgroup errors to runtime_cgroup_unavailable' {
+        (Get-StartFailureCode -Service 'core-postgres' -Output 'Error: rootlessport listen tcp 127.0.0.1:18330: bind: address already in use') | Should Match '^pulso:port_conflict'
+        (Get-StartFailureCode -Service 'x' -Output 'crun: controller `pids` is not available') | Should Match '^pulso:runtime_cgroup_unavailable'
+        (Get-StartFailureCode -Service 'core-migrate' -Output 'boom') | Should Match '^pulso:core_migrate_failed'
+    }
+}
