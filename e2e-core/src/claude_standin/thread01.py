@@ -195,10 +195,21 @@ def _rust(ctx: Ctx) -> "sh.StepsHost | None":
     return sh.StepsHost(ctx.cfg.steps_exe, runner_exe=ctx.cfg.exe)
 
 
-def _rust_rec(label: str) -> dict:
+def _fallback(ctx: Ctx, why: str) -> dict:
+    """In rust mode a step the Rust stand-in cannot serve stays Python: say so on the step (never silent)."""
+    return {"steps_fallback": f"python({why})"} if ctx.cfg.steps_mode == "rust" else {}
+
+
+def _exe_sha(host: "sh.StepsHost") -> str:
+    """sha256 of the steps_cli binary that actually ran (a stale binary is visible in the report)."""
+    import hashlib
+    return hashlib.sha256(Path(host.cli_exe).read_bytes()).hexdigest()
+
+
+def _rust_rec(label: str, host: "sh.StepsHost") -> dict:
     """Common labels of a step that ran through the Rust stand-in: real-narrow, host=python (via _finish), semantics."""
     return {"status": "real-narrow", "receipt": {"provider": "claude-standin"}, "semantics": "claude-standin",
-            "steps_label": label}
+            "steps_label": label, "steps_exe_sha256": _exe_sha(host)}
 
 
 # ---- step 2 ----------------------------------------------------------------------------------------------------
@@ -213,7 +224,7 @@ def step_02(ctx: Ctx) -> dict:
     if host:
         det, label = host.detect(ctx.out["package"], kw.get("arranque", 30), kw.get("min_support", 5))
         ctx.out["detection"] = det
-        return {**_rust_rec(label), "data_class": "generated_sample",
+        return {**_rust_rec(label, host), "data_class": "generated_sample",
                 "detail": {k: det[k] for k in ("producer", "admitted_family", "winner_support", "denominator",
                                                "discards", "holdout_status")}}
     det = ed0.detect(ctx.cfg.exe, ctx.out["package"], str(ctx.cfg.workdir / "sensor_out"), **kw)
@@ -442,7 +453,7 @@ def step_03(ctx: Ctx) -> list[dict]:
         labels = sorted({r["label"] for r in recompute.values() if r.get("label")})
         if not labels:
             raise RuntimeError("rust recompute produced no result for any claim")
-        recs.append({**_rust_rec(labels[0]), "id": "recompute", "data_class": "generated_sample",
+        recs.append({**_rust_rec(labels[0], host), "id": "recompute", "data_class": "generated_sample",
                      "detail": {"claims": len(hyps), "matched": sum(1 for r in recompute.values() if r["ok"]),
                                 "recomputed": {k: r["recomputed"] for k, r in recompute.items()}}})
     return recs
@@ -481,7 +492,7 @@ def step_04(ctx: Ctx) -> dict:
                                        "pulso-verifier")
         if not rows or any(v != "corroborated" for _s, v, _l in rows):
             raise RuntimeError(f"validation did not corroborate the recompute: {[v for _s, v, _l in rows]}")
-        validation = {**_rust_rec(rows[0][2]), "id": "validation", "data_class": "generated_sample",
+        validation = {**_rust_rec(rows[0][2], host), "id": "validation", "data_class": "generated_sample",
                       "detail": {"verdicts": {s_: v for s_, v, _l in rows}}}
     categories = {label: lab._fetch(db, ref)[4] for label, ref in refs.items()}  # label -> support (lab numerator)
     finding = {"finding_ref": "finding_1", "category": by_ref[verified[0]], "evidence_refs": sorted(verified)}
@@ -542,7 +553,7 @@ def step_05(ctx: Ctx) -> dict:
            "receipt": {"provider": "core-dry-run" if hook else "claude-standin"},
            "detail": {"compiler_label": out["compiler_label"], "draft_plan": out["draft_plan"],
                       "diff": [{"target": o["target_ref"], "to": o["new_ref"]} for o in out["draft_plan"]["operations"]]}}
-    return {**rec, **_rust_rec(label)} if host else rec
+    return {**rec, **_rust_rec(label, host)} if host else {**rec, **_fallback(ctx, "core dry-run hook")}
 
 
 def _run(case: str, status: str = "completed") -> dict:
@@ -581,8 +592,10 @@ def step_06(ctx: Ctx) -> dict:
                       "quality_claims": out["quality_claims"], "arms": arms_from, "verdict_judge": "stand-in",
                       **({"blocked": ctx.cfg.hooks.blocked[6]} if ctx.cfg.hooks.blocked.get(6) and not core_arms else {})}}
     if host:
-        rec = {**rec, **_rust_rec(label), "receipt": {"provider": "core-arms" if core_arms else "claude-standin"}}
+        rec = {**rec, **_rust_rec(label, host), "receipt": {"provider": "core-arms" if core_arms else "claude-standin"}}
         rec["detail"] = {**rec["detail"], "verdict_judge": "rust-claude-standin"}
+    else:
+        rec.update(_fallback(ctx, "custom G1 evaluators"))
     return rec
 
 
@@ -799,7 +812,7 @@ def _er():
 def build_report(ctx: Ctx, steps: list[dict]) -> dict:
     """The final engine-run report (C-2): per-step labels, per-port provenance, authors, engine-generated doubles[]."""
     keep = ("id", "n", "status", "data_class", "target", "sha", "contract_revision", "host", "receipt", "actor",
-            "model", "stage_output", "semantics", "steps_label")
+            "model", "stage_output", "semantics", "steps_label", "steps_exe_sha256", "steps_fallback")
     rep_steps = [{k: s[k] for k in keep if k in s} for s in steps]
     by = {(s["n"], s["id"]): s for s in steps}
     st = lambda n: next((s["status"] for s in steps if s["n"] == n), "red")  # noqa: E731

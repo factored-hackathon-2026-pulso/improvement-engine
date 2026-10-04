@@ -89,3 +89,24 @@ def test_rust_and_python_runs_agree_on_results(rust_run, tmp_path):
 def test_rust_mode_without_exe_is_red_not_silent(tmp_path):
     run = T.run_thread(cfg(tmp_path, steps_mode="rust", steps_exe=None))
     assert one(run, "signals")["status"] == "red"
+
+
+@needs_rust
+def test_rust_steps_record_exe_sha256_and_it_matches_the_binary(rust_run):
+    import hashlib
+    want = hashlib.sha256(Path(STEPS_EXE).read_bytes()).hexdigest()
+    for n, sid in ((2, "signals"), (3, "recompute"), (4, "validation"), (5, "compile"), (6, "gate")):
+        s = next(r for r in rust_run["steps"] if r["n"] == n and r["id"] == sid)
+        assert s["steps_exe_sha256"] == want, sid
+        assert s["steps_exe_sha256"] in [r.get("steps_exe_sha256") for r in rust_run["report"]["steps"]]
+
+
+@needs_rust
+def test_rust_mode_python_fallback_is_disclosed_per_step(tmp_path):
+    hook = T.CoreHooks(dry_run=lambda ops: "sha256:" + "c" * 64)
+    run = T.run_thread(cfg(tmp_path, steps_mode="rust", steps_exe=STEPS_EXE, hooks=hook,
+                           gate_evaluators={"safety": lambda b, c: ("pass", None)}))
+    for sid in ("compile", "gate"):
+        s = one(run, sid)
+        assert s.get("steps_fallback", "").startswith("python"), (sid, s)
+        assert s.get("semantics") != "claude-standin", sid

@@ -3,11 +3,11 @@
   "contracts": {
     "C-2": {
       "status": "frozen",
-      "digest": "sha256:2f99f9fb36da5cce66a6cdfe4ab57bfca1a0607afc066cea96b61cc994bddcf9",
+      "digest": "sha256:8e5d23845250d9a82b4845d7fbe49c4747c1ad314e2aab90193780804fea623f",
       "files": {
         "contracts/engine-run/engine_run.py": "sha256:7c2b1ff1239d2a3fca93099235f2ee5f977693e37598104dd2a652f7112ead70",
         "contracts/engine-run/report.schema.json": "sha256:ca797904b30421ae8a57da26c547639d19d8c345a8fe687d8a2b6f82a8457a61",
-        "e2e-core/src/claude_standin/thread01.py": "sha256:335dfa98d9c5d02b681322947ab202fb57469bd6664cefcd39332a91db634761"
+        "e2e-core/src/claude_standin/thread01.py": "sha256:87734fe8541f22b223106233abc9a1ceefbb00a19cf5ae0f710836e748ed2598"
       }
     },
     "C-12": {
