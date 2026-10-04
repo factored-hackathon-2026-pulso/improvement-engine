@@ -267,3 +267,43 @@ fn zero_signals_make_zero_proposals() {
     assert!(r.entries.is_empty() && r.runs.is_empty());
     assert_eq!(r.report["summary"]["proposals"], 0);
 }
+
+/// Fails every emit for the proposals in `lose` (a crash between the ledger write and the event emit looks the same on resume).
+struct Lossy(Mutex<Vec<String>>, Vec<&'static str>);
+impl RunEventSink for Lossy {
+    fn emit(&self, _run_id: &str, ev: NewEvent) -> Result<Value, String> {
+        if self.1.iter().any(|l| ev.entity_id.ends_with(l)) {
+            return Err("sink down".into());
+        }
+        self.0.lock().unwrap().push(ev.entity_id);
+        Ok(json!({}))
+    }
+}
+
+#[test]
+fn a_verdict_whose_event_was_lost_is_re_emitted_on_resume_exactly_once() {
+    let first = Arc::new(Lossy(Mutex::new(vec![]), vec!["-0001", "-0003"]));
+    let mut o = opts("reemit", four());
+    o.sink = Some(first.clone());
+    let work = o.work.clone();
+    let r = run_signals(&o).unwrap();
+    assert_eq!(r.emit_errors.len(), 2);
+    assert_eq!(first.0.lock().unwrap().len(), 2);
+    // resume with a healthy sink: the two lost verdicts are emitted now, the two delivered ones are not emitted again
+    let second = Arc::new(Lossy(Mutex::new(vec![]), vec![]));
+    let mut o2 = PipelineOpts::new(work.clone(), env!("CARGO_BIN_EXE_synth_runner").into(), "run-p", four());
+    o2.sink = Some(second.clone());
+    o2.now = 9000;
+    let r2 = run_signals(&o2).unwrap();
+    assert_eq!(r2.entries, r.entries);
+    let mut got = second.0.lock().unwrap().clone();
+    got.sort();
+    assert_eq!(got, vec!["prop-run-p-0001".to_string(), "prop-run-p-0003".to_string()]);
+    // and a third resume emits nothing
+    let third = Arc::new(Lossy(Mutex::new(vec![]), vec![]));
+    let mut o3 = PipelineOpts::new(work, env!("CARGO_BIN_EXE_synth_runner").into(), "run-p", four());
+    o3.sink = Some(third.clone());
+    o3.now = 9500;
+    run_signals(&o3).unwrap();
+    assert!(third.0.lock().unwrap().is_empty());
+}

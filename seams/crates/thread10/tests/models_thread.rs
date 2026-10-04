@@ -192,3 +192,20 @@ fn the_roleplay_port_drives_the_thread_from_recorded_answers() {
     let ids: Vec<&str> = r.report["models"].as_array().unwrap().iter().map(|m| m["model_id"].as_str().unwrap()).collect();
     assert_eq!(ids, ["agent_roleplay:resp-0", "agent_roleplay:resp-1", "agent_roleplay:resp-2"]);
 }
+
+#[test]
+fn a_persisted_answer_is_never_replayed_for_a_different_input() {
+    let mut o = opts("stale");
+    let p = Rc::new(Probe::new(Label::Scripted, "scripted-s"));
+    o.model = Some(p.clone());
+    run(&o).unwrap();
+    assert_eq!(p.calls.borrow().len(), 3);
+    // same work directory, a different signal row: the persisted answers belong to the old request
+    let mut other = Opts { now: 5000, ..Opts::new(o.work.clone(), o.runner.clone()) };
+    other.human_override = true;
+    other.seed = SignalSeed { numerator: 200, ..SignalSeed::lab_default() };
+    let p2 = Rc::new(Probe::new(Label::Scripted, "scripted-s"));
+    other.model = Some(p2.clone());
+    let second = run(&other);
+    assert!(second.is_err() || !p2.calls.borrow().is_empty(), "a stale model answer was replayed for a different input");
+}
