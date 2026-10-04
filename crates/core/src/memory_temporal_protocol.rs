@@ -520,4 +520,1106 @@ fn validate_successor_inputs(
         .map_err(TemporalSuccessorError::Temporal)
 }
 
-/// SmuãÏm¢G§²ÚîÆ­yÐ¢66W72À¢“° ¢76W'B†ÖF6†W2€¢G'W7FVEFV×÷&ÄWf–FVæ6T—77VW#£¦g&öÕ÷SF%÷&WÆ’‡SF%÷&WÆ•÷&ö¦V7F–öâ‚’Â&WVW7B’À¢W'"…FV×÷&Å&÷Fö6öÄW'&÷#£¥SD%&WÆ•66÷TÖ—6ÖF6‚¢’“°¢76W'B‡V&Æ—6†W"ç&V6V—G2‚’æ—5öV×G’‚’“°¢Ð ¢5·FW7EÐ¢fâ&öGV7F–öåö—77VW%÷&V¦V7G5÷SF%÷&ö¦V7F–öåöf÷%öæ÷F†W%÷FVæçEö&Vf÷&Uö÷&V6V—B‚’°¢ÆWB…ö'F–f7G2ÂV&Æ—6†W"Â66W72’Ò6VVFVB‚&g&÷¦Vâ"“°¢ÆWB&WVW7BÒÖVÖ÷'•W6U&WVW7C£¦æWr‡66÷R‚&g&÷¦Vâ"’Â66W72“° ¢76W'B†ÖF6†W2€¢G'W7FVEFV×÷&ÄWf–FVæ6T—77VW#£¦g&öÕ÷SF%÷&WÆ’€¢SF%÷&WÆ•÷&ö¦V7F–öåöf÷"‚'FVæçBÖ""Â""’À¢&WVW7BÀ¢’À¢W'"…FV×÷&Å&÷Fö6öÄW'&÷#£¥SD%&WÆ•66÷TÖ—6ÖF6‚¢’“°¢76W'B‡V&Æ—6†W"ç&V6V—G2‚’æ—5öV×G’‚’“°¢Ð ¢5·FW7EÐ¢fâ6÷W&6U÷6æ6†÷EöæE÷&öf–ÆUöF–vW7Eö6†ævU÷F†U÷FV×÷&Åö6öÖÖ—FÖVçB‚’°¢ÆWB…ö'F–f7G2Â÷V&Æ—6†W"Â66W72’Ò6VVFVB‚&g&÷¦Vâ"“°¢ÆWB&WVW7BÒÖVÖ÷'•W6U&WVW7C£¦æWr‡66÷R‚&g&÷¦Vâ"’Â66W72“°¢ÆWBf—'7BÒG'W7FVEFV×÷&ÄWf–FVæ6T—77VW#£¦g&öÕ÷SF%÷&WÆ’€¢SF%÷&WÆ•÷&ö¦V7F–öåöf÷"…DTäåBÂ""’À¢&WVW7Bæ6ÆöæR‚’À¢¢æW‡V7B‚&f—'7BW†7BSBÔ"6æ6†÷B"“°¢ÆWB6ÖU÷6VÖçF–75öæWu÷6æ6†÷BÒG'W7FVEFV×÷&ÄWf–FVæ6T—77VW#£¦g&öÕ÷SF%÷&WÆ’€¢SF%÷&WÆ•÷&ö¦V7F–öåöf÷"…DTäåBÂ%Æâ"’À¢&WVW7BÀ¢¢æW‡V7B‚'6V6öæBW†7BSBÔ"6æ6†÷B"“° ¢76W'EöæR€¢f—'7BæGFW7B„ÖVÖ÷'•FV×÷&Å&÷Fö6öÃ£¤g&÷¦Vâ’æ6öÖÖ—FÖVçBÀ¢6ÖU÷6VÖçF–75öæWu÷6æ6†÷@¢æGFW7B„ÖVÖ÷'•FV×÷&Å&÷Fö6öÃ£¤g&÷¦Vâ¢æ6öÖÖ—FÖVçBÀ¢'&r6æ6†÷BæB&öf–ÆR6VÇ2&R'BöbFV×÷&Â–FVçF—G’ ¢“°¢Ð ¢5·FW7EÐ¢fâ&V—77VVEöw&çE÷&Wf—6–öåö6ææ÷E÷&WW6U÷&–÷%÷FV×÷&ÅöWf–FVæ6Uö÷%öÆVfUö÷&V6V—B‚’°¢ÆWB†×WB'F–f7G2Â×WBV&Æ—6†W"Â66W72’Ò6VVFVB‚&g&÷¦Vâ"“°¢ÆWB÷&–v–æÅ÷&WVW7BÒÖVÖ÷'•W6U&WVW7C£¦æWr‡66÷R‚&g&÷¦Vâ"’Â66W72æ6ÆöæR‚’“°¢ÆWBWf–FVæ6RÒG'W7FVEFV×÷&ÄWf–FVæ6T—77VW#£¦FWFW&Ö–æ—7F–2€¢fW&–f–VDf–Æ&–Æ—G•&ö¦V7F–öã£¦FWFW&Ö–æ—7F–2†÷&–v–æÅ÷&WVW7BÂÂæöæRÂæöæR’À¢¢æGFW7B„ÖVÖ÷'•FV×÷&Å&÷Fö6öÃ£¤g&÷¦Vâ“° ¢ÆWB&–æF–ærÒÖVÖ÷'•66÷T&–æF–æs£¦æWr‚'v÷&ÆBÖ"Â&6×–vâÖ"Â&g&÷¦Vâ"Â'G&–â"“°¢V&Æ—6†W"æWF†÷&—G’‚’æ—77VR€¢v–¶”w&çC£¦æWu÷66÷VB€¢&w&çBÓ""À¢''VâÓ""À¢DTäåBÀ¢&–çfW7F–vF–öâ"À¢66W72ç6æ6†÷E÷&Vbæ6ÆöæR‚’À¢&–æF–ærÀ¢¢çv—F…÷&Wf—6–öâƒ"’À¢“°¢ÆWB&V—77VVE÷&WVW7BÐ¢ÖVÖ÷'•W6U&WVW7C£¦æWr‡66÷R‚&g&÷¦Vâ"’Â66W72çv—F…öw&çE÷&Wf—6–öâƒ"’“° ¢76W'B†ÖF6†W2€¢ÖVÖ÷'•FV×÷&ÄFÖ—76–öã£¦FÖ—B€¢ÖVÖ÷'•FV×÷&Å&÷Fö6öÃ£¤g&÷¦VâÀ¢Wf–FVæ6RÀ¢f×WBV&Æ—6†W"À¢f×WB'F–f7G2À¢&V—77VVE÷&WVW7BÀ¢’À¢W'"…FV×÷&ÄÖVÖ÷'”FÖ—76–öäW'&÷#£¥FV×÷&Â€¢FV×÷&Å&÷Fö6öÄW'&÷#£¤w&çE&Wf—6–öäÖ—6ÖF6€¢’¢’“°¢76W'B‡V&Æ—6†W"ç&V6V—G2‚’æ—5öV×G’‚’“°¢Ð ¢5·FW7EÐ¢fâWf–FVæ6U÷&V¦V7G5ö6ÆÆW%öVÆWfF–öåööeöÆÆ÷vVEöEö&Vf÷&U÷S35÷6–FUöVffV7G2‚’°¢ÆWB†×WB'F–f7G2Â×WBV&Æ—6†W"Â66W72’Ò6VVFVB‚&g&÷¦Vâ"“°¢ÆWB&WVW7BÒÖVÖ÷'•W6U&WVW7C£¦æWr‡66÷R‚&g&÷¦Vâ"’Â66W72“°¢ÆWBWf–FVæ6RÒG'W7FVEFV×÷&ÄWf–FVæ6T—77VW#£¦FWFW&Ö–æ—7F–2€¢fW&–f–VDf–Æ&–Æ—G•&ö¦V7F–öã£¦FWFW&Ö–æ—7F–2‡&WVW7Bæ6ÆöæR‚’ÂÂæöæRÂæöæR’À¢¢æGFW7B„ÖVÖ÷'•FV×÷&Å&÷Fö6öÃ£¤g&÷¦Vâ“°¢ÆWB÷&–v–æÅö66W72Ò&WVW7Bæ66W72‚’æ6ÆöæR‚“°¢ÆWBVÆWfFVBÒÖVÖ÷'•W6U&WVW7C£¦æWr€¢66÷R‚&g&÷¦Vâ"’À¢v–¶”66W73£¦æWu÷66÷VB€¢÷&–v–æÅö66W72ç'Våö–BÀ¢÷&–v–æÅö66W72çFVæçEö–BÀ¢÷&–v–æÅö66W72çW'÷6RÀ¢÷&–v–æÅö66W72æw&çEö–BÀ¢÷&–v–æÅö66W72ç6æ6†÷E÷&VbÀ¢À¢÷&–v–æÅö66W72æÖVÖ÷'•÷66÷RÀ¢’À¢“° ¢76W'B†ÖF6†W2€¢ÖVÖ÷'•FV×÷&ÄFÖ—76–öã£¦FÖ—B€¢ÖVÖ÷'•FV×÷&Å&÷Fö6öÃ£¤g&÷¦VâÀ¢Wf–FVæ6RÀ¢f×WBV&Æ—6†W"À¢f×WB'F–f7G2À¢VÆWfFVBÀ¢’À¢W'"…FV×÷&ÄÖVÖ÷'”FÖ—76–öäW'&÷#£¥FV×÷&Â€¢FV×÷&Å&÷Fö6öÄW'&÷#£¤66W75F–ÖTÖ—6ÖF6€¢’¢’“°¢76W'B‡V&Æ—6†W"ç&V6V—G2‚’æ—5öV×G’‚’“°¢Ð ¢5·FW7EÐ¢fâWf–FVæ6Uö6ææ÷Eö7&÷75ööÖVÖ÷'•÷66÷Uö&Vf÷&U÷S35÷6–FUöVffV7G2‚’°¢ÆWB†×WB'F–f7G2Â×WBV&Æ—6†W"Â66W72’Ò6VVFVB‚&g&÷¦Vâ"“°¢ÆWB&WVW7BÒÖVÖ÷'•W6U&WVW7C£¦æWr‡66÷R‚&g&÷¦Vâ"’Â66W72æ6ÆöæR‚’“°¢ÆWBWf–FVæ6RÒG'W7FVEFV×÷&ÄWf–FVæ6T—77VW#£¦FWFW&Ö–æ—7F–2€¢fW&–f–VDf–Æ&–Æ—G•&ö¦V7F–öã£¦FWFW&Ö–æ—7F–2‡&WVW7Bæ6ÆöæR‚’ÂÂæöæRÂæöæR’À¢¢æGFW7B„ÖVÖ÷'•FV×÷&Å&÷Fö6öÃ£¤g&÷¦Vâ“°¢ÆWB7&÷76VBÒÖVÖ÷'•W6U&WVW7C£¦æWr€¢ÖVÖ÷'•66÷S£¦æWr€¢DTäåBÀ¢&–çfW7F–vF–öâ"À¢'v÷&ÆBÖ""À¢&6×–vâÖ"À¢&g&÷¦Vâ"À¢'G&–â"À¢’À¢66W72À¢“°¢76W'B†ÖF6†W2€¢ÖVÖ÷'•FV×÷&ÄFÖ—76–öã£¦FÖ—B€¢ÖVÖ÷'•FV×÷&Å&÷Fö6öÃ£¤g&÷¦VâÀ¢Wf–FVæ6RÀ¢f×WBV&Æ—6†W"À¢f×WB'F–f7G2À¢7&÷76VBÀ¢’À¢W'"…FV×÷&ÄÖVÖ÷'”FÖ—76–öäW'&÷#£¥FV×÷&Â€¢FV×÷&Å&÷Fö6öÄW'&÷#£¤66W75F–ÖTÖ—6ÖF6€¢’¢’“°¢76W'B‡V&Æ—6†W"ç&V6V—G2‚’æ—5öV×G’‚’“°¢Ð ¢5·FW7EÐ¢fâ7V66W76÷%÷'Våö–FVçF—G•ö—5÷7F&ÆUöf÷%÷F†U÷6ÖUöWfVçEöæE÷fÆ–E÷WV–E÷cr‚’°¢ÆWBf—'7BÒ7V66W76÷%÷'Våö–B‚'FVæçBÖ"Â'ÆFf÷&ÒöWfVçBÓr"ÂósS•óC#óƒó¢æW‡V7B‚'fÆ–BWfVçB–FVçF—G’"“°¢ÆWB&WG'’Ò7V66W76÷%÷'Våö–B‚'FVæçBÖ"Â'ÆFf÷&ÒöWfVçBÓr"ÂósS•óC#óƒó¢æW‡V7B‚'6ÖRWfVçB–FVçF—G’"“°¢ÆWB÷F†W%öWfVçBÒ7V66W76÷%÷'Våö–B‚'FVæçBÖ"Â'ÆFf÷&ÒöWfVçBÓ‚"ÂósS•óC#óƒó¢æW‡V7B‚&F–ffW&VçBWfVçB–FVçF—G’"“° ¢76W'EöW†f—'7BÂ&WG'’Â'&WÆ’×W7B&V6÷fW"F†R6ÖR7V66W76÷"'Vâ"“°¢76W'EöæR†f—'7BÂ÷F†W%öWfVçBÂ&F–ffW&VçBWfVçG2×W7Bæ÷B6öÆÆ–FR"“°¢76W'B†—5÷WV–E÷cr‚ff—'7B’Â'7V66W76÷"&ö÷B×W7B6F—6g’SbUT”Gcr"“°¢Ð ¢5·FW7EÐ¢fâ6÷W&6UöWfVçE÷&VfW&Væ6Uö×W7Eö&Uöö6æöæ–6Åö÷VU÷Fö¶Vâ‚’°¢ÆWBfÆ–BÒf÷&ÖB‚'6†#Se÷·Ò"Â&"ç&WVBƒSb’“°¢76W'B‡7WW#£¦—5ö÷VU÷6÷W&6UöWfVçE÷&Vb‚gfÆ–B’“°¢f÷"&uö÷%öÖÆf÷&ÖVB–â°¢&7W7FöÖW$W†×ÆRæ6öÒ"À¢'ÆFf÷&ÒÖWfVçBÓ"À¢'6†#Seô$4DTb"À¢'6†#Seö"À¢Ò°¢76W'B€¢7WW#£¦—5ö÷VU÷6÷W&6UöWfVçE÷&Vb‡&uö÷%öÖÆf÷&ÖVB’À¢'&VfW&Væ6R×W7Bæ÷BFÖ—B&r÷"ÖÆf÷&ÖVB–çWC¢·&uö÷%öÖÆf÷&ÖVGÒ ¢“°¢Ð¢Ð ¢5·FW7EÐ¢fâ7V66W76÷%÷7Ç7FFUöW‡÷6W5ö6öæfÆ–7G5öæE÷&V6öæ6–Æ–F–öåö5öFöÖ–åö÷WF6öÖW2‚’°¢76W'EöW€¢7WW#£¦6Æ76–g•÷FV×÷&Å÷7V66W76÷%÷7Ç7FFR€¢g÷7Fw&W3£¦W'&÷#£¥7Å7FFS£¥Tä•TUõd”ôÄD”ôà¢’À¢7WW#£¥FV×÷&ÄFF&6T÷WF6öÖS£¤6öæfÆ–7@¢“°¢76W'EöW€¢7WW#£¦6Æ76–g•÷FV×÷&Å÷7V66W76÷%÷7Ç7FFR€¢g÷7Fw&W3£¦W'&÷#£¥7Å7FFS£¤ô$¤T5EôäõEô”åõ$U$UT•4•DUõ5DDP¢’À¢7WW#£¥FV×÷&ÄFF&6T÷WF6öÖS£¥&V6öæ6–Æ–F–öå&WV—&V@¢“°¢76W'EöW€¢7WW#£¦6Æ76–g•÷FV×÷&Å÷7V66W76÷%÷7Ç7FFR€¢g÷7Fw&W3£¦W'&÷#£¥7Å7FFS£¤4ôääT5D”ôåôd”ÅU$P¢’À¢7WW#£¥FV×÷&ÄFF&6T÷WF6öÖS£¥7F÷&vP¢“°¢Ð§Ð
+/// Source-event references cross a persistence boundary and therefore accept
+/// only the engine's opaque SHA-256 token shape, never source IDs or free text.
+fn is_opaque_source_event_ref(value: &str) -> bool {
+    let Some(digest) = value.strip_prefix("sha256_") else {
+        return false;
+    };
+    digest.len() == 56
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+#[allow(dead_code)] // Used only by the crate-private P4 successor composition.
+fn successor_request_digest(
+    request: &MemoryUseRequest,
+    evidence: &TemporalMemoryEvidence,
+    receipt_digest: &str,
+    source_event_ref: &str,
+    event_occurred_at_unix_ms: u64,
+    expected_head_version: u64,
+) -> String {
+    let access = request.access();
+    let bytes = serde_json::to_vec(&(
+        "pulso.temporal_successor.request.v1",
+        (
+            receipt_digest,
+            request.scope(),
+            &access.tenant_id,
+            &access.run_id,
+            &access.purpose,
+            &access.grant_id,
+            access.grant_revision,
+            &access.snapshot_ref,
+            access.allowed_at_unix_seconds,
+            &access.memory_scope,
+            expected_head_version,
+            source_event_ref,
+            event_occurred_at_unix_ms,
+        ),
+        (
+            &evidence.commitment,
+            evidence.protocol.as_str(),
+            evidence.cutoff_at_unix_seconds,
+            evidence.memory_use_at_unix_seconds,
+            evidence.outcome_available_at_unix_seconds,
+            &evidence.outcome_provenance,
+        ),
+    ))
+    .expect("temporal successor identity inputs serialize deterministically");
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TemporalMemoryAdmissionError {
+    Temporal(TemporalProtocolError),
+    Governed(MemoryUseAdmissionError),
+}
+
+/// Trusted composition entry point for the U23-P temporal gate.
+///
+/// It deliberately runs the pure temporal check before U22 records a receipt,
+/// so a not-yet-observable outcome cannot create an audit/use side effect. The
+/// underlying U22 call remains crate-private: an external caller cannot supply
+/// a permissive publisher or receive a use capability from this boundary.
+///
+/// ```compile_fail
+/// use improvement_engine_core::memory_temporal_protocol::MemoryTemporalAdmission;
+/// let _ = MemoryTemporalAdmission::admit;
+/// ```
+///
+/// ```compile_fail
+/// use improvement_engine_core::memory_temporal_protocol::MemoryTemporalAdmission;
+/// let _ = MemoryTemporalAdmission { _private: true };
+/// ```
+pub struct MemoryTemporalAdmission {
+    _private: bool,
+}
+
+impl MemoryTemporalAdmission {
+    #[allow(dead_code)] // Invoked by the future trusted service composition root.
+    pub(crate) fn admit<R: ArtifactRepository, P: AtomicMemoryUseCommitPort>(
+        protocol: MemoryTemporalProtocol,
+        evidence: TemporalMemoryEvidence,
+        publisher: &mut P,
+        artifacts: &mut R,
+        request: MemoryUseRequest,
+    ) -> Result<VerifiedMemoryUse, TemporalMemoryAdmissionError> {
+        if evidence.memory_use_at_unix_seconds != request.allowed_at_unix_seconds() {
+            return Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::AccessTimeMismatch,
+            ));
+        }
+        if evidence.scope != *request.scope()
+            || evidence.snapshot_ref != request.access().snapshot_ref
+            || evidence.run_id != request.access().run_id
+            || evidence.grant_id != request.access().grant_id
+            || evidence.purpose != request.access().purpose
+        {
+            return Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::AccessTimeMismatch,
+            ));
+        }
+        if evidence.grant_revision != request.access().grant_revision {
+            return Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::GrantRevisionMismatch,
+            ));
+        }
+        if evidence.protocol != protocol {
+            return Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::ProtocolMismatch {
+                    expected: protocol.as_str(),
+                    actual: evidence.protocol.as_str().to_owned(),
+                },
+            ));
+        }
+        protocol
+            .validate_evidence(request.scope(), &evidence)
+            .map_err(TemporalMemoryAdmissionError::Temporal)?;
+        let request = request.with_temporal_commitment(evidence.commitment.clone());
+        let admitted = MemoryUseAdmission::admit(publisher, artifacts, request)
+            .map_err(TemporalMemoryAdmissionError::Governed)?;
+        // The atomic U33 commit recomputes canonical receipt identity,
+        // liveness, authorization and this exact commitment before exposing a
+        // receipt; this comparison is only a defensive output check.
+        if admitted.receipt().temporal_commitment.as_deref() != Some(evidence.commitment.as_str()) {
+            return Err(TemporalMemoryAdmissionError::Governed(
+                MemoryUseAdmissionError::ReceiptMismatch,
+            ));
+        }
+        Ok(admitted)
+    }
+}
+
+impl MemoryTemporalProtocol {
+    /// Validates only temporal eligibility. Receipt/authentication/liveness are
+    /// deliberately revalidated by the U22/U33 composition boundary.
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Frozen => "frozen",
+            Self::Continuous => "continuous",
+        }
+    }
+
+    fn validate_evidence(
+        self,
+        scope: &MemoryScope,
+        evidence: &TemporalMemoryEvidence,
+    ) -> Result<(), TemporalProtocolError> {
+        let expected = match self {
+            Self::Frozen => "frozen",
+            Self::Continuous => "continuous",
+        };
+        if scope.protocol != expected {
+            return Err(TemporalProtocolError::ProtocolMismatch {
+                expected,
+                actual: scope.protocol.clone(),
+            });
+        }
+        if evidence.memory_use_at_unix_seconds > evidence.cutoff_at_unix_seconds {
+            return Err(TemporalProtocolError::MemoryAfterReplayCutoff);
+        }
+        match self {
+            Self::Frozen
+                if evidence.outcome_available_at_unix_seconds.is_some()
+                    || evidence.outcome_provenance.is_some() =>
+            {
+                Err(TemporalProtocolError::OutcomeForbiddenInFrozen)
+            }
+            Self::Frozen => Ok(()),
+            Self::Continuous => {
+                let outcome = evidence
+                    .outcome_available_at_unix_seconds
+                    .ok_or(TemporalProtocolError::OutcomeRequired)?;
+                if evidence
+                    .outcome_provenance
+                    .as_deref()
+                    .is_none_or(str::is_empty)
+                {
+                    return Err(TemporalProtocolError::OutcomeRequired);
+                }
+                if outcome > evidence.memory_use_at_unix_seconds {
+                    return Err(TemporalProtocolError::OutcomeAfterMemoryUse);
+                }
+                if outcome > evidence.cutoff_at_unix_seconds {
+                    return Err(TemporalProtocolError::OutcomeAfterReplayCutoff);
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// U23-E uses the same U04-B trusted clock as U23-P, but carries the result to
+/// the E0-specific U33-E sidecar instead of the generic U22 memory ledger.
+/// This helper emits only the temporal commitment after the pure Frozen gate;
+/// U33-E still rechecks exact publication, head, liveness and grant at commit.
+#[allow(dead_code)] // Used by the trusted U23-E runtime composition once wired.
+pub(crate) fn attest_frozen_e0_reuse(
+    replay: &VerifiedReplayAvailability,
+    scope: &MemoryScope,
+    access: &crate::wiki_scratch::WikiAccess,
+) -> Result<String, TemporalProtocolError> {
+    if replay.tenant_id() != scope.tenant_id
+        || replay.world_ref() != scope.world
+        || access.tenant_id != scope.tenant_id
+        || access.purpose != scope.purpose
+        || access.memory_scope.world != scope.world
+        || access.memory_scope.campaign != scope.campaign
+        || access.memory_scope.protocol != scope.protocol
+        || access.memory_scope.partition != scope.partition
+    {
+        return Err(TemporalProtocolError::U04BReplayScopeMismatch);
+    }
+    let request = MemoryUseRequest::new(scope.clone(), access.clone());
+    let projection = VerifiedAvailabilityProjection {
+        cutoff_at_unix_seconds: replay.cutoff_at_unix_seconds(),
+        source_snapshot_digest: replay.source_snapshot_digest().to_owned(),
+        availability_profile_digest: replay.availability_profile_digest().to_owned(),
+        request,
+        outcome_available_at_unix_seconds: None,
+        outcome_provenance: None,
+    };
+    let evidence =
+        TrustedTemporalEvidenceIssuer { projection }.attest(MemoryTemporalProtocol::Frozen);
+    MemoryTemporalProtocol::Frozen.validate_evidence(scope, &evidence)?;
+    Ok(evidence.commitment)
+}
+
+#[allow(dead_code)]
+struct TemporalCommitmentInput<'a> {
+    protocol: MemoryTemporalProtocol,
+    scope: &'a MemoryScope,
+    access: &'a crate::wiki_scratch::WikiAccess,
+    allowed_at: u64,
+    cutoff: u64,
+    outcome_at: Option<u64>,
+    outcome_provenance: Option<&'a str>,
+    source_snapshot_digest: &'a str,
+    availability_profile_digest: &'a str,
+}
+
+#[allow(dead_code)]
+fn temporal_commitment(input: &TemporalCommitmentInput<'_>) -> String {
+    let bytes = serde_json::to_vec(&(
+        input.protocol.as_str(),
+        input.scope,
+        &input.access.snapshot_ref,
+        &input.access.run_id,
+        &input.access.grant_id,
+        input.access.grant_revision,
+        &input.access.purpose,
+        input.allowed_at,
+        input.cutoff,
+        input.outcome_at,
+        input.outcome_provenance,
+        input.source_snapshot_digest,
+        input.availability_profile_digest,
+    ))
+    .expect("temporal evidence inputs serialize deterministically");
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::sync::{Arc, Barrier, Mutex};
+
+    use super::{
+        MemoryGrantLeaseClaims, MemoryTemporalAdmission, MemoryTemporalProtocol,
+        MissingMemoryGrantAuthority, RevocationSafeMemoryGrantAuthority,
+        TemporalMemoryAdmissionError, TemporalProtocolError, TemporalSuccessorError,
+        TemporalSuccessorTrigger, TrustedTemporalEvidenceIssuer, VerifiedAvailabilityProjection,
+        is_uuid_v7, record_temporal_successor, successor_run_id,
+    };
+    use crate::enriched_history::{
+        AvailabilityClockMode, AvailabilityProfile, EnrichedHistoryAdapter,
+        EnrichedHistoryManifest, PackageFile, ProvenanceDigests,
+    };
+    use crate::governed_memory_use::MemoryUseRequest;
+    use crate::memory_store::{
+        InMemoryGovernedMemoryCommitPort, InMemoryMemoryRegistry, MemoryPublisher, MemoryScope,
+    };
+    use crate::source_validation::SourceSnapshot;
+    use crate::wiki_scratch::{
+        InMemoryWikiGrantAuthority, MemoryScopeBinding, WikiAccess, WikiGrant,
+    };
+    use crate::{ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository};
+    use serde_json::json;
+
+    const TENANT: &str = "tenant-a";
+    const WIKI_ID: &str = "018f50a1-7f00-7000-8000-000000000023";
+
+    #[derive(Clone, Copy)]
+    enum GrantFixtureState {
+        Valid,
+        Revoked,
+        Expired,
+        ScopeMismatch,
+    }
+
+    struct LocalGrantLeaseFixture {
+        state: Mutex<GrantFixtureState>,
+        lease_guard: Mutex<()>,
+        hold: Option<(Arc<Barrier>, Arc<Barrier>)>,
+    }
+
+    impl LocalGrantLeaseFixture {
+        fn new(state: GrantFixtureState) -> Self {
+            Self {
+                state: Mutex::new(state),
+                lease_guard: Mutex::new(()),
+                hold: None,
+            }
+        }
+
+        fn held_valid_lease(entered: Arc<Barrier>, release: Arc<Barrier>) -> Self {
+            Self {
+                state: Mutex::new(GrantFixtureState::Valid),
+                lease_guard: Mutex::new(()),
+                hold: Some((entered, release)),
+            }
+        }
+
+        fn try_begin_revoke(&self) -> bool {
+            match self.lease_guard.try_lock() {
+                Ok(guard) => {
+                    *self.state.lock().expect("fixture grant state") = GrantFixtureState::Revoked;
+                    drop(guard);
+                    false
+                }
+                Err(std::sync::TryLockError::WouldBlock) => true,
+                Err(std::sync::TryLockError::Poisoned(error)) => {
+                    drop(error.into_inner());
+                    panic!("fixture lease lock poisoned");
+                }
+            }
+        }
+
+        fn revoke_after_lease(&self) {
+            let _guard = self.lease_guard.lock().expect("fixture lease lock");
+            *self.state.lock().expect("fixture grant state") = GrantFixtureState::Revoked;
+        }
+    }
+
+    impl RevocationSafeMemoryGrantAuthority for LocalGrantLeaseFixture {
+        fn with_valid_lease<T, F>(
+            &self,
+            claims: &MemoryGrantLeaseClaims<'_>,
+            operation: F,
+        ) -> Result<T, TemporalSuccessorError>
+        where
+            F: FnOnce() -> Result<T, TemporalSuccessorError>,
+        {
+            // Holding this guard across the callback models the U05 contract:
+            // a concurrent revoker cannot invalidate the admission before DB
+            // commit. This fixture is test-only, not a production authority.
+            let _guard = self.lease_guard.lock().expect("fixture lease lock");
+            let state = *self.state.lock().expect("fixture grant state");
+            let expected_tenant = TENANT;
+            let expected_scope = scope("frozen");
+            if !matches!(state, GrantFixtureState::Valid)
+                || claims.tenant_id != expected_tenant
+                || claims.grant_id != "grant-p4"
+                || claims.grant_revision != 1
+                || claims.purpose != "investigation"
+                || claims.scope != &expected_scope
+                || claims.allowed_at_unix_seconds != 150
+            {
+                return Err(TemporalSuccessorError::GrantDenied);
+            }
+            if let Some((entered, release)) = &self.hold {
+                entered.wait();
+                release.wait();
+            }
+            operation()
+        }
+    }
+
+    fn digest(byte: char) -> String {
+        format!("sha256:{}", byte.to_string().repeat(64))
+    }
+
+    fn opaque_event_ref(byte: char) -> String {
+        format!("sha256_{}", byte.to_string().repeat(56))
+    }
+
+    fn u04b_replay_projection() -> crate::enriched_history::VerifiedReplayAvailability {
+        u04b_replay_projection_for(TENANT, "")
+    }
+
+    fn u04b_replay_projection_for(
+        tenant_id: &str,
+        raw_prefix: &str,
+    ) -> crate::enriched_history::VerifiedReplayAvailability {
+        let snapshot = SourceSnapshot::from_json(&format!(
+            "{raw_prefix}{}",
+            json!({
+                "contract_version": {"major": 1, "minor": 0},
+                "tenant_id": tenant_id,
+                "source_namespace": "platform_history",
+                "world_ref": "world-a",
+                "observed_cutoff": "1970-01-01T00:01:40Z",
+                "sources": [{
+                    "table": "case",
+                    "uri": "file://fixture.csv",
+                    "file_digest": digest('a'),
+                    "header_digest": digest('b'),
+                    "row_count": 1,
+                    "source_contract_ref": {"id": "case", "version": "v1", "digest": digest('c')}
+                }]
+            })
+        ))
+        .expect("fixed U04-B source snapshot");
+        let profile = AvailabilityProfile::new(
+            "e0_replay",
+            1,
+            AvailabilityClockMode::replay_at_event_time("e0_ingestion_lag_zero_assumed"),
+            tenant_id,
+            snapshot.binding_digest(),
+        );
+        let manifest = EnrichedHistoryManifest::new_replay(
+            "platform_history",
+            "world-a",
+            "1970-01-01T00:01:40Z",
+            profile,
+            vec![
+                PackageFile::new(
+                    "case",
+                    ProvenanceDigests::new(digest('a'), digest('b'), digest('c'), digest('d')),
+                    "1970-01-01T00:01:40Z",
+                )
+                .with_field_availability(BTreeMap::from([(
+                    "event_time".to_owned(),
+                    "1970-01-01T00:01:40Z".to_owned(),
+                )]))
+                .with_replay_projection_digest(digest('e'))
+                .with_source_file_seal(
+                    snapshot
+                        .source_file_seal("case")
+                        .expect("fixed snapshot source seal"),
+                ),
+            ],
+        );
+        EnrichedHistoryAdapter::from_snapshot(manifest, &snapshot)
+            .expect("fixed replay package bound to its snapshot")
+            .verified_replay_availability(&snapshot)
+            .expect("U04-B replay projection")
+    }
+
+    fn scope(protocol: &str) -> MemoryScope {
+        MemoryScope::new(
+            TENANT,
+            "investigation",
+            "world-a",
+            "campaign-a",
+            protocol,
+            "train",
+        )
+    }
+
+    #[test]
+    #[ignore = "requires isolated PULSO_TEST_POSTGRES_URL and explicit destructive-test consent"]
+    fn temporal_successor_requires_u05_lease_and_commits_receipt_job_and_event_together() {
+        assert_eq!(
+            std::env::var("PULSO_ALLOW_DESTRUCTIVE_TEST_DB").as_deref(),
+            Ok("1")
+        );
+        let database_url = std::env::var("PULSO_TEST_POSTGRES_URL")
+            .expect("isolated temporal-successor test database");
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)
+            .expect("connect isolated test database");
+        for migration in [
+            include_str!("../../../migrations/0001_pulso_artifact_revisions.sql"),
+            include_str!("../../../migrations/0002_pulso_memory_control.sql"),
+            include_str!("../../../migrations/0003_pulso_run_events.sql"),
+            include_str!("../../../migrations/0004_pulso_memory_temporal_receipts.sql"),
+            include_str!("../../../migrations/0005_p4_temporal_successor_outbox.sql"),
+        ] {
+            client.batch_execute(migration).unwrap();
+        }
+        client.batch_execute("TRUNCATE pulso_memory_use_receipts, pulso_memory_tombstones, pulso_memory_lineage, pulso_memory_heads, pulso_jobs, pulso_artifact_heads, pulso_artifact_revisions CASCADE").unwrap();
+
+        let mut artifacts = crate::PostgresArtifactRepository::new(client);
+        let artifact = artifacts
+            .append(
+                None,
+                ArtifactDraft::new(
+                    TENANT,
+                    WIKI_ID,
+                    1,
+                    ArtifactKind::MemoryWiki,
+                    json!({
+                        "available_at_unix_seconds": 100,
+                        "purpose": "investigation",
+                        "pages": {"index.md": "p4 lease fixture"}
+                    }),
+                    None,
+                ),
+            )
+            .unwrap();
+        let snapshot_ref = artifact.reference();
+        let mut client = artifacts.into_inner();
+        client
+            .query_one(
+                "SELECT pulso_seed_memory_head($1,$2,$3,$4,$5,$6,$7::text::uuid,$8,$9)",
+                &[
+                    &TENANT,
+                    &"investigation",
+                    &"world-a",
+                    &"campaign-a",
+                    &"frozen",
+                    &"train",
+                    &snapshot_ref.id,
+                    &1_i64,
+                    &snapshot_ref.digest,
+                ],
+            )
+            .unwrap();
+
+        let request = MemoryUseRequest::new(
+            scope("frozen"),
+            WikiAccess::new_scoped(
+                "source-run-p4",
+                TENANT,
+                "investigation",
+                "grant-p4",
+                snapshot_ref,
+                150,
+                MemoryScopeBinding::new("world-a", "campaign-a", "frozen", "train"),
+            ),
+        );
+        let evidence = || {
+            TrustedTemporalEvidenceIssuer::deterministic(
+                VerifiedAvailabilityProjection::deterministic(request.clone(), 200, None, None),
+            )
+            .attest(MemoryTemporalProtocol::Frozen)
+        };
+        let event_ref = opaque_event_ref('a');
+        let event_time_ms = 1_759_420_800_000;
+        let expected_successor_id = successor_run_id(TENANT, &event_ref, event_time_ms).unwrap();
+        let counts = |client: &mut postgres::Client| -> (i64, i64, i64) {
+            let receipts: i64 = client
+                .query_one(
+                    "SELECT count(*) FROM pulso_memory_use_receipts WHERE tenant_id=$1 AND event_ref=$2",
+                    &[&TENANT, &event_ref],
+                )
+                .unwrap()
+                .get(0);
+            let jobs: i64 = client
+                .query_one(
+                    "SELECT count(*) FROM pulso_jobs WHERE tenant_id=$1 AND source_event_ref=$2",
+                    &[&TENANT, &event_ref],
+                )
+                .unwrap()
+                .get(0);
+            let events: i64 = client
+                .query_one(
+                    "SELECT count(*) FROM pulso_run_events WHERE tenant_id=$1 AND run_ref=$2::text::uuid AND event_code='job_queued'",
+                    &[&TENANT, &expected_successor_id],
+                )
+                .unwrap()
+                .get(0);
+            (receipts, jobs, events)
+        };
+
+        let missing = record_temporal_successor(
+            &mut client,
+            &MissingMemoryGrantAuthority,
+            MemoryTemporalProtocol::Frozen,
+            evidence(),
+            request.clone(),
+            TemporalSuccessorTrigger {
+                expected_head_version: 1,
+                source_event_ref: event_ref.to_owned(),
+                event_occurred_at_unix_ms: event_time_ms,
+            },
+        );
+        assert!(matches!(
+            missing,
+            Err(TemporalSuccessorError::DependencyBlocked)
+        ));
+        assert_eq!(counts(&mut client), (0, 0, 0));
+
+        for state in [
+            GrantFixtureState::Revoked,
+            GrantFixtureState::Expired,
+            GrantFixtureState::ScopeMismatch,
+        ] {
+            let denied = record_temporal_successor(
+                &mut client,
+                &LocalGrantLeaseFixture::new(state),
+                MemoryTemporalProtocol::Frozen,
+                evidence(),
+                request.clone(),
+                TemporalSuccessorTrigger {
+                    expected_head_version: 1,
+                    source_event_ref: event_ref.to_owned(),
+                    event_occurred_at_unix_ms: event_time_ms,
+                },
+            );
+            assert!(matches!(denied, Err(TemporalSuccessorError::GrantDenied)));
+            assert_eq!(counts(&mut client), (0, 0, 0));
+        }
+
+        let admitted = record_temporal_successor(
+            &mut client,
+            &LocalGrantLeaseFixture::new(GrantFixtureState::Valid),
+            MemoryTemporalProtocol::Frozen,
+            evidence(),
+            request.clone(),
+            TemporalSuccessorTrigger {
+                expected_head_version: 1,
+                source_event_ref: event_ref.to_owned(),
+                event_occurred_at_unix_ms: event_time_ms,
+            },
+        )
+        .expect("test-only current lease allows durable request");
+        assert_eq!(admitted.status, "requested");
+        assert!(is_uuid_v7(&admitted.successor_run_id));
+        assert_eq!(counts(&mut client), (1, 1, 1));
+
+        let replay = record_temporal_successor(
+            &mut client,
+            &LocalGrantLeaseFixture::new(GrantFixtureState::Valid),
+            MemoryTemporalProtocol::Frozen,
+            evidence(),
+            request.clone(),
+            TemporalSuccessorTrigger {
+                expected_head_version: 1,
+                source_event_ref: event_ref.to_owned(),
+                event_occurred_at_unix_ms: event_time_ms,
+            },
+        )
+        .expect("ambiguous-commit replay returns the same durable request");
+        assert_eq!(replay, admitted);
+        assert_eq!(counts(&mut client), (1, 1, 1));
+
+        // Race a revocation attempt against the actual durable callback. The
+        // fixture reports that it cannot acquire the lease fence while the
+        // request transaction is held; revocation proceeds only after commit.
+        let entered = Arc::new(Barrier::new(2));
+        let release = Arc::new(Barrier::new(2));
+        let authority = Arc::new(LocalGrantLeaseFixture::held_valid_lease(
+            Arc::clone(&entered),
+            Arc::clone(&release),
+        ));
+        let database_url = database_url.clone();
+        let race_request = MemoryUseRequest::new(
+            scope("frozen"),
+            WikiAccess::new_scoped(
+                "source-run-p4-race",
+                TENANT,
+                "investigation",
+                "grant-p4",
+                request.access().snapshot_ref.clone(),
+                150,
+                MemoryScopeBinding::new("world-a", "campaign-a", "frozen", "train"),
+            ),
+        );
+        let race_evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(race_request.clone(), 200, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
+        let writer_authority = Arc::clone(&authority);
+        let race_event_ref = opaque_event_ref('b');
+        let writer_event_ref = race_event_ref.clone();
+        let writer = std::thread::spawn(move || {
+            let mut client = postgres::Client::connect(&database_url, postgres::NoTls)
+                .expect("connect isolated race database");
+            record_temporal_successor(
+                &mut client,
+                writer_authority.as_ref(),
+                MemoryTemporalProtocol::Frozen,
+                race_evidence,
+                race_request,
+                TemporalSuccessorTrigger {
+                    expected_head_version: 1,
+                    source_event_ref: writer_event_ref,
+                    event_occurred_at_unix_ms: event_time_ms,
+                },
+            )
+        });
+        entered.wait();
+        let (attempted_tx, attempted_rx) = std::sync::mpsc::channel();
+        let revoker_authority = Arc::clone(&authority);
+        let revoker = std::thread::spawn(move || {
+            let blocked = revoker_authority.try_begin_revoke();
+            attempted_tx
+                .send(blocked)
+                .expect("report revoke lock result");
+            if blocked {
+                revoker_authority.revoke_after_lease();
+            }
+        });
+        assert_eq!(
+            attempted_rx.recv_timeout(std::time::Duration::from_secs(2)),
+            Ok(true),
+            "revocation must be fenced until receipt+outbox transaction commits"
+        );
+        release.wait();
+        let raced = writer
+            .join()
+            .expect("successor writer thread completes")
+            .expect("held lease permits durable successor request");
+        assert_eq!(raced.status, "requested");
+        revoker.join().expect("revocation completes after commit");
+        let race_successor_id = successor_run_id(TENANT, &race_event_ref, event_time_ms).unwrap();
+        let post_race_counts_row = client
+            .query_one(
+                "SELECT (SELECT count(*) FROM pulso_memory_use_receipts WHERE tenant_id=$1 AND event_ref=$2), (SELECT count(*) FROM pulso_jobs WHERE tenant_id=$1 AND source_event_ref=$2), (SELECT count(*) FROM pulso_run_events WHERE tenant_id=$1 AND run_ref=$3::text::uuid AND event_code='job_queued')",
+                &[&TENANT, &race_event_ref, &race_successor_id],
+            )
+            .unwrap();
+        let post_race_counts = (
+            post_race_counts_row.get::<_, i64>(0),
+            post_race_counts_row.get::<_, i64>(1),
+            post_race_counts_row.get::<_, i64>(2),
+        );
+        assert_eq!(post_race_counts, (1, 1, 1));
+    }
+
+    fn seeded(
+        protocol: &str,
+    ) -> (
+        InMemoryArtifactRepository,
+        InMemoryGovernedMemoryCommitPort,
+        WikiAccess,
+    ) {
+        let mut artifacts = InMemoryArtifactRepository::default();
+        let snapshot = artifacts
+            .append(
+                None,
+                ArtifactDraft::new(
+                    TENANT,
+                    WIKI_ID,
+                    1,
+                    ArtifactKind::MemoryWiki,
+                    json!({
+                        "available_at_unix_seconds": 100,
+                        "purpose": "investigation",
+                        "pages": {"index.md": "published"}
+                    }),
+                    None,
+                ),
+            )
+            .expect("fixed memory wiki")
+            .reference();
+        let binding = MemoryScopeBinding::new("world-a", "campaign-a", protocol, "train");
+        let access = WikiAccess::new_scoped(
+            "run-2",
+            TENANT,
+            "investigation",
+            "grant-2",
+            snapshot.clone(),
+            100,
+            binding.clone(),
+        );
+        let authority = InMemoryWikiGrantAuthority::default();
+        authority.issue(WikiGrant::new_scoped(
+            "grant-2",
+            "run-2",
+            TENANT,
+            "investigation",
+            snapshot.clone(),
+            binding,
+        ));
+        let mut registry = InMemoryMemoryRegistry::default();
+        registry
+            .seed_head(&mut artifacts, scope(protocol), snapshot)
+            .expect("fixed memory head");
+        (
+            artifacts,
+            InMemoryGovernedMemoryCommitPort::new(registry, authority),
+            access,
+        )
+    }
+
+    #[test]
+    fn continuous_admission_rejects_an_outcome_not_yet_available_without_recording_a_receipt() {
+        let (mut artifacts, mut publisher, access) = seeded("continuous");
+
+        let request = MemoryUseRequest::new(scope("continuous"), access);
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(
+                request.clone(),
+                100,
+                Some(101),
+                Some("outcome:1".into()),
+            ),
+        )
+        .attest(MemoryTemporalProtocol::Continuous);
+        let result = MemoryTemporalAdmission::admit(
+            MemoryTemporalProtocol::Continuous,
+            evidence,
+            &mut publisher,
+            &mut artifacts,
+            request,
+        );
+
+        match result {
+            Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::OutcomeAfterMemoryUse,
+            )) => {}
+            Err(other) => panic!("expected temporal outcome denial, got {other:?}"),
+            Ok(_) => panic!("future outcome must not mint a capability"),
+        }
+        assert!(publisher.receipts().is_empty());
+    }
+
+    #[test]
+    fn admission_binds_its_temporal_claim_to_the_u33_receipt_clock_before_recording() {
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
+
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
+        let result = MemoryTemporalAdmission::admit(
+            MemoryTemporalProtocol::Frozen,
+            evidence,
+            &mut publisher,
+            &mut artifacts,
+            request,
+        );
+
+        let admitted = result.expect("issuer binds the exact access time");
+        assert_eq!(
+            admitted.receipt().temporal_commitment,
+            publisher.receipts()[0].temporal_commitment
+        );
+        assert!(admitted.receipt().temporal_commitment.is_some());
+    }
+
+    #[test]
+    fn frozen_admission_mints_only_the_existing_u22_receipt_provenance() {
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
+
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
+        let admitted = MemoryTemporalAdmission::admit(
+            MemoryTemporalProtocol::Frozen,
+            evidence,
+            &mut publisher,
+            &mut artifacts,
+            request,
+        )
+        .expect("timely U22/U33 frozen admission");
+
+        assert_eq!(admitted.head_version(), 1);
+        assert_eq!(admitted.run_id(), "run-2");
+        assert_eq!(publisher.receipts().len(), 1);
+    }
+
+    #[test]
+    fn production_issuer_only_accepts_a_revalidated_u04b_replay_projection() {
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let issuer = TrustedTemporalEvidenceIssuer::from_u04b_replay(
+            u04b_replay_projection(),
+            request.clone(),
+        )
+        .expect("tenant and world were bound by the verified U04-B projection");
+        let admitted = MemoryTemporalAdmission::admit(
+            MemoryTemporalProtocol::Frozen,
+            issuer.attest(MemoryTemporalProtocol::Frozen),
+            &mut publisher,
+            &mut artifacts,
+            request,
+        )
+        .expect("bound replay projection can produce only the governed receipt");
+
+        assert_eq!(admitted.scope().tenant_id, TENANT);
+        assert_eq!(publisher.receipts().len(), 1);
+    }
+
+    #[test]
+    fn production_issuer_rejects_u04b_projection_for_another_world_before_a_receipt() {
+        let (_artifacts, publisher, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(
+            MemoryScope::new(
+                TENANT,
+                "investigation",
+                "world-b",
+                "campaign-a",
+                "frozen",
+                "train",
+            ),
+            access,
+        );
+
+        assert!(matches!(
+            TrustedTemporalEvidenceIssuer::from_u04b_replay(u04b_replay_projection(), request),
+            Err(TemporalProtocolError::U04BReplayScopeMismatch)
+        ));
+        assert!(publisher.receipts().is_empty());
+    }
+
+    #[test]
+    fn production_issuer_rejects_u04b_projection_for_another_tenant_before_a_receipt() {
+        let (_artifacts, publisher, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+
+        assert!(matches!(
+            TrustedTemporalEvidenceIssuer::from_u04b_replay(
+                u04b_replay_projection_for("tenant-b", ""),
+                request,
+            ),
+            Err(TemporalProtocolError::U04BReplayScopeMismatch)
+        ));
+        assert!(publisher.receipts().is_empty());
+    }
+
+    #[test]
+    fn source_snapshot_and_profile_digest_change_the_temporal_commitment() {
+        let (_artifacts, _publisher, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let first = TrustedTemporalEvidenceIssuer::from_u04b_replay(
+            u04b_replay_projection_for(TENANT, ""),
+            request.clone(),
+        )
+        .expect("first exact U04-B snapshot");
+        let same_semantics_new_snapshot = TrustedTemporalEvidenceIssuer::from_u04b_replay(
+            u04b_replay_projection_for(TENANT, "\n"),
+            request,
+        )
+        .expect("second exact U04-B snapshot");
+
+        assert_ne!(
+            first.attest(MemoryTemporalProtocol::Frozen).commitment,
+            same_semantics_new_snapshot
+                .attest(MemoryTemporalProtocol::Frozen)
+                .commitment,
+            "raw snapshot and profile seals are part of temporal identity"
+        );
+    }
+
+    #[test]
+    fn reissued_grant_revision_cannot_reuse_prior_temporal_evidence_or_leave_a_receipt() {
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
+        let original_request = MemoryUseRequest::new(scope("frozen"), access.clone());
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(original_request, 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
+
+        let binding = MemoryScopeBinding::new("world-a", "campaign-a", "frozen", "train");
+        publisher.authority().issue(
+            WikiGrant::new_scoped(
+                "grant-2",
+                "run-2",
+                TENANT,
+                "investigation",
+                access.snapshot_ref.clone(),
+                binding,
+            )
+            .with_revision(2),
+        );
+        let reissued_request =
+            MemoryUseRequest::new(scope("frozen"), access.with_grant_revision(2));
+
+        assert!(matches!(
+            MemoryTemporalAdmission::admit(
+                MemoryTemporalProtocol::Frozen,
+                evidence,
+                &mut publisher,
+                &mut artifacts,
+                reissued_request,
+            ),
+            Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::GrantRevisionMismatch
+            ))
+        ));
+        assert!(publisher.receipts().is_empty());
+    }
+
+    #[test]
+    fn evidence_rejects_caller_elevation_of_allowed_at_before_u33_side_effects() {
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access);
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
+        let original_access = request.access().clone();
+        let elevated = MemoryUseRequest::new(
+            scope("frozen"),
+            WikiAccess::new_scoped(
+                original_access.run_id,
+                original_access.tenant_id,
+                original_access.purpose,
+                original_access.grant_id,
+                original_access.snapshot_ref,
+                101,
+                original_access.memory_scope,
+            ),
+        );
+
+        assert!(matches!(
+            MemoryTemporalAdmission::admit(
+                MemoryTemporalProtocol::Frozen,
+                evidence,
+                &mut publisher,
+                &mut artifacts,
+                elevated,
+            ),
+            Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::AccessTimeMismatch
+            ))
+        ));
+        assert!(publisher.receipts().is_empty());
+    }
+
+    #[test]
+    fn evidence_cannot_cross_a_memory_scope_before_u33_side_effects() {
+        let (mut artifacts, mut publisher, access) = seeded("frozen");
+        let request = MemoryUseRequest::new(scope("frozen"), access.clone());
+        let evidence = TrustedTemporalEvidenceIssuer::deterministic(
+            VerifiedAvailabilityProjection::deterministic(request.clone(), 100, None, None),
+        )
+        .attest(MemoryTemporalProtocol::Frozen);
+        let crossed = MemoryUseRequest::new(
+            MemoryScope::new(
+                TENANT,
+                "investigation",
+                "world-b",
+                "campaign-a",
+                "frozen",
+                "train",
+            ),
+            access,
+        );
+        assert!(matches!(
+            MemoryTemporalAdmission::admit(
+                MemoryTemporalProtocol::Frozen,
+                evidence,
+                &mut publisher,
+                &mut artifacts,
+                crossed,
+            ),
+            Err(TemporalMemoryAdmissionError::Temporal(
+                TemporalProtocolError::AccessTimeMismatch
+            ))
+        ));
+        assert!(publisher.receipts().is_empty());
+    }
+
+    #[test]
+    fn successor_run_identity_is_stable_for_the_same_event_and_valid_uuid_v7() {
+        let first = successor_run_id("tenant-a", "platform/event-7", 1_759_420_800_000)
+            .expect("valid event identity");
+        let retry = successor_run_id("tenant-a", "platform/event-7", 1_759_420_800_000)
+            .expect("same event identity");
+        let other_event = successor_run_id("tenant-a", "platform/event-8", 1_759_420_800_000)
+            .expect("different event identity");
+
+        assert_eq!(first, retry, "replay must recover the same successor run");
+        assert_ne!(first, other_event, "different events must not collide");
+        assert!(is_uuid_v7(&first), "successor root must satisfy U06 UUIDv7");
+    }
+
+    #[test]
+    fn source_event_reference_must_be_a_canonical_opaque_token() {
+        let valid = format!("sha256_{}", "a".repeat(56));
+        assert!(super::is_opaque_source_event_ref(&valid));
+        for raw_or_malformed in [
+            "customer@example.com",
+            "platform-event-0001",
+            "sha256_ABCDEF",
+            "sha256_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!",
+        ] {
+            assert!(
+                !super::is_opaque_source_event_ref(raw_or_malformed),
+                "reference must not admit raw or malformed input: {raw_or_malformed}"
+            );
+        }
+    }
+
+    #[test]
+    fn successor_sqlstate_exposes_conflicts_and_reconciliation_as_domain_outcomes() {
+        assert_eq!(
+            super::classify_temporal_successor_sqlstate(
+                &postgres::error::SqlState::UNIQUE_VIOLATION
+            ),
+            super::TemporalDatabaseOutcome::Conflict
+        );
+        assert_eq!(
+            super::classify_temporal_successor_sqlstate(
+                &postgres::error::SqlState::OBJECT_NOT_IN_PREREQUISITE_STATE
+            ),
+            super::TemporalDatabaseOutcome::ReconciliationRequired
+        );
+        assert_eq!(
+            super::classify_temporal_successor_sqlstate(
+                &postgres::error::SqlState::CONNECTION_FAILURE
+            ),
+            super::TemporalDatabaseOutcome::Storage
+        );
+    }
+}
