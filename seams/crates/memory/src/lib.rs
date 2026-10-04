@@ -58,6 +58,39 @@ impl EvidenceStore {
     }
 }
 
+/// Conservative, dependency-free scan for secrets and PII. Returns the reason class when sensitive.
+pub fn sensitive_reason(text: &str) -> Option<&'static str> {
+    let lower = text.to_ascii_lowercase();
+    for marker in ["password=", "password:", "passwd=", "token=", "secret=", "api_key=", "apikey=", "bearer ", "private key-----"] {
+        if lower.contains(marker) {
+            return Some("secret");
+        }
+    }
+    let run_after = |prefix: &str, min: usize, pred: fn(char) -> bool| {
+        text.match_indices(prefix).any(|(i, _)| text[i + prefix.len()..].chars().take_while(|c| pred(*c)).count() >= min)
+    };
+    if run_after("sk-", 16, |c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        || run_after("AKIA", 16, |c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    {
+        return Some("secret");
+    }
+    for (i, _) in text.match_indices('@') {
+        let before = text[..i].chars().next_back().is_some_and(|c| c.is_alphanumeric());
+        let dom: String = text[i + 1..].chars().take_while(|c| c.is_alphanumeric() || *c == '.' || *c == '-').collect();
+        if before && dom.contains('.') && !dom.ends_with('.') {
+            return Some("email");
+        }
+    }
+    let mut run = 0;
+    for c in text.chars() {
+        run = if c.is_ascii_digit() { run + 1 } else { 0 };
+        if run >= 9 {
+            return Some("long_digit_run");
+        }
+    }
+    None
+}
+
 pub struct Memory {
     #[allow(dead_code)]
     evidence: EvidenceStore,
@@ -89,6 +122,11 @@ impl Memory {
         }
     }
     pub fn add_note(&mut self, n: NewNote) -> Result<String, MemError> {
+        for t in [&n.claim_key, &n.statement] {
+            if let Some(r) = sensitive_reason(t) {
+                return Err(MemError::SensitiveContent(r));
+            }
+        }
         self.check_refs(&n.evidence)?;
         self.seq += 1;
         let id = format!("note-{:04}", self.seq);
