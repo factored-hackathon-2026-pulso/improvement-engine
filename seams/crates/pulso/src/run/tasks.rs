@@ -5,6 +5,7 @@
 //! `run::build_tasks`. The worker claims jobs from a `JobRepository` and hands each to a `JobRunner`; with no runner
 //! registered it stays idle and claims nothing (it never consumes a job it cannot run).
 use crate::config::DataMode;
+use crate::health::{Health, Migrations};
 use crate::run::log::Logger;
 use crate::run::supervisor::{StopToken, Task};
 use pg::repo::{Claimed, JobRepository};
@@ -147,5 +148,30 @@ impl Task for JobWorker {
             }
         }
         Ok(())
+    }
+}
+
+/// Holds a task back until the schema is ready (applied or not applicable); it never runs against a half-migrated database.
+pub struct Gated {
+    pub inner: Box<dyn Task>,
+    pub health: Arc<Health>,
+}
+
+impl Task for Gated {
+    fn name(&self) -> String {
+        self.inner.name()
+    }
+    fn run(&mut self, stop: &StopToken) -> Result<(), String> {
+        loop {
+            match self.health.migrations() {
+                Migrations::Applied | Migrations::NotApplicable => break,
+                Migrations::Pending | Migrations::Failed(_) => {
+                    if stop.wait(Duration::from_millis(50)) {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        self.inner.run(stop)
     }
 }

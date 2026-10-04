@@ -41,6 +41,9 @@ impl Health {
     pub fn set_migrations(&self, m: Migrations) {
         *self.migrations.lock().unwrap() = m;
     }
+    pub fn migrations(&self) -> Migrations {
+        self.migrations.lock().unwrap().clone()
+    }
     pub fn register_task(&self, name: &str) {
         self.tasks.lock().unwrap().insert(name.into(), TaskState::Starting);
     }
