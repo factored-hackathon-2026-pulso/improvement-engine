@@ -305,3 +305,52 @@ fn a_failing_sensor_never_advances_the_watermark() {
     assert!(matches!(tick(&c, &a, &store), Err(SourceError::Sensor(_))));
     assert_eq!(store.get(a.source_id()).unwrap(), None);
 }
+
+// ---- W7: the hook between the run record and the watermark commit (how `pulso run` enqueues the engine job) ----
+
+#[test]
+fn on_ready_runs_after_the_record_is_written_and_before_the_watermark_moves() {
+    let dir = temp_path("hook");
+    let db = fixture(&dir, "tenant-a");
+    let work = dir.join("work");
+    let store = FileStore::open(work.join("wm")).unwrap();
+    let id = SourceId::new(DataMode::Platform, "platform:tenant-a").unwrap();
+    let c = cfg(&work, "platform:tenant-a", "100");
+    let seen = std::cell::RefCell::new(vec![]);
+    let hook = |run_id: &str, record: &Value| -> Result<(), SourceError> {
+        seen.borrow_mut().push((run_id.to_owned(), record["watermark_to"].as_str().unwrap().to_owned(), store.get(&id).unwrap().is_none(), work.join("runs").join(format!("{run_id}.json")).is_file()));
+        Ok(())
+    };
+    let (run_id, ..) = processed(sources::monitor::tick_with(&c, &adapter(&db, "platform:tenant-a"), &store, &hook).unwrap());
+    assert_eq!(*seen.borrow(), vec![(run_id, "seq:7".to_owned(), true, true)], "hook saw the record on disk and the watermark still unmoved");
+    assert_eq!(store.get(&id).unwrap().unwrap().watermark, Watermark::Sequence(7), "committed after the hook");
+    // an idle tick has nothing to hand over
+    assert!(matches!(sources::monitor::tick_with(&c, &adapter(&db, "platform:tenant-a"), &store, &hook).unwrap(), TickOutcome::Idle { .. }));
+    assert_eq!(seen.borrow().len(), 1);
+}
+
+#[test]
+fn a_failing_hook_leaves_the_watermark_and_the_replay_calls_it_again_with_the_same_run_id() {
+    let dir = temp_path("hookfail");
+    let db = fixture(&dir, "tenant-a");
+    let work = dir.join("work");
+    let store = FileStore::open(work.join("wm")).unwrap();
+    let id = SourceId::new(DataMode::Platform, "platform:tenant-a").unwrap();
+    let c = cfg(&work, "platform:tenant-a", "100");
+    let ids = std::cell::RefCell::new(vec![]);
+    let failing = |run_id: &str, _: &Value| -> Result<(), SourceError> {
+        ids.borrow_mut().push(run_id.to_owned());
+        Err(SourceError::Io("queue unavailable".into()))
+    };
+    assert!(sources::monitor::tick_with(&c, &adapter(&db, "platform:tenant-a"), &store, &failing).is_err());
+    assert!(store.get(&id).unwrap().is_none(), "no watermark without the hand-over");
+    let ok = |run_id: &str, _: &Value| -> Result<(), SourceError> {
+        ids.borrow_mut().push(run_id.to_owned());
+        Ok(())
+    };
+    processed(sources::monitor::tick_with(&c, &adapter(&db, "platform:tenant-a"), &store, &ok).unwrap());
+    let ids = ids.borrow();
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids[0], ids[1], "the replayed batch has the same run id (idempotent downstream)");
+    assert_eq!(runs(&work).len(), 1);
+}
