@@ -66,6 +66,7 @@ pub mod platform_sensor;
 pub mod platform_source_policy;
 pub mod quota_grant;
 pub mod replay_clock;
+pub mod replay_protocol;
 pub mod run_activity;
 pub mod run_config;
 pub mod run_fork;
