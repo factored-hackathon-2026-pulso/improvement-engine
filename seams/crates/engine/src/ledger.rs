@@ -137,6 +137,10 @@ impl LedgerEntry {
             if self.gate_verdict.as_deref() != Some("pass") {
                 return Err(format!("viable needs gate verdict pass, got {:?}", self.gate_verdict));
             }
+            match (self.kind.as_deref(), self.op.as_deref()) {
+                (Some(k), Some(o)) => bk0_check(k, o).map_err(|why| format!("viable needs a BK0-supported change family; ({k},{o}): {why}"))?,
+                _ => return Err("viable needs a BK0-supported change family: kind and op are missing".into()),
+            }
             if self.gates.is_empty() || self.gates.iter().any(|g| g.status != "pass") {
                 return Err("viable needs every recorded gate to be pass".into());
             }

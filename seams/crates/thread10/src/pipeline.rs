@@ -86,11 +86,18 @@ pub fn run_signals(o: &PipelineOpts) -> Result<PipelineRun, String> {
         let r = run(&t)?;
         let ordinal = u32::try_from(i).map_err(|_| "too many signals".to_string())?;
         let e = verdict_of(ordinal, &o.run_id, seed, &r)?;
-        if ledger.record(&e)? {
-            if let Some(sink) = &o.sink
-                && let Err(err) = sink.emit(&o.run_id, NewEvent::new("proposal_verdict", "proposal", &e.proposal_id, e.to_json()))
-            {
-                emit_errors.push(format!("{}: {err}", e.proposal_id));
+        ledger.record(&e)?;
+        // The event is emitted once per verdict, also across a crash between the ledger write and the emit: a delivery marker is
+        // written only after the sink accepted it, so a resume re-emits exactly the verdicts whose event never got out.
+        let marker = format!("ledger_emitted/e{ordinal:04}");
+        if let Some(sink) = &o.sink
+            && store.get(&marker)?.is_none()
+        {
+            match sink.emit(&o.run_id, NewEvent::new("proposal_verdict", "proposal", &e.proposal_id, e.to_json())) {
+                Ok(_) => {
+                    let _ = store.cas(&marker, 0, "emitted");
+                }
+                Err(err) => emit_errors.push(format!("{}: {err}", e.proposal_id)),
             }
         }
         proposals.push(json!({"proposal_id": e.proposal_id, "signal_id": e.signal_id, "verdict": e.verdict.as_str(), "reason": e.reason, "stage": e.stage, "report": r.report}));

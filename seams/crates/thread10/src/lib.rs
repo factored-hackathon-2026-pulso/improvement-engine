@@ -167,10 +167,12 @@ fn correlate(r: &platform::Release) -> Result<Value, String> {
 // The model stage: scout, verifier, builder, answered once and persisted
 // ---------------------------------------------------------------------------------------------------------------
 
-/// Ask `role` through `rec`, or replay the answer persisted under `model/<role>` by an earlier attempt. An outage is not
+/// Ask `role` through `rec`, or replay the answer persisted under `model/<role>/<input hash>` by an earlier attempt. An outage is not
 /// persisted (a resume may retry it); a refusal, an answer and an unusable answer are.
 fn ask(store: &FileStore, rec: &Recording, req: &engine::models::ModelRequest) -> Result<Result<(Value, Value), (String, String, Value)>, String> {
-    let key = format!("model/{}", req.role.as_str());
+    // The key carries the hash of the whole request: an answer is replayed only for the exact input it was given for.
+    let input = format!("{}|{}|{}|{}", req.role.as_str(), req.data_class.as_str(), req.system, req.payload);
+    let key = format!("model/{}/{}", req.role.as_str(), &core_client::canon::sha256_hex(input.as_bytes())[..32]);
     if let Some((_, text)) = store.get(&key)? {
         let doc: Value = serde_json::from_str(&text).map_err(|e| format!("corrupt {key}: {e}"))?;
         return Ok(match doc.get("error") {
