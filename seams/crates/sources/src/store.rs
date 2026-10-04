@@ -36,6 +36,14 @@ pub fn validate_commit(id: &SourceId, existing: Option<&WatermarkRecord>, expect
     if rec.watermark.kind() != want_kind {
         return Err(SourceError::BadWatermark(format!("{} needs a {want_kind} watermark", id.as_str())));
     }
+    let adapter_ok = match rec.adapter.as_str() {
+        "dataset-pg" => id.mode() == crate::DataMode::Dataset,
+        "product-sqlite" | "product-postgres" => id.mode() == crate::DataMode::Platform,
+        _ => false,
+    };
+    if !adapter_ok {
+        return Err(SourceError::Mismatch(format!("adapter {} cannot serve {}", rec.adapter, id.as_str())));
+    }
     if existing.map(|e| &e.watermark) != expected {
         return Err(SourceError::Conflict(format!("watermark of {} moved since it was read", id.as_str())));
     }
