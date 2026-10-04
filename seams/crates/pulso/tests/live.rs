@@ -36,7 +36,7 @@ fn streams_steps_while_the_job_runs_and_ends_completed_with_doubles_and_gate() {
     assert!(pos("signals|signals [pending]") < pos("signals|signals [stand-in]"), "pending first, then the label");
     assert!(pos("signals|signals [stand-in]") < pos("gate|gate [stand-in]") && pos("gate|gate [stand-in]") < pos("publish|publish [stand-in]"), "step order follows the job");
     let gates = log.iter().position(|(k, _)| k == "gates_set").unwrap();
-    assert!(pos("publish|publish [stand-in]") < gates, "gates after the steps");
+    assert!(pos("gate|gate [running]") < gates && gates < pos("publish|publish [stand-in]"), "gate details stream when the gate commits, not only at the end");
     let st = store.state("run-demo0-test").unwrap();
     assert_eq!(st["run"]["state"], "completed");
     let nodes = st["nodes"].as_array().unwrap();
@@ -109,8 +109,9 @@ fn panels_fill_as_each_step_commits_not_only_at_the_end() {
     assert!(first("gates_set") < first("approval|approval [simulated]"), "gate details appear when the gate committed: {log:?}");
     assert!(first("decision_set") < first("publish|publish [stand-in]"), "the decision card appears when authority committed, before publish: {log:?}");
     let count = |k: &str| log.iter().filter(|l| l.starts_with(&format!("{k}|"))).count();
-    assert!(count("decision_set") == 1 && count("diff_set") == 1, "unchanged panels are not re-sent: {log:?}");
-    assert!(count("gates_set") <= 2 && count("investigation_set") <= 3, "{log:?}");
+    assert!(count("decision_set") == 1, "unchanged panels are not re-sent: {log:?}");
+    assert!(count("diff_set") <= 2, "the draft diff, then the same change under the frozen proposal id: {log:?}");
+    assert!(count("gates_set") <= 3 && count("investigation_set") <= 6, "one snapshot per commit that changed it: {log:?}");
 
     let st = store.state("run-demo0-test").unwrap();
     assert!(st["investigation"]["hypothesis"].as_str().unwrap().contains("Scripted scout claims"));

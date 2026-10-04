@@ -3,6 +3,8 @@
 //! status thread10's report derives from what the job committed; between those moments a step is `pending` or `running`.
 use crate::doubles::generate;
 use debug_api::ingest::{double_item, gates_data, step_node};
+use debug_api::panels::project;
+use debug_api::store::now_iso;
 use debug_api::{NewEvent, RunEventSink};
 use serde_json::{Value, json};
 use std::cell::RefCell;
@@ -39,6 +41,8 @@ struct Live {
     pace: Duration,
     labels: HashMap<String, String>,
     declared: HashSet<String>,
+    /// Last panel snapshot sent per event kind + entity, with its timestamps blanked, so an unchanged panel is not re-sent.
+    panels: HashMap<String, Value>,
     error: Option<String>,
 }
 
@@ -77,6 +81,24 @@ impl Live {
         }
     }
 
+    /// Emit the panel events (investigation, alternatives, diff, gates, decision) of what is committed so far. Each is a full
+    /// snapshot derived by the shared `debug_api::panels::project`; one is sent only when it changed since the last send.
+    fn panels(&mut self, committed: &Value, report: Option<&Value>) {
+        let blank = project(committed, report, "");
+        let stamped = project(committed, report, &now_iso());
+        for (b, e) in blank.into_iter().zip(stamped) {
+            let key = format!("{}|{}", b.kind, b.entity_id);
+            if self.panels.get(&key) != Some(&b.data) {
+                self.panels.insert(key, b.data);
+                if self.error.is_none() {
+                    if let Err(err) = self.sink.emit(&self.run, e) {
+                        self.error = Some(err);
+                    }
+                }
+            }
+        }
+    }
+
     /// Complete every step the partial report says has run, then mark the next one `running`.
     fn advance(&mut self, partial: &Value) {
         let steps = partial["steps"].as_array().cloned().unwrap_or_default();
@@ -96,7 +118,7 @@ impl Live {
 }
 
 pub fn demo(sink: Arc<dyn RunEventSink>, o: &DemoOpts) -> Result<thread10::Run, String> {
-    let live = Rc::new(RefCell::new(Live { sink, run: o.run_id.clone(), pace: o.pace, labels: HashMap::new(), declared: HashSet::new(), error: None }));
+    let live = Rc::new(RefCell::new(Live { sink, run: o.run_id.clone(), pace: o.pace, labels: HashMap::new(), declared: HashSet::new(), panels: HashMap::new(), error: None }));
     let empty = thread10::report::build(&thread10::report::Input { sha: &o.sha, payload: None, events: &[], error: None });
     {
         let mut l = live.borrow_mut();
@@ -115,6 +137,8 @@ pub fn demo(sink: Arc<dyn RunEventSink>, o: &DemoOpts) -> Result<thread10::Run, 
     t.denied_kind = o.denied_kind;
     t.sha = o.sha.clone();
     t.on_commit = Some(Rc::new(move |_, partial| hook.borrow_mut().advance(partial)));
+    let panel_hook = live.clone();
+    t.on_payload = Some(Rc::new(move |_, committed| panel_hook.borrow_mut().panels(committed, None)));
     let result = thread10::run(&t);
     let mut l = live.borrow_mut();
     let run = l.run.clone();
@@ -130,7 +154,14 @@ pub fn demo(sink: Arc<dyn RunEventSink>, o: &DemoOpts) -> Result<thread10::Run, 
             }
         }
         l.doubles(&r.report, true);
-        l.emit("gates_set", "run", &run, gates_data(&r.report));
+        // The final snapshot knows the end of the run (e.g. an approval that was blocked); gates not derivable from the committed
+        // payload fall back to the report's own verdict.
+        if let Some(p) = &r.payload {
+            l.panels(p, Some(&r.report));
+        }
+        if !l.panels.keys().any(|k| k.starts_with("gates_set|")) {
+            l.emit("gates_set", "run", &run, gates_data(&r.report));
+        }
     }
     l.emit("run_state_changed", "run", &run, json!({"state": state}));
     if let Some(e) = l.error.take() {
