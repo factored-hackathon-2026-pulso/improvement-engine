@@ -9,7 +9,7 @@ pub mod report;
 use abi::JobHandler;
 use authority::Override;
 use engine::adapters::thread_handlers;
-use engine::executor::{ExecOptions, execute};
+use engine::executor::{ExecOptions, execute, read_lease};
 use engine::live::{CorePort, LiveConfig, dry_run_hook, live_handlers};
 use engine::{FileStore, JobStore, event_log, synth};
 use serde_json::Value;
@@ -114,6 +114,8 @@ pub fn run(o: &Opts) -> Result<Run, String> {
         Some(r) => correlate(r)?,
         None => Value::Null,
     };
+    let attempt = read_lease(&store).ok().flatten().map_or(0, |l| l.attempt);
+    report["run"] = serde_json::json!({"job": JOB, "attempt": attempt, "store": "engine FileStore"});
     let gate = report["gate"]["verdict"].as_str().map(str::to_string);
     report["memory_note"] = note::post_run_note(JOB, &events, gate.as_deref(), release.is_some())?;
     Ok(Run { events, error, report })
