@@ -14,6 +14,7 @@ pub mod demo;
 pub mod executor;
 pub mod live;
 pub mod live_core;
+pub mod models;
 mod lib_codec;
 pub mod store;
 pub mod synth;
