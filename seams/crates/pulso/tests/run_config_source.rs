@@ -27,10 +27,16 @@ fn the_defaults_are_the_stub_the_scripted_models_and_the_offline_core() {
 #[test]
 fn product_sqlite_needs_its_file_and_a_work_dir() {
     let base = [("PULSO_DATA_MODE", "platform"), ("PULSO_SOURCE_ADAPTER", "product-sqlite")];
-    assert!(err(&base).contains("PULSO_WORK_DIR"), "{}", err(&base));
-    let with_dir = [base[0], base[1], ("PULSO_WORK_DIR", "w")];
-    assert!(err(&with_dir).contains("PULSO_SOURCE_SQLITE"), "{}", err(&with_dir));
+    let refusal = |extra: &[(&str, &str)]| {
+        let mut p = base.to_vec();
+        p.extend_from_slice(extra);
+        load(&p).unwrap().check_source().expect_err("must refuse").to_string()
+    };
+    assert!(refusal(&[]).contains("PULSO_WORK_DIR"), "{}", refusal(&[]));
+    assert!(refusal(&[("PULSO_WORK_DIR", "w")]).contains("PULSO_SOURCE_SQLITE"));
+    assert!(load(&[("PULSO_DATA_MODE", "platform")]).unwrap().check_source().is_ok(), "the stub needs nothing");
     let c = load(&[base[0], base[1], ("PULSO_WORK_DIR", "w"), ("PULSO_SOURCE_SQLITE", "p.db"), ("PULSO_SOURCE_ID", "platform:sim")]).unwrap();
+    c.check_source().unwrap();
     assert_eq!((c.work_dir, c.source_sqlite, c.source_id.as_str()), (Some(PathBuf::from("w")), Some(PathBuf::from("p.db")), "platform:sim"));
 }
 
