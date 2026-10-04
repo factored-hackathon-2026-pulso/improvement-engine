@@ -26,9 +26,8 @@ def test_summary_states_every_double_before_any_step(report):
     head = text[:first_step]
     assert "NOT REAL" in head
     for d in report["doubles"]:
-        line = [l for l in head.splitlines() if l.lstrip("- ").startswith(f"{d['part']}:")]
-        assert line, f"double {d['part']} not listed before the steps"
-        assert str(d["status"]) in line[0]
+        lines = [l for l in head.splitlines() if l.startswith(f"- {d['part']}: {d['status']}")]   # a part may appear twice
+        assert lines, f"double {d['part']}={d['status']} not listed before the steps"
     assert "DEMO-0" in text and "quality_claims: forbidden" in text
 
 
@@ -42,7 +41,8 @@ def test_summary_labels_every_step(report):
 
 def test_summary_refuses_a_report_failing_g1_check(report):
     bad = copy.deepcopy(report)
-    bad["steps"][0]["status"] = "real"   # claims real for a local stand-in step
+    scout = next(x for x in bad["steps"] if x["id"] == "scout")
+    scout["status"] = "real"   # claims real for an agent_roleplay step
     from pulso_demo.demo0 import Demo0Refused
     with pytest.raises(Demo0Refused):
         demo0.summarize(bad)

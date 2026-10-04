@@ -165,7 +165,7 @@
   }
  ],
  "quality_claims": "forbidden",
- "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+ "sha": "aa2f94728af1402b09883269988549678cf5dd51",
  "steps": [
   {
    "contract_revision": "engine-run/c2-1",
@@ -176,7 +176,7 @@
    "receipt": {
     "provider": "local"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "status": "stand-in",
    "target": "local"
   },
@@ -189,7 +189,7 @@
    "receipt": {
     "provider": "local"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "status": "real-narrow",
    "target": "local"
   },
@@ -205,7 +205,7 @@
     "provider": "agent_roleplay",
     "scanner_id": "tps-1"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "stage_output": {
     "source": "model"
    },
@@ -224,7 +224,7 @@
     "provider": "agent_roleplay",
     "scanner_id": "tps-1"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "stage_output": {
     "source": "model"
    },
@@ -243,7 +243,7 @@
     "provider": "agent_roleplay",
     "scanner_id": "tps-1"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "stage_output": {
     "source": "model"
    },
@@ -259,7 +259,7 @@
    "receipt": {
     "provider": "claude-standin"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "status": "stand-in",
    "target": "local"
   },
@@ -273,7 +273,7 @@
    "receipt": {
     "provider": "claude-standin"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "status": "stand-in",
    "target": "local"
   },
@@ -283,7 +283,7 @@
    "host": "python",
    "id": "revision",
    "n": 7,
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "status": "not_exercised",
    "target": "local"
   },
@@ -296,7 +296,7 @@
    "receipt": {
     "provider": "simulated-issuer"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "status": "simulated",
    "target": "local"
   },
@@ -309,7 +309,7 @@
    "receipt": {
     "provider": "claude-standin"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "status": "stand-in",
    "target": "local"
   },
@@ -322,7 +322,7 @@
    "receipt": {
     "provider": "platform-sim"
    },
-   "sha": "cc8e13e71b3df8065dd0a71f59593b1937a28401",
+   "sha": "aa2f94728af1402b09883269988549678cf5dd51",
    "status": "simulated",
    "target": "local"
   }
