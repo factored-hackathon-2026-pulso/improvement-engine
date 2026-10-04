@@ -56,3 +56,39 @@ vive sólo durante la evaluación local. U19/U20/U27 deberán montar este puerto
 por brazo/repetición desde un manifest sellado y distinguir sus errores de
 infraestructura de un resultado funcional; esta prueba unitaria no acredita
 una evaluación Core ni una mejora de negocio.
+
+## Paired-comparison extension
+
+`paired_scenario` adds a pure fixture-only comparison of two caller-supplied
+observations. They are not authenticated as outputs of executed sandbox
+arms. The implementation status uses the same caller-supplied-observation
+wording to avoid implying authenticated execution. `PairPlan` fixes
+evaluation/scenario/fixture IDs, the seed digest,
+baseline and candidate digests, and the exact oracle; both observations must
+repeat those bindings and identify different arm IDs. An arm with a different
+seed/scenario/fixture or artifact digest is rejected
+before comparison (`BindingMismatch` / `ArtifactDigestMismatch`). The result
+seals plan and observation digests in a receipt without exposing state values.
+These digests commit to values supplied by the caller; they do not authenticate
+the runner or prove fresh sandbox execution. Projection keys and values are
+closed enums for minimized synthetic outcomes, not caller-provided strings.
+Plan and binding IDs must use canonical SHA-256-shaped opaque-reference syntax;
+the receipt and input containers deliberately do not implement `Debug`.
+This rejects common raw email/phone/free-text IDs at the contract boundary,
+but is not proof of anonymization: never create these references by hashing
+source/customer identifiers, and do not pass source/customer IDs or payloads.
+Upstream sanitization remains a caller responsibility. Receipt fields are
+read-only outside the module and `validate_integrity()` recomputes a digest
+over every claim. Optional fixture-evidence digest references may be empty;
+they are not authenticated and do not prove an arm executed. The receipt is
+marked `FixtureOnlyUnverified` so it cannot be treated as U27/Core gate evidence.
+
+If the baseline satisfies the oracle and the candidate does not, the verdict
+is `candidate_regression`; infrastructure outcomes are classified as
+`failed_infra`, never as a functional regression or a pass. A baseline that
+misses its oracle makes the pair `not_comparable`, even if the candidate passes.
+Infrastructure failures are retained per arm, including when both arms fail.
+`no_regression_observed` is only a fixture scenario result. The receipt explicitly sets
+`business_lift_measured=false`: this does not estimate business improvement or
+replace the full Core/U27 gate. This layer consumes evidence produced by a
+runner; it does not provision a sandbox or prove execution isolation itself.

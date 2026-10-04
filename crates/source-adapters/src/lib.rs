@@ -18,8 +18,30 @@ use arrow_array::{
     TimestampSecondArray,
 };
 use arrow_schema::{DataType, SchemaRef};
+use bytes::Bytes;
 use improvement_engine_core::ArtifactReference;
+#[cfg(feature = "local-simulation")]
+use improvement_engine_core::e0_query_lab::{E0QueryLab, VerifiedE0QueryResult};
+#[cfg(feature = "local-simulation")]
+use improvement_engine_core::enriched_history::{
+    AvailabilityClockMode, AvailabilityProfile, EnrichedHistoryAdapter, EnrichedHistoryManifest,
+    PackageFile, ProvenanceDigests, ReplayRowAvailability, TableInput, replay_projection_digest,
+};
+#[cfg(feature = "local-simulation")]
+use improvement_engine_core::local_lab::{
+    InMemoryLabGrantAuthority, InMemoryLabSourceAuthority, LabAccess, LabDataClassification,
+    LabGrant, LabQuery, LabSource, LabSourceApprovalPort, LabSourceManifest, LabTable,
+    LocalInvestigationLab,
+};
 use improvement_engine_core::original_contact_projection::source_wall_clock_month;
+#[cfg(feature = "local-simulation")]
+use improvement_engine_core::source_validation::{
+    SourceSnapshot, local_simulation_resolve_source_snapshot_artifact,
+};
+#[cfg(feature = "local-simulation")]
+use improvement_engine_core::{
+    ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository,
+};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -87,6 +109,11 @@ impl PreparationConfig {
             cutoff_unix_seconds,
             arranque_cases,
         })
+    }
+
+    #[must_use]
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
     }
 
     #[must_use]
@@ -504,7 +531,7 @@ pub enum E0Fact {
         state_change: Option<bool>,
         retry_count: Option<u32>,
         latency_ms: Option<u64>,
-        technical_error: bool,
+        technical_error: Option<bool>,
     },
     Approval {
         case_ordinal: u32,
@@ -757,13 +784,51 @@ pub fn prepare_e0_package(
     root: &Path,
     config: &PreparationConfig,
 ) -> Result<PreparedSource, AdapterError> {
+    prepare_e0_package_internal(root, config, false).map(|(prepared, _)| prepared)
+}
+
+/// Explicit local-simulation issuer for U12-E evidence. The evidence is
+/// created only while the package bytes are being parsed, then traverses the
+/// real U02/U04-B/U08 path. It is an in-process local capability, not a bank
+/// signature, production source attestation, or provider execution receipt.
+#[cfg(feature = "local-simulation")]
+pub fn prepare_e0_package_for_local_simulation(
+    root: &Path,
+    config: &PreparationConfig,
+) -> Result<(PreparedSource, Option<VerifiedE0QueryResult>), AdapterError> {
+    prepare_e0_package_internal(root, config, true)
+}
+
+fn prepare_e0_package_internal(
+    root: &Path,
+    config: &PreparationConfig,
+    issue_local_u12_evidence: bool,
+) -> Result<(PreparedSource, Option<VerifiedE0QueryResult>), AdapterError> {
     let data_dir = root.join("datos");
     let mut manifest_entries = Vec::new();
+    let mut parsed_cases = None;
+    let mut parsed_tool_calls = None;
     for table in E0_DISCOVERY_TABLES {
         let relative_path = PathBuf::from("datos").join(format!("{table}.parquet"));
         let path = root.join(&relative_path);
         if path.exists() {
-            manifest_entries.push(manifest_for_file(root, &path, &relative_path, table, true)?);
+            if matches!(*table, "case" | "tool_call") {
+                // Hash, inspect schema/row count, and parse from one immutable
+                // buffer. Both the case cohort selector and its tool-call join
+                // are included in the U02/U04/U08 local evidence boundary.
+                let bytes = fs::read(&path).map_err(|source| AdapterError::ReadFile {
+                    path: relative_path.display().to_string(),
+                    source,
+                })?;
+                manifest_entries.push(manifest_for_parquet_bytes(&relative_path, table, &bytes)?);
+                if *table == "case" {
+                    parsed_cases = Some(read_cases_from_bytes(Bytes::from(bytes))?);
+                } else {
+                    parsed_tool_calls = Some(read_tool_calls_from_bytes(Bytes::from(bytes))?);
+                }
+            } else {
+                manifest_entries.push(manifest_for_file(root, &path, &relative_path, table, true)?);
+            }
         } else if matches!(*table, "case" | "tool_call") {
             return Err(AdapterError::MissingInput(
                 "E0 package is missing required case/tool_call tables",
@@ -781,7 +846,7 @@ pub fn prepare_e0_package(
         relative_path: "contratos/platform_history.json".to_owned(),
         table: "platform_history_contract".to_owned(),
         file_digest: contract_digest.clone(),
-        header_digest: contract_digest,
+        header_digest: contract_digest.clone(),
         row_count: 1,
     });
     for entry in fs::read_dir(&data_dir).map_err(AdapterError::ReadDirectory)? {
@@ -805,7 +870,9 @@ pub fn prepare_e0_package(
     }
     manifest_entries.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
 
-    let mut raw_cases = read_cases(&data_dir.join("case.parquet"))?;
+    let mut raw_cases = parsed_cases.ok_or(AdapterError::MissingInput(
+        "E0 package is missing required case/tool_call tables",
+    ))?;
     raw_cases.sort_by(|left, right| {
         left.opened_at_unix_micros
             .cmp(&right.opened_at_unix_micros)
@@ -823,7 +890,9 @@ pub fn prepare_e0_package(
     // references. Future case ordinals form a suffix, then all future data is
     // removed before the discovery projection is built.
     let sorted = raw_cases;
-    let calls = read_tool_calls(&data_dir.join("tool_call.parquet"))?;
+    let calls = parsed_tool_calls.ok_or(AdapterError::MissingInput(
+        "E0 package is missing required case/tool_call tables",
+    ))?;
     let ordinal_by_id: BTreeMap<String, u32> = sorted
         .iter()
         .enumerate()
@@ -880,7 +949,11 @@ pub fn prepare_e0_package(
                 .ok_or(AdapterError::InvalidInput(
                     "tool_call references unknown case",
                 ))?;
-        let technical_error = matches!(call.status.as_str(), "error" | "timeout");
+        let technical_error = match call.status.as_str() {
+            "error" | "timeout" => Some(true),
+            "ok" | "denied" => Some(false),
+            _ => None,
+        };
         let event_ordinal = tool_ordinal_by_id.len() as u32 + 1;
         tool_ordinal_by_id.insert(call.internal_call_id.clone(), (ordinal, event_ordinal));
         facts.push(E0Fact::ToolCall {
@@ -924,7 +997,7 @@ pub fn prepare_e0_package(
     let events_by_ordinal: BTreeMap<u32, Vec<SafeEvent>> = (1..=included_case_count as u32)
         .map(|case_ordinal| Ok((case_ordinal, events_for_case(case_ordinal, &facts)?)))
         .collect::<Result<_, AdapterError>>()?;
-    let cases = sorted
+    let cases: Vec<AgentCase> = sorted
         .into_iter()
         .take(included_case_count)
         .enumerate()
@@ -944,6 +1017,24 @@ pub fn prepare_e0_package(
         })
         .collect();
 
+    #[cfg(feature = "local-simulation")]
+    let local_u12_evidence = if issue_local_u12_evidence {
+        build_local_u12_evidence(
+            config,
+            &manifest_entries,
+            &contract_digest,
+            &contract_bytes,
+            &cases,
+        )?
+    } else {
+        None
+    };
+    #[cfg(not(feature = "local-simulation"))]
+    let local_u12_evidence = {
+        let _ = issue_local_u12_evidence;
+        None
+    };
+
     let available_tables = manifest_entries
         .iter()
         .map(|entry| entry.table.clone())
@@ -954,7 +1045,7 @@ pub fn prepare_e0_package(
         &config.observed_cutoff,
         manifest_entries,
     );
-    prepared_source(
+    let prepared = prepared_source(
         SourceKind::E0,
         config,
         &manifest,
@@ -967,7 +1058,353 @@ pub fn prepare_e0_package(
             unsupported_metrics: Vec::new(),
             available_tables,
         },
-    )
+    )?;
+    Ok((prepared, local_u12_evidence))
+}
+
+#[cfg(feature = "local-simulation")]
+fn build_local_u12_evidence(
+    config: &PreparationConfig,
+    manifest_entries: &[ManifestEntry],
+    source_contract_digest: &str,
+    source_contract_bytes: &[u8],
+    cases: &[AgentCase],
+) -> Result<Option<VerifiedE0QueryResult>, AdapterError> {
+    if !supports_local_u12_contract(source_contract_bytes) {
+        return Ok(None);
+    }
+    let table = manifest_entries
+        .iter()
+        .find(|entry| entry.table == "tool_call")
+        .ok_or(AdapterError::InvalidInput(
+            "E0 U12 evidence requires the tool_call source seal",
+        ))?;
+    let cutoff = config.cutoff_unix_seconds();
+    let world_ref = "e0_local";
+    let transform_digest = digest(
+        format!(
+            "pulso.e0.u12.selection.v3;arranque_cases={};cutoff={};ordering=opened_at_asc_then_private_case_id;selection=first_n_pre_cutoff;projection=tool_call.event_time,technical_error(error|timeout=true;ok|denied=false;other=missing)",
+            config.arranque_cases(),
+            config.observed_cutoff()
+        )
+        .as_bytes(),
+    );
+    let policy_digest = digest(
+        format!(
+            "pulso.e0.u12.source_policy.v3;tables=case,tool_call;arranque_cases={};cutoff={};clock=replay_at_event_time;ingestion_time=unobserved_zero_lag_assumption;unknown_status=missing",
+            config.arranque_cases(),
+            config.observed_cutoff()
+        )
+        .as_bytes(),
+    );
+
+    // Build the U02 payload from source seals derived while the immutable
+    // tool_call bytes were both hashed and parsed above. Store the exact raw
+    // SourceSnapshot JSON string so U04 binds its bytes, not a reserialized
+    // object.
+    let raw_snapshot = serde_json::json!({
+        "contract_version": { "major": 1, "minor": 0 },
+        "tenant_id": config.tenant_id(),
+        "source_namespace": "platform_history",
+        "world_ref": world_ref,
+        "observed_cutoff": config.observed_cutoff(),
+        "sources": [{
+            "table": "case",
+            "uri": "file://datos/case.parquet",
+            "file_digest": manifest_entries.iter().find(|entry| entry.table == "case").map(|entry| entry.file_digest.as_str()).unwrap_or_default(),
+            "header_digest": manifest_entries.iter().find(|entry| entry.table == "case").map(|entry| entry.header_digest.as_str()).unwrap_or_default(),
+            "row_count": manifest_entries.iter().find(|entry| entry.table == "case").map(|entry| entry.row_count).unwrap_or_default(),
+            "source_contract_ref": {
+                "id": "platform_history",
+                "version": "v1",
+                "digest": source_contract_digest,
+            }
+        }, {
+            "table": "tool_call",
+            "uri": "file://datos/tool_call.parquet",
+            "file_digest": table.file_digest,
+            "header_digest": table.header_digest,
+            "row_count": table.row_count,
+            "source_contract_ref": {
+                "id": "platform_history",
+                "version": "v1",
+                "digest": source_contract_digest,
+            }
+        }]
+    })
+    .to_string();
+    let snapshot = SourceSnapshot::from_json(&raw_snapshot)
+        .map_err(|_| AdapterError::InvalidInput("E0 U02 SourceSnapshot validation failed"))?;
+    let mut artifacts = InMemoryArtifactRepository::default();
+    let source_snapshot_ref = artifacts
+        .append(
+            None,
+            ArtifactDraft::new(
+                config.tenant_id(),
+                uuid_v7(),
+                1,
+                ArtifactKind::SourceSnapshot,
+                serde_json::json!({ "source_snapshot_json": raw_snapshot }),
+                None,
+            ),
+        )
+        .map_err(|_| AdapterError::InvalidInput("E0 U02 SourceSnapshot append failed"))?
+        .reference();
+    let source_binding =
+        local_simulation_resolve_source_snapshot_artifact(&mut artifacts, &source_snapshot_ref)
+            .map_err(|_| AdapterError::InvalidInput("E0 U02 SourceSnapshot reread failed"))?;
+    let cutoff_profile = AvailabilityProfile::new(
+        "e0_replay",
+        1,
+        AvailabilityClockMode::replay_at_event_time("e0_zero_lag_assumption"),
+        config.tenant_id(),
+        snapshot.binding_digest(),
+    );
+
+    // Only the configured Arranque cases participate. No case/call ids or raw
+    // status strings enter the query table; technical_error is the versioned
+    // allowlisted transform emitted by the adapter.
+    let rows = cases
+        .iter()
+        .filter(|case| case.phase() == CasePhase::Arranque)
+        .flat_map(AgentCase::events)
+        .filter(|event| event.event_kind() == "tool_call")
+        .map(|event| {
+            serde_json::json!({
+                "event_time": event.event_time(),
+                "technical_error": match event.technical_error() {
+                    Some(true) => "true",
+                    Some(false) => "false",
+                    None => "",
+                },
+            })
+        })
+        .collect::<Vec<_>>();
+    let availability = rows
+        .iter()
+        .map(|row| {
+            let event_time = row
+                .get("event_time")
+                .and_then(serde_json::Value::as_str)
+                .ok_or(AdapterError::InvalidInput(
+                    "E0 U04 replay row is missing event_time",
+                ))?;
+            Ok(ReplayRowAvailability::new(BTreeMap::from([
+                ("event_time".to_owned(), event_time.to_owned()),
+                ("technical_error".to_owned(), event_time.to_owned()),
+            ])))
+        })
+        .collect::<Result<Vec<_>, AdapterError>>()?;
+    let availability_fields = BTreeMap::from([
+        ("event_time".to_owned(), config.observed_cutoff().to_owned()),
+        (
+            "technical_error".to_owned(),
+            config.observed_cutoff().to_owned(),
+        ),
+    ]);
+    let provenance = ProvenanceDigests::new(
+        table.file_digest.clone(),
+        table.header_digest.clone(),
+        transform_digest.clone(),
+        policy_digest.clone(),
+    );
+    let case_entry = manifest_entries
+        .iter()
+        .find(|entry| entry.table == "case")
+        .ok_or(AdapterError::InvalidInput("E0 U04 case seal missing"))?;
+    let case_rows = cases
+        .iter()
+        .filter(|case| case.phase() == CasePhase::Arranque)
+        .map(|case| serde_json::json!({ "opened_at": case.opened_at() }))
+        .collect::<Vec<_>>();
+    let case_availability = case_rows
+        .iter()
+        .map(|row| {
+            let opened_at = row
+                .get("opened_at")
+                .and_then(serde_json::Value::as_str)
+                .ok_or(AdapterError::InvalidInput(
+                    "E0 U04 case row missing opened_at",
+                ))?;
+            Ok(ReplayRowAvailability::new(BTreeMap::from([(
+                "opened_at".to_owned(),
+                opened_at.to_owned(),
+            )])))
+        })
+        .collect::<Result<Vec<_>, AdapterError>>()?;
+    let manifest = EnrichedHistoryManifest::new_replay(
+        "platform_history",
+        world_ref,
+        config.observed_cutoff(),
+        cutoff_profile,
+        vec![
+            PackageFile::new(
+                "case",
+                ProvenanceDigests::new(
+                    case_entry.file_digest.clone(),
+                    case_entry.header_digest.clone(),
+                    transform_digest.clone(),
+                    policy_digest.clone(),
+                ),
+                config.observed_cutoff(),
+            )
+            .with_source_contract_digest(source_contract_digest.to_owned())
+            .with_field_availability(BTreeMap::from([(
+                "opened_at".to_owned(),
+                config.observed_cutoff().to_owned(),
+            )]))
+            .with_replay_projection_digest(replay_projection_digest(&case_rows, &case_availability))
+            .with_source_file_seal(snapshot.source_file_seal("case").ok_or(
+                AdapterError::InvalidInput("E0 U04 case source seal missing"),
+            )?),
+            PackageFile::new("tool_call", provenance.clone(), config.observed_cutoff())
+                .with_source_contract_digest(source_contract_digest.to_owned())
+                .with_field_availability(availability_fields)
+                .with_replay_projection_digest(replay_projection_digest(&rows, &availability))
+                .with_source_file_seal(
+                    snapshot
+                        .source_file_seal("tool_call")
+                        .ok_or(AdapterError::InvalidInput("E0 U04 source seal missing"))?,
+                ),
+        ],
+    );
+    let u04 = EnrichedHistoryAdapter::from_snapshot(manifest, &snapshot)
+        .map_err(|_| AdapterError::InvalidInput("E0 U04 snapshot binding failed"))?;
+    let replay = u04
+        .local_simulation_verified_replay_availability(&snapshot)
+        .map_err(|_| AdapterError::InvalidInput("E0 U04 replay profile validation failed"))?;
+    let projection = u04
+        .local_simulation_verified_e0_query_projection(
+            &snapshot,
+            &replay,
+            "tool_call",
+            TableInput::new(provenance, rows.clone()).with_replay_row_availability(availability),
+        )
+        .map_err(|_| AdapterError::InvalidInput("E0 U04 query projection validation failed"))?;
+
+    let lab_rows = rows
+        .iter()
+        .map(|row| {
+            BTreeMap::from([
+                (
+                    "event_time".to_owned(),
+                    row["event_time"].as_str().unwrap_or_default().to_owned(),
+                ),
+                (
+                    "technical_error".to_owned(),
+                    row["technical_error"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                ),
+            ])
+        })
+        .collect();
+    let approved = InMemoryLabSourceAuthority
+        .approve(
+            LabSource::new(
+                LabSourceManifest {
+                    tenant_id: config.tenant_id().to_owned(),
+                    snapshot_ref: source_snapshot_ref.clone(),
+                    source_contract_digest: source_contract_digest.to_owned(),
+                    source_digest: table.file_digest.clone(),
+                    transform_digest,
+                    cutoff_unix_seconds: cutoff,
+                    classification: LabDataClassification::Treated,
+                    safe_for_discovery: true,
+                },
+                vec![LabTable::new(
+                    "tool_call",
+                    vec!["event_time", "technical_error"],
+                    lab_rows,
+                )],
+            )
+            .map_err(|_| AdapterError::InvalidInput("E0 U08 source validation failed"))?,
+        )
+        .map_err(|_| AdapterError::InvalidInput("E0 U08 source approval failed"))?
+        .bind_local_simulation_verified_u04_snapshot(source_binding)
+        .map_err(|_| AdapterError::InvalidInput("E0 U08/U04 source binding failed"))?;
+    let access = LabAccess::new(
+        "run_local_u12",
+        config.tenant_id(),
+        "investigation",
+        "grant_local_u12",
+        "authority_local_adapter",
+        source_snapshot_ref,
+        cutoff.saturating_add(3_600),
+    );
+    let mut grants = InMemoryLabGrantAuthority::default();
+    grants.issue(LabGrant::from_access(&access));
+    let mut lab = LocalInvestigationLab::new(grants);
+    let session = lab
+        .open(access.clone(), approved, cutoff)
+        .map_err(|_| AdapterError::InvalidInput("E0 U08 local session denied"))?;
+    let query = lab
+        .query(
+            session.session_id(),
+            &access,
+            LabQuery::select("tool_call", vec!["event_time", "technical_error"], None),
+            cutoff,
+        )
+        .map_err(|_| AdapterError::InvalidInput("E0 U08 read-only query failed"))?;
+    let candidate = lab
+        .local_simulation_governed_e0_candidate(
+            session.session_id(),
+            &access,
+            &query.receipt().digest,
+            cutoff,
+        )
+        .map_err(|_| AdapterError::InvalidInput("E0 U08 ledger reread failed"))?;
+    E0QueryLab::local_simulation_admit(&projection, candidate)
+        .map(Some)
+        .map_err(|_| AdapterError::InvalidInput("E0 U08 receipt/U04 projection binding failed"))
+}
+
+fn supports_local_u12_contract(bytes: &[u8]) -> bool {
+    fn has_required_field(
+        entities: &serde_json::Value,
+        table: &str,
+        field: &str,
+        ty: &str,
+    ) -> bool {
+        entities
+            .get(table)
+            .and_then(|table| table.get("fields"))
+            .and_then(|fields| fields.get(field))
+            .is_some_and(|spec| {
+                spec.get("type").and_then(serde_json::Value::as_str) == Some(ty)
+                    && spec.get("required").and_then(serde_json::Value::as_bool) == Some(true)
+            })
+    }
+
+    let Ok(contract) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return false;
+    };
+    let Some(entities) = contract.get("entities") else {
+        return false;
+    };
+    let has_error_domain = entities
+        .get("tool_call")
+        .and_then(|table| table.get("fields"))
+        .and_then(|fields| fields.get("status"))
+        .and_then(|status| status.get("domain"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|domain| {
+            ["ok", "error", "timeout", "denied"]
+                .iter()
+                .all(|expected| domain.iter().any(|value| value.as_str() == Some(expected)))
+        });
+    contract.get("name").and_then(serde_json::Value::as_str) == Some("platform_history")
+        && contract
+            .get("version")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|version| !version.is_empty())
+        && has_required_field(entities, "case", "case_id", "VARCHAR")
+        && has_required_field(entities, "case", "opened_at", "TIMESTAMP")
+        && has_required_field(entities, "tool_call", "case_id", "VARCHAR")
+        && has_required_field(entities, "tool_call", "event_time", "TIMESTAMP")
+        && has_required_field(entities, "tool_call", "status", "VARCHAR")
+        && has_error_domain
 }
 
 /// Evaluator-only API. It is intentionally separate from `PreparedSource` and
@@ -1906,6 +2343,32 @@ fn manifest_for_file(
     })
 }
 
+fn manifest_for_parquet_bytes(
+    relative: &Path,
+    table: &str,
+    bytes: &[u8],
+) -> Result<ManifestEntry, AdapterError> {
+    let builder = ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))
+        .map_err(|error| AdapterError::Parquet(error.to_string()))?;
+    let header_digest = digest(format!("{:?}", builder.schema()).as_bytes());
+    let reader = builder
+        .build()
+        .map_err(|error| AdapterError::Parquet(error.to_string()))?;
+    let mut row_count = 0_u64;
+    for batch in reader {
+        row_count += batch
+            .map_err(|error| AdapterError::Parquet(error.to_string()))?
+            .num_rows() as u64;
+    }
+    Ok(ManifestEntry {
+        relative_path: relative.to_string_lossy().replace('\\', "/"),
+        table: table.to_owned(),
+        file_digest: digest(bytes),
+        header_digest,
+        row_count,
+    })
+}
+
 #[derive(Debug)]
 struct RawCase {
     internal_case_id: String,
@@ -1934,12 +2397,8 @@ struct RawToolCall {
     latency_ms: Option<u64>,
 }
 
-fn read_cases(path: &Path) -> Result<Vec<RawCase>, AdapterError> {
-    let file = File::open(path).map_err(|source| AdapterError::ReadFile {
-        path: "datos/case.parquet".to_owned(),
-        source,
-    })?;
-    let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+fn read_cases_from_bytes(bytes: Bytes) -> Result<Vec<RawCase>, AdapterError> {
+    let reader = ParquetRecordBatchReaderBuilder::try_new(bytes)
         .map_err(|error| AdapterError::Parquet(error.to_string()))?
         .build()
         .map_err(|error| AdapterError::Parquet(error.to_string()))?;
@@ -1973,12 +2432,8 @@ fn read_cases(path: &Path) -> Result<Vec<RawCase>, AdapterError> {
     Ok(cases)
 }
 
-fn read_tool_calls(path: &Path) -> Result<Vec<RawToolCall>, AdapterError> {
-    let file = File::open(path).map_err(|source| AdapterError::ReadFile {
-        path: "datos/tool_call.parquet".to_owned(),
-        source,
-    })?;
-    let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+fn read_tool_calls_from_bytes(bytes: Bytes) -> Result<Vec<RawToolCall>, AdapterError> {
+    let reader = ParquetRecordBatchReaderBuilder::try_new(bytes)
         .map_err(|error| AdapterError::Parquet(error.to_string()))?
         .build()
         .map_err(|error| AdapterError::Parquet(error.to_string()))?;
@@ -2165,7 +2620,7 @@ fn events_for_case(case_ordinal: u32, facts: &[E0Fact]) -> Result<Vec<SafeEvent>
                 None,
                 Some(actor_role.as_str()),
                 Some(tool_id.as_str()),
-                Some(*technical_error),
+                *technical_error,
                 None,
                 None,
                 *retry_count,

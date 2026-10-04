@@ -186,6 +186,10 @@ impl ProvenanceDigests {
 pub struct PackageFile {
     pub table: String,
     pub digests: ProvenanceDigests,
+    /// Digest of the source contract that defines the table contents. Older
+    /// manifests omit it and retain the historical schema-digest fallback.
+    #[serde(default)]
+    pub source_contract_digest: Option<String>,
     /// Latest instant at which this file was available to a discovery run.
     pub available_at: String,
     /// Availability is explicit per top-level field/group. A group can contain
@@ -213,11 +217,18 @@ impl PackageFile {
         Self {
             table: table.into(),
             digests,
+            source_contract_digest: None,
             available_at: available_at.into(),
             field_availability: BTreeMap::new(),
             replay_projection_digest: None,
             source_file_seal: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_source_contract_digest(mut self, source_contract_digest: String) -> Self {
+        self.source_contract_digest = Some(source_contract_digest);
+        self
     }
 
     #[must_use]
@@ -530,7 +541,8 @@ pub struct EnrichedHistoryAdapter {
 /// temporal/scope commitments needed by a later trusted composition; it never
 /// exposes source rows or permits a caller-provided clock.
 #[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
-pub(crate) struct VerifiedReplayAvailability {
+#[cfg(feature = "local-simulation")]
+pub struct VerifiedReplayAvailability {
     tenant_id: String,
     world_ref: String,
     cutoff_at_unix_seconds: u64,
@@ -542,7 +554,7 @@ pub(crate) struct VerifiedReplayAvailability {
 /// U08-E can consume its commitments but cannot reopen package files, choose a
 /// different clock or add labels/future fields after this boundary.
 #[allow(dead_code)]
-pub(crate) struct VerifiedE0QueryProjection {
+pub struct VerifiedE0QueryProjection {
     tenant_id: String,
     cutoff_at_unix_seconds: u64,
     source_snapshot_digest: String,
@@ -927,6 +939,17 @@ impl EnrichedHistoryAdapter {
         })
     }
 
+    /// Local-simulation-only bridge for the source-adapter composition root.
+    /// It returns the same opaque U04-B capability; it is not an external or
+    /// production source attestation.
+    #[cfg(feature = "local-simulation")]
+    pub fn local_simulation_verified_replay_availability(
+        &self,
+        snapshot: &SourceSnapshot,
+    ) -> Result<VerifiedReplayAvailability, EnrichedHistoryError> {
+        self.verified_replay_availability(snapshot)
+    }
+
     /// Validates one E0 input through the existing discovery and replay
     /// validators, then returns only the table/field/projection commitments
     /// that a later U08-E receipt must preserve.
@@ -1018,7 +1041,10 @@ impl EnrichedHistoryAdapter {
             source_snapshot_digest: expected.source_snapshot_digest,
             availability_profile_digest: expected.availability_profile_digest,
             table: table.to_owned(),
-            source_contract_digest: sealed.digests.schema_digest.clone(),
+            source_contract_digest: sealed
+                .source_contract_digest
+                .clone()
+                .unwrap_or_else(|| sealed.digests.schema_digest.clone()),
             source_digest: sealed.digests.file_digest.clone(),
             transform_digest: sealed.digests.transform_digest.clone(),
             field_commitment,
@@ -1028,6 +1054,20 @@ impl EnrichedHistoryAdapter {
             replay_projection_digest,
             allowed_fields,
         })
+    }
+
+    /// Local-simulation-only bridge for the source-adapter composition root.
+    /// The result is opaque and may only be used with the matching U08 ledger
+    /// receipt; callers cannot construct or serialize it.
+    #[cfg(feature = "local-simulation")]
+    pub fn local_simulation_verified_e0_query_projection(
+        &self,
+        snapshot: &SourceSnapshot,
+        replay: &VerifiedReplayAvailability,
+        table: &str,
+        input: TableInput,
+    ) -> Result<VerifiedE0QueryProjection, EnrichedHistoryError> {
+        self.verified_e0_query_projection(snapshot, replay, table, input)
     }
 
     /// Returns a deterministic, discovery-safe projection for exactly one table.

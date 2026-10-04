@@ -253,6 +253,7 @@ mod tests {
             recurrence_measurement_status: "observed".into(),
             discovery_case_count: 10,
             excluded_replay_case_count: 0,
+            u12_e_u13_e: None,
             signal: None,
             signals: Vec::new(),
             local_simulation_portfolio: None,

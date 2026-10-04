@@ -101,6 +101,30 @@ fn e0_fixture_with_retries(
     );
 }
 
+fn install_u12_compatible_contract(root: &Path) {
+    let contract = serde_json::json!({
+        "name": "platform_history",
+        "version": "test-v1",
+        "entities": {
+            "case": { "fields": {
+                "case_id": { "type": "VARCHAR", "required": true },
+                "opened_at": { "type": "TIMESTAMP", "required": true }
+            }},
+            "tool_call": { "fields": {
+                "case_id": { "type": "VARCHAR", "required": true },
+                "event_time": { "type": "TIMESTAMP", "required": true },
+                "status": { "type": "VARCHAR", "required": true,
+                    "domain": ["ok", "error", "timeout", "denied"] }
+            }}
+        }
+    });
+    fs::write(
+        root.join("contratos/platform_history.json"),
+        contract.to_string(),
+    )
+    .expect("write compatible test contract");
+}
+
 fn e0_recurrence_fixture(
     root: &Path,
     replay_signature: &str,
@@ -889,6 +913,17 @@ fn binary_persists_simulated_result_and_timeline_without_source_identifiers() {
     assert!(result["excluded_replay_case_count"].is_null());
     assert_eq!(result["signal"]["numerator"], 1);
     assert_eq!(result["signal"]["denominator"], 1);
+    assert_eq!(result["u12_e_u13_e"]["status"], "dependency_unavailable");
+    assert_eq!(result["u12_e_u13_e"]["issuer_mode"], "none");
+    assert_eq!(result["u12_e_u13_e"]["provider_called"], false);
+    assert_eq!(result["u12_e_u13_e"]["agent_core_called"], false);
+    assert_eq!(result["u12_e_u13_e"]["candidate_count"], 0);
+    assert_eq!(
+        result["u12_e_u13_e"]["blocker"],
+        "u04_u08_authenticated_evidence_unavailable"
+    );
+    assert!(!timeline.contains("u09_agent_core_task"));
+    assert!(!timeline.contains("u10_model_provider"));
     assert!(timeline.contains("2025-07-01T00:00:00Z"));
     assert!(timeline.contains("improvement_draft"));
     assert!(!serialized.contains("private-case-id"));
@@ -1071,6 +1106,139 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
         }
     }
     assert!(!envelope.to_string().contains("2025-07-01T00:00:00Z"));
+}
+
+#[test]
+fn e0_cli_composes_verified_u12_signal_to_local_u13_candidates_only_with_compatible_contract() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0-compatible-contract");
+    let output = temp.path().join("runs-compatible-contract");
+    e0_fixture(&input, "error", "ok");
+    install_u12_compatible_contract(&input);
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run E0 CLI with a compatible local contract");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result JSON");
+    let timeline = fs::read_to_string(run_dir.join("events.ndjson")).expect("timeline");
+
+    assert_eq!(result["u12_e_u13_e"]["status"], "admitted");
+    assert_eq!(result["u12_e_u13_e"]["issuer_mode"], "local_simulated");
+    assert_eq!(result["u12_e_u13_e"]["candidate_count"], 3);
+    assert_eq!(
+        result["u12_e_u13_e"]["trigger_policy"],
+        "positive_count_plumbing_v1"
+    );
+    assert_eq!(
+        result["u12_e_u13_e"]["candidate_digests"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert!(
+        result["u12_e_u13_e"]["candidate_digests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|digest| digest
+                .as_str()
+                .is_some_and(|value| value.starts_with("sha256:")))
+    );
+    assert_eq!(result["u12_e_u13_e"]["provider_called"], false);
+    assert_eq!(result["u12_e_u13_e"]["agent_core_called"], false);
+    assert!(timeline.contains("u12_e_diagnostic"));
+    assert!(timeline.contains("u09_agent_core_task"));
+    assert!(timeline.contains("u10_model_provider"));
+    assert!(timeline.contains("u13_e_scout"));
+    let serialized = result.to_string();
+    assert!(!serialized.contains("private-case-id"));
+    assert!(!serialized.contains("private-tool-call-id"));
+    assert!(!serialized.contains("\"error\""));
+}
+
+#[test]
+fn e0_cli_zero_positive_u12_signal_is_a_noop_without_u09_u10_dispatch() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0-no-positive-signal");
+    let output = temp.path().join("runs-no-positive-signal");
+    e0_fixture(&input, "ok", "ok");
+    install_u12_compatible_contract(&input);
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run E0 CLI without a positive signal");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result JSON");
+    let timeline = fs::read_to_string(run_dir.join("events.ndjson")).expect("timeline");
+
+    assert_eq!(result["u12_e_u13_e"]["status"], "no_positive_signal");
+    assert_eq!(result["u12_e_u13_e"]["candidate_count"], 0);
+    assert!(!timeline.contains("u09_agent_core_task"));
+    assert!(!timeline.contains("u10_model_provider"));
 }
 
 #[test]

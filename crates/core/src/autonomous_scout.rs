@@ -1176,6 +1176,9 @@ impl TrustedE0ScoutComposer {
             || model.scope() != scope
             || core.input_digest() != binding.signal_digest
             || model.input_commitment().is_empty()
+            || !model
+                .input_commitment()
+                .starts_with(&format!("e0_signal:{}:", binding.signal_digest))
             || model.evidence().is_empty()
         {
             return Err(ScoutError::EvidenceDenied);
@@ -1220,6 +1223,9 @@ impl AutonomousScout {
             || core.scope() != scope
             || model.scope() != scope
             || core.input_digest() != b.signal_digest
+            || !model
+                .input_commitment()
+                .starts_with(&format!("e0_signal:{}:", b.signal_digest))
             || core.binding_digest() != evidence.core_binding_digest
             || core.attempt_id() != evidence.core_attempt_id
             || core.core_run_id() != evidence.core_run_id.as_deref()
@@ -1619,7 +1625,7 @@ mod candidate_admission_tests {
     }
 
     #[cfg(feature = "test-support")]
-    fn e0_model(scope: CoreTaskScope, attempt: &str) -> ModelReceipt {
+    fn e0_model(scope: CoreTaskScope, attempt: &str, signal_digest: &str) -> ModelReceipt {
         let capability = ModelCapability::new(
             ModelProvider::OpenRouter,
             "https://openrouter.ai/api/v1",
@@ -1635,16 +1641,26 @@ mod candidate_admission_tests {
             RedactionPolicy::TokenizeKnownMarkers,
             1,
             100,
-            ModelBudgetLimits::new(10, 10, 100).unwrap(),
+            ModelBudgetLimits::new(256, 10, 100).unwrap(),
         )
         .unwrap();
         let mut broker =
             HmacProjectionBroker::new_for_test(b"test-only-projection-authority-key-32b").unwrap();
         let projection = broker
-            .authorize_projection(&scope, &policy, "safe".into())
+            .authorize_projection(
+                &scope,
+                &policy,
+                format!("signal_digest={signal_digest}\nmetric=e0_technical_error_rate"),
+            )
             .unwrap();
-        let invocation =
-            ModelInvocation::from_verified(scope, policy, attempt, projection).unwrap();
+        let invocation = ModelInvocation::from_verified_for_e0_signal(
+            scope,
+            policy,
+            attempt,
+            projection,
+            signal_digest,
+        )
+        .unwrap();
         let mut port = ModelProviderSimulator::new(invocation.policy().clone());
         port.script_success("ok", "request_e0");
         port.invoke(invocation).unwrap()
@@ -1713,7 +1729,11 @@ mod candidate_admission_tests {
             &signal.scout_binding().signal_digest,
             "attempt_e0_u14",
         );
-        let model = e0_model(e0_scope.clone(), "attempt_model_e0_u14");
+        let model = e0_model(
+            e0_scope.clone(),
+            "attempt_model_e0_u14",
+            &signal.scout_binding().signal_digest,
+        );
         let evidence = TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model)
             .expect("real E0 evidence seals");
         let (result, mut authority) = record_e0_scout_discovery(
@@ -1742,7 +1762,11 @@ mod candidate_admission_tests {
             &signal.scout_binding().signal_digest,
             "attempt_e0",
         );
-        let model = e0_model(e0_scope.clone(), "attempt_model_e0");
+        let model = e0_model(
+            e0_scope.clone(),
+            "attempt_model_e0",
+            &signal.scout_binding().signal_digest,
+        );
         let evidence = TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model).unwrap();
         let repository = SharedScoutCandidateRepository::default();
         let (result, mut authority) =
@@ -1782,6 +1806,29 @@ mod candidate_admission_tests {
 
     #[cfg(feature = "test-support")]
     #[test]
+    fn u10_receipt_bound_to_different_e0_signal_is_rejected_before_u13() {
+        let signal = crate::e0_deterministic_sensor::real_signal_for_scout_test();
+        let e0_scope = e0_scope(&signal);
+        let core = e0_core(
+            e0_scope.clone(),
+            &signal.scout_binding().signal_digest,
+            "attempt_e0",
+        );
+        let other_signal_digest = d('f');
+        let model = e0_model(
+            e0_scope.clone(),
+            "attempt_model_other_signal",
+            &other_signal_digest,
+        );
+
+        assert!(matches!(
+            TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model),
+            Err(ScoutError::EvidenceDenied)
+        ));
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
     fn e0_scope_or_receipt_drift_is_denied_without_recording() {
         let signal = crate::e0_deterministic_sensor::real_signal_for_scout_test();
         let e0_scope = e0_scope(&signal);
@@ -1790,7 +1837,11 @@ mod candidate_admission_tests {
             &signal.scout_binding().signal_digest,
             "attempt_e0",
         );
-        let model = e0_model(e0_scope.clone(), "attempt_model_e0");
+        let model = e0_model(
+            e0_scope.clone(),
+            "attempt_model_e0",
+            &signal.scout_binding().signal_digest,
+        );
         let evidence = TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model).unwrap();
         let changed_core = e0_core(
             e0_scope.clone(),
@@ -1819,7 +1870,11 @@ mod candidate_admission_tests {
             &signal.scout_binding().signal_digest,
             "attempt_e0",
         );
-        let model = e0_model(e0_scope.clone(), "attempt_model_e0");
+        let model = e0_model(
+            e0_scope.clone(),
+            "attempt_model_e0",
+            &signal.scout_binding().signal_digest,
+        );
         let evidence = TrustedE0ScoutComposer::seal(&e0_scope, &signal, &core, &model).unwrap();
 
         macro_rules! assert_drift_denied {

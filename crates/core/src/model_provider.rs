@@ -7,6 +7,7 @@
 //! stored, logged, hashed or returned by this module.
 
 use crate::core_task::CoreTaskScope;
+use crate::is_sha256_digest;
 use postgres::Client;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -346,6 +347,30 @@ impl ModelInvocation {
             redacted_input: projection.treated_input,
             input_commitment: projection.commitment,
         })
+    }
+
+    /// Creates an invocation whose broker-signed treated projection is bound
+    /// to one exact U12-E signal digest. The digest must lead the signed
+    /// projection, so a receipt from a different signal cannot be reused by
+    /// U13-E even when its visible metric counts happen to match.
+    pub fn from_verified_for_e0_signal(
+        scope: CoreTaskScope,
+        policy: ModelPolicy,
+        attempt_id: impl Into<String>,
+        projection: VerifiedProjection,
+        signal_digest: &str,
+    ) -> Result<Self, ModelProviderError> {
+        if !is_sha256_digest(signal_digest)
+            || !projection
+                .treated_input
+                .starts_with(&format!("signal_digest={signal_digest}\n"))
+        {
+            return Err(ModelProviderError::InvalidProjectionAuthorization);
+        }
+        let mut invocation = Self::from_verified(scope, policy, attempt_id, projection)?;
+        invocation.input_commitment =
+            format!("e0_signal:{signal_digest}:{}", invocation.input_commitment);
+        Ok(invocation)
     }
     pub fn scope(&self) -> &CoreTaskScope {
         &self.scope

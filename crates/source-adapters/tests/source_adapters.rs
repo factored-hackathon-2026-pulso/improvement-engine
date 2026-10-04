@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, BooleanArray, RecordBatch, StringArray, TimestampMicrosecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
+#[cfg(feature = "local-simulation")]
+use improvement_engine_source_adapters::prepare_e0_package_for_local_simulation;
 use improvement_engine_source_adapters::{
     AdapterError, CasePhase, PreparationConfig, PreparedSource, SourceKind, evaluator,
     prepare_e0_package, prepare_original_bank,
@@ -304,7 +306,133 @@ fn e0_fixture(root: &Path) {
     e0_fixture_with_retry_counts(root, vec![Some(0), Some(0), Some(1), None]);
 }
 
+#[cfg(feature = "local-simulation")]
+fn install_local_u12_contract(root: &Path) {
+    let contract = serde_json::json!({
+        "name": "platform_history",
+        "version": "test-v1",
+        "entities": {
+            "case": { "fields": {
+                "case_id": { "type": "VARCHAR", "required": true },
+                "opened_at": { "type": "TIMESTAMP", "required": true }
+            }},
+            "tool_call": { "fields": {
+                "case_id": { "type": "VARCHAR", "required": true },
+                "event_time": { "type": "TIMESTAMP", "required": true },
+                "status": { "type": "VARCHAR", "required": true,
+                    "domain": ["ok", "error", "timeout", "denied"] }
+            }}
+        }
+    });
+    fs::write(
+        root.join("contratos/platform_history.json"),
+        contract.to_string(),
+    )
+    .expect("write U12-compatible local contract");
+}
+
+#[cfg(feature = "local-simulation")]
+#[test]
+fn local_simulation_issuer_returns_only_u08_verified_e0_rows_from_e0_package() {
+    let temp = TempDir::new().expect("temporary source directory");
+    e0_fixture(temp.path());
+    install_local_u12_contract(temp.path());
+
+    let local_config = PreparationConfig::new("pulso_local", "2025-07-01T00:00:00Z", 2)
+        .expect("valid local simulation config");
+    let (prepared, evidence) = prepare_e0_package_for_local_simulation(temp.path(), &local_config)
+        .expect("prepare E0 with local U02/U04/U08 evidence");
+    let evidence = evidence.expect("E0 package should issue verified local query evidence");
+
+    assert_eq!(prepared.source_kind(), SourceKind::E0);
+    assert_eq!(
+        evidence.result().receipt().queried_table,
+        "tool_call",
+        "the receipt must come from the U08 tool_call read"
+    );
+    assert!(evidence.result().receipt().has_valid_digest());
+    assert_eq!(evidence.result().rows().len(), 3);
+    for row in evidence.result().rows() {
+        assert_eq!(row.len(), 2);
+        assert!(row.contains_key("event_time"));
+        assert!(row.contains_key("technical_error"));
+        let serialized = serde_json::to_string(row).expect("safe row JSON");
+        assert!(!serialized.contains("synthetic-customer"));
+        assert!(!serialized.contains("person@example.test"));
+        assert!(!serialized.contains("call-"));
+        assert!(!serialized.contains("read_txn"));
+    }
+
+    let one_case_config = PreparationConfig::new("pulso_local", "2025-07-01T00:00:00Z", 1)
+        .expect("valid one-case cohort config");
+    let (_, one_case_evidence) =
+        prepare_e0_package_for_local_simulation(temp.path(), &one_case_config)
+            .expect("prepare one-case cohort");
+    let one_case_evidence = one_case_evidence.expect("verified one-case evidence");
+    assert_eq!(one_case_evidence.result().receipt().row_count, 2);
+    assert_ne!(
+        evidence.result().receipt().transform_digest,
+        one_case_evidence.result().receipt().transform_digest,
+        "the selected Arranque count is committed by U04/U08 provenance"
+    );
+
+    write_parquet(
+        &temp.path().join("datos").join("case.parquet"),
+        Schema::new(vec![
+            Field::new("case_id", DataType::Utf8, false),
+            Field::new(
+                "opened_at",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                false,
+            ),
+            Field::new("customer_id", DataType::Utf8, false),
+            Field::new("channel", DataType::Utf8, false),
+            Field::new("language", DataType::Utf8, false),
+            Field::new("topic", DataType::Utf8, false),
+            Field::new("priority", DataType::Utf8, false),
+        ]),
+        vec![
+            Arc::new(StringArray::from(vec!["case-b", "case-a", "case-c"])),
+            Arc::new(
+                TimestampMicrosecondArray::from(vec![5_000_000_i64, 10_000_000, 30_000_000])
+                    .with_timezone("UTC"),
+            ),
+            Arc::new(StringArray::from(vec![
+                "customer-b",
+                "customer-a",
+                "customer-c",
+            ])),
+            Arc::new(StringArray::from(vec!["chat", "phone", "web"])),
+            Arc::new(StringArray::from(vec!["es", "es", "es"])),
+            Arc::new(StringArray::from(vec!["payments", "payments", "account"])),
+            Arc::new(StringArray::from(vec!["normal", "high", "normal"])),
+        ],
+    );
+    let (_, changed_case_evidence) =
+        prepare_e0_package_for_local_simulation(temp.path(), &one_case_config)
+            .expect("prepare changed case cohort");
+    let changed_case_evidence = changed_case_evidence.expect("verified changed-case evidence");
+    assert_eq!(changed_case_evidence.result().receipt().row_count, 1);
+    assert_ne!(
+        one_case_evidence
+            .result()
+            .receipt()
+            .source_snapshot_ref
+            .digest,
+        changed_case_evidence
+            .result()
+            .receipt()
+            .source_snapshot_ref
+            .digest,
+        "case.parquet bytes are part of the U02 snapshot that U08 rereads"
+    );
+}
+
 fn e0_fixture_with_retry_counts(root: &Path, retry_counts: Vec<Option<i64>>) {
+    e0_fixture_with_statuses(root, retry_counts, ["timeout", "ok", "error", "denied"]);
+}
+
+fn e0_fixture_with_statuses(root: &Path, retry_counts: Vec<Option<i64>>, statuses: [&str; 4]) {
     assert_eq!(retry_counts.len(), 4);
     let data = root.join("datos");
     fs::create_dir_all(&data).expect("create data dir");
@@ -405,7 +533,7 @@ fn e0_fixture_with_retry_counts(root: &Path, retry_counts: Vec<Option<i64>>) {
                 "confirm",
                 "human_only",
             ])),
-            Arc::new(StringArray::from(vec!["timeout", "ok", "error", "denied"])),
+            Arc::new(StringArray::from(statuses.to_vec())),
             Arc::new(BooleanArray::from(vec![true, true, true, false])),
             Arc::new(arrow_array::StringArray::from(vec![
                 None,
