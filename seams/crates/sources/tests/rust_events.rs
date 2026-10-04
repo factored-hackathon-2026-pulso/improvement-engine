@@ -4,7 +4,7 @@
 mod ev_common;
 mod common;
 use common::temp_path;
-use ev_common::{Scn, make};
+use ev_common::{Scn, make_spread};
 use rusqlite::Connection;
 use serde_json::Value;
 use sources::config::Config;
@@ -27,7 +27,7 @@ fn build_db(dir: &Path, scn: Scn, seed: u64, cases: usize) -> PathBuf {
            previous_case_id TEXT, tenant_id TEXT);",
     )
     .unwrap();
-    let d = make(scn, seed, cases);
+    let d = make_spread(scn, seed, cases, 21);
     let tx = c.unchecked_transaction().unwrap();
     for l in d.events.lines() {
         let v: Value = serde_json::from_str(l).unwrap();
@@ -57,7 +57,6 @@ fn cfg(work: &Path, extra: &[(&str, &str)]) -> Config {
         ("work_dir", work.to_str().unwrap()),
         ("runner_exe", RUNNER),
         ("batch_cap", "5000"),
-        ("min_history_days", "0"),
     ];
     for (k, v) in extra {
         pairs.retain(|(e, _)| e != k);
@@ -169,7 +168,7 @@ fn real_sim(file: &str) -> Option<(PathBuf, Vec<Value>)> {
     let db = work.join("product.db");
     std::fs::copy(&src, &db).unwrap();
     let w = work.join("work");
-    let recs = run_all(&db, &cfg(&w, &[("batch_cap", "10000"), ("min_history_days", "0")]), &w);
+    let recs = run_all(&db, &cfg(&w, &[("batch_cap", "10000")]), &w);
     Some((w, recs))
 }
 

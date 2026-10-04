@@ -73,6 +73,11 @@ fn onset(frac: f64) -> bool {
 }
 
 pub fn make(scn: Scn, seed: u64, n_cases: usize) -> Data {
+    make_spread(scn, seed, n_cases, 0)
+}
+
+/// Same stream (sequence order, cells, rates unchanged) with `event_time` stretched linearly so the stream spans at least `min_days`.
+pub fn make_spread(scn: Scn, seed: u64, n_cases: usize, min_days: i64) -> Data {
     let mut r = Rng::new(seed);
     let target = ("pt", "web_chat");
     let mut evs: Vec<Ev> = vec![];
@@ -134,6 +139,8 @@ pub fn make(scn: Scn, seed: u64, n_cases: usize) -> Data {
         }
     }
     evs.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap().then(a.case.cmp(&b.case)));
+    let span = evs.last().map_or(1.0, |e| e.t) - evs.first().map_or(0.0, |e| e.t);
+    let scale = (min_days as f64 * 86_400.0 / span.max(1.0)).max(1.0);
     let mut out = String::new();
     for (i, e) in evs.iter().enumerate() {
         let actor = if e.actor.is_empty() { "null".to_string() } else { format!("\"{}\"", e.actor) };
@@ -144,7 +151,7 @@ pub fn make(scn: Scn, seed: u64, n_cases: usize) -> Data {
             e.case,
             e.case,
             e.role,
-            iso(e.t as i64)
+            iso((START as f64 + (e.t - START as f64) * scale) as i64)
         ));
     }
     Data { events: out, cases: case_rows.join("\n") + "\n", ids, n_cases }
