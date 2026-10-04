@@ -241,7 +241,18 @@ class ProductStream:
         def cnt(key, lo, hi):
             return sum(1 for s, _ in self.stats[key] if lo < s <= hi)
         w = self.scn.windows()
-        real = {"last_sequence": self._seq, "cases": len(self.stats["cases"]),
+        tc = self.scn.target_cell
+        on = self.scn.onset_sequence
+
+        def tcell(pred):
+            n = sum(1 for q, c in self.stats["cases"] if c == tc and pred(q))
+            ra = sum(1 for q, c in self.stats["reassigns"] if c == tc and pred(q))
+            ro = sum(1 for q, c in self.stats["reopens"] if c == tc and pred(q))
+            return {"cases": n, "reassigns": ra, "reopens": ro,
+                    "reassign_rate": ra / n if n else 0.0, "reopen_rate": ro / n if n else 0.0}
+        real = {"target_cell": {"pre_onset": tcell(lambda q: q <= on), "post_onset": tcell(lambda q: q > on)},
+                "note": "realised rates are below the nominal planted probabilities (ineligible or closed cases)",
+                "last_sequence": self._seq, "cases": len(self.stats["cases"]),
                 "reassigns": len(self.stats["reassigns"]), "reopens": len(self.stats["reopens"]),
                 "by_window": {k: {"cases": cnt("cases", *v), "reassigns": cnt("reassigns", *v),
                                   "reopens": cnt("reopens", *v)} for k, v in w.items()}}

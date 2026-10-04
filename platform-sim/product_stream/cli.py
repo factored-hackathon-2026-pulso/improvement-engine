@@ -72,6 +72,10 @@ def main(argv=None, sleep=time.sleep, stdin=None, connect=None) -> int:
                       file=sys.stderr)
                 return 2
             sink.reset()
+            if sink.event_log_count() > 0:
+                print("error: rows not written by this simulator remain in event_log; refusing to mix with them",
+                      file=sys.stderr)
+                return 2
         gen = ProductStream(seed=a.seed, scenario=a.scenario, horizon_events=horizon, start=a.start, n_customers=a.customers,
                             **({"onset_sequence": a.onset_sequence} if a.onset_sequence is not None else {}))
         if a.backfill:

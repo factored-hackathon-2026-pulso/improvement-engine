@@ -32,8 +32,25 @@
     },
     "cases": 32,
     "last_sequence": 300,
+    "note": "realised rates are below the nominal planted probabilities (ineligible or closed cases)",
     "reassigns": 1,
-    "reopens": 4
+    "reopens": 4,
+    "target_cell": {
+      "post_onset": {
+        "cases": 3,
+        "reassign_rate": 0.3333333333333333,
+        "reassigns": 1,
+        "reopen_rate": 0.0,
+        "reopens": 0
+      },
+      "pre_onset": {
+        "cases": 1,
+        "reassign_rate": 0.0,
+        "reassigns": 0,
+        "reopen_rate": 0.0,
+        "reopens": 0
+      }
+    }
   },
   "scenario": "escalation_rise",
   "seed": 7,
