@@ -1,0 +1,5 @@
+id: t/aclarar
+version: 1.0.0
+locales:
+  es: "¿Puedes aclararlo?"
+  pt: "Pode esclarecer?"

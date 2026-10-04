@@ -1,0 +1,15 @@
+id: disputa-tarea
+version: 1.0.0
+priority: 50
+nodes:
+  - {id: buscar_tx, type: tool, config: {tool: buscar_transacciones@1, args: {}, save_as: candidatas},
+     next: {ok: elegir, error: esc_tool, timeout: esc_tool, denied: esc_tool}}
+  - {id: elegir, type: tool, config: {tool: seleccionar@1, args: {lista: facts.candidatas.value}, save_as: transaccion_elegida},
+     next: {ok: a_usd, error: esc_tool, timeout: esc_tool, denied: esc_tool}}
+  - {id: a_usd, type: tool, config: {tool: convertir_moneda@1, args: {monto: facts.transaccion_elegida.value.amount, moneda: facts.transaccion_elegida.value.currency, destino: USD}, save_as: monto_usd},
+     next: {ok: umbral, error: esc_tool, timeout: esc_tool, denied: esc_tool}}
+  - {id: umbral, type: rule, config: {policy: escalamiento-disputa-monto@1}, next: {true: esc_monto, false: responder_ok}}
+  - {id: responder_ok, type: respond, config: {generate: {prompt_ref: p/resumen_radicado@1, allowed_facts: [facts.transaccion_elegida], fallback_template_ref: t/disputa_recibida@1}}, next: {next: fin}}
+  - {id: fin, type: end, config: {outcome: completed}}
+  - {id: esc_tool, type: escalate, config: {reason_code: tool_failure}}
+  - {id: esc_monto, type: escalate, config: {reason_code: "policy:escalamiento-disputa-monto", target_queue: disputas}}

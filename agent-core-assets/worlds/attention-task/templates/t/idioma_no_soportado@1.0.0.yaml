@@ -1,0 +1,5 @@
+id: t/idioma_no_soportado
+version: 1.0.0
+locales:
+  es: "Atiendo en español y portugués."
+  pt: "Atendo em espanhol e português."
