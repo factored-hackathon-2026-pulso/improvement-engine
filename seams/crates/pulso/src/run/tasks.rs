@@ -8,6 +8,7 @@ use crate::config::DataMode;
 use crate::run::log::Logger;
 use crate::run::supervisor::{StopToken, Task};
 use pg::repo::{Claimed, JobRepository};
+use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -57,7 +58,25 @@ impl Task for MonitorTask {
         "monitor".into()
     }
     fn run(&mut self, stop: &StopToken) -> Result<(), String> {
-        let _ = (&mut self.tick, &self.ctx, self.poll, &self.log, stop);
+        let mut failures = 0u32;
+        while !stop.is_stopped() {
+            match self.tick.tick(&self.ctx) {
+                Ok(r) => {
+                    failures = 0;
+                    self.log.info("monitor_tick", json!({"processed": r.processed, "adapter": self.ctx.adapter}));
+                }
+                Err(e) => {
+                    failures += 1;
+                    self.log.warn("monitor_tick_failed", json!({"consecutive": failures, "reason": e}));
+                    if failures >= MAX_CONSECUTIVE_TICK_FAILURES {
+                        return Err(format!("{failures} consecutive tick failures"));
+                    }
+                }
+            }
+            if stop.wait(self.poll) {
+                break;
+            }
+        }
         Ok(())
     }
 }
@@ -98,7 +117,35 @@ impl Task for JobWorker {
         "worker".into()
     }
     fn run(&mut self, stop: &StopToken) -> Result<(), String> {
-        let _ = (&self.repo, &self.runner, &self.tenant, &self.worker_id, self.poll, self.batch_cap, self.lease_seconds, &self.clock, &self.log, stop);
+        let Some(runner) = self.runner.clone() else {
+            self.log.info("worker_idle_no_runner", json!({}));
+            while !stop.wait(self.poll) {}
+            return Ok(());
+        };
+        while !stop.is_stopped() {
+            let mut ran = 0u32;
+            while ran < self.batch_cap && !stop.is_stopped() {
+                let now = (self.clock)();
+                match self.repo.claim_next(&self.tenant, &self.worker_id, now, self.lease_seconds) {
+                    Ok(Some(job)) => {
+                        ran += 1;
+                        let ctx = JobCtx { repo: self.repo.as_ref(), tenant: &self.tenant, worker: &self.worker_id, stop, now, lease_seconds: self.lease_seconds };
+                        match runner.run(&job, &ctx) {
+                            Ok(()) => self.log.info("job_done", json!({"job": job.job, "fence": job.fence_token, "attempt": job.attempt})),
+                            Err(e) => self.log.warn("job_failed", json!({"job": job.job, "attempt": job.attempt, "reason": e})),
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(e) => {
+                        self.log.error("claim_failed", json!({"reason": format!("{e:?}")}));
+                        break;
+                    }
+                }
+            }
+            if stop.wait(self.poll) {
+                break;
+            }
+        }
         Ok(())
     }
 }
