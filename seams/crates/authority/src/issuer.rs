@@ -35,6 +35,8 @@ pub enum IssuerError {
     /// Ticket expired at `now`.
     Expired,
     Unknown,
+    /// Ticket was issued for a different proposal/revision/candidate.
+    TargetMismatch,
 }
 
 pub trait HumanIssuer {
@@ -55,14 +57,16 @@ pub struct SimTicket {
     pub issuer_ok: bool,
     pub roles: Vec<&'static str>,
     pub expiry: u64,
+    /// When set, the ticket is only valid for this exact target.
+    pub bound_to: Option<Target>,
 }
 
 impl SimTicket {
     pub fn approver(actor: &str, expiry: u64) -> Self {
-        Self { actor: actor.into(), human: true, step_up: true, issuer_ok: true, roles: vec!["aprobador"], expiry }
+        Self { actor: actor.into(), human: true, step_up: true, issuer_ok: true, roles: vec!["aprobador"], expiry, bound_to: None }
     }
     pub fn admin(actor: &str, expiry: u64) -> Self {
-        Self { actor: actor.into(), human: true, step_up: true, issuer_ok: true, roles: vec!["admin"], expiry }
+        Self { actor: actor.into(), human: true, step_up: true, issuer_ok: true, roles: vec!["admin"], expiry, bound_to: None }
     }
 }
 
@@ -74,8 +78,11 @@ impl SimulatedIssuer {
 }
 
 impl HumanIssuer for SimulatedIssuer {
-    fn verify(&self, ticket: &str, _t: &Target, op: Op, now: u64) -> Result<Verified, IssuerError> {
+    fn verify(&self, ticket: &str, target: &Target, op: Op, now: u64) -> Result<Verified, IssuerError> {
         let t = self.tickets.get(ticket).ok_or(IssuerError::Unknown)?;
+        if t.bound_to.as_ref().is_some_and(|b| b != target) {
+            return Err(IssuerError::TargetMismatch);
+        }
         if !t.issuer_ok {
             return Err(IssuerError::WrongIssuer);
         }

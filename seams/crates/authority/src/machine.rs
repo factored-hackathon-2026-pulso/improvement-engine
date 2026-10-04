@@ -61,9 +61,13 @@ pub struct Approval {
     pub actor_ref: String,
     pub override_label: Option<&'static str>,
     pub simulated: bool,
+    pub override_actor: Option<String>,
+    pub override_reason: Option<String>,
+    /// G1: a human override of a non-pass gate forbids quality claims.
+    pub quality_claims_forbidden: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Event {
     StartEvaluation,
     RecordGates { safety: GateVerdict, improvement: GateVerdict },
@@ -74,6 +78,43 @@ pub enum Event {
     Publish { target: Target, ticket: String },
     Revoke { target: Target, ticket: String },
     Expire,
+}
+
+impl std::fmt::Debug for Event {
+    /// Tickets are credentials-adjacent: never printed.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Event::Approve { decision_id, target, override_, .. } => f
+                .debug_struct("Approve")
+                .field("decision_id", decision_id)
+                .field("target", target)
+                .field("ticket", &"<redacted>")
+                .field("override_", override_)
+                .finish(),
+            Event::Reject { decision_id, target, .. } => f
+                .debug_struct("Reject")
+                .field("decision_id", decision_id)
+                .field("target", target)
+                .field("ticket", &"<redacted>")
+                .finish(),
+            Event::Publish { target, .. } => {
+                f.debug_struct("Publish").field("target", target).field("ticket", &"<redacted>").finish()
+            }
+            Event::Revoke { target, .. } => {
+                f.debug_struct("Revoke").field("target", target).field("ticket", &"<redacted>").finish()
+            }
+            Event::StartEvaluation => f.write_str("StartEvaluation"),
+            Event::Expire => f.write_str("Expire"),
+            Event::RecordGates { safety, improvement } => {
+                f.debug_struct("RecordGates").field("safety", safety).field("improvement", improvement).finish()
+            }
+            Event::RequestDecision { decision_id, expires_at } => f
+                .debug_struct("RequestDecision")
+                .field("decision_id", decision_id)
+                .field("expires_at", expires_at)
+                .finish(),
+        }
+    }
 }
 
 impl Event {
@@ -108,6 +149,9 @@ pub enum AuthorityError {
     WrongIssuer,
     TicketExpired,
     UnknownTicket,
+    TicketNotBound,
+    OverrideOnPassingGate,
+    EmptyDecisionId,
 }
 
 impl From<IssuerError> for AuthorityError {
@@ -118,6 +162,7 @@ impl From<IssuerError> for AuthorityError {
             IssuerError::WrongIssuer => AuthorityError::WrongIssuer,
             IssuerError::Expired => AuthorityError::TicketExpired,
             IssuerError::Unknown => AuthorityError::UnknownTicket,
+            IssuerError::TargetMismatch => AuthorityError::TicketNotBound,
         }
     }
 }
@@ -139,8 +184,7 @@ struct Request {
 struct Decided {
     id: String,
     approve: bool,
-    candidate_hash: String,
-    rev: u64,
+    target: Target,
 }
 
 #[derive(Debug, Clone)]
@@ -223,6 +267,9 @@ impl Authority {
                 self.go(Gated, "record_gates")
             }
             (Event::RequestDecision { decision_id, expires_at }, Gated) => {
+                if decision_id.trim().is_empty() {
+                    return Err(AuthorityError::EmptyDecisionId);
+                }
                 if *expires_at <= now {
                     return Err(AuthorityError::DecisionExpired);
                 }
@@ -234,24 +281,30 @@ impl Authority {
                 self.bind(target)?;
                 let v = issuer.verify(ticket, target, Op::Approve, now)?;
                 let mut label = None;
+                let mut ov_info = None;
                 let both_pass = self.gates == Some((GateVerdict::Pass, GateVerdict::Pass));
-                if !both_pass {
-                    match override_ {
-                        Some(o) if is_human_override(o) => label = Some("human_override"),
-                        _ => return Err(AuthorityError::GateFailed),
+                match (both_pass, override_) {
+                    (true, None) => {}
+                    (true, Some(_)) => return Err(AuthorityError::OverrideOnPassingGate),
+                    (false, Some(o)) if is_human_override(o) => {
+                        label = Some("human_override");
+                        ov_info = Some((o.actor.trim().to_string(), o.reason.trim().to_string()));
                     }
+                    (false, _) => return Err(AuthorityError::GateFailed),
                 }
                 self.decided = Some(Decided {
                     id: decision_id.clone(),
                     approve: true,
-                    candidate_hash: target.candidate_hash.clone(),
-                    rev: target.proposal_rev,
+                    target: target.clone(),
                 });
                 self.approval = Some(Approval {
                     decision_id: decision_id.clone(),
                     actor_ref: v.actor_ref,
                     override_label: label,
                     simulated: true,
+                    quality_claims_forbidden: label.is_some(),
+                    override_actor: ov_info.as_ref().map(|o| o.0.clone()),
+                    override_reason: ov_info.map(|o| o.1),
                 });
                 self.approval_expiry = v.expiry;
                 self.go(Approved, "approve")
@@ -263,8 +316,7 @@ impl Authority {
                 self.decided = Some(Decided {
                     id: decision_id.clone(),
                     approve: false,
-                    candidate_hash: target.candidate_hash.clone(),
-                    rev: target.proposal_rev,
+                    target: target.clone(),
                 });
                 self.go(Rejected, "reject")
             }
@@ -276,10 +328,7 @@ impl Authority {
                 let is_approve = matches!(ev, Event::Approve { .. });
                 match &self.decided {
                     Some(d) if d.id == *decision_id => {
-                        if d.approve == is_approve
-                            && d.candidate_hash == target.candidate_hash
-                            && d.rev == target.proposal_rev
-                        {
+                        if d.approve == is_approve && d.target == *target {
                             Ok(Applied::Replayed(self.state))
                         } else {
                             Err(AuthorityError::IdempotencyConflict)
