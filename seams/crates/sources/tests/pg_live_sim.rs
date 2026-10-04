@@ -10,7 +10,7 @@ use sources::monitor::{TickOutcome, tick};
 use sources::pg_product::PostgresProduct;
 use sources::pg_store::PgStore;
 use sources::store::{WatermarkRecord, WatermarkStore};
-use sources::{DataMode, SourceError, SourceId, Watermark};
+use sources::{DataMode, SourceAdapter, SourceError, SourceId, Watermark};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 fn dsns() -> Option<(String, String)> {
