@@ -55,10 +55,13 @@ def build(d, mutate=None):
         "command": "python gt05_collect.py", "exit_code": 0, "calls": 5, "misses": 0}), encoding="utf-8")
     (d / "ratchet.json").write_text(json.dumps({"schema": "ratchet-receipt/v1", "command": "pytest ratchet", "exit_code": 0,
                                                 "passed": 7, "failed": 0}), encoding="utf-8")
+    orig = rust_report()
+    step(orig, "signals")["data_class"] = "original"
+    (d / "original-report.json").write_text(json.dumps(orig), encoding="utf-8")
     (d / "original-run.json").write_text(json.dumps({"schema": "gt05-original-run/v1", "steps_mode": "rust",
-                                                     "report": "rust-report.json"}), encoding="utf-8")
+                                                     "report": "original-report.json"}), encoding="utf-8")
     rv = d / "reviews"
-    rv.mkdir()
+    rv.mkdir(exist_ok=True)
     (rv / "x.review.json").write_text(json.dumps({
         "schema": "review-log/v1", "wps": list(gate.REQUIRED_CRV1), "author": {"id": "a"}, "reviewer": {"id": "b"},
         "provenance": "contemporaneous", "findings": [], "verdict": "closed"}), encoding="utf-8")
@@ -161,7 +164,7 @@ class Gate(unittest.TestCase):
         self.assertIn("fallback_disclosure", failed(res))
 
     def test_g1_check_violations_fail(self):
-        self.assertIn("g1_check", failed(self.run_gate(self.edit(lambda r: r.update(host="rust", label="DEMO-3")))))
+        self.assertIn("g1_check", failed(self.run_gate(self.edit(lambda r: r.update(label="DEMO-2")))))
 
     def test_red_step_in_the_rust_run_fails(self):
         self.assertIn("no_red_steps", failed(self.run_gate(self.edit(lambda r: step(r, "approval").update(status="red")))))
@@ -216,6 +219,11 @@ class Gate(unittest.TestCase):
             self.assertFalse(by[k]["ok"])
             self.assertTrue(by[k]["detail"].startswith("MISSING"), by[k])
         self.assertTrue(by["rg1"]["ok"], by["rg1"])
+
+    def test_original_run_needs_an_original_data_class_and_rust_served_steps(self):
+        def mut(d, m):
+            (d / "original-report.json").write_text((d / "rust-report.json").read_text())
+        self.assertIn("rg1_original", failed(self.run_gate(mut)))
 
     def test_ratchet_receipt_must_be_a_passing_run(self):
         def mut(d, m):
