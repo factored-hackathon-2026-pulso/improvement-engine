@@ -3,6 +3,7 @@
 //! Read-only by default; loopback only; never depends on `crates/core`.
 pub mod app;
 pub mod event;
+pub mod ingest;
 pub mod project;
 pub mod server;
 pub mod store;
