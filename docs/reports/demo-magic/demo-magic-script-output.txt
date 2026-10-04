@@ -1,0 +1,49 @@
+[1/4] building pulso (cargo build -j 1 -p pulso; a no-op when up to date)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.50s
+[2/4] console build is up to date (debug-console/dist)
+[3/4] starting pulso serve on 127.0.0.1:4022 (loopback only)
+pulso: serving the built console from D:\.codex\factored\worktrees\improvement-engine-claude-w6-demo\debug-console\dist
+
+  Console (live run): http://127.0.0.1:4022/#/run/run-demo0-20261004105013
+  Console (all runs): http://127.0.0.1:4022/
+
+[4/4] running the demo (DEMO-0, offline Core double), pace 100 ms per step
+pulso: streaming run run-demo0-20261004105013 into http://127.0.0.1:4022 (DEMO-0: offline Core double; every stand-in is labelled)
+run: run-demo0-20261004105013  console: http://127.0.0.1:4022/#/run/run-demo0-20261004105013
+DEMO-0 engine-run report: label DEMO-0, host rust, target local, contract engine-run/c2-1, sha 313ccdc84ea1
+quality_claims: forbidden; gate judge claude-gsipy, gate verdict fail
+
+NOT REAL (doubles[], listed first; everything below is only as real as this list allows):
+- trigger: stand-in (provider=manual-command, data_class=generated_sample)
+- signals: stand-in (provider=claude-standin, data_class=generated_sample)
+- scout: stand-in (provider=scripted, data_class=generated_sample)
+- recompute: real-narrow (provider=claude-standin, data_class=generated_sample)
+- opportunity: stand-in (provider=scripted, data_class=generated_sample)
+- validation: real-narrow (provider=claude-standin, data_class=generated_sample)
+- compile: stand-in (provider=claude-standin, data_class=generated_sample)
+- gate: stand-in (provider=claude-standin, data_class=generated_sample)
+- revision: not_exercised (provider=claude-standin, data_class=generated_sample)
+- approval: simulated (provider=simulated-issuer, data_class=generated_sample)
+- publish: stand-in (provider=claude-standin, data_class=generated_sample)
+- observation: simulated (provider=platform-sim, data_class=generated_sample)
+- gate.override: human_override(simulated human, DEMO-0 stand-in)
+- port.core: offline-double(thread10::DoublePort)
+- port.llm_gateway: not-exercised(no model in the offline Rust thread)
+- port.registry: in-process-double
+- port.human_issuer: simulated-local-issuer
+- port.platform: platform-sim
+- override: human_override of gate verdict fail by human (simulated=true): exercise approve/publish of a failed structural gate; no quality claim
+
+STEPS (id, status, data class, receipt provider):
+1. trigger: stand-in | generated_sample | manual-command
+2. signals: stand-in | generated_sample | claude-standin
+3. scout: stand-in | generated_sample | scripted
+3. recompute: real-narrow | generated_sample | claude-standin
+4. opportunity: stand-in | generated_sample | scripted
+4. validation: real-narrow | generated_sample | claude-standin
+5. compile: stand-in | generated_sample | claude-standin
+6. gate: stand-in | generated_sample | claude-standin
+7. revision: not_exercised | generated_sample | claude-standin
+8. approval: simulated | generated_sample | simulated-issuer
+9. publish: stand-in | generated_sample | claude-standin
+10. observation: simulated | generated_sample | platform-sim

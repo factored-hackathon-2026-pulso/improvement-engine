@@ -1,0 +1,31 @@
+{
+ "as_of": "2026-10-04T15:48:01Z",
+ "available_commands": [],
+ "blocking_reasons": [],
+ "coverage": {
+  "expected_count": null,
+  "observed_count": null,
+  "reason_code": null,
+  "status": "complete"
+ },
+ "entity_ref": null,
+ "environment": "sandbox",
+ "items": [
+  {
+   "origin": "manual",
+   "projection_revision": 43,
+   "run_id": "run-demo0-evidence",
+   "state": "completed",
+   "title": "DEMO-0 live run (host rust, target local): offline Core double, no real model, simulated human, no quality claim"
+  }
+ ],
+ "links": [],
+ "next_automatic_action": null,
+ "next_cursor": null,
+ "projection_revision": 43,
+ "schema_version": "1",
+ "source_kind": "engine_event",
+ "status": "ok",
+ "tenant_id": "tenant-local",
+ "validation": "unverified"
+}

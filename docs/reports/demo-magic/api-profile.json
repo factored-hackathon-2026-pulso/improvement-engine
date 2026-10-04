@@ -1,0 +1,100 @@
+{
+ "doubles": [
+  "trigger:stand-in",
+  "port.core:offline-double(thread10::DoublePort)",
+  "port.llm_gateway:not-exercised(no model in the offline Rust thread)",
+  "port.registry:in-process-double",
+  "port.human_issuer:simulated-local-issuer",
+  "port.platform:platform-sim",
+  "signals:stand-in",
+  "scout:stand-in",
+  "recompute:real-narrow",
+  "opportunity:stand-in",
+  "validation:real-narrow",
+  "compile:stand-in",
+  "gate:stand-in",
+  "approval:simulated",
+  "gate.override:human_override(simulated human, DEMO-0 stand-in)",
+  "publish:stand-in",
+  "observation:simulated",
+  "revision:not_exercised"
+ ],
+ "doubles_detail": [
+  {
+   "id": "trigger:stand-in",
+   "what": "stand-in, provider manual-command, data_class generated_sample"
+  },
+  {
+   "id": "port.core:offline-double(thread10::DoublePort)",
+   "what": "offline-double(thread10::DoublePort), price_source n/a"
+  },
+  {
+   "id": "port.llm_gateway:not-exercised(no model in the offline Rust thread)",
+   "what": "not-exercised(no model in the offline Rust thread), price_source n/a"
+  },
+  {
+   "id": "port.registry:in-process-double",
+   "what": "in-process-double, price_source n/a"
+  },
+  {
+   "id": "port.human_issuer:simulated-local-issuer",
+   "what": "simulated-local-issuer, price_source n/a"
+  },
+  {
+   "id": "port.platform:platform-sim",
+   "what": "platform-sim, price_source n/a"
+  },
+  {
+   "id": "signals:stand-in",
+   "what": "stand-in, provider claude-standin, data_class generated_sample"
+  },
+  {
+   "id": "scout:stand-in",
+   "what": "stand-in, provider scripted, data_class generated_sample"
+  },
+  {
+   "id": "recompute:real-narrow",
+   "what": "real-narrow, provider claude-standin, data_class generated_sample"
+  },
+  {
+   "id": "opportunity:stand-in",
+   "what": "stand-in, provider scripted, data_class generated_sample"
+  },
+  {
+   "id": "validation:real-narrow",
+   "what": "real-narrow, provider claude-standin, data_class generated_sample"
+  },
+  {
+   "id": "compile:stand-in",
+   "what": "stand-in, provider claude-standin, data_class generated_sample"
+  },
+  {
+   "id": "gate:stand-in",
+   "what": "stand-in, provider claude-standin, data_class generated_sample"
+  },
+  {
+   "id": "approval:simulated",
+   "what": "simulated, provider simulated-issuer, data_class generated_sample"
+  },
+  {
+   "id": "gate.override:human_override(simulated human, DEMO-0 stand-in)",
+   "what": "human_override(simulated human, DEMO-0 stand-in), verdict fail, by human"
+  },
+  {
+   "id": "publish:stand-in",
+   "what": "stand-in, provider claude-standin, data_class generated_sample"
+  },
+  {
+   "id": "observation:simulated",
+   "what": "simulated, provider platform-sim, data_class generated_sample"
+  },
+  {
+   "id": "revision:not_exercised",
+   "what": "not_exercised, provider claude-standin, data_class generated_sample"
+  }
+ ],
+ "mode": "stand_in",
+ "pin": null,
+ "runtime_profile": "rust_run_event_store",
+ "target": "debug-api"
+}
