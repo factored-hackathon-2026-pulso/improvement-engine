@@ -9,6 +9,7 @@ import type * as S from '../api/schemas';
 import { RunView } from '../features/RunView';
 import { MemoryView } from '../features/Panels';
 import { SourcesView } from '../features/SourcesView';
+import { AutomationView } from '../features/automation/AutomationView';
 import { ModeBanner } from './ModeBanner';
 import { LiveRegionProvider, useAnnounce } from '../a11y/AnnounceContext';
 import { t } from '../i18n/es419';
@@ -88,7 +89,7 @@ function Shell() {
           {t(session === 'expired' ? 'session.expired' : 'session.unavailable')}
         </div>
       )}
-      <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a> · <a href="#/sources">{t('sources.nav')}</a></nav>
+      <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a> · <a href="#/sources">{t('sources.nav')}</a> · <a href="#/automatizacion">{t('auto.nav')}</a></nav>
       {dataProvider !== 'http' && (run || path === '/sources' || path === '/memory') && (
         <div className="banner bad" role="note" data-testid="provider-partial">{t('decl.partial', { provider: dataProvider })}</div>
       )}
@@ -98,7 +99,7 @@ function Shell() {
               runId={run[1]} nodeId={node} onProfileChanged={refreshProfile}
               onNode={(id) => { window.location.hash = id ? `#/run/${run[1]}?node=${id}` : `#/run/${run[1]}`; }}
             />
-          : path === '/sources' ? <SourcesView /> : path === '/memory' ? <MemoryView /> : <><h1>{t('app.title')}</h1>{debugApi ? <DebugApiProvider api={debugApi}><RunList /></DebugApiProvider> : <p>{t('runs.loading')}</p>}</>}
+          : path === '/automatizacion' ? <AutomationView /> : path === '/sources' ? <SourcesView /> : path === '/memory' ? <MemoryView /> : <><h1>{t('app.title')}</h1>{debugApi ? <DebugApiProvider api={debugApi}><RunList /></DebugApiProvider> : <p>{t('runs.loading')}</p>}</>}
       </main>
     </>
   );
