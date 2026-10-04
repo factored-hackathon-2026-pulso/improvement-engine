@@ -67,3 +67,54 @@ fn kill_9_mid_pipeline_resumes_too() {
     let (clean, resumed) = kill_at(2, "mid");
     same_outcome(&clean, &resumed);
 }
+
+/// Kill INSIDE the publish effect: the effect ran (ledger line) but its commit did not. The engine records the effect
+/// intent before running it, so the resumed attempt must NOT blindly re-run it: it stops with NeedsReconciliation(8).
+/// No second publish effect, no publish event, no successor (a human reconciles; this slice does not).
+#[test]
+fn kill_9_inside_the_publish_effect_before_its_commit_needs_reconciliation_and_never_republishes() {
+    let work = tmp("mid-commit");
+    let marker = work.with_extension("marker");
+    let ledger = work.with_extension("ledger");
+    let _ = std::fs::remove_file(&marker);
+    let _ = std::fs::remove_file(&ledger);
+    let mut child = cmd(&work, "1000").arg("--ledger").arg(&ledger).arg("--kill-in-publish").arg(&marker).stdout(Stdio::null()).spawn().unwrap();
+    for _ in 0..1500 {
+        if marker.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(marker.exists(), "the publish effect never ran");
+    child.kill().unwrap();
+    assert!(!child.wait().unwrap().success(), "killed, not a clean exit");
+    assert_eq!(std::fs::read_to_string(&ledger).unwrap().lines().count(), 1, "the effect ran once before the kill");
+    let out = cmd(&work, "1060").arg("--ledger").arg(&ledger).output().unwrap();
+    assert_eq!(out.status.code(), Some(1), "the resumed job stops, it does not re-publish");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("NeedsReconciliation(8)"), "{}", String::from_utf8_lossy(&out.stderr));
+    let resumed: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(std::fs::read_to_string(&ledger).unwrap().lines().count(), 1, "the effect was not run a second time");
+    assert!(resumed["events"].as_array().unwrap().iter().all(|e| !e.as_str().unwrap().starts_with("thread:publish")), "no publish commit");
+    assert_eq!(resumed["successor"], Value::Null, "no successor without a committed publish");
+}
+
+#[test]
+fn a_clean_run_and_a_kill_after_the_publish_commit_invoke_the_publish_effect_once() {
+    let work = tmp("ledger-post");
+    let marker = work.with_extension("marker");
+    let ledger = work.with_extension("ledger");
+    let _ = std::fs::remove_file(&marker);
+    let _ = std::fs::remove_file(&ledger);
+    let mut child = cmd(&work, "1000").arg("--ledger").arg(&ledger).arg("--marker").arg(&marker).arg("8").stdout(Stdio::null()).spawn().unwrap();
+    for _ in 0..1500 {
+        if marker.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(marker.exists());
+    child.kill().unwrap();
+    child.wait().unwrap();
+    report(&cmd(&work, "1060").arg("--ledger").arg(&ledger).output().unwrap());
+    assert_eq!(std::fs::read_to_string(&ledger).unwrap().lines().count(), 1, "no second publish effect after the commit");
+}

@@ -29,6 +29,8 @@ fn main() {
             "--claimed-rate" => o.claimed_rate = Some(it.next().and_then(|v| v.parse().ok()).unwrap_or_else(|| usage("--claimed-rate needs a number"))),
             "--now" => o.now = it.next().and_then(|v| v.parse().ok()).unwrap_or_else(|| usage("--now needs unix seconds")),
             "--sha" => o.sha = it.next().cloned().unwrap_or_else(|| usage("--sha needs a value")),
+            "--ledger" => o.ledger = Some(it.next().cloned().unwrap_or_else(|| usage("--ledger needs FILE")).into()),
+            "--kill-in-publish" => o.kill_in_publish = Some(it.next().cloned().unwrap_or_else(|| usage("--kill-in-publish needs FILE")).into()),
             "--marker" => {
                 let (m, i) = (it.next(), it.next().and_then(|v| v.parse::<usize>().ok()));
                 match (m, i) {
