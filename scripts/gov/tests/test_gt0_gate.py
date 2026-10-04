@@ -189,6 +189,36 @@ class Gate(unittest.TestCase):
         p.write_text(json.dumps(doc))
         self.assertTrue(gate.check_g0p(p, repo, True)["ok"])
 
+    def test_g0p_cargo_manifest_path_must_cover_every_changed_rust_file(self):
+        repo = self.d / "repo2"
+        (repo / "seams").mkdir(parents=True)
+        (repo / "crates").mkdir()
+        g = lambda *a: subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@x.invalid", *a],
+                                      capture_output=True, text=True, check=True).stdout.strip()
+        g("init", "-q")
+        (repo / "a.txt").write_text("1")
+        g("add", "-A"); g("commit", "-qm", "base")
+        base = g("rev-parse", "HEAD")
+        (repo / "seams" / "a.rs").write_text("fn main(){}")
+        (repo / "crates" / "b.rs").write_text("fn main(){}")
+        g("add", "-A"); g("commit", "-qm", "rust")
+        head = g("rev-parse", "HEAD")
+        doc = {"schema": "pre-pr-gate/v1", "verdict": "pass", "head_sha": head, "base_ref": base,
+               "rust_files_changed": ["crates/b.rs", "seams/a.rs"],
+               "legs": {k: {"status": "pass", "exit_code": 0, "command": "c"} for k in gate.LEGS}}
+        doc["legs"]["ci"]["command"] = "cargo test --manifest-path seams/Cargo.toml --offline -j 2"
+        p = self.d / "r2.json"
+        p.write_text(json.dumps(doc))
+        res = gate.check_g0p(p, repo, True)
+        self.assertFalse(res["ok"])                                       # crates/b.rs is outside seams/
+        self.assertIn("crates/b.rs", res["detail"])
+        doc["rust_files_changed"] = ["seams/a.rs"]
+        (repo / "crates" / "b.rs").unlink()
+        g("add", "-A"); g("commit", "-qm", "drop")
+        doc["head_sha"] = g("rev-parse", "HEAD")
+        p.write_text(json.dumps(doc))
+        self.assertTrue(gate.check_g0p(p, repo, True)["ok"])
+
     def test_replay_fixtures_digest_is_recomputed(self):
         res = self.run_gate(self.edit("replay.json", lambda r: r.update(fixtures_digest="sha256:" + "0" * 64)))
         self.assertIn("replay", failed(res))

@@ -120,6 +120,15 @@ def check_g0p(path, repo, ancestry=True):
                     p.append(f"rust_files_changed does not match git ({len(rust)} Rust file(s) since {base})")
                 if rust and "cargo" not in str((doc.get("legs") or {}).get("ci", {}).get("command", "")).lower():
                     p.append("Rust files changed but the ci leg did not run cargo")
+                else:
+                    # a cargo leg that names --manifest-path covers only that workspace's directory
+                    cmd = str((doc.get("legs") or {}).get("ci", {}).get("command", ""))
+                    roots = [m.rsplit("/", 1)[0] if "/" in m else "" for m in
+                             (x.replace("\\", "/").lstrip("./") for x in re.findall(r"--manifest-path[ =]['\"]?([^\s'\"]+)", cmd))]
+                    if rust and roots:
+                        out = [f for f in rust if not any(r == "" or f == r or f.startswith(r + "/") for r in roots)]
+                        if out:
+                            p.append(f"Rust files outside the cargo leg's --manifest-path coverage: {', '.join(out)}")
     return _res("g0p", not p, "; ".join(p) or f"pre-pr-gate pass at {head[:12]}")
 
 
