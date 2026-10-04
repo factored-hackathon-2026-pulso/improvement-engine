@@ -9,9 +9,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _exporter_policy():
-    sys.path.insert(0, str(ROOT / "platform-exporter" / "src"))
-    from platform_exporter import policy
-    return policy
+    import importlib.util
+    f = ROOT / "platform-exporter" / "src" / "platform_exporter" / "policy.py"
+    spec = importlib.util.spec_from_file_location("exporter_policy", f)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def test_committed_sql_equals_render():
