@@ -17,4 +17,8 @@ path = "../thread10/src/bin/synth_runner.rs"
 [dependencies]
 debug-api = { path = "../debug-api" }
 serde_json = "1"
+sources = { path = "../sources" }
 thread10 = { path = "../thread10" }
+
+[dev-dependencies]
+rusqlite = { version = "0.39.0", features = ["bundled"] }

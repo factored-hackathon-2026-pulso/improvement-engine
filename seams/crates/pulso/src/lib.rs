@@ -2,4 +2,5 @@
 pub mod cli;
 pub mod doubles;
 pub mod live;
+pub mod monitor_cmd;
 pub mod sink;
