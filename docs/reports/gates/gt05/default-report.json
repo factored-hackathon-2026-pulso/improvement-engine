@@ -58,22 +58,22 @@
    "status": "not_exercised"
   },
   {
-   "data_class": null,
+   "data_class": "synthetic",
    "part": "approval",
-   "provider": null,
-   "status": "red"
-  },
-  {
-   "data_class": null,
-   "part": "publish",
-   "provider": null,
-   "status": "red"
+   "provider": "simulated-issuer",
+   "status": "simulated"
   },
   {
    "data_class": "synthetic",
+   "part": "publish",
+   "provider": "claude-standin",
+   "status": "stand-in"
+  },
+  {
+   "data_class": "simulated",
    "part": "observation",
-   "provider": null,
-   "status": "not_exercised"
+   "provider": "platform-sim",
+   "status": "simulated"
   },
   {
    "observed": true,
@@ -93,7 +93,7 @@
   {
    "observed": true,
    "part": "issuer",
-   "status": "red"
+   "status": "simulated"
   },
   {
    "observed": true,
@@ -108,7 +108,7 @@
   {
    "observed": true,
    "part": "product",
-   "status": "red"
+   "status": "simulated"
   },
   {
    "part": "scanner",
@@ -165,7 +165,7 @@
   }
  ],
  "quality_claims": "forbidden",
- "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+ "sha": "166a4023d4f7081335386d6d16de5555f7201488",
  "steps": [
   {
    "contract_revision": "engine-run/c2-1",
@@ -176,7 +176,7 @@
    "receipt": {
     "provider": "local"
    },
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
    "status": "stand-in",
    "target": "local"
   },
@@ -189,7 +189,7 @@
    "receipt": {
     "provider": "local"
    },
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
    "status": "real-narrow",
    "target": "local"
   },
@@ -205,7 +205,7 @@
     "provider": "agent_roleplay",
     "scanner_id": "tps-1"
    },
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
    "stage_output": {
     "source": "model"
    },
@@ -224,7 +224,7 @@
     "provider": "agent_roleplay",
     "scanner_id": "tps-1"
    },
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
    "stage_output": {
     "source": "model"
    },
@@ -243,7 +243,7 @@
     "provider": "agent_roleplay",
     "scanner_id": "tps-1"
    },
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
    "stage_output": {
     "source": "model"
    },
@@ -259,7 +259,7 @@
    "receipt": {
     "provider": "claude-standin"
    },
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
    "status": "stand-in",
    "target": "local"
   },
@@ -273,7 +273,7 @@
    "receipt": {
     "provider": "claude-standin"
    },
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
    "status": "stand-in",
    "target": "local"
   },
@@ -283,38 +283,47 @@
    "host": "python",
    "id": "revision",
    "n": 7,
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
    "status": "not_exercised",
-   "target": "local"
-  },
-  {
-   "contract_revision": "engine-run/c2-1",
-   "data_class": null,
-   "host": "python",
-   "id": "approval",
-   "n": 8,
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
-   "status": "red",
-   "target": "local"
-  },
-  {
-   "contract_revision": "engine-run/c2-1",
-   "data_class": null,
-   "host": "python",
-   "id": "publish",
-   "n": 9,
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
-   "status": "red",
    "target": "local"
   },
   {
    "contract_revision": "engine-run/c2-1",
    "data_class": "synthetic",
    "host": "python",
+   "id": "approval",
+   "n": 8,
+   "receipt": {
+    "provider": "simulated-issuer"
+   },
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
+   "status": "simulated",
+   "target": "local"
+  },
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "synthetic",
+   "host": "python",
+   "id": "publish",
+   "n": 9,
+   "receipt": {
+    "provider": "claude-standin"
+   },
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
+   "status": "stand-in",
+   "target": "local"
+  },
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "simulated",
+   "host": "python",
    "id": "observation",
    "n": 10,
-   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
-   "status": "not_exercised",
+   "receipt": {
+    "provider": "platform-sim"
+   },
+   "sha": "166a4023d4f7081335386d6d16de5555f7201488",
+   "status": "simulated",
    "target": "local"
   }
  ],

@@ -1,10 +1,10 @@
 {
  "calls": 5,
  "command": "python scripts/gov/gt05_collect.py --out-dir <dir> (thread01 replay, steps_mode=rust)",
- "exit_code": 1,
+ "exit_code": 0,
  "misses": 0,
  "mode": "rust",
- "report_sha256": "sha256:a456a817ad075b48616f16290954bb515c381cf0645694f0ca87833feecf4ddf",
+ "report_sha256": "sha256:64b58ee3217007e005220f4d53eb71c496cdb72278a89c24030be57c43d19935",
  "schema": "gt05-run/v1",
  "steps_exe": "D:\\cargo-targets\\claude-seams\\debug\\steps_cli.exe",
  "steps_exe_sha256": "0af44264059d77cf10157fdffce2e6f4be294f971649536dbf94b1085c4e5f5e"

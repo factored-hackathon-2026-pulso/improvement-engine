@@ -19,23 +19,23 @@
   },
   {
    "item": "g1_check",
-   "ok": false,
-   "detail": "S1 approval: status outside honesty vocabulary; S1 approval: missing data_class; S1 publish: status outside honesty vocabulary; S1 publish: missing data_class"
+   "ok": true,
+   "detail": "engine_run.check() clean (G1, S1, tests 1-8)"
   },
   {
    "item": "no_red_steps",
-   "ok": false,
-   "detail": "approval: ; publish: "
+   "ok": true,
+   "detail": "no red step"
   },
   {
    "item": "run_record",
-   "ok": false,
-   "detail": "exit_code 1"
+   "ok": true,
+   "detail": "rust-mode run, exit 0, 5 calls, 0 misses, bound to the report"
   },
   {
    "item": "gt0_dependency",
-   "ok": false,
-   "detail": "g0p: Rust files changed after the receipt head (receipt is stale for Rust); rust_files_changed does not match git (24 Rust file(s) since origin/main); Rust files changed but the ci leg did not run cargo"
+   "ok": true,
+   "detail": "GT0 gate: 9/10 items pass (capacity excluded by design)"
   },
   {
    "item": "ratchet_default",
@@ -54,8 +54,8 @@
   },
   {
    "item": "rg1_ratchet_tests",
-   "ok": false,
-   "detail": "receipt is not a passing ratchet-receipt/v1 with a command"
+   "ok": true,
+   "detail": "7 ratchet test(s) passed"
   },
   {
    "item": "rg1_original",
