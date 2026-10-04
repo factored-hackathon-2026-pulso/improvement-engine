@@ -14,8 +14,11 @@ from typing import Any, Callable
 
 import yaml
 
+from codex_standin.dto import request_digest
+
 from . import compile_step as cmp
 
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _REF = re.compile(r"^([a-z_]+):([A-Za-z0-9._-]+)@([0-9]+)$")
 DOCS = {"description": "thread01 change", "rationale": "recorded synthetic opportunity", "changelog": "thread01"}
 
@@ -45,8 +48,15 @@ def make_dry_run(bridge: Any, world: dict, *, tenant: str, agent_id: str, base_r
         res = r.json()
         if not res.get("valid"):
             raise RuntimeError("core dry-run refused: " + "; ".join(f"{v['rule']}: {v['message']}" for v in res["violations"]))
-        h = res["candidate_hash"]
-        return h if h.startswith("sha256:") else "sha256:" + h
+        if res.get("request_digest") != request_digest(body):  # the answer must be about the request we sent
+            raise RuntimeError("core dry-run request_digest does not match the request sent")
+        if res.get("proposal_created") is not False:
+            raise RuntimeError("core dry-run reported proposal_created != false (dry-run must write nothing)")
+        h = res.get("candidate_hash")
+        h = h[7:] if isinstance(h, str) and h.startswith("sha256:") else h
+        if not isinstance(h, str) or not _HEX64.match(h):
+            raise RuntimeError("core dry-run valid answer without a well-formed candidate_hash")
+        return "sha256:" + h
     return dry_run
 
 
@@ -55,5 +65,8 @@ def make_alias_read(bridge: Any, *, tenant: str, agent_id: str) -> Callable:
         r = bridge.call("GET", f"/core-state/aliases/{agent_id}/{alias}", "aliases", tenant)
         if r.status_code != 200:
             raise RuntimeError(f"core alias read http {r.status_code}")
-        return {"release_id": r.json()["release_id"], "alias": alias}
+        res = r.json()
+        if res.get("alias") != alias or not isinstance(res.get("release_id"), str) or not res["release_id"]:
+            raise RuntimeError("core alias read answer does not match the requested alias or lacks release_id")
+        return {"release_id": res["release_id"], "alias": alias}
     return alias_read

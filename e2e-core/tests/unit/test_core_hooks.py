@@ -19,7 +19,9 @@ class FakeBridge:
         if op == "alias_read" or op == "aliases":
             return SimpleNamespace(status_code=self.alias_status, text="",
                                    json=lambda: {"release_id": "rel-base", "alias": path.rsplit("/", 1)[-1]})
-        body = ({"valid": True, "candidate_hash": "ab" * 32, "violations": []} if self.valid else
+        from codex_standin.dto import request_digest
+        body = ({"valid": True, "candidate_hash": "ab" * 32, "violations": [], "proposal_created": False,
+                 "request_digest": request_digest(json)} if self.valid else
                 {"valid": False, "candidate_hash": None, "violations": [{"rule": "REG-X", "message": "no"}]})
         return SimpleNamespace(status_code=200, text="", json=lambda: body)
 
@@ -64,3 +66,50 @@ def test_dry_run_hook_flips_step_5_to_real_narrow_in_the_thread(tmp_path):
     steps = {s["n"]: s for s in T.run_thread(cfg)["steps"]}
     assert steps[5]["status"] == "real-narrow" and steps[5]["detail"]["draft_plan"]["digest"] == "sha256:" + "ab" * 32
     assert steps[6]["status"] == "stand-in" and steps[9]["status"] == "stand-in"
+
+
+class EchoBridge(FakeBridge):
+    """Mimics Core's dry-run answer: echoes the digest of the body it received (override fields to simulate faults)."""
+    def __init__(self, **over):
+        super().__init__()
+        self.over = over
+
+    def call(self, method, path, op, tenant, json=None, **kw):
+        from codex_standin.dto import request_digest
+        if op != "dry_run":
+            return super().call(method, path, op, tenant, json=json, **kw)
+        body = {"valid": True, "candidate_hash": "cd" * 32, "violations": [], "proposal_created": False,
+                "request_digest": request_digest(json), **self.over}
+        return SimpleNamespace(status_code=200, text="", json=lambda: body)
+
+
+def _hook(b):
+    return H.make_dry_run(b, WORLD, tenant="t1", agent_id="atencion", base_release_id="rel-base")
+
+
+def test_dry_run_accepts_an_answer_bound_to_the_request_we_sent():
+    assert _hook(EchoBridge())([rep()]) == "sha256:" + "cd" * 32
+
+
+def test_dry_run_rejects_an_answer_bound_to_another_request_digest():
+    with pytest.raises(RuntimeError, match="request_digest"):
+        _hook(EchoBridge(request_digest="0" * 64))([rep()])
+
+
+@pytest.mark.parametrize("bad", [None, "", "zz", "ab" * 31])
+def test_dry_run_rejects_a_valid_answer_without_a_wellformed_candidate_hash(bad):
+    with pytest.raises(RuntimeError, match="candidate_hash"):
+        _hook(EchoBridge(candidate_hash=bad))([rep()])
+
+
+def test_dry_run_rejects_an_answer_that_created_a_proposal():
+    with pytest.raises(RuntimeError, match="proposal_created"):
+        _hook(EchoBridge(proposal_created=True))([rep()])
+
+
+def test_alias_read_rejects_an_answer_for_another_alias_or_without_release():
+    class B(FakeBridge):
+        def call(self, *a, **k):
+            return SimpleNamespace(status_code=200, text="", json=lambda: {"release_id": "", "alias": "prod"})
+    with pytest.raises(RuntimeError, match="alias"):
+        H.make_alias_read(B(), tenant="t1", agent_id="atencion")(None, "staging")
