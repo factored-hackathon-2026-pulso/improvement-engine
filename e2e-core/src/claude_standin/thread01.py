@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -361,10 +362,13 @@ def _role(stage: str, responder: str | None = None, **extra) -> dict:
 
 def step_03(ctx: Ctx) -> list[dict]:
     llm, db, caps = _llm(ctx), ctx.out["lab_db"], ctx.out["m3"]["caps"]
+    llm.shim.registry.allow({FAMILY_ID, "binding-scout-0001", "binding-verifier-0001"})  # the stage's own literals
     out, calls = agent_loop(llm, "scout", "Find the largest recurrence in the treated lab.",
                             {"family_id": FAMILY_ID, "binding_id": "binding-scout-0001"}, db, caps["scout"])
     hyps = out["hypotheses"]
     scout = _role("scout", llm.responders.get("scout"), detail={"calls": calls, "hypotheses": len(hyps)})
+    # model-authored hypothesis ids are echoed back only in a strict machine shape (anything else is rejected by the TPS)
+    llm.shim.registry.allow({h["hypothesis_id"] for h in hyps if re.fullmatch(r"h_[a-z0-9_]{1,40}", str(h.get("hypothesis_id")))})
     v_out, v_calls = agent_loop(llm, "verifier", "Verify the hypotheses against the treated lab.",
                                 {"family_id": FAMILY_ID, "binding_id": "binding-verifier-0001", "hypotheses": hyps},
                                 db, caps["verifier"])
@@ -415,6 +419,9 @@ def step_04(ctx: Ctx) -> dict:
     inputs = {"binding_id": "binding-builder-0001", "finding_ref": di["finding_ref"], "category": di["category"],
               "evidence_refs": di["evidence_refs"],
               "candidates": [{"target_ref": _enc(c["target_ref"]), "op": c["op"]} for c in di["candidates"]]}
+    # exactly the tokens this stage derives from its own catalogue and finding: nothing else is expected
+    llm.shim.registry.allow({inputs["binding_id"], inputs["finding_ref"], inputs["category"],
+                             *(c["target_ref"] for c in inputs["candidates"]), *(c["op"] for c in inputs["candidates"])})
     out, calls = agent_loop(llm, "builder_design", "Design one change for the finding, or do nothing.", inputs, db,
                             caps["builder_design"])
     di_out = dict(out["design_intent"])
