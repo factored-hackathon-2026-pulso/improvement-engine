@@ -141,3 +141,10 @@ def test_default_batch_id_is_content_hash(tmp_path):
 def test_generic_over_product_schema():
     p = lp.build_plan("product", "event_log", ["sequence", "event_id"], "b", "f")
     assert p.copy_sql.startswith("COPY product.event_log (sequence, event_id")
+
+
+def test_forbidden_tables_refused_by_policy_not_just_unknown(monkeypatch):
+    # mutation guard: with FORBIDDEN_TABLES emptied, the refusal must change, so the set is load-bearing.
+    for t in ("labels", "e0_labels", "pseudonym_map", "bank_login_accounts", "mfa_challenges"):
+        with pytest.raises(lp.LoaderRefusal, match="never loaded"):
+            lp.build_plan("raw", t, ["case_id"], "b1", "f.parquet")
