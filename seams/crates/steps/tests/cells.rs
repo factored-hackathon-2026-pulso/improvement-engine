@@ -238,3 +238,115 @@ fn config_is_explicit_and_k_is_ten() {
     let r = analyse(&grid("M1", &planted_queja_phone).join("\n"), &c).unwrap();
     assert_eq!(r.cells_explored, 10);
 }
+
+// ---- follow-up: same-channel baseline, R2 windows, dependency flag ----
+
+fn prow(metric: &str, reason: &str, channel: &str, half: &str, period: &str, num: i64, den: i64) -> String {
+    format!(
+        "{{\"metric\":\"{metric}\",\"dims\":{{\"reason_category\":\"{reason}\",\"channel\":\"{channel}\"}},\"half\":\"{half}\",\"period\":\"{period}\",\"numerator\":{num},\"denominator\":{den}}}"
+    )
+}
+
+fn find_m<'a>(j: &'a Json, metric: &str, reason: &str, channel: &str) -> Option<&'a Json> {
+    signals(j).into_iter().find(|s| {
+        s.get("metric").and_then(|v| v.as_str()) == Some(metric)
+            && s.get("dims").and_then(|d| d.get("reason_category")).and_then(|v| v.as_str()) == Some(reason)
+            && s.get("dims").and_then(|d| d.get("channel")).and_then(|v| v.as_str()) == Some(channel)
+    })
+}
+
+#[test]
+fn channel_mix_and_a_dominant_reason_do_not_fabricate_findings() {
+    // No reason effect anywhere: Phone 10% and Chat 40% for EVERY reason; Chat/Queja is huge.
+    let mut rows = vec![];
+    for r in REASONS {
+        for (c, permille) in [("Phone", 100i64), ("Chat", 400i64)] {
+            for (half, base) in [("discovery", 600i64), ("holdout", 600i64)] {
+                let den = if r == "Queja" && c == "Chat" { base * 8 } else { base };
+                rows.push(row("M1", r, c, half, den * permille / 1000, den));
+            }
+        }
+    }
+    let j = out(&rows);
+    let found = signals(&j)
+        .into_iter()
+        .filter(|s| matches!(s.get("status").and_then(|v| v.as_str()), Some("corroborated") | Some("candidate")))
+        .count();
+    assert_eq!(found, 0, "pooled-over-channels baselines would flag every Chat cell");
+}
+
+#[test]
+fn baseline_excludes_own_reason_within_the_same_channel() {
+    let j = out(&grid("M1", &planted_queja_phone));
+    let d = find(&j, "Queja", "Phone").unwrap().get("discovery").unwrap();
+    // Phone rest = the other four Phone cells at 20%, not the whole metric.
+    let base = d.get("baseline_rate").and_then(|v| v.as_f64()).unwrap();
+    assert!((base - 0.2).abs() < 1e-9);
+}
+
+fn r2_rows(effect_in: &dyn Fn(&str) -> bool) -> Vec<String> {
+    let periods = ["2023-08", "2024-06", "2025-03", "2026-02"];
+    let mut rows = vec![];
+    for r in REASONS {
+        for c in CHANNELS {
+            for half in ["discovery", "holdout"] {
+                for p in periods {
+                    let permille = if r == "Queja" && c == "Phone" && effect_in(p) { 300 } else { 200 };
+                    rows.push(prow("M1", r, c, half, p, 300 * permille / 1000, 300));
+                }
+            }
+        }
+    }
+    rows
+}
+
+#[test]
+fn r2_windows_confirm_a_persistent_effect() {
+    let j = out(&r2_rows(&|_| true));
+    let s = find(&j, "Queja", "Phone").unwrap();
+    assert_eq!(s.get("status").and_then(|v| v.as_str()), Some("corroborated"));
+    let r2 = s.get("r2").expect("r2 present");
+    assert_eq!(r2.get("status").and_then(|v| v.as_str()), Some("replicated"));
+    assert!(r2.get("w1").is_some() && r2.get("w2").is_some());
+}
+
+#[test]
+fn r2_windows_flag_an_effect_that_exists_in_one_window_only() {
+    let j = out(&r2_rows(&|p| p < "2025"));
+    let s = find(&j, "Queja", "Phone").unwrap();
+    let r2 = s.get("r2").unwrap();
+    assert_ne!(r2.get("status").and_then(|v| v.as_str()), Some("replicated"));
+}
+
+#[test]
+fn r2_is_not_evaluated_without_periods_and_partial_months_are_ignored() {
+    let j = out(&grid("M1", &planted_queja_phone));
+    let s = find(&j, "Queja", "Phone").unwrap();
+    assert_eq!(s.get("r2").and_then(|r| r.get("status")).and_then(|v| v.as_str()), Some("not_evaluated"));
+    let mut rows = r2_rows(&|_| true);
+    rows.push(prow("M1", "Queja", "Phone", "discovery", "2026-06", 290, 300)); // partial month, outside both windows
+    let j2 = out(&rows);
+    assert_eq!(
+        find(&j2, "Queja", "Phone").unwrap().get("r2").and_then(|r| r.get("status")).and_then(|v| v.as_str()),
+        Some("replicated")
+    );
+    let bad = prow("M1", "Queja", "Phone", "discovery", "2024-13", 20, 300);
+    assert!(run(&bad).is_err());
+}
+
+#[test]
+fn dependent_metric_findings_are_flagged_not_dropped() {
+    let mut rows = grid("M1", &planted_queja_phone);
+    let f6 = |r: &str, c: &str, _h: &str| match (r, c) {
+        ("Queja", "Phone") | ("Tecnico", "Chat") => Some(300),
+        _ => None,
+    };
+    rows.extend(grid("M6", &f6));
+    let j = out(&rows);
+    let dep = find_m(&j, "M6", "Queja", "Phone").expect("kept");
+    assert_eq!(dep.get("status").and_then(|v| v.as_str()), Some("corroborated"));
+    assert_eq!(dep.get("depends_on").and_then(|v| v.as_str()), Some("M1"));
+    let indep = find_m(&j, "M6", "Tecnico", "Chat").expect("kept");
+    assert!(indep.get("depends_on").is_none());
+    assert!(find_m(&j, "M1", "Queja", "Phone").unwrap().get("depends_on").is_none());
+}
