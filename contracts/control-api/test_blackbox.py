@@ -138,7 +138,7 @@ def _start_double(keys: Keys) -> tuple[str, Any]:
 def _start_rust(keys: Keys) -> tuple[str, Any]:
     assert Path(BIN).exists(), f"control-api binary not built: {BIN}"
     port = free_port()
-    env = {**os.environ, "E2E_VERIFY_KEYS": json.dumps(keys.verify_keys()), "E2E_PORT": str(port)}
+    env = {**os.environ, "E2E_VERIFY_KEYS": json.dumps(keys.verify_keys()), "E2E_PORT": str(port), "CONTROL_API_ADMIN": "1"}
     proc = subprocess.Popen([BIN], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     wait_port(port, proc)
     return f"http://127.0.0.1:{port}", proc
