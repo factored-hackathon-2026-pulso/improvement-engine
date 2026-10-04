@@ -719,9 +719,8 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
               **({"overrides": [ctx.out["override"]]} if ctx.out.get("override") else {}), "steps": rep_steps, "ports": ports,
               "authors": {"world": world["authors"].get("world"), "suite": world["authors"].get("suite"),
                           "effect": ctx.out.get("effect_author") or EFFECT_AUTHOR, "judge": JUDGE,
-                          "suite_sealed_at": SUITE_SEALED_AT, "candidate_created_at": ctx.out.get("candidate_created_at") or CANDIDATE_CREATED_AT}}
-    # G1 H5 requires a candidate timestamp; in an `unlinked` run no candidate exists, so the reserved ordering slot is
-    # reported (the suite is sealed before any candidate could exist). Contract gap noted in THREAD01.md.
+                          "suite_sealed_at": SUITE_SEALED_AT, "candidate_created_at": ctx.out.get("candidate_created_at")}}
+    # G1 H5: when compile is not exercised (an `unlinked` run) no candidate exists and candidate_created_at is null.
     observed = {"model": by.get((3, "scout"), {}).get("status", "red"),
                 "jev": "not_exercised(blocked: agent-core PR 28 not on main)",
                 "issuer": st(8), "product": "simulated" if st(9) == "stand-in" else st(9), "host": HOST,

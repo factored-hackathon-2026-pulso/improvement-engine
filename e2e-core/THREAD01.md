@@ -124,6 +124,4 @@ summary under the git-ignored `output/`; no fixture from it is committed. Respon
 | Leak scan | 0 raw case, query, customer or analyst ids or signatures in queue, workdir, summary, log; DC0 scan clean |
 
 Mapping: E0 categories are hashed query-signature groups that no catalogue entry declares, so `smap.e0_mapping` ends `unlinked`
-(valid honest ending); steps 5-10 report `not_exercised` with that reason. Contract gap: G1 rule H5 demands
-`candidate_created_at` even when no candidate exists; the report carries the reserved ordering slot. A contract change to
-accept null when step 5 is not_exercised is proposed, not made here.
+(valid honest ending); steps 5-10 report `not_exercised` with that reason. G1 rule H5 accepts a null `candidate_created_at` when the compile step is not exercised, so no reserved timestamp is reported.
