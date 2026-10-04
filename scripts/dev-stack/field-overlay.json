@@ -1,0 +1,107 @@
+{
+  "pulso_signal": {
+    "field_class": "public"
+  },
+  "pulso_signal.id": {
+    "field_class": "public"
+  },
+  "pulso_signal.kind": {
+    "field_class": "public"
+  },
+  "pulso_signal.segment": {
+    "field_class": "public"
+  },
+  "pulso_signal.topic": {
+    "field_class": "public"
+  },
+  "pulso_signal.metric": {
+    "field_class": "public"
+  },
+  "pulso_signal.value": {
+    "field_class": "public"
+  },
+  "pulso_signal.baseline": {
+    "field_class": "public"
+  },
+  "pulso_signal.window": {
+    "field_class": "public"
+  },
+  "proposal_id": {
+    "field_class": "public"
+  },
+  "rev": {
+    "field_class": "public"
+  },
+  "valid": {
+    "field_class": "public"
+  },
+  "agent_id": {
+    "field_class": "public"
+  },
+  "id": {
+    "field_class": "public"
+  },
+  "version": {
+    "field_class": "public"
+  },
+  "spec": {
+    "field_class": "public"
+  },
+  "kind": {
+    "field_class": "public"
+  },
+  "entity_id": {
+    "field_class": "public"
+  },
+  "model_profile": {
+    "field_class": "public"
+  },
+  "name": {
+    "field_class": "public"
+  },
+  "tools_allowed": {
+    "field_class": "public"
+  },
+  "mode": {
+    "field_class": "public"
+  },
+  "priority": {
+    "field_class": "public"
+  },
+  "type": {
+    "field_class": "public"
+  },
+  "ok": {
+    "field_class": "public"
+  },
+  "state": {
+    "field_class": "public"
+  },
+  "locales": {
+    "field_class": "untrusted_text"
+  },
+  "es": {
+    "field_class": "untrusted_text"
+  },
+  "description": {
+    "field_class": "untrusted_text"
+  },
+  "rationale": {
+    "field_class": "untrusted_text"
+  },
+  "changelog": {
+    "field_class": "untrusted_text"
+  },
+  "goal": {
+    "field_class": "untrusted_text"
+  },
+  "evidencia": {
+    "field_class": "untrusted_text"
+  },
+  "objetivo": {
+    "field_class": "untrusted_text"
+  },
+  "agente": {
+    "field_class": "untrusted_text"
+  }
+}

@@ -1,0 +1,5 @@
+id: t/mensaje_largo
+version: 1.0.0
+locales:
+  es: "El mensaje es muy largo."
+  pt: "A mensagem é muito longa."

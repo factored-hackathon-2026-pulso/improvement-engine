@@ -1,0 +1,133 @@
+id: pulso-construir
+version: 1.0.0
+priority: 50
+nodes:
+- id: redactar
+  type: agent
+  config:
+    tools_allowed:
+    - registry/get_entity@1
+    - registry/list_versions@1
+    max_steps: 6
+    prompt_ref: p/pulso-builder@1
+    goal: Produce the minimal registry change draft that satisfies the goal on the target agent, grounded in the evidence.
+    save_as: borrador
+    input_view:
+    - slots.evidencia
+    - slots.agente
+    - slots.objetivo
+    output_schema:
+      type: object
+      additionalProperties: false
+      required:
+      - changes
+      properties:
+        changes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - kind
+            - content
+            - docs
+            properties:
+              kind:
+                type: string
+              content:
+                type: object
+              docs:
+                type: object
+                additionalProperties: false
+                required:
+                - description
+                - rationale
+                - changelog
+                properties:
+                  description:
+                    type: string
+                  rationale:
+                    type: string
+                  changelog:
+                    type: string
+  next:
+    answered: crear
+    gave_up: esc
+- id: crear
+  type: tool
+  config:
+    draft: true
+    tool: registry/create_proposal@1
+    args:
+      agent_id: slots.agente
+      origin: auto_detect
+      title: slots.objetivo
+    save_as: propuesta
+  next:
+    ok: vcrear
+    uncertain: vcrear
+    denied: esc
+- id: vcrear
+  type: verify
+  config:
+    readback: registry/get_write@1
+    by: idempotency_key
+    predicate:
+      ==:
+      - var: readback.op
+      - create_proposal
+    save_as: crear_ok
+  next:
+    verified: guardar
+    failed: esc
+- id: guardar
+  type: tool
+  config:
+    draft: true
+    tool: registry/put_draft@1
+    args:
+      proposal_id: facts.propuesta.value.proposal_id
+      expected_rev: facts.propuesta.value.rev
+      changes: facts.borrador.value.changes
+    save_as: guardado
+  next:
+    ok: vguardar
+    uncertain: vguardar
+    denied: esc
+- id: vguardar
+  type: verify
+  config:
+    readback: registry/get_write@1
+    by: idempotency_key
+    predicate:
+      ==:
+      - var: readback.op
+      - put_draft
+    save_as: guardar_ok
+  next:
+    verified: validar
+    failed: esc
+- id: validar
+  type: tool
+  config:
+    tool: registry/validate@1
+    args:
+      proposal_id: facts.propuesta.value.proposal_id
+    save_as: validacion
+  next:
+    ok: fin
+    error: esc
+    timeout: esc
+    denied: esc
+- id: fin
+  type: end
+  config:
+    outcome: completed
+    output_map:
+      proposal_id: facts.propuesta.value.proposal_id
+      valid: facts.validacion.value.valid
+      rev: facts.propuesta.value.rev
+- id: esc
+  type: escalate
+  config:
+    reason_code: tool_failure

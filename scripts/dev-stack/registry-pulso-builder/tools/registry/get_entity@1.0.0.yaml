@@ -1,0 +1,20 @@
+id: registry/get_entity
+version: 1.0.0
+risk_class: read
+min_auth_level: session
+idempotent: true
+confirmation_ttl: PT5M
+description: Lee una versión de una entidad del registry.
+args_schema:
+  type: object
+  additionalProperties: false
+  required:
+  - kind
+  - entity_id
+  properties:
+    kind:
+      type: string
+    entity_id:
+      type: string
+    version:
+      type: string
