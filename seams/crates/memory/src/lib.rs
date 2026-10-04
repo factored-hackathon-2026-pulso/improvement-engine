@@ -49,19 +49,42 @@ impl EvidenceStore {
 pub struct Memory {
     #[allow(dead_code)]
     evidence: EvidenceStore,
+    notes: BTreeMap<String, Note>,
+    seq: u64,
+}
+
+impl Status {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Status::Active => "active",
+            Status::Confirmed => "confirmed",
+            Status::Contradicted => "contradicted",
+        }
+    }
 }
 
 impl Memory {
     pub fn new(evidence: EvidenceStore) -> Self {
-        Self { evidence }
+        Self { evidence, notes: BTreeMap::new(), seq: 0 }
     }
-    pub fn add_note(&mut self, _n: NewNote) -> Result<String, MemError> {
-        Err(MemError::NotImplemented)
+    pub fn add_note(&mut self, n: NewNote) -> Result<String, MemError> {
+        self.seq += 1;
+        let id = format!("note-{:04}", self.seq);
+        self.notes.insert(
+            id.clone(),
+            Note { id: id.clone(), claim_key: n.claim_key, statement: n.statement, evidence: n.evidence, status: Status::Active },
+        );
+        Ok(id)
     }
-    pub fn note(&self, _id: &str) -> Option<&Note> {
-        None
+    pub fn note(&self, id: &str) -> Option<&Note> {
+        self.notes.get(id)
     }
-    pub fn artifact(&self, _id: &str) -> Option<serde_json::Value> {
-        None
+    pub fn artifact(&self, id: &str) -> Option<serde_json::Value> {
+        let n = self.notes.get(id)?;
+        Some(serde_json::json!({
+            "id": n.id, "claim_key": n.claim_key, "statement": n.statement,
+            "evidence_refs": n.evidence, "status": n.status.as_str(),
+            "scope": SCOPE, "durable": false,
+        }))
     }
 }
