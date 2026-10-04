@@ -41,3 +41,29 @@ fn runner_schema_equals_union_of_existing_test_setups() {
         only_expected.len(), only_actual.len(), &only_expected[..only_expected.len().min(5)], &only_actual[..only_actual.len().min(5)]
     );
 }
+
+#[test]
+fn snapshot_detects_order_comments_grants_rls_and_sequences() {
+    let Some(db) = TempDb::create() else { return };
+    let mut c = db.connect();
+    c.batch_execute("CREATE TABLE s_t (a int, b int)").unwrap();
+    let base = schema::snapshot(&mut c).unwrap();
+    let mut prev = base.clone();
+    let mut changed = |c: &mut postgres::Client, sql: &str| {
+        c.batch_execute(sql).unwrap();
+        let now = schema::snapshot(c).unwrap();
+        assert_ne!(now, prev, "snapshot blind to: {sql}");
+        prev = now;
+    };
+    changed(&mut c, "COMMENT ON TABLE s_t IS 'x'");
+    changed(&mut c, "COMMENT ON COLUMN s_t.a IS 'x'");
+    changed(&mut c, "GRANT SELECT ON s_t TO PUBLIC");
+    changed(&mut c, "ALTER TABLE s_t ENABLE ROW LEVEL SECURITY");
+    changed(&mut c, "CREATE SEQUENCE s_seq");
+    changed(&mut c, "CREATE TYPE s_enum AS ENUM ('a')");
+    // column order: a new database with b before a must differ
+    let other = TempDb::create().unwrap();
+    let mut o = other.connect();
+    o.batch_execute("CREATE TABLE s_t (b int, a int)").unwrap();
+    assert_ne!(schema::snapshot(&mut o).unwrap(), base, "column order invisible");
+}

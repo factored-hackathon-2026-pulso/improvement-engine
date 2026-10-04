@@ -68,6 +68,8 @@ pub fn discover(dir: &Path) -> Result<Vec<Migration>, Error> {
         let file = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_owned();
         let (version, id) = parse_name(&file)?;
         let sql = fs::read_to_string(&path).map_err(|e| Error::Io(format!("{file}: {e}")))?;
+        // Execute exactly the bytes that were checksummed, so CRLF checkouts build the same schema.
+        let sql = sql.replace("\r\n", "\n");
         out.push(Migration { id, version, checksum: checksum(&sql), sql });
     }
     out.sort_by(|a, b| (a.version, &a.id).cmp(&(b.version, &b.id)));
