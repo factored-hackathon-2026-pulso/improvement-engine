@@ -46,9 +46,23 @@ fn respond(request: tiny_http::Request, resp: Resp) {
 
 static STREAMS: AtomicUsize = AtomicUsize::new(0);
 
+/// A route answered before the debug-api sees the request (the embedding binary's own probes); `None` = not mine.
+pub type Front = Arc<dyn Fn(&Req) -> Option<Resp> + Send + Sync>;
+
 pub fn serve(server: tiny_http::Server, app: Arc<App>) {
+    serve_with(server, app, None, Arc::new(|| false))
+}
+
+/// `serve` for an embedding binary: `front` answers its own routes first and `stop` (polled every 100 ms while idle)
+/// ends the accept loop, so the caller can shut the listener down. In-flight feeds end with the process.
+pub fn serve_with(server: tiny_http::Server, app: Arc<App>, front: Option<Front>, stop: Arc<dyn Fn() -> bool + Send + Sync>) {
     let inflight = Arc::new(AtomicUsize::new(0));
-    for mut request in server.incoming_requests() {
+    while !stop() {
+        let mut request = match server.recv_timeout(Duration::from_millis(100)) {
+            Ok(Some(r)) => r,
+            Ok(None) => continue,
+            Err(_) => break,
+        };
         if request.body_length().is_some_and(|n| n as u64 > MAX_BODY) {
             refuse(request, 413, "payload_too_large");
             continue;
@@ -58,7 +72,7 @@ pub fn serve(server: tiny_http::Server, app: Arc<App>) {
             refuse(request, 503, "overloaded");
             continue;
         }
-        let (app, inflight) = (app.clone(), inflight.clone());
+        let (app, inflight, front) = (app.clone(), inflight.clone(), front.clone());
         thread::spawn(move || {
             let _guard = Guard(&inflight);
             let mut body = Vec::new();
@@ -66,6 +80,9 @@ pub fn serve(server: tiny_http::Server, app: Arc<App>) {
             let headers: HashMap<String, String> = request.headers().iter().map(|h| (h.field.as_str().as_str().to_ascii_lowercase(), h.value.to_string())).collect();
             let (path, query) = request.url().split_once('?').map_or((request.url(), ""), |(p, q)| (p, q));
             let req = Req { method: request.method().as_str().to_string(), path: path.to_string(), query: query.to_string(), headers, body };
+            if let Some(resp) = front.as_ref().and_then(|f| f(&req)) {
+                return respond(request, resp);
+            }
             match app.stream_route(&req) {
                 Some(Ok(plan)) => stream(request, &app, &plan),
                 Some(Err(resp)) => respond(request, resp),
