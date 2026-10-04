@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 const BK0: &str = include_str!("../../../../contracts/artifact-kinds/matrix.json");
 
 pub const VIABLE_REASONS: [&str; 1] = ["structural_gate_passed"];
-pub const NOT_VIABLE_REASONS: [&str; 3] = ["gate_failed", "verifier_refuted", "claim_not_corroborated"];
+pub const NOT_VIABLE_REASONS: [&str; 4] = ["gate_failed", "native_eval_failed", "verifier_refuted", "claim_not_corroborated"];
 pub const NOT_EVALUABLE_REASONS: [&str; 10] = [
     "kind_not_supported",
     "release_settings_not_allowed",
