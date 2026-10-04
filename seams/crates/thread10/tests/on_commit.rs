@@ -40,3 +40,14 @@ fn run_exposes_the_committed_payload_and_on_payload_sees_it_growing() {
     let p = r.payload.expect("committed payload");
     assert!(p["out"]["gate"]["verdict"].is_string() && p["out"]["authority"]["state"] == "approved", "{p}");
 }
+
+#[test]
+fn the_final_report_carries_the_committed_payload_so_a_report_alone_can_fill_the_panels() {
+    let d = std::env::temp_dir().join(format!("t10-committed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let mut o = Opts::new(d, env!("CARGO_BIN_EXE_synth_runner").into());
+    o.human_override = true;
+    let r = run(&o).expect("run");
+    assert_eq!(r.report["committed"], r.payload.clone().unwrap(), "the report says what the job committed");
+    assert_eq!(r.report["steps"].as_array().unwrap().len(), 12, "the C-2 steps are untouched");
+}
