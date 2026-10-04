@@ -211,6 +211,17 @@ class ArtifactEnvelopeContractTest(unittest.TestCase):
 
         self.assertIn("invalid_family_entry", report["errors"])
 
+    def test_spec22_report_returns_validation_error_for_unhashable_status(self) -> None:
+        from copy import deepcopy
+        from unittest.mock import patch
+
+        families = deepcopy(spec22_coverage_report()["families"])
+        next(item for item in families if item["name"] == "read_model")["contract_status"] = []
+        with patch("contracts.validate_fixtures._load", return_value={"families": families}):
+            report = spec22_coverage_report()
+
+        self.assertIn("invalid_contract_status:read_model", report["errors"])
+
 
 if __name__ == "__main__":
     unittest.main()
