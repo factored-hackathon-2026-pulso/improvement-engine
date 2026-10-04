@@ -76,3 +76,44 @@ fn unknown_error_classification_fails_closed() {
     assert_eq!(core.requests().len(), 1, "unknown code is never retried");
     assert!(clock.0.lock().unwrap().is_empty());
 }
+
+#[test]
+fn relay_drops_the_response_after_the_effect_one_effect() {
+    let core = ArmCore::start(vec![]);
+    let relay = common::relay::TcpRelay::start(&core.addr, 1);
+    let rep = client(&relay.addr).run_arm_reconciled("t1", Some("job-1"), &req(), &RetryPolicy::default(), &TestClock::default()).unwrap();
+    assert_eq!(relay.dropped.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(core.effects(), 1);
+    assert_eq!(rep.execution_id, core_client::canon::arm_execution_id("t1", "k5a-arm-1").unwrap());
+}
+
+#[test]
+fn request_lost_before_the_effect_is_absent_then_sent_once_with_the_same_key() {
+    let core = ArmCore::start(vec![Fault::DropBeforeEffect]);
+    run(&core, &TestClock::default(), &RetryPolicy::default()).unwrap();
+    assert_eq!(core.effects(), 1);
+    let keys: Vec<_> = core.requests().into_iter().filter(|r| r.0 == "POST").map(|r| r.2).collect();
+    assert_eq!(keys, vec![Some("k5a-arm-1".to_string()); 2]);
+}
+
+#[test]
+fn crash_after_write_reconcile_finds_the_effect_or_reports_absent() {
+    use core_client::reconcile::Reconciled;
+    // the first process wrote the effect and died before recording it (no response ever read)
+    let core = ArmCore::start(vec![Fault::DropAfterEffect]);
+    let first = client(&core.addr).with_attempts(1);
+    let _ = first.run_arm("t1", Some("job-1"), &req()); // outcome lost to the "crash"
+    drop(first);
+    assert_eq!(core.effects(), 1);
+    // restarted process: only the key survives
+    let resumed = client(&core.addr);
+    match resumed.reconcile_arm("t1", Some("job-1"), "k5a-arm-1").unwrap() {
+        Reconciled::Found(r) => assert_eq!(r.execution_id, core_client::canon::arm_execution_id("t1", "k5a-arm-1").unwrap()),
+        Reconciled::Absent => panic!("effect exists"),
+    }
+    assert_eq!(resumed.reconcile_arm("t1", Some("job-1"), "never-sent").unwrap(), Reconciled::Absent);
+    assert_eq!(core.effects(), 1, "reconcile is read-only");
+    // and a re-run after the crash replays instead of double-effecting
+    resumed.run_arm_reconciled("t1", Some("job-1"), &req(), &RetryPolicy::default(), &TestClock::default()).unwrap();
+    assert_eq!(core.effects(), 1);
+}

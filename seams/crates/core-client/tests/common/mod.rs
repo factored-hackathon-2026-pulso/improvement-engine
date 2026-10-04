@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 pub mod armcore;
 pub mod golden;
+pub mod relay;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
