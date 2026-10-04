@@ -1,0 +1,11 @@
+{
+  "schema": "gt05-manifest/v1",
+  "reviews_dir": "../../../reviews/claude",
+  "gt0_manifest": "../gt0/manifest.json",
+  "artifacts": {
+    "rust_report": "rust-report.json",
+    "default_report": "default-report.json",
+    "run": "rust-run.json",
+    "ratchet_receipt": "ratchet.json"
+  }
+}

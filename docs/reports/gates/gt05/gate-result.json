@@ -1,0 +1,66 @@
+{
+ "schema": "gt05-gate-result/v1",
+ "verdict": "fail",
+ "items": [
+  {
+   "item": "rust_flips",
+   "ok": true,
+   "detail": "steps 2-6 real-narrow, host=python, semantics=claude-standin, Rust-labelled"
+  },
+  {
+   "item": "exe_sha256",
+   "ok": true,
+   "detail": "5 step(s) match the binary on disk (0af44264059d)"
+  },
+  {
+   "item": "fallback_disclosure",
+   "ok": true,
+   "detail": "no silent Python fallback among steps 2-6"
+  },
+  {
+   "item": "g1_check",
+   "ok": false,
+   "detail": "S1 approval: status outside honesty vocabulary; S1 approval: missing data_class; S1 publish: status outside honesty vocabulary; S1 publish: missing data_class"
+  },
+  {
+   "item": "no_red_steps",
+   "ok": false,
+   "detail": "approval: ; publish: "
+  },
+  {
+   "item": "run_record",
+   "ok": false,
+   "detail": "exit_code 1"
+  },
+  {
+   "item": "gt0_dependency",
+   "ok": false,
+   "detail": "g0p: Rust files changed after the receipt head (receipt is stale for Rust); rust_files_changed does not match git (24 Rust file(s) since origin/main); Rust files changed but the ci leg did not run cargo"
+  },
+  {
+   "item": "ratchet_default",
+   "ok": true,
+   "detail": "default run unchanged (python steps, no Rust keys); untouched steps agree with the Rust run"
+  },
+  {
+   "item": "crv1",
+   "ok": true,
+   "detail": "16 review logs closed; required STP1, CMP, GSI, E3b, K0, ED0b, M5a, PX0, G2, TA0 covered"
+  },
+  {
+   "item": "rg1",
+   "ok": true,
+   "detail": "all 5 real-narrow step(s) are served by a Rust step"
+  },
+  {
+   "item": "rg1_ratchet_tests",
+   "ok": false,
+   "detail": "receipt is not a passing ratchet-receipt/v1 with a command"
+  },
+  {
+   "item": "rg1_original",
+   "ok": false,
+   "detail": "MISSING: no Rust-steps run of the ED0b original source (the Rust sensor is not mapped to the original CSV)"
+  }
+ ]
+}
