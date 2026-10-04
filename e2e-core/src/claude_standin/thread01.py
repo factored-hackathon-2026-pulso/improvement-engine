@@ -389,6 +389,15 @@ def step_07(ctx: Ctx) -> dict:
                        "last_verdict": final}}
 
 
+def _denied(fn) -> bool:
+    from codex_standin import jwtsvc as J
+    try:
+        fn()
+    except J.Denied:
+        return True
+    return False
+
+
 def step_08(ctx: Ctx) -> dict:
     """Human only for authority: a SIMULATED local issuer signs an approval bound to the compiled draft digest.
     Replay verifies it with the local A03 Verifier; on the real Core the same JWS is verified by Core (INT0)."""
@@ -411,9 +420,16 @@ def step_08(ctx: Ctx) -> dict:
         tampered = False
     except J.Denied:
         tampered = True
+    h, pl, sg = token.split(".")
+    bad_payload = h + "." + J.b64u(json.dumps({**claims, "purpose": "publish:sha256:" + "0" * 64, "scope": "approve"},
+                                              sort_keys=True, separators=(",", ":")).encode()) + "." + sg
+    payload_rej = _denied(lambda: ver.verify(bad_payload, aud="pulso-core", scope="approve", purpose="publish:sha256:" + "0" * 64))
+    expired = J.sign(key, "sim-issuer-1", {**claims, "jti": "approval-0003", "exp": now - 1})
+    expired_rej = _denied(lambda: ver.verify(expired, aud="pulso-core", scope="approve", purpose=f"publish:{digest}"))
     ctx.out["approval"] = {"jti": ok["jti"], "digest": digest}
     return {"status": "simulated", "data_class": "synthetic", "receipt": {"provider": "simulated-issuer"},
-            "detail": {"bound_to_digest": digest, "tampered_rejected": tampered, "verified_by": "local-stand-in-verifier",
+            "detail": {"bound_to_digest": digest, "tampered_rejected": tampered, "payload_tamper_rejected": payload_rej,
+                       "expired_rejected": expired_rej, "verified_by": "local-stand-in-verifier",
                        "issuer": "simulated"}}
 
 
@@ -540,8 +556,10 @@ def run_thread(cfg: ThreadConfig) -> dict:
         except Exception as e:  # noqa: BLE001 - a step that cannot run is RED, never silently skipped
             steps.append(_finish(n, sid, {"status": "red", "error": f"{type(e).__name__}: {e}", "data_class": None,
                                           "detail": {}}, ctx))
+    llm = ctx.out.get("llm")  # the live counters, never a stale per-step snapshot: a miss in any stage must show
+    ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls} if llm else {"misses": 1, "calls": 0}
     ctx.out["report"] = build_report(ctx, steps)
-    return {"steps": steps, "mode": cfg.mode, "host": HOST, "replay": ctx.out.get("replay", {"misses": 1, "calls": 0}),
+    return {"steps": steps, "mode": cfg.mode, "host": HOST, "replay": ctx.out["replay"],
             "report": ctx.out.get("report", {}), "m3": ctx.out.get("m3", {}), "mapper": ctx.out.get("mapper"),
             "categories": ctx.out.get("categories"), "gate_verdict": ctx.out.get("gate_verdict"), "ctx": ctx.out}
 
