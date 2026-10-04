@@ -178,3 +178,43 @@ fn an_approval_without_override_never_claims_both_gates_passed_unless_the_commit
     assert!(!text.contains("Both gates passed"), "reason invented a pass the committed gate does not carry: {text}");
     assert!(text.contains("SIMULATED"), "{text}");
 }
+
+fn limit_text(report: Option<&Value>) -> (String, String) {
+    let evs = project(&full(), report, AT);
+    let inv = pick(&evs, "investigation_set");
+    let lim = inv["evidence"].as_array().unwrap().iter().find(|e| e["evidence_ref"]["id"] == "ev-limit-scripted-scout").expect("scout limit evidence").clone();
+    (lim["summary"].as_str().unwrap().to_string(), inv["hypothesis"].as_str().unwrap().to_string())
+}
+
+fn scout_report(label: &str, provider: &str, outcome: &str, real: bool) -> Value {
+    json!({"models": [{"role": "scout", "label": label, "model_id": "m-1", "outcome": outcome, "provider": provider, "real": real, "status": if real { "real" } else { "stand-in" }}]})
+}
+
+#[test]
+fn scout_limit_for_a_scripted_model_says_scripted_and_no_model() {
+    let (t, h) = limit_text(Some(&scout_report("scripted", "scripted", "answered", false)));
+    assert!(t.contains("scripted") && t.contains("no model produced it"), "{t}");
+    assert!(h.starts_with("Scripted scout claims"), "{h}");
+}
+
+#[test]
+fn scout_limit_for_a_roleplay_replay_does_not_say_scripted_and_names_the_replay() {
+    let (t, h) = limit_text(Some(&scout_report("roleplay", "agent-roleplay", "answered", false)));
+    assert!(t.contains("roleplay") && t.contains("replay") && t.contains("not a real model"), "{t}");
+    assert!(!t.contains("scripted value") && !t.contains("no model produced it"), "{t}");
+    assert!(!h.contains("Scripted"), "{h}");
+}
+
+#[test]
+fn scout_limit_for_a_gateway_answer_names_the_gateway_model_and_does_not_say_no_model() {
+    let (t, h) = limit_text(Some(&scout_report("gateway", "gateway:claude-x", "answered", true)));
+    assert!(t.contains("gateway") && t.contains("claude-x"), "{t}");
+    assert!(!t.contains("scripted value") && !t.contains("no model produced it"), "{t}");
+    assert!(!h.contains("Scripted"), "{h}");
+}
+
+#[test]
+fn scout_limit_without_a_report_keeps_the_scripted_text() {
+    let (t, _) = limit_text(None);
+    assert!(t.contains("scripted") && t.contains("no model produced it"), "{t}");
+}
