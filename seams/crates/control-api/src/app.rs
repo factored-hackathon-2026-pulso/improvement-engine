@@ -13,6 +13,8 @@ pub const MAX_ARTIFACT_BYTES: usize = 1024 * 1024;
 pub struct Req {
     pub method: String,
     pub path: String,
+    /// Raw query string without the `?` (empty when absent).
+    pub query: String,
     /// Lower-cased header names.
     pub headers: HashMap<String, String>,
     pub body: Vec<u8>,
@@ -314,6 +316,11 @@ impl App {
             let env = json!({"schema_version": "1", "artifact": {"id": id, "digest": format!("sha256:{}", sha256_hex(canon.as_bytes())), "media_type": "application/json"},
                              "encoding": "json", "content": item["content"], "byte_length": canon.len()});
             let _ = self.store.put_artifact(tenant, env);
+        }
+        for item in cfg.get("run_events").and_then(Value::as_array).into_iter().flatten() {
+            if let Err(e) = self.seed_run_events(item) {
+                return e;
+            }
         }
         for item in cfg.get("wiki").and_then(Value::as_array).into_iter().flatten() {
             let (Some(tenant), Some(path), Some(text)) = (item["tenant"].as_str(), item["path"].as_str(), item["content"].as_str()) else { return code(422, "schema_invalid") };

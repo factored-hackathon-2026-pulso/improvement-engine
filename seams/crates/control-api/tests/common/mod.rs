@@ -77,7 +77,7 @@ impl Rig {
         if let Some(t) = token {
             h.insert("authorization".into(), format!("Bearer {t}"));
         }
-        let r: Resp = self.app.handle(&Req { method: method.into(), path: path.into(), headers: h, body: body.map(|b| b.to_string().into_bytes()).unwrap_or_default() });
+        let r: Resp = self.app.handle(&Req { method: method.into(), path: path.into(), query: String::new(), headers: h, body: body.map(|b| b.to_string().into_bytes()).unwrap_or_default() });
         (r.status, serde_json::from_slice(&r.body).unwrap_or(Value::Null))
     }
 
