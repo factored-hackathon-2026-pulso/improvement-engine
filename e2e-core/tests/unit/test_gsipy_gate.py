@@ -107,3 +107,26 @@ def test_g1_hook_overrides_a_gate():
 
     o = G.gate_verdict(gin(), reports(BASE_BAD, CAND_OK), WORLD, evaluators={"improvement": g1_improvement})
     assert seen and o["verdict"] == "fail" and o["gates"][1]["reason"] == "g1_says_no"
+
+
+@pytest.mark.parametrize("j", ["claude_wrld0", "claude.wrld0", "agent-core-registry-demo", "agent_core_registry_demo"])
+def test_review_judge_spelling_variants_of_authors_refused(j):
+    o = G.gate_verdict(gin(judge=j), reports(BASE_BAD, CAND_OK), WORLD)
+    assert o["verdict"] == "not_evaluable"
+
+
+def test_review_duplicate_cases_cannot_inflate_improvement():
+    o = verdict(base=[run("c1", status="failed"), run("c2", status="failed")],
+                cand=[run("c1"), run("c1"), run("c2", status="failed")])
+    assert o["verdict"] == "not_evaluable"
+
+
+def test_review_string_cost_known_or_missing_flags_not_evaluable():
+    assert verdict(cand=[run("c1", cost_known="false"), run("c2")])["verdict"] == "not_evaluable"
+    r = run("c2"); del r["closed_early"]
+    assert verdict(cand=[run("c1"), r])["verdict"] == "not_evaluable"
+
+
+def test_review_missing_report_or_runs_not_evaluable_not_crash():
+    assert G.gate_verdict(gin(), {}, WORLD)["verdict"] == "not_evaluable"
+    assert G.gate_verdict(gin(), {"arm_report:base@1": {}, "arm_report:cand@1": {"runs": []}}, WORLD)["verdict"] == "not_evaluable"

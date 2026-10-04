@@ -29,6 +29,7 @@ from .contracts import validate_in
 LABEL = "claude-standin(python)"
 _KINDS = {("replace", "prompt"): "replace_prompt", ("add", "eval_suite"): "add_eval_suite"}
 _REF = re.compile(r"^([a-z_]+):([A-Za-z0-9._-]+)@([0-9]+)$")
+_BRIDGE_MAJOR = 1
 _WORLDS = Path(__file__).resolve().parents[3] / "agent-core-assets" / "worlds"
 
 
@@ -93,10 +94,17 @@ def compile_change_spec(doc: dict, world: dict, dry_run: Callable[[list], str] |
         reason = _check(op, world)
         if reason:
             break
-    if not reason and any(r != flow for r in spec["affected_routes"]):
+    targets = [op["target_ref"] for op in spec["operations"]]
+    if not reason and len(set(targets)) != len(targets):
+        reason = "mutable_reference"  # two ops would publish the same new version of one target
+    if not reason and (any(r != flow for r in spec["affected_routes"])
+                       or spec["workflow_bridge_ref"] != f"bridge:{flow}@{_BRIDGE_MAJOR}"
+                       or spec["base_bundle_ref"] != doc["base_bundle_ref"]):
         reason = "outside_bridge"
     if reason:
         return {**head, "status": "denied", "denied_reason": reason}
     ops = [{k: op[k] for k in ("op", "target_kind", "target_ref", "new_ref", "precondition_digest")} for op in spec["operations"]]
     digest = dry_run(ops) if dry_run else _canonical_digest(ops)
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(digest)):
+        raise ValueError(f"dry-run digest malformed: {digest!r}")
     return {**head, "status": "compiled", "draft_plan": {"operations": ops, "digest": digest}}

@@ -16,12 +16,18 @@ G1 hook: gate_verdict(..., evaluators={"safety": f, "improvement": f}) where f(b
 (status, reason|None). G1 (real gate over the real ArmReport/GateResult schema) plugs in there; the stand-in
 functions below are the defaults. Replace them, do not widen READ_FIELDS.
 """
+import re
 from typing import Callable
 
 from .contracts import validate_in, validate_out
 
 READ_FIELDS = frozenset({"case_ref", "status", "closed_early", "cost_known", "oracle_ref"})
 GATES = ("safety", "improvement")
+
+
+def _actor(a: str) -> str:
+    """Canonical actor identity: case, _ . - separators and an @revision suffix do not make a different actor."""
+    return re.sub(r"[-_.]+", "-", a.strip().lower().split("@")[0])
 
 
 def _project(runs: list) -> list:
@@ -58,17 +64,23 @@ def gate_verdict(doc: dict, reports: dict, world: dict, evaluators: dict[str, Ca
         raise ValueError(f"gate input invalid: {errs}")
     head = {"contract_version": "engine-steps/0", "step": "gate", "run_id": doc["run_id"], "data_class": doc["data_class"],
             "judge_actor": doc["judge_actor"], "quality_claims": "forbidden"}
-    authors = set(doc["author_actors"]) | {world["authors"]["world"], world["authors"]["suite"]}
-    if doc["judge_actor"] in authors:
+    authors = {_actor(a) for a in doc["author_actors"]} | {_actor(world["authors"]["world"]), _actor(world["authors"]["suite"])}
+    if _actor(doc["judge_actor"]) in authors:
         return _not_evaluable(head, "judge_not_separated")
-    base = _project(reports[doc["base_arm_report_ref"]]["runs"])
-    cand = _project(reports[doc["candidate_arm_report_ref"]]["runs"])
-    if not base or not cand:
+    raw = [(reports.get(doc[k]) or {}).get("runs") for k in ("base_arm_report_ref", "candidate_arm_report_ref")]
+    if not all(isinstance(x, list) and x and all(isinstance(r, dict) for r in x) for x in raw):
         return _not_evaluable(head, "empty_arm_report")
+    base, cand = _project(raw[0]), _project(raw[1])
+    for side in (base, cand):
+        refs = [r["case_ref"] for r in side]
+        if not all(isinstance(c, str) and c for c in refs) or len(set(refs)) != len(refs):
+            return _not_evaluable(head, "case_sets_differ")
     if {r["case_ref"] for r in base} != {r["case_ref"] for r in cand}:
         return _not_evaluable(head, "case_sets_differ")
-    if not all(r["cost_known"] for r in base + cand):
+    if not all(r["cost_known"] is True for r in base + cand):
         return _not_evaluable(head, "cost_unknown")
+    if not all(isinstance(r["closed_early"], bool) and isinstance(r["status"], str) for r in base + cand):
+        return _not_evaluable(head, "malformed_run")
     if not all(r["oracle_ref"] for r in base + cand):
         return _not_evaluable(head, "oracle_missing")
     ev = {"safety": _safety, "improvement": _improvement, **(evaluators or {})}

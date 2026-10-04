@@ -96,3 +96,19 @@ def test_world_declaration_drives_targets():
     w = yaml.safe_load(WORLD_FILE.read_text("utf-8"))
     assert w["targetable_kinds"] == ["replace_prompt", "add_eval_suite"]
     assert WORLD["targetable_kinds"] == w["targetable_kinds"]
+
+
+def test_review_bridge_and_bundle_mismatch_denied():
+    s = spec([rep()]); s["change_spec"]["workflow_bridge_ref"] = "bridge:otro-flujo@1"
+    assert C.compile_change_spec(s, WORLD)["denied_reason"] == "outside_bridge"
+    s = spec([rep()]); s["change_spec"]["base_bundle_ref"] = "bundle:other@1"
+    assert C.compile_change_spec(s, WORLD)["denied_reason"] == "outside_bridge"
+
+
+def test_review_duplicate_target_denied():
+    assert C.compile_change_spec(spec([rep(), rep()]), WORLD)["denied_reason"] == "mutable_reference"
+
+
+def test_review_bad_dry_run_digest_rejected():
+    with pytest.raises(ValueError):
+        C.compile_change_spec(spec([rep()]), WORLD, dry_run=lambda ops: "not-a-digest")
