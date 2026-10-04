@@ -43,6 +43,49 @@ class Order(unittest.TestCase):
         self.assertTrue(trn.check_order(lanes(("a", "ba", ["b"], 5), ("b", "bb", ["a"], 5))))
 
 
+class Safety(unittest.TestCase):
+    def test_receipt_leg_pass_needs_command_and_exit_zero(self):
+        with tempfile.TemporaryDirectory() as t:
+            leg = {"status": "pass", "exit_code": 0, "command": "c"}
+            doc = {"schema": "pre-pr-gate/v1", "verdict": "pass", "legs": {k: dict(leg) for k in trn.LEGS}}
+            f = Path(t, "r.json")
+            f.write_text(json.dumps(doc))
+            self.assertEqual(trn.check_receipt(f), [])
+            del doc["legs"]["ci"]["command"]
+            f.write_text(json.dumps(doc))
+            self.assertTrue(trn.check_receipt(f))
+
+    def test_negative_missing_or_nonnumeric_lane_hours_are_rejected(self):
+        for h in (-5, 0, "10", None, True):
+            self.assertTrue(trn.check_plan([{"id": "a", "branch": "ba", "deps": [], "lane_hours": h}], 35), h)
+        self.assertTrue(trn.check_plan([{"id": "a", "branch": "ba", "deps": []}], 35))
+
+    def test_option_like_branch_names_are_rejected(self):
+        self.assertTrue(trn.check_order([{"id": "a", "branch": "--upload-pack=x", "deps": [], "lane_hours": 1}]))
+
+    def test_merge_never_resets_a_lane_or_base_branch(self):
+        with tempfile.TemporaryDirectory() as t:
+            git(t, "init", "-q", "-b", "main")
+            commit(t, "base.txt")
+            git(t, "checkout", "-q", "-b", "lane-a")
+            commit(t, "a.txt")
+            git(t, "checkout", "-q", "main")
+            before = git(t, "rev-parse", "lane-a")
+            ls = lanes(("a", "lane-a", [], 5))
+            for bad in ("lane-a", "main"):
+                with self.assertRaises(ValueError):
+                    trn.merge(t, "main", bad, ls)
+            self.assertEqual(git(t, "rev-parse", "lane-a"), before)
+
+    def test_merge_refuses_a_remote_tracking_or_ref_style_train_branch(self):
+        with tempfile.TemporaryDirectory() as t:
+            git(t, "init", "-q", "-b", "main")
+            commit(t, "base.txt")
+            for bad in ("origin/x", "refs/heads/x", "-x"):
+                with self.assertRaises(ValueError):
+                    trn.merge(t, "main", bad, [])
+
+
 class Plan(unittest.TestCase):
     def test_groups_respect_the_cap_in_order(self):
         ls = lanes(("a", "ba", [], 20), ("b", "bb", [], 10), ("c", "bc", [], 20), ("d", "bd", [], 5))

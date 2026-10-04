@@ -19,8 +19,16 @@ DEFAULT_CAP = 35
 LEGS = ("ci", "pytest", "ratchet")
 
 
+def _bad_ref(name) -> bool:
+    return not (isinstance(name, str) and name and not name.startswith("-") and not name.startswith("refs/")
+                and not name.startswith("origin/") and ".." not in name and " " not in name)
+
+
 def check_order(lanes: list) -> list:
     problems, seen = [], set()
+    for l in lanes:
+        if _bad_ref(l.get("branch")):
+            problems.append(f"{l.get('id')}: unsafe branch name {l.get('branch')!r}")
     ids = [l["id"] for l in lanes]
     for i in {x for x in ids if ids.count(x) > 1}:
         problems.append(f"duplicate lane id {i}")
@@ -47,8 +55,12 @@ def plan(lanes: list, cap: float = DEFAULT_CAP) -> list:
 
 
 def check_plan(lanes: list, cap: float = DEFAULT_CAP) -> list:
-    return [f"{l['id']}: {l['lane_hours']} lane-hours exceeds the PR cap {cap}; split the lane" for l in lanes
-            if l["lane_hours"] > cap]
+    bad = [f"{l.get('id')}: lane_hours must be a positive number, got {l.get('lane_hours')!r}" for l in lanes
+           if isinstance(l.get("lane_hours"), bool) or not isinstance(l.get("lane_hours"), (int, float))
+           or not l["lane_hours"] > 0]
+    return bad + [f"{l['id']}: {l['lane_hours']} lane-hours exceeds the PR cap {cap}; split the lane" for l in lanes
+                  if isinstance(l.get("lane_hours"), (int, float)) and not isinstance(l["lane_hours"], bool)
+                  and l["lane_hours"] > cap]
 
 
 def check_receipt(path: Path) -> list:
@@ -65,8 +77,11 @@ def check_receipt(path: Path) -> list:
         p.append(f"{path.name}: verdict is {r.get('verdict')!r}, not pass")
     for leg in LEGS:
         st = (r.get("legs") or {}).get(leg, {}).get("status")
+        lg = (r.get("legs") or {}).get(leg) or {}
         if st != "pass":
             p.append(f"{path.name}: leg {leg} is {st or 'absent'}")
+        elif not (isinstance(lg.get("command"), str) and lg["command"].strip()) or lg.get("exit_code") != 0:
+            p.append(f"{path.name}: leg {leg} claims pass without a command and exit_code 0")
     return p
 
 
@@ -96,6 +111,14 @@ def merge(repo, base: str, train_branch: str, lanes: list) -> None:
     order = check_order(lanes)
     if order:
         raise ValueError("; ".join(order))
+    if _bad_ref(train_branch) or _bad_ref(base):
+        raise ValueError(f"unsafe train branch or base name: {train_branch!r}, {base!r}")
+    if train_branch == base or train_branch in {l["branch"] for l in lanes}:
+        raise ValueError(f"train branch {train_branch} must not be the base or a lane branch (it would be reset)")
+    if _git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{train_branch}", check=False).returncode == 0:
+        subjects = _git(repo, "log", "--format=%s", f"{base}..{train_branch}").stdout.splitlines()
+        if any(not x.startswith("train: merge ") for x in subjects):
+            raise ValueError(f"train branch {train_branch} holds commits that are not train merges; refusing to reset it")
     _git(repo, "checkout", "-q", "-B", train_branch, base)
     for l in lanes:
         r = _git(repo, "-c", "user.name=trn0", "-c", "user.email=trn0@example.invalid",
