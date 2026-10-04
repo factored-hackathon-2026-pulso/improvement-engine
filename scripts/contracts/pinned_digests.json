@@ -11,6 +11,13 @@
       "observed": "2026-10-04",
       "sha": "56354dd289bace477ba906390784e543de4eedbd"
     },
+    "observed_later": {
+      "contracts_version": "1.3.0",
+      "digest": "dd8d0fa4658dade3c022601a64ec14e74665e0ddd24b281849cd87e645f6c45f",
+      "note": "PR #33 HttpToolExecutor (ADR 0025): adds agent_core/adapters/tools/*, an ADR and tests; contracts/ byte-identical to 56354dd. Observation only, no pin bump.",
+      "observed": "2026-10-04",
+      "sha": "547e608"
+    },
     "pinned": {
       "contracts_version": "1.3.0",
       "derivation": "digest of core-bridge/wire/agent_core@c814c2b (byte copy of contracts/ without VERSION)",
