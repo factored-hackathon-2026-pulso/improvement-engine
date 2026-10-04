@@ -37,6 +37,26 @@ services:
       start_period: 5s
     networks: [pulso-internal]
 
+  # Development/demo observability only. Keep off the default engine stack.
+  otel-lgtm:
+    profiles: [observability]
+    image: docker.io/grafana/otel-lgtm:0.33.1@sha256:d6c52678ab5b7144f27ae569fd778608121c0f4a10eb411983750a0d67c1fbe3
+    ports:
+      - "127.0.0.1:${PULSO_OTEL_GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${PULSO_OTEL_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${PULSO_OTEL_HTTP_PORT:-4318}:4318"
+    environment:
+      PROMETHEUS_EXTRA_ARGS: "--storage.tsdb.retention.time=${PULSO_OTEL_METRICS_RETENTION:-24h}"
+      LOKI_EXTRA_ARGS: "-store.retention=${PULSO_OTEL_LOGS_RETENTION:-24h} -compactor.retention-enabled=true -compactor.delete-request-store=filesystem"
+      TEMPO_EXTRA_ARGS: "--compaction.block-retention=${PULSO_OTEL_TRACES_RETENTION:-24h}"
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/ready && /otel-lgtm/docker/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5m
+    networks: [pulso-internal]
+
 networks:
   pulso-internal:
     internal: true

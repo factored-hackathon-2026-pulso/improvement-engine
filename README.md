@@ -75,6 +75,32 @@ podman compose --env-file local/.env -f local/compose.yaml up -d
 only verifies the Compose rendering when a real Podman backend is available.
 It does not certify PostgreSQL, S3, Agent Core, AWS or a deployed engine.
 
+For local development telemetry, start the optional Grafana LGTM profile:
+
+```powershell
+podman compose --env-file local/.env -f local/compose.yaml --profile observability up -d otel-lgtm
+```
+
+Grafana is at `http://127.0.0.1:3000` (`admin` / `admin`, local-only default).
+A host-process engine can send OTLP over gRPC to `127.0.0.1:4317` or HTTP to
+`127.0.0.1:4318`. An engine container attached to `pulso-internal` should use
+the service DNS name `otel-lgtm:4317` or `otel-lgtm:4318` instead. All
+host-published ports are loopback-bound; the collector and backends share only
+the internal `pulso-internal` network. The profile is not started by the
+default stack, has no host data/secret mounts or persistent volume, and is
+configured with 24-hour metrics, logs and trace retention arguments by
+default. Override the ports and per-signal retention with `PULSO_OTEL_*` values
+in `local/.env`; the checked-in duration defaults are validated, but caller
+overrides are not runtime-validated and must be a single valid Go duration
+token such as `24h` (no spaces or additional flags, because the upstream image
+splits extra arguments on whitespace). Malformed overrides may prevent startup.
+The image healthcheck covers Grafana, Loki, Tempo,
+Prometheus and the collector. This slice configures a backend only: Compose
+render/startup and effective retention have not been runtime-verified because
+the local Podman VM socket is unavailable, and the engine is not yet wired to
+emit telemetry. This development/demo/test stack is not a production
+monitoring service and must not receive real customer data.
+
 To run the current snapshot-level local simulation against both the E0
 enrichment and original bank CSVs, see [the Windows local snapshot E2E guide](docs/local-e0-e2e-runner.md).
 Each source writes to a separate fresh output directory. These runs make no
