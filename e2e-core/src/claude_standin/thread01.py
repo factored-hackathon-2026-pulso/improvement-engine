@@ -450,8 +450,31 @@ def step_09(ctx: Ctx) -> dict:
             "detail": {"published": published, "alias_read": alias, "registry": "core" if both else "in-process-double"}}
 
 
+EFFECT_AUTHOR = "claude-p2py-effects"
+MECHANISM_AUTHOR = "claude-ed0"
+
+
 def step_10(ctx: Ctx) -> dict:
-    raise NotImplementedError("step 10")
+    """Observation only: platform-sim emits release.* and a simulated effect series. Nothing here feeds a decision,
+    the gate or a revision; memory and successor are not exercised in DEMO-0."""
+    _ensure_paths()
+    from platform_live import PlatformLiveSim
+    from platform_live import effects as fx
+    rid = ctx.out["published"]["release_id"]
+    effect = fx.EffectSpec(effect_id="effect-thread01", author=EFFECT_AUTHOR, metric="first_response_seconds",
+                           baseline=300.0, delta_pct=-20.0, ramp_days=2, noise_sd=0.0, seed=7)
+    planted = fx.PlantedMechanism(mechanism_id="mech-thread01", author=MECHANISM_AUTHOR, kind="recurrence")
+    sim = PlatformLiveSim(seed=1)
+    sim.publish_release("atencion", ctx.out["published"]["alias"], rid, effect=effect, mechanism=planted)
+    sim.fast_forward(days=3)
+    series = sim.effect_series(rid)
+    types = sorted({r[0] for r in sim.conn.execute("select event_type from event_log")})
+    labels = sim.observation_labels()
+    ctx.out["effect_author"] = EFFECT_AUTHOR
+    return {"status": "simulated", "data_class": "simulated", "receipt": {"provider": "platform-sim"},
+            "detail": {"observation_only": True, "feeds_decision": False, "event_types": types, "effect_series": series,
+                       "memory": labels["memory"], "successor": labels["successor"],
+                       "release_event": labels["release_event"], "effect": labels["effect"]}}
 
 
 STEPS: list[tuple[int, str, Callable]] = [
