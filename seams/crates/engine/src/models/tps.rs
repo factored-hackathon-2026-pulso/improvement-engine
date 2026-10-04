@@ -87,10 +87,17 @@ fn shaped(s: &str) -> bool {
     s.strip_prefix('w').is_some_and(|r| digits(r, 1, 3))
 }
 
+/// The Python regex `[^\s@]+@[^\s@]+\.[^\s@]+` searched anywhere: an `@` preceded by a non-space non-at char and followed by a
+/// run of such chars that holds a dot with at least one char on each side.
 fn email_like(s: &str) -> bool {
-    s.split(char::is_whitespace).any(|tok| {
-        let Some((l, r)) = tok.split_once('@') else { return false };
-        !l.is_empty() && !r.contains('@') && r.split('.').count() >= 2 && r.split('.').all(|p| !p.is_empty())
+    let c: Vec<char> = s.chars().collect();
+    let plain = |x: char| !x.is_whitespace() && x != '@';
+    (1..c.len()).any(|i| {
+        if c[i] != '@' || !plain(c[i - 1]) {
+            return false;
+        }
+        let run: Vec<char> = c[i + 1..].iter().copied().take_while(|x| plain(*x)).collect();
+        run.len() >= 3 && (1..run.len() - 1).any(|j| run[j] == '.')
     })
 }
 
@@ -158,7 +165,9 @@ fn long_digits(s: &str) -> bool {
 }
 
 fn disguised(s: &str) -> bool {
-    s.chars().any(|c| (!c.is_ascii() && c.is_numeric()) || matches!(c, '\u{ff20}' | '\u{fe6b}'))
+    // NFKC would fold these to ASCII digits, `@`, `.`, `-`, `(` or `)`: fullwidth/halfwidth forms, small form variants,
+    // superscript parens and the one-dot leader. Rejected outright instead of normalised (stricter, never looser).
+    s.chars().any(|c| (!c.is_ascii() && c.is_numeric()) || matches!(c, '\u{ff00}'..='\u{ffef}' | '\u{fe50}'..='\u{fe6f}' | '\u{207d}' | '\u{207e}' | '\u{208d}' | '\u{208e}' | '\u{2024}'))
 }
 
 fn static_text(x: &Value, path: &str, v: &mut Vec<String>, limit: usize) {
