@@ -22,3 +22,12 @@ Replay fixtures: `tests/fixtures/thread01_queue/responses` (synthetic, role-play
 `python -m claude_standin.thread01 --record <dir>`; a drift test fails if the scripted responder and the fixtures differ.
 The final report is built by `build_report` and must pass `contracts/engine-run` `check()`; `doubles[]` comes from
 `generate_doubles`. Raw E0 is never read: packages are synthetic and live in a temp workdir.
+
+## INT0 status (real-Core hooks)
+
+`claude_standin/core_hooks.py` provides `make_dry_run` (step 5, real Core authoring dry-run through the bridge, base
+release = `atencion` prod alias) and `make_alias_read`. Verified live once on PG16 + the real Core image (pinned
+agent-core c814c2b) with `e2e-core/tests/live/test_08_thread01_core_hooks.py`: step 5 flips to `real-narrow`,
+no step is red. NOT done, still stand-in: `run_arms` (step 6) and `publish` (step 9) need a frozen proposal of the
+thread's draft written by a writer stage (scripted model, control-api/gateway doubles) and a human-issuer JWS bound to
+it; `alias_read` is only supplied together with `publish`, so step 9 stays `stand-in`. Step 8 JWS stays the local simulated issuer.
