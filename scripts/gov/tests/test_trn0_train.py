@@ -140,9 +140,10 @@ class Cli(unittest.TestCase):
                 return subprocess.run([sys.executable, str(GOV / "trn0_train.py"), "check", "--manifest", str(m),
                                        "--repo", str(repo)], capture_output=True, text=True)
             self.assertEqual(run(lanes(("b", "bb", ["a"], 5), ("a", "ba", [], 5))).returncode, 1)
+            git(repo, "checkout", "-q", "ba"); commit(repo, "a"); git(repo, "checkout", "-q", "main")   # ba moved, bb not stacked
             r = run(lanes(("a", "ba", [], 5), ("b", "bb", ["a"], 5)))
-            self.assertEqual(r.returncode, 1, r.stdout)     # bb is not stacked on ba (both at main): restack needed
-            git(repo, "checkout", "-q", "ba"); commit(repo, "a"); git(repo, "branch", "-f", "bb", "ba"); git(repo, "checkout", "-q", "main")
+            self.assertEqual(r.returncode, 1, r.stdout)
+            git(repo, "branch", "-f", "bb", "ba")
             r = run(lanes(("a", "ba", [], 5), ("b", "bb", ["a"], 5)))
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
