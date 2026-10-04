@@ -44,9 +44,10 @@ the current one, newest first, 96 MB budget), so replays only see their own past
   numerator/denominator are the cell's counts over both windows (delays: numerator = cell cases slower than the rest's mean).
 - Versioned superset `sensor-events/1` (`Report::to_json`, in the tick record under `sensor.report`): exact discard names,
   discovery/holdout rates and p-values, drift, quarantine counts by reason, `method`, and `not_done`.
-- Downstream (scout/recompute) consumes only the frozen shape. recompute checks `signal_id` against this output; it does not
-  yet understand cell populations, so a recompute spec for `reassignment_rate.<cell>` needs R1E to accept the new metric ids
-  (not edited here).
+- Downstream (scout/recompute) consumes only the frozen shape. W7: the recompute handler (`engine::adapters`) accepts a sensed
+  `metric_id` (`reassignment_rate.pt.web_chat`) as a signal id next to the sensor's own `sig-NNNN` (additive; the `signal_id` rule is
+  unchanged), and `thread10::SignalSeed::with_metric` registers the cell metric id for the scout/verifier/builder requests. In `pulso run`
+  each admitted signal becomes one `SignalSeed` (cell metric id, numerator/denominator of the cell, data class of the record).
 
 ## Not done (honest)
 
