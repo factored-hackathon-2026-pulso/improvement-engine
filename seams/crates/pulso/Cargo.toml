@@ -1,0 +1,15 @@
+[package]
+name = "pulso"
+description = "One runnable: `pulso demo` streams the ten-step offline thread live into the debug-api run-event store; `pulso serve` embeds debug-api (loopback) and serves the built debug-console."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "pulso"
+path = "src/main.rs"
+
+[dependencies]
+debug-api = { path = "../debug-api" }
+serde_json = "1"
+thread10 = { path = "../thread10" }
