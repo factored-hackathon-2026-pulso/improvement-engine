@@ -41,6 +41,13 @@ pub struct Config {
     pub admin: bool,
 }
 
+impl Config {
+    /// Everything optional off: no upload pin, no admin channel.
+    pub fn new(ring: Arc<KeyRing>) -> Config {
+        Config { ring, upload_pin: None, admin: false }
+    }
+}
+
 #[derive(Default)]
 struct Admin {
     deny_operations: HashSet<String>,

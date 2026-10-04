@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 fn start() -> String {
     let ring = Arc::new(KeyRing::from_json(&serde_json::json!({})).unwrap());
-    let app = Arc::new(App::new(Config { ring, upload_pin: None, admin: false }, Box::new(MemStore::default())));
+    let app = Arc::new(App::new(Config::new(ring), Box::new(MemStore::default())));
     let s = tiny_http::Server::http("127.0.0.1:0").unwrap();
     let addr = s.server_addr().to_ip().unwrap().to_string();
     std::thread::spawn(move || server::serve(s, app));

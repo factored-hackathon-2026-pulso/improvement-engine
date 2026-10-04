@@ -16,7 +16,12 @@ fn main() {
         .as_object()
         .and_then(|i| Some((i.get("binding_ref")?.as_str()?.to_string(), i.get("tenant_id")?.as_str()?.to_string())));
     let admin = std::env::var("CONTROL_API_ADMIN").is_ok_and(|v| v == "1");
-    let app = Arc::new(App::new(Config { ring, upload_pin, admin }, Box::new(MemStore::default())));
+    let app = Arc::new(App::new({
+        let mut cfg = Config::new(ring);
+        cfg.upload_pin = upload_pin;
+        cfg.admin = admin;
+        cfg
+    }, Box::new(MemStore::default())));
     let host = std::env::var("CONTROL_API_HOST").unwrap_or_else(|_| "127.0.0.1".into());
     let port = std::env::var("E2E_PORT").unwrap_or_else(|_| "8700".into());
     let server = tiny_http::Server::http(format!("{host}:{port}")).expect("bind");
