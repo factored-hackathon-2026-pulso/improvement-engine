@@ -63,40 +63,94 @@ struct Job {
     outputs: BTreeMap<u32, String>,
 }
 
+/// Deliberate defects for mutation-testing the conformance suite (`MemRepo::with_fault`); `None` is correct.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Fault {
+    #[default]
+    None,
+    /// holder-only operations accept any fence (stale-fence commit)
+    IgnoreFence,
+    /// holder-only operations accept a holder past its expiry (lost lease)
+    IgnoreExpiry,
+    /// holder-only operations accept any worker name
+    IgnoreWorker,
+    /// claim also takes jobs whose effect state is not NoEffect
+    ClaimIgnoresEffect,
+    /// `begin_effect` returns Ok but records nothing
+    EffectNotRecorded,
+    /// a reclaim does not bump `attempt`
+    AttemptNotBumped,
+    /// a reclaim bumps `attempt` twice
+    AttemptBumpedTwice,
+    /// a reclaim does not bump the fence
+    FenceNotBumped,
+    /// reclaim only when `now > expires` (off by one)
+    ReclaimOffByOne,
+    /// a live lease is reclaimable
+    ReclaimLiveLease,
+    /// claim picks the newest job
+    ClaimNewestFirst,
+    /// claim ignores the tenant
+    ClaimIgnoresTenant,
+    /// holder-only operations ignore the tenant
+    ForeignTenantOps,
+    /// commit_output overwrites an existing out/N instead of conflicting
+    OverwriteOutput,
+    /// touch_lease reports success but does not move the expiry
+    TouchNoExtend,
+}
+
 impl Job {
-    fn holds(&self, worker: &str, fence: u64, now: u64) -> bool {
-        self.leased && self.worker == worker && self.fence == fence && now < self.expires
+    fn holds(&self, f: Fault, worker: &str, fence: u64, now: u64) -> bool {
+        self.leased
+            && (f == Fault::IgnoreWorker || self.worker == worker)
+            && (f == Fault::IgnoreFence || self.fence == fence)
+            && (f == Fault::IgnoreExpiry || now < self.expires)
     }
-    fn claimable(&self, now: u64) -> bool {
-        !self.effect && (!self.leased || now >= self.expires)
+    fn claimable(&self, f: Fault, now: u64) -> bool {
+        let expired = match f {
+            Fault::ReclaimOffByOne => now > self.expires,
+            Fault::ReclaimLiveLease => true,
+            _ => now >= self.expires,
+        };
+        (f == Fault::ClaimIgnoresEffect || !self.effect) && (!self.leased || expired)
     }
 }
 
 #[derive(Default)]
 pub struct MemRepo {
     jobs: Mutex<Vec<Job>>,
+    fault: Fault,
 }
 
 impl MemRepo {
     pub fn new() -> Self {
         Self::default()
     }
+    /// A repository with one deliberate defect, to prove the conformance suite catches it.
+    pub fn with_fault(fault: Fault) -> Self {
+        Self { fault, ..Self::default() }
+    }
     /// Oldest claimable job id (read only). Public so a deliberately broken repository can be built in tests.
     pub fn peek_candidate(&self, tenant: &str, now: u64) -> Option<String> {
         let jobs = self.jobs.lock().unwrap();
-        jobs.iter().find(|j| j.tenant == tenant && j.claimable(now)).map(|j| j.id.clone())
+        jobs.iter().find(|j| j.tenant == tenant && j.claimable(self.fault, now)).map(|j| j.id.clone())
     }
     /// Unconditional lease write (no re-check): the building block of a read-then-write bug.
     pub fn force_claim(&self, tenant: &str, job: &str, worker: &str, now: u64, lease: u64) -> Claimed {
         let mut jobs = self.jobs.lock().unwrap();
         let j = jobs.iter_mut().find(|j| j.tenant == tenant && j.id == job).unwrap();
-        Self::lease_it(j, worker, now, lease)
+        Self::lease_it(self.fault, j, worker, now, lease)
     }
-    fn lease_it(j: &mut Job, worker: &str, now: u64, lease: u64) -> Claimed {
+    fn lease_it(f: Fault, j: &mut Job, worker: &str, now: u64, lease: u64) -> Claimed {
         j.leased = true;
         j.worker = worker.into();
-        j.fence += 1;
-        j.attempt += 1;
+        if f != Fault::FenceNotBumped {
+            j.fence += 1;
+        }
+        if f != Fault::AttemptNotBumped {
+            j.attempt += if f == Fault::AttemptBumpedTwice { 2 } else { 1 };
+        }
         j.expires = now + lease;
         Claimed { job: j.id.clone(), fence_token: j.fence, attempt: j.attempt, expires_at: j.expires }
     }
@@ -107,12 +161,13 @@ impl MemRepo {
         worker: &str,
         fence: u64,
         now: u64,
-        f: impl FnOnce(&mut Job) -> Result<T, RepoError>,
+        f: impl FnOnce(&mut Job, Fault) -> Result<T, RepoError>,
     ) -> Result<T, RepoError> {
         check_ids(tenant, worker)?;
         let mut jobs = self.jobs.lock().unwrap();
-        match jobs.iter_mut().find(|j| j.tenant == tenant && j.id == job) {
-            Some(j) if j.holds(worker, fence, now) => f(j),
+        let fault = self.fault;
+        match jobs.iter_mut().find(|j| (fault == Fault::ForeignTenantOps || j.tenant == tenant) && j.id == job) {
+            Some(j) if j.holds(fault, worker, fence, now) => f(j, fault),
             _ => Err(RepoError::StaleFence),
         }
     }
@@ -143,27 +198,31 @@ impl JobRepository for MemRepo {
         }
         // selection and lease are one critical section (no read-then-write)
         let mut jobs = self.jobs.lock().unwrap();
-        let Some(j) = jobs.iter_mut().find(|j| j.tenant == tenant && j.claimable(now)) else { return Ok(None) };
-        Ok(Some(Self::lease_it(j, worker, now, lease_seconds)))
+        let fault = self.fault;
+        let mut it = jobs.iter_mut().filter(|j| (fault == Fault::ClaimIgnoresTenant || j.tenant == tenant) && j.claimable(fault, now));
+        let Some(j) = (if fault == Fault::ClaimNewestFirst { it.last() } else { it.next() }) else { return Ok(None) };
+        Ok(Some(Self::lease_it(fault, j, worker, now, lease_seconds)))
     }
     fn touch_lease(&self, tenant: &str, job: &str, worker: &str, fence: u64, now: u64, lease_seconds: u64) -> Result<u64, RepoError> {
         if lease_seconds == 0 {
             return Err(RepoError::InvalidLeaseDuration);
         }
-        self.with_holder(tenant, job, worker, fence, now, |j| {
-            j.expires = now + lease_seconds;
-            Ok(j.expires)
+        self.with_holder(tenant, job, worker, fence, now, |j, f| {
+            if f != Fault::TouchNoExtend {
+                j.expires = now + lease_seconds;
+            }
+            Ok(now + lease_seconds)
         })
     }
     fn begin_effect(&self, tenant: &str, job: &str, worker: &str, fence: u64, now: u64) -> Result<(), RepoError> {
-        self.with_holder(tenant, job, worker, fence, now, |j| {
-            j.effect = true;
+        self.with_holder(tenant, job, worker, fence, now, |j, f| {
+            j.effect = f != Fault::EffectNotRecorded;
             Ok(())
         })
     }
     fn commit_output(&self, tenant: &str, job: &str, step: u32, worker: &str, fence: u64, now: u64, record: &str) -> Result<(), RepoError> {
-        self.with_holder(tenant, job, worker, fence, now, |j| {
-            if j.outputs.contains_key(&step) {
+        self.with_holder(tenant, job, worker, fence, now, |j, f| {
+            if f != Fault::OverwriteOutput && j.outputs.contains_key(&step) {
                 return Err(RepoError::Conflict(format!("out/{step} exists")));
             }
             j.outputs.insert(step, record.into());

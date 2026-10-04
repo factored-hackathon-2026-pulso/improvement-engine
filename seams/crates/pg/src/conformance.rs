@@ -22,6 +22,7 @@ pub const SCENARIOS: &[(&str, Scenario)] = &[
     ("one_output_per_step", one_output_per_step),
     ("crash_before_commit_then_reclaim_is_attempt_plus_one", crash_then_reclaim),
     ("touch_lease_extends_only_for_current_holder", touch_lease),
+    ("same_worker_old_fence_cannot_commit_touch_or_begin_effect", same_worker_old_fence),
 ];
 
 pub fn run_suite(make: Make) -> Vec<String> {
@@ -200,4 +201,18 @@ fn touch_lease(make: Make) -> Result<(), String> {
     eq("not reclaimable at old expiry", claim(&*r, A, "w2", 130)?, None)?;
     eq("other worker cannot renew", r.touch_lease(A, &a, "w2", c.fence_token, 130, 30), Err(RepoError::StaleFence))?;
     eq("expired cannot renew", r.touch_lease(A, &a, "w1", c.fence_token, 150, 30), Err(RepoError::StaleFence))
+}
+
+/// The same worker name reclaims its own expired job: the fence alone (not the name) must refuse the old holder.
+fn same_worker_old_fence(make: Make) -> Result<(), String> {
+    let r = make();
+    let a = st(r.admit(A))?;
+    let c1 = claim(&*r, A, "w1", 100)?.ok_or("no claim")?;
+    let c2 = claim(&*r, A, "w1", 130)?.ok_or("no reclaim")?;
+    eq("fence", (c1.fence_token, c2.fence_token), (1, 2))?;
+    eq("old fence commit", r.commit_output(A, &a, 0, "w1", 1, 131, "P stale"), Err(RepoError::StaleFence))?;
+    eq("old fence touch", r.touch_lease(A, &a, "w1", 1, 131, 30), Err(RepoError::StaleFence))?;
+    eq("old fence effect", r.begin_effect(A, &a, "w1", 1, 131), Err(RepoError::StaleFence))?;
+    eq("out/0 untouched", st(r.output(A, &a, 0))?, None)?;
+    st(r.commit_output(A, &a, 0, "w1", 2, 131, "P new"))
 }
