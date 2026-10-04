@@ -27,6 +27,8 @@ pub enum Fault {
     ReadOtherRun,
     /// The next by-key read answers this key's id but with a different arm (key reused with another body).
     ReadOtherBody,
+    /// The next by-key read answers 404 with a code other than pulso:not_found (wrong path/tenant style).
+    ReadNotFoundOtherCode,
 }
 
 #[derive(Default)]
@@ -127,6 +129,9 @@ fn serve(mut s: TcpStream, st: &Arc<Mutex<ArmState>>) {
         respond(&mut s, st_code, "", &out);
     } else if method == "GET" && path.starts_with("/internal/v1/evaluation/arms/by-key/") {
         let key = &path["/internal/v1/evaluation/arms/by-key/".len()..];
+        if matches!(fault, Some(Fault::ReadNotFoundOtherCode)) {
+            return respond(&mut s, 404, "", &envelope("pulso:made_up_code", false));
+        }
         match g.reports.get(&(tenant, key.to_string())) {
             Some((_, r)) => {
                 let mut r = r.clone();

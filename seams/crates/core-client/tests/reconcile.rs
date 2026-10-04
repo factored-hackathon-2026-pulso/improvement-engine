@@ -144,3 +144,10 @@ fn read_back_with_a_different_body_is_a_contract_error_not_adopted() {
     let core = ArmCore::start(vec![Fault::DropAfterEffect, Fault::ReadOtherBody]);
     assert!(matches!(run(&core, &TestClock::default(), &RetryPolicy::default()), Err(core_client::OpError::Contract(_))));
 }
+
+#[test]
+fn a_404_that_is_not_pulso_not_found_is_never_absent() {
+    let core = ArmCore::start(vec![Fault::DropAfterEffect, Fault::ReadNotFoundOtherCode]);
+    assert!(run(&core, &TestClock::default(), &RetryPolicy::default()).is_err());
+    assert_eq!(posts(&core), 1, "misclassified 404 would resend");
+}
