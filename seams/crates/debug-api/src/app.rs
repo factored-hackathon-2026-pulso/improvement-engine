@@ -21,11 +21,15 @@ pub struct Config {
     /// Admin (append/purge/ingest) token; `None` = the admin surface does not exist (404).
     pub admin_token: Option<String>,
     pub heartbeat: Duration,
+    /// Directory of a built console (`index.html`, assets) served for non-API GETs; `None` = no static surface.
+    pub static_dir: Option<std::path::PathBuf>,
+    /// Body served for `/config.json` instead of the file in `static_dir` (points the console's data provider at this server).
+    pub config_json: Option<String>,
 }
 
 impl Default for Config {
     fn default() -> Config {
-        Config { tenant: "tenant-local".into(), token: None, admin_token: None, heartbeat: Duration::from_secs(5) }
+        Config { tenant: "tenant-local".into(), token: None, admin_token: None, heartbeat: Duration::from_secs(5), static_dir: None, config_json: None }
     }
 }
 
@@ -142,6 +146,11 @@ impl App {
             }
             _ => {}
         }
+        if m == "GET" && !p.starts_with(PREFIX) && !p.starts_with("/api/") {
+            if let Some(r) = self.static_file(p) {
+                return r;
+            }
+        }
         let Some(rest) = p.strip_prefix(PREFIX).and_then(|s| s.strip_prefix('/')) else { return problem("not_found", 404, json!({})) };
         let parts: Vec<&str> = rest.split('/').collect();
         match (m, parts.as_slice()) {
@@ -155,6 +164,46 @@ impl App {
             ("POST", ["decisions", id, "responses"]) => self.respond(id, r),
             _ => problem("not_found", 404, json!({})),
         }
+    }
+
+    /// Static console. `None` = not configured (the caller answers 404). Any path that could leave the directory is a 404.
+    fn static_file(&self, path: &str) -> Option<Resp> {
+        let dir = self.cfg.static_dir.as_ref()?;
+        let not_found = || problem("not_found", 404, json!({}));
+        let file = |ctype: &str, body: Vec<u8>| Resp { status: 200, headers: vec![("Content-Type".into(), ctype.into()), ("Cache-Control".into(), "no-store".into())], body };
+        if path == "/config.json" {
+            if let Some(c) = &self.cfg.config_json {
+                return Some(file("application/json", c.clone().into_bytes()));
+            }
+        }
+        let rel = path.trim_start_matches('/');
+        if rel.contains("..") || rel.bytes().any(|b| matches!(b, 92 | b'%' | b':' | 0)) {
+            return Some(not_found());
+        }
+        let wanted = if rel.is_empty() { "index.html" } else { rel };
+        let target = dir.join(wanted);
+        let (target, spa) = if target.is_file() {
+            (target, false)
+        } else if wanted.rsplit('/').next().is_some_and(|n| n.contains('.')) {
+            return Some(not_found());
+        } else {
+            (dir.join("index.html"), true)
+        };
+        let Ok(body) = std::fs::read(&target) else { return Some(not_found()) };
+        let ext = if spa { "html" } else { target.extension().and_then(|e| e.to_str()).unwrap_or("") };
+        let ctype = match ext {
+            "html" => "text/html; charset=utf-8",
+            "js" | "mjs" => "text/javascript; charset=utf-8",
+            "css" => "text/css; charset=utf-8",
+            "json" | "map" => "application/json",
+            "svg" => "image/svg+xml",
+            "png" => "image/png",
+            "ico" => "image/x-icon",
+            "woff2" => "font/woff2",
+            "txt" => "text/plain; charset=utf-8",
+            _ => "application/octet-stream",
+        };
+        Some(file(ctype, body))
     }
 
     fn session(&self) -> Resp {
