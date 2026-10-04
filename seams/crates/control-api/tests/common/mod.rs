@@ -115,7 +115,7 @@ pub fn domain(seq: i64, event_type: &str, schema: &Value) -> Value {
     json!({"kind": "platform_event", "level": null,
            "source_event": {"kind": "domain_event", "event_type": event_type, "event_id": format!("EVT-{seq}"), "payload": {"secret_marker": "DO-NOT-STORE"}},
            "native_event_id": format!("EVT-{seq}"), "source_event_digest": sha256_hex(format!("evt{seq}{event_type}").as_bytes()),
-           "source_event_ref": null, "source_schema_ref": schema, "source_run_ref": null, "source_sequence": seq,
+           "source_event_ref": null, "source_schema_ref": schema, "source_run_ref": null, "source_sequence": seq, "episode_ref": null, "goal_ref": null, "layer_mapping_ref": null,
            "observed_at": "2026-03-01T10:00:00Z", "trace_refs": [], "coverage_marker": null})
 }
 
@@ -123,7 +123,7 @@ pub fn finding(native: &str, code: &str, details: Value, schema: &Value) -> Valu
     json!({"kind": "platform_event", "level": null,
            "source_event": {"kind": "exporter_finding", "finding_code": code, "severity": "warning", "details": details},
            "native_event_id": native, "source_event_digest": sha256_hex(native.as_bytes()), "source_event_ref": null,
-           "source_schema_ref": schema, "source_run_ref": null, "source_sequence": null, "observed_at": "2026-03-01T10:00:00Z",
+           "source_schema_ref": schema, "source_run_ref": null, "source_sequence": null, "episode_ref": null, "goal_ref": null, "layer_mapping_ref": null, "observed_at": "2026-03-01T10:00:00Z",
            "trace_refs": [], "coverage_marker": null})
 }
 

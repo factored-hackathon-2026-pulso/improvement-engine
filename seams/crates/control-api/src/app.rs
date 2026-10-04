@@ -23,13 +23,13 @@ pub struct Resp {
     pub body: Vec<u8>,
 }
 
-fn json_resp(status: u16, v: Value) -> Resp {
+pub(crate) fn json_resp(status: u16, v: Value) -> Resp {
     Resp { status, body: serde_json::to_vec(&v).expect("json") }
 }
-fn code(status: u16, c: &str) -> Resp {
+pub(crate) fn code(status: u16, c: &str) -> Resp {
     json_resp(status, json!({ "code": c }))
 }
-fn error(status: u16, c: &str) -> Resp {
+pub(crate) fn error(status: u16, c: &str) -> Resp {
     json_resp(status, json!({ "error": c }))
 }
 
@@ -55,16 +55,16 @@ struct Admin {
 }
 
 pub struct App {
-    cfg: Config,
-    control: Verifier,
-    broker: Verifier,
-    store: Box<dyn Store>,
+    pub(crate) cfg: Config,
+    pub(crate) control: Verifier,
+    pub(crate) broker: Verifier,
+    pub(crate) store: Box<dyn Store>,
     admin: Mutex<Admin>,
-    write_lock: Mutex<()>,
-    now: Box<dyn Fn() -> f64 + Send + Sync>,
+    pub(crate) write_lock: Mutex<()>,
+    pub(crate) now: Box<dyn Fn() -> f64 + Send + Sync>,
 }
 
-fn is_hex64(s: &str) -> bool {
+pub(crate) fn is_hex64(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
@@ -75,9 +75,10 @@ impl App {
     }
 
     pub fn with_clock(cfg: Config, store: Box<dyn Store>, now: Box<dyn Fn() -> f64 + Send + Sync>) -> App {
+        let boot = now();
         App {
-            control: Verifier::new(cfg.ring.clone()),
-            broker: Verifier::new(cfg.ring.clone()),
+            control: Verifier::new(cfg.ring.clone()).with_boot_floor(boot),
+            broker: Verifier::new(cfg.ring.clone()).with_boot_floor(boot),
             cfg,
             store,
             admin: Mutex::new(Admin::default()),
@@ -93,6 +94,10 @@ impl App {
             ("POST", _, Some("/authorizations/check")) => self.authz(r),
             ("POST", _, Some("/artifacts")) => self.artifact_put(r),
             ("GET", _, Some(p)) if p.starts_with("/artifacts/") => self.artifact_get(r, &p["/artifacts/".len()..]),
+            ("GET", "/healthz", _) => json_resp(200, json!({"status": "ok", "service": "control-api"})),
+            ("POST", "/internal/v1/platform/observations", _) => self.observations(r),
+            ("GET", "/internal/v1/platform/quarantine", _) => self.quarantine_list(r),
+            ("GET", p, _) if p.starts_with("/internal/v1/platform/exporters/") => self.cursor_get(r),
             ("POST", "/_e2e/config", _) if self.cfg.admin => self.admin_config(r),
             _ => code(404, "not_found"),
         }
@@ -104,20 +109,20 @@ impl App {
         (scheme.eq_ignore_ascii_case("bearer") && !token.is_empty()).then_some(token)
     }
 
-    fn authn(&self, v: &Verifier, r: &Req, want: &Expect) -> Result<Value, Denied> {
+    pub(crate) fn authn(&self, v: &Verifier, r: &Req, want: &Expect) -> Result<Value, Denied> {
         let token = self.bearer(r).ok_or(Denied { reason: "missing_bearer", status: 401 })?;
         v.verify(token, (self.now)(), want)
     }
 
-    fn denied(d: Denied) -> Resp {
+    pub(crate) fn denied(d: Denied) -> Resp {
         code(d.status, &format!("pulso:auth_{}", d.reason))
     }
 
-    fn fault(&self, route: &str) -> Option<String> {
+    pub(crate) fn fault(&self, route: &str) -> Option<String> {
         self.admin.lock().unwrap().faults.get_mut(route).and_then(VecDeque::pop_front)
     }
 
-    fn parse(r: &Req) -> Option<Map<String, Value>> {
+    pub(crate) fn parse(r: &Req) -> Option<Map<String, Value>> {
         match serde_json::from_slice::<Value>(if r.body.is_empty() { b"{}" } else { &r.body }) {
             Ok(Value::Object(m)) => Some(m),
             _ => None,

@@ -102,9 +102,9 @@ fn planned_and_denied_types_quarantine_with_their_class_and_the_payload_is_never
     let classes: Vec<(&str, &str)> = q["items"].as_array().unwrap().iter().map(|i| (i["event_type"].as_str().unwrap(), i["classification"].as_str().unwrap())).collect();
     assert_eq!(classes, vec![("auth.password_accepted", "denied"), ("staff.created", "planned"), ("team.created", "planned")]);
     assert!(!q.to_string().contains("DO-NOT-STORE"), "quarantine keeps metadata, never the payload");
-    // another tenant sees nothing
+    // the deployment pins the exporter binding to tenant t1: another tenant's token is refused outright
     let other = rig.token("ob", "control-api", "observations", "t2", json!({"purpose": "platform_observations"}));
-    assert_eq!(rig.call("GET", "/internal/v1/platform/quarantine", None, Some(&other), &[]).1["items"], json!([]));
+    assert_eq!(rig.call("GET", "/internal/v1/platform/quarantine", None, Some(&other), &[]).0, 403);
 }
 
 #[test]

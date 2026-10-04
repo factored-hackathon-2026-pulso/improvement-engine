@@ -31,6 +31,12 @@ pub trait Store: Send + Sync {
     /// Idempotent by `(tenant, artifact id)`; `Conflict` when the same id exists with a different `artifact` ref.
     fn put_artifact(&self, tenant: &str, envelope: Value) -> PutOutcome;
     fn get_artifact(&self, tenant: &str, id: &str) -> Option<Value>;
+    /// Namespaced, tenant-scoped JSON documents (ingest ledger/cursors/receipts/quarantine, grants, lab queries, run events).
+    /// The app serialises writers, so a get-modify-put needs no atomicity from the store.
+    fn put_doc(&self, ns: &str, tenant: &str, id: &str, doc: Value);
+    fn get_doc(&self, ns: &str, tenant: &str, id: &str) -> Option<Value>;
+    /// All documents of `(ns, tenant)`, ordered by id.
+    fn list_docs(&self, ns: &str, tenant: &str) -> Vec<(String, Value)>;
 }
 
 #[derive(Default)]
@@ -40,6 +46,7 @@ struct Inner {
     effects: HashMap<(String, String), u32>,
     refs: HashMap<String, String>,
     artifacts: HashMap<(String, String), Value>,
+    docs: std::collections::BTreeMap<(String, String, String), Value>,
 }
 
 #[derive(Default)]
@@ -82,5 +89,15 @@ impl Store for MemStore {
     }
     fn get_artifact(&self, tenant: &str, id: &str) -> Option<Value> {
         self.0.lock().unwrap().artifacts.get(&(tenant.into(), id.into())).cloned()
+    }
+    fn put_doc(&self, ns: &str, tenant: &str, id: &str, doc: Value) {
+        self.0.lock().unwrap().docs.insert((ns.into(), tenant.into(), id.into()), doc);
+    }
+    fn get_doc(&self, ns: &str, tenant: &str, id: &str) -> Option<Value> {
+        self.0.lock().unwrap().docs.get(&(ns.into(), tenant.into(), id.into())).cloned()
+    }
+    fn list_docs(&self, ns: &str, tenant: &str) -> Vec<(String, Value)> {
+        let g = self.0.lock().unwrap();
+        g.docs.iter().filter(|((n, t, _), _)| n == ns && t == tenant).map(|((_, _, id), v)| (id.clone(), v.clone())).collect()
     }
 }

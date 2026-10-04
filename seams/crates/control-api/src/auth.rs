@@ -49,11 +49,20 @@ pub struct Expect<'a> {
 pub struct Verifier {
     ring: std::sync::Arc<KeyRing>,
     seen: Mutex<HashMap<(String, String), f64>>,
+    /// Tokens issued before this instant are refused: the jti set is process memory, so a token captured before a restart
+    /// could otherwise be replayed once after it. 0 disables the rule.
+    boot_floor: f64,
 }
 
 impl Verifier {
     pub fn new(ring: std::sync::Arc<KeyRing>) -> Verifier {
-        Verifier { ring, seen: Mutex::new(HashMap::new()) }
+        Verifier { ring, seen: Mutex::new(HashMap::new()), boot_floor: 0.0 }
+    }
+
+    /// Refuse (`pre_boot_token`) any token whose `iat` precedes `floor` (epoch seconds, whole): replay protection across restarts.
+    pub fn with_boot_floor(mut self, floor: f64) -> Verifier {
+        self.boot_floor = floor.floor();
+        self
     }
 
     pub fn verify(&self, token: &str, now: f64, want: &Expect) -> Result<Value, Denied> {
@@ -88,6 +97,9 @@ impl Verifier {
         let (Some(exp), Some(jti)) = (exp, jti) else { return Err(deny("missing_claims")) };
         if exp <= now {
             return Err(deny("expired"));
+        }
+        if self.boot_floor > 0.0 && cl.get("iat").and_then(Value::as_f64).is_none_or(|iat| iat < self.boot_floor) {
+            return Err(deny("pre_boot_token"));
         }
         if exp - now > 330.0 {
             return Err(deny("ttl_too_long"));
