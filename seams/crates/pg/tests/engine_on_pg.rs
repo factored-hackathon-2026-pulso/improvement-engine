@@ -80,3 +80,60 @@ fn kill_9_between_handlers_resumes_on_pg_with_the_golden_sequence() {
     assert_eq!(events(&resumed.stdout), GOLDEN);
     assert!(String::from_utf8_lossy(&resumed.stdout).contains("\"attempt\":2"));
 }
+
+#[test]
+fn kill_9_inside_the_commit_transaction_leaves_no_partial_state_and_resumes() {
+    use std::process::{Command, Stdio};
+    let Some(db) = migrated() else { return };
+    let mut admin = db.connect();
+    // the out/1 INSERT stalls inside its open transaction, so the process can be killed mid-transaction
+    admin
+        .batch_execute(
+            "CREATE FUNCTION stall_out1() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+               IF NEW.key = 'out/1' THEN PERFORM pg_sleep(3); END IF; RETURN NEW; END $$;
+             CREATE TRIGGER stall_out1 BEFORE INSERT ON pulso_job_kv FOR EACH ROW EXECUTE FUNCTION stall_out1();",
+        )
+        .unwrap();
+    let exe = env!("CARGO_BIN_EXE_pg_engine_run");
+    let run = |now: &str| {
+        let mut c = Command::new(exe);
+        c.args(["demo3", "midtx"]).env("ENGINE_NOW", now).env("PULSO_TEST_PG_DB", &db.name);
+        c
+    };
+    let mut child = run("1000").stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+    let mut stalled = false;
+    for _ in 0..500 {
+        let n: i64 = admin
+            .query_one("SELECT count(*) FROM pg_stat_activity WHERE datname = $1 AND wait_event = 'PgSleep'", &[&db.name])
+            .unwrap()
+            .get(0);
+        if n > 0 {
+            stalled = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(stalled, "never reached the in-transaction stall");
+    child.kill().unwrap();
+    child.wait().unwrap();
+    // the backend notices the dead client once the stall ends; the open transaction must roll back
+    std::thread::sleep(std::time::Duration::from_secs(5));
+    let keys: Vec<String> = admin
+        .query("SELECT key FROM pulso_job_kv WHERE job_ref = 'midtx' ORDER BY key", &[])
+        .unwrap()
+        .iter()
+        .map(|r| r.get(0))
+        .collect();
+    assert!(keys.contains(&"out/0".to_string()) && !keys.contains(&"out/1".to_string()), "partial state: {keys:?}");
+    let open: i64 = admin
+        .query_one("SELECT count(*) FROM pg_stat_activity WHERE datname = $1 AND state LIKE 'idle in transaction%'", &[&db.name])
+        .unwrap()
+        .get(0);
+    assert_eq!(open, 0, "a transaction was left open");
+    admin.batch_execute("DROP TRIGGER stall_out1 ON pulso_job_kv").unwrap();
+    let resumed = run("1060").output().unwrap();
+    assert!(resumed.status.success(), "{}", String::from_utf8_lossy(&resumed.stderr));
+    let log: String = String::from_utf8_lossy(&resumed.stdout).lines().filter(|l| !l.starts_with("SUMMARY ")).map(|l| format!("{l}\n")).collect();
+    assert_eq!(log, GOLDEN);
+    assert!(String::from_utf8_lossy(&resumed.stdout).contains("\"attempt\":2"));
+}
