@@ -30,4 +30,4 @@ Honest findings:
 - Not touched: `contracts/artifact-kinds/matrix.json` and its DIGEST (no verdict changed; `release_settings` evidence level could now be
   raised to real-core-live by citing this test, left to the matrix owner).
 - A whole-suite run (`run.ps1 ... -PytestArgs <file>` appends the file after `tests/live`, so it runs everything) showed
-  `test_09_..._steps_5_6_8_9...[1]` failing in that run while the rest passed; not investigated here (out of scope), flagged for follow-up.
+  `test_09_..._steps_5_6_8_9...[1]` failing in that run while the rest passed; caused by a missing `tests/unit` sys.path entry in test_09 (not by test order); fixed in 80d9d0a.
