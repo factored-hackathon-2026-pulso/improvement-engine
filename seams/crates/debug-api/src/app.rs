@@ -359,6 +359,11 @@ impl App {
                 Some(Ok(())) => ok(&json!({"ok": true})),
                 _ => bad(),
             },
+            ("POST", ["ingest", "engine-run"]) => match crate::ingest::engine_run_report(&*self.store, &|id| self.store.head(id).is_some(), &body) {
+                Ok(run_id) => ok(&json!({"run_id": run_id})),
+                Err(e) if e.contains("already") => problem("already_ingested", 409, json!({})),
+                Err(e) => problem("validation_error", 422, json!({"message": e})),
+            },
             _ => problem("not_found", 404, json!({})),
         }
     }
