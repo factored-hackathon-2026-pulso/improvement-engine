@@ -390,7 +390,31 @@ def step_07(ctx: Ctx) -> dict:
 
 
 def step_08(ctx: Ctx) -> dict:
-    raise NotImplementedError("step 8")
+    """Human only for authority: a SIMULATED local issuer signs an approval bound to the compiled draft digest.
+    Replay verifies it with the local A03 Verifier; on the real Core the same JWS is verified by Core (INT0)."""
+    src = str(ROOT / "e2e-core" / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from codex_standin import jwtsvc as J
+    digest = ctx.out["compiled"]["draft_plan"]["digest"]
+    key = J.private_from_seed(J.b64u(b"thread01-issuer-seed-32-bytes!!!!"[:32]))
+    ring = J.KeyRing({"sim-issuer-1": ("sim-human-issuer", "pulso-core", J.public_of(key))})
+    now = 1_800_000_000
+    ver = J.Verifier(ring, now=lambda: now)
+    claims = {"iss": "sim-human-issuer", "aud": "pulso-core", "exp": now + 300, "jti": "approval-0001",
+              "scope": "approve", "purpose": f"publish:{digest}", "tenant_id": "pulso_local", "sub": "simulated-approver"}
+    token = J.sign(key, "sim-issuer-1", claims)
+    ok = ver.verify(token, aud="pulso-core", scope="approve", purpose=f"publish:{digest}")
+    try:  # the same approval must not authorise a different plan
+        ver.verify(J.sign(key, "sim-issuer-1", {**claims, "jti": "approval-0002"}), aud="pulso-core", scope="approve",
+                   purpose="publish:sha256:" + "0" * 64)
+        tampered = False
+    except J.Denied:
+        tampered = True
+    ctx.out["approval"] = {"jti": ok["jti"], "digest": digest}
+    return {"status": "simulated", "data_class": "synthetic", "receipt": {"provider": "simulated-issuer"},
+            "detail": {"bound_to_digest": digest, "tampered_rejected": tampered, "verified_by": "local-stand-in-verifier",
+                       "issuer": "simulated"}}
 
 
 def step_09(ctx: Ctx) -> dict:
