@@ -124,3 +124,18 @@ def test_tool_schema_tells_a_responder_the_lab_query_arguments(tmp_path):
     sch = req["inputs"]["tools"][0]["args_schema"]
     assert set(sch["required"]) == {"metric_id", "window_id"}
     assert sch["properties"]["metric_id"]["enum"] == ["recurrence_rate"] and sch["properties"]["window_id"]["enum"] == ["w1"]
+
+
+def test_output_schema_names_the_final_answer_shape_per_stage(tmp_path):
+    """A responder must be able to form a final answer from the request alone (no stub `{"type": "object"}`)."""
+    res, q = _live(tmp_path)
+    by_stage = {}
+    for p in (q / "requests").glob("*.json"):
+        r = json.loads(p.read_text(encoding="utf-8"))
+        by_stage[r["system_prompt"][:20]] = r["inputs"]["output_schema"]
+    sc, ve, bu = (by_stage[k] for k in ("You are the scout. Q", "You are the verifier", "You are the builder."))
+    assert sc["required"] == ["hypotheses"]
+    assert set(sc["properties"]["hypotheses"]["items"]["required"]) == {"hypothesis_id", "evidence_ref", "rate", "count"}
+    assert ve["properties"]["assessments"]["items"]["properties"]["verdict"]["enum"] == ["supported", "unsupported"]
+    assert set(bu["required"]) == {"design_intent", "evidence_refs", "alternatives"}
+    assert bu["properties"]["design_intent"]["properties"]["verdict"]["enum"] == ["linked", "unlinked", "do_nothing", "not_evaluable"]

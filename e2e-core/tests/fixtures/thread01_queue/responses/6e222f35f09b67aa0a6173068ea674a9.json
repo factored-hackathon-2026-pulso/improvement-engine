@@ -2,22 +2,21 @@
  "content": {
   "kind": "final",
   "output": {
-   "hypotheses": [
+   "assessments": [
     {
-     "count": 40,
      "evidence_ref": "ev_66fd2583201f4506",
      "hypothesis_id": "h_1",
-     "rate": 0.55
+     "verdict": "supported"
     }
    ]
   }
  },
- "key": "9ad23f395581b9d1e77531fc6d81bf2e",
+ "key": "6e222f35f09b67aa0a6173068ea674a9",
  "protocol": "roleplay-queue/1",
  "provenance": "agent_roleplay",
  "quality_claims": "forbidden",
  "responder": {
-  "id": "responder-scout",
-  "role": "scout"
+  "id": "responder-verifier",
+  "role": "verifier"
  }
 }

@@ -62,6 +62,26 @@ SYSTEMS = {
 }
 
 
+_STR = {"type": "string"}
+OUTPUT_SCHEMAS = {  # the final-answer shape a responder must produce (it sees only the request)
+    "scout": {"type": "object", "required": ["hypotheses"], "properties": {"hypotheses": {
+        "type": "array", "items": {"type": "object", "required": ["hypothesis_id", "evidence_ref", "rate", "count"],
+                                   "properties": {"hypothesis_id": _STR, "evidence_ref": _STR,
+                                                  "rate": {"type": "number"}, "count": {"type": "integer"}}}}}},
+    "verifier": {"type": "object", "required": ["assessments"], "properties": {"assessments": {
+        "type": "array", "items": {"type": "object", "required": ["hypothesis_id", "evidence_ref", "verdict"],
+                                   "properties": {"hypothesis_id": _STR, "evidence_ref": _STR,
+                                                  "verdict": {"type": "string", "enum": ["supported", "unsupported"]}}}}}},
+    "builder_design": {"type": "object", "required": ["design_intent", "evidence_refs", "alternatives"], "properties": {
+        "design_intent": {"type": "object", "required": ["verdict"], "properties": {
+            "verdict": {"type": "string", "enum": ["linked", "unlinked", "do_nothing", "not_evaluable"]},
+            "target_ref": {"type": "string", "description": "one offered candidate target_ref, only if linked"}}},
+        "evidence_refs": {"type": "array", "items": _STR},
+        "alternatives": {"type": "array", "items": {"type": "object", "properties": {
+            "kind": {"type": "string", "enum": ["do_nothing"]}}}}}},
+}
+
+
 def _ensure_paths() -> None:
     for rel in ("roleplay-llm", "core-bridge/src", "platform-sim", "platform-contract"):
         p = str(ROOT / rel)
@@ -280,7 +300,7 @@ def agent_loop(llm: LLMDouble, stage: str, goal: str, inputs: dict, db: str, cap
     obs: list[dict] = []
     for step in range(1, cap + 1):
         out = llm.step(stage, {"goal": goal, "inputs": inputs, "step": step, "tools": tools, "observations": obs,
-                               "feedback": None, "output_schema": {"type": "object"}})
+                               "feedback": None, "output_schema": OUTPUT_SCHEMAS[stage]})
         if out["kind"] == "final":
             return out["output"], step
         if out["kind"] != "tool_call" or out["tool"] != LAB_TOOL:

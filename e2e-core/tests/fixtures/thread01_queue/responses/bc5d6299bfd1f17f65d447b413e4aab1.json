@@ -7,12 +7,12 @@
   "kind": "tool_call",
   "tool": "pulso/lab_query@1.0.0"
  },
- "key": "f2f4273c9305c2ae96931a2ac12890e4",
+ "key": "bc5d6299bfd1f17f65d447b413e4aab1",
  "protocol": "roleplay-queue/1",
  "provenance": "agent_roleplay",
  "quality_claims": "forbidden",
  "responder": {
-  "id": "responder-scout",
-  "role": "scout"
+  "id": "responder-verifier",
+  "role": "verifier"
  }
 }
