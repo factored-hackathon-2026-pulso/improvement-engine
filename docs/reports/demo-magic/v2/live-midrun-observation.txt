@@ -1,0 +1,6 @@
+Observed in the built-in browser (console served by `pulso serve`, `pulso demo --pace-ms 2500 --run-id run-demo0-live` running):
+ t~12 s: signals complete, scout..observation [pending]; Investigation "sin hipotesis", Diff "no hay diff", Decision "decision no disponible".
+ t~26 s: recompute [real-narrow] complete, validation [pending] -> the Investigation panel ALREADY shows the scripted-scout hypothesis,
+         verifier "corroborated" and its evidence (no reload); Diff still "no hay diff", Gates still not_evaluable, Decision still unavailable.
+ (the Investigation event is emitted when the recompute/validation handlers commit; Diff when compile commits; Gates when the gate commits;
+  the Decision card when authority commits.)
