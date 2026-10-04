@@ -31,7 +31,7 @@ pub fn run(input: &str) -> Result<String, StepError> {
         }
     }
     let lab_path = env_path("STEPS_LAB_DIR")?.join(format!("{lab_id}.json"));
-    let lab_text = std::fs::read_to_string(&lab_path).map_err(|e| StepError::Io(format!("{}: {e}", lab_path.display())))?;
+    let lab_text = std::fs::read_to_string(&lab_path).map_err(|_| StepError::Io("cannot read lab file".into()))?;
     let lab = json::parse(&lab_text)?;
     let rows = lab.get("rows").and_then(Json::as_arr).ok_or_else(|| inv("lab rows"))?;
 

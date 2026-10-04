@@ -103,7 +103,7 @@ pub mod json {
     }
 
     pub fn parse(text: &str) -> Result<Json, StepError> {
-        let mut p = P { b: text.as_bytes(), i: 0 };
+        let mut p = P { b: text.as_bytes(), i: 0, depth: 0 };
         let v = p.value()?;
         p.ws();
         if p.i != p.b.len() {
@@ -115,7 +115,10 @@ pub mod json {
     struct P<'a> {
         b: &'a [u8],
         i: usize,
+        depth: usize,
     }
+
+    const MAX_DEPTH: usize = 64;
 
     impl P<'_> {
         fn err(&self, m: &str) -> StepError {
@@ -135,6 +138,15 @@ pub mod json {
             }
         }
         fn value(&mut self) -> Result<Json, StepError> {
+            self.depth += 1;
+            if self.depth > MAX_DEPTH {
+                return Err(self.err("nesting too deep"));
+            }
+            let r = self.value_inner();
+            self.depth -= 1;
+            r
+        }
+        fn value_inner(&mut self) -> Result<Json, StepError> {
             self.ws();
             match self.b.get(self.i) {
                 None => Err(self.err("unexpected end")),
@@ -151,6 +163,9 @@ pub mod json {
                         self.ws();
                         if !self.eat(":") {
                             return Err(self.err("expected ':'"));
+                        }
+                        if kv.iter().any(|(e, _)| *e == k) {
+                            return Err(self.err("duplicate key"));
                         }
                         kv.push((k, self.value()?));
                         self.ws();
@@ -195,8 +210,11 @@ pub mod json {
                 self.i += 1;
             }
             let t = std::str::from_utf8(&self.b[s..self.i]).unwrap_or("");
-            if t.is_empty() {
-                return Err(self.err("unexpected character"));
+            let d = t.strip_prefix('-').unwrap_or(t).as_bytes();
+            let int_end = d.iter().position(|c| !c.is_ascii_digit()).unwrap_or(d.len());
+            let frac_ok = d.get(int_end) != Some(&b'.') || d.get(int_end + 1).is_some_and(u8::is_ascii_digit);
+            if t.is_empty() || int_end == 0 || (d[0] == b'0' && int_end > 1) || !frac_ok || t.starts_with('+') {
+                return Err(self.err("bad number"));
             }
             if let Ok(i) = t.parse::<i64>() {
                 return Ok(Json::Int(i));
@@ -230,13 +248,28 @@ pub mod json {
                                 let n = u32::from_str_radix(std::str::from_utf8(h).unwrap_or(""), 16)
                                     .map_err(|_| self.err("bad \\u"))?;
                                 self.i += 4;
-                                char::from_u32(n).unwrap_or('\u{fffd}')
+                                if (0xD800..0xDC00).contains(&n) {
+                                    let lo = self
+                                        .b
+                                        .get(self.i..self.i + 6)
+                                        .filter(|x| x.starts_with(&[b'\\', b'u']))
+                                        .and_then(|x| std::str::from_utf8(&x[2..]).ok())
+                                        .and_then(|x| u32::from_str_radix(x, 16).ok())
+                                        .filter(|l| (0xDC00..0xE000).contains(l))
+                                        .ok_or_else(|| self.err("lone surrogate"))?;
+                                    self.i += 6;
+                                    char::from_u32(0x10000 + ((n - 0xD800) << 10) + (lo - 0xDC00))
+                                        .ok_or_else(|| self.err("bad surrogate pair"))?
+                                } else {
+                                    char::from_u32(n).ok_or_else(|| self.err("lone surrogate"))?
+                                }
                             }
                             _ => return Err(self.err("bad escape")),
                         };
                         let mut buf = [0u8; 4];
                         out.extend_from_slice(ch.encode_utf8(&mut buf).as_bytes());
                     }
+                    c if c < 0x20 => return Err(self.err("control character in string")),
                     c => out.push(c),
                 }
             }
@@ -247,7 +280,8 @@ pub mod json {
 
 use json::Json;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 fn is_id(s: &str) -> bool {
     // ^[a-z0-9][a-z0-9._-]{2,63}$
@@ -265,6 +299,7 @@ pub(crate) fn ref_id(r: &str) -> Result<&str, StepError> {
     let ok = !kind.is_empty()
         && kind.bytes().all(|c| c.is_ascii_lowercase() || c == b'_')
         && !id.is_empty()
+        && !id.starts_with('.')
         && id.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
         && !rev.is_empty()
         && rev.bytes().all(|c| c.is_ascii_digit());
@@ -322,7 +357,7 @@ pub fn run(input: &str) -> Result<String, StepError> {
 
     let exe = env_path("STEPS_RUNNER_EXE")?;
     if !exe.is_file() {
-        return Err(StepError::Io(format!("runner exe not found: {}", exe.display())));
+        return Err(StepError::Io("runner exe not found".to_string()));
     }
     let package = env_path("STEPS_SNAPSHOT_ROOT")?.join(snap);
     let out_dir = std::env::temp_dir().join(format!("steps-sensor-{run_id}-{}", std::process::id()));
@@ -330,7 +365,8 @@ pub fn run(input: &str) -> Result<String, StepError> {
     std::fs::create_dir_all(&out_dir).map_err(|e| StepError::Io(e.to_string()))?;
     let arranque = std::env::var("STEPS_ARRANQUE").unwrap_or_else(|_| "30".into());
     let min_support = std::env::var("STEPS_MIN_SUPPORT").unwrap_or_else(|_| "5".into());
-    let done = Command::new(&exe)
+    let timeout = std::env::var("STEPS_RUNNER_TIMEOUT_SECS").ok().and_then(|t| t.parse::<u64>().ok()).unwrap_or(600);
+    let mut child = Command::new(&exe)
         .args(["local-sim", "--mode", "local-simulation", "--source", "e0", "--input"])
         .arg(&package)
         .arg("--output")
@@ -338,13 +374,28 @@ pub fn run(input: &str) -> Result<String, StepError> {
         .args(["--tenant-id", "pulso_local", "--observed-cutoff"])
         .arg(format!("{end}T00:00:00Z"))
         .args(["--arranque-cases", &arranque, "--min-recurring-query-cases", &min_support])
-        .output()
-        .map_err(|e| StepError::Io(format!("cannot start runner: {e}")))?;
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| StepError::Io("cannot start runner".into()))?;
+    let deadline = Instant::now() + Duration::from_secs(timeout);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(st)) => break Ok(st),
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break Err(StepError::Runner(format!("sensor timed out after {timeout}s")));
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            Err(_) => break Err(StepError::Runner("cannot wait for runner".into())),
+        }
+    };
     let result = (|| {
-        if !done.status.success() {
-            let err = String::from_utf8_lossy(&done.stderr);
-            let tail: String = err.chars().rev().take(300).collect::<Vec<_>>().into_iter().rev().collect();
-            return Err(StepError::Runner(format!("sensor failed: {tail}")));
+        let status = status?;
+        if !status.success() {
+            return Err(StepError::Runner(format!("sensor failed ({status})")));
         }
         let run_dir = std::fs::read_dir(&out_dir)
             .map_err(|e| StepError::Io(e.to_string()))?
@@ -352,7 +403,11 @@ pub fn run(input: &str) -> Result<String, StepError> {
             .map(|e| e.path())
             .find(|p| p.is_dir())
             .ok_or_else(|| StepError::Runner("runner produced no run directory".into()))?;
-        let text = std::fs::read_to_string(run_dir.join("result.json")).map_err(|e| StepError::Io(e.to_string()))?;
+        let rp = run_dir.join("result.json");
+        if std::fs::metadata(&rp).map_err(|_| StepError::Io("runner result.json missing".into()))?.len() > 16 << 20 {
+            return Err(StepError::Runner("runner result.json too large".into()));
+        }
+        let text = std::fs::read_to_string(&rp).map_err(|_| StepError::Io("cannot read runner result.json".into()))?;
         json::parse(&text)
     })();
     let _ = std::fs::remove_dir_all(&out_dir);
