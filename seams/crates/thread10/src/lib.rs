@@ -2,6 +2,7 @@
 //! The engine executor runs the nine handlers (sensors, recompute, validation, compile, arms, gate, native_eval,
 //! authority, publish) over a labelled Core double; `report` derives the ten report steps from what the job COMMITTED.
 pub mod double;
+pub mod platform;
 pub mod report;
 
 use abi::JobHandler;
