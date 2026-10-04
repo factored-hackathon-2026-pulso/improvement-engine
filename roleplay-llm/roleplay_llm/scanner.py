@@ -102,7 +102,7 @@ def _static_tree(x: Any, path: str, v: list[str], depth: int = 0) -> None:
 
 
 def _opaque_str(x: str, path: str, v: list[str]) -> None:
-    if not _OPAQUE.match(x) or _EMAIL.search(x) or _LONG_DIGITS.search(x) or re.fullmatch(r"\d{7,}", x):
+    if not _OPAQUE.match(x) or _EMAIL.search(x) or re.fullmatch(r"\+?[\d().-]{7,}", x):
         v.append(f"{path}: string is not an opaque id or enum")
 
 
