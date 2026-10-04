@@ -3,6 +3,9 @@
 //! `policy` and never returns denylisted tables or columns.
 pub mod config;
 pub mod monitor;
+pub mod pg_dataset;
+pub mod pg_product;
+pub mod pg_store;
 pub mod policy;
 pub mod sqlite;
 pub mod store;
