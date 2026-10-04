@@ -38,19 +38,21 @@ def aggregate(cases, queries, tool_calls, suggestion_rows, k=10):
             continue
         sigs = sig_cases[t]
         lead = max(sigs.values(), key=len) if sigs else set()
+        cell = lambda n: n if n >= k else None  # noqa: E731  every emitted count is >= k or null (suppressed)
         rows.append({
             "type_id": t,
-            "copilot_questions": len(asked[t]),
-            "repeat_q_cases": len(lead),
-            "tool_applicable": len(lead),
-            "tool_used": len(lead & analyst_tool),
+            "copilot_questions": cell(len(asked[t])),
+            "repeat_q_cases": cell(len(lead)),
+            "tool_applicable": cell(len(lead)),
+            "tool_used": cell(len(lead & analyst_tool)),
         })
     return {
-        "source": "e0_treated", "simulated": False, "k_min": k, "suppressed_types": suppressed, "suggestion_rows": suggestion_rows,
+        "source": "e0_treated", "simulated": False, "k_min": k, "types_suppressed": suppressed > 0, "has_suggestion_rows": suggestion_rows > 0,  # a boolean, never a small count
         "not_computable": {
             "draft_accept_100": "no_draft_rows: E0 has no suggestion rows" if suggestion_rows == 0 else None,
             "stage_3_to_agent": "depends on draft_accept_100",
         },
+        "assumptions": {"topic_mapping": "E0 disputar_cargo is treated as cobro_indebido (E0 has no finer dispute type)"},
         "definitions": {
             "repeat_q_cases": "distinct cases carrying the most frequent copilot query_signature, per type",
             "tool_used": "of those cases, with at least one tool_call by an analyst (proxy for 'proposed tool used')",
