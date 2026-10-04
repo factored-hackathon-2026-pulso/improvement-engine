@@ -43,7 +43,7 @@ class CoverageTest(unittest.TestCase):
                     self.assertTrue(row.get("blocked_on"), (name, v))
 
     def test_matrix_covers_core_entity_kinds_and_release_settings(self):
-        self.assertEqual(set(KINDS), set(M["core"]["entity_kinds"]) | set(M["core"]["draft_only_kinds"]))
+        self.assertEqual(set(KINDS), set(M["core"]["entity_kinds"]) | set(M["core"]["draft_only_kinds"]) | {M["core"]["release_settings_kind"]})
         self.assertIn("release_settings", KINDS)
         self.assertEqual(len(M["core"]["entity_kinds"]), 11)
 

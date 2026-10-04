@@ -1,0 +1,8 @@
+{
+  "contract_version": "artifact-kinds/0",
+  "digest": "sha256:637f452491baeffe549f8f6201ed4daea20b1299bdfaf2936e22cdc73288ee30",
+  "files": {
+    "matrix.json": "sha256:637f452491baeffe549f8f6201ed4daea20b1299bdfaf2936e22cdc73288ee30",
+    "matrix.schema.json": "sha256:bfcc9a7796d3f9c06fda5e823c9c54d70f633b796ba2267e0fcdd29f0fb81b2b"
+  }
+}

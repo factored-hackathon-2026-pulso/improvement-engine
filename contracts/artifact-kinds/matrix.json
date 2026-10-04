@@ -1,0 +1,663 @@
+{
+  "contract_version": "artifact-kinds/0",
+  "core": {
+    "pin": "agent-core c814c2b",
+    "entity_kinds": [
+      "agent",
+      "flow",
+      "decision_model",
+      "policy",
+      "template",
+      "prompt",
+      "tool",
+      "language_detection",
+      "injection_ruleset",
+      "model_profile",
+      "knowledge_snapshot"
+    ],
+    "draft_only_kinds": [
+      "eval_suite"
+    ],
+    "release_settings_kind": "release_settings",
+    "sources": [
+      "agent_core/domain/refs.py::EntityKind",
+      "agent_core/registry/entities.py::SUITE_KIND",
+      "agent_core/registry/models.py::RELEASE_SETTINGS"
+    ]
+  },
+  "verbs": [
+    "propose",
+    "validate",
+    "evaluate",
+    "publish"
+  ],
+  "reasons": [
+    "kind_not_supported",
+    "missing_precondition",
+    "outside_bridge",
+    "mutable_reference",
+    "release_settings_not_allowed",
+    "tool_without_executor",
+    "unsupported_capability",
+    "release_level_change"
+  ],
+  "kinds": [
+    {
+      "kind": "prompt",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "supported",
+          "evidence_level": "real-core-live",
+          "evidence": [
+            "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core",
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_two_operation_spec_compiles_and_validates"
+          ],
+          "note": "Only op replace (replace_prompt); compile is the claude-standin step, the dry-run digest is Core's. add_prompt (and prompt-variant) and disable are denied(kind_not_supported) by the engine."
+        },
+        "validate": {
+          "verdict": "supported",
+          "evidence_level": "real-core-live",
+          "evidence": [
+            "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core"
+          ],
+          "note": "Core dry-run via the bridge; candidate_hash equals the dry-run digest."
+        },
+        "evaluate": {
+          "verdict": "supported",
+          "evidence_level": "real-core-live",
+          "evidence": [
+            "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core"
+          ],
+          "note": "Core native evaluation passes before approve; Core arm runs are real (6 per window); the structural gate verdict is a GSIpy stand-in and fails (no_structural_improvement), so steps 8-9 run as a labelled human override."
+        },
+        "publish": {
+          "verdict": "supported",
+          "evidence_level": "real-core-live",
+          "evidence": [
+            "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core"
+          ],
+          "note": "Staging publish plus alias read-back; approval JWS comes from the local human-issuer double."
+        }
+      },
+      "notes": "Real today for REPLACE only. Immutable: a new version is published (mutable_reference otherwise)."
+    },
+    {
+      "kind": "eval_suite",
+      "source": "draft_only_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "supported",
+          "evidence_level": "real-core-live",
+          "evidence": [
+            "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core",
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_two_operation_spec_compiles_and_validates"
+          ],
+          "note": "Only op add (add_eval_suite); replace/disable of a suite is denied(kind_not_supported) by the engine. Not a Core EntityKind: a registry draft kind (SUITE_KIND)."
+        },
+        "validate": {
+          "verdict": "supported",
+          "evidence_level": "real-core-live",
+          "evidence": [
+            "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core"
+          ],
+          "note": "Core dry-run; platform_* thresholds are a REG-PLATFORM-EDIT violation."
+        },
+        "evaluate": {
+          "verdict": "supported",
+          "evidence_level": "real-core-live",
+          "evidence": [
+            "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core"
+          ],
+          "note": "The suite is the yardstick of the native evaluation."
+        },
+        "publish": {
+          "verdict": "supported",
+          "evidence_level": "real-core-live",
+          "evidence": [
+            "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core"
+          ],
+          "note": "Suite 2.0.0 is published with the prompt (immutable; one window per fresh stack)."
+        }
+      },
+      "notes": "Draft-only kind, listed because Replace Prompt + Add EvalSuite is the live pair."
+    },
+    {
+      "kind": "flow",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "supported",
+          "evidence_level": "real-core-dry-run",
+          "evidence": [
+            "core-bridge/tests/authoring/test_authoring_routes.py::test_dry_run_node_limit_is_enforced_by_core_validation_with_the_configured_limit"
+          ],
+          "note": "Real Core in-process dry-run validates a flow draft (node-limit violation reported); not reachable through the engine compile step."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no flow proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no flow proposal can be frozen by the engine."
+        }
+      },
+      "notes": "Codex BKF (offline) and Claude BKFL (live) target this kind; compiled trees are flow content."
+    },
+    {
+      "kind": "agent",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "not_exercised",
+          "evidence_level": "real-core-dry-run",
+          "evidence": [
+            "core-bridge/tests/authoring/test_authoring_routes.py::test_dry_run_new_agent_without_base_is_reported_not_crashing"
+          ],
+          "note": "Only a negative case exists: a new agent without base is reported, not crashing."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no agent proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no agent proposal can be frozen by the engine."
+        }
+      },
+      "notes": "Codex BKA (authorized fields, cascade prediction). Core rejects platform_* metric ids (REG-PLATFORM-EDIT). Cascade expected_derived vs auto_bumped (CAP-19) is not exercised."
+    },
+    {
+      "kind": "decision_model",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "No test submits a decision_model draft to the Core dry-run (the route is kind-generic, decode_entity). Unreachable from the engine until a kind module exists."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no decision_model proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no decision_model proposal can be frozen by the engine."
+        }
+      },
+      "provider_notes": {
+        "jev": {
+          "verdict": "blocked",
+          "blocked_on": "jev",
+          "note": "agent-core PR 28 not on main; honest ending is blocked(jev)"
+        },
+        "classifier": {
+          "verdict": "not_exercised"
+        },
+        "llm_structured": {
+          "verdict": "not_exercised"
+        },
+        "rule": {
+          "verdict": "not_exercised"
+        }
+      },
+      "notes": "Codex BKD/BKJ, Claude BKDL/BKJL. Calibration must stay unchanged (not enforced anywhere yet)."
+    },
+    {
+      "kind": "policy",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "No test submits a policy draft to the Core dry-run (the route is kind-generic, decode_entity). Unreachable from the engine until a kind module exists."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no policy proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no policy proposal can be frozen by the engine."
+        }
+      },
+      "notes": "Codex BKT (compile, authorized-field limits). No authorized-field list exists in the pinned Core; BKT defines it."
+    },
+    {
+      "kind": "template",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "No test submits a template draft to the Core dry-run (the route is kind-generic, decode_entity). Unreachable from the engine until a kind module exists."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no template proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no template proposal can be frozen by the engine."
+        }
+      },
+      "notes": "Codex BKT (compile, authorized-field limits)."
+    },
+    {
+      "kind": "tool",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported. Planned named negative: tool_without_executor (Codex BKN)."
+        },
+        "validate": {
+          "verdict": "blocked",
+          "blocked_on": "executor-registration",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Needs an executor registered in the Pulso-owned runtime factories (Claude BKOL, T3); bank tools stay blocked."
+        },
+        "evaluate": {
+          "verdict": "blocked",
+          "blocked_on": "executor-registration",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Needs an executor registered in the Pulso-owned runtime factories (Claude BKOL, T3); bank tools stay blocked."
+        },
+        "publish": {
+          "verdict": "blocked",
+          "blocked_on": "executor-registration",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Needs an executor registered in the Pulso-owned runtime factories (Claude BKOL, T3); bank tools stay blocked."
+        }
+      },
+      "notes": "A tool proposal must not pass without an executor (Codex BKN negative tool_without_executor)."
+    },
+    {
+      "kind": "language_detection",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "No test submits a language_detection draft to the Core dry-run (the route is kind-generic, decode_entity). Unreachable from the engine until a kind module exists."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no language_detection proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no language_detection proposal can be frozen by the engine."
+        }
+      },
+      "notes": "Referenced only through release_settings (swap for another registry entity); no standalone improvement path."
+    },
+    {
+      "kind": "injection_ruleset",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "No test submits a injection_ruleset draft to the Core dry-run (the route is kind-generic, decode_entity). Unreachable from the engine until a kind module exists."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no injection_ruleset proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no injection_ruleset proposal can be frozen by the engine."
+        }
+      },
+      "notes": "Platform guardrail family: referenced through release_settings; the Core never lets a proposal remove it, only swap it."
+    },
+    {
+      "kind": "model_profile",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "No test submits a model_profile draft to the Core dry-run (the route is kind-generic, decode_entity). Unreachable from the engine until a kind module exists."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no model_profile proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no model_profile proposal can be frozen by the engine."
+        }
+      },
+      "notes": "No bridge or engine path; model choice is not an improvement lever in the current plan."
+    },
+    {
+      "kind": "knowledge_snapshot",
+      "source": "entity_kind",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "kind_not_supported",
+          "denied_by": "engine",
+          "evidence_level": "stand-in",
+          "evidence": [
+            "e2e-core/tests/unit/test_cmppy_compile.py::test_denied_kind_not_supported",
+            "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+          ],
+          "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
+        },
+        "validate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "No test submits a knowledge_snapshot draft to the Core dry-run (the route is kind-generic, decode_entity). Unreachable from the engine until a kind module exists."
+        },
+        "evaluate": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no knowledge_snapshot proposal can be frozen by the engine."
+        },
+        "publish": {
+          "verdict": "not_exercised",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Not exercised: no knowledge_snapshot proposal can be frozen by the engine."
+        }
+      },
+      "notes": "Produced by the knowledge/memory pipeline, not by an improvement proposal."
+    },
+    {
+      "kind": "release_settings",
+      "source": "release_settings",
+      "verbs": {
+        "propose": {
+          "verdict": "denied",
+          "reason": "release_settings_not_allowed",
+          "denied_by": "bridge",
+          "evidence_level": "real-core-dry-run",
+          "evidence": [
+            "core-bridge/tests/authoring/test_authoring_routes.py::test_dry_run_denies_release_settings_kind",
+            "core-bridge/tests/l3b/test_release_settings_denied.py::test_release_settings_is_denied_with_zero_effect_even_if_committed"
+          ],
+          "note": "Bridge default deny (CAP-23, N-07): put_draft is denied with zero effect even when the commitment covers it; kind variants (case, NFKC, zero-width) are denied too."
+        },
+        "validate": {
+          "verdict": "denied",
+          "reason": "release_settings_not_allowed",
+          "denied_by": "bridge",
+          "evidence_level": "real-core-dry-run",
+          "evidence": [
+            "core-bridge/tests/authoring/test_authoring_routes.py::test_dry_run_denies_release_settings_kind"
+          ],
+          "note": "Dry-run route answers 422 pulso:release_settings_not_allowed with no writes."
+        },
+        "evaluate": {
+          "verdict": "denied",
+          "reason": "release_settings_not_allowed",
+          "denied_by": "bridge",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Unreachable: the draft cannot be frozen."
+        },
+        "publish": {
+          "verdict": "denied",
+          "reason": "release_settings_not_allowed",
+          "denied_by": "bridge",
+          "evidence_level": "none",
+          "evidence": [],
+          "note": "Unreachable: the draft cannot be frozen."
+        }
+      },
+      "notes": "Not an entity: reserved draft (interrupts, language_detection, injection_ruleset, max_input_chars). It can drop a fraud interrupt, so it is denied until a Pulso-side guardrail exists (upstream D-17). The engine should also name release-level changes release_level_change (Codex BKN)."
+    }
+  ],
+  "change_families": [
+    {
+      "id": "replace_prompt",
+      "op": "replace",
+      "target_kind": "prompt",
+      "verdict": "supported",
+      "evidence": [
+        "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core",
+        "e2e-core/tests/unit/test_cmppy_compile.py::test_two_operation_spec_compiles_and_validates"
+      ]
+    },
+    {
+      "id": "add_eval_suite",
+      "op": "add",
+      "target_kind": "eval_suite",
+      "verdict": "supported",
+      "evidence": [
+        "e2e-core/tests/live/test_09_thread01_real_steps.py::test_thread01_steps_5_6_8_9_are_real_narrow_against_core",
+        "e2e-core/tests/unit/test_cmppy_compile.py::test_two_operation_spec_compiles_and_validates"
+      ]
+    },
+    {
+      "id": "add_prompt",
+      "op": "add",
+      "target_kind": "prompt",
+      "verdict": "denied",
+      "reason": "kind_not_supported",
+      "evidence": [
+        "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+      ]
+    },
+    {
+      "id": "disable_prompt",
+      "op": "disable",
+      "target_kind": "prompt",
+      "verdict": "denied",
+      "reason": "kind_not_supported",
+      "evidence": [
+        "seams/crates/steps/tests/cmp_compile.rs::four_denied_reasons_are_named"
+      ]
+    }
+  ],
+  "denied_kinds": [
+    {
+      "kind": "flow",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "agent",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "decision_model",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "policy",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "template",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "tool",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "language_detection",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "injection_ruleset",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "model_profile",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "knowledge_snapshot",
+      "denied_by": "engine",
+      "reason": "kind_not_supported",
+      "scope": "every op until a kind module exists"
+    },
+    {
+      "kind": "release_settings",
+      "denied_by": "bridge",
+      "reason": "release_settings_not_allowed",
+      "scope": "every op; bridge guardrail"
+    }
+  ]
+}

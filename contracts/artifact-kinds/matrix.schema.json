@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "artifact-kinds/matrix",
+  "title": "artifact-kind capability matrix",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "core", "verbs", "reasons", "kinds", "change_families", "denied_kinds"],
+  "properties": {
+    "contract_version": {"const": "artifact-kinds/0"},
+    "core": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pin", "entity_kinds", "draft_only_kinds", "release_settings_kind", "sources"],
+      "properties": {
+        "pin": {"type": "string"},
+        "entity_kinds": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+        "draft_only_kinds": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+        "release_settings_kind": {"type": "string"},
+        "sources": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "verbs": {"const": ["propose", "validate", "evaluate", "publish"]},
+    "reasons": {"type": "array", "items": {"enum": [
+      "kind_not_supported", "missing_precondition", "outside_bridge", "mutable_reference",
+      "release_settings_not_allowed", "tool_without_executor", "unsupported_capability", "release_level_change"]}},
+    "kinds": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Kind"}},
+    "change_families": {"type": "array", "items": {"$ref": "#/$defs/Family"}},
+    "denied_kinds": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "denied_by", "reason", "scope"],
+      "properties": {
+        "kind": {"type": "string"},
+        "denied_by": {"enum": ["bridge", "engine"]},
+        "reason": {"$ref": "#/$defs/Reason"},
+        "scope": {"type": "string"}
+      }}}
+  },
+  "$defs": {
+    "Reason": {"enum": [
+      "kind_not_supported", "missing_precondition", "outside_bridge", "mutable_reference",
+      "release_settings_not_allowed", "tool_without_executor", "unsupported_capability", "release_level_change"]},
+    "Row": {
+      "type": "object", "additionalProperties": false,
+      "required": ["verdict", "evidence_level"],
+      "properties": {
+        "verdict": {"enum": ["supported", "denied", "not_exercised", "blocked"]},
+        "reason": {"$ref": "#/$defs/Reason"},
+        "denied_by": {"enum": ["bridge", "engine"]},
+        "blocked_on": {"type": "string"},
+        "evidence_level": {"enum": ["real-core-live", "real-core-dry-run", "stand-in", "none"]},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "note": {"type": "string"}
+      }
+    },
+    "Kind": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "source", "verbs"],
+      "properties": {
+        "kind": {"type": "string"},
+        "source": {"enum": ["entity_kind", "draft_only_kind", "release_settings"]},
+        "verbs": {
+          "type": "object", "additionalProperties": false,
+          "required": ["propose", "validate", "evaluate", "publish"],
+          "properties": {
+            "propose": {"$ref": "#/$defs/Row"}, "validate": {"$ref": "#/$defs/Row"},
+            "evaluate": {"$ref": "#/$defs/Row"}, "publish": {"$ref": "#/$defs/Row"}
+          }
+        },
+        "provider_notes": {"type": "object"},
+        "notes": {"type": "string"}
+      }
+    },
+    "Family": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "op", "target_kind", "verdict"],
+      "properties": {
+        "id": {"type": "string"}, "op": {"enum": ["add", "replace", "disable"]}, "target_kind": {"type": "string"},
+        "verdict": {"enum": ["supported", "denied"]},
+        "reason": {"$ref": "#/$defs/Reason"},
+        "evidence": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
