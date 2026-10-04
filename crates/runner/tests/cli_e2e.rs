@@ -696,7 +696,255 @@ fn original_cli_reports_one_failed_event_for_each_source_preparation_stage_error
                 "--input",
             ])
             .arg(&input)
- …2322 tokens truncated…t_eq!(
+            .args(["--output"])
+            .arg(&output)
+            .args([
+                "--observed-cutoff",
+                "2025-07-01T00:00:00Z",
+                "--progress-jsonl",
+            ])
+            .output()
+            .expect("run invalid original source through CLI");
+        assert!(!completed.status.success());
+        let stderr = String::from_utf8(completed.stderr).expect("UTF-8 progress output");
+        let progress = stderr
+            .lines()
+            .filter(|line| line.starts_with('{'))
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("JSONL progress"))
+            .filter(|event| event["stage"] == failed_stage)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            progress
+                .iter()
+                .filter(|event| event["status"] == "failed")
+                .count(),
+            1,
+            "expected exactly one failed event for {failed_stage}: {stderr}"
+        );
+        assert!(!progress.iter().any(|event| event["status"] == "completed"));
+        assert!(!stderr.contains("private-id"));
+    }
+}
+
+#[test]
+fn e0_cli_emits_failed_phase_without_continuing_when_source_preparation_fails() {
+    let temp = TempDir::new().expect("temp directory");
+    let missing_input = temp.path().join("missing-e0-source");
+    let output = temp.path().join("runs-failed-progress");
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&missing_input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--progress-jsonl",
+        ])
+        .output()
+        .expect("run CLI with missing source");
+    assert!(!completed.status.success());
+
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 progress output");
+    let progress = stderr
+        .lines()
+        .filter(|line| line.starts_with('{'))
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("JSONL progress"))
+        .collect::<Vec<_>>();
+    assert_eq!(progress.len(), 2);
+    assert_eq!(progress[0]["phase"], "source_preparation");
+    assert_eq!(progress[0]["status"], "started");
+    assert_eq!(progress[1]["phase"], "source_preparation");
+    assert_eq!(progress[1]["status"], "failed");
+    assert!(
+        progress
+            .iter()
+            .all(|event| event["event"] == "run_progress" && event["schema_version"] == 1)
+    );
+    assert!(!stderr.contains("missing-e0-source"));
+}
+
+#[test]
+fn e0_cli_reports_failed_output_persistence_after_detection_without_false_completion() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0-persist-failure");
+    let output_file = temp.path().join("not-a-directory");
+    e0_fixture_with_retries(&input, "ok", "ok", [Some(2), None]);
+    fs::write(&output_file, "occupied").expect("create non-directory output target");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output_file)
+        .args([
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "2",
+            "--progress-jsonl",
+        ])
+        .output()
+        .expect("run CLI with invalid output target");
+    assert!(!completed.status.success());
+
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 progress output");
+    let progress = stderr
+        .lines()
+        .filter(|line| line.starts_with('{'))
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("JSONL progress"))
+        .collect::<Vec<_>>();
+    let transitions = progress
+        .iter()
+        .map(|event| {
+            (
+                event["phase"].as_str().unwrap(),
+                event["status"].as_str().unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        transitions,
+        [
+            ("source_preparation", "started"),
+            ("source_preparation", "completed"),
+            ("detection", "started"),
+            ("detection", "completed"),
+            ("post_selection_holdout", "started"),
+            ("post_selection_holdout", "skipped"),
+            ("persist_outputs", "started"),
+            ("persist_outputs", "failed"),
+        ]
+    );
+    assert!(!stderr.contains(&output_file.display().to_string()));
+}
+
+#[test]
+fn binary_persists_simulated_result_and_timeline_without_source_identifiers() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0");
+    let output = temp.path().join("runs");
+    e0_fixture(&input, "error", "error");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run CLI binary");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result json");
+    let timeline = fs::read_to_string(run_dir.join("events.ndjson")).expect("timeline file");
+    let serialized = result.to_string();
+    assert_eq!(result["execution_mode"], "local_simulation");
+    assert_eq!(result["terminal_status"], "complete_simulated");
+    assert_eq!(result["observed_cutoff_rfc3339"], "2025-07-01T00:00:00Z");
+    assert_eq!(result["evaluation"]["status"], "simulated");
+    assert_eq!(result["proposal"]["status"], "simulated_unverified");
+    assert_eq!(result["formal_route"], "do_nothing");
+    assert_eq!(result["discovery_case_count"], 1);
+    assert!(result["excluded_replay_case_count"].is_null());
+    assert_eq!(result["signal"]["numerator"], 1);
+    assert_eq!(result["signal"]["denominator"], 1);
+    assert!(timeline.contains("2025-07-01T00:00:00Z"));
+    assert!(timeline.contains("improvement_draft"));
+    assert!(!serialized.contains("private-case-id"));
+    assert!(!serialized.contains("private-tool-call-id"));
+    assert!(!serialized.contains("\"label\""));
+    assert!(!serialized.contains("final_sla_breached"));
+
+    let altered_input = temp.path().join("e0-altered-replay");
+    let altered_output = temp.path().join("runs-altered");
+    e0_fixture(&altered_input, "error", "ok");
+    let altered_run = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "e0",
+            "--input",
+        ])
+        .arg(&altered_input)
+        .args(["--output"])
+        .arg(&altered_output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run CLI with changed replay-only event");
+    assert!(
+        altered_run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&altered_run.stderr)
+    );
+    let altered_dir = fs::read_dir(&altered_output)
+        .expect("altered output directory")
+        .next()
+        .expect("altered run directory")
+        .expect("read altered run directory")
+        .path();
+    let altered_result: serde_json::Value = serde_json::from_slice(
+        &fs::read(altered_dir.join("result.json")).expect("altered result file"),
+    )
+    .expect("valid altered result");
+    assert_eq!(
+        altered_result["signal"]["numerator"],
+        result["signal"]["numerator"]
+    );
+    assert_eq!(
+        altered_result["signal"]["denominator"],
+        result["signal"]["denominator"]
+    );
+    assert_eq!(
         altered_result["proposal"]["hypothesis"],
         result["proposal"]["hypothesis"]
     );
