@@ -56,7 +56,7 @@ Everything marked as a double is a double, never the real Agent Core, control-ap
 The engine consumes Agent Core at a pinned commit. Do not copy a SHA from this README: the authoritative value is the
 `PIN_SHA` constant in [`core-bridge/src/pulso_core_runtime/__init__.py`](core-bridge/src/pulso_core_runtime/__init__.py),
 and the reasoning for each bump is in the ADR series under [`core-bridge/docs/adr`](core-bridge/docs/adr/README.md).
-Pin history: `86a7674` -> `789d6c8` -> `894fa65` -> `c814c2b` (the last bump is in progress on another branch).
+Pin history: `86a7674` -> `789d6c8` -> `894fa65` -> `c814c2b` (current; see ADR 0012).
 
 ## Local engine dependencies
 
