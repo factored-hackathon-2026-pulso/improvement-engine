@@ -1,0 +1,232 @@
+{
+  "contract_version": "smap/0",
+  "data_class": "synthetic",
+  "label": "recorded/synthetic",
+  "note": "Hand-authored placeholders recorded for harness testing; no quality claim; no E0 rows.",
+  "outputs": [
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [
+            "disputa-cargo"
+          ],
+          "mechanism": "synthetic placeholder for so-01",
+          "target_ref": "prompt:resumen_radicado@1",
+          "verdict": "linked"
+        },
+        "evidence_refs": [
+          "ev-0001"
+        ]
+      },
+      "finding": {
+        "category": "closing_reply_unclear",
+        "evidence_refs": [
+          "ev-0001",
+          "ev-0002"
+        ],
+        "finding_ref": "sig-0001"
+      },
+      "output_id": "so-01-linked-prompt"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [
+            "disputa-cargo"
+          ],
+          "mechanism": "synthetic placeholder for so-02",
+          "target_ref": "eval_suite:disputas-suite@1",
+          "verdict": "linked"
+        },
+        "evidence_refs": [
+          "ev-0001"
+        ]
+      },
+      "finding": {
+        "category": "coverage_gap_dispute",
+        "evidence_refs": [
+          "ev-0001"
+        ],
+        "finding_ref": "sig-0002"
+      },
+      "output_id": "so-02-linked-suite"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [],
+          "mechanism": "synthetic placeholder for so-03",
+          "target_ref": null,
+          "verdict": "do_nothing"
+        },
+        "evidence_refs": [
+          "ev-0002"
+        ]
+      },
+      "finding": {
+        "category": "closing_reply_unclear",
+        "evidence_refs": [
+          "ev-0001",
+          "ev-0002"
+        ],
+        "finding_ref": "sig-0003"
+      },
+      "output_id": "so-03-do-nothing"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [
+            "disputa-cargo"
+          ],
+          "mechanism": "synthetic placeholder for so-04",
+          "target_ref": "prompt:resumen_radicado@1",
+          "verdict": "linked"
+        },
+        "evidence_refs": [
+          "ev-0001"
+        ]
+      },
+      "finding": {
+        "category": "followup_wording",
+        "evidence_refs": [
+          "ev-0001"
+        ],
+        "finding_ref": "sig-0004"
+      },
+      "output_id": "so-04-linked-second-category"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [],
+          "mechanism": "synthetic placeholder for so-05",
+          "target_ref": null,
+          "verdict": "unlinked"
+        },
+        "evidence_refs": [
+          "ev-0001"
+        ]
+      },
+      "finding": {
+        "category": "otp_retry_exhaustion",
+        "evidence_refs": [
+          "ev-0001"
+        ],
+        "finding_ref": "sig-0005"
+      },
+      "output_id": "so-05-unlinked"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [
+            "disputa-cargo"
+          ],
+          "mechanism": "synthetic placeholder for so-06",
+          "target_ref": "prompt:resumen_radicado@1",
+          "verdict": "linked"
+        },
+        "evidence_refs": [
+          "ev-0001"
+        ]
+      },
+      "finding": {
+        "category": "otp_retry_exhaustion",
+        "evidence_refs": [
+          "ev-0001"
+        ],
+        "finding_ref": "sig-0006"
+      },
+      "output_id": "so-06-linked-claim-no-catalogue-route"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [
+            "disputa-cargo"
+          ],
+          "mechanism": "synthetic placeholder for so-07",
+          "target_ref": null,
+          "verdict": "not_evaluable"
+        },
+        "evidence_refs": [
+          "ev-0001"
+        ]
+      },
+      "finding": {
+        "category": "closing_reply_unclear",
+        "evidence_refs": [
+          "ev-0001"
+        ],
+        "finding_ref": "sig-0007"
+      },
+      "output_id": "so-07-not-evaluable"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [],
+          "mechanism": "synthetic placeholder for so-08",
+          "target_ref": null,
+          "verdict": "not_evaluable"
+        },
+        "evidence_refs": []
+      },
+      "finding": {
+        "category": "coverage_gap_dispute",
+        "evidence_refs": [
+          "ev-0001"
+        ],
+        "finding_ref": "sig-0008"
+      },
+      "output_id": "so-08-not-evaluable-empty-evidence"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [
+            "disputa-cargo"
+          ],
+          "mechanism": "synthetic placeholder for so-09",
+          "target_ref": "prompt:resumen_radicado@1",
+          "verdict": "linked"
+        },
+        "evidence_refs": [
+          "ev-9999"
+        ]
+      },
+      "finding": {
+        "category": "closing_reply_unclear",
+        "evidence_refs": [
+          "ev-0001"
+        ],
+        "finding_ref": "sig-0009"
+      },
+      "output_id": "so-09-invented-evidence"
+    },
+    {
+      "builder_output": {
+        "design_intent": {
+          "affected_routes": [
+            "disputa-cargo"
+          ],
+          "mechanism": "synthetic placeholder for so-10",
+          "target_ref": "eval_suite:disputas-suite@1",
+          "verdict": "linked"
+        },
+        "evidence_refs": [
+          "ev-0001"
+        ]
+      },
+      "finding": {
+        "category": "closing_reply_unclear",
+        "evidence_refs": [
+          "ev-0001"
+        ],
+        "finding_ref": "sig-0010"
+      },
+      "output_id": "so-10-prose-target-mismatch"
+    }
+  ]
+}
