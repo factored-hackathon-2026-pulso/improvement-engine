@@ -96,6 +96,10 @@ fn contract_seed_provides_dec_1_and_prop_1_and_says_it_is_not_an_engine_run() {
     assert_eq!(get(&app, &format!("{D}/proposals/prop-1/diff")).0, 200);
     let (_, list) = get(&app, &format!("{D}/runs"));
     assert!(list["items"][0]["title"].as_str().unwrap().contains("not an engine run"));
+    assert_eq!(id, "run-active", "the contract suite reads the graph of run-active unconditionally");
+    let (_, graph) = get(&app, &format!("{D}/runs/run-active/graph"));
+    assert_eq!(graph["nodes"].as_array().unwrap().len(), 2);
+    assert!(graph["nodes"].as_array().unwrap().iter().all(|n| n["trace_id"].is_null()));
     let (_, g) = get(&app, &format!("{D}/runs/{id}/gates"));
     assert_eq!(g["proposal_id"], "prop-1");
     let (_, p) = get(&app, &format!("{D}/profile"));

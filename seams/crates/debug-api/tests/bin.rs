@@ -42,7 +42,7 @@ fn serves_an_ingested_report_and_the_contract_seed_from_a_file_store() {
     let (status, runs) = get(port, "/internal/v1/debug/runs", "");
     assert!(status.contains("200"), "{status}");
     let ids: Vec<&str> = runs["items"].as_array().unwrap().iter().map(|r| r["run_id"].as_str().unwrap()).collect();
-    assert_eq!(ids, vec!["run-demo-0-aa2f9472", "run-contract-seed"]);
+    assert_eq!(ids, vec!["run-demo-0-aa2f9472", "run-active"]);
     let (_, prof) = get(port, "/internal/v1/debug/profile", "");
     assert_eq!(prof["mode"], "stand_in");
     let _ = std::fs::remove_dir_all(&dir);
