@@ -50,7 +50,7 @@ L-MODEL: roleplay-llm/** ; local/core/gateway/** ; scripts/dc/** ; agent-core-as
 L-BRIDGE: core-bridge/** ; bridge-contract/** ; agent-core-assets/** ; local/core/** ; scripts/core/** ; docs/adr/012[0-9]-* ; docs/journal/(013[2-9]|014[0-7])-* ; local/compose.d/l-bridge.yaml
 L-E2E: e2e-core/** ; demo/** ; docs/reports/e2e/** ; docs/adr/016[0-9]-* ; docs/journal/(019[6-9]|020[0-9]|021[0-1])-* ; local/compose.d/l-e2e.yaml
 L-PLAT: platform-contract/** ; platform-exporter/** ; platform-sim/** ; contracts/product/** ; seams/crates/control-api/src/correlation/** ; migrations/007[0-4]_* ; docs/adr/026[0-9]-* ; docs/journal/(035[6-9]|036[0-9]|037[0-1])-* ; local/compose.d/l-plat.yaml
-L-CLIENT: seams/Cargo.toml ; seams/Cargo.lock ; seams/crates/core-client/** ; seams/crates/model-client/** ; docs/adr/014[0-9]-* ; docs/journal/(016[4-9]|017[0-9])-* ; local/compose.d/l-client.yaml
+L-CLIENT: seams/Cargo.toml ; seams/Cargo.lock ; seams/README.md ; seams/crates/core-client/** ; seams/crates/model-client/** ; docs/adr/014[0-9]-* ; docs/journal/(016[4-9]|017[0-9])-* ; local/compose.d/l-client.yaml
 L-ENGINE: seams/crates/abi/** ; seams/crates/engine/** ; contracts/engine-handlers/** ; seams/crates/steps/** ; seams/crates/swap/** ; docs/adr/017[0-9]-* ; docs/journal/(021[2-9]|022[0-7])-* ; local/compose.d/l-engine.yaml
 L-CAPI: seams/crates/control-api/** ; contracts/control-api/** ; migrations/008[5-9]_* ; docs/adr/013[0-9]-* ; docs/journal/(014[8-9]|015[0-9]|016[0-3])-* ; local/compose.d/l-capi.yaml
 L-PG: seams/crates/pg/** ; seams/crates/worker/** ; local/pg/** ; migrations/00[56][0-9]_* ; docs/adr/025[0-9]-* ; docs/journal/(034[0-9]|035[0-5])-* ; local/compose.d/l-pg.yaml
