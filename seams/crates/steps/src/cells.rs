@@ -28,6 +28,9 @@ pub enum Multiplicity {
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    /// (dependent metric, parent metric): a dependent finding on a cell where the parent also has a
+    /// finding is flagged `depends_on`, never dropped.
+    pub dependencies: Vec<(String, String)>,
     pub multiplicity: Multiplicity,
     /// Minimum count for every emitted number (cell numerator, complement, denominator).
     pub k_min: i64,
@@ -43,7 +46,12 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config { multiplicity: Multiplicity::Bh, k_min: 10, alpha: 0.01, min_ratio: 1.25, min_effect: 0.05, min_support: 500 }
+        Config {
+            dependencies: [("M6", "M1"), ("M6R", "M1"), ("M6U", "M1")]
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
+            multiplicity: Multiplicity::Bh, k_min: 10, alpha: 0.01, min_ratio: 1.25, min_effect: 0.05, min_support: 500 }
     }
 }
 
@@ -67,6 +75,18 @@ pub struct Signal {
     pub discovery: Option<Stage>,
     pub holdout: Option<Stage>,
     pub p_adj: Option<f64>,
+    /// Secondary replication over two long windows (R2), reported alongside the A/B split.
+    pub r2: Option<R2>,
+    /// Parent metric whose finding on the same cell explains this one (e.g. CSAT low depends on M1).
+    pub depends_on: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct R2 {
+    /// `replicated | not_replicated | reversed | not_evaluated`
+    pub status: &'static str,
+    pub w1: Option<Stage>,
+    pub w2: Option<Stage>,
 }
 
 #[derive(Debug, Clone)]
@@ -123,9 +143,36 @@ fn k_ok(c: &Cell, k: i64) -> bool {
     c.den >= k && (c.num == 0 || c.num >= k) && (c.den - c.num == 0 || c.den - c.num >= k)
 }
 
-fn parse_rows(input: &str) -> Result<(BTreeMap<Key, [Option<Cell>; 2]>, usize), StepError> {
-    let mut cells: BTreeMap<Key, [Option<Cell>; 2]> = BTreeMap::new();
-    let mut n = 0;
+struct Row {
+    key: Key,
+    half: usize,
+    period: Option<String>,
+    cell: Cell,
+}
+
+/// Window of a `YYYY-MM` period for the secondary R2 replication (partial months fall outside both).
+fn window_of(period: &str) -> Option<usize> {
+    if ("2023-07"..="2024-12").contains(&period) {
+        Some(0)
+    } else if ("2025-01"..="2026-05").contains(&period) {
+        Some(1)
+    } else {
+        None
+    }
+}
+
+fn valid_period(p: &str) -> bool {
+    let b = p.as_bytes();
+    b.len() == 7
+        && b[4] == b'-'
+        && b[..4].iter().all(|c| c.is_ascii_digit())
+        && b[5..].iter().all(|c| c.is_ascii_digit())
+        && (1..=12).contains(&p[5..].parse::<u32>().unwrap_or(0))
+}
+
+fn parse_rows(input: &str) -> Result<Vec<Row>, StepError> {
+    let mut rows = vec![];
+    let mut seen = std::collections::BTreeSet::new();
     for (ln, line) in input.lines().enumerate() {
         if line.trim().is_empty() {
             continue;
@@ -133,7 +180,7 @@ fn parse_rows(input: &str) -> Result<(BTreeMap<Key, [Option<Cell>; 2]>, usize), 
         let v = parse(line).map_err(|e| StepError::Invalid(format!("line {}: {e}", ln + 1)))?;
         let Json::Obj(kv) = &v else { return invalid(format!("line {}: not an object", ln + 1)) };
         for (k, _) in kv {
-            if !["metric", "dims", "half", "numerator", "denominator"].contains(&k.as_str()) {
+            if !["metric", "dims", "half", "period", "numerator", "denominator"].contains(&k.as_str()) {
                 return invalid(format!("line {}: field `{k}` is not allowed in a treated cell table", ln + 1));
             }
         }
@@ -153,19 +200,37 @@ fn parse_rows(input: &str) -> Result<(BTreeMap<Key, [Option<Cell>; 2]>, usize), 
             Some("holdout") => 1,
             _ => return invalid(format!("line {}: half must be discovery or holdout", ln + 1)),
         };
+        let period = match v.get("period") {
+            None => None,
+            Some(Json::Str(p)) if valid_period(p) => Some(p.clone()),
+            _ => return invalid(format!("line {}: period must be YYYY-MM", ln + 1)),
+        };
         let num = v.get("numerator").and_then(|x| x.as_i64()).ok_or_else(|| StepError::Invalid(format!("line {}: numerator", ln + 1)))?;
         let den = v.get("denominator").and_then(|x| x.as_i64()).ok_or_else(|| StepError::Invalid(format!("line {}: denominator", ln + 1)))?;
         if num < 0 || den < 0 || num > den {
             return invalid(format!("line {}: need 0 <= numerator <= denominator", ln + 1));
         }
-        let slot = &mut cells.entry((metric.to_string(), dims)).or_insert([None, None])[half];
-        if slot.is_some() {
+        let key: Key = (metric.to_string(), dims);
+        if !seen.insert((key.clone(), half, period.clone())) {
             return invalid(format!("line {}: duplicate cell row", ln + 1));
         }
-        *slot = Some(Cell { num, den });
-        n += 1;
+        rows.push(Row { key, half, period, cell: Cell { num, den } });
     }
-    Ok((cells, n))
+    Ok(rows)
+}
+
+/// Slots: 0 discovery, 1 holdout, 2 window W1, 3 window W2.
+type Slots = [Option<Cell>; 4];
+
+/// Comparison group of a cell: the same metric and the same non-reason dimensions (same channel),
+/// excluding the cell's own reason. Cells without a reason or with only a reason dimension compare
+/// against the rest of the metric.
+fn stratum(dims: &[(String, String)]) -> Vec<(String, String)> {
+    if dims.len() > 1 && dims.iter().any(|(k, _)| k == "reason_category") {
+        dims.iter().filter(|(k, _)| k != "reason_category").cloned().collect()
+    } else {
+        vec![]
+    }
 }
 
 fn stage(cell: &Cell, rest_num: i64, rest_den: i64) -> (Stage, bool) {
@@ -176,51 +241,56 @@ fn stage(cell: &Cell, rest_num: i64, rest_den: i64) -> (Stage, bool) {
 }
 
 pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
-    let (cells, _) = parse_rows(input)?;
+    let rows = parse_rows(input)?;
     let mut discards: BTreeMap<String, i64> = BTreeMap::new();
     let mut bump = |k: &str| *discards.entry(k.to_string()).or_insert(0) += 1;
 
-    // k rule: a violating cell is a named discard and is dropped everywhere (never tested, not in baselines).
-    let mut valid: BTreeMap<Key, [Option<Cell>; 2]> = BTreeMap::new();
-    for (key, halves) in cells {
-        let mut kept: [Option<Cell>; 2] = [None, None];
-        for (i, c) in halves.into_iter().enumerate() {
-            if let Some(c) = c {
-                if k_ok(&c, cfg.k_min) {
-                    kept[i] = Some(c);
-                } else {
-                    bump("k_violation");
-                }
-            }
+    // k rule: a violating row is a named discard and is dropped everywhere (never tested, not in baselines).
+    let mut valid: BTreeMap<Key, Slots> = BTreeMap::new();
+    let add = |slot: &mut Option<Cell>, c: &Cell| match slot {
+        Some(x) => {
+            x.num += c.num;
+            x.den += c.den;
         }
-        if kept[0].is_none() && kept[1].is_some() {
-            bump("holdout_without_discovery");
+        None => *slot = Some(Cell { num: c.num, den: c.den }),
+    };
+    for r in rows {
+        if !k_ok(&r.cell, cfg.k_min) {
+            bump("k_violation");
             continue;
         }
-        if kept.iter().any(|c| c.is_some()) {
-            valid.insert(key, kept);
+        let slots = valid.entry(r.key).or_insert([None, None, None, None]);
+        add(&mut slots[r.half], &r.cell);
+        if let Some(w) = r.period.as_deref().and_then(window_of) {
+            add(&mut slots[2 + w], &r.cell);
         }
     }
+    let before = valid.len();
+    valid.retain(|_, s| s[0].is_some());
+    for _ in 0..(before - valid.len()) {
+        bump("holdout_without_discovery");
+    }
 
-    // Per-metric, per-half totals (baseline = rest of the metric).
-    let mut totals: BTreeMap<(String, usize), (i64, i64)> = BTreeMap::new();
-    for ((metric, _), halves) in &valid {
-        for (i, c) in halves.iter().enumerate() {
+    // Totals per (metric, comparison stratum, slot); baseline = stratum total minus the cell itself.
+    let mut totals: BTreeMap<(String, Vec<(String, String)>, usize), (i64, i64)> = BTreeMap::new();
+    for ((metric, dims), slots) in &valid {
+        let st = stratum(dims);
+        for (i, c) in slots.iter().enumerate() {
             if let Some(c) = c {
-                let t = totals.entry((metric.clone(), i)).or_insert((0, 0));
+                let t = totals.entry((metric.clone(), st.clone(), i)).or_insert((0, 0));
                 t.0 += c.num;
                 t.1 += c.den;
             }
         }
     }
-    let rest = |metric: &str, half: usize, c: &Cell| -> Option<(i64, i64)> {
-        let t = totals.get(&(metric.to_string(), half))?;
+    let rest = |key: &Key, slot: usize, c: &Cell| -> Option<(i64, i64)> {
+        let t = totals.get(&(key.0.clone(), stratum(&key.1), slot))?;
         let (rn, rd) = (t.0 - c.num, t.1 - c.den);
         (rd >= cfg.k_min).then_some((rn, rd))
     };
 
     // Explored cells: every valid discovery cell of the whole package (Bonferroni family).
-    let m = valid.values().filter(|h| h[0].is_some()).count();
+    let m = valid.len();
     struct Pass {
         key: Key,
         disc: Stage,
@@ -232,7 +302,7 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
     let mut tested: Vec<(Key, Stage, bool)> = vec![];
     for (key, halves) in &valid {
         let Some(c) = &halves[0] else { continue };
-        let Some((rn, rd)) = rest(&key.0, 0, c) else {
+        let Some((rn, rd)) = rest(key, 0, c) else {
             bump("no_baseline");
             continue;
         };
@@ -283,6 +353,8 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
                 discovery: Some(disc),
                 holdout: None,
                 p_adj: Some(p_adj),
+                r2: None,
+                depends_on: None,
             });
         }
     }
@@ -296,7 +368,23 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
     for pa in passed {
         metrics_with_finding.insert(pa.key.0.clone(), true);
         let halves = &valid[&pa.key];
-        let hold = halves[1].as_ref().and_then(|h| rest(&pa.key.0, 1, h).map(|(rn, rd)| stage(h, rn, rd).0));
+        let hold = halves[1].as_ref().and_then(|h| rest(&pa.key, 1, h).map(|(rn, rd)| stage(h, rn, rd).0));
+        let w = |i: usize| halves[i].as_ref().and_then(|c| rest(&pa.key, i, c).map(|(rn, rd)| stage(c, rn, rd).0));
+        let (w1, w2) = (w(2), w(3));
+        let r2 = match (&w1, &w2) {
+            (Some(a), Some(b)) => {
+                let ok = |x: &Stage| x.diff >= cfg.min_effect / 2.0 && x.p < 0.05;
+                let status = if ok(a) && ok(b) {
+                    "replicated"
+                } else if a.diff <= 0.0 || b.diff <= 0.0 {
+                    "reversed"
+                } else {
+                    "not_replicated"
+                };
+                R2 { status, w1: w1.clone(), w2: w2.clone() }
+            }
+            _ => R2 { status: "not_evaluated", w1: None, w2: None },
+        };
         let (status, reason) = match &hold {
             None => ("candidate", "holdout_unavailable"),
             Some(h) if h.diff <= 0.0 => ("refuted", "holdout_direction_reversed"),
@@ -312,6 +400,8 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
             discovery: Some(pa.disc),
             holdout: hold,
             p_adj: Some(pa.p_adj),
+            r2: Some(r2),
+            depends_on: None,
         });
     }
     // A metric with no cell passing discovery is reported once as refuted / no differential.
@@ -326,7 +416,21 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
                 discovery: None,
                 holdout: None,
                 p_adj: None,
+                r2: None,
+                depends_on: None,
             });
+        }
+    }
+    let findings: Vec<(String, Vec<(String, String)>)> = signals
+        .iter()
+        .filter(|s| !s.dims.is_empty() && matches!(s.status, "corroborated" | "candidate"))
+        .map(|s| (s.metric.clone(), s.dims.clone()))
+        .collect();
+    for s in signals.iter_mut().filter(|s| !s.dims.is_empty()) {
+        for (dep, parent) in &cfg.dependencies {
+            if *dep == s.metric && findings.iter().any(|(m, d)| m == parent && d.iter().all(|x| s.dims.contains(x))) {
+                s.depends_on = Some(parent.clone());
+            }
         }
     }
     let rank = |s: &str| match s {
@@ -377,6 +481,19 @@ impl Report {
                 if let Some(h) = &s.holdout {
                     kv.push(("holdout", stage_json(h)));
                 }
+                if let Some(r) = &s.r2 {
+                    let mut o = vec![("status", Json::s(r.status))];
+                    if let Some(w) = &r.w1 {
+                        o.push(("w1", stage_json(w)));
+                    }
+                    if let Some(w) = &r.w2 {
+                        o.push(("w2", stage_json(w)));
+                    }
+                    kv.push(("r2", Json::obj(o)));
+                }
+                if let Some(d) = &s.depends_on {
+                    kv.push(("depends_on", Json::s(d)));
+                }
                 if let Some(p) = s.p_adj {
                     kv.push(("p_adj", Json::Float(p)));
                 }
@@ -393,10 +510,11 @@ impl Report {
             (
                 "method",
                 Json::obj(vec![
-                    ("test", Json::s("two_proportion_z_pooled_vs_rest_of_metric")),
+                    ("test", Json::s("two_proportion_z_pooled_vs_same_channel_excluding_own_reason")),
                     ("multiplicity", Json::s(match c.multiplicity { Multiplicity::Bh => "benjamini_hochberg_all_explored_cells", Multiplicity::Bonferroni => "bonferroni_all_explored_cells" })),
                     ("min_ratio", Json::Float(c.min_ratio)),
                     ("replication", Json::s("discovery_holdout_hash_split")),
+                    ("secondary_replication", Json::s("r2_windows_2023-07..2024-12_vs_2025-01..2026-05")),
                     ("alpha", Json::Float(c.alpha)),
                     ("min_effect", Json::Float(c.min_effect)),
                     ("min_support", Json::Int(c.min_support)),

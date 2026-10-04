@@ -11,9 +11,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import bank_cells as bc  # noqa: E402
 
-CALL_COLS = ["interaction_id", "customer_id", "channel", "reason_category", "was_resolved"]
-CMP_COLS = ["complaint_id", "customer_id", "category", "status", "sla_breached"]
-SRV_COLS = ["survey_id", "interaction_id", "customer_id", "survey_type", "send_channel", "main_score"]
+CALL_COLS = ["interaction_date", "interaction_id", "customer_id", "channel", "reason_category", "was_resolved"]
+CMP_COLS = ["creation_date", "complaint_id", "customer_id", "category", "status", "sla_breached"]
+SRV_COLS = ["survey_date", "survey_id", "interaction_id", "customer_id", "survey_type", "send_channel", "main_score"]
 
 
 def write_table(root: Path, table: str, cols, rows):
@@ -25,6 +25,11 @@ def write_table(root: Path, table: str, cols, rows):
         w.writerows(rows)
 
 
+def date(i):
+    """Six full months of 2024, plus 2026-06 (partial) for i % 50 == 7."""
+    return "2026-06-10 09:00:00" if i % 50 == 7 else f"2024-0{1 + i % 6}-10 09:00:00"
+
+
 def synthetic_root(tmp: Path, n_cust=400):
     calls, cmps, srvs = [], [], []
     for i in range(n_cust):
@@ -32,10 +37,10 @@ def synthetic_root(tmp: Path, n_cust=400):
         reason = ["Queja", "Técnico", "Comercial"][i % 3]
         chan = ["Phone", "App"][i % 2]
         resolved = "False" if (reason == "Queja" and i % 4 == 0) else "True"
-        calls.append([f"INT-{i:05d}", cid, chan, reason, resolved])
-        cmps.append([f"CMP-{i:05d}", cid, ["Fees", "Branch"][i % 2], ["Open", "Resolved", "Closed"][i % 3],
+        calls.append([date(i), f"INT-{i:05d}", cid, chan, reason, resolved])
+        cmps.append([date(i), f"CMP-{i:05d}", cid, ["Fees", "Branch"][i % 2], ["Open", "Resolved", "Closed"][i % 3],
                      "True" if i % 5 == 0 else "False"])
-        srvs.append([f"SRV-{i:05d}", f"INT-{i:05d}" if i % 5 else "", cid, ["CSAT", "NPS"][i % 2], "Email",
+        srvs.append([date(i), f"SRV-{i:05d}", f"INT-{i:05d}" if i % 5 else "", cid, ["CSAT", "NPS"][i % 2], "Email",
                      "2" if i % 6 == 0 else "5"])
     write_table(tmp, "call_center_interactions", CALL_COLS, calls)
     write_table(tmp, "complaints", CMP_COLS, cmps)
@@ -69,7 +74,7 @@ class BuildTests(unittest.TestCase):
         rows, _ = bc.build(self.root)
         self.assertTrue(rows)
         for r in rows:
-            self.assertEqual(set(r), {"metric", "dims", "half", "numerator", "denominator"})
+            self.assertEqual(set(r), {"metric", "dims", "half", "period", "numerator", "denominator"})
             self.assertIn(r["half"], ("discovery", "holdout"))
             for v in r["dims"].values():
                 self.assertFalse(v.startswith(("CLI-", "INT-", "CMP-", "SRV-")))
@@ -93,19 +98,31 @@ class BuildTests(unittest.TestCase):
     def test_metric_definitions(self):
         rows, _ = bc.build(self.root, k=1)  # k=1 so the tiny synthetic table is not suppressed
         m1 = [r for r in rows if r["metric"] == "M1" and r["dims"] == {"reason_category": "Queja", "channel": "Phone"}]
-        self.assertEqual(sum(r["denominator"] for r in m1), sum(1 for i in range(400) if i % 3 == 0 and i % 2 == 0))
-        self.assertEqual(sum(r["numerator"] for r in m1), sum(1 for i in range(400) if i % 3 == 0 and i % 2 == 0 and i % 4 == 0))
+        self.assertEqual(sum(r["denominator"] for r in m1), sum(1 for i in range(400) if i % 3 == 0 and i % 2 == 0 and i % 50 != 7))
+        self.assertEqual(sum(r["numerator"] for r in m1), sum(1 for i in range(400) if i % 3 == 0 and i % 2 == 0 and i % 4 == 0 and i % 50 != 7))
         m4 = [r for r in rows if r["metric"] == "M4"]
-        self.assertEqual(sum(r["denominator"] for r in m4), 400)
+        self.assertEqual(sum(r["denominator"] for r in m4), sum(1 for i in range(400) if i % 50 != 7))
         # open = Open + In Process + Escalated; here statuses Open / Resolved / Closed -> Open only
-        self.assertEqual(sum(r["numerator"] for r in m4), sum(1 for i in range(400) if i % 3 == 0))
-        self.assertTrue({r["metric"] for r in rows} >= {"M1", "M2", "M3", "M4", "M5", "M6R", "M6U"})
+        self.assertEqual(sum(r["numerator"] for r in m4), sum(1 for i in range(400) if i % 3 == 0 and i % 50 != 7))
+        self.assertTrue({r["metric"] for r in rows} >= {"M1", "M2", "M3", "M4", "M5", "M6", "M6R", "M6U"})
 
     def test_survey_linkage_coverage_is_reported_not_row_level(self):
         _, stats = bc.build(self.root)
         self.assertEqual(stats["surveys"]["total"], 400)
-        self.assertEqual(stats["surveys"]["scored_csat"], 200)
-        self.assertEqual(stats["surveys"]["linked_scored"], sum(1 for i in range(400) if i % 2 == 0 and i % 5))
+        self.assertEqual(stats["surveys"]["scored_csat"], sum(1 for i in range(400) if i % 2 == 0 and i % 50 != 7))
+        self.assertEqual(stats["surveys"]["linked_scored"], sum(1 for i in range(400) if i % 2 == 0 and i % 5 and i % 50 != 7))
+
+    def test_rows_carry_a_period_and_partial_months_are_excluded(self):
+        rows, stats = bc.build(self.root, k=1)
+        for r in rows:
+            self.assertRegex(r["period"], r"^\d{4}-\d{2}$")
+            self.assertNotIn(r["period"], ("2023-06", "2026-06"))
+        self.assertGreater(stats["partial_month_rows_excluded"]["call_center_interactions"], 0)
+        self.assertEqual({r["period"] for r in rows}, {f"2024-0{m}" for m in range(1, 7)})
+
+    def test_unstratified_csat_metric_exists_for_the_dependency_flag(self):
+        rows, _ = bc.build(self.root, k=1)
+        self.assertIn("M6", {r["metric"] for r in rows})
 
     def test_output_is_deterministic_and_sorted(self):
         a, _ = bc.build(self.root)

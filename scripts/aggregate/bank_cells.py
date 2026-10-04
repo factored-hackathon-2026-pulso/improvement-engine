@@ -9,6 +9,7 @@ data root, never committed) and emits ndjson cells for the Rust `cells` sensor (
 
 Guarantees: no identifiers, no free text, no row-level output. Every emitted count (numerator,
 complement, denominator) is 0 or >= k (k = 10); violating cells are suppressed and only counted.
+Cells carry a `period` (YYYY-MM, contact month); the partial months 2023-06 and 2026-06 are excluded.
 Replication design: deterministic customer-hash split A/B 50/50 (A = discovery, B = confirmation) (cross-sectional,
 because interaction timestamps are naive, without timezone).
 
@@ -37,6 +38,7 @@ SPLIT_SALT = "pulso-cells-v1|"
 OPEN_STATUSES = {"Open", "In Process", "Escalated"}
 SCORED_SURVEY_TYPE = "CSAT"  # other types use different scales; pooling them would fabricate differences
 LOW_SCORE_MAX = 2.0
+PARTIAL_MONTHS = {"2023-06", "2026-06"}  # data starts 2023-06-17 and ends 2026-06-18
 
 
 def split_half(customer_id: str) -> str:
@@ -61,15 +63,15 @@ def read_table(root: Path, table: str):
 
 
 def row_key(r):
-    return (r["metric"], sorted(r["dims"].items()), r["half"])
+    return (r["metric"], sorted(r["dims"].items()), r["half"], r["period"])
 
 
 class Acc:
     def __init__(self):
         self.cells = {}
 
-    def add(self, metric, dims, half, num, den=1):
-        c = self.cells.setdefault((metric, tuple(sorted(dims.items())), half), [0, 0])
+    def add(self, metric, dims, half, period, num, den=1):
+        c = self.cells.setdefault((metric, tuple(sorted(dims.items())), half, period), [0, 0])
         c[0] += num
         c[1] += den
 
@@ -86,34 +88,46 @@ def build(root, k=10, tables=ALLOWED_TABLES):
     acc = Acc()
     stats = {"k": k, "split": "customer_hash_A_B_50_50", "rows_read": {}}
     reason_of = {}
+    stats["partial_month_rows_excluded"] = {}
 
     if "call_center_interactions" in tables:
-        n = 0
+        n = skipped = 0
         for r in read_table(root, "call_center_interactions"):
+            period = r["interaction_date"][:7]
+            if period in PARTIAL_MONTHS:
+                skipped += 1
+                reason_of[r["interaction_id"]] = None
+                continue
             n += 1
             reason, chan = norm(r["reason_category"]), norm(r["channel"])
             half = split_half(r["customer_id"])
-            reason_of[r["interaction_id"]] = (reason, r["was_resolved"].strip())
+            reason_of[r["interaction_id"]] = (reason, r["was_resolved"].strip(), period)
             res = r["was_resolved"].strip()
             queja = int(reason == "Queja")
-            acc.add("M2", {"channel": chan}, half, queja)
+            acc.add("M2", {"channel": chan}, half, period, queja)
             if res in ("True", "False"):
                 unresolved = int(res == "False")
-                acc.add("M1", {"reason_category": reason, "channel": chan}, half, unresolved)
+                acc.add("M1", {"reason_category": reason, "channel": chan}, half, period, unresolved)
                 if unresolved:
-                    acc.add("M3", {"channel": chan}, half, queja)
+                    acc.add("M3", {"channel": chan}, half, period, queja)
         stats["rows_read"]["call_center_interactions"] = n
+        stats["partial_month_rows_excluded"]["call_center_interactions"] = skipped
 
     if "complaints" in tables:
-        n = 0
+        n = skipped = 0
         for r in read_table(root, "complaints"):
+            period = r["creation_date"][:7]
+            if period in PARTIAL_MONTHS:
+                skipped += 1
+                continue
             n += 1
             cat, half = norm(r["category"]), split_half(r["customer_id"])
-            acc.add("M4", {"category": cat}, half, int(r["status"].strip() in OPEN_STATUSES))
+            acc.add("M4", {"category": cat}, half, period, int(r["status"].strip() in OPEN_STATUSES))
             sla = r["sla_breached"].strip()
             if sla in ("True", "False"):
-                acc.add("M5", {"category": cat}, half, int(sla == "True"))
+                acc.add("M5", {"category": cat}, half, period, int(sla == "True"))
         stats["rows_read"]["complaints"] = n
+        stats["partial_month_rows_excluded"]["complaints"] = skipped
 
     if "satisfaction_surveys" in tables:
         n = linked = scored = 0
@@ -130,18 +144,20 @@ def build(root, k=10, tables=ALLOWED_TABLES):
             chan, half = norm(r["send_channel"]), split_half(r["customer_id"])
             scored += 1
             link = reason_of.get(r["interaction_id"])
-            if link is not None and link[1] in ("True", "False"):
+            if link is not None:
                 linked += 1
-                metric = "M6R" if link[1] == "True" else "M6U"
-                acc.add(metric, {"reason_category": link[0], "channel": chan}, half, low)
+                dims = {"reason_category": link[0], "channel": chan}
+                acc.add("M6", dims, half, link[2], low)
+                if link[1] in ("True", "False"):
+                    acc.add("M6R" if link[1] == "True" else "M6U", dims, half, link[2], low)
         stats["rows_read"]["satisfaction_surveys"] = n
         stats["surveys"] = {"total": n, "scored_csat": scored, "linked_scored": linked,
                             "linked_share": round(linked / scored, 4) if scored else 0.0}
 
     rows, suppressed = [], {}
-    for (metric, dims, half), (num, den) in acc.cells.items():
+    for (metric, dims, half, period), (num, den) in acc.cells.items():
         if k_ok(num, den, k):
-            rows.append({"metric": metric, "dims": dict(dims), "half": half, "numerator": num, "denominator": den})
+            rows.append({"metric": metric, "dims": dict(dims), "half": half, "period": period, "numerator": num, "denominator": den})
         else:
             suppressed[metric] = suppressed.get(metric, 0) + 1
     rows.sort(key=row_key)
