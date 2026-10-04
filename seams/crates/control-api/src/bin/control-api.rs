@@ -1,4 +1,5 @@
 //! `E2E_VERIFY_KEYS` (public keys only; same JSON as the Python double), `E2E_PORT` (default 8700),
+//! `CONTROL_API_LABS` (JSON `{tenant: path-to-ED0L-sqlite}`, optional), `CONTROL_API_MIN_K` (default 10),
 //! `CONTROL_API_ADMIN=1` enables the `/_e2e/config` test channel. Binds 127.0.0.1 unless `CONTROL_API_HOST` is set.
 use control_api::{
     app::{App, Config},
@@ -20,6 +21,13 @@ fn main() {
         let mut cfg = Config::new(ring);
         cfg.upload_pin = upload_pin;
         cfg.admin = admin;
+        if let Ok(raw) = std::env::var("CONTROL_API_LABS") {
+            let m: std::collections::HashMap<String, std::path::PathBuf> = serde_json::from_str(&raw).expect("CONTROL_API_LABS json");
+            cfg.labs = m;
+        }
+        if let Some(k) = std::env::var("CONTROL_API_MIN_K").ok().and_then(|v| v.parse().ok()) {
+            cfg.min_k = k;
+        }
         cfg
     }, Box::new(MemStore::default())));
     let host = std::env::var("CONTROL_API_HOST").unwrap_or_else(|_| "127.0.0.1".into());

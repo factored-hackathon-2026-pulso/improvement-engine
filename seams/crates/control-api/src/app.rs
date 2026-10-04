@@ -98,6 +98,16 @@ impl App {
             ("POST", _, Some("/authorizations/check")) => self.authz(r),
             ("POST", _, Some("/artifacts")) => self.artifact_put(r),
             ("GET", _, Some(p)) if p.starts_with("/artifacts/") => self.artifact_get(r, &p["/artifacts/".len()..]),
+            ("POST", _, Some("/grants")) => self.grant_issue(r),
+            ("POST", _, Some(p)) if p.starts_with("/grants/") && p.ends_with("/revoke") => self.grant_revoke(r, &p["/grants/".len()..p.len() - "/revoke".len()]),
+            ("POST", _, Some("/lab/sessions")) => self.lab_open(r),
+            ("POST", _, Some(p)) if p.starts_with("/lab/sessions/") && p.ends_with("/queries") => self.lab_query(r, &p["/lab/sessions/".len()..p.len() - "/queries".len()]),
+            ("POST", _, Some(p)) if p.starts_with("/lab/sessions/") && p.ends_with("/close") => self.lab_session(r, &p["/lab/sessions/".len()..p.len() - "/close".len()], true),
+            ("GET", _, Some(p)) if p.starts_with("/lab/sessions/") => self.lab_session(r, &p["/lab/sessions/".len()..], false),
+            ("GET", _, Some(p)) if p.starts_with("/lab/queries/") => self.lab_read(r, "lab_query", &p["/lab/queries/".len()..], "query_not_found"),
+            ("GET", _, Some(p)) if p.starts_with("/lab/results/") => self.lab_read(r, "lab_result", &p["/lab/results/".len()..], "result_not_found"),
+            ("GET", _, Some(p)) if p.starts_with("/lab/receipts/") => self.lab_read(r, "lab_receipt", &p["/lab/receipts/".len()..], "receipt_not_found"),
+            ("POST", _, Some("/wiki/read")) => self.wiki_read(r),
             ("GET", "/healthz", _) => json_resp(200, json!({"status": "ok", "service": "control-api"})),
             ("POST", "/internal/v1/platform/observations", _) => self.observations(r),
             ("GET", "/internal/v1/platform/quarantine", _) => self.quarantine_list(r),
@@ -304,6 +314,10 @@ impl App {
             let env = json!({"schema_version": "1", "artifact": {"id": id, "digest": format!("sha256:{}", sha256_hex(canon.as_bytes())), "media_type": "application/json"},
                              "encoding": "json", "content": item["content"], "byte_length": canon.len()});
             let _ = self.store.put_artifact(tenant, env);
+        }
+        for item in cfg.get("wiki").and_then(Value::as_array).into_iter().flatten() {
+            let (Some(tenant), Some(path), Some(text)) = (item["tenant"].as_str(), item["path"].as_str(), item["content"].as_str()) else { return code(422, "schema_invalid") };
+            self.store.put_doc("wiki", tenant, path, json!(text));
         }
         for item in cfg.get("preauthorized_bindings").and_then(Value::as_array).into_iter().flatten() {
             if let (Some(b), Some(t)) = (item["binding_ref"].as_str(), item["tenant"].as_str()) {

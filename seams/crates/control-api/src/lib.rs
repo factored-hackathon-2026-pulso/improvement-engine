@@ -4,6 +4,7 @@
 pub mod app;
 pub mod auth;
 pub mod ingest;
+pub mod lab;
 pub mod server;
 pub mod sse;
 pub mod store;
