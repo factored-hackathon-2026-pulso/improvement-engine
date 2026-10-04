@@ -38,6 +38,13 @@ setlocal EnableExtensions
 if defined PULSO_E2E_TEST_ARGS_FILE (
   if "%PULSO_E2E_TEST_APPEND_ARGS%"=="1" (echo %*>>"%PULSO_E2E_TEST_ARGS_FILE%") else echo %*>"%PULSO_E2E_TEST_ARGS_FILE%"
 )
+set "PULSO_E2E_TEST_SOURCE_VALIDATE="
+for %%A in (%*) do if "%%~A"=="source" set "PULSO_E2E_TEST_SOURCE_VALIDATE=1"
+if defined PULSO_E2E_TEST_FAIL_VALIDATE if "%~9"=="source" exit /b 8
+if defined PULSO_E2E_TEST_SOURCE_VALIDATE (
+  >&1 echo {"schema_version":1,"source_kind":"enriched_history","validation_status":"valid","contract_version":"0.5.1","manifest_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","snapshot_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+  exit /b 0
+)
 >&2 echo {"schema_version":1,"event":"run_progress","phase":"source_preparation","stage":"inventory","status":"started","files_completed":0,"files_total":0,"bytes_completed":0,"bytes_total":0,"elapsed_ms":0}
 >&2 echo {"schema_version":1,"event":"run_progress","phase":"source_preparation","stage":"inventory","status":"completed","files_completed":2,"files_total":2,"bytes_completed":52,"bytes_total":52,"elapsed_ms":12}
 >&2 echo private_customer_id=DO_NOT_PRINT_THIS
@@ -129,6 +136,7 @@ exit /b 0
         $script:argsLog = Join-Path $script:fixtureRoot 'cargo-args.txt'
         $env:PULSO_E2E_TEST_ARGS_FILE = $script:argsLog
         Remove-Item Env:PULSO_E2E_TEST_FAIL -ErrorAction SilentlyContinue
+        Remove-Item Env:PULSO_E2E_TEST_FAIL_VALIDATE -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_APPEND_ARGS -ErrorAction SilentlyContinue
     }
@@ -137,6 +145,7 @@ exit /b 0
         $env:PATH = $script:priorPath
         Remove-Item Env:PULSO_E2E_TEST_ARGS_FILE -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_FAIL -ErrorAction SilentlyContinue
+        Remove-Item Env:PULSO_E2E_TEST_FAIL_VALIDATE -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_JSON_MODE -ErrorAction SilentlyContinue
         Remove-Item Env:PULSO_E2E_TEST_APPEND_ARGS -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $script:fixtureRoot) {
@@ -173,6 +182,50 @@ exit /b 0
         Assert-True (Test-Path -LiteralPath $script:inputRoot) 'Input directory was removed.'
         if ((Get-Content -LiteralPath (Join-Path $script:inputRoot 'sentinel.txt') -Raw).Trim() -ne 'input must remain unchanged') {
             throw 'Input file was modified.'
+        }
+    }
+
+    It 'validates the E0 package before starting local simulation' {
+        $orderedOutput = Join-Path $script:fixtureRoot 'validated-e0-output'
+        Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
+        $env:PULSO_E2E_TEST_APPEND_ARGS = '1'
+        try {
+            $null = & $scriptPath -InputPath $script:inputRoot -OutputPath $orderedOutput -ObservedCutoff '2026-10-02T18:00:00Z'
+            $commands = @(Get-Content -LiteralPath $script:argsLog)
+            Assert-True ($commands.Count -eq 2) 'Expected source validation and local simulation commands.'
+            Assert-Contains $commands[0] '^run --locked --offline .* -- source validate --kind enriched_history --input .+ --contract-version 0\.5\.1$'
+            Assert-Contains $commands[1] '^run --locked --offline .* -- local-sim --mode local-simulation --source e0 .*'
+            Assert-True (Test-Path -LiteralPath (Join-Path $orderedOutput 'fixture-run\result.json')) 'Validated E0 output was not published.'
+        }
+        finally {
+            Remove-Item Env:PULSO_E2E_TEST_APPEND_ARGS -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'fails closed when E0 source validation fails without running or publishing output' {
+        $failedValidationOutput = Join-Path $script:fixtureRoot 'failed-validation-output'
+        Remove-Item -LiteralPath $script:argsLog -ErrorAction SilentlyContinue
+        $env:PULSO_E2E_TEST_APPEND_ARGS = '1'
+        $env:PULSO_E2E_TEST_FAIL_VALIDATE = '1'
+        $failure = ''
+        try {
+            try {
+                & $scriptPath -InputPath $script:inputRoot -OutputPath $failedValidationOutput -ObservedCutoff '2026-10-02T18:00:00Z' | Out-Null
+            }
+            catch {
+                $failure = $_.Exception.Message
+            }
+
+            $commands = @(Get-Content -LiteralPath $script:argsLog)
+            Assert-True ($commands.Count -eq 1) 'Local simulation ran after source validation failed.'
+            Assert-Contains $failure 'source validation failed'
+            Assert-DoesNotContain $failure 'DO_NOT_PRINT_THIS|private_customer_id|fixture-root'
+            Assert-Contains $commands[0] '^run --locked --offline .* -- source validate --kind enriched_history --input .+ --contract-version 0\.5\.1$'
+            Assert-True (-not (Test-Path -LiteralPath $failedValidationOutput)) 'Failed validation published run output.'
+        }
+        finally {
+            Remove-Item Env:PULSO_E2E_TEST_APPEND_ARGS -ErrorAction SilentlyContinue
+            Remove-Item Env:PULSO_E2E_TEST_FAIL_VALIDATE -ErrorAction SilentlyContinue
         }
     }
 

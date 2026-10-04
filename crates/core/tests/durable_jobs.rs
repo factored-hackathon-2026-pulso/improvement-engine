@@ -499,6 +499,309 @@ fn reducer_is_consumable_through_the_durable_repository_port() {
 }
 
 #[test]
+fn claim_next_job_gives_two_workers_distinct_jobs() {
+    let mut store = DurableJobStore::new();
+    store
+        .configure_quota(QuotaLimit::new(window("demo"), 10).expect("limit"))
+        .expect("configured quota");
+    let first = store
+        .admit(request("demo", "claim_two_001"))
+        .expect("first");
+    let second = store
+        .admit(request("demo", "claim_two_002"))
+        .expect("second");
+    let first_id = first.job().expect("admitted").job_id().to_owned();
+    let second_id = second.job().expect("admitted").job_id().to_owned();
+    // These deterministic digests deliberately sort opposite to admission
+    // order, proving selection is not accidentally supplied by BTreeMap.
+    assert!(
+        first_id > second_id,
+        "fixture must oppose lexical map order"
+    );
+
+    let claim_a = store
+        .claim_next_job("demo", "worker_a", 1_100, 10)
+        .expect("worker a claim")
+        .expect("first job");
+    let claim_b = store
+        .claim_next_job("demo", "worker_b", 1_100, 10)
+        .expect("worker b claim")
+        .expect("second job");
+
+    assert_ne!(claim_a.job_id(), claim_b.job_id());
+    assert_eq!(claim_a.job_id(), first_id);
+    assert_eq!(claim_b.job_id(), second_id);
+    assert_eq!(claim_a.lease().worker_id(), "worker_a");
+    assert_eq!(
+        store.status("demo", &first_id),
+        Ok(JobStatus::Leased {
+            attempt: 1,
+            fence_token: 1,
+            expires_at_unix_seconds: 1_110,
+        })
+    );
+    assert_eq!(
+        store.status("demo", &second_id),
+        Ok(JobStatus::Leased {
+            attempt: 1,
+            fence_token: 1,
+            expires_at_unix_seconds: 1_110,
+        })
+    );
+}
+
+#[test]
+fn claim_next_job_reclaims_only_after_expiry_and_advances_fence_once() {
+    let (mut store, job_id) = admitted_store("claim_expiry_001");
+    let before = store.control_version("demo", &job_id).expect("version");
+    let first = store
+        .claim_next_job("demo", "worker_a", 100, 30)
+        .expect("claim")
+        .expect("job");
+    assert_eq!(first.lease().fence_token(), 1);
+    assert_eq!(first.lease().expires_at_unix_seconds(), 130);
+    assert_eq!(store.control_version("demo", &job_id), Ok(before + 1));
+
+    assert_eq!(store.claim_next_job("demo", "worker_b", 129, 30), Ok(None),);
+    assert_eq!(store.control_version("demo", &job_id), Ok(before + 1));
+    let reclaimed = store
+        .claim_next_job("demo", "worker_b", 130, 30)
+        .expect("expired claim")
+        .expect("reclaimed job");
+    assert_eq!(reclaimed.job_id(), job_id);
+    assert_eq!(reclaimed.lease().fence_token(), 2);
+    assert_eq!(store.control_version("demo", &job_id), Ok(before + 2));
+}
+
+#[test]
+fn claim_next_job_prefers_expired_earlier_admission_over_later_queued_job() {
+    let mut store = DurableJobStore::new();
+    store
+        .configure_quota(QuotaLimit::new(window("demo"), 10).expect("limit"))
+        .expect("configured quota");
+    let earlier = store
+        .admit(request("demo", "claim_expired_fifo_earlier"))
+        .expect("earlier job");
+    let earlier_id = earlier.job().expect("admitted").job_id().to_owned();
+    let leased = store
+        .claim_next_job("demo", "worker_a", 100, 10)
+        .expect("initial claim")
+        .expect("earlier job claimed");
+    let later = store
+        .admit(request("demo", "claim_expired_fifo_later"))
+        .expect("later job");
+    let later_id = later.job().expect("admitted").job_id().to_owned();
+
+    let reclaimed = store
+        .claim_next_job("demo", "worker_b", 110, 30)
+        .expect("expired earlier job claim")
+        .expect("eligible job");
+    assert_eq!(reclaimed.job_id(), earlier_id);
+    assert_ne!(reclaimed.job_id(), later_id);
+    assert_eq!(
+        reclaimed.lease().fence_token(),
+        leased.lease().fence_token() + 1
+    );
+    assert_eq!(
+        store.status("demo", &later_id),
+        Ok(JobStatus::Queued),
+        "the later queued job must remain untouched"
+    );
+}
+
+#[test]
+fn claim_next_job_skips_paused_deferred_and_unknown_effect_jobs() {
+    let mut store = DurableJobStore::new();
+    store
+        .configure_quota(QuotaLimit::new(window("demo"), 1).expect("limit"))
+        .expect("configured quota");
+    let admitted = store
+        .admit(request("demo", "claim_skips_001"))
+        .expect("admitted");
+    let paused_id = admitted.job().expect("job").job_id().to_owned();
+    let command = JobControlCommand::new(
+        "demo",
+        &paused_id,
+        "operator_a",
+        "pause_claim_skips",
+        store.control_version("demo", &paused_id).expect("version"),
+        None,
+        JobControlKind::Pause,
+    )
+    .expect("valid control");
+    store.control_job(command, 50).expect("pause");
+    let deferred = store
+        .admit(request("demo", "claim_skips_deferred"))
+        .expect("deferred");
+    assert!(!deferred.is_admitted());
+    assert_eq!(store.claim_next_job("demo", "worker_a", 100, 30), Ok(None));
+
+    // A separately admitted job which crossed the effect boundary remains
+    // unreclaimable even after its lease expires.
+    let mut another = DurableJobStore::new();
+    another
+        .configure_quota(QuotaLimit::new(window("demo"), 10).expect("limit"))
+        .expect("configured quota");
+    let receipt = another
+        .admit(request("demo", "claim_unknown_001"))
+        .expect("admitted");
+    let unknown_id = receipt.job().expect("job").job_id().to_owned();
+    let lease = another
+        .claim_next_job("demo", "worker_a", 100, 1)
+        .expect("claim")
+        .expect("job");
+    another
+        .begin_effect_dispatch(
+            "demo",
+            &unknown_id,
+            "worker_a",
+            lease.lease().fence_token(),
+            100,
+        )
+        .expect("effect boundary");
+    assert_eq!(
+        another.claim_next_job("demo", "worker_b", 101, 30),
+        Ok(None)
+    );
+}
+
+#[test]
+fn claim_next_job_skips_cancelled_completed_and_acknowledged_jobs() {
+    let (mut cancelled, cancelled_id) = admitted_store("claim_cancelled_001");
+    let cancel = JobControlCommand::new(
+        "demo",
+        &cancelled_id,
+        "operator_a",
+        "cancel_claim_skip",
+        cancelled
+            .control_version("demo", &cancelled_id)
+            .expect("version"),
+        None,
+        JobControlKind::Cancel,
+    )
+    .expect("valid control");
+    cancelled.control_job(cancel, 50).expect("cancel");
+    assert_eq!(
+        cancelled.claim_next_job("demo", "worker_a", 100, 30),
+        Ok(None)
+    );
+
+    let (mut completed, completed_id) = admitted_store("claim_completed_001");
+    let claim = completed
+        .claim_next_job("demo", "worker_a", 100, 1)
+        .expect("claim")
+        .expect("job");
+    completed
+        .begin_effect_dispatch(
+            "demo",
+            &completed_id,
+            "worker_a",
+            claim.lease().fence_token(),
+            100,
+        )
+        .expect("dispatch");
+    completed
+        .recover_after_restart("demo", &completed_id, 101)
+        .expect("recovery");
+    completed
+        .trust_reconciliation_authority("demo", "reconciler_a")
+        .expect("trusted reconciler");
+    completed
+        .reconcile_unknown(
+            "demo",
+            &completed_id,
+            ReconciliationEvidence::no_effect(
+                "demo",
+                &completed_id,
+                claim.lease().fence_token(),
+                "reconciler_a",
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            )
+            .expect("evidence"),
+        )
+        .expect("no-effect reconciliation");
+    assert_eq!(
+        completed.claim_next_job("demo", "worker_b", 102, 30),
+        Ok(None)
+    );
+
+    let (mut acknowledged, acknowledged_id) = admitted_store("claim_acknowledged_001");
+    let claim = acknowledged
+        .claim_next_job("demo", "worker_a", 100, 30)
+        .expect("claim")
+        .expect("job");
+    acknowledged
+        .begin_effect_dispatch(
+            "demo",
+            &acknowledged_id,
+            "worker_a",
+            claim.lease().fence_token(),
+            101,
+        )
+        .expect("dispatch");
+    acknowledged
+        .acknowledge_effect(
+            "demo",
+            &acknowledged_id,
+            "worker_a",
+            claim.lease().fence_token(),
+            "effect:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            102,
+        )
+        .expect("acknowledgment");
+    assert_eq!(
+        acknowledged.claim_next_job("demo", "worker_b", 103, 30),
+        Ok(None)
+    );
+}
+
+#[test]
+fn claim_next_job_rejects_invalid_scope_worker_and_duration_without_mutation() {
+    let (mut store, job_id) = admitted_store("claim_validation_001");
+    let before = store.control_version("demo", &job_id).expect("version");
+    assert_eq!(
+        store.claim_next_job("", "worker_a", 100, 30),
+        Err(DurableJobError::InvalidIdentifier { field: "tenant_id" }),
+    );
+    assert_eq!(
+        store.claim_next_job("demo", "", 100, 30),
+        Err(DurableJobError::InvalidIdentifier { field: "worker_id" }),
+    );
+    assert_eq!(
+        store.claim_next_job("demo", "worker_a", 100, 0),
+        Err(DurableJobError::InvalidLeaseDuration),
+    );
+    assert_eq!(store.control_version("demo", &job_id), Ok(before));
+    assert_eq!(store.active_fence("demo", &job_id), Ok(None));
+    assert!(
+        store
+            .claim_next_job("demo", "worker_a", u64::MAX, 1)
+            .is_err()
+    );
+    assert_eq!(store.control_version("demo", &job_id), Ok(before));
+    assert_eq!(store.active_fence("demo", &job_id), Ok(None));
+}
+
+#[test]
+fn empty_claim_queue_is_a_state_noop() {
+    let mut store = DurableJobStore::new();
+    assert_eq!(store.claim_next_job("demo", "worker_a", 100, 30), Ok(None));
+    assert_eq!(store.job_count("demo"), 0);
+}
+
+#[test]
+fn claim_next_job_is_tenant_scoped_and_does_not_reveal_foreign_jobs() {
+    let (mut store, job_id) = admitted_store("claim_tenant_001");
+    assert_eq!(store.claim_next_job("other", "worker_a", 100, 30), Ok(None));
+    assert_eq!(store.active_fence("demo", &job_id), Ok(None));
+    let claim = store
+        .claim_next_job("demo", "worker_a", 100, 30)
+        .expect("tenant claim")
+        .expect("own job");
+    assert_eq!(claim.job_id(), job_id);
+}
+
+#[test]
 fn pause_is_an_atomic_durable_transition_with_idempotent_audit_receipt() {
     let (mut store, job_id) = admitted_store("control_pause_001");
     let command = control(

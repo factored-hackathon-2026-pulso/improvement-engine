@@ -72,21 +72,32 @@ impl RelationProjection {
     }
 }
 
-/// The only read capability handed to a platform source adapter. It has no
-/// dynamic table-name constructor and never includes the three credential
-/// relations (`login_accounts`, `mfa_challenges`, `staff_sessions`).
+/// The only capability handed to a platform source adapter. It has no dynamic
+/// table-name constructor and never includes credential relations.
 pub trait PlatformSourceReader {
     type Error;
 
     fn read_relation(
-        &mut self,
+        &self,
         relation: PlatformRelation,
         columns: &[PlatformColumn],
     ) -> Result<(), Self::Error>;
 }
 
+/// Caller-declared access mode used by the local read-plan guard.
+///
+/// This is not an authorization capability: callers can construct either
+/// value, and the policy layer cannot prove the reader's underlying database
+/// credentials or implementation behavior.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlatformSourceAccessMode {
+    ReadOnly,
+    ReadWrite,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlatformSourcePolicyError<E> {
+    ReadWriteAccessDenied,
     Reader(E),
 }
 
@@ -192,10 +203,20 @@ impl PlatformSourceReadPlan {
         PLATFORM_LIVE_PROJECTIONS
     }
 
-    pub fn execute<R: PlatformSourceReader>(
+    /// Execute the closed projection only when the caller declares read-only
+    /// access. A read-write declaration is refused before calling the reader.
+    /// This does not authenticate access, create a database snapshot, guarantee
+    /// a consistent cut across relations, or sandbox the reader. Those remain
+    /// requirements of a future concrete source adapter.
+    pub fn execute_read_plan<R: PlatformSourceReader>(
         &self,
-        reader: &mut R,
+        access_mode: PlatformSourceAccessMode,
+        reader: &R,
     ) -> Result<(), PlatformSourcePolicyError<R::Error>> {
+        if access_mode != PlatformSourceAccessMode::ReadOnly {
+            return Err(PlatformSourcePolicyError::ReadWriteAccessDenied);
+        }
+
         for projection in self.projections() {
             reader
                 .read_relation(projection.relation, projection.columns)

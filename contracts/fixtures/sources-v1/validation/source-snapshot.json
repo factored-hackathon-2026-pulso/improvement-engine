@@ -8,13 +8,13 @@
     {
       "table": "call_center_interactions",
       "uri": "file:///synthetic/sources-v1/validation/call_center_interactions.csv",
-      "file_digest": "sha256:f61fcd41c2ea9d29e12d776c8a9b9236ac7ca420ba58b6bf0f273d928d24beb2",
-      "header_digest": "sha256:e1dd9b3b7bb89860dfc91103bf7bb70d32bd606ababa7da14f66493821c9f17c",
+      "file_digest": "sha256:136b5783cd1f02cc968ac29c0b1e5703328829d35610190437b355e8ad881f13",
+      "header_digest": "sha256:c5ccbf9bc70f4345b0eb6cef2874ba035bbd1934bb5fb648bf77a116237d3314",
       "row_count": 1,
       "source_contract_ref": {
         "id": "call_center_interactions",
         "version": "v1",
-        "digest": "sha256:b40f76df8fd97cc646b2c44a83e2dca5873ee2c14a64031359ded23eb5c5cf17"
+        "digest": "sha256:bc300eff4e7509cbe9aa93bc832e9c60c50cc46eb27294e02bbfc59e82c24f35"
       }
     }
   ]

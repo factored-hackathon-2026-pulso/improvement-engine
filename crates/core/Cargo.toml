@@ -35,6 +35,22 @@ required-features = ["test-support"]
 name = "local_simulation"
 required-features = ["local-simulation"]
 
+[[test]]
+name = "artifact_kind_flow"
+path = "tests/artifact_kind_flow.rs"
+
+[[test]]
+name = "policy_oracle"
+path = "tests/policy_oracle.rs"
+
+[[test]]
+name = "facade_steps"
+path = "tests/facade_steps.rs"
+
+[[test]]
+name = "conformance_jobs"
+path = "tests/conformance/jobs.rs"
+
 [dependencies]
 csv = "1.4"
 serde = { version = "1.0", features = ["derive"] }

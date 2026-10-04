@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import json
 import hashlib
+import argparse
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 
@@ -50,6 +51,141 @@ SOURCE_CONTRACT_FIELDS = frozenset(
     {"contract_version", "source_namespace", "source_kind", "table", "primary_key", "event_clock", "read_only", "access_policy", "columns"}
 )
 SOURCE_COLUMN_FIELDS = frozenset({"name", "logical_type", "nullable", "purpose", "classification"})
+SPEC22_FAMILIES = (
+    "source_snapshot",
+    "platform_observation",
+    "signal",
+    "workflow_bridge",
+    "change_spec",
+    "tree",
+    "scenario",
+    "evaluation",
+    "release_ack",
+    "memory_wiki",
+    "read_model",
+)
+
+
+def _safe_repo_relative_ref(reference: str) -> bool:
+    windows_path = PureWindowsPath(reference)
+    posix_path = PurePosixPath(reference)
+    return not (
+        windows_path.is_absolute()
+        or posix_path.is_absolute()
+        or bool(windows_path.drive)
+        or ".." in windows_path.parts
+        or ".." in posix_path.parts
+    )
+
+
+def _is_published_json_schema(reference: str) -> bool:
+    if not reference.endswith(".schema.json") or not _safe_repo_relative_ref(reference):
+        return False
+    root = Path(__file__).resolve().parents[1]
+    schema_path = (root / reference).resolve()
+    if not schema_path.is_relative_to(root) or not schema_path.is_file():
+        return False
+    try:
+        value = json.loads(schema_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(value, dict) and isinstance(value.get("type"), str) and isinstance(value.get("title"), str)
+
+
+def validate_spec22_inventory(families: object) -> list[str]:
+    """Validate family inventory and referenced contract evidence, not payloads."""
+    if not isinstance(families, list):
+        return ["invalid_spec22_inventory"]
+    names: list[str] = []
+    errors: list[str] = []
+    for family in families:
+        if not isinstance(family, dict) or not isinstance(family.get("name"), str):
+            errors.append("invalid_family_entry")
+            continue
+        name = family["name"]
+        names.append(name)
+        if name not in SPEC22_FAMILIES:
+            errors.append(f"unknown_family:{name}")
+        contract_refs = family.get("contract_refs")
+        if not isinstance(contract_refs, list) or any(not isinstance(ref, str) for ref in contract_refs):
+            errors.append(f"invalid_contract_refs:{name}")
+        else:
+            errors.extend(
+                f"unsafe_contract_ref:{name}:{ref}"
+                for ref in contract_refs
+                if not _safe_repo_relative_ref(ref)
+            )
+            status = family.get("contract_status")
+            schema_refs = [ref for ref in contract_refs if _is_published_json_schema(ref)]
+            if status == "published" and not schema_refs:
+                errors.append(f"published_schema_missing_ref:{name}")
+            elif status == "missing" and contract_refs:
+                errors.append(f"missing_contract_has_ref:{name}")
+
+        fixture_refs = family.get("fixture_refs")
+        if not isinstance(fixture_refs, list) or any(not isinstance(ref, str) for ref in fixture_refs):
+            errors.append(f"invalid_fixture_refs:{name}")
+        else:
+            errors.extend(
+                f"unsafe_fixture_ref:{name}:{ref}"
+                for ref in fixture_refs
+                if not _safe_repo_relative_ref(ref)
+            )
+        status = family.get("contract_status")
+        if not isinstance(status, str) or status not in {"published", "partial", "missing"}:
+            errors.append(f"invalid_contract_status:{name}")
+    for name in SPEC22_FAMILIES:
+        if names.count(name) == 0:
+            errors.append(f"missing_family:{name}")
+        elif names.count(name) > 1:
+            errors.append(f"duplicate_family:{name}")
+    return errors
+
+
+def spec22_coverage_report() -> dict[str, Any]:
+    """Return evidence-backed Spec-22 contract coverage; no fixture is fabricated."""
+    manifest = _load(Path(__file__).parent / "fixtures" / "spec22-v1" / "coverage.json")
+    families = manifest.get("families", []) if isinstance(manifest, dict) else []
+    validation = validate_spec22_inventory(families)
+    root = Path(__file__).resolve().parents[1]
+    missing_refs: list[str] = []
+    for family in families:
+        if not isinstance(family, dict):
+            continue
+        refs: list[object] = []
+        for field in ("contract_refs", "fixture_refs"):
+            value = family.get(field, [])
+            if isinstance(value, list):
+                refs.extend(value)
+        for ref in refs:
+            if not isinstance(ref, str) or not _safe_repo_relative_ref(ref):
+                continue
+            resolved = (root / ref).resolve()
+            if not resolved.is_relative_to(root.resolve()) or not resolved.is_file():
+                family_name = family.get("name")
+                display_name = family_name if isinstance(family_name, str) else "<invalid>"
+                missing_refs.append(f"missing_reference:{display_name}:{ref}")
+    missing_contracts = [
+        family.get("name", "<invalid>")
+        for family in families
+        if isinstance(family, dict) and family.get("contract_status") != "published"
+    ]
+    return {
+        "family_count": len(families),
+        "missing_families": [error.removeprefix("missing_family:") for error in validation if error.startswith("missing_family:")],
+        "missing_wire_contracts": missing_contracts,
+        "errors": validation + missing_refs,
+        "families": families,
+    }
+
+
+def validate_spec22_coverage(*, strict: bool = False) -> list[str]:
+    """Strict mode is opt-in until all family wire contracts are published."""
+    report = spec22_coverage_report()
+    errors = list(report["errors"])
+    if strict:
+        errors.extend(f"wire_contract_not_published:{name}" for name in report["missing_wire_contracts"])
+    return errors
 
 
 def validate_envelope(value: object) -> list[str]:
@@ -278,7 +414,7 @@ def validate_source_contract(value: object) -> list[str]:
     names: set[str] = set()
     allowed_types = {"text", "timestamp", "date", "bool", "decimal", "int"}
     allowed_purposes = {"identity", "join", "event_clock", "metric", "dimension", "quality"}
-    allowed_classifications = {"internal", "pseudonymized", "aggregated"}
+    allowed_classifications = {"internal", "pseudonymized", "aggregated", "restricted"}
     for column in columns:
         if not isinstance(column, dict) or not isinstance(column.get("name"), str) or not column["name"]:
             errors.append("invalid_source_column")
@@ -302,7 +438,12 @@ def validate_source_contract(value: object) -> list[str]:
         errors.append("event_clock_not_declared")
     if isinstance(access_policy, dict) and isinstance(access_policy.get("permitted_classifications"), list):
         permitted = set(access_policy["permitted_classifications"])
-        if any(isinstance(column, dict) and column.get("classification") not in permitted for column in columns):
+        if any(
+            isinstance(column, dict)
+            and column.get("classification") not in permitted
+            and column.get("classification") != "restricted"
+            for column in columns
+        ):
             errors.append("source_column_classification_not_permitted")
     return errors
 
@@ -324,6 +465,9 @@ def _sha256_ref(path: Path) -> str:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--strict-spec22", action="store_true", help="fail unless all 11 family wire contracts are published")
+    args = parser.parse_args()
     fixture_root = Path(__file__).parent / "fixtures" / "artifact-envelope-v1"
     failures: list[str] = []
     for fixture in sorted(fixture_root.glob("*.json")):
@@ -355,6 +499,14 @@ def main() -> int:
     contract_ref = snapshot["sources"][0]["source_contract_ref"]
     if contract_ref["digest"] != _sha256_ref(implementation_contract):
         failures.append("source-contract-digest-mismatch")
+    spec22_errors = validate_spec22_coverage(strict=args.strict_spec22)
+    report = spec22_coverage_report()
+    if spec22_errors:
+        failures.extend(spec22_errors)
+    elif not args.strict_spec22:
+        missing = ", ".join(report["missing_wire_contracts"])
+        if missing:
+            print(f"Spec-22 inventory: {report['family_count']}/11 families present; wire contracts pending: {missing}")
     if failures:
         print("artifact-envelope fixture validation failed:", ", ".join(failures))
         return 1

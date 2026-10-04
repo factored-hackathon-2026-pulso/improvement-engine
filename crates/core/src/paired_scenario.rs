@@ -5,7 +5,224 @@
 
 use std::collections::BTreeMap;
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
+
+/// The two required outcomes in the checked-in C-10 gate envelope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GateKind {
+    Safety,
+    Improvement,
+}
+
+/// Status already computed by the corresponding evaluator; this module only
+/// combines the two statuses and does not authenticate their evidence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GateStatus {
+    Pass,
+    Fail,
+    NotEvaluable,
+}
+
+/// Bounded reason codes keep arbitrary or customer-supplied free text out of
+/// the gate envelope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GateReason {
+    CandidateRegression,
+    InfrastructureUnavailable,
+    InsufficientEvidence,
+    EvaluationFailed,
+}
+
+/// One typed gate outcome, optionally with a bounded diagnostic reason code.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct GateObservation {
+    gate: GateKind,
+    status: GateStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<GateReason>,
+}
+
+impl GateObservation {
+    #[must_use]
+    pub fn new(gate: GateKind, status: GateStatus, reason: Option<GateReason>) -> Self {
+        Self {
+            gate,
+            status,
+            reason,
+        }
+    }
+}
+
+/// Result of reducing both required gate outcomes. A pass means only that the
+/// paired fixture comparison found no regression and the supplied improvement
+/// gate passed. It does not prove sandbox execution, authenticate the paired
+/// observation producer, or measure business lift; `quality_claims` is always
+/// `forbidden`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct CombinedGateResult {
+    contract_version: &'static str,
+    run_id: String,
+    base_ref: String,
+    candidate_ref: String,
+    suite_digest: String,
+    verdict: GateVerdict,
+    gates: [GateObservation; 2],
+    judge_actor: String,
+    quality_claims: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GateVerdict {
+    Pass,
+    Fail,
+    NotEvaluable,
+}
+
+impl GateVerdict {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::Fail => "fail",
+            Self::NotEvaluable => "not_evaluable",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GateResultError {
+    InvalidMetadata,
+    MissingGate(GateKind),
+    DuplicateGate(GateKind),
+    PairIntegrityDenied,
+    PairStatusMismatch,
+    ReasonStatusMismatch,
+    SameArtifact,
+}
+
+/// Reduce the paired-scenario safety result and the independently supplied
+/// improvement result into the C-10 wire shape. Safety is bound to the sealed
+/// pair receipt, so a candidate regression or failed/incomparable pair cannot
+/// be overridden by a caller-supplied `pass`. The paired receipt itself still
+/// contains caller-supplied fixture observations: it does not authenticate a
+/// runner or prove sandbox execution.
+pub fn combine_gate_results(
+    pair: &PairedEvaluationReceipt,
+    suite_digest: impl Into<String>,
+    judge_actor: impl Into<String>,
+    observations: impl IntoIterator<Item = GateObservation>,
+) -> Result<CombinedGateResult, GateResultError> {
+    let suite_digest = suite_digest.into();
+    let judge_actor = judge_actor.into();
+    if !is_digest(&suite_digest) || !valid_c10_id(&judge_actor) {
+        return Err(GateResultError::InvalidMetadata);
+    }
+    if !pair.validate_integrity() {
+        return Err(GateResultError::PairIntegrityDenied);
+    }
+    if pair.baseline_digest == pair.candidate_digest {
+        return Err(GateResultError::SameArtifact);
+    }
+
+    let (expected_safety, expected_reason) = match pair.verdict {
+        PairVerdict::NoRegressionObserved => (GateStatus::Pass, None),
+        PairVerdict::CandidateRegression => {
+            (GateStatus::Fail, Some(GateReason::CandidateRegression))
+        }
+        PairVerdict::NotComparable => (
+            GateStatus::NotEvaluable,
+            Some(GateReason::InsufficientEvidence),
+        ),
+        PairVerdict::FailedInfra => (
+            GateStatus::NotEvaluable,
+            Some(GateReason::InfrastructureUnavailable),
+        ),
+    };
+
+    let (mut safety, mut improvement) = (None, None);
+    for observation in observations {
+        let kind = observation.gate;
+        let slot = match observation.gate {
+            GateKind::Safety => &mut safety,
+            GateKind::Improvement => &mut improvement,
+        };
+        if slot.is_some() {
+            return Err(GateResultError::DuplicateGate(kind));
+        }
+        *slot = Some(observation);
+    }
+    let safety = safety.ok_or(GateResultError::MissingGate(GateKind::Safety))?;
+    let improvement = improvement.ok_or(GateResultError::MissingGate(GateKind::Improvement))?;
+    if safety.status != expected_safety {
+        return Err(GateResultError::PairStatusMismatch);
+    }
+    if safety.reason != expected_reason || !valid_reason_status(&improvement) {
+        return Err(GateResultError::ReasonStatusMismatch);
+    }
+    let verdict = if safety.status == GateStatus::Fail || improvement.status == GateStatus::Fail {
+        GateVerdict::Fail
+    } else if safety.status == GateStatus::NotEvaluable
+        || improvement.status == GateStatus::NotEvaluable
+    {
+        GateVerdict::NotEvaluable
+    } else {
+        GateVerdict::Pass
+    };
+
+    Ok(CombinedGateResult {
+        contract_version: "engine-steps-pack/0",
+        run_id: c10_run_id(&pair.evaluation_id),
+        base_ref: c10_artifact_ref(&pair.baseline_digest),
+        candidate_ref: c10_artifact_ref(&pair.candidate_digest),
+        suite_digest,
+        verdict,
+        gates: [safety, improvement],
+        judge_actor,
+        quality_claims: "forbidden",
+    })
+}
+
+fn valid_reason_status(observation: &GateObservation) -> bool {
+    match observation.reason {
+        None => true,
+        Some(GateReason::CandidateRegression) => {
+            observation.gate == GateKind::Safety && observation.status == GateStatus::Fail
+        }
+        Some(GateReason::InfrastructureUnavailable | GateReason::InsufficientEvidence) => {
+            observation.status == GateStatus::NotEvaluable
+        }
+        Some(GateReason::EvaluationFailed) => observation.status == GateStatus::Fail,
+    }
+}
+
+fn c10_run_id(evaluation_id: &str) -> String {
+    // PairPlan already validates this as a full SHA-256 reference. The C-10
+    // run-id field allows at most 64 characters, so retain 248 bits of it.
+    format!("r-{}", &evaluation_id[7..69])
+}
+
+fn c10_artifact_ref(digest: &str) -> String {
+    let hex = digest.strip_prefix("sha256:").unwrap_or_default();
+    // This reducer has fixture-only authority; make the non-registry alias
+    // explicit instead of implying an Agent Core catalogue readback.
+    format!("fixture_bundle:sha256-{hex}@1")
+}
+
+fn valid_c10_id(value: &str) -> bool {
+    (3..=64).contains(&value.len())
+        && value
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
+        })
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PairError {

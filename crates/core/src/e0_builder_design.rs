@@ -391,6 +391,138 @@ pub enum E0BuilderDesignError {
     ProposalWithoutEvidence,
 }
 
+/// Verdict returned by the independent evaluator for the frozen FRZ0
+/// builder-output corpus. `Valid` means only that this synthetic design output's declared
+/// references resolve in the frozen catalogue; it grants no authoring,
+/// compilation, evaluation, or publication authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrozenBuilderOutputVerdict {
+    Valid,
+    Unlinked,
+    NotEvaluable,
+    Invalid,
+}
+
+/// Evaluate one FRZ0 builder output against the frozen catalogue.
+///
+/// The frozen corpus's `needs_catalogue` map has unspecified semantics and is
+/// inconsistent with linked/evidence references in several fixtures. This
+/// evaluator deliberately does not consult it: the published `rule` and golden
+/// verdicts with the full catalogue supplied define corpus conformance.
+/// `unlinked` and `not_evaluable` are dispositions that do not require catalogue
+/// lookup. A linked/do-nothing output with no catalogue or malformed catalogue
+/// is `NotEvaluable`, not `Invalid`, because reference resolution is unavailable.
+/// `target_ref` is optional; if present, it must resolve. `finding_ref` is only
+/// syntax-checked because the frozen catalogue has no finding domain to resolve
+/// it against.
+pub fn classify_frozen_builder_output(
+    output_json: &str,
+    catalogue_json: Option<&str>,
+) -> FrozenBuilderOutputVerdict {
+    let Ok(output) = serde_json::from_str::<FrozenBuilderOutput>(output_json) else {
+        return FrozenBuilderOutputVerdict::Invalid;
+    };
+    if output.contract_version != "engine-steps-pack/0"
+        || output.data_class != "synthetic"
+        || !is_pack_identifier(&output.output_id)
+        || !is_pack_identifier(&output.finding_ref)
+        || output
+            .evidence_refs
+            .iter()
+            .any(|reference| !is_pack_identifier(reference))
+        || output.design_intent.mechanism.is_empty()
+        || output
+            .design_intent
+            .affected_routes
+            .iter()
+            .any(String::is_empty)
+    {
+        return FrozenBuilderOutputVerdict::Invalid;
+    }
+
+    match output.design_intent.verdict {
+        FrozenBuilderOutputDisposition::Unlinked => FrozenBuilderOutputVerdict::Unlinked,
+        FrozenBuilderOutputDisposition::NotEvaluable => FrozenBuilderOutputVerdict::NotEvaluable,
+        FrozenBuilderOutputDisposition::Linked | FrozenBuilderOutputDisposition::DoNothing => {
+            let Some(catalogue_json) = catalogue_json else {
+                return FrozenBuilderOutputVerdict::NotEvaluable;
+            };
+            let Ok(catalogue) = serde_json::from_str::<FrozenBuilderCatalogue>(catalogue_json)
+            else {
+                return FrozenBuilderOutputVerdict::NotEvaluable;
+            };
+            if catalogue.contract_version != "engine-steps-pack/0"
+                || catalogue.data_class != "synthetic"
+            {
+                return FrozenBuilderOutputVerdict::NotEvaluable;
+            }
+            let evidence_resolves = output
+                .evidence_refs
+                .iter()
+                .all(|reference| catalogue.evidence_refs.contains(reference));
+            let target_resolves = output
+                .design_intent
+                .target_ref
+                .as_ref()
+                .is_none_or(|reference| catalogue.target_refs.contains(reference));
+            if evidence_resolves && target_resolves {
+                FrozenBuilderOutputVerdict::Valid
+            } else {
+                FrozenBuilderOutputVerdict::Invalid
+            }
+        }
+    }
+}
+
+fn is_pack_identifier(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    (3..=64).contains(&bytes.len())
+        && (bytes[0].is_ascii_lowercase() || bytes[0].is_ascii_digit())
+        && bytes[1..].iter().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FrozenBuilderOutput {
+    contract_version: String,
+    output_id: String,
+    data_class: String,
+    finding_ref: String,
+    evidence_refs: Vec<String>,
+    design_intent: FrozenBuilderDesignIntent,
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum FrozenBuilderOutputDisposition {
+    Linked,
+    Unlinked,
+    NotEvaluable,
+    DoNothing,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FrozenBuilderDesignIntent {
+    verdict: FrozenBuilderOutputDisposition,
+    #[serde(default)]
+    target_ref: Option<String>,
+    mechanism: String,
+    #[serde(default)]
+    affected_routes: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FrozenBuilderCatalogue {
+    contract_version: String,
+    data_class: String,
+    evidence_refs: Vec<String>,
+    target_refs: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

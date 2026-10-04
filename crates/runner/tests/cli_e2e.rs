@@ -262,6 +262,516 @@ fn e0_recurrence_fixture(
     );
 }
 
+fn write_empty_operational_tables(root: &Path) {
+    use arrow_schema::DataType;
+
+    type FixtureField = (&'static str, DataType, bool);
+    type FixtureTable = (&'static str, Vec<FixtureField>);
+
+    let tables: [FixtureTable; 7] = [
+        (
+            "identity_check",
+            vec![
+                ("check_id", DataType::LargeUtf8, false),
+                ("case_id", DataType::LargeUtf8, false),
+                ("actor_role", DataType::LargeUtf8, false),
+                ("result", DataType::LargeUtf8, false),
+                (
+                    "started_at",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+                (
+                    "ended_at",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+            ],
+        ),
+        (
+            "turn",
+            vec![
+                ("turn_id", DataType::LargeUtf8, false),
+                ("case_id", DataType::LargeUtf8, false),
+                ("author_role", DataType::LargeUtf8, false),
+                ("language", DataType::LargeUtf8, false),
+                (
+                    "event_time",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+            ],
+        ),
+        (
+            "routing_step",
+            vec![
+                ("step_id", DataType::LargeUtf8, false),
+                ("case_id", DataType::LargeUtf8, false),
+                ("tier", DataType::LargeUtf8, false),
+                ("outcome", DataType::LargeUtf8, false),
+                (
+                    "event_time",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+            ],
+        ),
+        (
+            "copilot_query",
+            vec![
+                ("query_id", DataType::LargeUtf8, false),
+                ("case_id", DataType::LargeUtf8, false),
+                ("query_signature", DataType::LargeUtf8, false),
+                ("answered_by", DataType::LargeUtf8, false),
+                (
+                    "event_time",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+            ],
+        ),
+        (
+            "approval",
+            vec![
+                ("approval_id", DataType::LargeUtf8, false),
+                ("case_id", DataType::LargeUtf8, false),
+                ("requested_by_role", DataType::LargeUtf8, false),
+                ("tool_id", DataType::LargeUtf8, false),
+                (
+                    "requested_at",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+                (
+                    "decided_at",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    true,
+                ),
+                ("executed_call_id", DataType::LargeUtf8, true),
+            ],
+        ),
+        (
+            "case_close",
+            vec![
+                ("case_id", DataType::LargeUtf8, false),
+                (
+                    "closed_at",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+                ("resolved", DataType::Boolean, false),
+            ],
+        ),
+        (
+            "signal",
+            vec![
+                ("signal_id", DataType::LargeUtf8, false),
+                (
+                    "window_start",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+                (
+                    "window_end",
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                    false,
+                ),
+                ("support_cases", DataType::Int32, false),
+                ("evidence_case_ids", DataType::LargeUtf8, false),
+            ],
+        ),
+    ];
+    let mut entities = serde_json::Map::new();
+    for (table, fields) in tables {
+        let schema = Schema::new(
+            fields
+                .iter()
+                .map(|(name, ty, nullable)| Field::new(*name, ty.clone(), *nullable))
+                .collect::<Vec<_>>(),
+        );
+        let mut contract_fields = serde_json::Map::new();
+        let columns = fields
+            .iter()
+            .map(|(_, ty, _)| -> ArrayRef {
+                match ty {
+                    DataType::LargeUtf8 => {
+                        Arc::new(LargeStringArray::from(Vec::<Option<&str>>::new()))
+                    }
+                    DataType::Boolean => Arc::new(BooleanArray::from(Vec::<Option<bool>>::new())),
+                    DataType::Int32 => Arc::new(Int32Array::from(Vec::<Option<i32>>::new())),
+                    DataType::Timestamp(_, _) => Arc::new(
+                        TimestampMicrosecondArray::from(Vec::<Option<i64>>::new())
+                            .with_timezone("UTC"),
+                    ),
+                    _ => unreachable!("fixture uses supported operational types"),
+                }
+            })
+            .collect();
+        for (name, ty, nullable) in &fields {
+            let type_name = match ty {
+                DataType::LargeUtf8 => "VARCHAR",
+                DataType::Boolean => "BOOLEAN",
+                DataType::Int32 => "INTEGER",
+                DataType::Timestamp(_, _) => "TIMESTAMP",
+                _ => unreachable!("fixture uses supported operational types"),
+            };
+            contract_fields.insert(
+                (*name).to_owned(),
+                serde_json::json!({"type":type_name,"required":!nullable}),
+            );
+        }
+        entities.insert(
+            table.to_owned(),
+            serde_json::json!({"fields":contract_fields}),
+        );
+        write_parquet(
+            &root.join(format!("datos/{table}.parquet")),
+            schema,
+            columns,
+        );
+    }
+    entities.insert("case".to_owned(), serde_json::json!({"fields": {
+        "case_id":{"type":"VARCHAR","required":true},"opened_at":{"type":"TIMESTAMP","required":true},
+        "channel":{"type":"VARCHAR","required":true},"language":{"type":"VARCHAR","required":true},
+        "topic":{"type":"VARCHAR","required":true},"priority":{"type":"VARCHAR","required":true}
+    }}));
+    entities.insert("tool_call".to_owned(), serde_json::json!({"fields": {
+        "call_id":{"type":"VARCHAR","required":true},"case_id":{"type":"VARCHAR","required":true},
+        "event_time":{"type":"TIMESTAMP","required":true},"actor_role":{"type":"VARCHAR","required":true},
+        "tool_id":{"type":"VARCHAR","required":true},"permission_level":{"type":"VARCHAR","required":true},
+        "status":{"type":"VARCHAR","required":true},"verified":{"type":"BOOLEAN","required":false},
+        "state_change":{"type":"VARCHAR","required":false},"retry_count":{"type":"INTEGER","required":false},
+        "latency_ms":{"type":"INTEGER","required":false}
+    }}));
+    fs::write(
+        root.join("contratos/platform_history.json"),
+        serde_json::json!({
+            "name":"platform_history", "version":"0.5.1", "entities":entities
+        })
+        .to_string(),
+    )
+    .expect("write full operational contract");
+}
+
+#[test]
+fn source_validate_e0_returns_an_aggregate_without_running_the_pipeline() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("e0-source-validation");
+    e0_fixture(&input, "ok", "ok");
+    write_empty_operational_tables(&input);
+
+    // Evaluator payloads are deliberately unreadable: source validation may
+    // inspect only the operational source contract and must not open them.
+    fs::write(
+        input.join("datos/labels.parquet"),
+        b"do-not-open-labels-sentinel",
+    )
+    .expect("write evaluator sentinel");
+    fs::write(
+        input.join("datos/timeline.parquet"),
+        b"do-not-open-timeline-sentinel",
+    )
+    .expect("write evaluator sentinel");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "source",
+            "validate",
+            "--kind",
+            "enriched_history",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--contract-version", "0.5.1"])
+        .output()
+        .expect("validate E0 through the public executable");
+
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
+    let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
+    assert_eq!(summary["source_kind"], "enriched_history");
+    assert_eq!(summary["validation_status"], "valid");
+    assert_eq!(summary["validation_scope"], "operational");
+    assert!(
+        summary["manifest_digest"]
+            .as_str()
+            .is_some_and(|value| { value.starts_with("sha256:") && value.len() == 71 })
+    );
+    assert!(
+        summary["snapshot_digest"]
+            .as_str()
+            .is_some_and(|value| { value.starts_with("sha256:") && value.len() == 71 })
+    );
+    assert!(summary.get("projected_case_count").is_none());
+    assert!(summary.get("projected_fact_count").is_none());
+    for forbidden in [
+        input.to_string_lossy().as_ref(),
+        "private-case-id",
+        "private-replay-case-id",
+        "do-not-open-labels-sentinel",
+        "do-not-open-timeline-sentinel",
+        "proposal_assembly",
+        "e0_recurrence_holdout",
+    ] {
+        assert!(!stdout.contains(forbidden), "summary exposed {forbidden}");
+    }
+}
+
+#[test]
+fn source_validate_reports_invalid_e0_relationship_as_invalid_not_unsupported() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("invalid-e0-source-validation");
+    e0_fixture(&input, "ok", "ok");
+    write_empty_operational_tables(&input);
+    let at = 1_750_000_000_000_000_i64;
+    write_parquet(
+        &input.join("datos/identity_check.parquet"),
+        Schema::new(vec![
+            Field::new("check_id", DataType::LargeUtf8, false),
+            Field::new("case_id", DataType::LargeUtf8, false),
+            Field::new("actor_role", DataType::LargeUtf8, false),
+            Field::new("result", DataType::LargeUtf8, false),
+            Field::new(
+                "started_at",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                false,
+            ),
+            Field::new(
+                "ended_at",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                false,
+            ),
+        ]),
+        vec![
+            large_strings(vec!["private-check-id"]),
+            large_strings(vec!["private-unknown-case-id"]),
+            large_strings(vec!["customer"]),
+            large_strings(vec!["passed"]),
+            Arc::new(TimestampMicrosecondArray::from(vec![at + 1]).with_timezone("UTC")),
+            Arc::new(TimestampMicrosecondArray::from(vec![at + 2]).with_timezone("UTC")),
+        ],
+    );
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "source",
+            "validate",
+            "--kind",
+            "enriched_history",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--contract-version", "0.5.1"])
+        .output()
+        .expect("validate invalid E0 through the public executable");
+
+    assert_eq!(completed.status.code(), Some(2));
+    let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
+    let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
+    assert_eq!(summary["validation_status"], "invalid_source");
+    assert_eq!(summary["validation_scope"], "operational");
+    assert_eq!(
+        summary["findings"],
+        serde_json::json!(["relationship_invalid"])
+    );
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 error");
+    assert!(stderr.contains("source validation failed: invalid_source"));
+    for forbidden in [
+        input.to_string_lossy().as_ref(),
+        "private-check-id",
+        "private-unknown-case-id",
+    ] {
+        assert!(!stdout.contains(forbidden), "summary exposed {forbidden}");
+        assert!(!stderr.contains(forbidden), "error exposed {forbidden}");
+    }
+}
+
+#[test]
+fn source_validate_original_rejects_malformed_input_without_disclosing_source_values() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("original-source-validation");
+    let contacts = input.join("call_center_interactions");
+    fs::create_dir_all(&contacts).expect("create contact input");
+    fs::write(
+        contacts.join("part-000.csv"),
+        "interaction_id,channel,channel\nprivate-row-sentinel,phone,web\n",
+    )
+    .expect("write malformed synthetic original source");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args(["source", "validate", "--kind", "original_bank", "--input"])
+        .arg(&input)
+        .args(["--contract-version", "1.0"])
+        .output()
+        .expect("validate original source through the public executable");
+
+    assert_eq!(completed.status.code(), Some(2));
+    let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
+    let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
+    assert_eq!(summary["source_kind"], "original_bank");
+    assert_eq!(summary["validation_status"], "invalid_source");
+    assert_eq!(
+        summary["validation_scope"],
+        "contacts_and_complaints_header_structure"
+    );
+    assert_eq!(
+        summary["findings"],
+        serde_json::json!(["contract_or_schema_invalid"])
+    );
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 error");
+    for forbidden in [
+        input.to_string_lossy().as_ref(),
+        "private-row-sentinel",
+        "part-000.csv",
+    ] {
+        assert!(!stdout.contains(forbidden), "summary exposed {forbidden}");
+        assert!(!stderr.contains(forbidden), "error exposed {forbidden}");
+    }
+}
+
+#[test]
+fn source_validate_original_rejects_contact_only_input_instead_of_claiming_a_complete_profile() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("original-valid-looking-unverified");
+    let contacts = input.join("call_center_interactions");
+    fs::create_dir_all(&contacts).expect("create contact input");
+    fs::write(
+        contacts.join("part-000.csv"),
+        concat!(
+            "interaction_id,customer_id,interaction_date,contact_reason,channel\n",
+            "private-interaction-sentinel,private-customer-sentinel,2025-01-01T10:00:00,Complaint,Phone\n",
+        ),
+    )
+    .expect("write valid-looking synthetic original source");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args(["source", "validate", "--kind", "original_bank", "--input"])
+        .arg(&input)
+        .args(["--contract-version", "1.0"])
+        .output()
+        .expect("validate original source through the public executable");
+
+    assert_eq!(completed.status.code(), Some(2));
+    let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
+    let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
+    assert_eq!(summary["source_kind"], "original_bank");
+    assert_eq!(summary["validation_status"], "invalid_source");
+    assert_eq!(
+        summary["validation_scope"],
+        "contacts_and_complaints_header_structure"
+    );
+    assert_eq!(
+        summary["findings"],
+        serde_json::json!(["contract_or_schema_invalid"])
+    );
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 error");
+    for forbidden in [
+        input.to_string_lossy().as_ref(),
+        "private-interaction-sentinel",
+        "private-customer-sentinel",
+        "2025-01-01T10:00:00",
+        "part-000.csv",
+    ] {
+        assert!(!stdout.contains(forbidden), "summary exposed {forbidden}");
+        assert!(!stderr.contains(forbidden), "error exposed {forbidden}");
+    }
+}
+
+fn write_contract_header(root: &Path, table: &str, contract: &str) {
+    let contract: serde_json::Value = serde_json::from_str(contract).unwrap();
+    let header = contract["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|column| column["name"].as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join(",");
+    let directory = root.join(table).join("year=2025/month=01");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("part.csv"), format!("{header}\n")).unwrap();
+}
+
+#[test]
+fn source_validate_original_accepts_only_the_versioned_contact_and_pqr_header_profile() {
+    let temp = TempDir::new().expect("temp directory");
+    write_contract_header(
+        temp.path(),
+        "call_center_interactions",
+        include_str!("../../../contracts/sources/call_center_interactions.v1.json"),
+    );
+    write_contract_header(
+        temp.path(),
+        "complaints",
+        include_str!("../../../contracts/sources/complaints.v1.json"),
+    );
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args(["source", "validate", "--kind", "original_bank", "--input"])
+        .arg(temp.path())
+        .args(["--contract-version", "1.0"])
+        .output()
+        .expect("validate bounded original profile through public CLI");
+
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let stdout = String::from_utf8(completed.stdout).expect("UTF-8 JSON summary");
+    let summary: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON summary");
+    assert_eq!(summary["source_kind"], "original_bank");
+    assert_eq!(summary["validation_status"], "valid");
+    assert_eq!(
+        summary["validation_scope"],
+        "contacts_and_complaints_header_structure"
+    );
+    assert_eq!(summary["contract_version"], "1.0");
+    assert!(summary["operational_table_count"].is_null());
+    assert_eq!(summary["validated_table_count"], 2);
+    assert!(summary["manifest_digest"].is_null());
+    assert!(summary["snapshot_digest"].is_null());
+}
+
+#[test]
+fn source_validate_original_rejects_unknown_contract_version_without_disclosing_input() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("must-not-be-opened");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args(["source", "validate", "--kind", "original_bank", "--input"])
+        .arg(&input)
+        .args(["--contract-version", "anything-at-all"])
+        .output()
+        .expect("validate original source through the public executable");
+
+    assert_eq!(completed.status.code(), Some(2));
+    let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
+    let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
+    assert_eq!(summary["source_kind"], "original_bank");
+    assert_eq!(summary["validation_status"], "invalid_source");
+    assert_eq!(
+        summary["validation_scope"],
+        "contacts_and_complaints_header_structure"
+    );
+    assert_eq!(
+        summary["findings"],
+        serde_json::json!(["contract_or_schema_invalid"])
+    );
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 error");
+    for forbidden in [
+        input.to_string_lossy().as_ref(),
+        "not found",
+        "contract_version_mismatch",
+    ] {
+        assert!(!stdout.contains(forbidden), "summary exposed {forbidden}");
+        assert!(!stderr.contains(forbidden), "error exposed {forbidden}");
+    }
+}
+
 fn run_e0_cli(input: &Path, output: &Path) -> serde_json::Value {
     run_e0_cli_with_arranque(input, output, "21")
 }
@@ -994,8 +1504,10 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("original-bank");
     let contacts = input.join("call_center_interactions");
+    let complaints = input.join("complaints");
     let output = temp.path().join("runs-original");
     fs::create_dir_all(&contacts).expect("contact table directory");
+    fs::create_dir_all(&complaints).expect("complaint table directory");
     let mut csv =
         String::from("interaction_id,customer_id,interaction_date,contact_reason,channel\n");
     for (month, day) in [("2027-03", 1), ("2027-04", 1)] {
@@ -1017,6 +1529,73 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
         "private-rejected-timestamp,private-customer-rejected-timestamp,not-a-date,Complaint,Phone\n",
     );
     fs::write(contacts.join("part-000.csv"), csv).expect("write synthetic contacts");
+
+    let complaint_contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/complaints.v1.json"
+    ))
+    .expect("complaints source contract");
+    let complaint_columns = complaint_contract["columns"]
+        .as_array()
+        .expect("complaints contract columns")
+        .iter()
+        .map(|column| column["name"].as_str().expect("contract column name"))
+        .collect::<Vec<_>>();
+    let mut complaint_csv = complaint_columns.join(",");
+    complaint_csv.push('\n');
+    for offset in 0..5 {
+        let mut row = vec![String::new(); complaint_columns.len()];
+        for (name, value) in [
+            ("complaint_id", format!("private-complaint-{offset}")),
+            ("customer_id", format!("private-pqr-customer-{offset}")),
+            ("creation_date", "2027-03-02 11:00:00".to_owned()),
+            ("category", "Queja".to_owned()),
+            ("reception_channel", "Phone".to_owned()),
+            ("description", format!("private-description-{offset}")),
+            ("sla_breached", "true".to_owned()),
+            ("resolution_days", "3".to_owned()),
+            ("resolution_satisfaction", "2".to_owned()),
+        ] {
+            let column = complaint_columns
+                .iter()
+                .position(|column| *column == name)
+                .expect("fixture field exists in contract");
+            row[column] = value;
+        }
+        complaint_csv.push_str(&row.join(","));
+        complaint_csv.push('\n');
+    }
+    for offset in 0..4 {
+        let mut row = vec![String::new(); complaint_columns.len()];
+        for (name, value) in [
+            (
+                "complaint_id",
+                format!("private-suppressed-complaint-{offset}"),
+            ),
+            (
+                "customer_id",
+                format!("private-suppressed-pqr-customer-{offset}"),
+            ),
+            ("creation_date", "2027-04-02 11:00:00".to_owned()),
+            ("category", "Card".to_owned()),
+            ("reception_channel", "Web".to_owned()),
+            (
+                "description",
+                format!("private-suppressed-description-{offset}"),
+            ),
+            ("sla_breached", "false".to_owned()),
+            ("resolution_days", "1".to_owned()),
+            ("resolution_satisfaction", "5".to_owned()),
+        ] {
+            let column = complaint_columns
+                .iter()
+                .position(|column| *column == name)
+                .expect("fixture field exists in contract");
+            row[column] = value;
+        }
+        complaint_csv.push_str(&row.join(","));
+        complaint_csv.push('\n');
+    }
+    fs::write(complaints.join("part-000.csv"), complaint_csv).expect("write synthetic complaints");
 
     let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
         .args([
@@ -1080,6 +1659,36 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
     assert!(envelope["finding"].get("rejected_rows").is_none());
     assert!(envelope["finding"].get("suppressed_cells").is_none());
     assert_eq!(envelope["finding"]["complaint_contact_count"], 10);
+    assert_eq!(result["complaint_projection_status"]["status"], "supported");
+    assert_eq!(
+        envelope["finding"]["complaint_table_projection"]["included_complaint_count"],
+        5
+    );
+    assert_eq!(
+        envelope["finding"]["complaint_table_projection"]["policy_id"],
+        "original_complaint_literal_month_k_v1"
+    );
+    assert_eq!(
+        envelope["finding"]["complaint_table_projection"]["aggregates"],
+        serde_json::json!([{
+            "period": "2027-03",
+            "category": "complaint",
+            "channel": "phone",
+            "complaint_count": 5,
+            "sla_breached_suppressed_small_denominator": false,
+            "sla_breached_valid_count": 5,
+            "sla_breached_missing_count": 0,
+            "sla_breached_positive_count": 5,
+            "resolution_days_suppressed_small_denominator": false,
+            "resolution_days_valid_count": 5,
+            "resolution_days_missing_count": 0,
+            "resolution_days_mean": 3.0,
+            "resolution_satisfaction_suppressed_small_denominator": false,
+            "resolution_satisfaction_valid_count": 5,
+            "resolution_satisfaction_missing_count": 0,
+            "resolution_satisfaction_mean": 2.0
+        }])
+    );
     assert_eq!(
         envelope["agent_core_candidate"],
         "dependency_blocked_snapshot_semantics"
@@ -1091,6 +1700,10 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
         "private-interaction",
         "private-customer",
         "private-suppressed",
+        "private-complaint",
+        "private-pqr-customer",
+        "private-description",
+        "private-suppressed-description",
         "technical",
         "chat",
         "rejected_rows",
@@ -1239,6 +1852,174 @@ fn e0_cli_zero_positive_u12_signal_is_a_noop_without_u09_u10_dispatch() {
     assert_eq!(result["u12_e_u13_e"]["candidate_count"], 0);
     assert!(!timeline.contains("u09_agent_core_task"));
     assert!(!timeline.contains("u10_model_provider"));
+}
+
+#[test]
+fn original_bank_cli_reports_absent_complaints_without_fabricating_pqr_evidence() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("original-bank");
+    let contacts = input.join("call_center_interactions");
+    let output = temp.path().join("runs-original-absent-complaints");
+    fs::create_dir_all(&contacts).expect("contact table directory");
+    let mut csv =
+        String::from("interaction_id,customer_id,interaction_date,contact_reason,channel\n");
+    for index in 0..5 {
+        csv.push_str(&format!(
+            "private-interaction-{index},private-customer-{index},2027-03-01 10:00:00,Complaint,Phone\n"
+        ));
+    }
+    fs::write(contacts.join("part-000.csv"), csv).expect("write synthetic contacts");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run original source CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result JSON");
+    assert_eq!(result["complaint_projection_status"]["status"], "absent");
+    assert!(
+        result["snapshot_descriptive_envelope"]["finding"]["complaint_table_projection"].is_null()
+    );
+    assert!(
+        result["events"].as_array().unwrap().iter().any(|event| {
+            event["stage"] == "complaint_projection" && event["status"] == "absent"
+        })
+    );
+    let serialized = result.to_string();
+    assert!(!serialized.contains("included_complaint_count"));
+}
+
+#[test]
+fn original_bank_cli_reports_unsupported_complaints_with_safe_diagnostics() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("original-bank");
+    let complaints = input.join("complaints");
+    let output = temp.path().join("runs-original-unsupported-complaints");
+    fs::create_dir_all(&complaints).expect("complaint table directory");
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/complaints.v1.json"
+    ))
+    .expect("complaints source contract");
+    let columns = contract["columns"]
+        .as_array()
+        .expect("complaints columns")
+        .iter()
+        .map(|column| column["name"].as_str().expect("column name"))
+        .collect::<Vec<_>>();
+    let mut csv = columns.join(",");
+    csv.push('\n');
+    let mut row = vec![String::new(); columns.len()];
+    for (name, value) in [
+        ("complaint_id", "private-complaint"),
+        ("customer_id", "private-customer"),
+        ("creation_date", "not-a-date"),
+        ("category", "Queja"),
+        ("reception_channel", "Phone"),
+        ("description", "private-description"),
+    ] {
+        let index = columns
+            .iter()
+            .position(|column| *column == name)
+            .expect("fixture field exists in contract");
+        row[index] = value.to_owned();
+    }
+    csv.push_str(&row.join(","));
+    csv.push('\n');
+    fs::write(complaints.join("part-000.csv"), csv).expect("write unsupported complaints");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run original source CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result JSON");
+    assert_eq!(
+        result["complaint_projection_status"]["status"],
+        "unsupported"
+    );
+    assert_eq!(
+        result["complaint_projection_status"]["missing_fields"],
+        serde_json::json!(["valid_source_wall_clock_timestamp"])
+    );
+    assert!(
+        result["snapshot_descriptive_envelope"]["finding"]["complaint_table_projection"].is_null()
+    );
+    assert!(result["events"].as_array().unwrap().iter().any(|event| {
+        event["stage"] == "complaint_projection"
+            && event["status"] == "unsupported"
+            && event["detail"]
+                .as_str()
+                .unwrap()
+                .contains("no complaint evidence admitted")
+    }));
+    let serialized = result.to_string();
+    for forbidden in [
+        "private-complaint",
+        "private-customer",
+        "private-description",
+    ] {
+        assert!(!serialized.contains(forbidden));
+    }
 }
 
 #[test]

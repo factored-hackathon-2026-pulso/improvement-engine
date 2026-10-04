@@ -23,6 +23,162 @@ fn source_snapshot() -> ArtifactReference {
     }
 }
 
+#[test]
+fn frozen_builder_output_corpus_matches_the_published_verdicts() {
+    use improvement_engine_core::e0_builder_design::{
+        FrozenBuilderOutputVerdict, classify_frozen_builder_output,
+    };
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("contracts/engine-steps/pack/parts/builder_corpus");
+    let expected: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(pack.join("verdicts.json")).unwrap()).unwrap();
+    let expected = expected["verdicts"].as_object().unwrap();
+    let catalogue = std::fs::read_to_string(pack.join("catalogue.json")).unwrap();
+    let output_dir = pack.join("outputs");
+    let mut observed = BTreeMap::new();
+
+    for entry in std::fs::read_dir(output_dir).unwrap() {
+        let path = entry.unwrap().path();
+        let output_id = path.file_stem().unwrap().to_string_lossy().to_string();
+        let output = std::fs::read_to_string(path).unwrap();
+        let payload: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(payload["output_id"].as_str(), Some(output_id.as_str()));
+        let verdict = classify_frozen_builder_output(&output, Some(&catalogue));
+        observed.insert(output_id, verdict);
+    }
+
+    assert_eq!(observed.len(), 10);
+    assert_eq!(expected.len(), 10);
+    assert!(
+        observed
+            .keys()
+            .all(|output_id| expected.contains_key(output_id))
+    );
+    for (output_id, expected_verdict) in expected {
+        let expected_verdict = expected_verdict.as_str().unwrap();
+        let actual = observed.get(output_id).unwrap();
+        let matches = match expected_verdict {
+            "valid" => *actual == FrozenBuilderOutputVerdict::Valid,
+            "unlinked" => *actual == FrozenBuilderOutputVerdict::Unlinked,
+            "not_evaluable" => *actual == FrozenBuilderOutputVerdict::NotEvaluable,
+            "invalid" => *actual == FrozenBuilderOutputVerdict::Invalid,
+            other => panic!("unknown frozen verdict {other}"),
+        };
+        assert!(
+            matches,
+            "{output_id}: expected {expected_verdict}, got {actual:?}"
+        );
+    }
+}
+
+#[test]
+fn frozen_unlinked_and_not_evaluable_outputs_do_not_need_a_catalogue() {
+    use improvement_engine_core::e0_builder_design::{
+        FrozenBuilderOutputVerdict, classify_frozen_builder_output,
+    };
+    use std::path::PathBuf;
+
+    let outputs = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("contracts/engine-steps/pack/parts/builder_corpus/outputs");
+    for (output_id, expected) in [
+        ("bo-05-unlinked", FrozenBuilderOutputVerdict::Unlinked),
+        (
+            "bo-06-unlinked-no-route",
+            FrozenBuilderOutputVerdict::Unlinked,
+        ),
+        (
+            "bo-07-not-evaluable",
+            FrozenBuilderOutputVerdict::NotEvaluable,
+        ),
+        (
+            "bo-08-not-evaluable-empty-evidence",
+            FrozenBuilderOutputVerdict::NotEvaluable,
+        ),
+    ] {
+        let output = std::fs::read_to_string(outputs.join(format!("{output_id}.json"))).unwrap();
+        assert_eq!(
+            classify_frozen_builder_output(&output, None),
+            expected,
+            "{output_id}"
+        );
+    }
+}
+
+#[test]
+fn frozen_builder_output_classifier_handles_catalogue_and_malformed_boundaries() {
+    use improvement_engine_core::e0_builder_design::{
+        FrozenBuilderOutputVerdict, classify_frozen_builder_output,
+    };
+    use std::path::PathBuf;
+
+    let pack = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("contracts/engine-steps/pack/parts/builder_corpus");
+    let outputs = pack.join("outputs");
+    let catalogue = std::fs::read_to_string(pack.join("catalogue.json")).unwrap();
+    let read_output =
+        |name: &str| std::fs::read_to_string(outputs.join(format!("{name}.json"))).unwrap();
+
+    // The rule requires all declared references to resolve before returning
+    // Valid, so linked/no-op outcomes cannot be established without a catalogue.
+    for output_id in ["bo-01-linked-prompt", "bo-03-do-nothing"] {
+        assert_eq!(
+            classify_frozen_builder_output(&read_output(output_id), None),
+            FrozenBuilderOutputVerdict::NotEvaluable,
+            "{output_id}"
+        );
+    }
+
+    // A do-nothing decision with a null target is valid when its evidence resolves.
+    let do_nothing = read_output("bo-03-do-nothing");
+    assert_eq!(
+        classify_frozen_builder_output(&do_nothing, Some(&catalogue)),
+        FrozenBuilderOutputVerdict::Valid
+    );
+
+    // The two invalid fixtures isolate evidence-ref and target-ref resolution.
+    for output_id in ["bo-09-invented-evidence", "bo-10-invented-target"] {
+        assert_eq!(
+            classify_frozen_builder_output(&read_output(output_id), Some(&catalogue)),
+            FrozenBuilderOutputVerdict::Invalid,
+            "{output_id}"
+        );
+    }
+
+    // A linked response with no target remains valid when its provided evidence resolves.
+    let mut linked_without_target: serde_json::Value =
+        serde_json::from_str(&read_output("bo-01-linked-prompt")).unwrap();
+    linked_without_target["design_intent"]
+        .as_object_mut()
+        .unwrap()
+        .remove("target_ref");
+    assert_eq!(
+        classify_frozen_builder_output(
+            &serde_json::to_string(&linked_without_target).unwrap(),
+            Some(&catalogue)
+        ),
+        FrozenBuilderOutputVerdict::Valid
+    );
+
+    // Malformed catalogue data is a dependency gap, not proof of an invalid output.
+    assert_eq!(
+        classify_frozen_builder_output(&read_output("bo-01-linked-prompt"), Some("{")),
+        FrozenBuilderOutputVerdict::NotEvaluable
+    );
+    assert_eq!(
+        classify_frozen_builder_output("{", Some(&catalogue)),
+        FrozenBuilderOutputVerdict::Invalid
+    );
+}
+
 fn recurring_candidate() -> (
     improvement_engine_core::local_simulation::LocalRunResult,
     improvement_engine_core::e0_proposal_assembly::LocalProposalCandidate,

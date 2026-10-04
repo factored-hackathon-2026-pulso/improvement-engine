@@ -263,6 +263,7 @@ mod tests {
             evaluation: None,
             contact_volume_projection: None,
             snapshot_descriptive_envelope: None,
+            complaint_projection_status: None,
             events: Vec::new(),
         }
     }
