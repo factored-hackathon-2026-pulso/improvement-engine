@@ -5,7 +5,8 @@ use serde_json::Value;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EvaluateOutcome {
     Pass,
-    /// 409 `gate_failed` with the EvalReport as payload.
+    /// V3 31.7.1: 409 `gate_failed` with the EvalReport as payload. OBSERVED on the real bridge profile instead: completed
+    /// stage, `native_evaluation: null`, proposal back in `draft` (V3-vs-Core divergence, see seams/README.md).
     Fail,
     FailedInfra,
     /// 429 `quota_exceeded`.

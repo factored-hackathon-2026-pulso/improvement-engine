@@ -109,3 +109,9 @@ pub fn capture_six() -> Vec<Capture> {
 pub fn captured_count(c: &[Capture]) -> usize {
     c.iter().filter(|x| matches!(x.status, CaptureStatus::Captured { .. })).count()
 }
+
+/// (real, fault_injected) split of the captured outcomes; the headline "N of 6" must never hide a fault-injected one.
+pub fn captured_split(c: &[Capture]) -> (usize, usize) {
+    let f = c.iter().filter(|x| matches!(&x.status, CaptureStatus::Captured { source } if source.contains("(fault-injected,"))).count();
+    (captured_count(c) - f, f)
+}

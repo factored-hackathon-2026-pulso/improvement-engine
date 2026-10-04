@@ -32,14 +32,17 @@ fn detects_abi_depending_on_codex_core() {
 }
 
 #[test]
-fn abi_and_core_client_are_free_of_crates_core() {
+fn no_seams_crate_depends_on_crates_core() {
+    // Every crate of the workspace (engine now depends on core-client/eval/authority): K0 graph rule, not a fixed list.
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    for name in ["abi", "core-client"] {
-        let m = crates.join(name).join("Cargo.toml");
-        if let Ok(text) = fs::read_to_string(&m) {
-            assert!(forbidden_core_deps(&text).is_empty(), "{name} depends on crates/core");
+    let mut seen = 0;
+    for e in fs::read_dir(crates).unwrap().filter_map(Result::ok) {
+        if let Ok(text) = fs::read_to_string(e.path().join("Cargo.toml")) {
+            seen += 1;
+            assert!(forbidden_core_deps(&text).is_empty(), "{:?} depends on crates/core", e.file_name());
         }
     }
+    assert!(seen >= 6, "scanned only {seen} manifests");
 }
 
 #[test]

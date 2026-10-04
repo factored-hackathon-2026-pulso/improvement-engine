@@ -18,7 +18,7 @@ e2e fixtures double's `/_e2e/config` (a test-only admin channel):
 Evidence: `seams/crates/core-client/tests/live_common/mod.rs` (`Fx`), live run `docs/reports/w4a-live/k3_acceptance.json`.
 Until a route exists the live K3 acceptance is labelled "platform = e2e double" and the engine cannot run outside the e2e stack.
 
-Also observed (not a request, a finding): a failed native gate does not surface as HTTP 409 `gate_failed` on the
+Also observed (not a request, a finding; V3-vs-Core DIVERGENCE: spec V3 31.7.1 CAP-38 defines fail as 409 gate_failed, the classifier maps this observed shape to fail by inference): a failed native gate does not surface as HTTP 409 `gate_failed` on the
 `agent_core_real` profile: the evaluate-only stage completes with a verified `evaluate` write and `native_evaluation: null`,
 and the proposal returns to draft (see `seams/crates/eval/tests/fixtures/v1/fail.json`). A consumer cannot read the failing
 report through the contract (it exists only in `pulso_bridge.eval_reports`). Request: expose `{verdict, eval_run_ref,

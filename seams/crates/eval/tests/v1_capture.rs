@@ -2,7 +2,7 @@
 //! A fixture counts only if it is complete (provenance), its observation classifies to the outcome its name claims, and
 //! the label is honest (a lost result is always `fault-injected`). Synthetic temp-dir fixtures test the rules; the last
 //! test reads the repo's real fixtures.
-use eval::capture::{CaptureStatus, FIXTURE_DIR, capture_from_dir, capture_six, captured_count};
+use eval::capture::{CaptureStatus, FIXTURE_DIR, capture_from_dir, capture_six, captured_count, captured_split};
 use eval::outcomes::EvaluateOutcome as O;
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -108,5 +108,14 @@ fn the_recorded_fixtures_of_the_repo_are_all_valid_and_the_count_matches_the_fil
     let files: Vec<String> = std::fs::read_dir(&dir).map(|r| r.filter_map(Result::ok).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.ends_with(".json")).collect()).unwrap_or_default();
     let caps = capture_six();
     assert_eq!(captured_count(&caps), files.len(), "every fixture file must be a valid capture (and nothing else counts): {files:?}");
-    eprintln!("V1 captured {} of 6 (computed from {} fixtures)", captured_count(&caps), files.len());
+    let (r, f) = captured_split(&caps);
+    eprintln!("V1 captured {} of 6 (computed from {} fixtures): {r} real, {f} fault-injected", captured_count(&caps), files.len());
+}
+
+#[test]
+fn the_count_separates_real_from_fault_injected() {
+    let d = tmp("split");
+    write(&d, "pass", prov("real"), receipt(json!({"verdict": "pass", "eval_run_ref": "r", "report_digest": "d"}), "evaluated"));
+    write(&d, "evaluation_result_lost", prov("fault-injected"), json!({"kind": "timeout", "request_sent": true, "proposal_state_after": "evaluated"}));
+    assert_eq!(captured_split(&capture_from_dir(&d)), (1, 1));
 }
