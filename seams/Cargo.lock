@@ -234,6 +234,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "debug-api"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+ "tiny_http",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"

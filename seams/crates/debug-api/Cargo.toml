@@ -1,0 +1,11 @@
+[package]
+name = "debug-api"
+description = "Claude-owned debug API: run-event store, /internal/v1/debug read routes and SSE for the debug-console; never depends on crates/core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json = "1"
+sha2 = "0.10"
+tiny_http = "0.12"
