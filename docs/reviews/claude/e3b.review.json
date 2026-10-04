@@ -1,0 +1,79 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "E3b"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "fresh-context-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0048",
+    "git a7678d4, 9060efc, c505c1e"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 (CRV1) from the shared journal and commit history. Findings are only those the journal or the cited commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "verdict": "closed",
+  "findings": [
+    {
+      "id": "E3b-R1",
+      "loop": 1,
+      "summary": "in rust mode a stale or different steps_cli binary was invisible in the report: the steps now record steps_exe_sha256 of the binary that ran",
+      "status": "fixed",
+      "fix_ref": "9060efc"
+    },
+    {
+      "id": "E3b-R2",
+      "loop": 1,
+      "summary": "a step the Rust stand-in cannot serve silently stayed Python: it is now disclosed per step as steps_fallback",
+      "status": "fixed",
+      "fix_ref": "9060efc"
+    },
+    {
+      "id": "CRV1-RES-GATE-STANDIN-ARMS",
+      "loop": 1,
+      "summary": "the gate step is flipped real-narrow even when the arms are stand-ins",
+      "status": "accepted",
+      "reason": "Decision recorded in journal CL-0048 (orchestrator): the verdict code is real Rust over the report; the arms and judge stay listed in doubles[] and the step carries verdict_judge=rust-claude-standin. A reader of the ratchet alone could over-read the flip, hence the explicit label.",
+      "owner": "Team CL (orchestrator decision)",
+      "tier": "T0.5 (wp_table CRV1)",
+      "tracking": "journal CL-0048; revisit at GT1A or when Codex DGATE is swapped in"
+    },
+    {
+      "id": "CRV1-RES-E0-RUST-UNTESTED",
+      "loop": 1,
+      "summary": "the E0 window mode combined with --steps rust has never been run",
+      "status": "accepted",
+      "reason": "E0 data is local-only and the E0 package is not available to this lane; the combination is untested, not known to work.",
+      "owner": "Team CL, lane L-E2E",
+      "tier": "T0.5 (wp_table CRV1)",
+      "tracking": "untracked; needs the local E0 package and a user-supervised run"
+    },
+    {
+      "id": "CRV1-RES-NO-RUST-PATH-HOOKS",
+      "loop": 1,
+      "summary": "the compile dry-run digest hook and custom G1 evaluators have no Rust path, so those runs fall back to Python",
+      "status": "accepted",
+      "reason": "The fallback is disclosed per step (steps_fallback) and the GT05 gate fails on it; the Rust steps take the digest from the bundled dry-run only.",
+      "owner": "Team CL, lane L-E2E",
+      "tier": "T0.5 (wp_table CRV1)",
+      "tracking": "untracked; needs a Core-client seam (S3a) for the hook"
+    }
+  ],
+  "closure_verification": {
+    "by": "implementer agent of Team Claude, GT05 lane (verification by commit inspection and gate runs; NOT an independent reviewer)",
+    "date": "2026-10-04",
+    "head_at_verification": "claude/w1i-gt05 (from claude/w0-train, PR #96)",
+    "evidence": [
+      "git show --stat 9060efc a7678d4 (e2e-core steps_host and thread01 changes, FREEZE.json re-pin)",
+      "scripts/gov/gt05_gate.py items exe_sha256 and fallback_disclosure recompute both fixes from a run report"
+    ],
+    "independence": "The journal cites independent fresh-context reviews but their reviewer identifiers were not recorded; this log does not claim more than the journal states."
+  }
+}
