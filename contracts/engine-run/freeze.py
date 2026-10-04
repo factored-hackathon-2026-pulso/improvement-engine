@@ -14,7 +14,8 @@ ROOT = HERE.parents[1]
 PIN = "contracts/engine-run/FREEZE.json"
 
 CONTRACTS = {
-    "C-2": ["contracts/engine-run/engine_run.py", "contracts/engine-run/report.schema.json"],
+    "C-2": ["contracts/engine-run/engine_run.py", "contracts/engine-run/report.schema.json",
+           "e2e-core/src/claude_standin/thread01.py"],
     "C-12": ["roleplay-llm/roleplay_llm/protocol.py", "roleplay-llm/roleplay_llm/scanner.py",
              "roleplay-llm/roleplay_llm/shim.py"],
 }
@@ -40,7 +41,13 @@ def verify(root: Path = ROOT) -> list:
     """Return human-readable drift problems; empty means every covered file matches the pin."""
     pin = json.loads((root / PIN).read_text(encoding="utf-8"))["contracts"]
     problems = []
+    for cid in CONTRACTS:
+        if cid not in pin:
+            problems.append(f"{cid}: not pinned")
     for cid, c in pin.items():
+        for rel in CONTRACTS.get(cid, []):
+            if rel not in c["files"]:
+                problems.append(f"{cid}: {rel} is covered by the contract but absent from the pin")
         for rel, want in c["files"].items():
             p = root / rel
             if not p.is_file():

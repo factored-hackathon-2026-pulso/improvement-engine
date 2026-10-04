@@ -85,6 +85,7 @@ class Honesty(unittest.TestCase):
 
     def test_5_null_candidate_accepted_when_compile_not_exercised(self):
         r = good(); r["authors"]["candidate_created_at"] = None
+        r["steps"] = [s for s in r["steps"] if s["id"] != "gate"]   # no candidate, so nothing downstream ran either
         r["steps"].append({"id": "compile", "status": "not_exercised", "data_class": "generated_sample", "target": "local",
                            "sha": "a" * 40, "contract_revision": "c2-1", "host": "rust"})
         self.assertNotIn("H5", rules(r))
@@ -97,6 +98,18 @@ class Honesty(unittest.TestCase):
         r["steps"].append({"id": "compile", "status": "stand-in", "data_class": "generated_sample", "target": "local",
                            "sha": "a" * 40, "contract_revision": "c2-1", "host": "rust"})
         self.assertIn("H5", rules(r))
+
+    def test_5_null_candidate_cannot_hide_a_downstream_candidate_effect(self):
+        for later in ("gate", "revision", "approval", "publish"):
+            r = good(); r["authors"]["candidate_created_at"] = None
+            r["steps"] = [s for s in r["steps"] if s["id"] != later]
+            r["steps"].append({"id": "compile", "status": "not_exercised", "data_class": "generated_sample",
+                               "target": "local", "sha": "a" * 40, "contract_revision": "c2-1", "host": "rust"})
+            r["steps"].append({"id": later, "status": "stand-in", "data_class": "generated_sample", "target": "local",
+                               "sha": "a" * 40, "contract_revision": "c2-1", "host": "rust",
+                               "receipt": {"provider": "claude-standin"}})
+            r["gate"] = {"verdict": "pass"}
+            self.assertIn("H5", rules(r), later)
 
     def test_5_null_candidate_does_not_excuse_missing_seal(self):
         r = good(); r["authors"]["candidate_created_at"] = None; del r["authors"]["suite_sealed_at"]

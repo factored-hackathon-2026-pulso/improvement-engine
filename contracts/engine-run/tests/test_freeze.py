@@ -77,5 +77,24 @@ class ReportSchema(unittest.TestCase):
         self.assertIn("null", s["properties"]["authors"]["properties"]["candidate_created_at"]["type"])
 
 
+    def test_report_producer_is_covered_by_c2(self):
+        pin = json.loads((HERE / "FREEZE.json").read_text(encoding="utf-8"))
+        self.assertIn("e2e-core/src/claude_standin/thread01.py", pin["contracts"]["C-2"]["files"])
+
+    def test_a_pin_that_drops_a_covered_file_is_rejected(self):
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            for rels in freeze.CONTRACTS.values():
+                for rel in rels:
+                    (t / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(ROOT / rel, t / rel)
+            pin = freeze.compute(t)
+            c = pin["contracts"]["C-12"]
+            c["files"].pop("roleplay-llm/roleplay_llm/scanner.py")
+            c["digest"] = freeze.contract_digest(c["files"])
+            (t / freeze.PIN).write_text(json.dumps(pin), encoding="utf-8")
+            self.assertTrue(any("scanner.py" in x for x in freeze.verify(t)))
+
+
 if __name__ == "__main__":
     unittest.main()

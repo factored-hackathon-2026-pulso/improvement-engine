@@ -138,7 +138,8 @@ def check(report: dict) -> list:
         out.append(_v("H5", "authors", "world, suite, effect and judge authors must be distinct"))
     sealed, cand = a.get("suite_sealed_at"), a.get("candidate_created_at")
     compile_step = next((s for s in steps if s.get("id") == "compile"), None)
-    no_candidate = compile_step is not None and not _exercised(compile_step) and cand is None
+    downstream = [s_ for s_ in steps if s_.get("id") in ("gate", "revision", "approval", "publish") and _exercised(s_)]
+    no_candidate = compile_step is not None and not _exercised(compile_step) and cand is None and not downstream
     if not sealed or (not no_candidate and (not cand or sealed >= cand)):
         out.append(_v("H5", "suite", "suite must be sealed before the candidate exists"))
     hosts = {report.get("host")} | {s.get("host") for s in steps}
