@@ -70,35 +70,53 @@ impl CoreClient {
         suite: &SuiteRef,
         run: &EvaluationRun,
     ) -> Result<Evaluation, OpError> {
-        let mut inv = TaskInvocation::new(&run.tenant_id, &run.job_id, Stage::Writer, &run.logical_key);
-        inv.attempt = run.attempt;
-        inv.agent_id = WRITER_AGENT.into();
-        inv.agent_version = run.writer_agent_version.clone();
-        inv.release_id = run.writer_release_id.clone();
-        inv.pulso_run_ref = run.pulso_run_ref.clone();
-        inv.lab_grant_ref = run.lab_grant_ref.clone();
-        let key = inv.idempotency_key()?;
-        let binding_ref = canon::task_binding_ref(&run.tenant_id, &key)?;
-        let adm = AdmissionRequest::new(&binding_ref, &frozen.proposal_id, &frozen.candidate_hash, &suite.id, &suite.version, &suite.digest, run.attempt, &run.budget_ref, &run.deadline);
+        let (inv, binding_ref, ctx, adm) = build(frozen, suite, run)?;
         adm.validate().map_err(OpError::Invalid)?;
-        let ctx = adm.derived_context_ref(&run.tenant_id, &run.job_id)?;
         pre.preauthorize(&run.tenant_id, &binding_ref).map_err(|e| OpError::Invalid(format!("pre-authorising the binding: {e}")))?;
         self.admit_evaluation(&run.tenant_id, &run.job_id, &adm)?;
-        inv.input = WriterInput {
-            draft_plan_ref: frozen.plan_ref.clone(),
-            base_release_id: frozen.base_release_id.clone(),
-            evaluate_enabled: true,
-            proposal_id: Some(frozen.proposal_id.clone()),
-            evaluation_suite: Some((suite.id.clone(), suite.version.clone())),
-        }
-        .to_json();
-        inv.registry_mutation_commitment = Some(
-            EvaluateOnlyCommitment { base_release_id: frozen.base_release_id.clone(), proposal_id: frozen.proposal_id.clone(), evaluation_context_ref: ctx.clone() }.to_json(),
-        );
+        self.finish(inv, binding_ref, ctx, &frozen.proposal_id)
+    }
+
+    /// Recovery of a lost answer: the IDENTICAL evaluate-only invoke (same key), no second admission. The admission is
+    /// already consumed and the proposal is no longer frozen, so admitting again would be refused (`candidate_changed`,
+    /// seen live); Core returns the stored run instead of evaluating twice.
+    pub fn replay_evaluation(&self, frozen: &crate::writer::FrozenProposal, suite: &SuiteRef, run: &EvaluationRun) -> Result<Evaluation, OpError> {
+        let (inv, binding_ref, ctx, _) = build(frozen, suite, run)?;
+        self.finish(inv, binding_ref, ctx, &frozen.proposal_id)
+    }
+
+    fn finish(&self, inv: TaskInvocation, binding_ref: String, ctx: String, proposal_id: &str) -> Result<Evaluation, OpError> {
         let receipt = self.invoke(&inv)?;
-        let native = if receipt.is_success() { verify_stage(&receipt, &frozen.proposal_id)? } else { None };
+        let native = if receipt.is_success() { verify_stage(&receipt, proposal_id)? } else { None };
         Ok(Evaluation { binding_ref, evaluation_context_ref: ctx, receipt, native })
     }
+}
+
+/// The evaluate-only invocation, the binding it presents and the admission that precedes it: all derived, nothing sent.
+fn build(frozen: &crate::writer::FrozenProposal, suite: &SuiteRef, run: &EvaluationRun) -> Result<(TaskInvocation, String, String, AdmissionRequest), OpError> {
+    let mut inv = TaskInvocation::new(&run.tenant_id, &run.job_id, Stage::Writer, &run.logical_key);
+    inv.attempt = run.attempt;
+    inv.agent_id = WRITER_AGENT.into();
+    inv.agent_version = run.writer_agent_version.clone();
+    inv.release_id = run.writer_release_id.clone();
+    inv.pulso_run_ref = run.pulso_run_ref.clone();
+    inv.lab_grant_ref = run.lab_grant_ref.clone();
+    let key = inv.idempotency_key()?;
+    let binding_ref = canon::task_binding_ref(&run.tenant_id, &key)?;
+    let adm = AdmissionRequest::new(&binding_ref, &frozen.proposal_id, &frozen.candidate_hash, &suite.id, &suite.version, &suite.digest, run.attempt, &run.budget_ref, &run.deadline);
+    let ctx = adm.derived_context_ref(&run.tenant_id, &run.job_id)?;
+    inv.input = WriterInput {
+        draft_plan_ref: frozen.plan_ref.clone(),
+        base_release_id: frozen.base_release_id.clone(),
+        evaluate_enabled: true,
+        proposal_id: Some(frozen.proposal_id.clone()),
+        evaluation_suite: Some((suite.id.clone(), suite.version.clone())),
+    }
+    .to_json();
+    inv.registry_mutation_commitment = Some(
+        EvaluateOnlyCommitment { base_release_id: frozen.base_release_id.clone(), proposal_id: frozen.proposal_id.clone(), evaluation_context_ref: ctx.clone() }.to_json(),
+    );
+    Ok((inv, binding_ref, ctx, adm))
 }
 
 /// A completed evaluate-only stage must have written exactly one verified `evaluate` and report a native evaluation.

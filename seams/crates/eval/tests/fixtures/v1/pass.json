@@ -1,0 +1,31 @@
+{
+  "observation": {
+    "http_status": 200,
+    "kind": "stage_receipt",
+    "native_evaluation": {
+      "eval_run_ref": "01a106b5-f98f-70b0-9d5d-5476832b14a1",
+      "report_digest": "01e7b1bf8f44737ac4259920f0a7e4a927759f8b7b120c65b11168420c19121d",
+      "verdict": "pass"
+    },
+    "outcome": "completed",
+    "proposal_state_after": "evaluated",
+    "state": "TerminalOk",
+    "write_ops": [
+      "evaluate"
+    ]
+  },
+  "outcome": "pass",
+  "proposal_id": "01a106b5-f47b-7171-bec4-37674d9c5b4e",
+  "provenance": {
+    "agent_core_sha": "c814c2bad9f154d10c092326558815dca9562be7",
+    "command": "cargo test --offline -j 2 --manifest-path seams/Cargo.toml -p eval --test live_capture -- --ignored --nocapture --test-threads 1 (env: seams/scripts/live-env.ps1)",
+    "date": "2026-10-04",
+    "label": "real",
+    "namespace": "claude-w4a-1",
+    "stack_image": "localhost/pulso-core-runtime:c814c2b-920f5e3"
+  },
+  "suite": {
+    "id": "disputas-tarea-suite",
+    "version": "4.0.0"
+  }
+}

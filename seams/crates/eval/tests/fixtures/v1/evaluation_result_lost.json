@@ -1,0 +1,23 @@
+{
+  "fault": "TCP relay forwarded the evaluate-only invoke, waited for Core's answer and never relayed it; client timeout 4 s, 1 attempt",
+  "observation": {
+    "detail": "A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond. (os error 10060)",
+    "kind": "timeout",
+    "proposal_state_after": "evaluated",
+    "request_sent": true
+  },
+  "outcome": "evaluation_result_lost",
+  "proposal_id": "01a106b6-8259-7b41-bb9b-d51e6a7b94dc",
+  "provenance": {
+    "agent_core_sha": "c814c2bad9f154d10c092326558815dca9562be7",
+    "command": "cargo test --offline -j 2 --manifest-path seams/Cargo.toml -p eval --test live_capture -- --ignored --nocapture --test-threads 1 (env: seams/scripts/live-env.ps1)",
+    "date": "2026-10-04",
+    "label": "fault-injected",
+    "namespace": "claude-w4a-1",
+    "stack_image": "localhost/pulso-core-runtime:c814c2b-920f5e3"
+  },
+  "recovery": {
+    "replay_http_status": 200,
+    "replay_same_key_verdict": "pass"
+  }
+}

@@ -1,8 +1,15 @@
-//! Fixture-based golden capture of the six evaluate outcomes. Only recorded real reports count; an outcome with no
-//! recorded real report is `NotCaptured` with the reason (never fabricated).
-use crate::outcomes::{ArmRollup, EvaluateOutcome, classify_http, rollup_arms};
+//! Fixture-based golden capture of the six evaluate outcomes. "Captured N of 6" is COMPUTED from the recorded fixtures
+//! `tests/fixtures/v1/<outcome>.json`; an outcome without a valid recorded real (or labelled fault-injected) observation
+//! is `NotCaptured` with the reason (never fabricated). The bridge-contract goldens are references, not captures.
+//!
+//! Fixture: `{outcome, provenance{stack_image, agent_core_sha, date, command, label}, observation, ...evidence}`;
+//! `label` is `real` or `fault-injected`; a lost result is always `fault-injected`.
+use crate::outcomes::{ArmRollup, EvaluateOutcome, classify_http, classify_observation, rollup_arms};
 use core_client::dto::ArmReport;
 use serde_json::Value;
+use std::path::Path;
+
+pub const FIXTURE_DIR: &str = "tests/fixtures/v1";
 
 const WRITER_EVALUATION: &str = include_str!("../../../../bridge-contract/examples/flows/writer_evaluation.json");
 const ARMS: &str = include_str!("../../../../bridge-contract/examples/flows/arms.json");
@@ -19,49 +26,84 @@ pub struct Capture {
     pub status: CaptureStatus,
 }
 
+/// A contract golden that documents a shape. Never counted as a capture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoldenReference {
+    pub outcome: EvaluateOutcome,
+    pub source: String,
+}
+
 fn step_body(flow: &str, case: &str) -> Option<Value> {
     let d: Value = serde_json::from_str(flow).ok()?;
     d["steps"].as_array()?.iter().find(|s| s["case"] == case).map(|s| s["response"]["body"].clone())
 }
 
-fn pass() -> Option<String> {
-    let b = step_body(WRITER_EVALUATION, "invoke_evaluate_only")?;
-    let ne = &b["result"]["facts"]["pulso_writer_receipts"]["value"]["native_evaluation"];
-    (classify_http(200, ne) == Ok(EvaluateOutcome::Pass)).then(|| "bridge-contract/examples/flows/writer_evaluation.json#invoke_evaluate_only (native_evaluation.verdict=pass)".into())
-}
-
-fn failed_infra() -> Option<String> {
-    let b = step_body(ARMS, "arm_budget_unknown")?;
-    let r = ArmReport::from_json(&b).ok()?;
-    (rollup_arms(&[r]) == ArmRollup::Outcome(EvaluateOutcome::FailedInfra)).then(|| "bridge-contract/examples/flows/arms.json#arm_budget_unknown (arm report status=failed_infra, arm-level)".into())
-}
-
-fn missing(o: EvaluateOutcome) -> &'static str {
-    match o {
-        EvaluateOutcome::Fail => "no recorded real arm report: the 409 gate_failed body is in no golden or e2e-core fixture",
-        EvaluateOutcome::QuotaExceeded => "no recorded real 429 quota_exceeded evaluate response",
-        EvaluateOutcome::CandidateChanged => "no recorded evaluate-level candidate_changed (only admission/approve-level exists)",
-        EvaluateOutcome::ResultLost => "client-side timeout, no recorded real report by definition",
-        _ => "not captured",
+pub fn golden_references() -> Vec<GoldenReference> {
+    let mut out = vec![];
+    if let Some(b) = step_body(WRITER_EVALUATION, "invoke_evaluate_only") {
+        let ne = &b["result"]["facts"]["pulso_writer_receipts"]["value"]["native_evaluation"];
+        if classify_http(200, ne) == Ok(EvaluateOutcome::Pass) {
+            out.push(GoldenReference { outcome: EvaluateOutcome::Pass, source: "bridge-contract/examples/flows/writer_evaluation.json#invoke_evaluate_only (synthetic)".into() });
+        }
     }
+    if let Some(b) = step_body(ARMS, "arm_budget_unknown")
+        && let Ok(r) = ArmReport::from_json(&b)
+        && rollup_arms(&[r]) == ArmRollup::Outcome(EvaluateOutcome::FailedInfra)
+    {
+        out.push(GoldenReference { outcome: EvaluateOutcome::FailedInfra, source: "bridge-contract/examples/flows/arms.json#arm_budget_unknown (arm-level, synthetic)".into() });
+    }
+    out
 }
 
-pub fn capture_six() -> Vec<Capture> {
+const PROVENANCE: [&str; 5] = ["stack_image", "agent_core_sha", "date", "command", "label"];
+
+fn judge(o: EvaluateOutcome, doc: &Value) -> Result<String, String> {
+    if doc["outcome"].as_str() != Some(o.as_str()) {
+        return Err(format!("fixture claims outcome {:?}, expected {:?}", doc["outcome"], o.as_str()));
+    }
+    let p = &doc["provenance"];
+    for f in PROVENANCE {
+        if p.get(f).and_then(Value::as_str).is_none_or(str::is_empty) {
+            return Err(format!("provenance.{f} is missing"));
+        }
+    }
+    let label = p["label"].as_str().unwrap_or_default();
+    if label != "real" && label != "fault-injected" {
+        return Err(format!("provenance.label {label:?} is not real or fault-injected"));
+    }
+    if o == EvaluateOutcome::ResultLost && label != "fault-injected" {
+        return Err("a lost result must be labelled fault-injected (the timeout is caused by the fault)".into());
+    }
+    let got = classify_observation(&doc["observation"])?;
+    if got != o {
+        return Err(format!("the recorded observation classifies as {:?}, not {:?}", got.as_str(), o.as_str()));
+    }
+    Ok(format!("{FIXTURE_DIR}/{}.json ({label}, image {}, {})", o.as_str(), p["stack_image"].as_str().unwrap_or(""), p["date"].as_str().unwrap_or("")))
+}
+
+fn missing(o: EvaluateOutcome, why: &str) -> CaptureStatus {
+    CaptureStatus::NotCaptured { reason: format!("{}: {why}", o.as_str()) }
+}
+
+pub fn capture_from_dir(dir: &Path) -> Vec<Capture> {
     EvaluateOutcome::ALL
         .iter()
         .map(|&o| {
-            let hit = match o {
-                EvaluateOutcome::Pass => pass(),
-                EvaluateOutcome::FailedInfra => failed_infra(),
-                _ => None,
-            };
-            let status = match hit {
-                Some(source) => CaptureStatus::Captured { source },
-                None => CaptureStatus::NotCaptured { reason: missing(o).into() },
+            let path = dir.join(format!("{}.json", o.as_str()));
+            let status = match std::fs::read_to_string(&path) {
+                Err(_) => missing(o, "no fixture recorded"),
+                Ok(text) => match serde_json::from_str::<Value>(&text).map_err(|e| e.to_string()).and_then(|d| judge(o, &d)) {
+                    Ok(source) => CaptureStatus::Captured { source },
+                    Err(why) => missing(o, &why),
+                },
             };
             Capture { outcome: o, status }
         })
         .collect()
+}
+
+pub fn capture_six() -> Vec<Capture> {
+    capture_from_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURE_DIR))
 }
 
 pub fn captured_count(c: &[Capture]) -> usize {

@@ -52,6 +52,37 @@ pub fn classify_http(status: u16, body: &Value) -> Result<EvaluateOutcome, Strin
     }
 }
 
+/// Classify a recorded observation of one evaluate attempt (the shape stored in `tests/fixtures/v1`):
+/// - `stage_receipt`: the evaluate-only writer stage completed. A native verdict decides. NO verdict plus a verified
+///   `evaluate` write and the proposal back in `draft` is the failed gate (409 `gate_failed` inside Core's registry tool:
+///   the bridge does not pass it through as HTTP on this profile; the report stays in Core's `eval_reports`). No verdict
+///   with the proposal still frozen is NOT a failed gate.
+/// - `http_error`: the bridge's refusal (`classify_http`).
+/// - `timeout`: only a request that was SENT can be a lost result.
+pub fn classify_observation(obs: &Value) -> Result<EvaluateOutcome, String> {
+    match obs.get("kind").and_then(Value::as_str) {
+        Some("stage_receipt") => {
+            let native = obs.get("native_evaluation").filter(|n| !n.is_null());
+            if let Some(n) = native {
+                return classify_http(200, n);
+            }
+            let wrote_eval = obs.get("write_ops").and_then(Value::as_array).is_some_and(|o| o.len() == 1 && o[0] == "evaluate");
+            match (wrote_eval, obs.get("proposal_state_after").and_then(Value::as_str)) {
+                (true, Some("draft")) => Ok(EvaluateOutcome::Fail),
+                (_, state) => Err(format!("a completed stage without a verdict is a failed gate only when the proposal is back in draft (proposal state {state:?}, evaluate write {wrote_eval})")),
+            }
+        }
+        Some("http_error") => {
+            let status = obs.get("http_status").and_then(Value::as_u64).ok_or("http_error without http_status")? as u16;
+            classify_http(status, &serde_json::json!({"code": obs.get("code").and_then(Value::as_str).unwrap_or("")}))
+        }
+        Some("timeout") => {
+            if obs.get("request_sent").and_then(Value::as_bool) == Some(true) { Ok(classify_timeout()) } else { Err("a timeout of a request that was never sent is not a lost result".into()) }
+        }
+        other => Err(format!("unknown observation kind {other:?}")),
+    }
+}
+
 pub fn classify_timeout() -> EvaluateOutcome {
     EvaluateOutcome::ResultLost
 }

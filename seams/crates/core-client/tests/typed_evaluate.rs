@@ -177,3 +177,18 @@ fn an_admission_for_another_context_is_a_contract_error_and_no_stage_is_invoked(
     assert!(matches!(r, Err(OpError::Contract(_))), "{r:?}");
     assert_eq!(f.requests().len(), 1);
 }
+
+/// After a lost answer the admission is already consumed and the proposal is no longer frozen, so a second admission
+/// would be refused (`candidate_changed`, seen live). The recovery is the IDENTICAL invoke under the same key: Core
+/// returns the stored run, no second evaluation.
+#[test]
+fn a_lost_evaluation_is_recovered_by_the_identical_invoke_without_a_second_admission() {
+    let f = FakeCore::start();
+    script_invoke(&f, &["evaluate"], json!({"eval_run_ref": "er-1", "report_digest": "d".repeat(64), "verdict": "pass"}), "terminal_ok", "completed");
+    let ev = client(&f.addr).replay_evaluation(&frozen(), &suite(), &run()).expect("replay");
+    assert_eq!(ev.verdict(), Some("pass"));
+    let reqs = f.requests();
+    assert_eq!(reqs.len(), 1);
+    assert_eq!(reqs[0].path, "/internal/v1/core-tasks/invoke");
+    assert_eq!(reqs[0].headers.get("idempotency-key").map(String::as_str), Some(key().as_str()));
+}

@@ -1,6 +1,5 @@
 use core_client::dto::ArmReport;
 use eval::outcomes::{ArmRollup, EvaluateOutcome as O, classify_http, classify_timeout, rollup_arms};
-use eval::capture::{CaptureStatus, capture_six};
 use serde_json::json;
 
 #[test]
@@ -27,14 +26,25 @@ fn completed_arms_alone_never_raise_a_verdict() {
 }
 
 #[test]
-fn capture_from_recorded_goldens_is_honest_about_what_has_no_real_report() {
-    let caps = capture_six();
-    assert_eq!(caps.len(), 6);
-    let get = |o: O| caps.iter().find(|c| c.outcome == o).unwrap();
-    assert!(matches!(get(O::Pass).status, CaptureStatus::Captured { .. }));
-    assert!(matches!(get(O::FailedInfra).status, CaptureStatus::Captured { .. }));
-    for o in [O::Fail, O::QuotaExceeded, O::CandidateChanged, O::ResultLost] {
-        assert!(matches!(get(o).status, CaptureStatus::NotCaptured { .. }), "{o:?} must not be fabricated");
-    }
-    assert_eq!(eval::capture::captured_count(&caps), 2);
+fn the_contract_goldens_are_references_not_captures() {
+    // The bridge-contract goldens carry a synthetic pass and a failed_infra ARM report. They document the shape, they are
+    // not real evaluate-level captures and never count towards "captured N of 6" (see v1_capture.rs).
+    let refs = eval::capture::golden_references();
+    assert_eq!(refs.len(), 2);
+    assert!(refs.iter().all(|r| r.source.contains("bridge-contract/examples/flows")));
+}
+
+#[test]
+fn observations_classify_like_the_http_signals() {
+    use eval::outcomes::classify_observation;
+    let rec = |native: serde_json::Value, state: &str| json!({"kind": "stage_receipt", "http_status": 200, "state": "terminal_ok", "outcome": "completed", "write_ops": ["evaluate"], "native_evaluation": native, "proposal_state_after": state});
+    assert_eq!(classify_observation(&rec(json!({"verdict": "pass"}), "evaluated")), Ok(O::Pass));
+    assert_eq!(classify_observation(&rec(json!({"verdict": "failed_infra"}), "candidate")), Ok(O::FailedInfra));
+    assert_eq!(classify_observation(&rec(json!(null), "draft")), Ok(O::Fail));
+    assert!(classify_observation(&rec(json!(null), "candidate")).is_err());
+    assert_eq!(classify_observation(&json!({"kind": "http_error", "http_status": 429, "code": "quota_exceeded"})), Ok(O::QuotaExceeded));
+    assert_eq!(classify_observation(&json!({"kind": "http_error", "http_status": 409, "code": "pulso:candidate_changed"})), Ok(O::CandidateChanged));
+    assert_eq!(classify_observation(&json!({"kind": "timeout", "request_sent": true})), Ok(O::ResultLost));
+    assert!(classify_observation(&json!({"kind": "timeout", "request_sent": false})).is_err());
+    assert!(classify_observation(&json!({"kind": "weird"})).is_err());
 }
