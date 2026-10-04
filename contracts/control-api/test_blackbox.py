@@ -8,7 +8,10 @@ The file generates its own Ed25519 keys and starts the target itself (the double
 server as a subprocess configured with the same E2E_VERIFY_KEYS / E2E_PORT env the double's container uses).
 
 Surfaces: POST /internal/v1/core-task-bindings, POST /internal/v1/broker/authorizations/check,
-GET|POST /internal/v1/broker/artifacts, admin /_e2e/config (artifact seeding, deny_operations, faults).
+GET|POST /internal/v1/broker/artifacts, POST /internal/v1/platform/observations (+ cursor GET),
+admin /_e2e/config (artifact seeding, deny_operations, faults).
+POST /internal/v1/broker/wiki/read. Rust-only behaviour (type/gap quarantine, healthz, lab grants and queries) lives in
+seams/crates/control-api/tests/; the one lab test here (ED0L cross-check) runs against the Rust server only.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+rfc8785 = pytest.importorskip("rfc8785", reason="needs the e2e venv")
 
 # Needs the e2e venv (cryptography, fastapi, uvicorn, rfc8785); skip with a clear reason instead of breaking collection.
 pytest.importorskip("cryptography", reason="control-api black-box test needs the e2e venv (see module docstring)")
@@ -48,7 +52,7 @@ def b64u(raw: bytes) -> str:
 
 class Keys:
     def __init__(self) -> None:
-        self.cb, self.ex = Ed25519PrivateKey.generate(), Ed25519PrivateKey.generate()
+        self.cb, self.ex, self.ob = (Ed25519PrivateKey.generate() for _ in range(3))
 
     @staticmethod
     def pub(k: Ed25519PrivateKey) -> str:
@@ -56,13 +60,15 @@ class Keys:
 
     def verify_keys(self) -> dict[str, Any]:
         ring = {"cb": ["core-bridge", "control-api", self.pub(self.cb)],
-                "ex": ["core-bridge", "lab-broker", self.pub(self.ex)]}
-        ingest = {"keys": {"ex": {"iss": "core-bridge", "aud": "lab-broker", "key": self.pub(self.ex)}},
+                "ex": ["core-bridge", "lab-broker", self.pub(self.ex)],
+                "ob": ["core-bridge", "control-api", self.pub(self.ob)]}
+        ingest = {"keys": {"ex": {"iss": "core-bridge", "aud": "lab-broker", "key": self.pub(self.ex)},
+                           "ob": {"iss": "core-bridge", "aud": "control-api", "key": self.pub(self.ob)}},
                   "binding_ref": SUB, "tenant_id": "t1"}
         return {"ring": ring, "ingest": ingest}
 
     def token(self, which: str, aud: str, scope: str, tenant: str | None, **over: Any) -> str:
-        key, kid = (self.cb, "cb") if which == "cb" else (self.ex, "ex")
+        key, kid = {"cb": self.cb, "ex": self.ex, "ob": self.ob}[which], which
         now = int(time.time())
         claims: dict[str, Any] = {"iss": "core-bridge", "aud": aud, "sub": over.pop("sub", "bridge:1"), "scope": scope,
                                   "purpose": over.pop("purpose", scope), "iat": now, "exp": now + 60,
@@ -322,3 +328,143 @@ def test_scout_flow_binding_then_authorization_then_artifact(t: Target) -> None:
     status, art = read_artifact(t, "t1", "scout-evidence")
     assert status == 200 and art["content"] == {"rows": [1, 2, 3]}
     assert read_artifact(t, "t2", "scout-evidence")[0] == 404
+
+
+# ---- platform observation ingest (ACK / duplicate / CAS / digest) -------------------------------------------------------
+INGEST = "/internal/v1/platform/observations"
+
+
+def obs_token(t: Target, tenant: str = "t1", scope: str = "observations") -> str:
+    return t.keys.token("ob", "control-api", scope, tenant, purpose="platform_observations", sub=SUB)
+
+
+def schema_ref(t: Target) -> dict[str, Any]:
+    return put_artifact(t, upload_body({"schema": "platform_event/1"}))[1]["artifact_ref"]
+
+
+def obs_event(seq: int, ref: dict[str, Any]) -> dict[str, Any]:
+    return {"kind": "platform_event", "level": None, "source_event": {"kind": "domain_event", "event_type": "case.opened"},
+            "native_event_id": f"EVT-{seq}", "source_event_digest": hashlib.sha256(f"e{seq}".encode()).hexdigest(),
+            "source_event_ref": None, "source_schema_ref": ref, "source_run_ref": None, "source_sequence": seq,
+            "episode_ref": None, "goal_ref": None, "layer_mapping_ref": None, "observed_at": "2026-03-01T10:00:00Z",
+            "trace_refs": [], "coverage_marker": None}
+
+
+def obs_batch(ref: dict[str, Any], seqs: list[int], revision: int | None = 0, cursor: str = "s.1",
+              tenant: str = "t1") -> dict[str, Any]:
+    body: dict[str, Any] = {"contract_version": "pulso-observations-2", "source_id": "plat-a.events", "tenant_id": tenant,
+                            "partition": "tenant.t1", "scan_mode": "fast_poll" if revision is not None else "rescan",
+                            "expected_cursor_revision": revision, "from_seq": seqs[0], "to_seq": seqs[-1], "cursor": cursor,
+                            "cut_ref": None, "events": [obs_event(s, ref) for s in seqs], "verification_receipts": []}
+    return {**body, "batch_digest": hashlib.sha256(rfc8785.dumps(body)).hexdigest()}
+
+
+def post_obs(t: Target, batch: dict[str, Any], token: str | None = None, key: str | None = None) -> tuple[int, Any]:
+    return t.http.call("POST", INGEST, batch, token or obs_token(t), {"Idempotency-Key": key or batch["batch_digest"]})
+
+
+def test_ingest_ack_then_duplicate_replays_the_committed_receipt(t: Target) -> None:
+    ref = schema_ref(t)
+    batch = obs_batch(ref, [1, 2], cursor="s.2")
+    status, ack = post_obs(t, batch)
+    assert status == 202
+    assert {k: ack[k] for k in ("batch_digest", "accepted_event_count", "duplicate_event_count", "checkpoint_advanced",
+                                "current_cursor", "cursor_revision")} == {
+        "batch_digest": batch["batch_digest"], "accepted_event_count": 2, "duplicate_event_count": 0,
+        "checkpoint_advanced": True, "current_cursor": "s.2", "cursor_revision": 1}
+    status, again = post_obs(t, batch)  # 200: committed receipt, nothing re-applied
+    assert status == 200 and again["checkpoint_advanced"] is False
+    assert (again["accepted_event_count"], again["duplicate_event_count"], again["cursor_revision"]) == (0, 2, 1)
+    cur = t.http.call("GET", "/internal/v1/platform/exporters/plat-a.events/partitions/tenant.t1/cursor", None, obs_token(t))[1]
+    assert (cur["cursor"], cur["cursor_revision"], cur["last_batch_digest"]) == ("s.2", 1, batch["batch_digest"])
+
+
+def test_ingest_stale_cursor_revision_is_409_and_rescan_never_moves_the_checkpoint(t: Target) -> None:
+    ref = schema_ref(t)
+    assert post_obs(t, obs_batch(ref, [1], cursor="s.1"))[0] == 202
+    status, body = post_obs(t, obs_batch(ref, [2], revision=0, cursor="s.2"))  # CAS on the old revision
+    assert (status, body) == (409, {"error": "stale_cursor_revision"})
+    status, ack = post_obs(t, obs_batch(ref, [1], revision=None, cursor="s.9"))  # rescan: duplicates, no checkpoint
+    assert (status, ack["checkpoint_advanced"], ack["duplicate_event_count"], ack["current_cursor"]) == (202, False, 1, "s.1")
+
+
+def test_ingest_rejects_digest_key_ref_and_tenant_violations(t: Target) -> None:
+    ref = schema_ref(t)
+    batch = obs_batch(ref, [1])
+    assert post_obs(t, {**batch, "cursor": "tampered"})[1] == {"error": "batch_digest_mismatch"}
+    assert post_obs(t, batch, key="0" * 64)[1] == {"error": "idempotency_key_mismatch"}
+    assert post_obs(t, {**batch, "extra": 1})[1] == {"error": "schema_invalid"}
+    ghost = {"id": "artifact:" + "9" * 64, "digest": "9" * 64, "media_type": "application/json"}
+    assert post_obs(t, obs_batch(ghost, [1]))[1] == {"error": "unresolvable_artifact_ref"}
+    assert post_obs(t, batch, token=obs_token(t, "t2"))[0] == 403  # the exporter binding is pinned to t1
+    assert post_obs(t, batch, token=obs_token(t, scope="binding"))[0] == 403
+    assert t.http.call("POST", INGEST, batch, None, {"Idempotency-Key": batch["batch_digest"]})[0] == 401
+    assert post_obs(t, batch)[0] == 202  # the same batch is still fine afterwards: nothing above had an effect
+
+
+# ---- wiki read (shared) ---------------------------------------------------------------------------------------------
+def wiki_read(t: Target, tenant: str, paths: list[str]) -> tuple[int, Any]:
+    tok = t.keys.token("ex", "lab-broker", "wiki", tenant, purpose="wiki")
+    return t.http.call("POST", BROKER + "/wiki/read", {"paths": paths}, tok)
+
+
+def test_wiki_read_returns_seeded_pages_and_never_another_tenants(t: Target) -> None:
+    t.admin({"wiki": [{"tenant": "t1", "path": "runbooks/recurrence.md", "content": "t1-only page"}]})
+    status, body = wiki_read(t, "t1", ["runbooks/recurrence.md"])
+    assert status == 200
+    (entry,) = body["entries"]
+    assert (entry["path"], entry["content"], entry["evidence_refs"]) == ("runbooks/recurrence.md", "t1-only page", [])
+    assert entry["digest"] == hashlib.sha256(b"t1-only page").hexdigest()
+    assert len(body["base_digest"]) == 64
+    other = wiki_read(t, "t2", ["runbooks/recurrence.md"])
+    assert "t1-only page" not in json.dumps(other[1])
+    tok = t.keys.token("ex", "lab-broker", "lab", "t1", purpose="lab")  # wrong scope
+    assert t.http.call("POST", BROKER + "/wiki/read", {"paths": ["x"]}, tok)[0] == 403
+
+
+# ---- Rust only: the broker serves a lab built by the real ED0L builder -----------------------------------------------
+def test_rust_lab_serves_the_same_aggregates_as_the_ed0l_python_lab(tmp_path: Path) -> None:
+    if "rust" not in TARGETS:
+        pytest.skip("rust target not selected")
+    sys.path[:0] = [str(ROOT / "e2e-core" / "src")]
+    from claude_standin import ed0_lab
+
+    cases = [(f"c{i}", "A", "w1", i < 3) for i in range(12)] + [(f"d{i}", "B", "w1", i < 5) for i in range(15)] +             [(f"e{i}", "C", "w1", True) for i in range(4)]  # group C is below k: the lab drops it
+    db = ed0_lab.build_lab(tmp_path / "lab.sqlite", cases, salt=b"s" * 16)
+    keys = Keys()
+    port = free_port()
+    env = {**os.environ, "E2E_VERIFY_KEYS": json.dumps(keys.verify_keys()), "E2E_PORT": str(port), "CONTROL_API_ADMIN": "1",
+           "CONTROL_API_LABS": json.dumps({"t1": db})}
+    proc = subprocess.Popen([BIN], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        wait_port(port, proc)
+        t = Target("rust", Http(f"http://127.0.0.1:{port}"), keys)
+        t.admin({"preauthorized_bindings": [{"binding_ref": "bind-lab", "tenant": "t1"}]})
+
+        def tok(scope: str) -> str:
+            return keys.token("ex", "lab-broker", scope, "t1", purpose=scope)
+
+        status, grant = t.http.call("POST", BROKER + "/grants", {"binding_ref": "bind-lab", "scope": "lab", "ttl_seconds": 60},
+                                    tok("grant_issue"))
+        assert status == 201
+        h = {"X-Grant-Ref": grant["grant_ref"]}
+        assert t.http.call("POST", BROKER + "/lab/sessions", {"binding_ref": "bind-lab"}, tok("lab"))[0] == 403  # no grant
+        status, sess = t.http.call("POST", BROKER + "/lab/sessions", {"binding_ref": "bind-lab"}, tok("lab"), h)
+        assert status == 200
+        sid = sess["session_ref"]
+        status, q = t.http.call("POST", f"{BROKER}/lab/sessions/{sid}/queries",
+                                {"query_key": "bb-1", "metric_id": ed0_lab.METRIC, "window_id": "w1"}, tok("lab"))
+        assert status == 202
+        state = t.http.call("GET", f"{BROKER}/lab/queries/{q['query_ref']}", None, tok("lab"))[1]
+        res = t.http.call("GET", f"{BROKER}/lab/results/{state['result_ref']}", None, tok("lab"))[1]
+        want = ed0_lab.lab_query(db, ed0_lab.METRIC, "w1")["rows"]
+        got = [{"metric_id": r[0], "window_id": r[1], "g_group": r[2], "count": r[3], "rate": r[4], "evidence_ref": r[5]}
+               for r in res["rows"]]
+        assert got == want and len(got) == 2  # same hashed groups, counts, half-even rates, evidence refs; C absent
+        receipt = t.http.call("GET", f"{BROKER}/lab/receipts/{res['receipt_ref']}", None, tok("lab"))[1]
+        assert (receipt["rows"], receipt["outcome"], receipt["quality_findings"]) == (2, "ok", [])
+        assert t.http.call("POST", BROKER + f"/grants/{grant['grant_ref']}/revoke", None, tok("grant_issue"))[0] == 200
+        assert t.http.call("GET", f"{BROKER}/lab/results/{state['result_ref']}", None, tok("lab"))[0] == 403
+    finally:
+        proc.kill()
+        proc.wait()

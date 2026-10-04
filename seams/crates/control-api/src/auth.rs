@@ -49,11 +49,20 @@ pub struct Expect<'a> {
 pub struct Verifier {
     ring: std::sync::Arc<KeyRing>,
     seen: Mutex<HashMap<(String, String), f64>>,
+    /// Tokens issued before this instant are refused: the jti set is process memory, so a token captured before a restart
+    /// could otherwise be replayed once after it. 0 disables the rule.
+    boot_floor: f64,
 }
 
 impl Verifier {
     pub fn new(ring: std::sync::Arc<KeyRing>) -> Verifier {
-        Verifier { ring, seen: Mutex::new(HashMap::new()) }
+        Verifier { ring, seen: Mutex::new(HashMap::new()), boot_floor: 0.0 }
+    }
+
+    /// Refuse (`pre_boot_token`) any token whose `iat` precedes `floor` (epoch seconds, whole): replay protection across restarts.
+    pub fn with_boot_floor(mut self, floor: f64) -> Verifier {
+        self.boot_floor = floor.floor();
+        self
     }
 
     pub fn verify(&self, token: &str, now: f64, want: &Expect) -> Result<Value, Denied> {
@@ -89,6 +98,9 @@ impl Verifier {
         if exp <= now {
             return Err(deny("expired"));
         }
+        if self.boot_floor > 0.0 && cl.get("iat").and_then(Value::as_f64).is_none_or(|iat| iat < self.boot_floor) {
+            return Err(deny("pre_boot_token"));
+        }
         if exp - now > 330.0 {
             return Err(deny("ttl_too_long"));
         }
@@ -101,7 +113,7 @@ impl Verifier {
         if s("tenant_id").is_none_or(str::is_empty) {
             return Err(Denied { reason: "tenant_required", status: 403 });
         }
-        let mut seen = self.seen.lock().unwrap();
+        let mut seen = self.seen.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         // A token past `exp` is rejected before this point, so its entry is dead weight: evict to bound memory.
         seen.retain(|_, e| *e > now);
         if seen.insert((s("iss").unwrap().to_string(), jti.to_string()), exp).is_some() {
@@ -145,7 +157,7 @@ mod tests {
         }
         let tok = sign(&sk, &JwtParams { kid: "k", worker_id: "w", purpose: "p", tenant_id: Some("t1"), job_id: None, iat: 5000, ttl_s: 60, jti: "late" });
         v.verify(&tok, 5010.0, &want).unwrap();
-        assert_eq!(v.seen.lock().unwrap().len(), 1);
+        assert_eq!(v.seen.lock().unwrap_or_else(std::sync::PoisonError::into_inner).len(), 1);
     }
 
     #[test]

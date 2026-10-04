@@ -1,4 +1,5 @@
 //! `E2E_VERIFY_KEYS` (public keys only; same JSON as the Python double), `E2E_PORT` (default 8700),
+//! `CONTROL_API_LABS` (JSON `{tenant: path-to-ED0L-sqlite}`, optional), `CONTROL_API_MIN_K` (default 10), `CONTROL_API_MIN_CELL` (default 0),
 //! `CONTROL_API_ADMIN=1` enables the `/_e2e/config` test channel. Binds 127.0.0.1 unless `CONTROL_API_HOST` is set.
 use control_api::{
     app::{App, Config},
@@ -16,8 +17,25 @@ fn main() {
         .as_object()
         .and_then(|i| Some((i.get("binding_ref")?.as_str()?.to_string(), i.get("tenant_id")?.as_str()?.to_string())));
     let admin = std::env::var("CONTROL_API_ADMIN").is_ok_and(|v| v == "1");
-    let app = Arc::new(App::new(Config { ring, upload_pin, admin }, Box::new(MemStore::default())));
     let host = std::env::var("CONTROL_API_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    // The admin channel is unauthenticated (seeds artifacts, wiki, bindings): never expose it beyond loopback.
+    assert!(!admin || matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1" | "[::1]"), "CONTROL_API_ADMIN=1 requires a loopback CONTROL_API_HOST");
+    let app = Arc::new(App::new({
+        let mut cfg = Config::new(ring);
+        cfg.upload_pin = upload_pin;
+        cfg.admin = admin;
+        if let Ok(raw) = std::env::var("CONTROL_API_LABS") {
+            let m: std::collections::HashMap<String, std::path::PathBuf> = serde_json::from_str(&raw).expect("CONTROL_API_LABS json");
+            cfg.labs = m;
+        }
+        if let Some(k) = std::env::var("CONTROL_API_MIN_CELL").ok().and_then(|v| v.parse().ok()) {
+            cfg.min_cell = k;
+        }
+        if let Some(k) = std::env::var("CONTROL_API_MIN_K").ok().and_then(|v| v.parse().ok()) {
+            cfg.min_k = k;
+        }
+        cfg
+    }, Box::new(MemStore::default())));
     let port = std::env::var("E2E_PORT").unwrap_or_else(|_| "8700".into());
     let server = tiny_http::Server::http(format!("{host}:{port}")).expect("bind");
     server::serve(server, app);

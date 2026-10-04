@@ -13,6 +13,8 @@ pub const MAX_ARTIFACT_BYTES: usize = 1024 * 1024;
 pub struct Req {
     pub method: String,
     pub path: String,
+    /// Raw query string without the `?` (empty when absent).
+    pub query: String,
     /// Lower-cased header names.
     pub headers: HashMap<String, String>,
     pub body: Vec<u8>,
@@ -23,13 +25,13 @@ pub struct Resp {
     pub body: Vec<u8>,
 }
 
-fn json_resp(status: u16, v: Value) -> Resp {
+pub(crate) fn json_resp(status: u16, v: Value) -> Resp {
     Resp { status, body: serde_json::to_vec(&v).expect("json") }
 }
-fn code(status: u16, c: &str) -> Resp {
+pub(crate) fn code(status: u16, c: &str) -> Resp {
     json_resp(status, json!({ "code": c }))
 }
-fn error(status: u16, c: &str) -> Resp {
+pub(crate) fn error(status: u16, c: &str) -> Resp {
     json_resp(status, json!({ "error": c }))
 }
 
@@ -39,6 +41,19 @@ pub struct Config {
     pub upload_pin: Option<(String, String)>,
     /// `/_e2e/config` admin channel (seeding, denials, faults). Off unless explicitly enabled.
     pub admin: bool,
+    /// Treated lab (sqlite, ED0L shape) per tenant; a tenant without an entry has no lab (`lab_unavailable`).
+    pub labs: HashMap<String, std::path::PathBuf>,
+    /// Floor of the k-anonymity threshold: rows with fewer cases are never served, whatever the lab file says.
+    pub min_k: i64,
+    /// Floor of the numerator/complement size: a row whose numerator or complement is below it is withheld (the rate would expose it).
+    pub min_cell: i64,
+}
+
+impl Config {
+    /// Everything optional off: no upload pin, no admin channel.
+    pub fn new(ring: Arc<KeyRing>) -> Config {
+        Config { ring, upload_pin: None, admin: false, labs: HashMap::new(), min_k: 10, min_cell: 0 }
+    }
 }
 
 #[derive(Default)]
@@ -48,16 +63,16 @@ struct Admin {
 }
 
 pub struct App {
-    cfg: Config,
-    control: Verifier,
-    broker: Verifier,
-    store: Box<dyn Store>,
+    pub(crate) cfg: Config,
+    pub(crate) control: Verifier,
+    pub(crate) broker: Verifier,
+    pub(crate) store: Box<dyn Store>,
     admin: Mutex<Admin>,
-    write_lock: Mutex<()>,
-    now: Box<dyn Fn() -> f64 + Send + Sync>,
+    pub(crate) write_lock: Mutex<()>,
+    pub(crate) now: Box<dyn Fn() -> f64 + Send + Sync>,
 }
 
-fn is_hex64(s: &str) -> bool {
+pub(crate) fn is_hex64(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
@@ -68,9 +83,10 @@ impl App {
     }
 
     pub fn with_clock(cfg: Config, store: Box<dyn Store>, now: Box<dyn Fn() -> f64 + Send + Sync>) -> App {
+        let boot = now();
         App {
-            control: Verifier::new(cfg.ring.clone()),
-            broker: Verifier::new(cfg.ring.clone()),
+            control: Verifier::new(cfg.ring.clone()).with_boot_floor(boot),
+            broker: Verifier::new(cfg.ring.clone()).with_boot_floor(boot),
             cfg,
             store,
             admin: Mutex::new(Admin::default()),
@@ -86,6 +102,20 @@ impl App {
             ("POST", _, Some("/authorizations/check")) => self.authz(r),
             ("POST", _, Some("/artifacts")) => self.artifact_put(r),
             ("GET", _, Some(p)) if p.starts_with("/artifacts/") => self.artifact_get(r, &p["/artifacts/".len()..]),
+            ("POST", _, Some("/grants")) => self.grant_issue(r),
+            ("POST", _, Some(p)) if p.starts_with("/grants/") && p.ends_with("/revoke") => self.grant_revoke(r, &p["/grants/".len()..p.len() - "/revoke".len()]),
+            ("POST", _, Some("/lab/sessions")) => self.lab_open(r),
+            ("POST", _, Some(p)) if p.starts_with("/lab/sessions/") && p.ends_with("/queries") => self.lab_query(r, &p["/lab/sessions/".len()..p.len() - "/queries".len()]),
+            ("POST", _, Some(p)) if p.starts_with("/lab/sessions/") && p.ends_with("/close") => self.lab_session(r, &p["/lab/sessions/".len()..p.len() - "/close".len()], true),
+            ("GET", _, Some(p)) if p.starts_with("/lab/sessions/") => self.lab_session(r, &p["/lab/sessions/".len()..], false),
+            ("GET", _, Some(p)) if p.starts_with("/lab/queries/") => self.lab_read(r, "lab_query", &p["/lab/queries/".len()..], "query_not_found"),
+            ("GET", _, Some(p)) if p.starts_with("/lab/results/") => self.lab_read(r, "lab_result", &p["/lab/results/".len()..], "result_not_found"),
+            ("GET", _, Some(p)) if p.starts_with("/lab/receipts/") => self.lab_read(r, "lab_receipt", &p["/lab/receipts/".len()..], "receipt_not_found"),
+            ("POST", _, Some("/wiki/read")) => self.wiki_read(r),
+            ("GET", "/healthz", _) => json_resp(200, json!({"status": "ok", "service": "control-api"})),
+            ("POST", "/internal/v1/platform/observations", _) => self.observations(r),
+            ("GET", "/internal/v1/platform/quarantine", _) => self.quarantine_list(r),
+            ("GET", p, _) if p.starts_with("/internal/v1/platform/exporters/") => self.cursor_get(r),
             ("POST", "/_e2e/config", _) if self.cfg.admin => self.admin_config(r),
             _ => code(404, "not_found"),
         }
@@ -97,20 +127,20 @@ impl App {
         (scheme.eq_ignore_ascii_case("bearer") && !token.is_empty()).then_some(token)
     }
 
-    fn authn(&self, v: &Verifier, r: &Req, want: &Expect) -> Result<Value, Denied> {
+    pub(crate) fn authn(&self, v: &Verifier, r: &Req, want: &Expect) -> Result<Value, Denied> {
         let token = self.bearer(r).ok_or(Denied { reason: "missing_bearer", status: 401 })?;
         v.verify(token, (self.now)(), want)
     }
 
-    fn denied(d: Denied) -> Resp {
+    pub(crate) fn denied(d: Denied) -> Resp {
         code(d.status, &format!("pulso:auth_{}", d.reason))
     }
 
-    fn fault(&self, route: &str) -> Option<String> {
-        self.admin.lock().unwrap().faults.get_mut(route).and_then(VecDeque::pop_front)
+    pub(crate) fn fault(&self, route: &str) -> Option<String> {
+        self.admin.lock().unwrap_or_else(std::sync::PoisonError::into_inner).faults.get_mut(route).and_then(VecDeque::pop_front)
     }
 
-    fn parse(r: &Req) -> Option<Map<String, Value>> {
+    pub(crate) fn parse(r: &Req) -> Option<Map<String, Value>> {
         match serde_json::from_slice::<Value>(if r.body.is_empty() { b"{}" } else { &r.body }) {
             Ok(Value::Object(m)) => Some(m),
             _ => None,
@@ -138,7 +168,7 @@ impl App {
             return code(422, "idempotency_key_mismatch");
         }
         let mode = self.fault("bind");
-        let _w = self.write_lock.lock().unwrap();
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let prior = self.store.binding(&tenant, &command_key);
         if prior.as_ref().is_some_and(|p| p.request_digest != request_digest) {
             return code(409, "digest_mismatch");
@@ -171,7 +201,7 @@ impl App {
         let owner = body.get("binding_ref").and_then(Value::as_str).and_then(|b| self.store.binding_ref_tenant(b));
         let reason = if owner.as_deref() != Some(tenant) {
             Some("binding_unknown") // unknown or another tenant's binding: never allowed
-        } else if self.admin.lock().unwrap().deny_operations.contains(operation) {
+        } else if self.admin.lock().unwrap_or_else(std::sync::PoisonError::into_inner).deny_operations.contains(operation) {
             Some("revoked")
         } else {
             None
@@ -234,7 +264,7 @@ impl App {
         }
         let rf = json!({"id": format!("artifact:{digest}"), "digest": digest, "media_type": up["media_type"]});
         let envelope = json!({"schema_version": "1", "artifact": rf, "encoding": up["encoding"], "content": up["content"], "byte_length": byte_length});
-        let _w = self.write_lock.lock().unwrap();
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let outcome = self.store.put_artifact(&tenant, envelope);
         if outcome == PutOutcome::Conflict {
             return error(409, "digest_conflict");
@@ -272,7 +302,7 @@ impl App {
     // ---- POST /_e2e/config (driver/test channel, off by default) -------------------------------------------------
     fn admin_config(&self, r: &Req) -> Resp {
         let Some(cfg) = Self::parse(r) else { return code(422, "schema_invalid") };
-        let mut a = self.admin.lock().unwrap();
+        let mut a = self.admin.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(ops) = cfg.get("deny_operations").and_then(Value::as_array) {
             a.deny_operations = ops.iter().filter_map(|v| v.as_str().map(str::to_string)).collect();
         }
@@ -288,6 +318,15 @@ impl App {
             let env = json!({"schema_version": "1", "artifact": {"id": id, "digest": format!("sha256:{}", sha256_hex(canon.as_bytes())), "media_type": "application/json"},
                              "encoding": "json", "content": item["content"], "byte_length": canon.len()});
             let _ = self.store.put_artifact(tenant, env);
+        }
+        for item in cfg.get("run_events").and_then(Value::as_array).into_iter().flatten() {
+            if let Err(e) = self.seed_run_events(item) {
+                return e;
+            }
+        }
+        for item in cfg.get("wiki").and_then(Value::as_array).into_iter().flatten() {
+            let (Some(tenant), Some(path), Some(text)) = (item["tenant"].as_str(), item["path"].as_str(), item["content"].as_str()) else { return code(422, "schema_invalid") };
+            self.store.put_doc("wiki", tenant, path, json!(text));
         }
         for item in cfg.get("preauthorized_bindings").and_then(Value::as_array).into_iter().flatten() {
             if let (Some(b), Some(t)) = (item["binding_ref"].as_str(), item["tenant"].as_str()) {
