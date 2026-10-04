@@ -200,6 +200,11 @@ class ResponseValidation(Base):
         status, _ = self._bad(content={"kind": "final", "output": {}}, quality_score=0.9)
         self.assertEqual(status, 502)
 
+    def test_responder_identity_must_be_a_small_plain_object(self):
+        for bad in ("real-model", {"id": "x" * 200, "role": "scout"}, {"id": "a b/../c", "role": "scout"},
+                    {"id": "r1", "role": "scout", "model": "claims"}, {"id": "r1", "role": "oracle"}, {"role": "scout"}):
+            self.assertEqual(self._bad(responder=bad)[0], 502, bad)
+
     def test_must_be_labelled_agent_roleplay(self):
         self.assertEqual(self._bad(provenance="real")[0], 502)
 

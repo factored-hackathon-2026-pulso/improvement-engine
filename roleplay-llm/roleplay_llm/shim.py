@@ -33,7 +33,8 @@ HOLD_S = 55.0
 VOLATILE_KEYS = {"run_id", "turn_id", "session_id", "labels"}
 _UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 _PREFIXED = re.compile(r"\b(binding|job|artifact)[-_:][0-9A-Za-z][0-9A-Za-z-]{5,}")
-_FORBIDDEN_RESPONSE_KEYS = ("quality", "score", "confidence", "rating")
+_FORBIDDEN_ROLES = {"scout", "verifier", "builder", "builder_design"}
+_RESPONSE_KEYS = ("quality", "score", "confidence", "rating")
 _RESPONSE_KEYS = {"protocol", "key", "provenance", "quality_claims", "responder", "content"}
 
 
@@ -227,6 +228,10 @@ class Shim:
         extra = set(doc) - _RESPONSE_KEYS
         if extra or any(w in k.lower() for k in doc for w in _FORBIDDEN_RESPONSE_KEYS if k != "quality_claims"):
             return f"unexpected or quality-claiming fields: {sorted(extra)}"
+        r = doc.get("responder")
+        if (not isinstance(r, dict) or set(r) != {"id", "role"} or not isinstance(r["id"], str)
+                or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", r["id"]) or r["role"] not in _ROLES):
+            return "responder must be {id: [A-Za-z0-9._-]{1,64}, role: scout|verifier|builder}"
         c = doc.get("content")
         if not isinstance(c, dict):
             return "content is not an object"
