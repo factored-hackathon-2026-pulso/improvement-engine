@@ -41,6 +41,11 @@ pub mod e0_safety_oracle;
 pub mod enriched_history;
 pub mod evaluation_plan;
 pub mod facade_steps;
+pub use facade_steps::{
+    ArmBinding, ArmObservation, InfrastructureFailure, PairError, PairPlan, PairVerdict,
+    PlatformColumn, PlatformRelation, PlatformSourceReadPlan, PlatformSourceText,
+    PlatformTreatedText,
+};
 pub mod final_eligibility;
 pub mod governed_memory_use;
 pub mod governed_registry;
