@@ -218,3 +218,37 @@ fn scout_limit_without_a_report_keeps_the_scripted_text() {
     let (t, _) = limit_text(None);
     assert!(t.contains("scripted") && t.contains("no model produced it"), "{t}");
 }
+
+// ---- W7: a signal that came from a real sensor run over a platform event package ----
+
+fn source() -> Value {
+    json!({"sensor": "rust-events", "data_mode": "platform", "data_origin": "platform_live", "adapter": "product-sqlite", "source_id": "platform:sim",
+           "package": "pkg-0123456789abcdef", "events_read": 3000, "metric_id": "reassignment_rate.pt.web_chat", "cell": "pt/web_chat", "numerator": 54, "denominator": 321})
+}
+
+#[test]
+fn a_report_with_a_source_shows_the_real_sensor_signal_and_stops_calling_the_sensor_a_stand_in_that_reads_no_data() {
+    let report = json!({"models": [], "source": source()});
+    let inv = pick(&project(&full(), Some(&report), AT), "investigation_set");
+    let ev = |id: &str| inv["evidence"].as_array().unwrap().iter().find(|e| e["evidence_ref"]["id"] == id).cloned().unwrap_or_else(|| panic!("no {id}: {inv}"));
+    let sig = ev("ev-source-signal");
+    let text = sig["summary"].as_str().unwrap();
+    assert!(text.contains("rust-events") && text.contains("pt/web_chat") && text.contains("54/321") && text.contains("pkg-0123456789abcdef"), "{text}");
+    assert_eq!(sig["relation"], "supports");
+    let limit = ev("ev-limit-sensor")["summary"].as_str().unwrap().to_string();
+    assert!(limit.contains("fixed-output stand-in") && limit.contains("lab row"), "{limit}");
+    assert!(!limit.contains("reads no data"), "the real sensor did read data: {limit}");
+    let ids = evidence_ids(&inv);
+    for h in inv["hypotheses"].as_array().unwrap() {
+        for r in h["evidence_refs"].as_array().unwrap() {
+            assert!(ids.contains(&r.as_str().unwrap().to_string()));
+        }
+    }
+}
+
+#[test]
+fn without_a_source_the_sensor_limit_keeps_its_offline_wording() {
+    let inv = pick(&project(&full(), Some(&json!({"models": []})), AT), "investigation_set");
+    let text = inv.to_string();
+    assert!(text.contains("it reads no data") && !text.contains("ev-source-signal"), "{text}");
+}
