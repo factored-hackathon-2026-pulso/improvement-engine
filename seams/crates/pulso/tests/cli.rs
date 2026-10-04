@@ -106,3 +106,23 @@ fn demo_against_an_unreachable_api_fails_with_a_clear_message() {
     assert_eq!(o.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&o.stderr).contains("pulso serve"), "{}", String::from_utf8_lossy(&o.stderr));
 }
+
+#[test]
+fn serve_exits_when_its_stdin_closes_so_a_killed_parent_leaks_nothing() {
+    let mut c = Command::new(BIN);
+    c.args(["serve", "--addr", "127.0.0.1:0", "--admin-token", "t", "--console-dir", "Z:/none", "--exit-on-stdin-eof"]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+    let mut child = c.spawn().unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap()).read_line(&mut line).unwrap();
+    assert!(line.starts_with("pulso listening on"), "{line:?}");
+    assert!(child.try_wait().unwrap().is_none(), "must keep serving while stdin is open");
+    drop(child.stdin.take()); // what the OS does when the parent is hard-killed
+    for _ in 0..100 {
+        if child.try_wait().unwrap().is_some() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let _ = child.kill();
+    panic!("serve outlived the closed stdin");
+}

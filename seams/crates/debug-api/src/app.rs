@@ -189,6 +189,11 @@ impl App {
         } else {
             (dir.join("index.html"), true)
         };
+        // A symlink (or junction) inside the directory must not lead outside it.
+        match (target.canonicalize(), dir.canonicalize()) {
+            (Ok(t), Ok(d)) if t.starts_with(&d) => {}
+            _ => return Some(not_found()),
+        }
         let Ok(body) = std::fs::read(&target) else { return Some(not_found()) };
         let ext = if spa { "html" } else { target.extension().and_then(|e| e.to_str()).unwrap_or("") };
         let ctype = match ext {

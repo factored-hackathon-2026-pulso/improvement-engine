@@ -17,7 +17,7 @@ the steps with labels, then holds the server until Enter/Ctrl+C and stops what i
 
 - The console data provider is `http` (typed `DebugApi`), but the run view keeps the legacy client for part of its data. Observed live:
   the mode banner (profile doubles) and the Gates panel are read at page load and are NOT refreshed by SSE: during the run they show only
-  the early doubles and `not_evaluable`; a reload shows all doubles and the native gate `fail` (03 vs 04). The graph (nodes, labels, run
+  the early doubles and `not_evaluable`; a reload shows all doubles and the native gate `fail` (03 vs 04). Root cause (review): the Rust side already streams `doubles_declared` and `gates_set` events and `/profile` and `/runs/{id}/gates` return them; the console fetches the profile once (App.tsx) and Gates once per runId (Panels.tsx useLoad), while RunView.reload only re-reads the graph. The fix belongs in the console (refetch profile/gates on those events), not in pulso or debug-api. The graph (nodes, labels, run
   state) IS live over SSE.
 - Traces panel: degraded by design (`trace_id` is null, 12 of 12 nodes); Investigation, Diff and Decision panels are empty/`unknown`:
   this run produces no hypothesis, proposal or decision events.
@@ -25,4 +25,4 @@ the steps with labels, then holds the server until Enter/Ctrl+C and stops what i
   opportunity, GSIpy judge stand-in, simulated human issuer and override, in-process platform. No real model, no real human, no quality claim.
   `pulso demo --real-core` is refused honestly (no live Core port is wired into this binary, even if a Core answers).
 - `pulso serve` keeps runs in memory unless `--store-dir`; the admin token is ephemeral, passed via the environment, never printed.
-- If the parent PowerShell is hard-killed (not Ctrl+C), the started `pulso serve` can outlive it; Ctrl+C, Enter, errors and normal exit stop it.
+- Hard kill of the parent PowerShell: the script starts `pulso serve --exit-on-stdin-eof` with a held-open stdin pipe, so the OS closing the pipe makes serve exit by itself (tested: `serve_exits_when_its_stdin_closes...`). A hard-killed `pulso demo` finishes or fails on its own within seconds. Ctrl+C, Enter, errors and normal exit stop both via try/finally.

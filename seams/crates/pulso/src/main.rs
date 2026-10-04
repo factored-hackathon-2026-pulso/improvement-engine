@@ -41,6 +41,12 @@ fn default_console_dir() -> Option<PathBuf> {
 
 fn run_serve(a: ServeArgs) {
     let server = bind_loopback(&a.addr).unwrap_or_else(|e| die(2, &e));
+    if a.exit_on_stdin_eof {
+        std::thread::spawn(|| {
+            let _ = std::io::copy(&mut std::io::stdin(), &mut std::io::sink());
+            std::process::exit(0)
+        });
+    }
     let store = Arc::new(match &a.store_dir {
         Some(d) => Store::open(d).unwrap_or_else(|e| die(1, &e)),
         None => Store::memory(),

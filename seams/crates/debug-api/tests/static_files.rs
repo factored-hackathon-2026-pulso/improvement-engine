@@ -52,3 +52,24 @@ fn never_leaves_the_directory() {
         assert_ne!(r.body, b"secret", "{p}");
     }
 }
+
+#[test]
+fn device_names_and_symlinks_do_not_escape() {
+    let d = dist();
+    let a = app(Config { static_dir: Some(d.clone()), ..Config::default() });
+    for p in ["/nul", "/con", "/aux.txt", "/COM1", "/NUL.js", "//dapi-secret.txt", "/C:/Windows/win.ini", "/index.html::$DATA"] {
+        let r = get(&a, p);
+        assert_ne!(r.body, b"secret", "{p}");
+        assert!(r.status == 404 || r.body == b"<html>console</html>", "{p}: {}", r.status);
+    }
+    // A symlink inside the directory that points outside it is never followed (skipped when the OS refuses to create one).
+    let link = d.join("leak.txt");
+    let target = d.parent().unwrap().join("dapi-secret.txt");
+    #[cfg(windows)]
+    let made = std::os::windows::fs::symlink_file(&target, &link).is_ok();
+    #[cfg(unix)]
+    let made = std::os::unix::fs::symlink(&target, &link).is_ok();
+    if made {
+        assert_ne!(get(&a, "/leak.txt").body, b"secret", "symlink escape");
+    }
+}

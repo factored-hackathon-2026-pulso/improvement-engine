@@ -10,6 +10,8 @@ pub struct ServeArgs {
     pub store_dir: Option<PathBuf>,
     pub admin_token: Option<String>,
     pub token: Option<String>,
+    /// Exit when stdin reaches EOF (the launching parent died or closed the pipe): no orphaned server after a hard kill.
+    pub exit_on_stdin_eof: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -36,7 +38,7 @@ pub fn parse(args: &[String]) -> Result<Cmd, String> {
     let mut it = rest.iter();
     match cmd.as_str() {
         "serve" => {
-            let mut a = ServeArgs { addr: "127.0.0.1:4020".into(), console_dir: None, store_dir: None, admin_token: None, token: None };
+            let mut a = ServeArgs { addr: "127.0.0.1:4020".into(), console_dir: None, store_dir: None, admin_token: None, token: None, exit_on_stdin_eof: false };
             while let Some(f) = it.next() {
                 let mut v = || it.next().cloned().ok_or(format!("{f} needs a value"));
                 match f.as_str() {
@@ -45,6 +47,7 @@ pub fn parse(args: &[String]) -> Result<Cmd, String> {
                     "--store-dir" => a.store_dir = Some(v()?.into()),
                     "--admin-token" => a.admin_token = Some(v()?),
                     "--token" => a.token = Some(v()?),
+                    "--exit-on-stdin-eof" => a.exit_on_stdin_eof = true,
                     other => return Err(format!("unknown argument {other:?} for serve")),
                 }
             }

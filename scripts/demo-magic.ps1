@@ -60,9 +60,10 @@ try {
     $token = New-DemoToken
     $psi = New-Object Diagnostics.ProcessStartInfo
     $psi.FileName = $exe
-    $psi.Arguments = "serve --addr 127.0.0.1:$Port"
+    $psi.Arguments = "serve --addr 127.0.0.1:$Port --exit-on-stdin-eof"
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardInput = $true   # held open: if this script is hard-killed the pipe closes and serve exits on its own
     $psi.Environment['PULSO_ADMIN_TOKEN'] = $token
     $server = [Diagnostics.Process]::Start($psi)
     $line = $server.StandardOutput.ReadLineAsync()
