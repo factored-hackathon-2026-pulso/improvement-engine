@@ -83,6 +83,27 @@ class Honesty(unittest.TestCase):
         r = good(); r["authors"]["suite_sealed_at"] = "2026-01-03T00:00:00Z"
         self.assertIn("H5", rules(r))
 
+    def test_5_null_candidate_accepted_when_compile_not_exercised(self):
+        r = good(); r["authors"]["candidate_created_at"] = None
+        r["steps"].append({"id": "compile", "status": "not_exercised", "data_class": "generated_sample", "target": "local",
+                           "sha": "a" * 40, "contract_revision": "c2-1", "host": "rust"})
+        self.assertNotIn("H5", rules(r))
+        r["steps"][-1]["status"] = "blocked(no-candidate)"
+        self.assertNotIn("H5", rules(r))
+
+    def test_5_null_candidate_still_rejected_otherwise(self):
+        r = good(); r["authors"]["candidate_created_at"] = None  # no compile step reported
+        self.assertIn("H5", rules(r))
+        r["steps"].append({"id": "compile", "status": "stand-in", "data_class": "generated_sample", "target": "local",
+                           "sha": "a" * 40, "contract_revision": "c2-1", "host": "rust"})
+        self.assertIn("H5", rules(r))
+
+    def test_5_null_candidate_does_not_excuse_missing_seal(self):
+        r = good(); r["authors"]["candidate_created_at"] = None; del r["authors"]["suite_sealed_at"]
+        r["steps"].append({"id": "compile", "status": "not_exercised", "data_class": "generated_sample", "target": "local",
+                           "sha": "a" * 40, "contract_revision": "c2-1", "host": "rust"})
+        self.assertIn("H5", rules(r))
+
     def test_6_python_host_label_cap(self):
         r = good(); r["host"] = "python"; r["label"] = "DEMO-1b"
         self.assertIn("H6", rules(r))
