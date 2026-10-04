@@ -103,7 +103,7 @@ class Receipts(unittest.TestCase):
 
     def good(self):
         return {"schema": "pre-pr-gate/v1", "verdict": "pass",
-                "legs": {k: {"status": "pass", "exit_code": 0} for k in ("ci", "pytest", "ratchet")}}
+                "legs": {k: {"status": "pass", "exit_code": 0, "command": "c"} for k in ("ci", "pytest", "ratchet")}}
 
     def test_missing_receipt_fails(self):
         with tempfile.TemporaryDirectory() as d:
