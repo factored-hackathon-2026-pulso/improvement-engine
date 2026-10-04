@@ -43,10 +43,10 @@ try {
                 $states = @{}; foreach ($e in $expected) { $states[$e.name] = $raw.($e.name) }
             } else {
                 $model = Get-ComposeModel -Namespace $Namespace -Profile $Profile
-                $expected = @($model.services.PSObject.Properties | ForEach-Object { [pscustomobject]@{ name = $_.Name; oneShot = ($_.Value.restart -eq 'no') } })
+                $expected = @($model.services.PSObject.Properties | ForEach-Object { [pscustomobject]@{ name = $_.Name; oneShot = (Test-DevOneShot -Service $_.Value) } })
                 $states = @{}; foreach ($e in $expected) { $states[$e.name] = Get-ContainerState -Connection $conn -Name "$project-$($e.name)-1" }
                 $json = & $ps -NoProfile -File (Join-Path $core 'doctor.core.ps1') -Json -Namespace $Namespace -Machine $Machine -Profile $Profile 2>$null | Out-String
-                try { $coreChecks = @($json | ConvertFrom-Json) } catch { $coreChecks = @([pscustomobject]@{ check = 'engine_doctor'; status = 'fail'; code = 'engine_doctor_unreadable'; detail = 'doctor.core.ps1 gave no JSON' }) }
+                try { $coreChecks = @(Select-DevCoreChecks -Checks @($json | ConvertFrom-Json) -Profile $Profile) } catch { $coreChecks = @([pscustomobject]@{ check = 'engine_doctor'; status = 'fail'; code = 'engine_doctor_unreadable'; detail = 'doctor.core.ps1 gave no JSON' }) }
             }
             $v = Get-DevDoctorVerdict -Expected $expected -States $states -CoreChecks $coreChecks
             if ($v.ok) { Write-Output "doctor: green ($(@($expected).Count) services, namespace $Namespace)"; exit 0 }

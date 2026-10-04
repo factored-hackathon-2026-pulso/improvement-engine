@@ -17,3 +17,17 @@ function Get-DevDoctorVerdict {
     foreach ($c in @($CoreChecks)) { if ($c.status -eq 'fail') { Add-F $c.check $(if ($c.code) { $c.code } else { 'check_failed' }) $c.detail } }
     [pscustomobject]@{ ok = ($failures.Count -eq 0); failures = [object[]]$failures.ToArray() }
 }
+
+# A restart:"no" service is one-shot only when it has no healthcheck (human-issuer is long-running with restart:"no").
+function Test-DevOneShot {
+    param([Parameter(Mandatory)]$Service)
+    ($Service.restart -eq 'no') -and -not $Service.healthcheck
+}
+
+# The fixture profile runs contract_mock (core-synth) and no real runtime/human issuer/bridge key: those engine checks do not apply.
+function Select-DevCoreChecks {
+    param([object[]]$Checks = @(), [Parameter(Mandatory)][string]$Profile)
+    if ($Profile -ne 'fixture') { return @($Checks) }
+    $n = 'core_not_ready', 'human_issuer_ready', 'human_issuer_internal_only', 'bridge_executor_key', 'core_demo_doubles_active', 'core_unreachable_from_stack'
+    @($Checks | Where-Object { $_.check -notin $n })
+}
