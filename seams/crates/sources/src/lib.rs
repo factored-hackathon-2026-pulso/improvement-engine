@@ -3,6 +3,7 @@
 //! `policy` and never returns denylisted tables or columns.
 pub mod policy;
 pub mod sqlite;
+pub mod store;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -14,6 +15,7 @@ pub enum SourceError {
     BadWatermark(String),
     BadSourceId(String),
     SchemaDrift(String),
+    Conflict(String),
     Io(String),
 }
 impl fmt::Display for SourceError {
