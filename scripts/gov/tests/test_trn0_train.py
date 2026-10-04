@@ -124,6 +124,27 @@ class GitSteps(unittest.TestCase):
         self.assertTrue(written[0].is_file() and written[0].stat().st_size > 0)
 
 
+class TrainReceipt(unittest.TestCase):
+    def test_receipt_is_written_with_a_verdict_and_per_pr_w0_receipt_refs(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d, "r"); repo.mkdir()
+            git(repo, "init", "-q", "-b", "main"); commit(repo, "x")
+            git(repo, "checkout", "-qb", "ba"); commit(repo, "a"); git(repo, "checkout", "-q", "main")
+            rec = Path(d, "w0"); rec.mkdir()
+            Path(rec, "pr-1.json").write_text(json.dumps(Receipts().good()), encoding="utf-8")
+            m = {"base": "main", "train_branch": "train", "pr_cap_hours": 35, "receipts_dir": str(rec),
+                 "lanes": lanes(("a", "ba", [], 5))}
+            out = Path(d, "out", "train.json")
+            doc = trn.make_receipt(repo, m, out)
+            self.assertEqual(doc["schema"], "train-receipt/v1")
+            self.assertEqual(doc["verdict"], "pass")
+            self.assertEqual(doc["prs"][0]["lanes"], ["a"])
+            self.assertEqual(json.loads(out.read_text(encoding="utf-8")), doc)
+            self.assertTrue((out.parent / doc["prs"][0]["w0_receipt"]).is_file())
+            Path(rec, "pr-1.json").unlink()
+            self.assertEqual(trn.make_receipt(repo, m, out)["verdict"], "fail")
+
+
 class Cli(unittest.TestCase):
     def test_check_exits_1_on_out_of_order_manifest_and_0_when_clean(self):
         with tempfile.TemporaryDirectory() as d:
