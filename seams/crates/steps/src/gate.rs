@@ -72,8 +72,8 @@ impl<'a> P<'a> {
         }
     }
     fn hex4(&mut self) -> Result<u32, GateError> {
-        let h = self.b.get(self.i..self.i + 4).and_then(|s| std::str::from_utf8(s).ok());
-        let v = h.and_then(|s| u32::from_str_radix(s, 16).ok());
+        let h = self.b.get(self.i..self.i + 4).filter(|s| s.iter().all(u8::is_ascii_hexdigit));
+        let v = h.and_then(|s| std::str::from_utf8(s).ok()).and_then(|s| u32::from_str_radix(s, 16).ok());
         self.i += 4;
         v.ok_or_else(|| GateError("json: bad \\u escape".into()))
     }
@@ -124,6 +124,39 @@ impl<'a> P<'a> {
             }
         }
         String::from_utf8(out).map_err(|_| GateError("json: invalid utf-8".into()))
+    }
+    fn digits(&mut self) -> Result<(), GateError> {
+        let s = self.i;
+        while self.b.get(self.i).is_some_and(u8::is_ascii_digit) {
+            self.i += 1;
+        }
+        if self.i == s {
+            return err("json: bad number");
+        }
+        Ok(())
+    }
+    /// Strict RFC 8259 number: -?(0|[1-9][0-9]*)(.[0-9]+)?([eE][+-]?[0-9]+)?
+    fn number(&mut self) -> Result<(), GateError> {
+        if self.b.get(self.i) == Some(&b'-') {
+            self.i += 1;
+        }
+        if self.b.get(self.i) == Some(&b'0') {
+            self.i += 1;
+        } else {
+            self.digits()?;
+        }
+        if self.b.get(self.i) == Some(&b'.') {
+            self.i += 1;
+            self.digits()?;
+        }
+        if matches!(self.b.get(self.i), Some(b'e' | b'E')) {
+            self.i += 1;
+            if matches!(self.b.get(self.i), Some(b'+' | b'-')) {
+                self.i += 1;
+            }
+            self.digits()?;
+        }
+        Ok(())
     }
     fn value(&mut self, depth: u32) -> Result<J, GateError> {
         if depth > 64 {
@@ -185,13 +218,8 @@ impl<'a> P<'a> {
             }
             Some(c) if *c == b'-' || c.is_ascii_digit() => {
                 let s = self.i;
-                while self.i < self.b.len() && matches!(self.b[self.i], b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9') {
-                    self.i += 1;
-                }
+                self.number()?;
                 let t = std::str::from_utf8(&self.b[s..self.i]).unwrap_or("");
-                if t.parse::<f64>().is_err() {
-                    return err("json: bad number");
-                }
                 Ok(J::Num(t.to_string()))
             }
             Some(_) => err(format!("json: unexpected byte at {}", self.i)),
