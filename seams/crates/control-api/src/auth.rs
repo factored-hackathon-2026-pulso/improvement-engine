@@ -48,12 +48,12 @@ pub struct Expect<'a> {
 /// One verifier (one jti store) per receiver.
 pub struct Verifier {
     ring: std::sync::Arc<KeyRing>,
-    seen: Mutex<HashSet<(String, String)>>,
+    seen: Mutex<HashMap<(String, String), f64>>,
 }
 
 impl Verifier {
     pub fn new(ring: std::sync::Arc<KeyRing>) -> Verifier {
-        Verifier { ring, seen: Mutex::new(HashSet::new()) }
+        Verifier { ring, seen: Mutex::new(HashMap::new()) }
     }
 
     pub fn verify(&self, token: &str, now: f64, want: &Expect) -> Result<Value, Denied> {
@@ -102,7 +102,9 @@ impl Verifier {
             return Err(Denied { reason: "tenant_required", status: 403 });
         }
         let mut seen = self.seen.lock().unwrap();
-        if !seen.insert((s("iss").unwrap().to_string(), jti.to_string())) {
+        // A token past `exp` is rejected before this point, so its entry is dead weight: evict to bound memory.
+        seen.retain(|_, e| *e > now);
+        if seen.insert((s("iss").unwrap().to_string(), jti.to_string()), exp).is_some() {
             return Err(deny("jti_replayed"));
         }
         Ok(claims.clone())
@@ -129,6 +131,33 @@ mod tests {
         let want = Expect { aud: "core-bridge", scope: None, purpose: Some("core_task_invoke") };
         assert_eq!(v.verify(&tok, 1010.0, &want).unwrap()["tenant_id"], "t1");
         assert_eq!(v.verify(&tok, 1010.0, &want), Err(deny("jti_replayed")));
+    }
+
+    #[test]
+    fn jti_set_evicts_expired_entries() {
+        let sk = SigningKey::from_bytes(&[9u8; 32]);
+        let v = Verifier::new(ring(&sk));
+        let want = Expect { aud: "core-bridge", scope: None, purpose: None };
+        for i in 0..50 {
+            let j = format!("j{i}");
+            let tok = sign(&sk, &JwtParams { kid: "k", worker_id: "w", purpose: "p", tenant_id: Some("t1"), job_id: None, iat: 1000, ttl_s: 60, jti: &j });
+            v.verify(&tok, 1010.0, &want).unwrap();
+        }
+        let tok = sign(&sk, &JwtParams { kid: "k", worker_id: "w", purpose: "p", tenant_id: Some("t1"), job_id: None, iat: 5000, ttl_s: 60, jti: "late" });
+        v.verify(&tok, 5010.0, &want).unwrap();
+        assert_eq!(v.seen.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn alg_none_hs256_and_unknown_kid_are_rejected() {
+        let sk = SigningKey::from_bytes(&[9u8; 32]);
+        let v = Verifier::new(ring(&sk));
+        let want = Expect { aud: "core-bridge", scope: None, purpose: None };
+        let body = B64.encode(br#"{"iss":"control-api","aud":"core-bridge","exp":1060,"jti":"x","tenant_id":"t1"}"#);
+        for h in [r#"{"alg":"none","kid":"k","typ":"JWT"}"#, r#"{"alg":"HS256","kid":"k","typ":"JWT"}"#, r#"{"alg":"EdDSA","kid":"zz","typ":"JWT"}"#] {
+            let tok = format!("{}.{}.", B64.encode(h), body);
+            assert!(v.verify(&tok, 1010.0, &want).is_err(), "{h}");
+        }
     }
 
     #[test]
