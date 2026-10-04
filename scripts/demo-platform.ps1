@@ -45,7 +45,7 @@ function Stop-Started {
     }
     foreach ($p in @($pulso, $sim)) {
         if ($p -and -not $p.HasExited) {
-            try { if (-not $p.WaitForExit(8000)) { $p.Kill($true) } } catch { try { $p.Kill() } catch { } }
+            try { if (-not $p.WaitForExit(8000)) { $p.Kill($true) } } catch { try { & taskkill.exe /PID $p.Id /T /F 2>&1 | Out-Null } catch { try { $p.Kill() } catch { } } }   # Windows PowerShell 5.1 has no Kill($true): taskkill /T keeps `uv`'s python child from being orphaned
         }
     }
 }
