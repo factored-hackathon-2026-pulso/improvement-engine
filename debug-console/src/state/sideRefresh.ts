@@ -1,11 +1,14 @@
-// SSE events that change data the run view reads outside the graph (the mode banner's profile and the Gates panel).
+// SSE events that change data the run view reads outside the graph: the mode banner's profile, and the run outcome panels
+// (gates, alternatives, diff, investigation, decision), which all refresh together under `gates`.
 import type { DebugEvent } from './runStore';
+
+const OUTCOME_KINDS = ['gates_set', 'investigation_set', 'alternatives_set', 'diff_set', 'decision_set'];
 
 export interface SideRefresh { profile: boolean; gates: boolean }
 
 export const needsSideRefresh = (events: DebugEvent[]): SideRefresh => ({
   profile: events.some((e) => e.kind === 'doubles_declared'),
-  gates: events.some((e) => e.kind === 'gates_set'),
+  gates: events.some((e) => OUTCOME_KINDS.includes(e.kind)),
 });
 
 export interface Debounced { (): void; cancel: () => void }

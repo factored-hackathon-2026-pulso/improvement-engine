@@ -180,9 +180,9 @@ export function RunView({ runId, nodeId, onNode, onProfileChanged }: { runId: st
         </Drawer>
       )}
       <TracePanel nodes={graph.nodes} />
-      <Investigation runId={runId} />
+      <Investigation runId={runId} refresh={gatesTick} />
       <RunOutcome runId={runId} refresh={gatesTick} />
-      <DecisionPanel hookPending={graph.nodes.some((n) => hookState(n) === 'decision_pending')} />
+      <DecisionPanel runId={runId} refresh={gatesTick} hookPending={graph.nodes.some((n) => hookState(n) === 'decision_pending')} />
     </div>
   );
 }

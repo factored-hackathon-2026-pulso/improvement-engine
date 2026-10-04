@@ -71,7 +71,7 @@ export function HypothesesList({ hypotheses }: { hypotheses: Hyp[] }) {
       <ul>
         {hypotheses.map((h) => (
           <li key={h.id} className="hyp" data-testid={`hyp-${h.id}`} data-verdict={h.verdict}>
-            <strong>{h.id === 'main' ? t('hyp.main') : t('hyp.competing', { id: h.id })}</strong>{h.id === 'main' ? `: ${h.statement}` : null}
+            <strong>{h.id === 'main' ? t('hyp.main') : t('hyp.competing', { id: h.id })}</strong>{h.id === 'main' || h.statement !== h.id ? `: ${h.statement}` : null}
             <p>{t('hyp.verdict')}<strong>{h.verdict}</strong></p>
             {h.supports.length > 0 && <ul aria-label={t('hyp.supports')}>{h.supports.map((x, i) => <li key={i} className="supports">{x}</li>)}</ul>}
             {h.counter.length > 0 && <ul aria-label={t('hyp.counter')}>{h.counter.map((x, i) => <li key={i} className="contradicts">{t('hyp.counter')}: {x}</li>)}</ul>}
