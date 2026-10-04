@@ -262,3 +262,9 @@ def test_model_exposes_payload_specs_consistently():
     for t, keys in model.EVENT_FREE_TEXT_KEYS.items():
         assert set(keys) <= set(model.EVENT_PAYLOAD_KEYS.get(t, keys))
     assert copy.deepcopy(model.EVENT_DATA_CLASSES)
+
+
+def test_assistant_turn_author_id_is_agent_at_version():
+    row = dict(_first("turns"), author_role="assistant", author_id="recepcion@1.0.0")
+    assert _errors("turns", row) == []
+    assert _errors("turns", dict(row, author_id="not an id")) != []

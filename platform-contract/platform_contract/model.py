@@ -42,7 +42,8 @@ ID_PATTERNS = {
     "assignment": r"^ASG-.+$",
     "customer": r"^CUS-.+$",
     "staff": r"^STF-.+$",
-    "actor": r"^(CUS|STF)-.+$",
+    # 1.2.0: an assistant turn's author_id is the agent `id@version` (ADR 0003)
+    "actor": r"^((CUS|STF)-.+|[A-Za-z0-9_.-]+@[A-Za-z0-9_.^~-]+)$",
     "event": r"^EVT-.+$",
 }
 
