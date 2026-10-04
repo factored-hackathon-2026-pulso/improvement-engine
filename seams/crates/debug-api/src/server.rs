@@ -47,13 +47,13 @@ fn respond(request: tiny_http::Request, resp: Resp) {
 static STREAMS: AtomicUsize = AtomicUsize::new(0);
 
 /// A route answered before the debug-api sees the request (the embedding binary's own probes); `None` = not mine.
-pub type Front = Arc<dyn Fn(&Req) -> Option<Resp> + Send + Sync>;
+pub type Front = Arc<dyn Fn(&mut Req) -> Option<Resp> + Send + Sync>;
 
 pub fn serve(server: tiny_http::Server, app: Arc<App>) {
     serve_with(server, app, None, Arc::new(|| false))
 }
 
-/// `serve` for an embedding binary: `front` answers its own routes first and `stop` (polled every 100 ms while idle)
+/// `serve` for an embedding binary: `front` may rewrite the request (path prefix) or answer its own routes first and `stop` (polled every 100 ms while idle)
 /// ends the accept loop, so the caller can shut the listener down. In-flight feeds end with the process.
 pub fn serve_with(server: tiny_http::Server, app: Arc<App>, front: Option<Front>, stop: Arc<dyn Fn() -> bool + Send + Sync>) {
     let inflight = Arc::new(AtomicUsize::new(0));
@@ -79,8 +79,8 @@ pub fn serve_with(server: tiny_http::Server, app: Arc<App>, front: Option<Front>
             let _ = request.as_reader().take(MAX_BODY + 1).read_to_end(&mut body);
             let headers: HashMap<String, String> = request.headers().iter().map(|h| (h.field.as_str().as_str().to_ascii_lowercase(), h.value.to_string())).collect();
             let (path, query) = request.url().split_once('?').map_or((request.url(), ""), |(p, q)| (p, q));
-            let req = Req { method: request.method().as_str().to_string(), path: path.to_string(), query: query.to_string(), headers, body };
-            if let Some(resp) = front.as_ref().and_then(|f| f(&req)) {
+            let mut req = Req { method: request.method().as_str().to_string(), path: path.to_string(), query: query.to_string(), headers, body };
+            if let Some(resp) = front.as_ref().and_then(|f| f(&mut req)) {
                 return respond(request, resp);
             }
             match app.stream_route(&req) {

@@ -3,3 +3,4 @@ pub mod log;
 pub mod supervisor;
 pub mod http;
 pub mod tasks;
+pub mod db;

@@ -8,6 +8,9 @@ use std::time::Duration;
 pub struct Secret(String);
 
 impl Secret {
+    pub fn new(s: impl Into<String>) -> Secret {
+        Secret(s.into())
+    }
     pub fn expose(&self) -> &str {
         &self.0
     }
@@ -130,7 +133,7 @@ impl RunConfig {
         let grace = Duration::from_secs(num("PULSO_SHUTDOWN_GRACE_SECS", 50, 1, 3_600)?);
 
         let listen_addr: SocketAddr = var("PULSO_LISTEN_ADDR")
-            .unwrap_or_else(|| "127.0.0.1:4020".into())
+            .unwrap_or_else(|| "127.0.0.1:8080".into())
             .parse()
             .map_err(|_| invalid("PULSO_LISTEN_ADDR", "must be ip:port"))?;
         let debug_token = var("PULSO_DEBUG_TOKEN").map(Secret);
@@ -164,6 +167,11 @@ impl RunConfig {
             }
         };
 
+        let base_path = match var("PULSO_BASE_PATH") {
+            None => String::new(),
+            Some(b) => normalize_base_path(&b).map_err(|r| invalid("PULSO_BASE_PATH", &r))?,
+        };
+
         Ok(RunConfig {
             storage,
             database_url: url.map(Secret),
@@ -177,7 +185,7 @@ impl RunConfig {
             storage_prefix,
             store_dir: var("PULSO_STORE_DIR").map(PathBuf::from),
             console_dir: var("PULSO_CONSOLE_DIR").map(PathBuf::from),
-            base_path: String::new(),
+            base_path,
             grace,
             tenant: var("PULSO_TENANT").unwrap_or_else(|| "tenant-local".into()),
             worker_id: var("PULSO_WORKER_ID").unwrap_or_else(|| format!("pulso-{}", std::process::id())),
@@ -188,3 +196,16 @@ impl RunConfig {
 
 /// Minimum length of a bearer token accepted on a non-loopback bind.
 pub const MIN_TOKEN: usize = 16;
+
+/// "" or "/" -> ""; "/pulso/" -> "/pulso". Rejects relative paths, empty/dot segments and anything but [A-Za-z0-9._-].
+pub fn normalize_base_path(p: &str) -> Result<String, String> {
+    let p = p.trim();
+    if p.is_empty() || p == "/" {
+        return Ok(String::new());
+    }
+    let p = p.strip_suffix('/').unwrap_or(p);
+    let ok = p.starts_with('/')
+        && p.len() <= 128
+        && p[1..].split('/').all(|s| !s.is_empty() && s != "." && s != ".." && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')));
+    if ok { Ok(p.to_string()) } else { Err("must look like /prefix or /a/b: segments of [A-Za-z0-9._-], no empty or dot segments".into()) }
+}

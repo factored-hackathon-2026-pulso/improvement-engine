@@ -4,6 +4,7 @@ description = "One runnable: `pulso demo` streams the ten-step offline thread li
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+build = "build.rs"
 
 [[bin]]
 name = "pulso"

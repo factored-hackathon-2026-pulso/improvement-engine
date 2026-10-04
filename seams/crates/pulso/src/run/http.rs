@@ -15,6 +15,7 @@ pub struct HttpTask {
     app: Arc<App>,
     health: Arc<Health>,
     addr: SocketAddr,
+    base: String,
 }
 
 impl HttpTask {
@@ -22,7 +23,7 @@ impl HttpTask {
         let server = tiny_http::Server::http(cfg.listen_addr).map_err(|e| format!("bind {}: {e}", cfg.listen_addr))?;
         let addr = server.server_addr().to_ip().ok_or("listener is not an IP socket")?;
         let console = cfg.console_dir.clone().filter(|d| d.join("index.html").is_file());
-        let config_json = json!({"provider": "stand-in", "dataProvider": "http", "apiBase": "", "sseHeartbeatMs": 5000, "traceLinkOrigins": []}).to_string();
+        let config_json = json!({"provider": "stand-in", "dataProvider": "http", "apiBase": cfg.base_path, "sseHeartbeatMs": 5000, "traceLinkOrigins": []}).to_string();
         let dcfg = Config {
             tenant: cfg.tenant.clone(),
             token: cfg.debug_token.as_ref().map(|t| t.expose().to_string()),
@@ -31,11 +32,15 @@ impl HttpTask {
             config_json: Some(config_json),
             ..Config::default()
         };
-        Ok(HttpTask { server: Some(server), app: Arc::new(App::new(store, dcfg)), health, addr })
+        Ok(HttpTask { server: Some(server), app: Arc::new(App::new(store, dcfg)), health, addr, base: cfg.base_path.clone() })
     }
     pub fn local_addr(&self) -> SocketAddr {
         self.addr
     }
+}
+
+fn json_resp_pair((s, b): (u16, serde_json::Value)) -> Resp {
+    json_resp(s, b)
 }
 
 fn json_resp(status: u16, body: serde_json::Value) -> Resp {
@@ -49,20 +54,31 @@ impl Task for HttpTask {
     fn run(&mut self, stop: &StopToken) -> Result<(), String> {
         let server = self.server.take().ok_or("http task already ran")?;
         let health = self.health.clone();
+        let base = self.base.clone();
         let front: Front = Arc::new(move |r| {
-            if r.method != "GET" && r.method != "HEAD" {
-                return None;
+            let probe = |p: &str| -> Option<Resp> {
+                match p {
+                    "/healthz" => Some(json_resp_pair(health.healthz())),
+                    "/readyz" => Some(json_resp_pair(health.readyz())),
+                    _ => None,
+                }
+            };
+            let read = r.method == "GET" || r.method == "HEAD";
+            if base.is_empty() {
+                return if read { probe(&r.path) } else { None };
             }
-            match r.path.as_str() {
-                "/healthz" => {
-                    let (s, b) = health.healthz();
-                    Some(json_resp(s, b))
+            // Behind a proxy prefix: only paths under it reach the debug-api (prefix stripped); bare probes stay open.
+            let rel = if r.path == base { Some("/".to_string()) } else { r.path.strip_prefix(&base).filter(|t| t.starts_with('/')).map(String::from) };
+            match rel {
+                Some(rel) if rel.split('/').any(|s| s == ".." || s == ".") => Some(json_resp(404, json!({"code": "not_found"}))),
+                Some(rel) => {
+                    if read && let Some(resp) = probe(&rel) {
+                        return Some(resp);
+                    }
+                    r.path = rel;
+                    None
                 }
-                "/readyz" => {
-                    let (s, b) = health.readyz();
-                    Some(json_resp(s, b))
-                }
-                _ => None,
+                None => Some(if read { probe(&r.path) } else { None }.unwrap_or_else(|| json_resp(404, json!({"code": "not_found"})))),
             }
         });
         let st = stop.clone();
