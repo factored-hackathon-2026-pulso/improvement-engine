@@ -83,8 +83,7 @@ fn truncated_and_mutated_inputs_never_panic() {
 
 /// Value of the first line whose trimmed text starts with `key`, after `from` in `yaml`, comment stripped.
 fn yaml_value(yaml: &str, from: &str, key: &str) -> String {
-    let at = yaml.match_indices(from).map(|(i, _)| i).find(|&i| i == 0 || yaml.as_bytes()[i - 1] == b'
-');
+    let at = yaml.match_indices(from).map(|(i, _)| i).find(|&i| i == 0 || yaml.as_bytes()[i - 1] == 10);
     let rest = &yaml[at.unwrap_or_else(|| panic!("no {from}"))..];
     let line = rest.lines().find(|l| l.trim_start().starts_with(key)).unwrap_or_else(|| panic!("no {key}"));
     line.trim_start()[key.len()..].split('#').next().unwrap().trim().to_string()
