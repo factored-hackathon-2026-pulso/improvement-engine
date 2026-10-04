@@ -56,7 +56,7 @@ HEALTHCHECK CMD ["/pulso", "healthcheck"]     # GET 127.0.0.1:<PULSO_LISTEN_ADDR
 
 ## Known gaps (adversarial review, CL)
 
-- `JobRepository` has no `complete` transition: a job whose runner returned `Ok` stays `leased` and is claimable again when the lease lapses (fence bumped). `commit_output` keeps outputs first-writer-wins, but an external effect performed before the commit runs twice. Demonstrated by the ignored test `a_job_whose_runner_returned_ok_is_never_run_again` (`cargo test -p pulso --test run_tasks -- --ignored`). Fix: `complete(tenant, job, worker, fence)` -> status `complete` (already allowed by migration 0050) excluded from `claim_next`; wire it in `JobWorker` on `Ok`. Until then a runner must read `output()` first or use `begin_effect`.
+- (closed, W7) `JobRepository::complete(tenant, job, worker, fence, now)` is the terminal transition (status `complete`, admitted by migration 0050); the worker calls it when the runner returns `Ok`, so a finished job is never claimed again. A runner that fails or is killed still leaves the lease to expire and the job is retried (at-least-once, fenced). Test: `a_job_whose_runner_returned_ok_is_never_run_again`.
 - No read/idle timeout on the HTTP front (a slow client holds one of 256 request threads; at the cap `/readyz` also answers 503). Put a proxy with timeouts in front.
 - `PULSO_STORAGE_PREFIX` is validated and logged but not consumed by any component yet.
 - The listener stops accepting at SIGTERM (same stop token), so `/readyz` cannot answer `shutting_down` during an LB drain; default `PULSO_SHUTDOWN_GRACE_SECS=25` stays below the ECS default stopTimeout of 30 s (keep it below the task's stopTimeout).

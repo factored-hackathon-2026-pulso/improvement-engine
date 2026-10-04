@@ -132,7 +132,13 @@ impl Task for JobWorker {
                         ran += 1;
                         let ctx = JobCtx { repo: self.repo.as_ref(), tenant: &self.tenant, worker: &self.worker_id, stop, now, lease_seconds: self.lease_seconds };
                         match runner.run(&job, &ctx) {
-                            Ok(()) => self.log.info("job_done", json!({"job": job.job, "fence": job.fence_token, "attempt": job.attempt})),
+                            Ok(()) => {
+                                // The terminal transition: without it the finished job is reclaimed once its lease lapses (double execution).
+                                match self.repo.complete(&self.tenant, &job.job, &self.worker_id, job.fence_token, (self.clock)()) {
+                                    Ok(()) => self.log.info("job_done", json!({"job": job.job, "fence": job.fence_token, "attempt": job.attempt})),
+                                    Err(e) => self.log.warn("job_complete_refused", json!({"job": job.job, "attempt": job.attempt, "reason": format!("{e:?}")})),
+                                }
+                            }
                             Err(e) => self.log.warn("job_failed", json!({"job": job.job, "attempt": job.attempt, "reason": e})),
                         }
                     }
