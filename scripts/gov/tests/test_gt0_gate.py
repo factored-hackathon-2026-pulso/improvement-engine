@@ -133,6 +133,12 @@ class Gate(unittest.TestCase):
     def test_trn0_requires_a_w0_receipt_for_every_pr(self):
         self.assertIn("trn0", failed(self.run_gate(lambda d, m: (d / "w0-pr-1.json").unlink())))
 
+    def test_trn0_pass_discloses_recorded_deviations_in_the_detail(self):
+        res = self.run_gate(self.edit("trn0.json", lambda t: t.update(deviations=["PR 1 over the cap; authority: ruling"])))
+        item = next(r for r in res if r["item"] == "trn0")
+        self.assertTrue(item["ok"])
+        self.assertIn("authority: ruling", item["detail"])
+
     def test_crv0_open_review_fails_and_missing_required_wp_fails(self):
         def open_f(doc):
             doc["findings"] = [{"id": "F", "loop": 1, "summary": "s", "status": "open"}]
