@@ -8,10 +8,13 @@
 //! lease expiry/reclaim (C-7 now>=expires) is not modelled; FileStore locking is a lock file, not OS-level.
 use abi::*;
 
+pub mod adapters;
 pub mod demo;
 pub mod executor;
+pub mod live;
 mod lib_codec;
 pub mod store;
+pub mod synth;
 pub use store::{FileStore, JobStore};
 
 #[derive(Debug, PartialEq, Eq)]

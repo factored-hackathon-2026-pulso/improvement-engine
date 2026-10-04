@@ -73,6 +73,22 @@ fn main() {
             let store = FileStore::open(&a[1]).expect("store");
             run("job-1", &store, &demo::handlers(), "x", marker_hook(&a[2..]))
         }
+        Some("thread") if a.len() >= 3 => {
+            let live = a.iter().any(|x| x == "--live-stubs");
+            let rest: Vec<String> = a[3..].iter().filter(|x| *x != "--live-stubs").cloned().collect();
+            let runner = std::env::var_os("STEPS_RUNNER_EXE").map(std::path::PathBuf::from).unwrap_or_else(|| {
+                let mut p = std::env::current_exe().expect("exe path");
+                p.set_file_name(format!("synth_runner{}", std::env::consts::EXE_SUFFIX));
+                p
+            });
+            let store = FileStore::open(&a[1]).expect("store");
+            let (env, spec) = engine::synth::build(std::path::Path::new(&a[2]), &runner, None).expect("synthetic data");
+            let mut hs = engine::adapters::thread_handlers(env, None);
+            if live {
+                hs.extend(engine::live::stub_handlers());
+            }
+            run("thread-1", &store, &hs, &spec, marker_hook(&rest))
+        }
         _ => {
             eprintln!("usage: engine_run demo3 <store> [marker idx] | thread <store> <work_dir> [marker idx] [--live-stubs]");
             2
