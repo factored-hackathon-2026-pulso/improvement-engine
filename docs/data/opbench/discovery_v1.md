@@ -39,7 +39,7 @@ without a declared timezone. This is a final-snapshot descriptive analysis.
 | M4 `pqr_open_rate` | PQRs in `open`, `in process`, or `escalated` / all valid PQRs | normalized PQR category, plus overall | `resolved`, `closed`, and `rejected` are not open. The source status snapshot is not event-time history. |
 | M5 `pqr_sla_breach_rate` | `sla_breached=true` / PQRs with a parseable SLA-breach flag | normalized PQR category, plus overall | The dictionary supplies a non-null breach flag but no SLA deadline/eligibility field; denominator means rows with an observed flag, not independently verified SLA eligibility. |
 | M6 `survey_low_score_rate` | CSAT `main_score <= 2` / CSAT surveys with integer score in 1–5 | linked interaction `reason_category × survey send_channel`, plus overall linked | NPS and CES rows are excluded. A survey is linkable only by `interaction_id` to a deduplicated contact. `channel` means survey `send_channel` (not the contact's channel): Email→email, IVR→phone, App→mobile_app, Web→web; SMS and other unsupported send channels→other. Coverage is linked eligible CSAT / all eligible CSAT; unlinked rows do not enter cell rates. |
-| E1 `copilot_repeat_rate` | eligible cases whose leading `query_signature` equals the discovery-half modal signature / eligible cases with at least one `copilot_query` | one overall cell | Leading query is the earliest operational query by event timestamp then stable source ordinal. Modal ties resolve by lexical opaque signature only in memory. No signature is emitted. A repeat finding is not customer intent or a causal mechanism. |
+| E1 `copilot_repeat_rate` | eligible cases whose leading `query_signature` equals the discovery-half modal signature / query-bearing cases, measured independently in each half | one overall cell | Leading query is the earliest operational query by event timestamp then stable source ordinal. Modal ties resolve by lexical opaque signature only in memory. Compare discovery and replication proportions with the registered two-proportion test; effect is replication rate minus discovery rate. No signature is emitted. A repeat finding is not customer intent or a causal mechanism. |
 
 ### Normalized dimensions
 
@@ -87,9 +87,11 @@ candidate only if (a) numerator and denominator are each at least `k=10`,
 (c) absolute rate difference is at least 0.05. These floors are fixed and not
 changed after computation.
 
-The independent replication half freezes each discovery candidate cell (and
-for E1 the discovery-selected modal query signature) and recomputes its
-proportion against the corresponding pooled complement. A candidate is
+The independent replication half freezes each discovery candidate cell and
+recomputes its proportion against the corresponding pooled complement. For
+E1, freeze the discovery-selected modal query signature and compare its rate
+between the discovery and replication halves (its two independent binomial
+proportions); this tests rate change, not causal replication of intent. A candidate is
 replicated when both comparison groups satisfy the same k=10 event/non-event
 support, effect has the same direction and at least 0.05 magnitude, and the
 replication two-proportion test is significant at `p < 0.05` after
@@ -163,3 +165,14 @@ channel and is distinct from the linked contact channel. M6 therefore groups
 by the explicitly normalized survey send channel plus the linked contact
 reason. The first draft ambiguously said only “channel”; no results were
 computed before this field-level definition was fixed.
+
+### Preregistration clarification (v1.3, still before any result artifact)
+
+E1 is not a within-half cell-vs-complement test: the modal signature is selected
+from discovery, then the same signature's prevalence is compared between
+independent customer-hash halves with the specified two-proportion test and
+the full-family BH adjustment. `corroborated` requires a >=5pp replication
+increase with adjusted q<=0.05; `corroborated_descriptive` records adequate
+support with a rate difference smaller than 5pp; a significant >=5pp decrease
+is `refuted`; other insufficiency/disagreement is `uncertain`. A top-signature
+digest remains local-only.
