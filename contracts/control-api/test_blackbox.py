@@ -10,7 +10,8 @@ server as a subprocess configured with the same E2E_VERIFY_KEYS / E2E_PORT env t
 Surfaces: POST /internal/v1/core-task-bindings, POST /internal/v1/broker/authorizations/check,
 GET|POST /internal/v1/broker/artifacts, POST /internal/v1/platform/observations (+ cursor GET),
 admin /_e2e/config (artifact seeding, deny_operations, faults).
-Rust-only behaviour (type/gap quarantine, healthz, lab grants) lives in seams/crates/control-api/tests/.
+POST /internal/v1/broker/wiki/read. Rust-only behaviour (type/gap quarantine, healthz, lab grants and queries) lives in
+seams/crates/control-api/tests/; the one lab test here (ED0L cross-check) runs against the Rust server only.
 """
 
 from __future__ import annotations
@@ -399,3 +400,71 @@ def test_ingest_rejects_digest_key_ref_and_tenant_violations(t: Target) -> None:
     assert post_obs(t, batch, token=obs_token(t, scope="binding"))[0] == 403
     assert t.http.call("POST", INGEST, batch, None, {"Idempotency-Key": batch["batch_digest"]})[0] == 401
     assert post_obs(t, batch)[0] == 202  # the same batch is still fine afterwards: nothing above had an effect
+
+
+# ---- wiki read (shared) ---------------------------------------------------------------------------------------------
+def wiki_read(t: Target, tenant: str, paths: list[str]) -> tuple[int, Any]:
+    tok = t.keys.token("ex", "lab-broker", "wiki", tenant, purpose="wiki")
+    return t.http.call("POST", BROKER + "/wiki/read", {"paths": paths}, tok)
+
+
+def test_wiki_read_returns_seeded_pages_and_never_another_tenants(t: Target) -> None:
+    t.admin({"wiki": [{"tenant": "t1", "path": "runbooks/recurrence.md", "content": "t1-only page"}]})
+    status, body = wiki_read(t, "t1", ["runbooks/recurrence.md"])
+    assert status == 200
+    (entry,) = body["entries"]
+    assert (entry["path"], entry["content"], entry["evidence_refs"]) == ("runbooks/recurrence.md", "t1-only page", [])
+    assert entry["digest"] == hashlib.sha256(b"t1-only page").hexdigest()
+    assert len(body["base_digest"]) == 64
+    other = wiki_read(t, "t2", ["runbooks/recurrence.md"])
+    assert "t1-only page" not in json.dumps(other[1])
+    tok = t.keys.token("ex", "lab-broker", "lab", "t1", purpose="lab")  # wrong scope
+    assert t.http.call("POST", BROKER + "/wiki/read", {"paths": ["x"]}, tok)[0] == 403
+
+
+# ---- Rust only: the broker serves a lab built by the real ED0L builder -----------------------------------------------
+def test_rust_lab_serves_the_same_aggregates_as_the_ed0l_python_lab(tmp_path: Path) -> None:
+    if "rust" not in TARGETS:
+        pytest.skip("rust target not selected")
+    sys.path[:0] = [str(ROOT / "e2e-core" / "src")]
+    from claude_standin import ed0_lab
+
+    cases = [(f"c{i}", "A", "w1", i < 3) for i in range(12)] + [(f"d{i}", "B", "w1", i < 5) for i in range(15)] +             [(f"e{i}", "C", "w1", True) for i in range(4)]  # group C is below k: the lab drops it
+    db = ed0_lab.build_lab(tmp_path / "lab.sqlite", cases, salt=b"s" * 16)
+    keys = Keys()
+    port = free_port()
+    env = {**os.environ, "E2E_VERIFY_KEYS": json.dumps(keys.verify_keys()), "E2E_PORT": str(port), "CONTROL_API_ADMIN": "1",
+           "CONTROL_API_LABS": json.dumps({"t1": db})}
+    proc = subprocess.Popen([BIN], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        wait_port(port, proc)
+        t = Target("rust", Http(f"http://127.0.0.1:{port}"), keys)
+        t.admin({"preauthorized_bindings": [{"binding_ref": "bind-lab", "tenant": "t1"}]})
+
+        def tok(scope: str) -> str:
+            return keys.token("ex", "lab-broker", scope, "t1", purpose=scope)
+
+        status, grant = t.http.call("POST", BROKER + "/grants", {"binding_ref": "bind-lab", "scope": "lab", "ttl_seconds": 60},
+                                    tok("grant_issue"))
+        assert status == 201
+        h = {"X-Grant-Ref": grant["grant_ref"]}
+        assert t.http.call("POST", BROKER + "/lab/sessions", {"binding_ref": "bind-lab"}, tok("lab"))[0] == 403  # no grant
+        status, sess = t.http.call("POST", BROKER + "/lab/sessions", {"binding_ref": "bind-lab"}, tok("lab"), h)
+        assert status == 200
+        sid = sess["session_ref"]
+        status, q = t.http.call("POST", f"{BROKER}/lab/sessions/{sid}/queries",
+                                {"query_key": "bb-1", "metric_id": ed0_lab.METRIC, "window_id": "w1"}, tok("lab"))
+        assert status == 202
+        state = t.http.call("GET", f"{BROKER}/lab/queries/{q['query_ref']}", None, tok("lab"))[1]
+        res = t.http.call("GET", f"{BROKER}/lab/results/{state['result_ref']}", None, tok("lab"))[1]
+        want = ed0_lab.lab_query(db, ed0_lab.METRIC, "w1")["rows"]
+        got = [{"metric_id": r[0], "window_id": r[1], "g_group": r[2], "count": r[3], "rate": r[4], "evidence_ref": r[5]}
+               for r in res["rows"]]
+        assert got == want and len(got) == 2  # same hashed groups, counts, half-even rates, evidence refs; C absent
+        receipt = t.http.call("GET", f"{BROKER}/lab/receipts/{res['receipt_ref']}", None, tok("lab"))[1]
+        assert (receipt["rows"], receipt["outcome"], receipt["quality_findings"]) == (2, "ok", [])
+        assert t.http.call("POST", BROKER + f"/grants/{grant['grant_ref']}/revoke", None, tok("grant_issue"))[0] == 200
+        assert t.http.call("GET", f"{BROKER}/lab/results/{state['result_ref']}", None, tok("lab"))[0] == 403
+    finally:
+        proc.kill()
+        proc.wait()
