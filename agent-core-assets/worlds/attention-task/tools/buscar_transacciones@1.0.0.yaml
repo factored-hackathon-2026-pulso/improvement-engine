@@ -1,0 +1,5 @@
+id: buscar_transacciones
+version: 1.0.0
+risk_class: read
+min_auth_level: session
+idempotent: true

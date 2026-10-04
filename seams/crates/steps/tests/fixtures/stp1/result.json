@@ -1,0 +1,71 @@
+{
+ "signal": {
+  "coverage_basis_points": 10000,
+  "denominator": 30,
+  "detector_policy_id": "e0_recurring_copilot_query_support_v1",
+  "detector_policy_version": 1,
+  "digest": "sha256:034797835940edd24d184fdbfe26061dc5715002a404af8238aedbe7527bb3ae",
+  "metric_id": "e0_recurring_copilot_query_cases",
+  "minimum_support": 5,
+  "missing": 0,
+  "numerator": 22,
+  "pattern_ref": "sha256:e2962281d5647c5c432dfbfb0a7de14e68f33372e71c0b16b4bf3bdb0c6ffab6",
+  "summary_commitment": "sha256:d65a6ccf3d5eaa306c8345c320a961c19684f2d72bf2b87a2dd111b5336aeaba"
+ },
+ "signals": [
+  {
+   "coverage_basis_points": 10000,
+   "denominator": 30,
+   "detector_policy_id": "e0_technical_error_rate_v1",
+   "detector_policy_version": 1,
+   "digest": "sha256:4bea4dd4ddea76cd71d2032b1c2d5b8b197ce0f7ed15e01f27c38f56a1d66860",
+   "metric_id": "e0_technical_error_rate",
+   "minimum_support": 1,
+   "missing": 0,
+   "numerator": 0,
+   "pattern_ref": null,
+   "summary_commitment": "sha256:66412d7cadf79148cb86a40bf22746b5a7ac4d59098e66161a1956a183f883df"
+  },
+  {
+   "coverage_basis_points": 10000,
+   "denominator": 30,
+   "detector_policy_id": "e0_tool_retry_case_rate_v1",
+   "detector_policy_version": 1,
+   "digest": "sha256:9af5de81acd503951af62b217fe5c57b3074f11ad46520d0b5b9e47e163adab6",
+   "metric_id": "e0_tool_retry_case_rate",
+   "minimum_support": 1,
+   "missing": 0,
+   "numerator": 0,
+   "pattern_ref": null,
+   "summary_commitment": "sha256:7787c357e994cf2d8c4613dbb309a605bc720ee9b07f4a98b763bcf0444d495b"
+  },
+  {
+   "coverage_basis_points": 10000,
+   "denominator": 30,
+   "detector_policy_id": "e0_recurring_copilot_query_support_v1",
+   "detector_policy_version": 1,
+   "digest": "sha256:034797835940edd24d184fdbfe26061dc5715002a404af8238aedbe7527bb3ae",
+   "metric_id": "e0_recurring_copilot_query_cases",
+   "minimum_support": 5,
+   "missing": 0,
+   "numerator": 22,
+   "pattern_ref": "sha256:e2962281d5647c5c432dfbfb0a7de14e68f33372e71c0b16b4bf3bdb0c6ffab6",
+   "summary_commitment": "sha256:d65a6ccf3d5eaa306c8345c320a961c19684f2d72bf2b87a2dd111b5336aeaba"
+  }
+ ],
+ "e0_recurrence_holdout": {
+  "candidate_ref": "sha256:e2962281d5647c5c432dfbfb0a7de14e68f33372e71c0b16b4bf3bdb0c6ffab6",
+  "discovery_source_commitment": "sha256:09eacb66f7dd9d6e7b53cec9b4954e05b89a3ec5afca519b6700d85f41e82605",
+  "holdout_source_commitment": "sha256:09eacb66f7dd9d6e7b53cec9b4954e05b89a3ec5afca519b6700d85f41e82605",
+  "interpretation": "descriptive_recurrence_only_no_causal_or_outcome_claim",
+  "matching_case_count": 20,
+  "minimum_distinct_case_support": 5,
+  "policy_id": "e0_recurrence_holdout",
+  "policy_version": 2,
+  "queried_case_count": 20,
+  "recurrence_rate_basis_points": 10000,
+  "reproduction_case_count": 30,
+  "status": "replicated"
+ },
+ "run_id": "run_14776_1791100561221631000"
+}

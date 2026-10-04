@@ -1,0 +1,45 @@
+# Suite of the seeded base world (task agent, no model needed): every scenario only starts the run and scripts its tools.
+# Synthetic. Authored by the suite author recorded in worlds/seeded-base.world.yaml, not by the judge.
+id: disputas-tarea-suite
+version: 1.0.0
+agent_id: atencion-tarea
+repetitions: 1
+scenarios:
+  - id: resuelto
+    principal: {id: cust-001, attrs: {country: CO}}
+    steps:
+      - {op: start}
+    seed:
+      tools:
+        buscar_transacciones:
+          - result:
+              - {transaction_id: tx-1, amount: "120.50", currency: USD}
+              - {transaction_id: tx-2, amount: "30.00", currency: USD}
+        seleccionar:
+          - result: {transaction_id: tx-1, amount: "120.50", currency: USD}
+        convertir_moneda:
+          - result: 120
+    expect: {outcome: completed, escalated: false}
+  - id: escalado_por_monto
+    principal: {id: cust-002, attrs: {country: CO}}
+    steps:
+      - {op: start}
+    seed:
+      tools:
+        buscar_transacciones:
+          - result:
+              - {transaction_id: tx-9, amount: "600.00", currency: USD}
+        seleccionar:
+          - result: {transaction_id: tx-9, amount: "600.00", currency: USD}
+        convertir_moneda:
+          - result: 600
+    expect: {outcome: escalated, escalated: true}
+  - id: sin_candidatas
+    principal: {id: cust-003, attrs: {country: CO}}
+    steps:
+      - {op: start}
+    seed:
+      tools:
+        buscar_transacciones:
+          - result: []
+    expect: {outcome: escalated, escalated: true}

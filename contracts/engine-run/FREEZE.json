@@ -1,0 +1,23 @@
+{
+  "schema": "contract-freeze/v1",
+  "contracts": {
+    "C-2": {
+      "status": "frozen",
+      "digest": "sha256:8e5d23845250d9a82b4845d7fbe49c4747c1ad314e2aab90193780804fea623f",
+      "files": {
+        "contracts/engine-run/engine_run.py": "sha256:7c2b1ff1239d2a3fca93099235f2ee5f977693e37598104dd2a652f7112ead70",
+        "contracts/engine-run/report.schema.json": "sha256:ca797904b30421ae8a57da26c547639d19d8c345a8fe687d8a2b6f82a8457a61",
+        "e2e-core/src/claude_standin/thread01.py": "sha256:87734fe8541f22b223106233abc9a1ceefbb00a19cf5ae0f710836e748ed2598"
+      }
+    },
+    "C-12": {
+      "status": "frozen",
+      "digest": "sha256:4128f5d8fcf0b602ef8e2237bedf0c576f7b452a3609a079fa2fe153e002dc86",
+      "files": {
+        "roleplay-llm/roleplay_llm/protocol.py": "sha256:cc261a6e9ad0288caf1f6cc9beb10a2a8430b8f33ccc9152ec64ee8c373d6ede",
+        "roleplay-llm/roleplay_llm/scanner.py": "sha256:138a725148b30edad70a61788f9cf46b557c2ddfb971291db311a05b85840697",
+        "roleplay-llm/roleplay_llm/shim.py": "sha256:7219c302bfcbb3b38aada2f1145265a0d613f99fcfafc04da46c74bf9bc52ce7"
+      }
+    }
+  }
+}

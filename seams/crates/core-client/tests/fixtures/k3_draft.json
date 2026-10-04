@@ -1,0 +1,51 @@
+{
+ "artifact_digest": "ce887cf5a6ec180b73ec45936a43a57bcdd835b0e78a0e2cad8f98e0f67b9fca",
+ "generated_by": "gen/gen_k3_fixture.py",
+ "plan": {
+  "agent_id": "atencion",
+  "changes": [
+   {
+    "content": {
+     "id": "p/resumen_radicado",
+     "locales": {
+      "es": "Confirma en una frase que la disputa quedo radicada.",
+      "pt": "Confirme em uma frase que a contestacao foi registrada."
+     },
+     "model_profile": "perfil-generacion@1.0.0",
+     "version": "1.1.0"
+    },
+    "docs": {
+     "changelog": "k3",
+     "description": "k3 fixture",
+     "rationale": "mejorar"
+    },
+    "kind": "prompt"
+   },
+   {
+    "content": {
+     "id": "disputas-suite",
+     "repetitions": 1,
+     "scenarios": [
+      {
+       "expect": {
+        "outcome": "resolved"
+       },
+       "id": "s1",
+       "input": "Quiero disputar un cargo"
+      }
+     ],
+     "seed": 120,
+     "version": "1.0.0"
+    },
+    "docs": {
+     "changelog": "k3",
+     "description": "k3 fixture",
+     "rationale": "mejorar"
+    },
+    "kind": "eval_suite"
+   }
+  ],
+  "title": "pulso-key:k3fixture"
+ },
+ "put_draft_digest": "38a1e825f485b516f82f591452f8617fa15e140044d9859de95cf00e75622845"
+}

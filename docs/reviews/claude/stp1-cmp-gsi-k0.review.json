@@ -1,0 +1,116 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "STP1",
+    "CMP",
+    "GSI",
+    "K0"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "fresh-context-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0048",
+    "git ac3a599, d66d780",
+    "git e3e173e, 78de5e3, d559ad7, 642f8bf",
+    "git 688c185, 10d0d0a",
+    "git 5b8397a, 185fddb"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 (CRV1) from the shared journal and commit history. Findings are only those the journal or the cited commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "verdict": "closed",
+  "findings": [
+    {
+      "id": "STP1-R1",
+      "loop": 1,
+      "summary": "deeply nested JSON overflowed the stack in the std-only reader (depth limit missing)",
+      "status": "fixed",
+      "fix_ref": "ac3a599",
+      "red_ref": "d66d780"
+    },
+    {
+      "id": "STP1-R2",
+      "loop": 1,
+      "summary": "lax JSON number grammar and duplicate keys were accepted",
+      "status": "fixed",
+      "fix_ref": "ac3a599",
+      "red_ref": "d66d780"
+    },
+    {
+      "id": "STP1-R3",
+      "loop": 1,
+      "summary": "snapshot/ref ids with a leading dot or dot-dot could escape the intended directory",
+      "status": "fixed",
+      "fix_ref": "ac3a599",
+      "red_ref": "d66d780"
+    },
+    {
+      "id": "STP1-R4",
+      "loop": 1,
+      "summary": "the sensor runner had no timeout and could hang the host",
+      "status": "fixed",
+      "fix_ref": "ac3a599",
+      "red_ref": "d66d780"
+    },
+    {
+      "id": "STP1-R5",
+      "loop": 1,
+      "summary": "error text echoed filesystem paths and runner stderr",
+      "status": "fixed",
+      "fix_ref": "ac3a599",
+      "red_ref": "d66d780"
+    },
+    {
+      "id": "CMP-R1",
+      "loop": 1,
+      "summary": "compile JSON reader had no depth limit; numbers not strict; \\u escapes not hex-only; DEL not escaped; lone surrogate differed from the Python reference",
+      "status": "fixed",
+      "fix_ref": "e3e173e",
+      "red_ref": "78de5e3"
+    },
+    {
+      "id": "CMP-R2",
+      "loop": 1,
+      "summary": "SHA-256 padding edge lengths and CRLF/drift fixtures were not covered by vectors (hardening tests added; the journal counts the SHA-256 edge lengths among the 12 defects, no separate fix commit is isolated)",
+      "status": "fixed",
+      "fix_ref": "78de5e3",
+      "red_ref": "78de5e3"
+    },
+    {
+      "id": "GSI-R1",
+      "loop": 1,
+      "summary": "gate JSON reader accepted non-RFC 8259 numbers and non-hex \\u escapes",
+      "status": "fixed",
+      "fix_ref": "688c185",
+      "red_ref": "10d0d0a"
+    },
+    {
+      "id": "CRV1-RES-JSON-DUP",
+      "loop": 1,
+      "summary": "each steps module (sensor, compile, gate) carries its own std-only JSON reader/writer; the same hardening had to be applied three times (ac3a599, e3e173e, 688c185)",
+      "status": "accepted",
+      "reason": "Duplication was chosen so each lane could land independently with byte parity against its Python reference. A future divergence between the readers is the residual risk; parity tests against the Python references bound it today.",
+      "owner": "Team CL, lane L-ENGINE (steps)",
+      "tier": "T0.5 (wp_table CRV1)",
+      "tracking": "not scheduled; consolidate into one shared module before the Rust shell (GT1A) or when a fourth reader is needed"
+    }
+  ],
+  "closure_verification": {
+    "by": "implementer agent of Team Claude, GT05 lane (verification by commit inspection and gate runs; NOT an independent reviewer)",
+    "date": "2026-10-04",
+    "head_at_verification": "claude/w1i-gt05 (from claude/w0-train, PR #96)",
+    "evidence": [
+      "git show --stat ac3a599 e3e173e 688c185 (fixes in seams/crates/steps/src/{sensor,compile,gate}.rs)",
+      "RED commits d66d780, 78de5e3, 10d0d0a precede the fixes; journal CL-0048: 12 defects fixed RED-first"
+    ],
+    "independence": "The journal cites independent fresh-context reviews but their reviewer identifiers were not recorded; this log does not claim more than the journal states."
+  },
+  "journal_defect_count": 12
+}

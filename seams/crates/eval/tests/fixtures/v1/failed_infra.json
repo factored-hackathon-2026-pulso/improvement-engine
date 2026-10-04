@@ -1,0 +1,28 @@
+{
+  "cause": "llm-gateway double without a scripted rule (llm_rules replaced by [])",
+  "observation": {
+    "http_status": 200,
+    "kind": "stage_receipt",
+    "native_evaluation": {
+      "eval_run_ref": "01a106b5-ff32-7ea8-877d-cb5185c7488b",
+      "report_digest": "8adf514295415d2068a6096ac9fbf1b8110c9cc7a0daf5806eec39c4b3e9d19e",
+      "verdict": "failed_infra"
+    },
+    "outcome": "completed",
+    "proposal_state_after": "candidate",
+    "state": "TerminalOk",
+    "write_ops": [
+      "evaluate"
+    ]
+  },
+  "outcome": "failed_infra",
+  "proposal_id": "01a106b5-fb22-7b4e-a292-32e76fe86e84",
+  "provenance": {
+    "agent_core_sha": "c814c2bad9f154d10c092326558815dca9562be7",
+    "command": "cargo test --offline -j 2 --manifest-path seams/Cargo.toml -p eval --test live_capture -- --ignored --nocapture --test-threads 1 (env: seams/scripts/live-env.ps1)",
+    "date": "2026-10-04",
+    "label": "real",
+    "namespace": "claude-w4a-1",
+    "stack_image": "localhost/pulso-core-runtime:c814c2b-920f5e3"
+  }
+}

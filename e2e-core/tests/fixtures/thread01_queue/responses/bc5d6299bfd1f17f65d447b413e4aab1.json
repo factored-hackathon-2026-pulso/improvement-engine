@@ -1,0 +1,18 @@
+{
+ "content": {
+  "args": {
+   "metric_id": "recurrence_rate",
+   "window_id": "w1"
+  },
+  "kind": "tool_call",
+  "tool": "pulso/lab_query@1.0.0"
+ },
+ "key": "bc5d6299bfd1f17f65d447b413e4aab1",
+ "protocol": "roleplay-queue/1",
+ "provenance": "agent_roleplay",
+ "quality_claims": "forbidden",
+ "responder": {
+  "id": "responder-verifier",
+  "role": "verifier"
+ }
+}

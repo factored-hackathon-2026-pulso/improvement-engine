@@ -1,0 +1,130 @@
+{
+  "expected_reason": "missing_precondition",
+  "negative": "stale_precondition",
+  "provenance": {
+    "command": "e2e-core/run.ps1 -BaseImage localhost/pulso-core-runtime:c814c2b-920f5e3 -Namespace claude-e2e-bknl -Keep (fresh stack), then pytest tests/live/test_10_bknl_denied_kinds.py with BKNL_RECORD_DIR",
+    "endpoint": "POST /internal/v1/core-authoring/dry-run (bridge, purpose authoring_dry_run)",
+    "image": "localhost/pulso-core-runtime:c814c2b-920f5e3",
+    "recorded_utc": "2026-10-04",
+    "redaction": "service JWT and headers are not recorded; tenant and agent ids are the synthetic e2e ones"
+  },
+  "registry_after": {
+    "aliases": {
+      "prod": "rel-aee75c258fb3b722",
+      "staging": "rel-253b52903d377aae"
+    },
+    "draft_writes": 11,
+    "proposals": 4,
+    "releases": [
+      "rel-166ab3e82a890f42",
+      "rel-1cddd55d1fe8f19f",
+      "rel-253b52903d377aae",
+      "rel-5f152bbf73ea31b4",
+      "rel-aee75c258fb3b722",
+      "rel-bf3f06148962dabb",
+      "rel-db71ae5ed04c6131",
+      "rel-e26df0070f6be82f"
+    ]
+  },
+  "registry_before": {
+    "aliases": {
+      "prod": "rel-aee75c258fb3b722",
+      "staging": "rel-253b52903d377aae"
+    },
+    "draft_writes": 11,
+    "proposals": 4,
+    "releases": [
+      "rel-166ab3e82a890f42",
+      "rel-1cddd55d1fe8f19f",
+      "rel-253b52903d377aae",
+      "rel-5f152bbf73ea31b4",
+      "rel-aee75c258fb3b722",
+      "rel-bf3f06148962dabb",
+      "rel-db71ae5ed04c6131",
+      "rel-e26df0070f6be82f"
+    ]
+  },
+  "request": {
+    "agent_id": "atencion-tarea",
+    "base_release_id": "rel-aee75c258fb3b722",
+    "changes": [
+      {
+        "content": {
+          "id": "p/resumen_radicado",
+          "locales": {
+            "es": "Redacta un mensaje breve para el cliente que confirme que su disputa fue radicada. No repitas cifras.",
+            "pt": "Redija uma mensagem breve para o cliente confirmando que sua contesta\u00e7\u00e3o foi registrada. N\u00e3o repita n\u00fameros."
+          },
+          "model_profile": "perfil-generacion@1",
+          "version": "2.0.0"
+        },
+        "docs": {
+          "changelog": "thread01",
+          "description": "thread01 change",
+          "rationale": "recorded synthetic opportunity"
+        },
+        "kind": "prompt"
+      }
+    ],
+    "schema_version": "1",
+    "tenant_id": "tenant-local"
+  },
+  "response": {
+    "body": {
+      "auto_bumped": [
+        {
+          "id": "atencion-tarea",
+          "kind": "agent",
+          "version": "1.0.2"
+        },
+        {
+          "id": "disputa-tarea",
+          "kind": "flow",
+          "version": "1.0.2"
+        }
+      ],
+      "candidate_hash": "45d8d9bdf2c49811fee72c595831d9fe37d964ed1b23d78ed17cebedcb0d264b",
+      "content_hashes": {
+        "agent:atencion-tarea@1.0.2": "94364341774b15c035cf0b660c3bc8a3ec94610676cf57d1a9a12277091c29fa",
+        "flow:disputa-tarea@1.0.2": "1caf9f4acda766e3d7830bc564d9fbc6c73336723b008d1b9395cc174ef4e67e",
+        "injection_ruleset:injection-rules@1.0.0": "172c1c4c0a20480fff9d2221e1df155bd5765b3a87e2d5591d42ba5ef82e361f",
+        "language_detection:lang-es-pt@1.0.0": "819529d6716a28ce54252f7975958b38790c7d05b4fe972516020d0a4e674d6c",
+        "model_profile:perfil-generacion@1.0.0": "d685c8c3161a94542e3337a8c5950a3d90bdc9ea180b8a09805311219d7a4129",
+        "policy:escalamiento-disputa-monto@1.0.0": "e67997e2d2a2356ad1d1e4fd6733a7c33b4754a8a54054c43e15fe897f37b6bf",
+        "prompt:p/resumen_radicado@2.0.0": "bcd5c43233e5868ebd0afef7fc54d7d688db1fdc07f18ebab192083a02ddb069",
+        "template:t/abstencion@1.0.0": "cc0289873212eaaa029239618c0e10a037f8656892c8a677364f79338f763705",
+        "template:t/aclarar@1.0.0": "56206672b53310b8c4cb1c30bd33bcee1d6abfbfd89cbe470d2fd658fd248179",
+        "template:t/acuse@1.0.0": "9061fefb66a06575d9941f7b2dcd83efa5765ed1c5954e07b1d86e74a05d0fce",
+        "template:t/disputa_recibida@1.0.0": "2acb5bcbe8df9fbd8daf65356604d096101e9dfc41924465677dda3b54801518",
+        "template:t/idioma_no_soportado@1.0.0": "63a73d2237109534ada31082b64486dda7c498b5a7d5fb19659594ccfc6f3ef5",
+        "template:t/mensaje_largo@1.0.0": "93427eb0c1696c0e9fad0a9eb60ed950c2928d2813c7e6e4a939f3fd22d1020f",
+        "template:t/oferta@1.0.0": "cdcd2ac3f37ecbb0fd3cf052764980d36276cdd602f9b216b31e3b77e43e8eab",
+        "template:t/traspaso@1.0.0": "aa993133401ef31c971efdd2a0c3a74881663df95299dabd83bb700c4c04a481",
+        "tool:buscar_transacciones@1.0.0": "a7e05d1d46c07c8add95eba12f6fc200e973dad31b659dd7c800b35948903deb",
+        "tool:convertir_moneda@1.0.0": "3b0addb9f12b20cd58beda0958a04ebb397ad62f8a0f82f5e6760f7f9953a86b",
+        "tool:seleccionar@1.0.0": "087dc355351dd0b082f72996af259de5748a16c13f0d4a3d95e5b270c0faba36"
+      },
+      "new_versions": [
+        {
+          "id": "atencion-tarea",
+          "kind": "agent",
+          "version": "1.0.2"
+        },
+        {
+          "id": "disputa-tarea",
+          "kind": "flow",
+          "version": "1.0.2"
+        }
+      ],
+      "proposal_created": false,
+      "release_hash": "7c5148807dabbd4d5584dfbacad15c0009f895c2f6fbe278ba1f204ad3771e00",
+      "release_id_preview": "rel-45d8d9bdf2c49811",
+      "request_digest": "be043375c4252c18f85cf05c9e7744d8bf11031dc52b9b9fd6e9e019f379f1ed",
+      "runtime_profile": "agent_core_real",
+      "schema_version": "1",
+      "valid": true,
+      "violations": []
+    },
+    "status": 200
+  }
+}

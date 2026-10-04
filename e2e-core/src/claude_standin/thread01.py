@@ -1,0 +1,933 @@
+"""E2E-THREAD-01 runner (Q1r): the ten demo steps on the Python host, REPLAY mode, in-process doubles only.
+
+Pieces assembled (all already in this branch): ED0 (ed0_detect, real Rust sensor), ED0L (ed0_lab), roleplay-llm
+shim (replay of recorded agent_roleplay answers), M3 stage policy and timeouts (core-bridge stages), SMAP, CMPpy,
+GSIpy, P2py (platform-sim release and effect series) and the G1 engine-run report (`check()` must pass).
+
+Steps and honest labels in replay (plan 2.1):
+  1 data wakes the engine      stand-in      manual command, no trigger
+  2 signals and discards       real-narrow   existing Rust sensor on a synthetic E0-shaped package
+  3 scout + separate verifier  agent_roleplay  recorded answers via the shim; tool results from the ED0L lab
+  4 opportunity (builder)      agent_roleplay  target chosen from the ReadBase catalogue (SMAP), never from prose
+  5 concrete change            stand-in      CMPpy generic compile                         [hook: dry_run]
+  6 base vs candidate, gates   stand-in      structural GSIpy verdict over stand-in arms   [hook: run_arms]
+  7 failure -> revision        not_exercised unless the gate fails (then rule-driven stand-in, bounded)
+  8-9 after a failed gate      blocked(gate) unless ThreadConfig.human_override (labelled human override, G1 check())
+  8 human only for authority   simulated     local Ed25519 issuer, bound to the draft digest
+  9 staging + alias read       stand-in      in-process registry double                    [hooks: publish, alias_read]
+ 10 observation                simulated     platform-sim release.* and effect series; observation only
+
+INT0 swap-in points are the fields of `CoreHooks` (each documented there). A hook that is supplied flips the
+step label to `real-narrow`: the step then reports what the real Core returned, not the double.
+Raw E0 is never read here: packages are SYNTHETIC and live only under `ThreadConfig.workdir` (untracked).
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable
+
+from . import ed0_detect as ed0
+from . import ed0_feed as feed
+from . import ed0_original as original
+from . import compile_step as cmp
+from . import ed0_lab as lab
+from . import gate_step as gate
+from . import smap
+from . import steps_host as sh
+
+ROOT = Path(__file__).resolve().parents[3]
+WORLD_FILE = ROOT / "agent-core-assets" / "worlds" / "seeded-base.world.yaml"
+CONTRACT_REVISION = "engine-run/c2-1"
+HOST = "python"
+CATEGORY_LABELS = {"A": "closing_reply_unclear", "B": "followup_wording"}  # SMAP catalogue vocabulary
+# synthetic treated cases behind the lab: label -> (cases, recurring cases). Same shape as ed0's package (A larger).
+LAB_SHAPE = {"closing_reply_unclear": (40, 22), "followup_wording": (25, 12)}
+LAB_SALT = b"thread01-synthetic-salt"
+FAMILY_ID = "e0_recurring_copilot_query_cases"
+LAB_TOOL = "pulso/lab_query@1.0.0"
+INVOKE_TIMEOUT_S = 1800.0  # CLT0: live DEMO-0 Core invoke timeout
+HOLD_S = 55.0
+RESPONDERS = {"scout": "responder-scout", "verifier": "responder-verifier", "builder_design": "responder-builder"}
+SYSTEMS = {
+    "scout": "You are the scout. Query the treated lab, then answer with hypotheses that cite evidence refs.",
+    "verifier": "You are the verifier. Check each hypothesis against the treated lab and assess it.",
+    "builder_design": "You are the builder. Choose among the offered candidates or do nothing; cite evidence refs.",
+}
+
+
+_STR = {"type": "string"}
+OUTPUT_SCHEMAS = {  # the final-answer shape a responder must produce (it sees only the request)
+    "scout": {"type": "object", "required": ["hypotheses"], "properties": {"hypotheses": {
+        "type": "array", "items": {"type": "object", "required": ["hypothesis_id", "evidence_ref", "rate", "count"],
+                                   "properties": {"hypothesis_id": _STR, "evidence_ref": _STR,
+                                                  "rate": {"type": "number"}, "count": {"type": "integer"}}}}}},
+    "verifier": {"type": "object", "required": ["assessments"], "properties": {"assessments": {
+        "type": "array", "items": {"type": "object", "required": ["hypothesis_id", "evidence_ref", "verdict"],
+                                   "properties": {"hypothesis_id": _STR, "evidence_ref": _STR,
+                                                  "verdict": {"type": "string", "enum": ["supported", "unsupported"]}}}}}},
+    "builder_design": {"type": "object", "required": ["design_intent", "evidence_refs", "alternatives"], "properties": {
+        "design_intent": {"type": "object", "required": ["verdict"], "properties": {
+            "verdict": {"type": "string", "enum": ["linked", "unlinked", "do_nothing", "not_evaluable"]},
+            "target_ref": {"type": "string", "description": "one offered candidate target_ref, only if linked"}}},
+        "evidence_refs": {"type": "array", "items": _STR},
+        "alternatives": {"type": "array", "items": {"type": "object", "properties": {
+            "kind": {"type": "string", "enum": ["do_nothing"]}}}}}},
+}
+
+
+def _ensure_paths() -> None:
+    for rel in ("roleplay-llm", "core-bridge/src", "platform-sim", "platform-contract"):
+        p = str(ROOT / rel)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
+
+@dataclass
+class CoreHooks:
+    """INT0 swap-in points. Each is optional; None keeps the in-process double and its stand-in label.
+
+    dry_run(operations) -> "sha256:<64 hex>"        step 5: the real Core dry-run digest of the compiled plan
+    run_arms(ctx) -> {"base": runs, "candidate": runs} | None
+                                                    step 6: ArmReport runs of the real Core arms (None keeps the
+                                                    stand-in runs); the verdict stays the stand-in GSIpy one
+    approve(ctx) -> {"approver", "decision", "candidate_hash", "tamper_refused", "replay_refused"}
+                                                    step 8: Core verified a human-issuer JWS bound to the frozen draft
+    publish(ctx) -> {"release_id", "alias"}         step 9: publish to local staging on the real Core
+    alias_read(ctx, alias) -> {"release_id", "alias"}  step 9: read the alias back from the real Core
+    doubles: ports (dicts port/provenance) the hooks' stack still serves with labelled doubles (control-api, bank)
+    """
+    dry_run: Callable | None = None
+    run_arms: Callable | None = None
+    approve: Callable | None = None
+    publish: Callable | None = None
+    alias_read: Callable | None = None
+    doubles: list = field(default_factory=list)
+    blocked: dict = field(default_factory=dict)  # step number -> dependency that blocks the real hook (reported, never hidden)
+
+
+@dataclass
+class ThreadConfig:
+    workdir: Path
+    exe: str
+    queue_dir: Path
+    mode: str = "replay"  # "replay" (shim replay_only) | "record" (scripted responder writes the queue) | "live"
+    # live: real HTTP to the shim on the host; an EXTERNAL lane (fresh-context subagents) writes responses/ in queue_dir
+    live_hold_s: float = HOLD_S  # shim hold per call; a 504 responder_timeout is retried (the late answer serves it)
+    live_max_waits: int = 200
+    hooks: CoreHooks = field(default_factory=CoreHooks)
+    gate_evaluators: dict | None = None
+    # Explicit human OVERRIDE of a gate that did not pass: {"by": "human", "actor": <who>, "reason": <why>}. Without it
+    # steps 8 and 9 are blocked(gate) after a failed gate; with it they run and the report labels the override.
+    human_override: dict | None = None
+    # E0 window: a local E0 package read at runtime (never copied); the lab is fed by the pyarrow feeder with an
+    # ephemeral salt, and the ending is honest `unlinked` when no catalogue entry matches exactly.
+    e0_path: str | None = None
+    e0_arranque: int = 200
+    e0_min_support: int = 20
+    # ED0b original window (`--source original`): the original bank CSV dataset, its own data class and namespace
+    # (`original` / `original-treated`), never mixed with generated_sample or E0. original_map names
+    # {table, case_col, group_col}; nothing is inferred. The ending is honest `unlinked` (no catalogue entry).
+    original_path: str | None = None
+    original_map: dict | None = None
+    # E3b: "python" (default) runs the Python reference steps; "rust" runs steps 2 (sensor), the verifier recompute (3),
+    # the validation (4), compile (5) and gate (6) through the Rust step stand-ins (steps_cli) behind the step schema.
+    steps_mode: str = "python"
+    steps_exe: str | None = None  # steps_cli binary (env STEPS_CLI_EXE on the command line)
+
+    def __post_init__(self):
+        if self.steps_mode not in ("python", "rust"):
+            raise ValueError("steps_mode must be python or rust")
+        if self.e0_path and self.original_path:
+            raise ValueError("e0_path and original_path are mutually exclusive data classes")
+
+    @property
+    def treated(self) -> bool:
+        return bool(self.e0_path or self.original_path)
+
+
+@dataclass
+class Ctx:
+    cfg: ThreadConfig
+    sha: str
+    out: dict[str, Any] = field(default_factory=dict)  # per-step outputs consumed by later steps
+
+
+def _sha() -> str:
+    try:
+        s = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    except OSError:
+        s = ""
+    return s if len(s) == 40 else "0" * 40
+
+
+# ---- step 1 ----------------------------------------------------------------------------------------------------
+def step_01(ctx: Ctx) -> dict:
+    if ctx.cfg.original_path:
+        ctx.out["package"] = str(ctx.cfg.original_path)
+        return {"status": "stand-in", "data_class": "generated_sample", "receipt": {"provider": "local"},
+                "detail": {"trigger": "manual_command", "package": "original CSV dataset (read at runtime, not copied)"}}
+    if ctx.cfg.e0_path:
+        ctx.out["package"] = str(ctx.cfg.e0_path)
+        return {"status": "stand-in", "data_class": "generated_sample", "receipt": {"provider": "local"},
+                "detail": {"trigger": "manual_command", "package": "local E0 sample (read at runtime, not copied)"}}
+    pkg = ctx.cfg.workdir / "e0_package"
+    ed0.write_synthetic_e0(str(pkg), CATEGORY_LABELS)
+    ctx.out["package"] = str(pkg)
+    return {"status": "stand-in", "data_class": "generated_sample", "receipt": {"provider": "local"},
+            "detail": {"trigger": "manual_command", "package": "synthetic E0-shaped (workdir, untracked)"}}
+
+
+def _rust(ctx: Ctx) -> "sh.StepsHost | None":
+    """The Rust steps host when `--steps rust`, else None (the Python reference steps run)."""
+    if ctx.cfg.steps_mode != "rust":
+        return None
+    return sh.StepsHost(ctx.cfg.steps_exe, runner_exe=ctx.cfg.exe)
+
+
+def _fallback(ctx: Ctx, why: str) -> dict:
+    """In rust mode a step the Rust stand-in cannot serve stays Python: say so on the step (never silent)."""
+    return {"steps_fallback": f"python({why})"} if ctx.cfg.steps_mode == "rust" else {}
+
+
+def _exe_sha(host: "sh.StepsHost") -> str:
+    """sha256 of the steps_cli binary that actually ran (a stale binary is visible in the report)."""
+    import hashlib
+    return hashlib.sha256(Path(host.cli_exe).read_bytes()).hexdigest()
+
+
+def _rust_rec(label: str, host: "sh.StepsHost") -> dict:
+    """Common labels of a step that ran through the Rust stand-in: real-narrow, host=python (via _finish), semantics."""
+    return {"status": "real-narrow", "receipt": {"provider": "claude-standin"}, "semantics": "claude-standin",
+            "steps_label": label, "steps_exe_sha256": _exe_sha(host)}
+
+
+# ---- step 2 ----------------------------------------------------------------------------------------------------
+def step_02(ctx: Ctx) -> dict:
+    if ctx.cfg.original_path:  # the Rust sensor reads the E0 parquet shape; no honest original-CSV mapping exists
+        return {"status": "not_exercised", "data_class": "generated_sample",
+                "detail": {"reason": "sensor_not_mapped_to_original_csv"}}
+    if not (ctx.cfg.exe and os.path.exists(ctx.cfg.exe)):
+        return {"status": "blocked(sensor-exe)", "data_class": "generated_sample", "detail": {}}
+    kw = {"arranque": ctx.cfg.e0_arranque, "min_support": ctx.cfg.e0_min_support} if ctx.cfg.e0_path else {}
+    host = _rust(ctx)
+    if host:
+        det, label = host.detect(ctx.out["package"], kw.get("arranque", 30), kw.get("min_support", 5))
+        ctx.out["detection"] = det
+        return {**_rust_rec(label, host), "data_class": "generated_sample",
+                "detail": {k: det[k] for k in ("producer", "admitted_family", "winner_support", "denominator",
+                                               "discards", "holdout_status")}}
+    det = ed0.detect(ctx.cfg.exe, ctx.out["package"], str(ctx.cfg.workdir / "sensor_out"), **kw)
+    ctx.out["detection"] = det
+    return {"status": "real-narrow", "data_class": "generated_sample", "receipt": {"provider": "local"},
+            "detail": {k: det[k] for k in ("producer", "admitted_family", "winner_support", "denominator",
+                                           "discards", "holdout_status")}}
+
+
+# ---- the model path: agent_roleplay through the shim (replay) ---------------------------------------------------
+def _lab_cases():
+    i = 0
+    for label, (n, hits) in LAB_SHAPE.items():
+        for j in range(n):
+            i += 1
+            yield (f"private-case-{i}", label, "w1", j < hits)
+
+
+def _lab_tool(db, args: dict) -> dict:
+    return lab.lab_query(db, args["metric_id"], args["window_id"])
+
+
+def scripted_responder(stage: str, inputs: dict) -> dict:
+    """The role-played answer (deterministic). It sees only the treated, scanner-passed request, like a real responder."""
+    if stage in ("scout", "verifier") and inputs["step"] == 1:
+        return {"kind": "tool_call", "tool": LAB_TOOL, "args": {"metric_id": lab.METRIC, "window_id": "w1"}}
+    if stage == "scout":
+        rows = inputs["observations"][-1]["result"]["rows"]
+        best = max(rows, key=lambda r: (r["rate"], r["evidence_ref"]))
+        return {"kind": "final", "output": {"hypotheses": [
+            {"hypothesis_id": "h_1", "evidence_ref": best["evidence_ref"], "rate": best["rate"], "count": best["count"]}]}}
+    if stage == "verifier":
+        return {"kind": "final", "output": {"assessments": [
+            {"hypothesis_id": h["hypothesis_id"], "evidence_ref": h["evidence_ref"], "verdict": "supported"}
+            for h in inputs["inputs"]["hypotheses"]]}}
+    if stage == "builder_design":
+        cands = inputs["inputs"]["candidates"]
+        if not cands:
+            return {"kind": "final", "output": {"design_intent": {"verdict": "unlinked"},
+                                                "evidence_refs": inputs["inputs"]["evidence_refs"],
+                                                "alternatives": [{"kind": "do_nothing"}]}}
+        return {"kind": "final", "output": {"design_intent": {"verdict": "linked", "target_ref": cands[0]["target_ref"]},
+                                            "evidence_refs": inputs["inputs"]["evidence_refs"],
+                                            "alternatives": [{"kind": "do_nothing"}]}}
+    raise ValueError(f"no scripted answer for {stage}")
+
+
+class LLMDouble:
+    """Chat-completions caller over the roleplay shim. replay: shim.replay_only on a copy of the recorded queue.
+    record: the scripted responder writes the answer file first (what a live responder lane does), then the shim serves it."""
+
+    def __init__(self, cfg: ThreadConfig):
+        _ensure_paths()
+        from roleplay_llm import shim as S
+        self.S, self.mode = S, cfg.mode
+        if cfg.mode == "replay":
+            self.queue = cfg.workdir / "queue"
+            if self.queue.exists():
+                shutil.rmtree(self.queue)
+            shutil.copytree(cfg.queue_dir, self.queue)
+            self.shim = S.Shim(self.queue, replay_only=True)
+        elif cfg.mode == "live":
+            self.queue = Path(cfg.queue_dir)
+            self.shim = S.Shim(self.queue, hold_s=cfg.live_hold_s, poll_s=0.05)
+            self.server = S.serve(self.shim, port=0)  # real HTTP on the host, loopback only
+            self.port = self.server.server_address[1]
+            threading.Thread(target=self.server.serve_forever, daemon=True).start()
+            self.max_waits = cfg.live_max_waits
+        else:
+            self.queue = Path(cfg.queue_dir)
+            self.shim = S.Shim(self.queue, hold_s=1.0, poll_s=0.02)
+        self.calls = 0
+        self.misses = 0
+        self.scanner_ids: set[str] = set()
+        self.responders: dict[str, str] = {}  # stage -> responder id of the last answer (live)
+        self.stats = {"responder_calls": 0, "timeouts": 0, "scanner_rejections": 0, "rejected_responses": 0,
+                      "reasks": 0}
+        self.t0 = time.monotonic()
+
+    def close(self) -> None:
+        if self.mode == "live":
+            self.server.shutdown()
+            self.server.server_close()
+
+    def _post(self, body: bytes) -> tuple[int, dict]:
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=body, method="POST",
+                                     headers={"Content-Type": "application/json", "Authorization": "Bearer dummy"})
+        try:
+            with urllib.request.urlopen(req, timeout=self.shim.hold_s + 30) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    def _live_call(self, stage: str, body: bytes) -> tuple[int, dict]:
+        """Real HTTP; a 504 responder_timeout is retried (a late answer serves it); an invalid answer is re-asked ONCE."""
+        reasked = False
+        for _ in range(self.max_waits):
+            status, resp = self._post(body)
+            etype = resp.get("error", {}).get("type")
+            if status == 504 and etype == "responder_timeout":
+                self.stats["timeouts"] += 1
+                continue
+            if status == 502 and etype == "invalid_output":
+                self.stats["rejected_responses"] += 1
+                if reasked:
+                    return status, resp
+                reasked = True
+                self.stats["reasks"] += 1
+                continue
+            if status == 422:
+                self.stats["scanner_rejections"] += 1
+            return status, resp
+        return 504, {"error": {"type": "responder_timeout", "message": "wait budget exhausted"}}
+
+    def step(self, stage: str, inputs: dict) -> dict:
+        system = SYSTEMS[stage]
+        if self.mode == "record":
+            key = self.S.replay_key(system, inputs)
+            doc = {"protocol": self.S.PROTOCOL, "key": key, "provenance": "agent_roleplay",
+                   "quality_claims": "forbidden", "responder": {"id": RESPONDERS[stage], "role": stage},
+                   "content": scripted_responder(stage, inputs)}
+            path = self.queue / "responses" / f"{key}.json"
+            path.write_text(json.dumps(doc, indent=1, sort_keys=True), encoding="utf-8", newline="\n")
+        body = json.dumps({"model": "external-reasoning-model", "temperature": 0, "max_tokens": 4000,
+                           "messages": [{"role": "system", "content": system},
+                                        {"role": "user", "content": json.dumps(inputs, sort_keys=True,
+                                                                               separators=(",", ":"))}]}).encode()
+        status, resp = self._live_call(stage, body) if self.mode == "live" else self.shim.handle(body)
+        self.calls += 1
+        if status != 200:
+            self.misses += 1
+            raise RuntimeError(f"{stage}: shim answered {status} {resp.get('error', {}).get('type')}")
+        self.scanner_ids.add("tps-1")
+        if self.mode == "live":
+            self.stats["responder_calls"] += 1
+            rid = ((resp.get("x_roleplay") or {}).get("responder") or {}).get("id")
+            if isinstance(rid, str) and rid:
+                self.responders[stage] = rid
+        return json.loads(resp["choices"][0]["message"]["content"])
+
+
+def agent_loop(llm: LLMDouble, stage: str, goal: str, inputs: dict, db: str, cap: int) -> tuple[dict, int]:
+    """One agent stage: tool calls executed against the treated lab until `final`, at most `cap` calls (M3 STEP_CAPS)."""
+    tools = [{"tool": LAB_TOOL, "description": "Query treated k-anonymous aggregates.",
+              "args_schema": {"type": "object", "required": ["metric_id", "window_id"], "properties": {
+                  "metric_id": {"type": "string", "enum": [lab.METRIC]},
+                  "window_id": {"type": "string", "enum": ["w1"]}}}}]
+    obs: list[dict] = []
+    for step in range(1, cap + 1):
+        out = llm.step(stage, {"goal": goal, "inputs": inputs, "step": step, "tools": tools, "observations": obs,
+                               "feedback": None, "output_schema": OUTPUT_SCHEMAS[stage]})
+        if out["kind"] == "final":
+            return out["output"], step
+        if out["kind"] != "tool_call" or out["tool"] != LAB_TOOL:
+            raise RuntimeError(f"{stage}: tool outside the stage allow-list: {out.get('tool')}")
+        obs.append({"tool": out["tool"], "args": out["args"], "status": "ok",
+                    "result": _lab_tool(db, out["args"]), "error": None})
+    raise RuntimeError(f"{stage}: exceeded the {cap}-call cap without a final answer")
+
+
+def _m3() -> dict:
+    """M3 stage policy and timeout plan evaluated on the registry profile the Flows reference."""
+    _ensure_paths()
+    from pulso_core_runtime.stages import policy as P
+    from pulso_core_runtime.stages.catalog import STEP_CAPS
+    from pulso_core_runtime.stages.timeouts import timeout_plan
+    prof = P.load_registry_profile(ROOT / "agent-core-assets" / "worlds" / "pulso-evolution" / "model_profiles"
+                                   / "pulso-evolution-structured@1.0.0.yaml")
+    pol = P.evolution_policy(prof)
+    plan = timeout_plan(profile_timeout_s=prof.timeout_s, invoke_timeout_s=INVOKE_TIMEOUT_S, hold_s=HOLD_S)
+    return {"caps": dict(STEP_CAPS), "timeout_problems": list(plan.problems), "worst_case_s": plan.worst_case_s,
+            "pin_problems": [p for p in (pol.check(s, prof) for s in STEP_CAPS) if p]}
+
+
+def _llm(ctx: Ctx) -> LLMDouble:
+    if "llm" not in ctx.out:
+        ctx.out["llm"] = LLMDouble(ctx.cfg)
+        if ctx.cfg.original_path:
+            ctx.out["salt"] = feed.lab_salt()
+            cases = original.feed(ctx.cfg.original_path, ctx.out["salt"], **(ctx.cfg.original_map or {}))
+        elif ctx.cfg.e0_path:
+            ctx.out["salt"] = feed.lab_salt()  # ephemeral (or env), never stored
+            cases = feed.feed(ctx.cfg.e0_path, ctx.out["salt"])
+        else:
+            ctx.out["salt"], cases = LAB_SALT, _lab_cases()
+        ctx.out["lab_db"] = lab.build_lab(ctx.cfg.workdir / "lab.sqlite", cases, ctx.out["salt"],
+                                      min_cell=lab.K if ctx.cfg.treated else 0)
+        ctx.out["m3"] = _m3()
+    return ctx.out["llm"]
+
+
+def _role(stage: str, responder: str | None = None, **extra) -> dict:
+    return {"status": "agent_roleplay", "data_class": "generated_sample", "actor": f"pulso-{stage}",
+            "model": f"agent_roleplay:{responder or RESPONDERS[stage]}", "stage_output": {"source": "model"},
+            "receipt": {"provider": "agent_roleplay", "scanner_id": "tps-1"}, **extra}
+
+
+def step_03(ctx: Ctx) -> list[dict]:
+    llm, db, caps = _llm(ctx), ctx.out["lab_db"], ctx.out["m3"]["caps"]
+    llm.shim.registry.allow({FAMILY_ID, "binding-scout-0001", "binding-verifier-0001"})  # the stage's own literals
+    out, calls = agent_loop(llm, "scout", "Find the largest recurrence in the treated lab.",
+                            {"family_id": FAMILY_ID, "binding_id": "binding-scout-0001"}, db, caps["scout"])
+    hyps = out["hypotheses"]
+    scout = _role("scout", llm.responders.get("scout"), detail={"calls": calls, "hypotheses": len(hyps)})
+    # model-authored hypothesis ids are echoed back only in a strict machine shape (anything else is rejected by the TPS)
+    llm.shim.registry.allow({h["hypothesis_id"] for h in hyps if re.fullmatch(r"h_[a-z0-9_]{1,40}", str(h.get("hypothesis_id")))})
+    v_out, v_calls = agent_loop(llm, "verifier", "Verify the hypotheses against the treated lab.",
+                                {"family_id": FAMILY_ID, "binding_id": "binding-verifier-0001", "hypotheses": hyps},
+                                db, caps["verifier"])
+    # the verifier's verdict is only accepted if the independent ED0L recompute agrees (never from model prose)
+    host = _rust(ctx)
+    if host:  # the verifier recompute runs through the Rust recompute step (ED0L keeps the row integrity checks)
+        recompute = host.recompute_claims(db, hyps, ctx.out["salt"], ctx.cfg.workdir / "steps")
+        ctx.out["recompute_outputs"] = [r["step_output"] for r in recompute.values() if "step_output" in r]
+    else:
+        recompute = {h["hypothesis_id"]: lab.verify_claim(db, h, ctx.out["salt"]) for h in hyps}
+    supported = [a["evidence_ref"] for a in v_out["assessments"] if a["verdict"] == "supported"
+                 and recompute[a["hypothesis_id"]]["ok"]]
+    ctx.out["verified_refs"] = supported
+    ctx.out["hypotheses"] = hyps
+    ver = _role("verifier", llm.responders.get("verifier"), id="verifier", detail={"calls": v_calls, "recompute_ok": bool(supported) and all(
+        r["ok"] for r in recompute.values()), "supported_refs": supported})
+    ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls}
+    recs = [{**scout, "id": "scout"}, ver]
+    if host:
+        labels = sorted({r["label"] for r in recompute.values() if r.get("label")})
+        if not labels:
+            raise RuntimeError("rust recompute produced no result for any claim")
+        recs.append({**_rust_rec(labels[0], host), "id": "recompute", "data_class": "generated_sample",
+                     "detail": {"claims": len(hyps), "matched": sum(1 for r in recompute.values() if r["ok"]),
+                                "recomputed": {k: r["recomputed"] for k, r in recompute.items()}}})
+    return recs
+
+
+def _enc(ref: str) -> str:
+    """Scanner-safe boundary encoding of a catalogue ref ('@' is not an opaque-id character)."""
+    return ref.replace("@", "__at__")
+
+
+def _dec(ref: str) -> str:
+    return ref.replace("__at__", "@")
+
+
+def _label_refs() -> dict[str, str]:
+    return {label: lab._ref(lab.METRIC, "w1", lab.group_hash(LAB_SALT, lab.GROUP_FIELD, label)) for label in LAB_SHAPE}
+
+
+def step_04(ctx: Ctx) -> dict:
+    llm, db, caps = _llm(ctx), ctx.out["lab_db"], ctx.out["m3"]["caps"]
+    world = cmp.load_world(WORLD_FILE)
+    catalogue = smap.catalogue_from_world(world)
+    if ctx.cfg.treated:  # categories are the lab's hashed groups: no raw label exists outside the feeder's memory
+        groups = lab.lab_groups(db)
+        refs = {g: v["evidence_ref"] for g, v in groups.items()}
+    else:
+        refs = _label_refs()
+    by_ref = {v: k for k, v in refs.items()}
+    verified = ctx.out["verified_refs"]
+    if not verified:
+        raise RuntimeError("no verified hypothesis: the builder does not run on unverified evidence")
+    validation = None
+    host = _rust(ctx)
+    if host:  # the validation step (Rust `intent`) must corroborate every recompute before the builder runs
+        rows = host.validate_recompute(ctx.out["recompute_outputs"], ctx.cfg.workdir / "steps", "pulso-scout",
+                                       "pulso-verifier")
+        if not rows or any(v != "corroborated" for _s, v, _l in rows):
+            raise RuntimeError(f"validation did not corroborate the recompute: {[v for _s, v, _l in rows]}")
+        validation = {**_rust_rec(rows[0][2], host), "id": "validation", "data_class": "generated_sample",
+                      "detail": {"verdicts": {s_: v for s_, v, _l in rows}}}
+    categories = {label: lab._fetch(db, ref)[4] for label, ref in refs.items()}  # label -> support (lab numerator)
+    finding = {"finding_ref": "finding_1", "category": by_ref[verified[0]], "evidence_refs": sorted(verified)}
+    ctx.out.update(world=world, catalogue=catalogue, finding=finding, categories=categories, mapper=smap.winning_category)
+    if not ctx.cfg.treated and ctx.out["detection"]["winner_support"] != categories[smap.winning_category(categories)]:
+        raise RuntimeError("lab categories disagree with the sensor's winner support")
+    di = smap.design_input(finding, catalogue)
+    inputs = {"binding_id": "binding-builder-0001", "finding_ref": di["finding_ref"], "category": di["category"],
+              "evidence_refs": di["evidence_refs"],
+              "candidates": [{"target_ref": _enc(c["target_ref"]), "op": c["op"]} for c in di["candidates"]]}
+    # exactly the tokens this stage derives from its own catalogue and finding: nothing else is expected
+    llm.shim.registry.allow({inputs["binding_id"], inputs["finding_ref"], inputs["category"],
+                             *(c["target_ref"] for c in inputs["candidates"]), *(c["op"] for c in inputs["candidates"])})
+    out, calls = agent_loop(llm, "builder_design", "Design one change for the finding, or do nothing.", inputs, db,
+                            caps["builder_design"])
+    di_out = dict(out["design_intent"])
+    if di_out.get("target_ref"):
+        di_out["target_ref"] = _dec(di_out["target_ref"])
+    res = smap.classify({"design_intent": di_out, "evidence_refs": out["evidence_refs"]}, finding, catalogue, world)
+    ctx.out["design"] = res
+    ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls}
+    opp = _role("builder_design", llm.responders.get("builder_design"), id="opportunity", detail={
+        "calls": calls, "smap": res, "category": finding["category"],
+        "do_nothing_considered": any(a.get("kind") == "do_nothing" for a in out.get("alternatives", []))})
+    return [opp, validation] if validation else opp
+
+
+SUITE_SEALED_AT = "2026-10-04T12:00:00Z"  # the suite (world slot) is sealed before any candidate exists
+CANDIDATE_CREATED_AT = "2026-10-04T12:00:10Z"
+
+
+def step_05(ctx: Ctx) -> dict:
+    world, catalogue, design = ctx.out["world"], ctx.out["catalogue"], ctx.out["design"]
+    if design["verdict"] != "valid" or not design["target"]:
+        raise RuntimeError(f"no compilable design: {design['verdict']}")
+    entries = {e["target_ref"]: e for e in catalogue["entries"]}
+    suite = next(e for e in catalogue["entries"] if e["target_kind"] == "eval_suite")
+    ops = [{"op": e["op"], "target_kind": e["target_kind"], "target_ref": e["target_ref"], "new_ref": e["new_ref"],
+            "precondition_digest": cmp.asset_digest(world, e["target_ref"])} for e in (entries[design["target"]], suite)]
+    doc = {"contract_version": "engine-steps/0", "step": "compile", "run_id": "run-thread01-0001",
+           "data_class": "synthetic", "base_bundle_ref": cmp.bundle_ref(world),
+           "change_spec": {"base_bundle_ref": cmp.bundle_ref(world), "opportunity_ref": "opportunity:thread01@1",
+                           "workflow_bridge_ref": cmp.bridge_ref(world), "operations": ops,
+                           "expected_mechanism": "recorded synthetic",
+                           "affected_routes": [world["replaceable_prompt"]["used_by"]["flow"]],
+                           "rollback_ref": cmp.bundle_ref(world)}}
+    hook = ctx.cfg.hooks.dry_run
+    host = None if hook else _rust(ctx)  # a Core dry-run digest hook keeps the Python compile (Rust has no hook)
+    if host:
+        out, label = host.compile(doc)
+    else:
+        out = cmp.compile_change_spec(doc, world, dry_run=hook)
+    if out["status"] != "compiled":
+        raise RuntimeError(f"compile denied: {out.get('denied_reason')}")
+    ctx.out["compiled"] = out
+    ctx.out["candidate_created_at"] = CANDIDATE_CREATED_AT
+    rec = {"status": "real-narrow" if hook else "stand-in", "data_class": "synthetic",
+           "receipt": {"provider": "core-dry-run" if hook else "claude-standin"},
+           "detail": {"compiler_label": out["compiler_label"], "draft_plan": out["draft_plan"],
+                      "diff": [{"target": o["target_ref"], "to": o["new_ref"]} for o in out["draft_plan"]["operations"]]}}
+    return {**rec, **_rust_rec(label, host)} if host else {**rec, **_fallback(ctx, "core dry-run hook")}
+
+
+def _run(case: str, status: str = "completed") -> dict:
+    return {"arm": "x", "case_ref": case, "status": status, "closed_early": False, "cost_known": True,
+            "oracle_ref": "oracle:handwritten@1", "final_state_ref": "state:s@1", "effect_receipts": [], "reason": None}
+
+
+def _standin_arms() -> dict:
+    """Stand-in ArmReport runs (assets_handwritten suite): the base fails two cases, the candidate completes all."""
+    cases = ["c1", "c2", "c3", "c4"]
+    return {"base": [_run(c, "failed" if c in ("c1", "c2") else "completed") for c in cases],
+            "candidate": [_run(c) for c in cases]}
+
+
+JUDGE = "claude-gsipy"
+
+
+def step_06(ctx: Ctx) -> dict:
+    world, hook = ctx.out["world"], ctx.cfg.hooks.run_arms
+    core_arms = hook(ctx) if hook else None
+    arms, arms_from = (core_arms, "core") if core_arms else (_standin_arms(), "stand-in")
+    reports = {"arm_report:base@1": {"runs": arms["base"]}, "arm_report:cand@1": {"runs": arms["candidate"]}}
+    slot = cmp._slots(world)["eval_suite"]
+    doc = {"contract_version": "engine-steps/0", "step": "gate", "run_id": "run-thread01-0001", "data_class": "synthetic",
+           "base_arm_report_ref": "arm_report:base@1", "candidate_arm_report_ref": "arm_report:cand@1",
+           "suite_ref": f"eval_suite:{slot['name']}@{cmp._major(slot['version'])}", "judge_actor": JUDGE, "author_actors": ["claude-wrld0"]}
+    host = None if ctx.cfg.gate_evaluators else _rust(ctx)  # custom G1 evaluators are Python callables: no Rust path
+    if host:
+        out, label = host.gate(doc, reports, {k: world["authors"][k] for k in ("world", "suite")})
+    else:
+        out = gate.gate_verdict(doc, reports, world, evaluators=ctx.cfg.gate_evaluators)
+    ctx.out.update(gate_verdict=out["verdict"], gate=out, arms=arms)
+    rec = {"status": "real-narrow" if core_arms else "stand-in", "data_class": "synthetic", "actor": JUDGE,
+           "receipt": {"provider": "core-arms" if core_arms else "claude-standin"},
+           "detail": {"verdict": out["verdict"], "gates": out["gates"], "judge_actor": out["judge_actor"],
+                      "quality_claims": out["quality_claims"], "arms": arms_from, "verdict_judge": "stand-in",
+                      **({"blocked": ctx.cfg.hooks.blocked[6]} if ctx.cfg.hooks.blocked.get(6) and not core_arms else {})}}
+    if host:
+        rec = {**rec, **_rust_rec(label, host), "receipt": {"provider": "core-arms" if core_arms else "claude-standin"}}
+        rec["detail"] = {**rec["detail"], "verdict_judge": "rust-claude-standin"}
+    else:
+        rec.update(_fallback(ctx, "custom G1 evaluators"))
+    return rec
+
+
+MAX_REVISION_ROUNDS = 1
+
+
+def step_07(ctx: Ctx) -> dict:
+    if ctx.out["gate_verdict"] == "pass":
+        return {"status": "not_exercised", "data_class": "synthetic", "detail": {"reason": "gate passed"}}
+    # gate failed: a rule-driven stand-in revision, bounded; the same arms are re-judged and the loop then stops
+    rounds, final = 0, ctx.out["gate_verdict"]
+    while final != "pass" and rounds < MAX_REVISION_ROUNDS:
+        rounds += 1  # rule: no model, no new candidate; the revision is recorded, not claimed to improve anything
+    return {"status": "stand-in", "data_class": "synthetic", "receipt": {"provider": "claude-standin"},
+            "detail": {"rounds": rounds, "bounded": rounds <= MAX_REVISION_ROUNDS, "final_decision": "do_nothing",
+                       "last_verdict": final}}
+
+
+def _denied(fn) -> bool:
+    from codex_standin import jwtsvc as J
+    try:
+        fn()
+    except J.Denied:
+        return True
+    return False
+
+
+def _gate_blocks(ctx: Ctx) -> dict | None:
+    """After a gate that did not pass, approval and publish run only under an explicit labelled human override."""
+    verdict = ctx.out.get("gate_verdict")
+    if verdict == "pass":
+        return None
+    ov = ctx.cfg.human_override or {}
+    ok = (ov.get("by") == "human" and isinstance(ov.get("actor"), str) and ov["actor"].strip()
+          and isinstance(ov.get("reason"), str) and ov["reason"].strip())
+    if not ok:
+        return {"gate_verdict": verdict, "reason": "gate_not_passed_and_no_human_override"}
+    ctx.out["override"] = {"step": "approval", "of": "gate", "verdict": verdict, "by": "human", "label": "human_override",
+                           "reason": ov["reason"].strip(), "actor": ov["actor"].strip(),
+                           "simulated": True}  # DEMO-0: the "human" is a config value written by the run's author
+    return None
+
+
+def step_08(ctx: Ctx) -> dict:
+    blocked = _gate_blocks(ctx)
+    if blocked:
+        return {"status": "blocked(gate)", "data_class": "synthetic", "detail": blocked}
+    res = _step_08(ctx)
+    if ctx.out.get("override") and res.get("status") != "red":
+        res["detail"] = {**res["detail"], "override": ctx.out["override"]}
+    return res
+
+
+def _step_08(ctx: Ctx) -> dict:
+    """Human only for authority: a SIMULATED local issuer signs an approval bound to the compiled draft digest.
+    Replay verifies it with the local A03 Verifier; on the real Core the same JWS is verified by Core (INT0)."""
+    src = str(ROOT / "e2e-core" / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from codex_standin import jwtsvc as J
+    digest = ctx.out["compiled"]["draft_plan"]["digest"]
+    if ctx.cfg.hooks.approve:
+        return _step_08_core(ctx, digest)
+    key = J.private_from_seed(J.b64u(b"thread01-issuer-seed-32-bytes!!!!"[:32]))
+    ring = J.KeyRing({"sim-issuer-1": ("sim-human-issuer", "pulso-core", J.public_of(key))})
+    now = 1_800_000_000
+    ver = J.Verifier(ring, now=lambda: now)
+    claims = {"iss": "sim-human-issuer", "aud": "pulso-core", "exp": now + 300, "jti": "approval-0001",
+              "scope": "approve", "purpose": f"publish:{digest}", "tenant_id": "pulso_local", "sub": "simulated-approver"}
+    token = J.sign(key, "sim-issuer-1", claims)
+    ok = ver.verify(token, aud="pulso-core", scope="approve", purpose=f"publish:{digest}")
+    try:  # the same approval must not authorise a different plan
+        ver.verify(J.sign(key, "sim-issuer-1", {**claims, "jti": "approval-0002"}), aud="pulso-core", scope="approve",
+                   purpose="publish:sha256:" + "0" * 64)
+        tampered = False
+    except J.Denied:
+        tampered = True
+    h, pl, sg = token.split(".")
+    bad_payload = h + "." + J.b64u(json.dumps({**claims, "purpose": "publish:sha256:" + "0" * 64, "scope": "approve"},
+                                              sort_keys=True, separators=(",", ":")).encode()) + "." + sg
+    payload_rej = _denied(lambda: ver.verify(bad_payload, aud="pulso-core", scope="approve", purpose="publish:sha256:" + "0" * 64))
+    expired = J.sign(key, "sim-issuer-1", {**claims, "jti": "approval-0003", "exp": now - 1})
+    expired_rej = _denied(lambda: ver.verify(expired, aud="pulso-core", scope="approve", purpose=f"publish:{digest}"))
+    ctx.out["approval"] = {"jti": ok["jti"], "digest": digest}
+    return {"status": "simulated", "data_class": "synthetic", "receipt": {"provider": "simulated-issuer"},
+            "detail": {"bound_to_digest": digest, "tampered_rejected": tampered, "payload_tamper_rejected": payload_rej,
+                       "expired_rejected": expired_rej, "verified_by": "local-stand-in-verifier",
+                       "issuer": "simulated", **_blocked(ctx, 8)}}
+
+
+def _blocked(ctx: Ctx, n: int) -> dict:
+    b = ctx.cfg.hooks.blocked.get(n)
+    return {"blocked": b} if b else {}
+
+
+def _step_08_core(ctx: Ctx, digest: str) -> dict:
+    """The real local human issuer signed the JWS; the REAL Core verified it (approve accepted, tampered hash and replay
+    refused). The hook must prove all three and the approval must be about THIS thread's draft digest."""
+    res = ctx.cfg.hooks.approve(ctx)
+    if res.get("candidate_hash") != digest.split(":", 1)[1] or res.get("decision") != "approved":
+        raise RuntimeError("core approval is not about the compiled draft digest")
+    if res.get("tamper_refused") is not True or res.get("replay_refused") is not True:
+        raise RuntimeError("core approval did not prove tamper and replay refusal")
+    ctx.out["approval"] = {"jti": "core-verified", "digest": digest}
+    return {"status": "real-narrow", "data_class": "synthetic", "receipt": {"provider": "local-human-issuer"},
+            "detail": {"bound_to_digest": digest, "tampered_rejected": True, "replay_rejected": True,
+                       "verified_by": "core", "issuer": "local-human-issuer", "approver": res.get("approver"),
+                       "decision": res["decision"]}}
+
+
+class RegistryDouble:
+    """In-process stand-in for the Core registry writer and alias table (INT0 replaces it through CoreHooks)."""
+
+    def __init__(self):
+        self.aliases: dict[str, str] = {}
+
+    def publish(self, ctx: "Ctx") -> dict:
+        digest = ctx.out["approval"]["digest"]  # only an approved digest can be published
+        rid = "rel-" + digest.split(":")[1][:12]
+        self.aliases["staging"] = rid
+        return {"release_id": rid, "alias": "staging"}
+
+    def alias_read(self, ctx: "Ctx", alias: str) -> dict:
+        return {"release_id": self.aliases[alias], "alias": alias}
+
+
+def step_09(ctx: Ctx) -> dict:
+    if ctx.out.get("gate_verdict") != "pass" and not ctx.out.get("override"):
+        return {"status": "blocked(gate)", "data_class": "synthetic",
+                "detail": {"gate_verdict": ctx.out.get("gate_verdict"), "reason": "gate_not_passed_and_no_human_override"}}
+    if not ctx.out.get("approval"):
+        raise RuntimeError("no approval: nothing to publish")
+    reg, h = RegistryDouble(), ctx.cfg.hooks
+    published = (h.publish or reg.publish)(ctx)
+    ctx.out["published"] = published
+    read = (h.alias_read or (reg.alias_read if not h.publish else None))
+    if read is None:
+        raise RuntimeError("publish hook supplied without an alias_read hook")
+    alias = read(ctx, published["alias"])
+    if alias.get("release_id") != published["release_id"] or alias.get("alias") != published["alias"]:
+        raise RuntimeError("alias read does not show the published release")
+    both = bool(h.publish and h.alias_read)
+    ctx.out["alias_read"] = alias
+    return {"status": "real-narrow" if both else "stand-in", "data_class": "synthetic",
+            "receipt": {"provider": "core-local-staging" if both else "claude-standin"},
+            "detail": {"published": published, "alias_read": alias, "registry": "core" if both else "in-process-double",
+                       **({} if both else _blocked(ctx, 9))}}
+
+
+EFFECT_AUTHOR = "claude-p2py-effects"
+MECHANISM_AUTHOR = "claude-ed0"
+
+
+def step_10(ctx: Ctx) -> dict:
+    """Observation only: platform-sim emits release.* and a simulated effect series. Nothing here feeds a decision,
+    the gate or a revision; memory and successor are not exercised in DEMO-0."""
+    if not ctx.out.get("published"):
+        return {"status": "not_exercised", "data_class": "synthetic", "detail": {"reason": "nothing was published"}}
+    _ensure_paths()
+    from platform_live import PlatformLiveSim
+    from platform_live import effects as fx
+    rid = ctx.out["published"]["release_id"]
+    effect = fx.EffectSpec(effect_id="effect-thread01", author=EFFECT_AUTHOR, metric="first_response_seconds",
+                           baseline=300.0, delta_pct=-20.0, ramp_days=2, noise_sd=0.0, seed=7)
+    planted = fx.PlantedMechanism(mechanism_id="mech-thread01", author=MECHANISM_AUTHOR, kind="recurrence")
+    sim = PlatformLiveSim(seed=1)
+    sim.publish_release(ctx.out["world"]["agent"]["id"], ctx.out["published"]["alias"], rid, effect=effect, mechanism=planted)
+    sim.fast_forward(days=3)
+    series = sim.effect_series(rid)
+    types = sorted({r[0] for r in sim.conn.execute("select event_type from event_log")})
+    labels = sim.observation_labels()
+    ctx.out["effect_author"] = EFFECT_AUTHOR
+    return {"status": "simulated", "data_class": "simulated", "receipt": {"provider": "platform-sim"},
+            "detail": {"observation_only": True, "feeds_decision": False, "event_types": types, "effect_series": series,
+                       "memory": labels["memory"], "successor": labels["successor"],
+                       "release_event": labels["release_event"], "effect": labels["effect"]}}
+
+
+STEPS: list[tuple[int, str, Callable]] = [
+    (1, "trigger", step_01), (2, "signals", step_02), (3, "scout", step_03), (4, "opportunity", step_04),
+    (5, "compile", step_05), (6, "gate", step_06), (7, "revision", step_07), (8, "approval", step_08),
+    (9, "publish", step_09), (10, "observation", step_10),
+]
+
+
+# E0 window: the data really is E0 (steps 1-2 local) or treated aggregates derived from it (3-4, sent to a responder
+# through the TPS scanner). It is never labelled generated_sample: that class is what gw-hosted accepts.
+E0_STEP_CLASS = {1: "E0", 2: "E0", 3: "original-treated", 4: "original-treated"}
+# ED0b: the original dataset has its own class pair. Raw-touching steps are `original`; steps fed treated aggregates
+# are `original-treated`; later (not exercised) steps keep `original` rather than falling back to generated_sample.
+ORIGINAL_STEP_CLASS = {1: "original", 2: "original", 3: "original-treated", 4: "original-treated"}
+
+
+def _finish(n: int, sid: str, rec: dict, ctx: Ctx) -> dict:
+    if ctx.cfg.original_path and rec.get("data_class") == "generated_sample":
+        rec = {**rec, "data_class": ORIGINAL_STEP_CLASS.get(n, "original")}
+    elif ctx.cfg.e0_path and n in E0_STEP_CLASS and rec.get("data_class") == "generated_sample":
+        rec = {**rec, "data_class": E0_STEP_CLASS[n]}
+    return {"n": n, "id": rec.get("id", sid), "target": "local", "sha": ctx.sha,
+            "contract_revision": CONTRACT_REVISION, "host": HOST, **{k: v for k, v in rec.items() if k != "id"}}
+
+
+def _er():
+    import importlib.util
+    if "engine_run" in sys.modules:
+        return sys.modules["engine_run"]
+    spec = importlib.util.spec_from_file_location("engine_run", ROOT / "contracts" / "engine-run" / "engine_run.py")
+    m = importlib.util.module_from_spec(spec)
+    sys.modules["engine_run"] = m
+    spec.loader.exec_module(m)
+    return m
+
+
+def build_report(ctx: Ctx, steps: list[dict]) -> dict:
+    """The final engine-run report (C-2): per-step labels, per-port provenance, authors, engine-generated doubles[]."""
+    keep = ("id", "n", "status", "data_class", "target", "sha", "contract_revision", "host", "receipt", "actor",
+            "model", "stage_output", "semantics", "steps_label", "steps_exe_sha256", "steps_fallback")
+    rep_steps = [{k: s[k] for k in keep if k in s} for s in steps]
+    by = {(s["n"], s["id"]): s for s in steps}
+    st = lambda n: next((s["status"] for s in steps if s["n"] == n), "red")  # noqa: E731
+    world = ctx.out.get("world") or {"authors": {}}
+    h = ctx.cfg.hooks
+    ports = [{"port": "llm_gateway", "provenance": {"live": "roleplay-shim:live", "record": "roleplay-shim:record(scripted-responder)"}.get(ctx.cfg.mode, "roleplay-shim:replay"), "price_source": "placeholder-rate-card"},
+             {"port": "registry", "provenance": "core-local-staging" if (h.publish and h.alias_read) else "in-process-double",
+              "price_source": "n/a"},
+             {"port": "human_issuer", "provenance": "local-human-issuer-double" if h.approve else "simulated-local-issuer",
+              "price_source": "n/a"},
+             {"port": "platform", "provenance": "platform-sim", "price_source": "n/a"},
+             *[{"price_source": "n/a", **d} for d in h.doubles]]
+    report = {"contract_revision": CONTRACT_REVISION, "target": "local", "sha": ctx.sha, "host": HOST, "label": "DEMO-0",
+              "quality_claims": "forbidden", "mode": ctx.cfg.mode,
+              "gate": {"verdict": ctx.out.get("gate_verdict"), "judge": JUDGE},
+              **({"overrides": [ctx.out["override"]]} if ctx.out.get("override") else {}), "steps": rep_steps, "ports": ports,
+              "authors": {"world": world["authors"].get("world"), "suite": world["authors"].get("suite"),
+                          "effect": ctx.out.get("effect_author") or EFFECT_AUTHOR, "judge": JUDGE,
+                          "suite_sealed_at": SUITE_SEALED_AT, "candidate_created_at": ctx.out.get("candidate_created_at")}}
+    # G1 H5: when compile is not exercised (an `unlinked` run) no candidate exists and candidate_created_at is null.
+    observed = {"model": by.get((3, "scout"), {}).get("status", "red"),
+                "jev": "not_exercised(blocked: agent-core PR 28 not on main)",
+                "issuer": st(8), "product": "simulated" if st(9) == "stand-in" else st(9), "host": HOST,
+                "gate": "claude-authored(structural, quality_claims forbidden)", "data_origin": "original-treated-aggregates" if ctx.cfg.original_path else "E0-treated-aggregates" if ctx.cfg.e0_path else "generated_sample"}
+    report["doubles"] = _er().generate_doubles(report, observed)
+    return report
+
+
+def safe_error(e: Exception, e0: bool) -> str:
+    """E0 mode: exception text may embed a raw value (parquet cast, key error), so only the type is reported."""
+    return type(e).__name__ if e0 else f"{type(e).__name__}: {e}"
+
+
+def run_thread(cfg: ThreadConfig) -> dict:
+    cfg.workdir = Path(cfg.workdir)
+    cfg.workdir.mkdir(parents=True, exist_ok=True)
+    ctx = Ctx(cfg, _sha())
+    steps: list[dict] = []
+    t0 = time.monotonic()
+    for n, sid, fn in STEPS:
+        try:
+            if n >= 5 and (ctx.out.get("design") or {}).get("verdict") == "unlinked":
+                res = {"status": "not_exercised", "data_class": "generated_sample",
+                       "detail": {"reason": f"route unlinked: {smap.UNLINKED_REASON}"}}
+            else:
+                res = fn(ctx)
+            recs = res if isinstance(res, list) else [res]
+            steps += [_finish(n, sid, r, ctx) for r in recs]
+        except Exception as e:  # noqa: BLE001 - a step that cannot run is RED, never silently skipped
+            steps.append(_finish(n, sid, {"status": "red", "error": safe_error(e, cfg.treated), "data_class": None,
+                                          "detail": {}}, ctx))
+    llm = ctx.out.get("llm")  # the live counters, never a stale per-step snapshot: a miss in any stage must show
+    ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls} if llm else {"misses": 1, "calls": 0}
+    ctx.out["report"] = build_report(ctx, steps)
+    live = None
+    if llm and cfg.mode == "live":
+        live = {**llm.stats, "wall_minutes": round((time.monotonic() - t0) / 60, 4)}
+        llm.close()
+    return {"steps": steps, "live": live, "mode": cfg.mode, "host": HOST, "steps_mode": cfg.steps_mode, "replay": ctx.out["replay"],
+            "report": ctx.out.get("report", {}), "m3": ctx.out.get("m3", {}), "mapper": ctx.out.get("mapper"),
+            "categories": ctx.out.get("categories"), "gate_verdict": ctx.out.get("gate_verdict"), "ctx": ctx.out}
+
+
+def live_summary(res: dict) -> dict:
+    """Aggregate-only record of a window: labels, counts, G1 violations. No payloads, no rows."""
+    rep = res["report"]
+    return {"mode": res["mode"], "quality_claims": rep["quality_claims"], "live": res.get("live"),
+            "replay": res["replay"], "g1_violations": [str(v) for v in _er().check(rep)],
+            "steps": [{"n": s["n"], "id": s["id"], "status": s["status"], "data_class": s.get("data_class"),
+                       "model": s.get("model")} for s in res["steps"]]}
+
+
+def main(argv=None) -> int:
+    """python -m claude_standin.thread01 --record QUEUE_DIR   re-record the replay fixtures with the scripted responder
+    python -m claude_standin.thread01 --replay QUEUE_DIR      replay a recorded queue; prints the labelled step table
+    The synthetic package and lab are written to a temp dir (untracked)."""
+    import argparse
+    import tempfile
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--record")
+    ap.add_argument("--replay")
+    ap.add_argument("--live", help="queue dir answered by an external responder lane (shim over real HTTP)")
+    ap.add_argument("--workdir", help="persistent workdir (live); untracked")
+    ap.add_argument("--summary", help="write the aggregate-only window summary JSON here")
+    ap.add_argument("--e0", action="store_true", help="read the local E0 package named by ED0_E0_PATH at runtime (needs pyarrow)")
+    ap.add_argument("--source", choices=("generated", "original"), default="generated",
+                    help="original: the local original bank CSV dataset named by ED0_ORIGINAL_PATH (needs --original-map)")
+    ap.add_argument("--original-map", help="table,case_col,group_col of the original CSV (nothing is inferred)")
+    ap.add_argument("--steps", choices=("python", "rust"), default="python",
+                    help="rust: steps 2-6 run through the Rust step stand-ins (needs STEPS_CLI_EXE or --steps-exe)")
+    ap.add_argument("--steps-exe", default=os.environ.get("STEPS_CLI_EXE"))
+    ap.add_argument("--hold-s", type=float, default=HOLD_S)
+    ap.add_argument("--exe", default=os.environ.get("ED0_RUNNER_EXE", "D:/cargo-targets/claude-ed0/debug/improvement-engine.exe"))
+    a = ap.parse_args(argv)
+    if a.source == "original" and (a.e0 or not a.original_map or a.original_map.count(",") != 2):
+        ap.error("--source original needs --original-map table,case_col,group_col and excludes --e0")
+    if a.original_map and a.source != "original":
+        ap.error("--original-map requires --source original")
+    omap = dict(zip(("table", "case_col", "group_col"), a.original_map.split(","))) if a.source == "original" else None
+    qdir, mode = (a.record, "record") if a.record else (a.live, "live") if a.live else (a.replay, "replay")
+    with tempfile.TemporaryDirectory() as tmp:
+        wd = Path(a.workdir) if a.workdir else Path(tmp)
+        res = run_thread(ThreadConfig(workdir=wd, exe=a.exe, queue_dir=Path(qdir), mode=mode, live_hold_s=a.hold_s,
+                                    e0_path=feed.e0_path() if a.e0 else None,
+                                    original_path=original.original_path() if omap else None, original_map=omap,
+                                    steps_mode=a.steps, steps_exe=a.steps_exe))
+    if a.summary:
+        Path(a.summary).write_text(json.dumps(live_summary(res), indent=1, sort_keys=True), encoding="utf-8")
+    if res.get("live"):
+        print("live", res["live"])
+    for s in res["steps"]:
+        print(f"{s['n']:>2} {s['id']:<12} {s['status']:<16} {s.get('data_class')}  {s.get('error', '')}")
+    print("replay", res["replay"])
+    return 0 if all(s["status"] != "red" for s in res["steps"]) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

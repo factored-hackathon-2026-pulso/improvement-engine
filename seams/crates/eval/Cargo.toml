@@ -1,0 +1,11 @@
+[package]
+name = "eval"
+description = "Claude-owned eval package: sealed suite, arm requests, six evaluate outcomes, gate wiring (gate=claude-authored, judge=claude-standin)."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-client = { path = "../core-client" }
+steps = { path = "../steps" }
+serde_json = "1"

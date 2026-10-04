@@ -38,3 +38,11 @@ against the recorded request of the same stage and step. Raw-E0-derived queues s
 
 ## Tests
 `cd roleplay-llm && python -m unittest discover -s tests`
+
+## Jev surface (M5a)
+`python -m roleplay_llm --queue <dir> --port 8640 --jev-port 8641` also serves `POST /v1/jev` and `/v1/systemone`
+(the body the llm-gateway forwards: `{state:{locale,input}, model, questions}`; answer `{model, answers, usage}`).
+Point the gateway Jev upstream at it. Queue namespace `<dir>/jev/` (same files and rules as above); responder
+`role` is `jev` and `content` is exactly `{answers, usage}`, one answer per question id, probabilities in [0,1].
+Scanner runs before any queue write; labels `agent_roleplay`, `quality_claims: forbidden`. Plumbing only: the
+thread keeps `jev=not_exercised(blocked: agent-core PR 28)`. Client: `roleplay_llm.jev_client.HttpJevTransport`.

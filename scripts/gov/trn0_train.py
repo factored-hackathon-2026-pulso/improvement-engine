@@ -1,0 +1,279 @@
+"""TRN0 train integrator for W0: lane branches merge in dependency order, one PR per 25-35 lane-hours, a restack check,
+a W0 (pre-pr-gate/v1) receipt per train PR, and an exchange/ bundle when a PR reaches the cap.
+
+Manifest (train/v1): {"schema","base","train_branch","pr_cap_hours","receipts_dir","lanes":[{"id","branch","deps":[ids],"lane_hours"}]}
+Lanes are listed in merge order. The receipt of train PR n is <receipts_dir>/pr-<n>.json.
+
+Usage: python trn0_train.py check|merge|bundle|receipt --manifest M.json --repo PATH [--exchange DIR]
+`merge` writes only to the local train branch; it never pushes.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+DEFAULT_CAP = 35
+LEGS = ("ci", "pytest", "ratchet")
+
+
+def _bad_ref(name) -> bool:
+    return not (isinstance(name, str) and name and not name.startswith("-") and not name.startswith("refs/")
+                and not name.startswith("origin/") and ".." not in name and " " not in name)
+
+
+def check_order(lanes: list) -> list:
+    problems, seen = [], set()
+    for l in lanes:
+        if _bad_ref(l.get("branch")):
+            problems.append(f"{l.get('id')}: unsafe branch name {l.get('branch')!r}")
+    ids = [l["id"] for l in lanes]
+    for i in {x for x in ids if ids.count(x) > 1}:
+        problems.append(f"duplicate lane id {i}")
+    for l in lanes:
+        for d in l.get("deps", []):
+            if d not in ids:
+                problems.append(f"{l['id']}: unknown dependency {d}")
+            elif d not in seen:
+                problems.append(f"{l['id']}: out of order, dependency {d} is not merged before it")
+        seen.add(l["id"])
+    return problems
+
+
+def plan(lanes: list, cap: float = DEFAULT_CAP) -> list:
+    """Group lanes, in order, into train PRs whose lane-hours stay within the cap."""
+    groups, cur, hours = [], [], 0.0
+    for l in lanes:
+        if cur and hours + l["lane_hours"] > cap:
+            groups.append(cur)
+            cur, hours = [], 0.0
+        cur.append(l)
+        hours += l["lane_hours"]
+    return groups + ([cur] if cur else [])
+
+
+def check_plan(lanes: list, cap: float = DEFAULT_CAP) -> list:
+    bad = [f"{l.get('id')}: lane_hours must be a positive number, got {l.get('lane_hours')!r}" for l in lanes
+           if isinstance(l.get("lane_hours"), bool) or not isinstance(l.get("lane_hours"), (int, float))
+           or not l["lane_hours"] > 0]
+    return bad + [f"{l['id']}: {l['lane_hours']} lane-hours exceeds the PR cap {cap}; split the lane" for l in lanes
+                  if isinstance(l.get("lane_hours"), (int, float)) and not isinstance(l["lane_hours"], bool)
+                  and l["lane_hours"] > cap]
+
+
+def check_receipt(path: Path) -> list:
+    if not path.is_file():
+        return [f"W0 receipt {path.name} missing"]
+    try:
+        r = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return [f"W0 receipt {path.name} is not JSON"]
+    p = []
+    if r.get("schema") != "pre-pr-gate/v1":
+        p.append(f"{path.name}: schema must be pre-pr-gate/v1")
+    if r.get("verdict") != "pass":
+        p.append(f"{path.name}: verdict is {r.get('verdict')!r}, not pass")
+    for leg in LEGS:
+        st = (r.get("legs") or {}).get(leg, {}).get("status")
+        lg = (r.get("legs") or {}).get(leg) or {}
+        if st != "pass":
+            p.append(f"{path.name}: leg {leg} is {st or 'absent'}")
+        elif not (isinstance(lg.get("command"), str) and lg["command"].strip()) or lg.get("exit_code") != 0:
+            p.append(f"{path.name}: leg {leg} claims pass without a command and exit_code 0")
+    return p
+
+
+def _git(repo, *args, check=True):
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=check)
+
+
+def _is_ancestor(repo, a, b) -> bool:
+    return _git(repo, "merge-base", "--is-ancestor", a, b, check=False).returncode == 0
+
+
+def check_restack(repo, lanes: list, base: str = "main") -> list:
+    """Every lane branch must contain its dependencies' tips (and the base): otherwise it needs a restack."""
+    by_id = {l["id"]: l for l in lanes}
+    p = []
+    for l in lanes:
+        if _git(repo, "rev-parse", "--verify", "-q", l["branch"], check=False).returncode != 0:
+            p.append(f"{l['id']}: branch {l['branch']} not found")
+            continue
+        for tip in [base] + [by_id[d]["branch"] for d in l.get("deps", []) if d in by_id]:
+            if not _is_ancestor(repo, tip, l["branch"]):
+                p.append(f"{l['id']}: restack needed, {l['branch']} does not contain {tip}")
+    return p
+
+
+def merge(repo, base: str, train_branch: str, lanes: list) -> None:
+    order = check_order(lanes)
+    if order:
+        raise ValueError("; ".join(order))
+    if _bad_ref(train_branch) or _bad_ref(base):
+        raise ValueError(f"unsafe train branch or base name: {train_branch!r}, {base!r}")
+    if train_branch == base or train_branch in {l["branch"] for l in lanes}:
+        raise ValueError(f"train branch {train_branch} must not be the base or a lane branch (it would be reset)")
+    if _git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{train_branch}", check=False).returncode == 0:
+        subjects = _git(repo, "log", "--format=%s", f"{base}..{train_branch}").stdout.splitlines()
+        if any(not x.startswith("train: merge ") for x in subjects):
+            raise ValueError(f"train branch {train_branch} holds commits that are not train merges; refusing to reset it")
+    _git(repo, "checkout", "-q", "-B", train_branch, base)
+    for l in lanes:
+        r = _git(repo, "-c", "user.name=trn0", "-c", "user.email=trn0@example.invalid",
+                 "merge", "--no-ff", "-q", "-m", f"train: merge {l['branch']}", l["branch"], check=False)
+        if r.returncode != 0:
+            _git(repo, "merge", "--abort", check=False)
+            raise RuntimeError(f"merge of {l['branch']} failed: {r.stdout.strip()} {r.stderr.strip()}")
+
+
+def write_bundles(repo, base: str, lanes: list, cap: float, out_dir: Path) -> list:
+    """Write exchange/pr-<n>.bundle for every train PR that reached the cap (all groups except the still-open last one)."""
+    groups = plan(lanes, cap)
+    full = groups[:-1] + ([groups[-1]] if groups and sum(l["lane_hours"] for l in groups[-1]) >= cap else [])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for n, g in enumerate(groups, 1):
+        if g not in full:
+            continue
+        f = out_dir / f"pr-{n}.bundle"
+        _git(repo, "bundle", "create", str(f), f"^{base}", *[l["branch"] for l in g])
+        written.append(f)
+    return written
+
+
+def check_all(repo, m: dict) -> list:
+    lanes, cap = m["lanes"], m.get("pr_cap_hours", DEFAULT_CAP)
+    problems = check_order(lanes) + check_plan(lanes, cap)
+    if not problems:
+        problems += check_restack(repo, lanes, m.get("base", "main"))
+    for n, _ in enumerate(plan(lanes, cap), 1):
+        problems += check_receipt(Path(m["receipts_dir"]) / f"pr-{n}.json")
+    return problems
+
+
+def observed_merge_order(repo, base: str, train_branch: str, lanes: list):
+    """For a train that is already merged: each lane's position is the first first-parent commit of the train that
+    contains its tip. Returns (order, problems); nothing is asserted, everything is read from git."""
+    log = _git(repo, "rev-list", "--first-parent", "--reverse", f"{base}..{train_branch}", check=False)
+    commits = log.stdout.split()
+    order, problems = [], []
+    for l in lanes:
+        if _bad_ref(l.get("branch")):
+            problems.append(f"{l.get('id')}: unsafe branch name {l.get('branch')!r}")
+            continue
+        pos = next((i for i, c in enumerate(commits) if _is_ancestor(repo, l["branch"], c)), None)
+        if pos is None:
+            problems.append(f"{l['id']}: branch {l['branch']} is not merged into {train_branch}")
+        else:
+            order.append({"lane": l["id"], "branch": l["branch"], "first_train_commit": commits[pos], "position": pos})
+    where = {o["lane"]: o["position"] for o in order}
+    for l in lanes:
+        for d in l.get("deps", []):
+            if l["id"] in where and d in where and where[d] > where[l["id"]]:
+                problems.append(f"{l['id']}: merged before its dependency {d}")
+    return order, problems
+
+
+def make_consolidated_receipt(repo, m: dict, out: Path) -> dict:
+    """train-receipt/v1 for an already-merged train carried by ONE consolidated PR (m['pr']). Lane-hours may be null
+    (unknown, never invented); a PR over the cap is a disclosed deviation that needs a recorded authority."""
+    import datetime
+    import shutil
+    lanes, cap, base, branch = m["lanes"], m.get("pr_cap_hours", DEFAULT_CAP), m.get("base", "main"), m["train_branch"]
+    problems, deviations = [], []
+    for l in lanes:
+        h = l.get("lane_hours")
+        if h is not None and (isinstance(h, bool) or not isinstance(h, (int, float)) or not h > 0):
+            problems.append(f"{l.get('id')}: lane_hours must be a positive number or null, got {h!r}")
+    ids = [l["id"] for l in lanes]
+    problems += [f"duplicate lane id {i}" for i in {x for x in ids if ids.count(x) > 1}]
+    problems += [f"{l['id']}: unknown dependency {d}" for l in lanes for d in l.get("deps", []) if d not in ids]
+    order, p2 = observed_merge_order(repo, base, branch, lanes)
+    problems += p2
+    known = [l for l in lanes if isinstance(l.get("lane_hours"), (int, float)) and not isinstance(l.get("lane_hours"), bool)]
+    total = sum(l["lane_hours"] for l in known)
+    unknown = [l["id"] for l in lanes if l not in known]
+    if total > cap:
+        auth = ((m.get("cap_deviation") or {}).get("authority") or "").strip()
+        if auth:
+            deviations.append(f"PR {m['pr']} carries {total} known lane-hours, over the {cap} cap; authority: {auth}")
+        else:
+            problems.append(f"PR {m['pr']} carries {total} lane-hours, over the {cap} cap, with no recorded cap_deviation.authority")
+    n = m["pr"]
+    src = Path(m["receipts_dir"]) / f"pr-{n}.json"
+    problems += check_receipt(src)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    ref = None
+    if src.is_file():
+        ref = f"w0-pr-{n}.json"
+        shutil.copyfile(src, out.parent / ref)
+    head = _git(repo, "rev-parse", branch, check=False).stdout.strip()
+    doc = {"schema": "train-receipt/v1", "mode": "consolidated",
+           "generated_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+           "base": base, "train_branch": branch, "head_sha": head, "pr_cap_hours": cap,
+           "merge_order": order, "deviations": deviations,
+           "prs": [{"n": n, "lanes": ids, "lane_hours": total, "lane_hours_unknown": unknown, "w0_receipt": ref}],
+           "problems": problems, "verdict": "fail" if problems else "pass"}
+    out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return doc
+
+
+def make_receipt(repo, m: dict, out: Path) -> dict:
+    if m.get("mode") == "consolidated":
+        return make_consolidated_receipt(repo, m, out)
+    """Write a train-receipt/v1: the check verdict plus, per train PR, its lanes, lane-hours and a copy of its W0 receipt."""
+    import datetime
+    import shutil
+    lanes, cap = m["lanes"], m.get("pr_cap_hours", DEFAULT_CAP)
+    problems = check_all(repo, m)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    prs = []
+    for n, g in enumerate(plan(lanes, cap), 1):
+        src = Path(m["receipts_dir"]) / f"pr-{n}.json"
+        ref = None
+        if src.is_file():
+            ref = f"w0-pr-{n}.json"
+            shutil.copyfile(src, out.parent / ref)
+        prs.append({"n": n, "lanes": [l["id"] for l in g], "lane_hours": sum(l["lane_hours"] for l in g), "w0_receipt": ref})
+    head = _git(repo, "rev-parse", "HEAD", check=False).stdout.strip()
+    doc = {"schema": "train-receipt/v1", "generated_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+           "base": m.get("base", "main"), "train_branch": m.get("train_branch"), "head_sha": head,
+           "pr_cap_hours": cap, "prs": prs, "problems": problems, "verdict": "fail" if problems else "pass"}
+    out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return doc
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("cmd", choices=["check", "merge", "bundle", "receipt"])
+    ap.add_argument("--manifest", required=True)
+    ap.add_argument("--repo", required=True)
+    ap.add_argument("--exchange", default="exchange")
+    ap.add_argument("--out", help="receipt: where to write train-receipt/v1")
+    a = ap.parse_args(argv)
+    m = json.loads(Path(a.manifest).read_text(encoding="utf-8"))
+    if a.cmd == "check":
+        problems = check_all(a.repo, m)
+        print("\n".join(problems) or "train check: clean")
+        return 1 if problems else 0
+    if a.cmd == "receipt":
+        doc = make_receipt(a.repo, m, Path(a.out))
+        print(f"train receipt {doc['verdict']}: {a.out}")
+        return 0 if doc["verdict"] == "pass" else 1
+    if a.cmd == "merge":
+        problems = check_order(m["lanes"]) + check_restack(a.repo, m["lanes"], m.get("base", "main"))
+        if problems:
+            print("\n".join(problems))
+            return 1
+        merge(a.repo, m.get("base", "main"), m["train_branch"], m["lanes"])
+        print(f"merged {len(m['lanes'])} lanes into {m['train_branch']} (local only)")
+        return 0
+    files = write_bundles(a.repo, m.get("base", "main"), m["lanes"], m.get("pr_cap_hours", DEFAULT_CAP), Path(a.exchange))
+    print("\n".join(map(str, files)) or "no train PR has reached the cap")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

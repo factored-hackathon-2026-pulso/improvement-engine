@@ -47,6 +47,25 @@ class Gate(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertTrue(d is None or d["verdict"] == "fail")
 
+    def test_receipt_records_head_sha_rust_scope_note_and_leg_commands(self):
+        head = subprocess.run(["git", "-C", str(GATE.parents[2]), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        r, d = run(CiCommand=OK, PytestCommand=OK, RatchetCommand=OK, BaseRef="HEAD", Note="no cargo on this machine")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(d["head_sha"], head)
+        self.assertEqual(d["base_ref"], "HEAD")
+        self.assertEqual(d["rust_files_changed"], [])
+        self.assertEqual(d["notes"], "no cargo on this machine")
+        self.assertEqual(d["legs"]["ci"]["command"], OK)
+
+    def test_rust_files_changed_listed_against_a_real_base(self):
+        r, d = run(CiCommand=OK, PytestCommand=OK, RatchetCommand=OK, BaseRef="HEAD~1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIsInstance(d["rust_files_changed"], list)
+
+    def test_unresolvable_base_ref_fails(self):
+        r, d = run(CiCommand=OK, PytestCommand=OK, RatchetCommand=OK, BaseRef="no-such-ref-xyz")
+        self.assertEqual(r.returncode, 1)
+
     def test_failing_leg_exits_1(self):
         r, d = run(CiCommand=BAD, PytestCommand=OK, RatchetCommand=OK)
         self.assertEqual(r.returncode, 1)

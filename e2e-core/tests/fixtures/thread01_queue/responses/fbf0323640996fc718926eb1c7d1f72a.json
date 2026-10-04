@@ -1,0 +1,23 @@
+{
+ "content": {
+  "kind": "final",
+  "output": {
+   "hypotheses": [
+    {
+     "count": 40,
+     "evidence_ref": "ev_66fd2583201f4506",
+     "hypothesis_id": "h_1",
+     "rate": 0.55
+    }
+   ]
+  }
+ },
+ "key": "fbf0323640996fc718926eb1c7d1f72a",
+ "protocol": "roleplay-queue/1",
+ "provenance": "agent_roleplay",
+ "quality_claims": "forbidden",
+ "responder": {
+  "id": "responder-scout",
+  "role": "scout"
+ }
+}

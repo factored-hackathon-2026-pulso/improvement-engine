@@ -1,0 +1,60 @@
+{
+  "schema": "pre-pr-gate/v1",
+  "generated_utc": "2026-10-04T08:33:15.2377625Z",
+  "head_sha": "166a4023d4f7081335386d6d16de5555f7201488",
+  "base_ref": "origin/main",
+  "rust_files_changed": [
+    "seams/Cargo.lock",
+    "seams/Cargo.toml",
+    "seams/crates/core-client/Cargo.toml",
+    "seams/crates/core-client/src/lib.rs",
+    "seams/crates/core-client/tests/graph.rs",
+    "seams/crates/steps/Cargo.toml",
+    "seams/crates/steps/src/bin/steps_cli.rs",
+    "seams/crates/steps/src/compile.rs",
+    "seams/crates/steps/src/gate.rs",
+    "seams/crates/steps/src/intent.rs",
+    "seams/crates/steps/src/lib.rs",
+    "seams/crates/steps/src/recompute.rs",
+    "seams/crates/steps/src/sensor.rs",
+    "seams/crates/steps/tests/cli_all.rs",
+    "seams/crates/steps/tests/cmp_compile.rs",
+    "seams/crates/steps/tests/cmp_hardening.rs",
+    "seams/crates/steps/tests/cmp_parity.rs",
+    "seams/crates/steps/tests/gsi_gate.rs",
+    "seams/crates/steps/tests/stp1_adversarial.rs",
+    "seams/crates/steps/tests/stp1_cli.rs",
+    "seams/crates/steps/tests/stp1_common/mod.rs",
+    "seams/crates/steps/tests/stp1_intent.rs",
+    "seams/crates/steps/tests/stp1_recompute.rs",
+    "seams/crates/steps/tests/stp1_sensor.rs"
+  ],
+  "notes": "Claude's seams workspace: cargo test --manifest-path seams/Cargo.toml --offline -j 2 ran in the ci leg and covers all Rust files changed vs origin/main (all under seams/). Codex's ROOT workspace gates (fmt, clippy, cargo test of crates/) were NOT run by Claude; they are Codex-owned and Codex runs them (journal CX-0215). Pester not run. cargo fmt/clippy of seams not run.",
+  "packages_touched": [
+    "contracts/engine-run",
+    "scripts/gov",
+    "docs/reviews/claude",
+    "e2e-core",
+    "roleplay-llm",
+    "core-bridge",
+    "seams"
+  ],
+  "legs": {
+    "ci": {
+      "status": "pass",
+      "exit_code": 0,
+      "command": "cargo test --manifest-path seams/Cargo.toml --offline -j 2; if ($LASTEXITCODE) { exit $LASTEXITCODE }; uv run --python 3.12 --with pytest --with pyyaml --with jsonschema --with cryptography --with httpx --with fastapi --with uvicorn --with pydantic python -m unittest discover -s tests -p test_*_contract.py; if ($LASTEXITCODE) { exit $LASTEXITCODE }; uv run --python 3.12 --with pyyaml --with jsonschema python contracts/validate_fixtures.py; if ($LASTEXITCODE) { exit $LASTEXITCODE }; uv run --python 3.12 --with pytest --with pyyaml python -m pytest docs/agents/tests -q -p no:cacheprovider"
+    },
+    "pytest": {
+      "status": "pass",
+      "exit_code": 0,
+      "command": "uv run --python 3.12 --with pytest --with pyyaml --with jsonschema --with cryptography --with httpx --with fastapi --with uvicorn --with pydantic python -m pytest -q -p no:cacheprovider contracts/engine-run/tests scripts/gov/tests scripts/dc/tests"
+    },
+    "ratchet": {
+      "status": "pass",
+      "exit_code": 0,
+      "command": "uv run --python 3.12 --with pytest --with pyyaml --with jsonschema --with cryptography --with httpx --with fastapi --with uvicorn --with pydantic python -m pytest -q -p no:cacheprovider e2e-core/tests/unit/test_e2e_thread_01.py e2e-core/tests/unit/test_e2e_thread_01_live_replay.py"
+    }
+  },
+  "verdict": "pass"
+}

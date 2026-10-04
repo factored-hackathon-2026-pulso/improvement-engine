@@ -1,0 +1,33 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "ED0"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "fresh-context-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0043",
+    "journal CL-0044",
+    "git a5ff9e5"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept. ED0 defects are not itemised in the journal beyond the aggregate counts of CL-0043/CL-0044.",
+  "findings": [
+    {
+      "id": "ED0-R1",
+      "loop": 1,
+      "summary": "recurrence definition used same-signature repeats, empty on the real shape (now: case with >= 2 copilot queries)",
+      "status": "fixed",
+      "fix_ref": "a5ff9e5"
+    }
+  ],
+  "verdict": "closed"
+}

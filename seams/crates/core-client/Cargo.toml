@@ -1,0 +1,12 @@
+[package]
+name = "core-client"
+description = "Claude-owned client seam to Codex core; std-only, never depends on crates/core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64 = "0.22"
+ed25519-dalek = "2"
+serde_json = "1"
+sha2 = "0.10"

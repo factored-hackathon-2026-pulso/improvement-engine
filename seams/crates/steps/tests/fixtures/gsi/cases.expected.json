@@ -1,0 +1,401 @@
+{
+ "closed_early_missing": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "malformed_run",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "malformed_run",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "cost_known_string": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "cost_unknown",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "cost_unknown",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "duplicate_case_refs": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "case_sets_differ",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "case_sets_differ",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "empty_reports": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "empty_arm_report",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "empty_arm_report",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "fx1_pass": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "status": "pass"
+   },
+   {
+    "gate": "improvement",
+    "status": "pass"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "pass"
+ },
+ "fx2_fail_improvement_equal": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "status": "pass"
+   },
+   {
+    "gate": "improvement",
+    "reason": "no_structural_improvement",
+    "status": "fail"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "fail"
+ },
+ "fx3_fail_safety_closed_early": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "candidate_closed_early",
+    "status": "fail"
+   },
+   {
+    "gate": "improvement",
+    "status": "pass"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "fail"
+ },
+ "fx4_case_mismatch": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "case_sets_differ",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "case_sets_differ",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "fx5_cost_unknown": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "cost_unknown",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "cost_unknown",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "invalid_gate_input_contract_version": {
+  "error": true
+ },
+ "invalid_gate_input_no_authors": {
+  "error": true
+ },
+ "judge_is_author": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-wrld0",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "judge_is_suite_author": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "someone-else",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "judge_revision_suffix_of_suite": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "agent-core-registry-demo",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "judge_spelling_dot": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude.wrld0",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "judge_spelling_underscore": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "judge_not_separated",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude_wrld0",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "oracle_missing": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "oracle_missing",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "oracle_missing",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "planted_columns_ignored": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "status": "pass"
+   },
+   {
+    "gate": "improvement",
+    "reason": "no_structural_improvement",
+    "status": "fail"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "fail"
+ },
+ "reports_missing": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "empty_arm_report",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "empty_arm_report",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "runs_key_missing": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "empty_arm_report",
+    "status": "not_evaluable"
+   },
+   {
+    "gate": "improvement",
+    "reason": "empty_arm_report",
+    "status": "not_evaluable"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "not_evaluable"
+ },
+ "safety_regression_but_more_completed": {
+  "contract_version": "engine-steps/0",
+  "data_class": "synthetic",
+  "gates": [
+   {
+    "gate": "safety",
+    "reason": "candidate_regressed_a_completed_case",
+    "status": "fail"
+   },
+   {
+    "gate": "improvement",
+    "status": "pass"
+   }
+  ],
+  "judge_actor": "claude-gsipy",
+  "quality_claims": "forbidden",
+  "run_id": "run-gate-0001",
+  "step": "gate",
+  "verdict": "fail"
+ }
+}

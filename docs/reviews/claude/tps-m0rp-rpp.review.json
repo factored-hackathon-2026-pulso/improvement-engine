@@ -1,0 +1,140 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "TPS",
+    "M0RP",
+    "RPP"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "fresh-context-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0041",
+    "journal CL-0044",
+    "git b555416, 3d3c79e",
+    "journal CL-0046",
+    "git 6697404, a03e99f, d222b88, b64824b"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "TPS-R1",
+      "loop": 1,
+      "summary": "system prompt was not scanned",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R2",
+      "loop": 1,
+      "summary": "big ints bypassed bounds",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R3",
+      "loop": 1,
+      "summary": "newline in a regex let a token pass (fullmatch needed)",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R4",
+      "loop": 1,
+      "summary": "NFKC-confusable characters not normalised",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R5",
+      "loop": 1,
+      "summary": "response content keys not validated",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R6",
+      "loop": 1,
+      "summary": "fault injection path unhardened",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R7",
+      "loop": 1,
+      "summary": "auth bytes handling",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R8",
+      "loop": 1,
+      "summary": "unbounded recursion in the scanner",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R9",
+      "loop": 1,
+      "summary": "Content-Length handling",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "RPP-R1",
+      "loop": 1,
+      "summary": "shim did not validate the responder identity (plain id, known role) before it reached the report label",
+      "status": "fixed",
+      "fix_ref": "3d3c79e",
+      "note": "commit subject only; found during the Q1r live windows"
+    },
+    {
+      "id": "TPS-R10",
+      "loop": 1,
+      "summary": "opaque ids in inputs/args (a name or national id shaped like an allowed token) pass the allow-list; needs a registry of expected ids",
+      "status": "fixed",
+      "note": "deny-by-default registry: strings in inputs/args pass only with a system-issued hex shape or a token the stage registered; names or ids shaped like allowed tokens are rejected",
+      "fix_ref": "6697404, a03e99f, d222b88",
+      "red_ref": "6697404"
+    },
+    {
+      "id": "TPS-R11",
+      "loop": 2,
+      "summary": "registry trusted request-declared schema enums as whitelisted tokens; ev_ and tool-ref shapes could carry letters of a name",
+      "status": "fixed",
+      "fix_ref": "a03e99f",
+      "note": "test_registry.py extended in the same commit; C-12 deliberately re-pinned in b64824b (journal CL-0046)"
+    },
+    {
+      "id": "TPS-R12",
+      "loop": 2,
+      "summary": "hex-encoded text inside hex-shaped ids (ev_, g_, uuid, binding/job/artifact) cannot be rejected by shape alone",
+      "status": "accepted",
+      "reason": "Residual privacy risk of a shape check: closing it needs HMAC-issued ids held in the Registry. Mitigated meanwhile because only treated k-anonymous aggregates and synthetic data are sent (ASK-1) and DC0 keeps E0 off the hosted path.",
+      "owner": "Team CL, lane L-MODEL (TPS)",
+      "tier": "T0 (wp_table TPS)",
+      "tracking": "journal CL-0046 privacy bullet; HMAC-issued ids not scheduled"
+    }
+  ],
+  "verdict": "closed",
+  "journal_defect_count": 9,
+  "closure_verification": {
+    "by": "closer agent of Team Claude (verification by commit inspection and test re-run; NOT an independent reviewer)",
+    "date": "2026-10-04",
+    "head_at_verification": "4ed3f18 (claude/w1d-close)",
+    "evidence": [
+      "git show --stat 6697404 a03e99f d222b88 (registry in scanner.py/shim.py, tests in roleplay-llm/tests/test_registry.py)",
+      "roleplay-llm: python -m unittest discover -> 63 tests OK at 4ed3f18",
+      "e2e-core tests/unit: 174 passed, 1 skipped (with the sensor exe)"
+    ],
+    "independence": "Loop-2 reviews are cited in journal CL-0046 as independent but their reviewer identifiers were not recorded; this log does not claim more than the journal states."
+  }
+}

@@ -178,6 +178,14 @@ class ReceiptStore:
                 "SELECT * FROM pulso_bridge.budget_meter WHERE tenant_id=%s AND job_id=%s AND stage=%s"
                 " AND attempt=%s", (tenant_id, job_id, stage, attempt)).fetchone()
 
+    def meter_job_total(self, tenant_id: str, job_id: str) -> Decimal:
+        """Settled + held spend across every stage/attempt of a job (what the run ceiling is checked against)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(cost_usd+reserved_usd), 0) AS total FROM pulso_bridge.budget_meter"
+                " WHERE tenant_id=%s AND job_id=%s", (tenant_id, job_id)).fetchone()
+        return Decimal(row["total"])
+
     # --- metering v2: atomic pre-reservation, settlement and the model-call ledger ------------------------------
 
     def meter_reserve(self, tenant_id: str, job_id: str, stage: str, attempt: int, *, amount: str,

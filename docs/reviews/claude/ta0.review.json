@@ -1,0 +1,61 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "TA0"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (infra worktree agent, repo pulso-factored/infra, branch claude/ta0-aws-asks, PR #31)"
+  },
+  "reviewer": {
+    "id": "reviewer-unrecorded-cl",
+    "context": "unknown",
+    "identity_recorded": false,
+    "note": "journal CL-0048 does not name a reviewer for TA0; the hardening commit eef84eb is consistent with a review loop but is not proof of one"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0047",
+    "journal CL-0048",
+    "infra git eef84eb, 0097b8d, 9195348"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 (CRV1) from the shared journal and commit history. Findings are only those the journal or the cited commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "verdict": "closed",
+  "findings": [
+    {
+      "id": "TA0-R1",
+      "loop": 1,
+      "summary": "offline AWS plan review had false negatives: bare account ids, wildcard-account ARNs, inline ingress, string-true switches, locals switches, wildcard principals, star action lists, committed keys",
+      "status": "fixed",
+      "fix_ref": "infra eef84eb",
+      "red_ref": "infra 9195348"
+    },
+    {
+      "id": "TA0-R2",
+      "loop": 1,
+      "summary": "asks lacked logging and break-glass entries (added)",
+      "status": "fixed",
+      "fix_ref": "infra eef84eb"
+    },
+    {
+      "id": "CRV1-RES-REVIEWER-IDENTITY",
+      "loop": 1,
+      "summary": "reviewer identity and independence are unrecorded for every reconstructed CRV1 log, and for TA0 the journal does not name any reviewer",
+      "status": "accepted",
+      "reason": "Loop-1 and loop-2 reviews are cited as independent fresh-context in the journal but no per-review identifier was kept. The TA0 log therefore claims no independence; nothing was applied to AWS (0 FAIL / 4 GAP on the current tree).",
+      "owner": "Team CL, lane L-GOV",
+      "tier": "T0.5 (wp_table CRV1)",
+      "tracking": "re-review TA0 by a distinct fresh-context Claude actor under CRV6 (AWS slice)"
+    }
+  ],
+  "closure_verification": {
+    "by": "implementer agent of Team Claude, GT05 lane (verification by commit inspection and gate runs; NOT an independent reviewer)",
+    "date": "2026-10-04",
+    "head_at_verification": "claude/w1i-gt05 (from claude/w0-train, PR #96)",
+    "evidence": [
+      "infra repo: git show --stat eef84eb 0097b8d 9195348 on branch claude/ta0-aws-asks",
+      "journal CL-0048: TA0 = 21 AWS asks, offline plan-review checker, 0 FAIL / 4 GAP, nothing applied"
+    ],
+    "independence": "The journal cites independent fresh-context reviews but their reviewer identifiers were not recorded; this log does not claim more than the journal states."
+  }
+}

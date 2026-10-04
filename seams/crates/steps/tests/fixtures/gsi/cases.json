@@ -1,0 +1,1489 @@
+[
+ {
+  "name": "fx1_pass",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "fx2_fail_improvement_equal",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "fx3_fail_safety_closed_early",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": true,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "fx4_case_mismatch",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c9",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "fx5_cost_unknown",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": false,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "empty_reports",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": []
+    },
+    "arm_report:cand@1": {
+     "runs": []
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "judge_is_author",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-wrld0",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "judge_spelling_underscore",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude_wrld0",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "judge_spelling_dot",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude.wrld0",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "judge_revision_suffix_of_suite",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "agent-core-registry-demo",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "judge_is_suite_author",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "someone-else",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "someone-else"
+   }
+  }
+ },
+ {
+  "name": "duplicate_case_refs",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "cost_known_string",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": "false",
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "closed_early_missing",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "oracle_missing",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "reports_missing",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {},
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "runs_key_missing",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {},
+    "arm_report:cand@1": {
+     "runs": []
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "planted_columns_ignored",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null,
+       "improvement": "pass",
+       "planted_verdict": "pass",
+       "lift": 9.9,
+       "mechanism_proxy": 1
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null,
+       "improvement": "pass",
+       "planted_verdict": "pass",
+       "lift": 9.9,
+       "mechanism_proxy": 1
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "safety_regression_but_more_completed",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c3",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c3",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "invalid_gate_input_contract_version",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/9",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": [
+     "claude-wrld0"
+    ]
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ },
+ {
+  "name": "invalid_gate_input_no_authors",
+  "input": {
+   "gate_in": {
+    "contract_version": "engine-steps/0",
+    "step": "gate",
+    "run_id": "run-gate-0001",
+    "data_class": "synthetic",
+    "base_arm_report_ref": "arm_report:base@1",
+    "candidate_arm_report_ref": "arm_report:cand@1",
+    "suite_ref": "eval_suite:disputas-tarea-suite@1",
+    "judge_actor": "claude-gsipy",
+    "author_actors": []
+   },
+   "reports": {
+    "arm_report:base@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "failed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    },
+    "arm_report:cand@1": {
+     "runs": [
+      {
+       "arm": "x",
+       "case_ref": "c1",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      },
+      {
+       "arm": "x",
+       "case_ref": "c2",
+       "status": "completed",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:o@1",
+       "final_state_ref": "state:s@1",
+       "effect_receipts": [],
+       "reason": null
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "world": "claude-wrld0",
+    "suite": "agent-core-registry-demo@c814c2b"
+   }
+  }
+ }
+]

@@ -1,0 +1,30 @@
+{
+  "schema": "e0-sensor-receipt/v1",
+  "recorded_utc": "2026-10-04",
+  "kind": "post-hoc artifact receipt (NOT a first-build log)",
+  "artifact": {
+    "what": "improvement-engine.exe (crate improvement-engine-runner, subcommand local-sim) used by e2e-core ED0 detection",
+    "path_outside_repo": "D:/cargo-targets/claude-ed0/debug/improvement-engine.exe",
+    "sha256": "ff7776c4148d4b4a914d954796025d03a9450edcc94b14fd1ef5d783f452df02",
+    "size_bytes": 32382464,
+    "file_mtime": "2026-10-04T00:01:09-05:00",
+    "build_command_documented_in": "e2e-core/ED0.md (cargo build -j 2 --locked --offline -p improvement-engine-runner, CARGO_TARGET_DIR=D:/cargo-targets/claude-ed0)"
+  },
+  "source": {
+    "crates_changed_vs_origin_main": 0,
+    "origin_main": "707c5b4bb6394203ba818fbfbf73b9bcc362e753",
+    "last_commit_touching_crates": "917aa523763850e6aa577c05f8cf98e4224c8f22 (2026-10-03T21:48:47-05:00, in origin/main)",
+    "reading": "the exe mtime is later than the last commit that touched crates/, and this branch changes no Rust file, so the exe is consistent with the crates at origin/main. mtime ordering is circumstantial; it is not a build attestation."
+  },
+  "verification_run": {
+    "date": "2026-10-04",
+    "command": "ED0_RUNNER_EXE=<path above> PYTHONPATH='src;tests;<agent-core pin c814c2b>' python -m pytest tests/unit  (cwd e2e-core, deps per the closure task)",
+    "result": "174 passed, 1 skipped (local_identity module not importable); without ED0_RUNNER_EXE: 171 passed, 4 skipped, so the 3 exe-dependent tests (rename and permute mutation) ran only with the exe",
+    "exe_invocation": "improvement-engine.exe with no subcommand answers 'expected subcommand local-sim'"
+  },
+  "limits": [
+    "The original first-Windows-build log was not retained; this receipt cannot show how or when the exe was built, only which binary the tests ran against.",
+    "cargo is not available on this machine in this task, so the exe was not rebuilt and its build was not reproduced.",
+    "No real E0 data is read or recorded here; the E0 path is supplied only at runtime (ED0_E0_PATH or --input), never committed."
+  ]
+}

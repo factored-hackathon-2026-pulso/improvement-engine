@@ -1,0 +1,233 @@
+{
+  "schema": "train/v1",
+  "mode": "consolidated",
+  "pr": 96,
+  "base": "origin/main",
+  "train_branch": "claude/w0-train",
+  "pr_cap_hours": 35,
+  "hours_basis": "wp_table.csv hours_high of the WPs the lane delivers: a PLANNED upper bound, not measured lane-hours. null = no wp_table row for the lane (unknown, not counted).",
+  "cap_deviation": {
+    "authority": "user ruling: few, large PRs (journal CL-0042, CL-0045: one consolidated open PR #96); lanes were merged into claude/w0-train before this receipt, so the order is observed from git, not enforced"
+  },
+  "receipts_dir": "docs/reports/gates/gt0/train-w0",
+  "lanes": [
+    {
+      "id": "g1",
+      "branch": "claude/w0b-g1",
+      "wps": [
+        "G1"
+      ],
+      "deps": [],
+      "lane_hours": 12
+    },
+    {
+      "id": "p2py",
+      "branch": "claude/w0b-plat",
+      "wps": [
+        "P2py"
+      ],
+      "deps": [
+        "g1"
+      ],
+      "lane_hours": 9
+    },
+    {
+      "id": "cmppy_gsipy",
+      "branch": "claude/w0b-e2e",
+      "wps": [
+        "CMPpy",
+        "GSIpy"
+      ],
+      "deps": [
+        "g1"
+      ],
+      "lane_hours": 16
+    },
+    {
+      "id": "m3",
+      "branch": "claude/w0b-model",
+      "wps": [
+        "M3"
+      ],
+      "deps": [
+        "g1"
+      ],
+      "lane_hours": 11
+    },
+    {
+      "id": "ed0",
+      "branch": "claude/w0c-ed0",
+      "wps": [
+        "ED0"
+      ],
+      "deps": [],
+      "lane_hours": 14
+    },
+    {
+      "id": "m1_m2a",
+      "branch": "claude/w0c-m1",
+      "wps": [
+        "M1",
+        "M2a"
+      ],
+      "deps": [],
+      "lane_hours": 10
+    },
+    {
+      "id": "ed0l",
+      "branch": "claude/w0d-edl",
+      "wps": [
+        "ED0L"
+      ],
+      "deps": [
+        "ed0"
+      ],
+      "lane_hours": 14
+    },
+    {
+      "id": "smap",
+      "branch": "claude/w0d-smap",
+      "wps": [
+        "SMAP"
+      ],
+      "deps": [
+        "ed0"
+      ],
+      "lane_hours": 20
+    },
+    {
+      "id": "q1r",
+      "branch": "claude/w0e-q1r",
+      "wps": [
+        "Q1r"
+      ],
+      "deps": [
+        "g1",
+        "m3",
+        "m1_m2a",
+        "p2py",
+        "ed0",
+        "ed0l",
+        "smap",
+        "cmppy_gsipy"
+      ],
+      "lane_hours": 22
+    },
+    {
+      "id": "int0",
+      "branch": "claude/w0f-int0",
+      "wps": [
+        "INT0"
+      ],
+      "deps": [
+        "q1r"
+      ],
+      "lane_hours": 16
+    },
+    {
+      "id": "docs",
+      "branch": "claude/w0g-docs",
+      "wps": [
+        "docs"
+      ],
+      "deps": [],
+      "lane_hours": null
+    },
+    {
+      "id": "world",
+      "branch": "claude/w0h-world",
+      "wps": [
+        "WRLD0"
+      ],
+      "deps": [],
+      "lane_hours": 4
+    },
+    {
+      "id": "q1r_live",
+      "branch": "claude/w0i-live",
+      "wps": [
+        "Q1r live windows"
+      ],
+      "deps": [
+        "q1r"
+      ],
+      "lane_hours": null
+    },
+    {
+      "id": "e0_feeder",
+      "branch": "claude/w0j-e0",
+      "wps": [
+        "ED0 E0 feeder"
+      ],
+      "deps": [
+        "ed0",
+        "ed0l"
+      ],
+      "lane_hours": null
+    },
+    {
+      "id": "tps_registry",
+      "branch": "claude/w1a-tps",
+      "wps": [
+        "TPS"
+      ],
+      "deps": [],
+      "lane_hours": 9
+    },
+    {
+      "id": "spend_wiring",
+      "branch": "claude/w1a-spend",
+      "wps": [
+        "M2a wiring"
+      ],
+      "deps": [
+        "m1_m2a"
+      ],
+      "lane_hours": null
+    },
+    {
+      "id": "spend_pg",
+      "branch": "claude/w1b-pg",
+      "wps": [
+        "M2a PG16 tests"
+      ],
+      "deps": [
+        "spend_wiring"
+      ],
+      "lane_hours": null
+    },
+    {
+      "id": "gt0_gate",
+      "branch": "claude/w1a-gt0",
+      "wps": [
+        "G0p",
+        "TRN0",
+        "CRV0"
+      ],
+      "deps": [],
+      "lane_hours": 17
+    },
+    {
+      "id": "demo0",
+      "branch": "claude/w1c-demo0",
+      "wps": [
+        "DEMO-0 entry point"
+      ],
+      "deps": [
+        "int0"
+      ],
+      "lane_hours": null
+    },
+    {
+      "id": "review",
+      "branch": "claude/w1c-review",
+      "wps": [
+        "CRV0 fixes"
+      ],
+      "deps": [
+        "gt0_gate"
+      ],
+      "lane_hours": null
+    }
+  ]
+}

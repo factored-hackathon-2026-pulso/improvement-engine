@@ -1,0 +1,34 @@
+{
+  "schema": "pre-pr-gate/v1",
+  "generated_utc": "2026-10-04T07:35:13.0848925Z",
+  "head_sha": "69dea546675456621dc9bbb4ba629a7cec04041a",
+  "base_ref": "origin/main",
+  "rust_files_changed": [],
+  "notes": "No Rust files changed on this branch vs origin/main (see rust_files_changed, recomputed from git). cargo is unavailable on this machine, so the ci leg is the non-cargo subset of verify-local-ci.ps1 (Python contract tests, contract fixture validation, OWNERS map test); fmt, clippy and cargo tests were NOT run. The ratchet leg is the replay-mode e2e-core thread tests. Pester not run.",
+  "packages_touched": [
+    "contracts/engine-run",
+    "scripts/gov",
+    "docs/reviews/claude",
+    "e2e-core",
+    "roleplay-llm",
+    "core-bridge"
+  ],
+  "legs": {
+    "ci": {
+      "status": "pass",
+      "exit_code": 0,
+      "command": "uv run --python 3.12 --with pytest --with pyyaml --with jsonschema python -m unittest discover -s tests -p test_*_contract.py; if ($LASTEXITCODE) { exit $LASTEXITCODE }; uv run --python 3.12 --with pyyaml --with jsonschema python contracts/validate_fixtures.py; if ($LASTEXITCODE) { exit $LASTEXITCODE }; uv run --python 3.12 --with pytest --with pyyaml python -m pytest docs/agents/tests -q -p no:cacheprovider"
+    },
+    "pytest": {
+      "status": "pass",
+      "exit_code": 0,
+      "command": "uv run --python 3.12 --with pytest --with pyyaml --with cryptography --with jsonschema --with fastapi --with httpx --with uvicorn --with pydantic python -m pytest -q -p no:cacheprovider contracts/engine-run/tests scripts/gov/tests scripts/dc/tests"
+    },
+    "ratchet": {
+      "status": "pass",
+      "exit_code": 0,
+      "command": "uv run --python 3.12 --with pytest --with pyyaml --with cryptography --with jsonschema --with fastapi --with httpx --with uvicorn --with pydantic python -m pytest -q -p no:cacheprovider e2e-core/tests/unit/test_e2e_thread_01.py e2e-core/tests/unit/test_e2e_thread_01_live_replay.py"
+    }
+  },
+  "verdict": "pass"
+}

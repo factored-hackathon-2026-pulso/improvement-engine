@@ -1,0 +1,32 @@
+{
+  "cause": "the engine evaluates against a candidate hash that is not the hash frozen in the proposal",
+  "engine_candidate_hash": "d2684589ea1140ab3e8269e7d6728eeb4c28a5d48b723e4c7b6cb0653f7054ba",
+  "frozen_candidate_hash": "f8098b9f304d7b30330bf5af7c7bea78638ec96424c37e99c7519626509bb7b9",
+  "natural_variant": {
+    "description": "second evaluation of a proposal whose failed gate returned it to draft",
+    "observation": {
+      "code": "pulso:candidate_changed",
+      "http_status": 409,
+      "kind": "http_error",
+      "proposal_state_after": "draft",
+      "stage": "evaluation_admission_or_stage"
+    }
+  },
+  "observation": {
+    "code": "pulso:candidate_changed",
+    "http_status": 409,
+    "kind": "http_error",
+    "proposal_state_after": "candidate",
+    "stage": "evaluation_admission_or_stage"
+  },
+  "outcome": "candidate_changed",
+  "proposal_id": "01a106b5-ee64-769d-8fe5-2cac25961617",
+  "provenance": {
+    "agent_core_sha": "c814c2bad9f154d10c092326558815dca9562be7",
+    "command": "cargo test --offline -j 2 --manifest-path seams/Cargo.toml -p eval --test live_capture -- --ignored --nocapture --test-threads 1 (env: seams/scripts/live-env.ps1)",
+    "date": "2026-10-04",
+    "label": "real",
+    "namespace": "claude-w4a-1",
+    "stack_image": "localhost/pulso-core-runtime:c814c2b-920f5e3"
+  }
+}

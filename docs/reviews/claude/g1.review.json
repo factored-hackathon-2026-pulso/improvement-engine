@@ -1,0 +1,57 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "G1"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "fresh-context-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0042",
+    "journal CL-0044",
+    "journal CL-0045",
+    "git 446da7f, 2f02726, a35883a, c3adf00"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "G1-R1",
+      "loop": 1,
+      "summary": "check() loopholes: status vocabulary, provider and identity spellings, empty steps; doubles[] hid lying real steps",
+      "status": "fixed",
+      "fix_ref": "2f02726",
+      "red_ref": "446da7f"
+    },
+    {
+      "id": "G1-R2",
+      "loop": 1,
+      "summary": "third-party/restricted check bypassed by Hosted and e0_treated spellings",
+      "status": "fixed",
+      "fix_ref": "a35883a"
+    },
+    {
+      "id": "G1-R3",
+      "loop": 1,
+      "summary": "the DC0 human override was not marked as a simulated human",
+      "status": "fixed",
+      "fix_ref": "a35883a"
+    },
+    {
+      "id": "G1-R4",
+      "loop": 1,
+      "summary": "approval/publish after a failed gate flowed without a labelled override",
+      "status": "fixed",
+      "fix_ref": "c3adf00",
+      "note": "8 new tests per CL-0044"
+    }
+  ],
+  "verdict": "closed"
+}

@@ -1,0 +1,56 @@
+{
+ "schema": "gt0-gate-result/v1",
+ "verdict": "fail",
+ "items": [
+  {
+   "item": "g0p",
+   "ok": true,
+   "detail": "pre-pr-gate pass at 166a4023d4f7"
+  },
+  {
+   "item": "trn0",
+   "ok": true,
+   "detail": "1 train PR(s), each with a passing W0 receipt; deviations: PR 96 carries 174 known lane-hours, over the 35 cap; authority: user ruling: few, large PRs (journal CL-0042, CL-0045: one consolidated open PR #96); lanes were merged into claude/w0-train before this receipt, so the order is observed from git, not enforced"
+  },
+  {
+   "item": "crv0",
+   "ok": true,
+   "detail": "16 review logs closed"
+  },
+  {
+   "item": "honesty",
+   "ok": true,
+   "detail": "tests 1-8, G1 and S1 clean on the GT0 report"
+  },
+  {
+   "item": "scanner_ids",
+   "ok": true,
+   "detail": "scanner ids tps-1"
+  },
+  {
+   "item": "doubles",
+   "ok": true,
+   "detail": "doubles[] lists the plan parts; DEMO-0, host=python, quality_claims forbidden"
+  },
+  {
+   "item": "freeze",
+   "ok": true,
+   "detail": "C-2 and C-12 match FREEZE.json"
+  },
+  {
+   "item": "replay",
+   "ok": true,
+   "detail": "run replay-e2a94dbff2463c01: 5 calls, 0 misses"
+  },
+  {
+   "item": "live_window",
+   "ok": true,
+   "detail": "2 live window(s) logged, consistent with THREAD01.md"
+  },
+  {
+   "item": "capacity",
+   "ok": false,
+   "detail": "missing: capacity.json"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+  "schema": "gt0-manifest/v1",
+  "reviews_dir": "../../../reviews/claude",
+  "require_g0p_ancestry": true,
+  "artifacts": {
+    "g0p": "g0p.json",
+    "trn0": "trn0.json",
+    "report": "report.json",
+    "replay": "replay.json",
+    "live_log": "live-windows.json",
+    "capacity": "capacity.json"
+  }
+}
