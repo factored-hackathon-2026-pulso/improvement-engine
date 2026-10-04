@@ -11,3 +11,26 @@ pub mod sensor;
 
 /// Label stamped on every stand-in output.
 pub const SEMANTICS: &str = "claude-standin";
+
+/// Error shared by every step stand-in (STP1 adds it; CMP and GSI reuse it).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepError {
+    /// Input is not valid JSON or violates the step input schema.
+    Invalid(String),
+    /// A referenced file, directory or executable could not be used.
+    Io(String),
+    /// The wrapped runner failed or produced an unusable result.
+    Runner(String),
+}
+
+impl std::fmt::Display for StepError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StepError::Invalid(m) => write!(f, "invalid: {m}"),
+            StepError::Io(m) => write!(f, "io: {m}"),
+            StepError::Runner(m) => write!(f, "runner: {m}"),
+        }
+    }
+}
+
+impl std::error::Error for StepError {}
