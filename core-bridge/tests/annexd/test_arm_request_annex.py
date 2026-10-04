@@ -77,6 +77,43 @@ def test_agent_id_alias_must_match_the_target_agent(pg) -> None:  # type: ignore
     assert AGENT != "other-agent"
 
 
+def test_a_retry_with_a_later_deadline_replays_the_same_report(pg) -> None:  # type: ignore[no-untyped-def]
+    """`deadline` is a per-attempt bound, not identity: a Rust retry recomputes it and must not get a 409."""
+    w = World(pg)
+    r = runner(w)
+    first = r.run(annex_req(deadline="2030-01-01T00:00:00Z"), tenant_id="t1").report
+    jobs = w.storage.jobs
+    again = r.run(annex_req(deadline="2030-01-01T00:05:00Z"), tenant_id="t1")
+    assert again.report == first and w.storage.jobs == jobs
+    no_deadline = r.run(annex_req(deadline=None), tenant_id="t1")
+    assert no_deadline.report == first and w.storage.jobs == jobs
+
+
+def test_a_deadline_in_the_past_is_format_checked_only(pg) -> None:  # type: ignore[no-untyped-def]
+    """Annex D.4 gives arms no deadline-expiry error: a well-formed past deadline is accepted (ADR 0011)."""
+    w = World(pg)
+    rep = runner(w).run(annex_req(deadline="2000-01-01T00:00:00Z"), tenant_id="t1").report or {}
+    assert rep["status"] == "completed", rep
+
+
+def test_omitting_agent_id_and_sending_the_derived_one_are_the_same_request(pg) -> None:  # type: ignore[no-untyped-def]
+    w = World(pg)
+    r = runner(w)
+    first = r.run(annex_req(), tenant_id="t1").report  # no agent_id: derived from the target
+    jobs = w.storage.jobs
+    again = r.run(annex_req(agent_id=AGENT), tenant_id="t1")  # same key, derived value spelled out
+    assert again.report == first and w.storage.jobs == jobs
+
+
+def test_a_request_carrying_agent_id_is_replayed_by_one_without_it(pg) -> None:  # type: ignore[no-untyped-def]
+    w = World(pg)
+    r = runner(w)
+    first = r.run(annex_req(agent_id=AGENT), tenant_id="t1").report
+    jobs = w.storage.jobs
+    again = r.run(annex_req(), tenant_id="t1")
+    assert again.report == first and w.storage.jobs == jobs
+
+
 # -- the Idempotency-Key header (route level) -------------------------------------------------------------------
 class StubArms:
     def __init__(self) -> None:

@@ -96,10 +96,13 @@ class ArmRequest(BaseModel):
     def session_ref(self) -> str | None:
         return self.sandbox_session_ref if self.sandbox_session_ref is not None else self.seed_manifest_ref
 
-    def canonical(self) -> dict[str, Any]:
-        """What the single-flight digest covers: names normalised, so alias and annex spellings are one request."""
+    def canonical(self, derived_agent_id: str | None = None) -> dict[str, Any]:
+        """What the single-flight digest covers: names normalised, so alias and annex spellings are one request.
+        `deadline` is a per-attempt bound, not identity (a retry recomputes it), so it is excluded. `agent_id` is
+        always filled (given value, else the one derived from the target) so omitting it equals sending it."""
         d = self.model_dump(mode="json", exclude={"mode", "seed_manifest_ref", "sandbox_session_ref",
-                                                  "execution_profile"})
+                                                  "execution_profile", "deadline"})
+        d["agent_id"] = self.agent_id if self.agent_id is not None else derived_agent_id
         profile = MODE_TO_PROFILE[self.run_mode]
         d["execution_profile"] = profile
         if profile is None:
@@ -195,7 +198,8 @@ class ArmRunner:
             old = self.read(req.supersedes_execution_id, tenant_id=tenant_id)
             if old is None or old.status != "unknown":
                 raise ArmDenied("supersedes_invalid", 409)  # only a reconciled `unknown` arm can be re-run
-        digest = digest_of(req.canonical())
+        canonical = req.canonical(self._derive_agent(req))
+        digest = digest_of(canonical)
         execution_id = execution_id_for(req.idempotency_key, tenant_id)  # allocated BEFORE any effect
         row, created = self.store.begin(execution_id, scoped_key(req.idempotency_key, tenant_id), digest)
         if not created:
@@ -204,7 +208,7 @@ class ArmRunner:
             return self._settle(row)  # same key + digest: the stored report (or `unknown`), never a re-run
         self.inflight.add(execution_id)
         try:
-            report = self._execute(req, execution_id, tenant_id)
+            report = self._execute(req, execution_id, tenant_id, digest)
         except ArmDenied as exc:  # denied before any effect: terminal, zero spend
             self.store.finish(execution_id, "failed_infra", {"execution_id": execution_id,
                                                              "status": "failed_infra", "reason": exc.code})
@@ -220,7 +224,15 @@ class ArmRunner:
         assert out is not None
         return out
 
-    def _execute(self, req: ArmRequest, execution_id: str, tenant_id: str) -> dict[str, Any]:
+    def _derive_agent(self, req: ArmRequest) -> str | None:
+        """The target's single Agent entity, for digest normalisation only (read-only; None when unresolvable, in
+        which case `_execute` reports the failure and the request is hashed as given)."""
+        try:
+            return _target_agent(self.loader.load(req.target))
+        except Exception:
+            return None
+
+    def _execute(self, req: ArmRequest, execution_id: str, tenant_id: str, digest: str) -> dict[str, Any]:
         mode_, session_ref = req.run_mode, req.session_ref
         agent_id = ""
         base: dict[str, Any] = {
@@ -234,7 +246,7 @@ class ArmRunner:
 
         try:  # step 2
             allowed = self.broker.check(tenant_id=tenant_id, binding_ref=req.binding_ref, scope="evaluation_arm",
-                                        payload_digest=digest_of(req.canonical()))
+                                        payload_digest=digest)
         except Exception:
             allowed = False
         if not allowed:
