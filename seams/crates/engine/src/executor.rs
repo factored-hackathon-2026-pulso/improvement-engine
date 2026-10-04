@@ -17,6 +17,8 @@ pub struct ExecOptions {
     pub job_id: String,
     pub worker_id: String,
     pub lease_seconds: u64,
+    /// Claims allowed per job (attempt counter cap); bounds retry of failing handlers.
+    pub max_attempts: u64,
     /// Clock (unix seconds); injected so tests and the binary control time.
     pub now: Box<dyn Fn() -> u64>,
     /// Test hook: simulated kill right after handler N committed.
@@ -32,6 +34,7 @@ impl ExecOptions {
             job_id: job_id.into(),
             worker_id: worker_id.into(),
             lease_seconds: 60,
+            max_attempts: 5,
             now: Box::new(move || now),
             crash_after: None,
             after_commit: None,
@@ -47,6 +50,8 @@ pub enum ExecError {
     StaleFence,
     /// An effect of handler N may have happened and was not acknowledged: reconcile, never re-run.
     NeedsReconciliation(usize),
+    /// The attempt counter already reached `max_attempts`; no further claim.
+    AttemptsExhausted(u64),
     Crashed(usize),
     Handler(HandlerError),
     Store(String),
@@ -133,6 +138,11 @@ pub fn execute(
         if store.get(&format!("eff/{i}")).map_err(se)?.is_some() && store.get(&format!("out/{i}")).map_err(se)?.is_none() {
             return Err(ExecError::NeedsReconciliation(i));
         }
+    }
+    if let Some(p) = &prev
+        && p.attempt >= opts.max_attempts
+    {
+        return Err(ExecError::AttemptsExhausted(p.attempt));
     }
     let lease = Lease {
         worker_id: opts.worker_id.clone(),

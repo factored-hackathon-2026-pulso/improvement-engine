@@ -164,3 +164,24 @@ fn failed_pure_handler_is_retried_on_resume() {
     assert!(execute(&s, &hs, "x", &opts("w1", 0)).is_err());
     assert_eq!(execute(&s, &hs, "x", &opts("w2", 60)).unwrap(), "x");
 }
+
+#[test]
+fn pure_handler_that_always_fails_stops_after_max_attempts() {
+    struct Bad;
+    impl JobHandler for Bad {
+        fn id(&self) -> HandlerId { HandlerId("bad".into()) }
+        fn run(&self, _f: &Fence, _i: &InputEnvelope) -> Result<OutputEnvelope, HandlerError> {
+            Err(HandlerError::Failed("always".into()))
+        }
+    }
+    let s = FileStore::open(tmp("maxattempts")).unwrap();
+    let hs: Vec<Box<dyn JobHandler>> = vec![Box::new(Bad)];
+    for k in 0..3u64 {
+        let mut o = opts("w", k * 60);
+        o.max_attempts = 3;
+        assert!(matches!(execute(&s, &hs, "x", &o), Err(ExecError::Handler(_))));
+    }
+    let mut o = opts("w", 3 * 60);
+    o.max_attempts = 3;
+    assert_eq!(execute(&s, &hs, "x", &o), Err(ExecError::AttemptsExhausted(3)));
+}
