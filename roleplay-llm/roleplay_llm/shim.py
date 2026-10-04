@@ -33,8 +33,8 @@ HOLD_S = 55.0
 VOLATILE_KEYS = {"run_id", "turn_id", "session_id", "labels"}
 _UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 _PREFIXED = re.compile(r"\b(binding|job|artifact)[-_:][0-9A-Za-z][0-9A-Za-z-]{5,}")
-_FORBIDDEN_ROLES = {"scout", "verifier", "builder", "builder_design"}
-_RESPONSE_KEYS = ("quality", "score", "confidence", "rating")
+_ROLES = {"scout", "verifier", "builder", "builder_design"}
+_FORBIDDEN_RESPONSE_KEYS = ("quality", "score", "confidence", "rating")
 _RESPONSE_KEYS = {"protocol", "key", "provenance", "quality_claims", "responder", "content"}
 
 
