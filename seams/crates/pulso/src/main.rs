@@ -121,6 +121,10 @@ fn main() {
         Some("monitor") => std::process::exit(pulso::monitor_cmd::main(&args[1..])),
         Some("run") => std::process::exit(pulso::run::main(&args[1..])),
         Some("healthcheck") => std::process::exit(pulso::healthcheck::main(&args[1..])),
+        Some("--help" | "-h" | "help") => {
+            println!("{USAGE}");
+            std::process::exit(0)
+        }
         _ => {}
     }
     match parse(&args) {

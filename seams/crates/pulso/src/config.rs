@@ -130,7 +130,7 @@ impl RunConfig {
         };
         let poll_interval = Duration::from_millis(num("PULSO_POLL_INTERVAL_MS", 30_000, 1, 86_400_000)?);
         let batch_cap = num("PULSO_BATCH_CAP", 100, 1, 100_000)? as u32;
-        let grace = Duration::from_secs(num("PULSO_SHUTDOWN_GRACE_SECS", 50, 1, 3_600)?);
+        let grace = Duration::from_secs(num("PULSO_SHUTDOWN_GRACE_SECS", 25, 1, 3_600)?);
 
         let listen_addr: SocketAddr = var("PULSO_LISTEN_ADDR")
             .unwrap_or_else(|| "127.0.0.1:8080".into())
