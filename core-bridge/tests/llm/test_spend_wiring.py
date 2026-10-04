@@ -144,3 +144,28 @@ def test_main_wires_the_guard_into_production_construction() -> None:
     from pulso_core_runtime import main
 
     assert "guard=" in inspect.getsource(main) and "build_spend_guard" in inspect.getsource(main)
+
+
+def test_ledger_check_constraint_admits_guard_refusal_outcomes() -> None:
+    # The refusal path writes these outcomes; a CHECK that rejects them would raise a DB error instead of `refused`.
+    from pulso_core_runtime.store.migrations import MIGRATIONS
+    sql = " ".join(s for _, stmts in MIGRATIONS for s in stmts)
+    assert "kill_switch" in sql and "ceiling_exceeded" in sql
+
+
+@pytest.mark.parametrize("v", ["y", "Y", "enabled", "engage", " TRUE "])
+def test_kill_env_unknown_spellings_fail_closed(v: str) -> None:
+    from pulso_core_runtime.llm.guard import KillSwitch
+    assert KillSwitch(env={"PULSO_LLM_KILL": v}).engaged()
+
+
+@pytest.mark.parametrize("v", ["", "0", "false", "no", "off"])
+def test_kill_env_explicit_off(v: str) -> None:
+    from pulso_core_runtime.llm.guard import KillSwitch
+    assert not KillSwitch(env={"PULSO_LLM_KILL": v}).engaged()
+
+
+@pytest.mark.parametrize("bad", ["1e999", "1e30", "-0.01", " nan "])
+def test_absurd_ceiling_is_not_silently_unlimited(bad: str) -> None:
+    c, problems = parse_llm_config({**BASE, "PULSO_LLM_SPEND_CEILING": bad})
+    assert c is None and problems
