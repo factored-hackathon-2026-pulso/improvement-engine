@@ -8,6 +8,7 @@
 //! the ignored live test `live_k3_freeze_draft_matches_the_dry_run` touches a real stack, and it stops at the freeze.
 pub mod admission;
 pub mod arms;
+pub mod authorizer;
 pub mod authoring;
 pub mod canon;
 pub mod client;
