@@ -332,11 +332,12 @@ def step_05(ctx: Ctx) -> dict:
     ops = [{"op": e["op"], "target_kind": e["target_kind"], "target_ref": e["target_ref"], "new_ref": e["new_ref"],
             "precondition_digest": cmp.asset_digest(world, e["target_ref"])} for e in (entries[design["target"]], suite)]
     doc = {"contract_version": "engine-steps/0", "step": "compile", "run_id": "run-thread01-0001",
-           "data_class": "synthetic", "base_bundle_ref": "bundle:attention-demo@1",
-           "change_spec": {"base_bundle_ref": "bundle:attention-demo@1", "opportunity_ref": "opportunity:thread01@1",
-                           "workflow_bridge_ref": "bridge:disputa-cargo@1", "operations": ops,
-                           "expected_mechanism": "recorded synthetic", "affected_routes": ["disputa-cargo"],
-                           "rollback_ref": "bundle:attention-demo@1"}}
+           "data_class": "synthetic", "base_bundle_ref": cmp.bundle_ref(world),
+           "change_spec": {"base_bundle_ref": cmp.bundle_ref(world), "opportunity_ref": "opportunity:thread01@1",
+                           "workflow_bridge_ref": cmp.bridge_ref(world), "operations": ops,
+                           "expected_mechanism": "recorded synthetic",
+                           "affected_routes": [world["replaceable_prompt"]["used_by"]["flow"]],
+                           "rollback_ref": cmp.bundle_ref(world)}}
     hook = ctx.cfg.hooks.dry_run
     out = cmp.compile_change_spec(doc, world, dry_run=hook)
     if out["status"] != "compiled":
@@ -369,9 +370,10 @@ def step_06(ctx: Ctx) -> dict:
     core_arms = hook(ctx) if hook else None
     arms, arms_from = (core_arms, "core") if core_arms else (_standin_arms(), "stand-in")
     reports = {"arm_report:base@1": {"runs": arms["base"]}, "arm_report:cand@1": {"runs": arms["candidate"]}}
+    slot = cmp._slots(world)["eval_suite"]
     doc = {"contract_version": "engine-steps/0", "step": "gate", "run_id": "run-thread01-0001", "data_class": "synthetic",
            "base_arm_report_ref": "arm_report:base@1", "candidate_arm_report_ref": "arm_report:cand@1",
-           "suite_ref": "eval_suite:disputas-suite@1", "judge_actor": JUDGE, "author_actors": ["claude-wrld0"]}
+           "suite_ref": f"eval_suite:{slot['name']}@{cmp._major(slot['version'])}", "judge_actor": JUDGE, "author_actors": ["claude-wrld0"]}
     out = gate.gate_verdict(doc, reports, world, evaluators=ctx.cfg.gate_evaluators)
     ctx.out.update(gate_verdict=out["verdict"], gate=out, arms=arms)
     return {"status": "real-narrow" if core_arms else "stand-in", "data_class": "synthetic", "actor": JUDGE,
@@ -513,7 +515,7 @@ def step_10(ctx: Ctx) -> dict:
                            baseline=300.0, delta_pct=-20.0, ramp_days=2, noise_sd=0.0, seed=7)
     planted = fx.PlantedMechanism(mechanism_id="mech-thread01", author=MECHANISM_AUTHOR, kind="recurrence")
     sim = PlatformLiveSim(seed=1)
-    sim.publish_release("atencion", ctx.out["published"]["alias"], rid, effect=effect, mechanism=planted)
+    sim.publish_release(ctx.out["world"]["agent"]["id"], ctx.out["published"]["alias"], rid, effect=effect, mechanism=planted)
     sim.fast_forward(days=3)
     series = sim.effect_series(rid)
     types = sorted({r[0] for r in sim.conn.execute("select event_type from event_log")})

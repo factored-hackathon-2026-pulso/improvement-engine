@@ -8,12 +8,15 @@ Versioned Core assets (YAML entities) for the pinned agent-core (SHA `c814c2bad9
 - `worlds/attention-demo`: the pinned registry-demo world (agent `atencion`, flow `disputa-cargo`, decision models, policy,
   templates, tools, calibration `cal-demo`, suite `disputas-suite` with 3 scenarios, release `demo`). Layer mapping in
   `layer_mappings/atencion@1.0.0.yaml`.
+- `worlds/attention-task`: the seeded base world of the improvement loop (INT0): task agent `atencion-tarea`, flow
+  `disputa-tarea` (tool, rule, respond nodes only), suite `disputas-tarea-suite`, release `demo-task`. Needs no `jev`
+  provider, unlike `atencion` (conversational, `understand-turno` on `jev`).
 - `worlds/pulso-evolution`: four task stages (`pulso-scout`, `pulso-verifier`, `pulso-builder-design`, `pulso-writer`;
   `mode: task`, `invocable_by: [builder]`), Jev model `jev-evolution-route`, prompts, `pulso/*` tools, `registry/*` ToolDefs
   generated from `BUILDER_TOOL_DEFS` (`tools/gen_builder_tooldefs.py`) and the smoke suite `pulso-smoke`. Flows read run
   inputs from `facts.binding.value.*` produced by `pulso/bind_context` (ADR `core-bridge/docs/adr/0004`).
 - `manifest.yaml`: pin, per-world `files_digest`, `capability_catalog_digest`, `expected_state_digest`, release ids
-  (`atencion` `rel-e26df0070f6be82f`, `pulso-scout` `rel-1cddd55d1fe8f19f`, `pulso-verifier` `rel-db71ae5ed04c6131`,
+  (`atencion` `rel-e26df0070f6be82f`, `atencion-tarea` (see manifest.yaml), `pulso-scout` `rel-1cddd55d1fe8f19f`, `pulso-verifier` `rel-db71ae5ed04c6131`,
   `pulso-builder-design` `rel-5f152bbf73ea31b4`, `pulso-writer` `rel-bf3f06148962dabb`) and `expected-state.json`. Both
   are generated (`assetcheck.py write-state`) and must change in the same change as the asset.
 
@@ -40,7 +43,7 @@ The catalogue in `core-bridge/src/pulso_core_runtime/stages/catalog.py` must equ
 
 ## Seeding
 
-The standalone stack imports these worlds with `local/core/init/seed_assets.py` and verifies that the resulting five
+The standalone stack imports these worlds with `local/core/init/seed_assets.py` and verifies that the resulting six
 release ids equal `manifest.yaml`.
 
 ## Known gaps

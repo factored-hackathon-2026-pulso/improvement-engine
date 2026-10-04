@@ -25,7 +25,7 @@ from local_identity.keys import b64url_decode
 
 pytestmark = pytest.mark.live
 EXE = os.environ.get("ED0_RUNNER_EXE", "D:/cargo-targets/claude-ed0/debug/improvement-engine.exe")
-AGENT = "atencion"
+AGENT = "atencion-tarea"
 WINDOWS: list[dict[str, Any]] = []
 BLOCKED_GATE = "blocked(jev): Core approval and publish need an `evaluated` proposal; its native evaluation of the atencion suite ends failed_infra"
 BLOCKED_6 = "blocked(jev: the Core composes no `jev` decision provider for the atencion world; agent-core PR 28 not on main)"

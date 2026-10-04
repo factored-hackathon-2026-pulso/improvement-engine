@@ -23,5 +23,5 @@ eval_suite_slot:
 targetable_kinds: [replace_prompt, add_eval_suite]
 authors:
   world: claude-wrld0
-  suite: claude-wrld0-suite (scenarios adapted from agent-core-registry-demo@c814c2b)
+  suite: agent-core-registry-demo@c814c2b  # scenario set adapted by the world author to start-only task runs
   judge: claude-gsipy

@@ -2,6 +2,9 @@
 
 - `seeded-base.world.yaml` (WRLD0): seeded base world, synthetic. Conformance:
   `cd agent-core-assets && uv run --python 3.12 --with pyyaml --with pytest python -m pytest -c pytest.ini tests/test_world_seeded_base.py -q -p no:cacheprovider` (verified, 12 passed).
+- `attention-task/` (WRLD0 base world, release `demo-task`, agent `atencion-tarea`): task agent with no decision model, so the
+  pinned Core (c814c2b, no `jev` provider) can evaluate it and run arms (`tools/worldcheck.py` `needs_decision_provider`).
+  Entities shared with `attention-demo` are byte-identical copies (merge dedups them).
 - `attention-demo/`, `pulso-evolution/`: world declarations; `../corpus/smap-catalogue.json` (ReadBase catalogue) and
   `smap-recorded-v0.json` (10 recorded synthetic builder outputs: 4 valid, 2 unlinked, 2 not_evaluable, 2 invalid).
 - `../tools/`: `assetcheck.py`, `worldcheck.py`, importers; see `../README.md`.

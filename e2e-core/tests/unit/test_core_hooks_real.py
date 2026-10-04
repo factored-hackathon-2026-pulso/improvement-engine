@@ -103,7 +103,7 @@ def core(engine=None, bridge=None, log=None):
     bridge = bridge or FakeBridge()
     reg = FakeRegistry(bridge)
     rc = H.RealCore(engine=engine or FakeEngine(), bridge=bridge, registry=reg,
-                    authorize=authorizer(log if log is not None else []), world=WORLD, tenant="t1", agent_id="atencion")
+                    authorize=authorizer(log if log is not None else []), world=WORLD, tenant="t1", agent_id="atencion-tarea")
     return rc, bridge, reg
 
 
@@ -114,11 +114,11 @@ def test_freeze_runs_the_writer_on_the_threads_own_draft_and_binds_the_hash():
     stage, job, agent, inp, extra = rc.engine.stages[0]
     assert (stage, agent) == ("writer", "pulso-writer")
     plan = rc.engine.sealed[inp["draft_plan_ref"]]
-    assert plan["agent_id"] == "atencion" and [x["kind"] for x in plan["changes"]] == ["prompt", "eval_suite"]
+    assert plan["agent_id"] == "atencion-tarea" and [x["kind"] for x in plan["changes"]] == ["prompt", "eval_suite"]
     assert plan["changes"][0]["content"]["version"] == "2.0.0"
     assert inp["base_release_id"] == BASE and inp["evaluate_enabled"] is False
     com = extra["registry_mutation_commitment"]
-    assert com["create_agent_id"] == "atencion" and com["operations"] == ["create_proposal", "put_draft", "freeze"]
+    assert com["create_agent_id"] == "atencion-tarea" and com["operations"] == ["create_proposal", "put_draft", "freeze"]
     assert fz.proposal_id == "prop-1" and fz.candidate_hash == CAND and fz.binding_ref == "bind-1"
     assert rc.freeze(c) is fz and len(rc.engine.stages) == 1  # memoised: one proposal per thread
 
@@ -203,7 +203,7 @@ def test_evaluate_runs_the_cores_native_evaluation_on_the_frozen_proposal_with_t
     assert ev["verdict"] == "pass" and ev["eval_run_ref"] == "er-1"
     stage, job, agent, inp, extra = rc.engine.stages[-1]
     assert inp["evaluate_enabled"] is True and inp["proposal_id"] == "prop-1" and inp["draft_plan_ref"] == rc.freeze(ctx()).plan_ref
-    assert inp["evaluation_suite_id"] == "disputas-suite" and inp["evaluation_suite_version"] == "2.0.0"
+    assert inp["evaluation_suite_id"] == "disputas-tarea-suite" and inp["evaluation_suite_version"] == "2.0.0"
     assert extra["registry_mutation_commitment"]["mode"] == "evaluate_only"
 
 

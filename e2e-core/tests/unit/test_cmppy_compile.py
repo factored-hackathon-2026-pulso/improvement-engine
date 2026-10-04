@@ -13,16 +13,16 @@ ROOT = Path(__file__).resolve().parents[3]
 WORLD_FILE = ROOT / "agent-core-assets" / "worlds" / "seeded-base.world.yaml"
 SAMPLES = ROOT / "contracts" / "engine-steps" / "samples"
 WORLD = C.load_world(WORLD_FILE)
-PROMPT_REF, SUITE_REF = "prompt:resumen_radicado@1", "eval_suite:disputas-suite@1"
+PROMPT_REF, SUITE_REF = "prompt:resumen_radicado@1", "eval_suite:disputas-tarea-suite@1"
 
 
 def spec(ops):
     return {"contract_version": "engine-steps/0", "step": "compile", "run_id": "run-cmp-0001", "data_class": "synthetic",
-            "base_bundle_ref": "bundle:attention-demo@1",
-            "change_spec": {"base_bundle_ref": "bundle:attention-demo@1", "opportunity_ref": "opportunity:o1@1",
-                            "workflow_bridge_ref": "bridge:disputa-cargo@1", "operations": ops,
-                            "expected_mechanism": "shorter closing reply", "affected_routes": ["disputa-cargo"],
-                            "rollback_ref": "bundle:attention-demo@1"}}
+            "base_bundle_ref": "bundle:attention-task@1",
+            "change_spec": {"base_bundle_ref": "bundle:attention-task@1", "opportunity_ref": "opportunity:o1@1",
+                            "workflow_bridge_ref": "bridge:disputa-tarea@1", "operations": ops,
+                            "expected_mechanism": "shorter closing reply", "affected_routes": ["disputa-tarea"],
+                            "rollback_ref": "bundle:attention-task@1"}}
 
 
 def rep():
@@ -31,7 +31,7 @@ def rep():
 
 
 def add():
-    return {"op": "add", "target_kind": "eval_suite", "target_ref": SUITE_REF, "new_ref": "eval_suite:disputas-suite@2",
+    return {"op": "add", "target_kind": "eval_suite", "target_ref": SUITE_REF, "new_ref": "eval_suite:disputas-tarea-suite@2",
             "precondition_digest": C.asset_digest(WORLD, SUITE_REF)}
 
 

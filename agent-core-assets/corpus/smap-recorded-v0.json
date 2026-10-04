@@ -8,7 +8,7 @@
       "builder_output": {
         "design_intent": {
           "affected_routes": [
-            "disputa-cargo"
+            "disputa-tarea"
           ],
           "mechanism": "synthetic placeholder for so-01",
           "target_ref": "prompt:resumen_radicado@1",
@@ -32,10 +32,10 @@
       "builder_output": {
         "design_intent": {
           "affected_routes": [
-            "disputa-cargo"
+            "disputa-tarea"
           ],
           "mechanism": "synthetic placeholder for so-02",
-          "target_ref": "eval_suite:disputas-suite@1",
+          "target_ref": "eval_suite:disputas-tarea-suite@1",
           "verdict": "linked"
         },
         "evidence_refs": [
@@ -77,7 +77,7 @@
       "builder_output": {
         "design_intent": {
           "affected_routes": [
-            "disputa-cargo"
+            "disputa-tarea"
           ],
           "mechanism": "synthetic placeholder for so-04",
           "target_ref": "prompt:resumen_radicado@1",
@@ -121,7 +121,7 @@
       "builder_output": {
         "design_intent": {
           "affected_routes": [
-            "disputa-cargo"
+            "disputa-tarea"
           ],
           "mechanism": "synthetic placeholder for so-06",
           "target_ref": "prompt:resumen_radicado@1",
@@ -144,7 +144,7 @@
       "builder_output": {
         "design_intent": {
           "affected_routes": [
-            "disputa-cargo"
+            "disputa-tarea"
           ],
           "mechanism": "synthetic placeholder for so-07",
           "target_ref": null,
@@ -186,7 +186,7 @@
       "builder_output": {
         "design_intent": {
           "affected_routes": [
-            "disputa-cargo"
+            "disputa-tarea"
           ],
           "mechanism": "synthetic placeholder for so-09",
           "target_ref": "prompt:resumen_radicado@1",
@@ -209,10 +209,10 @@
       "builder_output": {
         "design_intent": {
           "affected_routes": [
-            "disputa-cargo"
+            "disputa-tarea"
           ],
           "mechanism": "synthetic placeholder for so-10",
-          "target_ref": "eval_suite:disputas-suite@1",
+          "target_ref": "eval_suite:disputas-tarea-suite@1",
           "verdict": "linked"
         },
         "evidence_refs": [

@@ -30,7 +30,7 @@ def finding(cat, ev=("ev-0001",)):
 def test_relabelling_the_category_changes_or_nulls_the_target():
     a = S.select_target(finding("closing_reply_unclear"), CAT)
     assert a == "prompt:resumen_radicado@1"
-    assert S.select_target(finding("coverage_gap_dispute"), CAT) == "eval_suite:disputas-suite@1"
+    assert S.select_target(finding("coverage_gap_dispute"), CAT) == "eval_suite:disputas-tarea-suite@1"
     assert S.select_target(finding("otp_retry_exhaustion"), CAT) is None  # not in the catalogue -> null
 
 
@@ -65,16 +65,16 @@ def test_model_prose_cannot_pick_the_target():
            "evidence_refs": ["ev-0001"]}
     r = S.classify(out, f, CAT, WORLD)
     assert r["verdict"] == "unlinked" and r["target"] is None
-    out["design_intent"]["target_ref"] = "eval_suite:disputas-suite@1"
+    out["design_intent"]["target_ref"] = "eval_suite:disputas-tarea-suite@1"
     r = S.classify(out, finding("closing_reply_unclear"), CAT, WORLD)
     assert r["verdict"] == "invalid" and r["target"] is None
 
 
 def test_valid_output_passes_dry_run_compile():
-    out = {"design_intent": {"verdict": "linked", "target_ref": "eval_suite:disputas-suite@1", "mechanism": "x"},
+    out = {"design_intent": {"verdict": "linked", "target_ref": "eval_suite:disputas-tarea-suite@1", "mechanism": "x"},
            "evidence_refs": ["ev-0001"]}
     r = S.classify(out, finding("coverage_gap_dispute"), CAT, WORLD)
-    assert r["verdict"] == "valid" and r["dry_run"] == "compiled" and r["target"] == "eval_suite:disputas-suite@1"
+    assert r["verdict"] == "valid" and r["dry_run"] == "compiled" and r["target"] == "eval_suite:disputas-tarea-suite@1"
 
 
 def test_recorded_corpus_counts():

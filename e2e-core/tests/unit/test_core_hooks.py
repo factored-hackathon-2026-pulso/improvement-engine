@@ -28,12 +28,12 @@ class FakeBridge:
 
 def test_dry_run_builds_entity_drafts_from_the_world_and_returns_the_candidate_hash():
     b = FakeBridge()
-    hook = H.make_dry_run(b, WORLD, tenant="t1", agent_id="atencion", base_release_id="rel-base")
+    hook = H.make_dry_run(b, WORLD, tenant="t1", agent_id="atencion-tarea", base_release_id="rel-base")
     ops = [{k: o[k] for k in ("op", "target_kind", "target_ref", "new_ref", "precondition_digest")} for o in (rep(), add())]
     assert hook(ops) == "sha256:" + "ab" * 32
     method, path, op, tenant, body = b.calls[0]
     assert (method, path, op, tenant) == ("POST", "/core-authoring/dry-run", "dry_run", "t1")
-    assert body["agent_id"] == "atencion" and body["base_release_id"] == "rel-base" and body["schema_version"] == "1"
+    assert body["agent_id"] == "atencion-tarea" and body["base_release_id"] == "rel-base" and body["schema_version"] == "1"
     kinds = [c["kind"] for c in body["changes"]]
     assert kinds == ["prompt", "eval_suite"]
     assert body["changes"][0]["content"]["id"] == "p/resumen_radicado" and body["changes"][0]["content"]["version"] == "2.0.0"
@@ -41,25 +41,25 @@ def test_dry_run_builds_entity_drafts_from_the_world_and_returns_the_candidate_h
 
 
 def test_dry_run_refusal_raises_with_the_core_violations():
-    hook = H.make_dry_run(FakeBridge(valid=False), WORLD, tenant="t1", agent_id="atencion", base_release_id=None)
+    hook = H.make_dry_run(FakeBridge(valid=False), WORLD, tenant="t1", agent_id="atencion-tarea", base_release_id=None)
     with pytest.raises(RuntimeError, match="REG-X"):
         hook([rep()])
 
 
 def test_alias_read_returns_release_and_alias():
     b = FakeBridge()
-    read = H.make_alias_read(b, tenant="t1", agent_id="atencion")
+    read = H.make_alias_read(b, tenant="t1", agent_id="atencion-tarea")
     assert read(None, "staging") == {"release_id": "rel-base", "alias": "staging"}
-    assert b.calls[0][:3] == ("GET", "/core-state/aliases/atencion/staging", "aliases")
+    assert b.calls[0][:3] == ("GET", "/core-state/aliases/atencion-tarea/staging", "aliases")
 
 
 def test_alias_read_http_error_raises():
     with pytest.raises(RuntimeError, match="404"):
-        H.make_alias_read(FakeBridge(alias_status=404), tenant="t1", agent_id="atencion")(None, "staging")
+        H.make_alias_read(FakeBridge(alias_status=404), tenant="t1", agent_id="atencion-tarea")(None, "staging")
 
 
 def test_dry_run_hook_flips_step_5_to_real_narrow_in_the_thread(tmp_path):
-    hook = H.make_dry_run(FakeBridge(), WORLD, tenant="t1", agent_id="atencion", base_release_id="rel-base")
+    hook = H.make_dry_run(FakeBridge(), WORLD, tenant="t1", agent_id="atencion-tarea", base_release_id="rel-base")
     cfg = T.ThreadConfig(workdir=tmp_path / "w", exe="D:/cargo-targets/claude-ed0/debug/improvement-engine.exe",
                          queue_dir=T.ROOT / "e2e-core/tests/fixtures/thread01_queue",
                          hooks=T.CoreHooks(dry_run=hook))
@@ -84,7 +84,7 @@ class EchoBridge(FakeBridge):
 
 
 def _hook(b):
-    return H.make_dry_run(b, WORLD, tenant="t1", agent_id="atencion", base_release_id="rel-base")
+    return H.make_dry_run(b, WORLD, tenant="t1", agent_id="atencion-tarea", base_release_id="rel-base")
 
 
 def test_dry_run_accepts_an_answer_bound_to_the_request_we_sent():
@@ -112,4 +112,4 @@ def test_alias_read_rejects_an_answer_for_another_alias_or_without_release():
         def call(self, *a, **k):
             return SimpleNamespace(status_code=200, text="", json=lambda: {"release_id": "", "alias": "prod"})
     with pytest.raises(RuntimeError, match="alias"):
-        H.make_alias_read(B(), tenant="t1", agent_id="atencion")(None, "staging")
+        H.make_alias_read(B(), tenant="t1", agent_id="atencion-tarea")(None, "staging")
