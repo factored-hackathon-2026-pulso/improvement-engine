@@ -21,6 +21,8 @@ pub struct Opts {
     pub runner: PathBuf,
     pub human_override: bool,
     pub denied_kind: bool,
+    /// What the scripted scout claims (default 0.3, the lab value).
+    pub claimed_rate: Option<f64>,
     pub sha: String,
     /// Unix seconds for the executor lease clock (a resume after a kill passes a later one).
     pub now: u64,
@@ -30,7 +32,7 @@ pub struct Opts {
 
 impl Opts {
     pub fn new(work: PathBuf, runner: PathBuf) -> Opts {
-        Opts { work, runner, human_override: false, denied_kind: false, sha: "0".repeat(40), now: 1000, kill_marker: None }
+        Opts { work, runner, human_override: false, denied_kind: false, claimed_rate: None, sha: "0".repeat(40), now: 1000, kill_marker: None }
     }
 }
 
@@ -53,7 +55,7 @@ fn committed_payload(store: &FileStore, n: usize) -> Result<Option<Value>, Strin
 
 pub fn run(o: &Opts) -> Result<Run, String> {
     std::fs::create_dir_all(&o.work).map_err(|e| e.to_string())?;
-    let (env, mut spec) = synth::build(&o.work, &o.runner, None)?;
+    let (env, mut spec) = synth::build(&o.work, &o.runner, o.claimed_rate)?;
     if o.denied_kind {
         // an `add` of a prompt is not a supported (op, kind) pair of the seeded base world: kind_not_supported
         spec = spec.replacen(r#""op":"replace""#, r#""op":"add""#, 1);
