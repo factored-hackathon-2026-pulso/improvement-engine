@@ -63,6 +63,19 @@ class MiniSchemaTest(unittest.TestCase):
         self.assertTrue(minischema.validate({"a": True}, s))
 
 
+class MiniSchemaStrictTest(unittest.TestCase):
+    def test_unsupported_keyword_is_not_silently_ignored(self):
+        for kw, val in (("maxItems", 1), ("format", "uri"), ("allOf", []), ("uniqueItems", True),
+                        ("maxLength", 1), ("anyOf", [])):
+            with self.assertRaises(ValueError, msg=kw):
+                minischema.validate([1, 2], {"type": "array", kw: val})
+
+    def test_bool_is_not_equal_to_integer_in_const_and_enum(self):
+        self.assertTrue(minischema.validate(True, {"const": 1}))
+        self.assertTrue(minischema.validate(True, {"enum": [1]}))
+        self.assertEqual(minischema.validate(1, {"enum": [1]}), [])
+
+
 class DigestTest(unittest.TestCase):
     def test_digest_is_published_and_matches(self):
         pub = load("DIGEST.json")
