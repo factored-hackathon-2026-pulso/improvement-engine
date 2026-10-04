@@ -35,9 +35,12 @@ pub struct GateVerdict {
     /// Semantics label of the verdict judge.
     pub semantics: String,
     pub quality_claims: String,
+    pub suite_ref: String,
 }
 
 pub struct GateInput<'a> {
+    /// Digest of the sealed suite (`EvalPackage::suite_digest`, 64 lowercase hex); `suite_ref` is derived from it.
+    pub suite_digest: &'a str,
     pub run_id: &'a str,
     pub judge_actor: &'a str,
     pub author_actors: Vec<&'a str>,
@@ -70,11 +73,15 @@ fn status(s: &str) -> Result<GateStatus, String> {
 }
 
 pub fn wire_gate(i: &GateInput) -> Result<GateVerdict, String> {
+    if i.suite_digest.len() != 64 || !i.suite_digest.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+        return Err("suite_digest must be the 64-hex sealed suite digest".into());
+    }
+    let suite_ref = format!("eval_suite:{}@1", i.suite_digest);
     let (b, c) = (format!("arm_report:base-{}@1", i.run_id), format!("arm_report:cand-{}@1", i.run_id));
     let env = json!({
         "gate_in": {
             "contract_version": "engine-steps/0", "step": "gate", "run_id": i.run_id, "data_class": "synthetic",
-            "base_arm_report_ref": b, "candidate_arm_report_ref": c, "suite_ref": format!("eval_suite:{}@1", i.run_id),
+            "base_arm_report_ref": b, "candidate_arm_report_ref": c, "suite_ref": &suite_ref,
             "judge_actor": i.judge_actor, "author_actors": i.author_actors,
         },
         "reports": { b: runs(i.base), c: runs(i.candidate) },
@@ -105,6 +112,10 @@ pub fn wire_gate(i: &GateInput) -> Result<GateVerdict, String> {
         judge_actor: i.judge_actor.into(),
         label: steps::gate::LABEL.into(),
         semantics: steps::SEMANTICS.into(),
-        quality_claims: o["quality_claims"].as_str().unwrap_or("forbidden").into(),
+        quality_claims: match o["quality_claims"].as_str() {
+            Some("forbidden") => "forbidden".into(),
+            other => return Err(format!("quality_claims must be forbidden, got {other:?}")),
+        },
+        suite_ref,
     })
 }

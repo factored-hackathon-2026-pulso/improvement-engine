@@ -68,3 +68,26 @@ fn empty_or_duplicate_case_suites_are_not_sealable() {
     d.cases[1].case_ref = "case-1".into();
     assert!(EvalPackage::try_seal(d).is_err());
 }
+
+#[test]
+fn request_keys_are_collision_free_and_use_the_annex_profile() {
+    let mut s = suite();
+    s.cases[0].case_ref = "a b".into();
+    s.cases[1].case_ref = "a-b".into();
+    let reqs = EvalPackage::seal(s).start_arms(&params()).unwrap();
+    let keys: std::collections::BTreeSet<_> = reqs.iter().map(|r| r.idempotency_key.clone()).collect();
+    assert_eq!(keys.len(), reqs.len(), "idempotency keys collide across case_refs");
+    for r in &reqs {
+        assert_eq!(r.execution_profile, Some(core_client::dto::ExecutionProfile::EvolutionTask));
+        assert!(r.mode.is_none(), "deprecated mode spelling");
+    }
+}
+
+#[test]
+fn zero_repetitions_is_rejected_and_does_not_start_the_arms() {
+    let mut p = EvalPackage::seal(suite());
+    let mut prm = params();
+    prm.repetitions = 0;
+    assert!(p.start_arms(&prm).is_err());
+    assert!(!p.arms_started());
+}

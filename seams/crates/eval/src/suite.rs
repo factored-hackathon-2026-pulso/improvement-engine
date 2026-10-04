@@ -1,6 +1,6 @@
 //! The assets evaluation suite, sealed before any arm runs, and the arm requests built from it.
 use core_client::canon;
-use core_client::dto::{ArmMode, ArmRequest};
+use core_client::dto::{ArmRequest, ExecutionProfile};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -73,8 +73,9 @@ pub struct EvalPackage {
     started: bool,
 }
 
-fn safe(s: &str) -> String {
-    s.chars().map(|c| if c.is_ascii_alphanumeric() || "_.-".contains(c) { c } else { '-' }).collect()
+/// Injective-in-practice case token: a digest of the exact `case_ref` (a lossy sanitiser would let `a b` and `a-b` collide).
+fn case_token(s: &str) -> String {
+    canon::sha256_hex(s.as_bytes())[..16].to_string()
 }
 
 impl EvalPackage {
@@ -112,13 +113,16 @@ impl EvalPackage {
         if self.started {
             return Err(SuiteError::AlreadyStarted);
         }
+        if p.repetitions == 0 {
+            return Err(SuiteError::Invalid("repetitions must be at least 1".into()));
+        }
         let mut out = Vec::new();
         for (arm, target) in [("baseline", &p.baseline_target), ("candidate", &p.candidate_target)] {
             for c in &self.suite.cases {
                 for rep in 0..p.repetitions {
-                    let key = format!("ev-{}-{}-{}-{}", &self.suite_digest[..16], arm, safe(&c.case_ref), rep);
+                    let key = format!("ev-{}-{}-{}-{}", &self.suite_digest[..16], arm, case_token(&c.case_ref), rep);
                     let mut r = ArmRequest::new(&key, &p.binding_ref, &c.case_ref, arm, rep, c.seed.clone(), target.clone(), &c.scenario_manifest_ref, &p.budget_ref);
-                    r.mode = Some(ArmMode::Native);
+                    r.execution_profile = Some(ExecutionProfile::EvolutionTask);
                     r.oracle_ref = c.oracle_ref.clone();
                     r.validate().map_err(SuiteError::Request)?;
                     out.push(r);
