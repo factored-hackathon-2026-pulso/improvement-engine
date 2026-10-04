@@ -2,6 +2,7 @@
 //! The engine executor runs the nine handlers (sensors, recompute, validation, compile, arms, gate, native_eval,
 //! authority, publish) over a labelled Core double; `report` derives the ten report steps from what the job COMMITTED.
 pub mod double;
+pub mod note;
 pub mod platform;
 pub mod report;
 
@@ -54,6 +55,32 @@ fn committed_payload(store: &FileStore, n: usize) -> Result<Option<Value>, Strin
     last.map(|p| serde_json::from_str(&p).map_err(|e| e.to_string())).transpose()
 }
 
+fn published_release(out: &Value) -> Option<platform::Release> {
+    let p = out.get("publish")?;
+    Some(platform::Release {
+        release_id: p.get("release_id")?.as_str()?.to_string(),
+        agent_id: "atencion-tarea".into(),
+        alias: p.get("alias")?.as_str()?.to_string(),
+        candidate_hash: out.get("arms")?.get("frozen")?.get("candidate_hash")?.as_str()?.to_string(),
+    })
+}
+
+/// Record the published release, deliver `release.published` (then a replay of it) and prove the unmatched case is retryable.
+fn correlate(r: &platform::Release) -> Result<Value, String> {
+    let p = platform::Platform::new();
+    let unknown = platform::Release { release_id: format!("{}-unrecorded", r.release_id), ..r.clone() };
+    let unmatched = p.post_published("evt-unmatched", &unknown).0;
+    p.record_release(r)?;
+    let (first, body) = p.post_published("evt-1", r);
+    let (replay, _) = p.post_published("evt-1", r);
+    let keys = p.successor_keys();
+    if first != 202 {
+        return Err(format!("release correlation answered {first}: {body}"));
+    }
+    Ok(serde_json::json!({"unique_key": keys.first(), "runs": keys.len(), "first_status": first, "replay_status": replay,
+        "unmatched_status": unmatched, "observation_window": body["observation_window"], "platform": "in-process control-api over MemStore (double)"}))
+}
+
 pub fn run(o: &Opts) -> Result<Run, String> {
     std::fs::create_dir_all(&o.work).map_err(|e| e.to_string())?;
     let (env, mut spec) = synth::build(&o.work, &o.runner, o.claimed_rate)?;
@@ -81,6 +108,13 @@ pub fn run(o: &Opts) -> Result<Run, String> {
     let events = event_log(&store, hs.len())?;
     let payload = committed_payload(&store, hs.len())?;
     let error = res.err().map(|e| format!("{e:?}"));
-    let report = report::build(&report::Input { sha: &o.sha, payload: payload.as_ref(), events: &events, error: error.as_deref() });
+    let mut report = report::build(&report::Input { sha: &o.sha, payload: payload.as_ref(), events: &events, error: error.as_deref() });
+    let release = payload.as_ref().and_then(|p| p.get("out")).and_then(published_release);
+    report["successor"] = match &release {
+        Some(r) => correlate(r)?,
+        None => Value::Null,
+    };
+    let gate = report["gate"]["verdict"].as_str().map(str::to_string);
+    report["memory_note"] = note::post_run_note(JOB, &events, gate.as_deref(), release.is_some())?;
     Ok(Run { events, error, report })
 }
