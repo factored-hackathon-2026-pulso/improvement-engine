@@ -48,3 +48,12 @@ impl Drop for TempDb {
         });
     }
 }
+
+impl TempDb {
+    /// Config (with dbname) for opening more connections to this database.
+    pub fn config(&self) -> Config {
+        let mut c = self.admin.clone();
+        c.dbname(&self.name);
+        c
+    }
+}
