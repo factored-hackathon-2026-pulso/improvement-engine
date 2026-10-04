@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS product.cases (
     opened_at timestamptz,
     sla_due_at timestamptz,
     previous_case_id text,
+    rating_score integer,
+    rated_at timestamptz,
     tenant_id text,
     _batch_id text,
     _source_file text,

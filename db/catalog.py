@@ -69,14 +69,15 @@ AUGMENTED: dict[str, list[tuple[str, str]]] = {
     "signals": RAW_E0["e0_signal"] + _SS,
 }
 
-# Product (support-platform, contract 1.1.0): ONLY the columns of the exporter allow-list exist here. Mutable state,
+# Product (support-platform, contract 1.2.0; rating_score/rated_at are the CSAT outcome, rating_comment is never here): ONLY the columns of the exporter allow-list exist here. Mutable state,
 # names, emails, message text and credential tables are absent by construction (denylist). Types follow tables.py.
 PRODUCT: dict[str, list[tuple[str, str]]] = {
     "event_log": [("sequence", "bigint"), ("event_id", _T), ("event_type", _T), ("entity", _T), ("entity_id", _T),
                   ("case_id", _T), ("actor_role", _T), ("actor_id", _T), ("event_time", _TS),
                   ("ingested_at", _TS), ("payload", _J), ("tenant_id", _T)],
     "cases": [("id", _T), ("customer_id", _T), ("channel", _T), ("language", _T), ("priority", _T),
-              ("opened_at", _TS), ("sla_due_at", _TS), ("previous_case_id", _T), ("tenant_id", _T)],
+              ("opened_at", _TS), ("sla_due_at", _TS), ("previous_case_id", _T), ("rating_score", _I),
+              ("rated_at", _TS), ("tenant_id", _T)],
     "customers": [("id", _T), ("simulator", _B)],
     "staff": [("id", _T), ("roles", _J), ("languages", _J), ("team", _T), ("team_id", _T), ("active", _B)],
     "turns": [("id", _T), ("case_id", _T), ("sequence", _I), ("kind", _T), ("audience", _T), ("author_role", _T),
