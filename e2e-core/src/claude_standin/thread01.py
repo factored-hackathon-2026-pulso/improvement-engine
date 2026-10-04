@@ -32,9 +32,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import ed0_detect as ed0
+from . import compile_step as cmp
 from . import ed0_lab as lab
+from . import smap
 
 ROOT = Path(__file__).resolve().parents[3]
+WORLD_FILE = ROOT / "agent-core-assets" / "worlds" / "seeded-base.world.yaml"
 CONTRACT_REVISION = "engine-run/c2-1"
 HOST = "python"
 CATEGORY_LABELS = {"A": "closing_reply_unclear", "B": "followup_wording"}  # SMAP catalogue vocabulary
@@ -185,7 +188,7 @@ class LLMDouble:
                    "quality_claims": "forbidden", "responder": {"id": RESPONDERS[stage], "role": stage},
                    "content": scripted_responder(stage, inputs)}
             path = self.queue / "responses" / f"{key}.json"
-            path.write_text(json.dumps(doc, indent=1, sort_keys=True), encoding="utf-8")
+            path.write_text(json.dumps(doc, indent=1, sort_keys=True), encoding="utf-8", newline="\n")
         body = json.dumps({"model": "external-reasoning-model", "temperature": 0, "max_tokens": 4000,
                            "messages": [{"role": "system", "content": system},
                                         {"role": "user", "content": json.dumps(inputs, sort_keys=True,
@@ -265,8 +268,48 @@ def step_03(ctx: Ctx) -> list[dict]:
     return [{**scout, "id": "scout"}, ver]
 
 
+def _enc(ref: str) -> str:
+    """Scanner-safe boundary encoding of a catalogue ref ('@' is not an opaque-id character)."""
+    return ref.replace("@", "__at__")
+
+
+def _dec(ref: str) -> str:
+    return ref.replace("__at__", "@")
+
+
+def _label_refs() -> dict[str, str]:
+    return {label: lab._ref(lab.METRIC, "w1", lab.group_hash(LAB_SALT, lab.GROUP_FIELD, label)) for label in LAB_SHAPE}
+
+
 def step_04(ctx: Ctx) -> dict:
-    raise NotImplementedError("step 4")
+    llm, db, caps = _llm(ctx), ctx.out["lab_db"], ctx.out["m3"]["caps"]
+    world = cmp.load_world(WORLD_FILE)
+    catalogue = smap.catalogue_from_world(world)
+    refs = _label_refs()
+    by_ref = {v: k for k, v in refs.items()}
+    verified = ctx.out["verified_refs"]
+    if not verified:
+        raise RuntimeError("no verified hypothesis: the builder does not run on unverified evidence")
+    categories = {label: lab._fetch(db, ref)[4] for label, ref in refs.items()}  # label -> support (lab numerator)
+    finding = {"finding_ref": "finding_1", "category": by_ref[verified[0]], "evidence_refs": sorted(verified)}
+    ctx.out.update(world=world, catalogue=catalogue, finding=finding, categories=categories, mapper=smap.winning_category)
+    if ctx.out["detection"]["winner_support"] != categories[smap.winning_category(categories)]:
+        raise RuntimeError("lab categories disagree with the sensor's winner support")
+    di = smap.design_input(finding, catalogue)
+    inputs = {"binding_id": "binding-builder-0001", "finding_ref": di["finding_ref"], "category": di["category"],
+              "evidence_refs": di["evidence_refs"],
+              "candidates": [{"target_ref": _enc(c["target_ref"]), "op": c["op"]} for c in di["candidates"]]}
+    out, calls = agent_loop(llm, "builder_design", "Design one change for the finding, or do nothing.", inputs, db,
+                            caps["builder_design"])
+    di_out = dict(out["design_intent"])
+    if di_out.get("target_ref"):
+        di_out["target_ref"] = _dec(di_out["target_ref"])
+    res = smap.classify({"design_intent": di_out, "evidence_refs": out["evidence_refs"]}, finding, catalogue, world)
+    ctx.out["design"] = res
+    ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls}
+    return _role("builder_design", id="opportunity", detail={
+        "calls": calls, "smap": res, "category": finding["category"],
+        "do_nothing_considered": any(a.get("kind") == "do_nothing" for a in out.get("alternatives", []))})
 
 
 def step_05(ctx: Ctx) -> dict:
@@ -319,7 +362,8 @@ def run_thread(cfg: ThreadConfig) -> dict:
             steps.append(_finish(n, sid, {"status": "red", "error": f"{type(e).__name__}: {e}", "data_class": None,
                                           "detail": {}}, ctx))
     return {"steps": steps, "mode": cfg.mode, "host": HOST, "replay": ctx.out.get("replay", {"misses": 1, "calls": 0}),
-            "report": ctx.out.get("report", {}), "m3": ctx.out.get("m3", {}), "ctx": ctx.out}
+            "report": ctx.out.get("report", {}), "m3": ctx.out.get("m3", {}), "mapper": ctx.out.get("mapper"),
+            "categories": ctx.out.get("categories"), "gate_verdict": ctx.out.get("gate_verdict"), "ctx": ctx.out}
 
 
 def main(argv=None) -> int:
