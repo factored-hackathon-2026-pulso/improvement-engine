@@ -47,6 +47,11 @@ impl EvidenceStore {
     pub fn new() -> Self {
         Self::default()
     }
+    pub fn digest(&self, id: &str) -> Option<String> {
+        use sha2::{Digest, Sha256};
+        let body = self.items.get(id)?;
+        Some(Sha256::digest(body.as_bytes()).iter().map(|b| format!("{b:02x}")).collect())
+    }
     pub fn insert(&mut self, id: &str, body: &str) {
         self.items.insert(id.to_string(), body.to_string());
     }
@@ -73,7 +78,17 @@ impl Memory {
     pub fn new(evidence: EvidenceStore) -> Self {
         Self { evidence, notes: BTreeMap::new(), seq: 0 }
     }
+    fn check_refs(&self, refs: &[String]) -> Result<(), MemError> {
+        if refs.is_empty() {
+            return Err(MemError::NoEvidence);
+        }
+        match refs.iter().find(|r| self.evidence.digest(r).is_none()) {
+            Some(bad) => Err(MemError::UnresolvedEvidence(bad.clone())),
+            None => Ok(()),
+        }
+    }
     pub fn add_note(&mut self, n: NewNote) -> Result<String, MemError> {
+        self.check_refs(&n.evidence)?;
         self.seq += 1;
         let id = format!("note-{:04}", self.seq);
         self.notes.insert(
@@ -95,7 +110,11 @@ impl Memory {
         any.then_some(out)
     }
     pub fn confirm(&mut self, id: &str, evidence: Vec<String>) -> Result<(), MemError> {
-        let n = self.notes.get_mut(id).ok_or_else(|| MemError::UnknownNote(id.to_string()))?;
+        if !self.notes.contains_key(id) {
+            return Err(MemError::UnknownNote(id.to_string()));
+        }
+        self.check_refs(&evidence)?;
+        let n = self.notes.get_mut(id).unwrap();
         n.evidence.extend(evidence);
         n.status = Status::Confirmed;
         Ok(())
@@ -118,7 +137,9 @@ impl Memory {
     }
     pub fn artifact(&self, id: &str) -> Option<serde_json::Value> {
         let n = self.notes.get(id)?;
+        let digests: BTreeMap<&String, Option<String>> = n.evidence.iter().map(|r| (r, self.evidence.digest(r))).collect();
         Some(serde_json::json!({
+            "evidence_digests": digests,
             "id": n.id, "claim_key": n.claim_key, "statement": n.statement,
             "evidence_refs": n.evidence, "status": n.status.as_str(),
             "contradicts": n.contradicts, "contradicted_by": n.contradicted_by, "scope": SCOPE, "durable": false,
