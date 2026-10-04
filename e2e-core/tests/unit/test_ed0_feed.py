@@ -41,10 +41,13 @@ def _package(root, spec_rows):
 @pytest.fixture
 def pkg(tmp_path):
     spec_rows = []
-    for i in range(30):   # 30 cases, 12 recurring (2 queries of the same signature)
+    for i in range(30):   # 30 cases, 12 recurring (2 queries)
         spec_rows.append((f"RAWCASE-a{i:03d}", SIG_BIG, 2 if i < 12 else 1))
     for i in range(14):   # 14 cases, 3 recurring
         spec_rows.append((f"RAWCASE-b{i:03d}", SIG_MID, 2 if i < 3 else 1))
+    for i in range(3):    # 3 cases that asked BOTH signatures once each: a repeat contact across signatures
+        spec_rows.append((f"RAWCASE-d{i:03d}", SIG_BIG, 1))
+        spec_rows.append((f"RAWCASE-d{i:03d}", SIG_MID, 1))
     for i in range(4):    # 4 cases: below k
         spec_rows.append((f"RAWCASE-c{i:03d}", SIG_SMALL, 2))
     return _package(tmp_path / "e0", spec_rows)
@@ -71,18 +74,18 @@ def test_feed_yields_pseudonymous_case_keys_and_raw_group_in_memory_only(pkg):
     assert {t[1] for t in out} == {SIG_BIG, SIG_MID, SIG_SMALL}
 
 
-def test_recurrence_is_a_repeat_of_the_same_signature_in_a_case(pkg):
+def test_recurrence_is_a_case_with_at_least_two_copilot_queries(pkg):
     by = {}
     for _k, g, _w, o in F.feed(pkg, SALT):
         n, h = by.get(g, (0, 0))
         by[g] = (n + 1, h + (1 if o else 0))
-    assert by == {SIG_BIG: (30, 12), SIG_MID: (14, 3), SIG_SMALL: (4, 4)}
+    assert by == {SIG_BIG: (33, 15), SIG_MID: (17, 6), SIG_SMALL: (4, 4)}
 
 
 def test_k_anonymity_drops_small_groups_and_rates_recompute(pkg, tmp_path):
     db = L.build_lab(tmp_path / "lab.sqlite", F.feed(pkg, SALT), SALT)
     rows = L.lab_query(db, L.METRIC, "w1")["rows"]
-    assert sorted((r["count"], r["rate"]) for r in rows) == [(14, 0.21), (30, 0.4)]
+    assert sorted((r["count"], r["rate"]) for r in rows) == [(17, 0.35), (33, 0.45)]
     for r in rows:
         assert L.verify_claim(db, L.scout_figure(db, r["evidence_ref"]), SALT)["ok"]
 

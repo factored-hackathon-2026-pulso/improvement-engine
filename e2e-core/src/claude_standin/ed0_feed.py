@@ -2,7 +2,7 @@
 
 Real E0 is read only at runtime from `ED0_E0_PATH` (never copied or committed). Only `case_id` and
 `query_signature` are read from `datos/copilot_query.parquet`; free text columns are never loaded.
-Group = query signature, outcome = recurrence (the same signature asked at least twice in one case).
+Group = query signature, outcome = recurrence (the case has at least two copilot queries: a repeat contact).
 Case ids leave this module only as salted HMAC keys; the raw signature is a transient in-memory group
 that the lab hashes and discards. The salt is the env `ED0_LAB_SALT` or ephemeral, and is never stored.
 """
@@ -39,9 +39,9 @@ def feed(package: str, salt: bytes, window: str = WINDOW):
     """Iterable of (case_key, group, window, outcome), one per (case, signature)."""
     import pyarrow.parquet as pq
     t = pq.read_table(os.path.join(package, QUERY_FILE), columns=["case_id", "query_signature"])
-    pairs = Counter(zip(t.column("case_id").to_pylist(), t.column("query_signature").to_pylist()))
+    cases, sigs = t.column("case_id").to_pylist(), t.column("query_signature").to_pylist()
     del t
-    for (case_id, sig), n in sorted(pairs.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))):
-        if case_id is None or sig is None:
-            continue
-        yield (_case_key(salt, case_id), sig, window, n >= 2)
+    per_case = Counter(c for c in cases if c is not None)
+    pairs = {(c, g) for c, g in zip(cases, sigs) if c is not None and g is not None}
+    for case_id, sig in sorted(pairs):
+        yield (_case_key(salt, case_id), sig, window, per_case[case_id] >= 2)
