@@ -6,6 +6,7 @@ pub mod auth;
 pub mod debug;
 pub mod ingest;
 pub mod lab;
+pub mod pgstore;
 pub mod server;
 pub mod sse;
 pub mod store;

@@ -181,7 +181,9 @@ impl App {
         }
         if prior.is_none() {
             let attempt = b.get("attempt").and_then(Value::as_i64).unwrap_or(0);
-            self.store.put_binding(&tenant, &command_key, BindingRec { request_digest, job_id: job_id.clone(), core_run_id, attempt, task_binding_ref });
+            if !self.store.put_binding(&tenant, &command_key, BindingRec { request_digest, job_id: job_id.clone(), core_run_id, attempt, task_binding_ref }) {
+                return code(409, "binding_conflict"); // lost a race for the job id or the binding ref is another tenant's
+            }
         }
         if mode.as_deref() == Some("applied_then_503") {
             return code(503, "unavailable"); // effect committed, answer lost

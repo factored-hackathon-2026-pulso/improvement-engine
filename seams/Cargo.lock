@@ -139,6 +139,8 @@ dependencies = [
  "base64",
  "core-client",
  "ed25519-dalek",
+ "pg",
+ "postgres",
  "rusqlite",
  "serde_json",
  "sha2 0.10.9",
