@@ -18,7 +18,7 @@ impl RunEventSink for Tap {
 fn opts(name: &str, pace: u64) -> DemoOpts {
     let work = std::env::temp_dir().join(format!("pulso-live-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&work);
-    let mut o = DemoOpts::new("run-demo0-test".into(), work, env!("CARGO_BIN_EXE_synth_runner").into());
+    let mut o = DemoOpts::new("run-demo0-test".into(), work, env!("CARGO_BIN_EXE_pulso-synth-runner").into());
     o.pace = Duration::from_millis(pace);
     o
 }

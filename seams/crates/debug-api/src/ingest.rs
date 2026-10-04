@@ -17,6 +17,43 @@ fn stage_of(step: &str) -> &str {
     }
 }
 
+/// One `doubles_declared` item for a `doubles[]` entry of the report.
+pub fn double_item(d: &Value) -> Option<Value> {
+    let (part, status) = (d["part"].as_str().filter(|x| !x.is_empty())?, d["status"].as_str().filter(|x| !x.is_empty())?);
+    Some(json!({"id": format!("{part}:{status}"), "what": double_what(d)}))
+}
+
+/// The graph node of a report step. `status` is the report's honesty label, or `pending` / `running` while a live run has not
+/// finished it; the label always carries it (`<id> [<status>]`).
+pub fn step_node(id: &str, status: &str, prev: Option<&str>) -> Value {
+    let (node_status, reason) = if status == "pending" {
+        ("planned", None)
+    } else if status == "running" {
+        ("running", None)
+    } else if status.starts_with("not_exercised") {
+        ("planned", Some("not_exercised"))
+    } else if status.starts_with("blocked") {
+        ("waiting_dependency", Some("dependency_blocked"))
+    } else {
+        ("complete", None)
+    };
+    json!({
+        "node_id": id, "label": format!("{id} [{status}]"), "stage": stage_of(id), "status": node_status,
+        "depends_on": prev.map(|p| vec![p]).unwrap_or_default(), "reason_code": reason, "node_kind": "material_step", "trace_id": null,
+    })
+}
+
+/// The `gates_set` payload of a report (the native verdict; the improvement gate is not in the report).
+pub fn gates_data(report: &Value) -> Value {
+    let verdict = report["gate"]["verdict"].as_str().unwrap_or("unknown");
+    json!({
+        "native": {"status": verdict, "reason_code": null, "report_ref": null, "checked_at": null},
+        "improvement": {"status": "not_evaluable", "reason_code": "not_in_engine_run_report", "receipt_refs": [], "checked_at": null},
+        "combined": {"decision": "hold", "reason_code": "improvement_gate_not_in_report"},
+        "proposal_id": null, "attempts": [],
+    })
+}
+
 fn double_what(d: &Value) -> String {
     let mut s = d["status"].as_str().unwrap_or("unknown").to_string();
     if d["observed"] == true {
@@ -69,28 +106,12 @@ pub fn engine_run_report(sink: &dyn RunEventSink, exists: &dyn Fn(&str) -> bool,
     for st in steps {
         let id = st["id"].as_str().ok_or("every step needs an id")?;
         let status = st["status"].as_str().unwrap_or("unknown");
-        let (node_status, reason) = if status.starts_with("not_exercised") {
-            ("planned", Some("not_exercised"))
-        } else if status.starts_with("blocked") {
-            ("waiting_dependency", Some("dependency_blocked"))
-        } else {
-            ("complete", None)
-        };
-        let node = json!({
-            "node_id": id, "label": format!("{id} [{status}]"), "stage": stage_of(id), "status": node_status,
-            "depends_on": prev.map(|p| vec![p]).unwrap_or_default(), "reason_code": reason, "node_kind": "material_step", "trace_id": null,
-        });
+        let node = step_node(id, status, prev);
         ev("node_status_changed", "node", id, json!({"node": node}))?;
         prev = Some(id);
     }
 
-    let verdict = report["gate"]["verdict"].as_str().unwrap_or("unknown");
-    ev("gates_set", "run", &run, json!({
-        "native": {"status": verdict, "reason_code": null, "report_ref": null, "checked_at": null},
-        "improvement": {"status": "not_evaluable", "reason_code": "not_in_engine_run_report", "receipt_refs": [], "checked_at": null},
-        "combined": {"decision": "hold", "reason_code": "improvement_gate_not_in_report"},
-        "proposal_id": null, "attempts": [],
-    }))?;
+    ev("gates_set", "run", &run, gates_data(report))?;
     ev("run_state_changed", "run", &run, json!({"state": "completed"}))?;
     Ok(run)
 }

@@ -9,6 +9,11 @@ publish.workspace = true
 name = "pulso"
 path = "src/main.rs"
 
+# The same fixed-output sensor stand-in as thread10 (one file, reused; no copy), built next to `pulso` so one `cargo build -p pulso` is enough.
+[[bin]]
+name = "pulso-synth-runner"
+path = "../thread10/src/bin/synth_runner.rs"
+
 [dependencies]
 debug-api = { path = "../debug-api" }
 serde_json = "1"
