@@ -51,3 +51,12 @@ fn unknown_invalid_or_inconsistent_config_refuses() {
     dup.push(("batch_cap", "2"));
     assert!(Config::from_pairs(&dup).is_err());
 }
+
+#[test]
+fn cold_start_gate_cannot_be_lowered_by_config() {
+    for kv in [("min_history_days", "0"), ("min_history_days", "13"), ("min_history_cases", "0"), ("min_history_cases", "199")] {
+        assert!(matches!(with(&[kv]), Err(SourceError::BadConfig(_))), "{kv:?}");
+    }
+    let c = with(&[("min_history_days", "30"), ("min_history_cases", "500")]).unwrap();
+    assert_eq!((c.min_history_days, c.min_history_cases), (30, 500));
+}

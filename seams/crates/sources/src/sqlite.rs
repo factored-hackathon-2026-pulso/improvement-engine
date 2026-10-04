@@ -33,7 +33,7 @@ fn guard(ctx: AuthContext<'_>) -> Authorization {
             if t == "sqlite_master" || t == "sqlite_schema" {
                 return Authorization::Allow; // schema names only
             }
-            let cols = policy::allowed_columns(&t);
+            let cols = if t == "event_log" { Some(EVENT_READ_COLUMNS) } else { policy::allowed_columns(&t) };
             if DENIED_TABLES.contains(&t.as_str()) || cols.is_none_or(|c| !column_name.is_empty() && !c.contains(&column_name.to_ascii_lowercase().as_str())) {
                 Authorization::Deny
             } else {

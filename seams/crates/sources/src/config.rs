@@ -74,8 +74,8 @@ impl Config {
             batch_cap: num("batch_cap", 1000, 1, crate::policy::HARD_CAP as u64)? as usize,
             work_dir: PathBuf::from(req("work_dir")?),
             runner_exe: PathBuf::from(req("runner_exe")?),
-            min_history_days: num("min_history_days", 14, 0, 3650)? as u32,
-            min_history_cases: num("min_history_cases", 200, 0, 10_000_000)? as u32,
+            min_history_days: num("min_history_days", 14, 14, 3650)? as u32,
+            min_history_cases: num("min_history_cases", 200, 200, 10_000_000)? as u32,
             min_support: num("min_support", 5, 1, 1_000_000)? as u32,
         })
     }

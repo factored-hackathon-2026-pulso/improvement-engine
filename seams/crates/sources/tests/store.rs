@@ -78,3 +78,15 @@ fn migration_creates_the_pulso_watermark_table_additively() {
     let up = sql.to_uppercase();
     assert!(!up.contains("DROP ") && !up.contains("ALTER TABLE PULSO_JOBS"));
 }
+
+#[test]
+fn stores_refuse_an_adapter_that_cannot_serve_the_source_mode() {
+    let s = MemStore::default();
+    let bad = s.commit(&pid("x"), None, &rec("dataset-pg", Watermark::Sequence(1)));
+    assert!(bad.is_err());
+    let ds = SourceId::new(DataMode::Dataset, "dataset:y").unwrap();
+    let w = Watermark::Dataset { ingested_at: "a".into(), batch_id: "b".into(), key: "k".into() };
+    assert!(s.commit(&ds, None, &rec("product-sqlite", w.clone())).is_err());
+    assert!(s.commit(&pid("x"), None, &rec("nonsense", Watermark::Sequence(1))).is_err());
+    assert!(s.commit(&ds, None, &rec("dataset-pg", w)).is_ok());
+}
