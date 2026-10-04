@@ -108,3 +108,46 @@ fn labels_quality_claims_forbidden_and_gate_authored_by_claude() {
     assert_eq!(member(&out, "quality_claims"), "\"forbidden\"");
     assert_eq!(steps::gate::LABEL, "gate=claude-authored");
 }
+
+#[test]
+fn json_reader_rejects_non_json_number_and_escape_forms() {
+    for bad in ["01", "-01", "1.", "-.5", "1.e3", "1e", "1e+", "+1", "-", "[01]", "\"\\u+123\"", "\"\\u 123\"", "\"\\u-123\"", "[1,]", "{\"a\":1,}", "[1 2]", "nul", "{\"a\" 1}", "\"\\x\""] {
+        assert!(canonical_json(bad).is_err(), "must reject {bad:?}");
+    }
+    for good in ["0", "-0", "0.0", "1e2", "1E+2", "-1.5e-3", "[]", "{}", "\"\\ud83d\\ude00\"", "{\"a\":1,\"a\":2}"] {
+        assert!(canonical_json(good).is_ok(), "must accept {good:?}");
+    }
+    assert_eq!(canonical_json("{\"a\":1,\"a\":2}").unwrap(), "{\"a\":2}");
+    assert!(canonical_json(&format!("{}1{}", "[".repeat(100_000), "]".repeat(100_000))).is_err());
+}
+
+#[test]
+fn malformed_inputs_return_err_never_panic() {
+    let cs = cases();
+    let base = cs.iter().find(|(c, _)| c == "fx1_pass").unwrap().1.clone();
+    // every prefix and every single-byte mutation of a valid envelope
+    for n in 0..base.len() {
+        if base.is_char_boundary(n) { let _ = run(&base[..n]); }
+    }
+    for i in 0..base.len() {
+        for rep in [b'{', b'}', b'[', b']', b'"', b'\\', b',', b':', b'-', b'0', b'u', b'e'] {
+            let mut b = base.clone().into_bytes();
+            b[i] = rep;
+            if let Ok(s) = String::from_utf8(b) { let _ = run(&s); }
+        }
+    }
+    for junk in ["", "null", "[]", "{}", "{\"gate_in\":null}", "{\"gate_in\":{},\"world_authors\":{}}", "\u{feff}{}", "{\"gate_in\":[1]}"] {
+        assert!(run(junk).is_err(), "{junk:?}");
+    }
+}
+
+#[test]
+fn judge_separation_edge_spellings() {
+    let cs = cases();
+    let base = cs.iter().find(|(c, _)| c == "fx1_pass").unwrap().1.clone();
+    for (judge, world) in [("claude-wrld0", "CLAUDE_WRLD0@9"), ("claude-wrld0", "  claude..wrld0@rev@2 "), ("claude-wrld0", "claude-_-wrld0")] {
+        let input = base.replace("\"world\":\"claude-wrld0\"", &format!("\"world\":\"{world}\"")).replace("\"judge_actor\":\"claude-gsipy\"", &format!("\"judge_actor\":\"{judge}\""));
+        assert!(input.contains(world) && input.contains(judge));
+        assert_eq!(verdict_of(&run(&input).unwrap()), "not_evaluable", "{world}");
+    }
+}
