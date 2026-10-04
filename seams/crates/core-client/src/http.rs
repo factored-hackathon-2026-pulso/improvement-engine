@@ -4,6 +4,9 @@ use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+/// Hard cap on a response (head + body); the bridge caps results at 256 KiB.
+pub const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+
 #[derive(Debug)]
 pub struct RawResponse {
     pub status: u16,
@@ -49,11 +52,18 @@ pub fn request(
         s.write_all(b).map_err(|e| HttpError::Io(e.to_string()))?;
     }
     let mut raw = Vec::new();
-    s.read_to_end(&mut raw).map_err(|e| HttpError::Io(e.to_string()))?;
+    // Bounded read: one byte past the cap is enough to refuse.
+    (&mut s)
+        .take(MAX_RESPONSE_BYTES as u64 + 1024 * 16 + 1)
+        .read_to_end(&mut raw)
+        .map_err(|e| HttpError::Io(e.to_string()))?;
     parse(&raw)
 }
 
 fn parse(raw: &[u8]) -> Result<RawResponse, HttpError> {
+    if raw.len() > MAX_RESPONSE_BYTES + 16 * 1024 {
+        return Err(HttpError::Protocol("response too large".into()));
+    }
     let end = raw
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
@@ -69,6 +79,9 @@ fn parse(raw: &[u8]) -> Result<RawResponse, HttpError> {
         .filter_map(|l| l.split_once(':').map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string())))
         .collect();
     let rest = &raw[end + 4..];
+    if rest.len() > MAX_RESPONSE_BYTES {
+        return Err(HttpError::Protocol("response too large".into()));
+    }
     let get = |n: &str| headers.iter().find(|(k, _)| k == n).map(|(_, v)| v.as_str());
     let body = if get("transfer-encoding").is_some_and(|v| v.eq_ignore_ascii_case("chunked")) {
         dechunk(rest)?
@@ -97,7 +110,7 @@ fn dechunk(mut d: &[u8]) -> Result<Vec<u8>, HttpError> {
         if size == 0 {
             return Ok(out);
         }
-        if d.len() < size + 2 {
+        if size > MAX_RESPONSE_BYTES || d.len() < size + 2 {
             return Err(HttpError::Io("truncated chunk".into()));
         }
         out.extend_from_slice(&d[..size]);
@@ -116,5 +129,18 @@ mod tests {
         let l = parse(b"HTTP/1.1 409 X\r\nContent-Length: 2\r\n\r\n{}").unwrap();
         assert_eq!((l.status, l.body.as_slice()), (409, &b"{}"[..]));
         assert!(matches!(parse(b"HTTP/1.1 200 X\r\nContent-Length: 9\r\n\r\n{}"), Err(HttpError::Io(_))));
+    }
+
+    #[test]
+    fn hostile_chunk_size_is_an_error_not_a_panic() {
+        let r = parse(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nffffffffffffffff\r\nabc\r\n0\r\n\r\n");
+        assert!(matches!(r, Err(HttpError::Protocol(_)) | Err(HttpError::Io(_))));
+    }
+
+    #[test]
+    fn oversized_body_is_refused() {
+        let mut raw = b"HTTP/1.1 200 OK\r\n\r\n".to_vec();
+        raw.extend(std::iter::repeat(b'a').take(MAX_RESPONSE_BYTES + 1));
+        assert!(matches!(parse(&raw), Err(HttpError::Protocol(_))));
     }
 }

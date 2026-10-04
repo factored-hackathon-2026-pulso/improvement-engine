@@ -83,8 +83,13 @@ fn pct(s: &str) -> String {
 }
 
 impl CoreClient {
-    pub fn new(cfg: ClientConfig) -> Self {
+    pub fn new(mut cfg: ClientConfig) -> Self {
         let key = SigningKey::from_bytes(&cfg.signing_seed);
+        // Do not keep a second copy of the seed around (SigningKey zeroizes itself on drop).
+        for b in cfg.signing_seed.iter_mut() {
+            // SAFETY-free volatile-ish wipe: black_box defeats dead-store elimination.
+            *b = std::hint::black_box(0);
+        }
         CoreClient { cfg, key }
     }
 

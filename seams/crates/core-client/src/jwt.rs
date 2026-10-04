@@ -40,7 +40,7 @@ pub fn sign(key: &SigningKey, p: &JwtParams) -> String {
     c.insert("sub".into(), json!(format!("worker:{}", p.worker_id)));
     c.insert("purpose".into(), json!(p.purpose));
     c.insert("iat".into(), json!(p.iat));
-    c.insert("exp".into(), json!(p.iat + p.ttl_s.min(crate::pins::JWT_MAX_TTL_SECONDS)));
+    c.insert("exp".into(), json!(p.iat + p.ttl_s.clamp(1, crate::pins::JWT_MAX_TTL_SECONDS)));
     c.insert("jti".into(), json!(p.jti));
     if let Some(t) = p.tenant_id {
         c.insert("tenant_id".into(), json!(t));
@@ -52,4 +52,17 @@ pub fn sign(key: &SigningKey, p: &JwtParams) -> String {
     let signing_input = format!("{}.{}", enc(&header), enc(&Value::Object(c)));
     let sig = key.sign(signing_input.as_bytes());
     format!("{signing_input}.{}", B64.encode(sig.to_bytes()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn non_positive_ttl_never_yields_exp_not_after_iat() {
+        let k = SigningKey::from_bytes(&[7u8; 32]);
+        let t = sign(&k, &JwtParams { kid: "k", worker_id: "w", purpose: "version_probe", tenant_id: None, job_id: None, iat: 1000, ttl_s: -5, jti: "j" });
+        let p = t.split('.').nth(1).unwrap();
+        let v: Value = serde_json::from_slice(&B64.decode(p).unwrap()).unwrap();
+        assert!(v["exp"].as_i64().unwrap() > 1000);
+    }
 }

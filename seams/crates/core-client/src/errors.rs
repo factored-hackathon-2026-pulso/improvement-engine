@@ -73,10 +73,8 @@ pub fn parse_envelope(status: u16, body: &[u8]) -> Option<ApiError> {
     let v: Value = serde_json::from_slice(body).ok()?;
     let code = v.get("code")?.as_str()?.to_string();
     let known = classify(&code);
-    // The contract table is authoritative for retryability; the wire flag is the fallback for unknown codes.
-    let retryable = known
-        .map(|k| k.retryable)
-        .unwrap_or_else(|| v.get("retryable").and_then(Value::as_bool).unwrap_or(false));
+    // The contract table is authoritative for retryability; unknown codes fail closed (never retried).
+    let retryable = known.map(|k| k.retryable).unwrap_or(false);
     let details = v.get("details").cloned().unwrap_or(Value::Null);
     Some(ApiError {
         status,

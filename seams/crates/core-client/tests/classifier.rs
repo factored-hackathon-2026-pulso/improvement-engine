@@ -56,3 +56,11 @@ fn parse_envelope_extracts_code_and_reason() {
     assert!(!e.retryable);
     assert!(errors::parse_envelope(500, b"<html>").is_none());
 }
+
+#[test]
+fn unknown_code_fails_closed_even_if_wire_says_retryable() {
+    let body = br#"{"code":"pulso:made_up","retryable":true,"details":{}}"#;
+    let e = errors::parse_envelope(500, body).unwrap();
+    assert!(!e.known);
+    assert_eq!(e.disposition(), Disposition::Terminal);
+}
