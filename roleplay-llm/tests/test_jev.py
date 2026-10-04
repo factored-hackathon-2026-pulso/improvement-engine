@@ -223,5 +223,42 @@ class Http(Base):
         self.assertEqual(c.exception.status, 404)
 
 
+class AdversarialReview(Base):
+    def test_malformed_question_type_and_input_never_crash_and_never_queue(self):
+        j = self.jev()
+        for mut in (lambda r: r["questions"]["urgent"].update(type=[]),
+                    lambda r: r["questions"]["urgent"].update(type={}),
+                    lambda r: r["state"].pop("input"),
+                    lambda r: r["state"].update(input=[1]),
+                    lambda r: r["state"].update(input="fam_001")):
+            r = req()
+            mut(r)
+            status, out = j.handle(body(r))
+            self.assertIn(status, (400, 422), out)
+        self.assertEqual(self.requests(), [])
+
+    def test_unhashable_choice_in_response_is_rejected_not_crash(self):
+        j = self.jev()
+        r = req(question_ids=["intent"])
+        bad = {"intent": {"type": "choice", "choice": ["billing"], "probabilities": {"billing": 1}}}
+        respond(self.queue, jev_replay_key(r), {"answers": bad, "usage": CONTENT["usage"]})
+        status, out = j.handle(body(r))
+        self.assertEqual((status, out["error"]["type"]), (502, "invalid_output"))
+
+    def test_score_level_outside_criteria_rejected(self):
+        j = self.jev()
+        r = req(question_ids=["urgent"])
+        r["questions"] = {"s": {"type": "score", "criteria": ["low", "high"]}}
+        ans = {"s": {"type": "score", "probabilities": {"7": 1}}}
+        respond(self.queue, jev_replay_key(r), {"answers": ans, "usage": CONTENT["usage"]})
+        self.assertEqual(j.handle(body(r))[0], 502)
+
+    def test_question_extra_keys_named_like_volatile_do_not_collide(self):
+        a, b = req(binding="binding-aaaaaaaa"), req(binding="binding-aaaaaaaa")
+        a["questions"]["urgent"]["run_id"] = "one"
+        b["questions"]["urgent"]["run_id"] = "two"
+        self.assertNotEqual(jev_replay_key(a), jev_replay_key(b))
+
+
 if __name__ == "__main__":
     unittest.main()
