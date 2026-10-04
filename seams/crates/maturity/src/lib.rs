@@ -332,6 +332,6 @@ pub fn evaluate(type_id: &str, t: &Thresholds, sources: &[&dyn InputSource]) -> 
         blocked_by = Some("copilot_questions: no_input".into());
     }
     let simulated = stage != Stage::S0
-        && (copilot.is_some_and(|(_, s)| s) || repeat_q.simulated() || tool_use_rate.simulated() || (stage >= Stage::S3 && draft_accept_100.simulated()) || (stage == Stage::Agent && agent_resolved.simulated()));
+        && (copilot.is_some_and(|(_, s)| s) || repeat_q.simulated() || tool_use_rate.simulated() || (stage >= Stage::S3 && draft_accept_100.simulated()) || (stage == Stage::Agent && (agent_resolved.simulated() || all.iter().any(|(_, sim, i)| *sim && i.as_ref().is_some_and(|i| i.has_agent)))));
     Maturity { type_id: type_id.to_string(), stage, agent_proposed, simulated, repeat_q, tool_use_rate, draft_accept_100, agent_resolved, blocked_by, cases_today }
 }
