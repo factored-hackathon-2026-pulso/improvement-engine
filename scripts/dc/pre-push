@@ -1,0 +1,4 @@
+#!/bin/sh
+# DC0 push scan hook. Install: cp scripts/dc/pre-push .git/hooks/pre-push (or git config core.hooksPath).
+ROOT="$(git rev-parse --show-toplevel)"
+exec python "$ROOT/scripts/dc/dataclass_gate.py" push-scan --root "$ROOT"

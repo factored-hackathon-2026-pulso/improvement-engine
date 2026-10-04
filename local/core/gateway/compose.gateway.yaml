@@ -1,0 +1,7 @@
+# DC0 gateway networks. gw-e0 sits on an internal network (no route out); gw-hosted is the only one with egress.
+# Fragment only: services attach with `networks: [pulso-gw-e0]` and must never join both.
+networks:
+  pulso-gw-e0:
+    internal: true
+  pulso-gw-hosted:
+    internal: false
