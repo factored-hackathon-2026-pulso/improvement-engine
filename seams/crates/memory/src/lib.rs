@@ -89,8 +89,11 @@ impl Memory {
         }
         any.then_some(out)
     }
-    pub fn confirm(&mut self, _id: &str, _evidence: Vec<String>) -> Result<(), MemError> {
-        Err(MemError::NotImplemented)
+    pub fn confirm(&mut self, id: &str, evidence: Vec<String>) -> Result<(), MemError> {
+        let n = self.notes.get_mut(id).ok_or_else(|| MemError::UnknownNote(id.to_string()))?;
+        n.evidence.extend(evidence);
+        n.status = Status::Confirmed;
+        Ok(())
     }
     pub fn note(&self, id: &str) -> Option<&Note> {
         self.notes.get(id)
