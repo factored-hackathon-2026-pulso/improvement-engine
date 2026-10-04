@@ -25,9 +25,15 @@ function Test-DevOneShot {
 }
 
 # The fixture profile runs contract_mock (core-synth) and no real runtime/human issuer/bridge key: those engine checks do not apply.
+$script:DevFixtureNotApplicable = 'core_not_ready', 'human_issuer_ready', 'human_issuer_internal_only', 'bridge_executor_key', 'core_demo_doubles_active', 'core_unreachable_from_stack'
 function Select-DevCoreChecks {
     param([object[]]$Checks = @(), [Parameter(Mandatory)][string]$Profile)
     if ($Profile -ne 'fixture') { return @($Checks) }
-    $n = 'core_not_ready', 'human_issuer_ready', 'human_issuer_internal_only', 'bridge_executor_key', 'core_demo_doubles_active', 'core_unreachable_from_stack'
-    @($Checks | Where-Object { $_.check -notin $n })
+    @($Checks | Where-Object { $_.check -notin $script:DevFixtureNotApplicable })
+}
+# Names of engine checks not applicable to the profile: doctor must print them as skipped, never as passed.
+function Get-DevSkippedChecks {
+    param([object[]]$Checks = @(), [Parameter(Mandatory)][string]$Profile)
+    if ($Profile -ne 'fixture') { return @() }
+    @($Checks | Where-Object { $_.check -in $script:DevFixtureNotApplicable } | ForEach-Object { $_.check })
 }

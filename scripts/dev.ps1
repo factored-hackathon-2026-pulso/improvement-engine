@@ -36,7 +36,7 @@ try {
         'down' { exit (Invoke-Core 'stop.ps1' @('-Namespace', $Namespace, '-Machine', $Machine)) }
         'reset' { exit (Invoke-Core 'reset.ps1' @('-Namespace', $Namespace, '-Machine', $Machine, '-Confirm')) }
         'doctor' {
-            $coreChecks = @()
+            $coreChecks = @(); $skipped = @()
             if ($StatesFile) {
                 $expected = @($ExpectedServices.Split(',') | ForEach-Object { $p = $_.Split(':'); [pscustomobject]@{ name = $p[0]; oneShot = ($p.Count -gt 1 -and $p[1] -eq 'oneshot') } })
                 $raw = Get-Content -LiteralPath $StatesFile -Raw | ConvertFrom-Json
@@ -46,8 +46,10 @@ try {
                 $expected = @($model.services.PSObject.Properties | ForEach-Object { [pscustomobject]@{ name = $_.Name; oneShot = (Test-DevOneShot -Service $_.Value) } })
                 $states = @{}; foreach ($e in $expected) { $states[$e.name] = Get-ContainerState -Connection $conn -Name "$project-$($e.name)-1" }
                 $json = & $ps -NoProfile -File (Join-Path $core 'doctor.core.ps1') -Json -Namespace $Namespace -Machine $Machine -Profile $Profile 2>$null | Out-String
-                try { $coreChecks = @(Select-DevCoreChecks -Checks @($json | ConvertFrom-Json) -Profile $Profile) } catch { $coreChecks = @([pscustomobject]@{ check = 'engine_doctor'; status = 'fail'; code = 'engine_doctor_unreadable'; detail = 'doctor.core.ps1 gave no JSON' }) }
+                try { $all = @($json | ConvertFrom-Json); $skipped = @(Get-DevSkippedChecks -Checks $all -Profile $Profile); $coreChecks = @(Select-DevCoreChecks -Checks @($json | ConvertFrom-Json) -Profile $Profile) } catch { $coreChecks = @([pscustomobject]@{ check = 'engine_doctor'; status = 'fail'; code = 'engine_doctor_unreadable'; detail = 'doctor.core.ps1 gave no JSON' }) }
             }
+            Write-Output "profile: $Profile (real_local not verified by this doctor run)"
+            if ($skipped.Count) { Write-Output "skipped (not applicable to $Profile): $($skipped -join ', ')" }
             $v = Get-DevDoctorVerdict -Expected $expected -States $states -CoreChecks $coreChecks
             if ($v.ok) { Write-Output "doctor: green ($(@($expected).Count) services, namespace $Namespace)"; exit 0 }
             foreach ($f in $v.failures) { Write-Output "$($f.service): $($f.reason) ($($f.detail))" }
