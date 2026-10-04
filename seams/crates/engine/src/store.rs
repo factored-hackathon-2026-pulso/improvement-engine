@@ -1,6 +1,5 @@
 //! Job store port plus a file-backed in-process implementation (std only).
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 
 pub trait JobStore {
@@ -8,8 +7,6 @@ pub trait JobStore {
     fn get(&self, key: &str) -> Result<Option<(u64, String)>, String>;
     /// Compare-and-set: `expected` 0 = key must be absent. Returns the new version.
     fn cas(&self, key: &str, expected: u64, value: &str) -> Result<u64, String>;
-    fn append_event(&self, line: &str) -> Result<(), String>;
-    fn events(&self) -> Result<Vec<String>, String>;
 }
 
 pub struct FileStore {
@@ -47,20 +44,5 @@ impl JobStore for FileStore {
         fs::write(&tmp, format!("{}\n{}", current + 1, value)).map_err(|e| e.to_string())?;
         fs::rename(&tmp, self.path(key)).map_err(|e| e.to_string())?;
         Ok(current + 1)
-    }
-    fn append_event(&self, line: &str) -> Result<(), String> {
-        let mut f = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(self.dir.join("events.log"))
-            .map_err(|e| e.to_string())?;
-        writeln!(f, "{line}").map_err(|e| e.to_string())
-    }
-    fn events(&self) -> Result<Vec<String>, String> {
-        match fs::read_to_string(self.dir.join("events.log")) {
-            Ok(s) => Ok(s.lines().map(String::from).collect()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
-            Err(e) => Err(e.to_string()),
-        }
     }
 }
