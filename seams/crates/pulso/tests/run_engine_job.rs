@@ -238,3 +238,34 @@ fn the_live_core_port_is_refused_at_construction_when_it_is_not_configured() {
     let e = EngineRunner::with_env(&c, &work, Path::new(RUNNER), store, Arc::new(|_| None)).err().expect("refused");
     assert!(e.contains("PULSO_CORE_PORT") || e.to_lowercase().contains("core"), "{e}");
 }
+
+#[test]
+fn a_source_declared_simulated_is_never_called_real_platform_signals_anywhere() {
+    let work = temp("simlabel");
+    write_record(&work, &record(vec![signal(0, "pt.web_chat", 54, 321)], "platform", "rust-events"));
+    let f = fixture(&work, &[("PULSO_SOURCE_PROVENANCE", "simulated")]);
+    run_job(&f).unwrap();
+    let evs = events(&f.store, RUN);
+    let title = f.store.state(RUN).unwrap()["run"]["title"].as_str().unwrap().to_lowercase();
+    assert!(!title.contains("real platform"), "{title}");
+    assert!(title.contains("simulated platform-shaped"), "{title}");
+    let profile = &of_kind(&evs, "run_profile_set")[0]["data"];
+    assert!(!profile["label"].as_str().unwrap().to_lowercase().contains("real platform"), "{profile}");
+    // an undeclared or real source keeps the monitor label (real platform signals; release and observation simulated)
+    let work = temp("reallabel");
+    write_record(&work, &record(vec![], "platform", "rust-events"));
+    let g = fixture(&work, &[("PULSO_SOURCE_PROVENANCE", "real")]);
+    run_job(&g).unwrap();
+    assert!(g.store.state(RUN).unwrap()["run"]["title"].as_str().unwrap().contains("real platform signals"));
+}
+
+#[test]
+fn the_steps_of_a_treated_run_do_not_claim_a_generated_sample_data_class() {
+    let work = temp("class");
+    write_record(&work, &record(vec![signal(0, "pt.web_chat", 54, 321)], "platform", "rust-events"));
+    let f = fixture(&work, &[]);
+    run_job(&f).unwrap();
+    let doubles = f.store.state(RUN).unwrap()["doubles"].to_string();
+    assert!(!doubles.contains("generated_sample"), "{doubles}");
+    assert!(doubles.contains("treated"), "{doubles}");
+}
