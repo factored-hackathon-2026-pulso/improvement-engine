@@ -1,0 +1,15 @@
+{
+  "contract_version": "engine-steps/0",
+  "step": "recompute",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "recomputes": [
+    {
+      "signal_id": "sig-0001",
+      "claimed_rate": 0.3,
+      "recomputed_rate": 0.3,
+      "match": true,
+      "evidence_ref": "ev-0001"
+    }
+  ]
+}

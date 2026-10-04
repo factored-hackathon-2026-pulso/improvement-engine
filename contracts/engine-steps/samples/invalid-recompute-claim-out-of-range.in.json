@@ -1,0 +1,16 @@
+{
+  "contract_version": "engine-steps/0",
+  "step": "recompute",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "lab_ref": "lab:sample-1@1",
+  "signal_ids": [
+    "sig-0001"
+  ],
+  "scout_claims": [
+    {
+      "signal_id": "sig-0001",
+      "claimed_rate": 1.5
+    }
+  ]
+}

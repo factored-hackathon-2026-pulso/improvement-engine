@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "engine-steps/compile.out",
+  "title": "compile step output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "step",
+    "run_id",
+    "data_class",
+    "status",
+    "compiler_label"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "engine-steps/0"
+    },
+    "step": {
+      "const": "compile"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "data_class": {
+      "enum": [
+        "synthetic",
+        "treated",
+        "e0",
+        "original"
+      ]
+    },
+    "status": {
+      "enum": [
+        "compiled",
+        "denied"
+      ]
+    },
+    "draft_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operations",
+        "digest"
+      ],
+      "properties": {
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object"
+          }
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "denied_reason": {
+      "enum": [
+        "kind_not_supported",
+        "missing_precondition",
+        "outside_bridge",
+        "mutable_reference"
+      ]
+    },
+    "compiler_label": {
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "draft_plan"
+      ],
+      "properties": {
+        "status": {
+          "const": "compiled"
+        }
+      }
+    },
+    {
+      "required": [
+        "denied_reason"
+      ],
+      "properties": {
+        "status": {
+          "const": "denied"
+        }
+      }
+    }
+  ]
+}

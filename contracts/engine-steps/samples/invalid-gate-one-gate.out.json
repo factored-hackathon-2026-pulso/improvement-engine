@@ -1,0 +1,15 @@
+{
+  "contract_version": "engine-steps/0",
+  "step": "gate",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "verdict": "pass",
+  "gates": [
+    {
+      "gate": "safety",
+      "status": "pass"
+    }
+  ],
+  "judge_actor": "actor-judge",
+  "quality_claims": "forbidden"
+}

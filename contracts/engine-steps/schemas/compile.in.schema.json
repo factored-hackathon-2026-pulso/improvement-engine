@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "engine-steps/compile.in",
+  "title": "compile step input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "step",
+    "run_id",
+    "data_class",
+    "change_spec",
+    "base_bundle_ref"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "engine-steps/0"
+    },
+    "step": {
+      "const": "compile"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "data_class": {
+      "enum": [
+        "synthetic",
+        "treated",
+        "e0",
+        "original"
+      ]
+    },
+    "change_spec": {
+      "$ref": "#/$defs/ChangeSpec"
+    },
+    "base_bundle_ref": {
+      "type": "string",
+      "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+    }
+  },
+  "$defs": {
+    "ChangeSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_bundle_ref",
+        "opportunity_ref",
+        "workflow_bridge_ref",
+        "operations",
+        "expected_mechanism",
+        "affected_routes",
+        "rollback_ref"
+      ],
+      "properties": {
+        "base_bundle_ref": {
+          "type": "string",
+          "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+        },
+        "opportunity_ref": {
+          "type": "string",
+          "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+        },
+        "workflow_bridge_ref": {
+          "type": "string",
+          "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "op",
+              "target_kind",
+              "target_ref",
+              "precondition_digest"
+            ],
+            "properties": {
+              "op": {
+                "enum": [
+                  "add",
+                  "replace",
+                  "disable"
+                ]
+              },
+              "target_kind": {
+                "enum": [
+                  "prompt",
+                  "eval_suite"
+                ]
+              },
+              "target_ref": {
+                "type": "string",
+                "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+              },
+              "new_ref": {
+                "type": "string",
+                "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+              },
+              "precondition_digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "expected_mechanism": {
+          "type": "string",
+          "minLength": 1
+        },
+        "affected_routes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "rollback_ref": {
+          "type": "string",
+          "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "contract_version": "engine-steps/0",
+  "step": "compile",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "status": "compiled",
+  "compiler_label": "claude-standin(python)",
+  "draft_plan": {
+    "operations": [
+      {
+        "op": "replace"
+      }
+    ],
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}
