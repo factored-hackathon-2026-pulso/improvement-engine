@@ -36,3 +36,12 @@ DTOs (`serde_json::Value`-based, no `crates/core`): `version`, `invoke`, `read_t
   `tests/golden_drift.rs` fails when the goldens change without regeneration (`--check` does the same from the shell).
 - Not sent: `traceparent` (optional in the goldens), `credentials`, `trace`, the deprecated `evaluation_context_ref`.
 - Live check (`tests/live.rs`, `#[ignore]`): `live_typed_replay_is_one_run` needs a stack with a seeded scout release.
+
+## core-client K3 status (writer path): partial
+
+Done and tested against the FakeCore: draft plan, dry-run, commitment, writer-stage invoke, commitment verification
+(`CommitmentMismatch`), alias readback check, JCS/digest parity with Python `rfc8785` (seeded fuzz fixture).
+NOT done, so K3 acceptance ("Prompt+EvalSuite published to staging on the real image, readback equals commitment") is
+NOT met: (1) a Rust client + authorizer for Core `/v1/registry` approve/publish; (2) sealing the draft artifact goes
+through the e2e fixtures server `/_e2e/config`, not a bridge contract route (BRG1 gap candidate); (3) the live test
+is `#[ignore]` and was not run against the real image in this branch.

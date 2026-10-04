@@ -23,6 +23,11 @@ impl fmt::Display for DecodeError {
 
 impl std::error::Error for DecodeError {}
 
+/// Length in Unicode code points: what Python `len(str)` and JSON-Schema `maxLength` count (never UTF-8 bytes).
+pub(crate) fn cp_len(s: &str) -> usize {
+    s.chars().count()
+}
+
 pub(crate) fn err<T>(what: &str, why: impl fmt::Display) -> Result<T, DecodeError> {
     Err(DecodeError(format!("{what}: {why}")))
 }
@@ -335,7 +340,7 @@ impl TaskInvocation {
             ("logical_key", &self.logical_key, 256),
         ];
         for (n, v, max) in nonempty {
-            if v.is_empty() || v.len() > max {
+            if v.is_empty() || cp_len(v) > max {
                 return Err(format!("{n} must be 1..={max} chars"));
             }
         }

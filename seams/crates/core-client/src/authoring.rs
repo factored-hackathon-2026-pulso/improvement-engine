@@ -40,17 +40,17 @@ impl DryRunRequest {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.tenant_id.is_empty() || self.tenant_id.len() > 255 {
+        if self.tenant_id.is_empty() || crate::dto::cp_len(&self.tenant_id) > 255 {
             return Err("tenant_id must be 1..=255 chars".into());
         }
-        if self.agent_id.is_empty() || self.agent_id.len() > 255 {
+        if self.agent_id.is_empty() || crate::dto::cp_len(&self.agent_id) > 255 {
             return Err("agent_id must be 1..=255 chars".into());
         }
-        if self.base_release_id.as_deref().is_some_and(|b| b.len() > 255) {
+        if self.base_release_id.as_deref().is_some_and(|b| crate::dto::cp_len(b) > 255) {
             return Err("base_release_id is capped at 255 chars".into());
         }
         for (i, c) in self.changes.iter().enumerate() {
-            if c.kind.is_empty() || c.kind.len() > 64 {
+            if c.kind.is_empty() || crate::dto::cp_len(&c.kind) > 64 {
                 return Err(format!("changes[{i}].kind must be 1..=64 chars"));
             }
             for (n, v) in [("content", &c.content), ("docs", &c.docs)] {
@@ -230,7 +230,7 @@ impl CredentialRequest {
 
     pub fn validate(&self) -> Result<(), String> {
         for (n, v, max) in [("tenant_id", &self.tenant_id, 128), ("role", &self.role, 64), ("purpose", &self.purpose, 64)] {
-            if v.is_empty() || v.len() > max {
+            if v.is_empty() || crate::dto::cp_len(v) > max {
                 return Err(format!("{n} must be 1..={max} chars"));
             }
         }

@@ -62,7 +62,7 @@ impl AdmissionRequest {
             ("suite_digest", &self.suite_digest, 128),
             ("budget_ref", &self.budget_ref, 200),
         ] {
-            if v.is_empty() || v.len() > max {
+            if v.is_empty() || crate::dto::cp_len(v) > max {
                 return Err(format!("{n} must be 1..={max} chars"));
             }
         }

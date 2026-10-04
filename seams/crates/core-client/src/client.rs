@@ -15,6 +15,9 @@ pub struct ClientConfig {
     pub signing_seed: [u8; 32],
     pub ttl_s: i64,
     pub timeout: Duration,
+    /// TEST ONLY: accept golden placeholders (`<...>`) in response binding fields. A real bridge never emits them, so
+    /// the default (`false`) treats one as a contract violation instead of skipping the binding check.
+    pub accept_golden_placeholders: bool,
 }
 
 impl ClientConfig {
@@ -26,6 +29,7 @@ impl ClientConfig {
             signing_seed,
             ttl_s: 60,
             timeout: Duration::from_secs(30),
+            accept_golden_placeholders: false,
         }
     }
 }
@@ -42,6 +46,8 @@ pub enum CallError {
     MissingIdempotencyKey,
     /// Invalid key characters (`[A-Za-z0-9_.:-]{1,200}`); nothing was sent.
     InvalidIdempotencyKey,
+    /// A path parameter is empty, a dot segment (`.`/`..`), or holds `/`, `\`, `%` or a control character; nothing was sent.
+    InvalidPathParam(String),
     /// `sent=false`: connect failed, safe to retry. `sent=true`: outcome UNKNOWN (never "failed").
     Transport { sent: bool, message: String },
     /// Non-2xx with a bridge error envelope.
@@ -69,6 +75,12 @@ pub struct CoreClient {
 
 fn key_ok(k: &str) -> bool {
     (1..=200).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.:-".contains(&b))
+}
+
+/// A path parameter is one URL segment: non-empty, not a dot segment, and free of separators, `%` (an encoded
+/// `..` would bypass the dot check on a lenient server) and control characters.
+fn path_param_ok(p: &str) -> bool {
+    !p.is_empty() && p != "." && p != ".." && !p.chars().any(|c| c.is_control() || matches!(c, '/' | '\u{5c}' | '%'))
 }
 
 fn pct(s: &str) -> String {
@@ -100,6 +112,10 @@ impl CoreClient {
         self
     }
 
+    pub(crate) fn placeholders_ok(&self) -> bool {
+        self.cfg.accept_golden_placeholders
+    }
+
     pub(crate) fn attempts(&self) -> u32 {
         self.attempts
     }
@@ -119,6 +135,11 @@ impl CoreClient {
         }
         if idempotency_key.is_some_and(|k| !key_ok(k)) {
             return Err(CallError::InvalidIdempotencyKey);
+        }
+        for p in path_params {
+            if !path_param_ok(p) {
+                return Err(CallError::InvalidPathParam(format!("{p:?}")));
+            }
         }
         let mut path = format!("{BASE_PATH}{}", route.path);
         for p in path_params {

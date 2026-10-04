@@ -22,6 +22,8 @@ pub enum OpError {
     Invalid(String),
     /// The bridge answered something that contradicts the contract (wrong binding, digest not bound to our request).
     Contract(String),
+    /// The writer stage result differs from the sealed commitment (or the dry-run digest): nothing may be adopted.
+    CommitmentMismatch(String),
     /// A dry-run answered `valid: false` or with violations: HTTP 200 but NOT success.
     DryRunRefused(Vec<Violation>),
 }
@@ -43,6 +45,7 @@ impl fmt::Display for OpError {
             OpError::Canon(c) => write!(f, "{c}"),
             OpError::Invalid(s) => write!(f, "invalid request: {s}"),
             OpError::Contract(s) => write!(f, "contract violation: {s}"),
+            OpError::CommitmentMismatch(s) => write!(f, "commitment mismatch: {s}"),
             OpError::DryRunRefused(v) => write!(f, "dry-run refused: {} violation(s): {}", v.len(), v.iter().map(|x| format!("{}: {}", x.rule, x.message)).collect::<Vec<_>>().join("; ")),
         }
     }
@@ -137,10 +140,10 @@ impl CoreClient {
         let body = req.to_json();
         let r = self.op(&routes::RUN_ARM, tenant, job_id, &[], Some(&body), Some(&req.idempotency_key), self.attempts())?;
         let rep = ArmReport::from_json(&r.body)?;
-        if !rep.execution_id_well_formed() {
+        if !rep.execution_id_well_formed(self.placeholders_ok()) {
             return Err(OpError::Contract(format!("execution_id {:?} is not arm-<32 hex>", rep.execution_id)));
         }
-        if !rep.execution_id.starts_with('<') && rep.execution_id != expected {
+        if !(self.placeholders_ok() && rep.execution_id.starts_with('<')) && rep.execution_id != expected {
             return Err(OpError::Contract(format!("execution_id {} is not the id of this key ({expected})", rep.execution_id)));
         }
         Ok(rep)
@@ -175,7 +178,7 @@ impl CoreClient {
         let r = self.op(&routes::ADMIT_EVALUATION, tenant, Some(job_id), &[], Some(&body), None, self.attempts())?;
         let admission = Admission::from_json(&r.body)?;
         // Golden placeholders (`<...>`) can never come from a real bridge.
-        if !admission.evaluation_context_ref.starts_with('<') && admission.evaluation_context_ref != derived {
+        if !(self.placeholders_ok() && admission.evaluation_context_ref.starts_with('<')) && admission.evaluation_context_ref != derived {
             return Err(OpError::Contract(format!("evaluation_context_ref {} is not the derived {derived}", admission.evaluation_context_ref)));
         }
         Ok(AdmissionOutcome { admission, created: r.status == 201 })

@@ -4,7 +4,7 @@
 //! profile, Idempotency-Key, body) and is answered with the golden status and body. Anything else is recorded as a
 //! failure and answered 418, so a client that encodes anything differently from the Python bridge golden fails.
 //!
-//! Matching rules: `null`-valued keys equal absent keys and a top-level `schema_version: "1"` equals absent (the
+//! Matching rules: `null`-valued TOP-LEVEL body keys equal absent keys (nested nulls are content) and a top-level `schema_version: "1"` equals absent (the
 //! DTOs treat them alike, `default: "1"`); a golden string of the form
 //! `<name>` is a placeholder for a volatile value: it matches any string, the same name must always bind the same
 //! value and different names different values (so `request_digest#2` vs `#3` really differ); `deadline*` must be
@@ -114,20 +114,18 @@ impl Bindings {
     }
 }
 
-fn strip_nulls(v: &Value) -> Value {
-    match v {
-        Value::Object(m) => Value::Object(m.iter().filter(|(_, x)| !x.is_null()).map(|(k, x)| (k.clone(), strip_nulls(x))).collect()),
-        Value::Array(a) => Value::Array(a.iter().map(strip_nulls).collect()),
-        o => o.clone(),
-    }
+fn strip_top_nulls(m: &serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    m.iter().filter(|(_, x)| !x.is_null()).map(|(k, x)| (k.clone(), x.clone())).collect()
 }
 
 fn matches(golden: &Value, actual: &Value, b: &mut Bindings, at: &str) -> Result<(), String> {
     match (golden, actual) {
         (Value::String(g), Value::String(a)) if is_placeholder(g) => b.bind(g, a),
         (Value::Object(g), Value::Object(a)) => {
-            let (g, a) = (strip_nulls(&Value::Object(g.clone())), strip_nulls(&Value::Object(a.clone())));
-            let (g, a) = (g.as_object().unwrap(), a.as_object().unwrap());
+            // `null` == absent ONLY for the top-level optional fields of the body (`seed_manifest_ref`,
+            // `base_release_id`, ...). Inside `input`/`target`/... a null is content: dropping or adding one changes
+            // the request and must not be masked.
+            let (g, a) = if at == "body" { (strip_top_nulls(g), strip_top_nulls(a)) } else { (g.clone(), a.clone()) };
             for k in g.keys().chain(a.keys()).collect::<HashSet<_>>() {
                 // `schema_version` defaults to "1" in the DTOs: a golden that omits it equals a request that sends "1".
                 if k == "schema_version" && at == "body" && g.get(k).is_none() && a.get(k) == Some(&Value::String("1".into())) {
@@ -154,6 +152,11 @@ fn matches(golden: &Value, actual: &Value, b: &mut Bindings, at: &str) -> Result
         (g, a) if g == a => Ok(()),
         (g, a) => Err(format!("{at}: request {a} != golden {g}")),
     }
+}
+
+/// Compare a golden request body with an actual one (placeholders bind per call; fresh bindings).
+pub fn body_matches(golden: &Value, actual: &Value) -> Result<(), String> {
+    matches(golden, actual, &mut Bindings::default(), "body")
 }
 
 fn pct_decode(s: &str) -> String {

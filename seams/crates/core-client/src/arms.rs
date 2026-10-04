@@ -123,11 +123,11 @@ impl ArmRequest {
             return Err("idempotency_key must match [A-Za-z0-9_.:-]{1,200}".into());
         }
         for (n, v, max) in [("binding_ref", &self.binding_ref, 200), ("case_ref", &self.case_ref, 200), ("arm", &self.arm, 64)] {
-            if v.is_empty() || v.len() > max {
+            if v.is_empty() || crate::dto::cp_len(v) > max {
                 return Err(format!("{n} must be 1..={max} chars"));
             }
         }
-        if self.campaign_ref.as_deref().is_some_and(|c| c.is_empty() || c.len() > 200) {
+        if self.campaign_ref.as_deref().is_some_and(|c| c.is_empty() || crate::dto::cp_len(c) > 200) {
             return Err("campaign_ref must be 1..=200 chars".into());
         }
         if self.scenario_manifest_ref.is_empty() || self.budget_ref.is_empty() {
@@ -320,10 +320,10 @@ impl ArmReport {
         self.status == ArmStatus::Completed
     }
 
-    /// `^arm-[0-9a-f]{32}$`, or a golden placeholder (`<...>`, which no real bridge can emit).
-    pub(crate) fn execution_id_well_formed(&self) -> bool {
+    /// `^arm-[0-9a-f]{32}$`, or, when the client opted in for golden tests, a placeholder (`<...>`).
+    pub(crate) fn execution_id_well_formed(&self, allow_placeholder: bool) -> bool {
         let id = &self.execution_id;
-        (id.starts_with('<') && id.ends_with('>'))
+        (allow_placeholder && id.starts_with('<') && id.ends_with('>'))
             || (id.len() == 36 && id.starts_with("arm-") && id[4..].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
     }
 }

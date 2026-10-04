@@ -9,6 +9,7 @@ use serde_json::json;
 fn client(addr: &str) -> CoreClient {
     let mut cfg = ClientConfig::new(addr, KID, SEED, "bridge-1");
     cfg.timeout = std::time::Duration::from_secs(5);
+    cfg.accept_golden_placeholders = true;
     CoreClient::new(cfg)
 }
 

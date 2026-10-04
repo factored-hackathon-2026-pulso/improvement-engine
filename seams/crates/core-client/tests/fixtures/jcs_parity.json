@@ -1,0 +1,71 @@
+{
+ "generated_by": "gen/gen_jcs_fixtures.py",
+ "rfc8785": "0.1.4",
+ "cases": [
+  {
+   "name": "empty_object",
+   "input": "{}",
+   "canonical": "{}"
+  },
+  {
+   "name": "empty_array",
+   "input": "[]",
+   "canonical": "[]"
+  },
+  {
+   "name": "scalars_array",
+   "input": "[null, true, false, 0, -1, 9007199254740991, -9007199254740991, \"\", \"a\"]",
+   "canonical": "[null,true,false,0,-1,9007199254740991,-9007199254740991,\"\",\"a\"]"
+  },
+  {
+   "name": "key_order_ascii",
+   "input": "{\"b\": 1, \"a\": 2, \"B\": 3, \"aa\": 4, \"a1\": 5, \"\": 6}",
+   "canonical": "{\"\":6,\"B\":3,\"a\":2,\"a1\":5,\"aa\":4,\"b\":1}"
+  },
+  {
+   "name": "key_order_utf16_vs_utf8",
+   "input": "{\"\\uffff\": 1, \"\\ud800\\udc00\": 2, \"\\ue000\": 3, \"\\ud7ff\": 4, \"z\": 5, \"\\ud83d\\ude00\": 6}",
+   "canonical": "{\"z\":5,\"\ud7ff\":4,\"\ud800\udc00\":2,\"\ud83d\ude00\":6,\"\ue000\":3,\"\uffff\":1}"
+  },
+  {
+   "name": "string_escapes",
+   "input": "[\"\\\"\", \"\\\\\", \"/\", \"\\b\", \"\\f\", \"\\n\", \"\\r\", \"\\t\", \"\\u0001\", \"\\u001f\", \"\\u007f\", \"\\u0080\"]",
+   "canonical": "[\"\\\"\",\"\\\\\",\"/\",\"\\b\",\"\\f\",\"\\n\",\"\\r\",\"\\t\",\"\\u0001\",\"\\u001f\",\"\u007f\",\"\u0080\"]"
+  },
+  {
+   "name": "unicode_values",
+   "input": "[\"\\u00e9\", \"\\u4e2d\\u6587\", \"\\ud83d\\ude00\", \"\\u2028\\u2029\", \"e\\u0301\", \"\\ufeff\"]",
+   "canonical": "[\"\u00e9\",\"\u4e2d\u6587\",\"\ud83d\ude00\",\"\u2028\u2029\",\"e\u0301\",\"\ufeff\"]"
+  },
+  {
+   "name": "unicode_keys_nested",
+   "input": "{\"\\u00e9\": {\"\\u00e8\": [1, {\"\\u00ea\": \"\\u00eb\"}]}, \"e\": {}}",
+   "canonical": "{\"e\":{},\"\u00e9\":{\"\u00e8\":[1,{\"\u00ea\":\"\u00eb\"}]}}"
+  },
+  {
+   "name": "deep_nesting",
+   "input": "{\"a\": {\"b\": {\"c\": {\"d\": [[[[1]]]]}}}}",
+   "canonical": "{\"a\":{\"b\":{\"c\":{\"d\":[[[[1]]]]}}}}"
+  },
+  {
+   "name": "mixed_array_objects",
+   "input": "[{\"z\": 1, \"y\": [3, 2, 1]}, {\"a\": null}, []]",
+   "canonical": "[{\"y\":[3,2,1],\"z\":1},{\"a\":null},[]]"
+  },
+  {
+   "name": "numeric_strings_and_keys",
+   "input": "{\"10\": \"a\", \"9\": \"b\", \"1\": \"c\", \"-1\": \"d\", \"01\": \"e\"}",
+   "canonical": "{\"-1\":\"d\",\"01\":\"e\",\"1\":\"c\",\"10\":\"a\",\"9\":\"b\"}"
+  },
+  {
+   "name": "int_limits",
+   "input": "{\"max\": 9007199254740991, \"min\": -9007199254740991, \"zero\": 0, \"neg\": -10}",
+   "canonical": "{\"max\":9007199254740991,\"min\":-9007199254740991,\"neg\":-10,\"zero\":0}"
+  },
+  {
+   "name": "request_like",
+   "input": "{\"schema_version\": \"1\", \"tenant_id\": \"t1\", \"agent_id\": \"atencion\", \"base_release_id\": null, \"changes\": [{\"kind\": \"prompt\", \"content\": {\"id\": \"p\", \"version\": \"1.0.0\", \"text\": \"Hola \\u00bfqu\\u00e9 tal?\"}, \"docs\": {}}]}",
+   "canonical": "{\"agent_id\":\"atencion\",\"base_release_id\":null,\"changes\":[{\"content\":{\"id\":\"p\",\"text\":\"Hola \u00bfqu\u00e9 tal?\",\"version\":\"1.0.0\"},\"docs\":{},\"kind\":\"prompt\"}],\"schema_version\":\"1\",\"tenant_id\":\"t1\"}"
+  }
+ ]
+}
