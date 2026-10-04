@@ -163,3 +163,27 @@ fn a_local_model_endpoint_is_labelled_local_model_not_real() {
     assert_eq!((j["real"].as_bool(), j["provider"].as_str()), (Some(false), Some("local-model")));
     assert_eq!(rec.doubles().len(), 1);
 }
+
+#[test]
+fn plain_http_is_only_allowed_toward_loopback_or_private_hosts() {
+    let ok = |addr: &str| Gateway::from_env(&env(&[("PULSO_MODEL_GATEWAY", "enabled"), ("PULSO_GATEWAY_ADDR", addr), ("PULSO_GATEWAY_MODEL", "m")])).is_ok();
+    for a in ["127.0.0.1:8080", "localhost:8080", "[::1]:8080", "10.1.2.3:80", "192.168.0.5:80", "172.16.0.1:80", "172.31.255.255:80"] {
+        assert!(ok(a), "{a} should be accepted");
+    }
+    for a in ["8.8.8.8:80", "gateway.example.com:80", "127.0.0.1.evil.com:80", "172.32.0.1:80", "169.253.1.1:80", "localhost.evil.com:80", "no-port", "@evil.com:80", "127.0.0.1@evil.com:80"] {
+        assert!(!ok(a), "{a} must be refused (no TLS in this client)");
+    }
+    let forced = Gateway::from_env(&env(&[("PULSO_MODEL_GATEWAY", "enabled"), ("PULSO_GATEWAY_ADDR", "gateway.example.com:80"), ("PULSO_GATEWAY_MODEL", "m"), ("PULSO_GATEWAY_ALLOW_REMOTE_PLAINTEXT", "yes")]));
+    assert!(forced.is_ok(), "an explicit operator override exists");
+}
+
+#[test]
+fn an_oversized_payload_split_across_fields_is_refused_before_any_byte_is_sent() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let f = fake(200, chat("{}", "m"));
+    let gw = on(&f.addr, &[]);
+    let mut r = req();
+    r.payload["tools"] = json!((0..400).map(|i| json!({"tool": format!("pulso/t{i}@1.0.0"), "description": "x".repeat(1900), "args_schema": {}})).collect::<Vec<_>>());
+    assert!(matches!(gw.call(&r), Err(ModelError::Refused(w)) if w.contains("too large")));
+    assert!(f.seen.lock().unwrap().is_empty());
+}
