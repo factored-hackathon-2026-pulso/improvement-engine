@@ -4,6 +4,9 @@ use std::fs;
 use std::path::PathBuf;
 use steps::compile::run;
 
+/// Inputs the Python reference accepts only because Python's `$` matches before a trailing newline.
+const STRICTER: [&str; 1] = ["raw_trailing_newline_ref"];
+
 #[test]
 fn matches_python_reference_on_all_cases() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cmp/cases");
@@ -15,6 +18,12 @@ fn matches_python_reference_on_all_cases() {
         let Some(stem) = name.strip_suffix(".in.json") else { continue };
         let input = fs::read_to_string(&p).unwrap();
         let got = run(&input);
+        if STRICTER.contains(&stem) {
+            // Documented divergence: the reference regex `$` also matches before a trailing newline; we follow the schema.
+            assert!(got.is_err(), "{stem}: stricter than the reference by design");
+            n += 1;
+            continue;
+        }
         if dir.join(format!("{stem}.error")).exists() {
             assert!(got.is_err(), "{stem}: reference rejects the input");
         } else {
@@ -23,5 +32,5 @@ fn matches_python_reference_on_all_cases() {
         }
         n += 1;
     }
-    assert!(n >= 18, "corpus too small: {n}");
+    assert!(n >= 34, "corpus too small: {n}");
 }
