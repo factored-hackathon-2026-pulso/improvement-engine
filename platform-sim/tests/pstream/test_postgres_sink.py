@@ -138,3 +138,16 @@ def test_ensure_schema_issues_no_ddl_when_tables_exist(monkeypatch):
     s, _ = sink(monkeypatch, conn)
     s.ensure_schema()
     assert not any(sql.lstrip().upper().startswith("CREATE") for sql, _ in conn.log)
+
+
+def test_customer_case_slots_keeps_last_row_per_customer_within_a_batch(monkeypatch):
+    """Found live: DELETE-all-then-INSERT-all left duplicate slot rows when one batch touched a customer twice
+    (the SQLite sink, deleting per row, ends with one)."""
+    conn = FakeConn()
+    s, _ = sink(monkeypatch, conn)
+    s.write_batch({"customer_case_slots": [{"customer_id": "c1", "open_case_id": "a"},
+                                           {"customer_id": "c2", "open_case_id": "x"},
+                                           {"customer_id": "c1", "open_case_id": "b"}]})
+    ins = next(p for sql, p in conn.log if sql.startswith("INSERT INTO product.customer_case_slots"))
+    got = {r[0]: r[1] for r in ins}
+    assert len(ins) == 2 and got == {"c1": "b", "c2": "x"}
