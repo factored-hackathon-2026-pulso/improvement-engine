@@ -5,40 +5,44 @@ use improvement_engine_core::model_provider::{
 use improvement_engine_core::platform_source_policy::{
     PlatformColumn, PlatformEventCatalog, PlatformEventCatalogError,
     PlatformEventCatalogProvenance, PlatformEventDisposition, PlatformEventPayloadLocalOnly,
-    PlatformRelation, PlatformSourcePolicyProvenance, PlatformSourceReadPlan, PlatformSourceText,
+    PlatformRelation, PlatformSourceAccessMode, PlatformSourcePolicyError,
+    PlatformSourcePolicyProvenance, PlatformSourceReadPlan, PlatformSourceText,
     PlatformTextEgressError, PlatformTurnBody, include_customer_in_population,
 };
+use std::cell::RefCell;
 
 #[derive(Default)]
 struct RecordingReader(
-    Vec<(
-        PlatformRelation,
-        Vec<improvement_engine_core::platform_source_policy::PlatformColumn>,
-    )>,
+    RefCell<
+        Vec<(
+            PlatformRelation,
+            Vec<improvement_engine_core::platform_source_policy::PlatformColumn>,
+        )>,
+    >,
 );
 
 impl improvement_engine_core::platform_source_policy::PlatformSourceReader for RecordingReader {
     type Error = std::convert::Infallible;
 
     fn read_relation(
-        &mut self,
+        &self,
         relation: PlatformRelation,
         columns: &[improvement_engine_core::platform_source_policy::PlatformColumn],
     ) -> Result<(), Self::Error> {
-        self.0.push((relation, columns.to_vec()));
+        self.0.borrow_mut().push((relation, columns.to_vec()));
         Ok(())
     }
 }
 
 #[test]
 fn default_read_plan_never_requests_credential_relations() {
-    let mut reader = RecordingReader::default();
+    let reader = RecordingReader::default();
     PlatformSourceReadPlan::platform_live()
-        .execute(&mut reader)
+        .execute_read_plan(PlatformSourceAccessMode::ReadOnly, &reader)
         .expect("all allow-listed relations can be read");
 
     assert_eq!(
-        reader.0,
+        *reader.0.borrow(),
         vec![
             (
                 PlatformRelation::Cases,
@@ -96,6 +100,21 @@ fn default_read_plan_never_requests_credential_relations() {
                 ],
             ),
         ]
+    );
+}
+
+#[test]
+fn read_write_access_mode_is_rejected_before_any_source_read() {
+    let reader = RecordingReader::default();
+
+    let error = PlatformSourceReadPlan::platform_live()
+        .execute_read_plan(PlatformSourceAccessMode::ReadWrite, &reader)
+        .expect_err("PL-C4 policy must reject a read-write access declaration");
+
+    assert_eq!(error, PlatformSourcePolicyError::ReadWriteAccessDenied);
+    assert!(
+        reader.0.borrow().is_empty(),
+        "denial must precede source access"
     );
 }
 
