@@ -1,6 +1,7 @@
 //! FakeCore: an HTTP/1.1 stub of the bridge `/internal/v1` over a std `TcpListener`.
 //! It verifies the service JWT like the Python verifier and models receiver-side idempotency.
 #![allow(dead_code)]
+pub mod armcore;
 pub mod golden;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;

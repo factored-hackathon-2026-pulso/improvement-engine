@@ -19,6 +19,7 @@ mod generated;
 pub mod http;
 pub mod jwt;
 pub mod ops;
+pub mod reconcile;
 pub mod pins;
 pub mod registry;
 pub mod routes;
