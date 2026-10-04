@@ -1,3 +1,4 @@
+import copy
 import json
 import tempfile
 import threading
@@ -19,7 +20,7 @@ ANSWERS = {"intent": {"type": "choice", "choice": "billing", "probabilities": {"
 
 
 def req(binding=None, question_ids=None, model="jev-test", state_input=None):
-    qs = QUESTIONS if question_ids is None else {k: QUESTIONS[k] for k in question_ids}
+    qs = copy.deepcopy(QUESTIONS if question_ids is None else {k: QUESTIONS[k] for k in question_ids})
     return {"state": {"locale": "es", "input": state_input or {
         "family_id": "fam_001", "binding_id": binding or f"binding-{uuid.uuid4().hex[:12]}"}},
         "model": model, "questions": qs}
@@ -70,7 +71,7 @@ class Scanner(Base):
         r = req(state_input={"category": "closing_reply_unclear"})
         self.assertEqual(self.jev().handle(body(r))[0], 422)
         ok = self.jev(replay_only=True, registry=Registry({"closing_reply_unclear"}))
-        self.assertEqual(ok.handle(body(r))[0], 409)  # passes the scanner, then a replay miss
+        st, o = ok.handle(body(r)); self.assertEqual(st, 409, o)  # passes the scanner, then a replay miss
 
     def test_pii_in_question_text_and_unknown_keys_rejected(self):
         r = req()
