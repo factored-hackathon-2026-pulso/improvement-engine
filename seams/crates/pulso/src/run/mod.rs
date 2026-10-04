@@ -1,7 +1,9 @@
 //! `pulso run`: the single-process runtime entrypoint (supervisor, tasks, health, logs).
 pub mod db;
+pub mod engine_job;
 pub mod http;
 pub mod log;
+pub mod models;
 pub mod source;
 pub mod signals;
 pub mod supervisor;

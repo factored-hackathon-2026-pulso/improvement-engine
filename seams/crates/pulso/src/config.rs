@@ -243,9 +243,9 @@ impl RunConfig {
             return Err(ConfigError::Missing("PULSO_ROLEPLAY_QUEUE (PULSO_MODEL_PORT=roleplay replays that queue)"));
         }
         let core_live = match var("PULSO_CORE_PORT").as_deref() {
-            None | Some("offline") => false,
+            None | Some("offline") | Some("double") => false,
             Some("live") => true,
-            Some(_) => return Err(invalid("PULSO_CORE_PORT", "must be offline or live")),
+            Some(_) => return Err(invalid("PULSO_CORE_PORT", "must be offline (alias double) or live")),
         };
 
         Ok(RunConfig {
