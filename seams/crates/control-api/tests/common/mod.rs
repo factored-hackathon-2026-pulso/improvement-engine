@@ -147,3 +147,57 @@ pub fn batch(b: B) -> Value {
     v["batch_digest"] = json!(sha256_hex(jcs(&v).unwrap().as_bytes()));
     v
 }
+
+// ---- lab / grants ------------------------------------------------------------------------------------------------------
+pub const BROKER: &str = "/internal/v1/broker";
+
+/// A sqlite lab in the ED0L shape (`lab_rows`, `lab_meta`); rows are `(metric, window, g_group, numerator, count)`.
+pub fn make_lab(name: &str, k: i64, rows: &[(&str, &str, &str, i64, i64)]) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!("control-api-lab-{}-{name}.sqlite", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let con = rusqlite::Connection::open(&path).unwrap();
+    con.execute_batch(
+        "create table lab_rows (evidence_ref text primary key, metric_id text, window_id text, g_group text, numerator integer, count integer, digest text);
+         create table lab_meta (key text primary key, value text);",
+    )
+    .unwrap();
+    for (i, (m, w, g, n, c)) in rows.iter().enumerate() {
+        con.execute("insert into lab_rows values (?,?,?,?,?,?,?)", rusqlite::params![format!("ev_{i:016}"), m, w, g, n, c, "d"]).unwrap();
+    }
+    con.execute("insert into lab_meta values ('k', ?)", [k.to_string()]).unwrap();
+    path
+}
+
+impl Rig {
+    pub fn lab_token(&self, tenant: &str, scope: &str) -> String {
+        self.token("ex", "lab-broker", scope, tenant, json!({}))
+    }
+
+    pub fn bind_ref(&self, binding_ref: &str, tenant: &str) {
+        self.admin(json!({"preauthorized_bindings": [{"binding_ref": binding_ref, "tenant": tenant}]}));
+    }
+
+    pub fn issue_grant(&self, tenant: &str, binding_ref: &str, scope: &str, ttl: i64) -> (u16, Value) {
+        let tok = self.lab_token(tenant, "grant_issue");
+        self.call("POST", &format!("{BROKER}/grants"), Some(&json!({"binding_ref": binding_ref, "scope": scope, "ttl_seconds": ttl})), Some(&tok), &[])
+    }
+
+    pub fn lab(&self, method: &str, path: &str, body: Option<&Value>, tenant: &str, grant: Option<&str>) -> (u16, Value) {
+        let tok = self.lab_token(tenant, "lab");
+        let mut h = Vec::new();
+        if let Some(g) = grant {
+            h.push(("X-Grant-Ref", g));
+        }
+        self.call(method, &format!("{BROKER}{path}"), body, Some(&tok), &h)
+    }
+
+    /// Issues a lab grant for `binding_ref` and opens a session with it; returns `(grant_ref, session_ref)`.
+    pub fn open_session(&self, tenant: &str, binding_ref: &str, ttl: i64) -> (String, String) {
+        let (st, g) = self.issue_grant(tenant, binding_ref, "lab", ttl);
+        assert_eq!(st, 201, "{g}");
+        let grant = g["grant_ref"].as_str().unwrap().to_string();
+        let (st, s) = self.lab("POST", "/lab/sessions", Some(&json!({"binding_ref": binding_ref})), tenant, Some(&grant));
+        assert_eq!(st, 200, "{s}");
+        (grant, s["session_ref"].as_str().unwrap().to_string())
+    }
+}
