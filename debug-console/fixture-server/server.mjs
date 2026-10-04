@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { makeScenario } from '../fixtures/scenarios.mjs';
+import { handleAutomation, resetAutomation } from './automation.mjs';
 
 let scenario = 'default';
 let world = makeScenario(scenario);
@@ -87,6 +88,7 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
   const m = req.method;
   if (p === '/healthz') return send(res, 200, { ok: true });
+  if (await handleAutomation({ req, res, p, m, send, problem, readBody, CSRF })) return;
   if (p.startsWith('/__fixture/')) {
     if (p === '/__fixture/reset' || p === '/__fixture/scenario') {
       const b = (await readBody(req)) ?? {};
@@ -95,6 +97,7 @@ const server = http.createServer(async (req, res) => {
       for (const c of sseClients) c.res.end();
       sseClients.clear();
       faults = freshFaults();
+      resetAutomation();
       hb.ms = 5000; hb.muted = false;
       return send(res, 200, { ok: true, scenario });
     }
