@@ -182,3 +182,54 @@ fn sigterm_exits_zero() {
     assert!(Command::new("kill").args(["-TERM", &pid]).status().unwrap().success());
     assert_eq!(wait_exit(&mut p, 10), 0);
 }
+
+/// Windows console control events reach the real handler (`SetConsoleCtrlHandler` in `run::signals`): the child is
+/// started in its own process group (so the event is not delivered to this test process) and receives CTRL_BREAK via
+/// `GenerateConsoleCtrlEvent`. Needs the test process to own a console; with none (some CI shells) the event cannot be
+/// sent and the test says so instead of failing.
+#[cfg(windows)]
+#[test]
+fn ctrl_break_exits_zero_on_windows() {
+    use std::os::windows::process::CommandExt;
+    unsafe extern "system" {
+        fn GenerateConsoleCtrlEvent(event: u32, group: u32) -> i32;
+    }
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    let mut c = bin();
+    c.arg("run").env("PULSO_STORAGE", "memory").env("PULSO_DATA_MODE", "dataset").env("PULSO_LISTEN_ADDR", "127.0.0.1:0").env("PULSO_POLL_INTERVAL_MS", "50");
+    let mut child = c.creation_flags(CREATE_NEW_PROCESS_GROUP).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut addr = None;
+    for _ in 0..100 {
+        let mut line = String::new();
+        if stdout.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+        let v: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+        if v["event"] == "listening" {
+            addr = Some(v["addr"].as_str().unwrap().parse::<SocketAddr>().unwrap());
+            break;
+        }
+    }
+    let addr = addr.expect("child never listened");
+    wait_ready(addr);
+    let sent = unsafe { GenerateConsoleCtrlEvent(1, child.id()) };
+    if sent == 0 {
+        eprintln!("SKIP ctrl_break_exits_zero_on_windows: this test process has no console to send CTRL_BREAK from");
+        let _ = child.kill();
+        let _ = child.wait();
+        return;
+    }
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let code = loop {
+        if let Some(s) = child.try_wait().unwrap() {
+            break s.code().unwrap_or(-1);
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("CTRL_BREAK did not stop the process");
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(code, 0, "console control event must be a clean stop");
+}

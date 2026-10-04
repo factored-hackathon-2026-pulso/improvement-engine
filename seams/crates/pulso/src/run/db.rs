@@ -36,7 +36,11 @@ pub fn apply(cfg: &Config) -> Result<Report, String> {
     let ms = migrations()?;
     pg::migrate::migrate(&mut client, &ms).map_err(|e| match e {
         pg::migrate::Error::ChecksumMismatch { id, .. } => format!("migration {id} was edited after it was applied"),
-        pg::migrate::Error::Db(_) => "migration failed in the database".to_string(),
+        // `Error::Db` is "<migration id>: <server text>" for a failing migration; the server text can carry row values, the id cannot.
+        pg::migrate::Error::Db(m) => match m.split_once(": ") {
+            Some((id, _)) if id.len() > 5 && id[..4].bytes().all(|b| b.is_ascii_digit()) && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') => format!("migration {id} failed in the database"),
+            _ => "migration failed in the database".to_string(),
+        },
         other => format!("migration error: {other:?}"),
     })
 }

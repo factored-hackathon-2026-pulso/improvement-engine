@@ -11,6 +11,14 @@ fn main() {
         .filter(|p| p.extension().is_some_and(|x| x == "sql"))
         .collect();
     files.sort();
+    // A misnamed file must break the BUILD, not leave a container that starts and never becomes ready.
+    // Same rule as `pg::migrate::parse_name`: four digits, '_', lowercase slug. Zero padding makes name order numeric order (0099 < 0100).
+    for f in &files {
+        let name = f.file_name().unwrap().to_str().unwrap_or("<non-utf8>");
+        let stem = name.strip_suffix(".sql").unwrap_or("");
+        let ok = stem.split_once('_').is_some_and(|(n, slug)| n.len() == 4 && n.bytes().all(|b| b.is_ascii_digit()) && !slug.is_empty() && slug.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'));
+        assert!(ok, "migrations/{name}: must be NNNN_slug.sql (4 digits, lowercase slug)");
+    }
     let mut out = String::from("pub static MIGRATIONS: &[(&str, &str)] = &[\n");
     for f in &files {
         println!("cargo:rerun-if-changed={}", f.display());

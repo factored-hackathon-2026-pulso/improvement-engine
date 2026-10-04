@@ -135,6 +135,9 @@ pub fn main(args: &[String]) -> i32 {
             std::thread::Builder::new()
                 .name("pulso-migrate".into())
                 .spawn(move || {
+                    // Backoff 2s -> 60s: a database that is down or a drifted migration must not hot-loop or flood the log;
+                    // an unchanged reason is logged once, not at every attempt.
+                    let (mut delay, mut last) = (Duration::from_secs(2), String::new());
                     loop {
                         match db::apply(&c) {
                             Ok(r) => {
@@ -143,13 +146,17 @@ pub fn main(args: &[String]) -> i32 {
                                 return;
                             }
                             Err(e) => {
-                                l.error("migrations_failed", json!({"reason": e}));
+                                if e != last {
+                                    l.error("migrations_failed", json!({"reason": e, "retry_in_s": delay.as_secs()}));
+                                    last = e.clone();
+                                }
                                 h.set_migrations(Migrations::Failed(e));
                             }
                         }
-                        if s.wait(Duration::from_secs(2)) {
+                        if s.wait(delay) {
                             return;
                         }
+                        delay = (delay * 2).min(Duration::from_secs(60));
                     }
                 })
                 .ok();

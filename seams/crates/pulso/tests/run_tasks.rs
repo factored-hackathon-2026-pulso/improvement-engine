@@ -228,3 +228,52 @@ fn batch_cap_bounds_jobs_per_cycle() {
     stop.stop();
     h.join().unwrap().unwrap();
 }
+
+// ---- adversarial review (CL): the missing 'completed' transition in the JobRepository port ----
+
+/// Characterisation of what the port does TODAY: there is no terminal transition, so a job whose every output is
+/// committed stays `leased` and is claimable again once the lease lapses (fence bumped). The only thing that stops a
+/// duplicate is `commit_output` ("one winner per step"); the side effect a runner performs BEFORE committing is not
+/// protected unless the runner consults `output()` first (resume) or uses `begin_effect`.
+#[test]
+fn a_fully_committed_job_is_reclaimed_after_lease_expiry_but_cannot_overwrite_its_output() {
+    let repo = MemRepo::new();
+    let id = repo.admit("t1").unwrap();
+    let first = repo.claim_next("t1", "w-a", 100, 10).unwrap().unwrap();
+    repo.commit_output("t1", &id, 0, "w-a", first.fence_token, 101, "done").unwrap();
+    assert!(repo.claim_next("t1", "w-b", 105, 10).unwrap().is_none(), "lease still held");
+    let again = repo.claim_next("t1", "w-b", 111, 10).unwrap().expect("KNOWN GAP: finished job is reclaimable");
+    assert!(again.fence_token > first.fence_token && again.attempt == 2);
+    assert!(repo.commit_output("t1", &id, 0, "w-b", again.fence_token, 112, "done again").is_err(), "output stays first-writer-wins");
+    assert_eq!(repo.output("t1", &id, 0).unwrap().as_deref(), Some("done"));
+}
+
+struct SideEffect(Arc<AtomicUsize>);
+impl JobRunner for SideEffect {
+    fn run(&self, job: &Claimed, ctx: &JobCtx) -> Result<(), String> {
+        self.0.fetch_add(1, Ordering::SeqCst); // the external effect (e.g. a gateway call), before the commit
+        ctx.repo.commit_output(ctx.tenant, &job.job, 0, ctx.worker, job.fence_token, ctx.now, "done").map_err(|e| format!("{e:?}"))
+    }
+}
+
+/// DESIRED behaviour: one job, one execution, even when the clock moves past the lease after completion.
+/// Fails today (runs twice) because the port has no `complete`; fix = `complete(tenant, job, worker, fence)` setting
+/// status 'complete' (already admitted by migration 0050's CHECK) and excluding it from `claim_next`, called by the
+/// worker on `Ok`. Ignored so the suite stays green; run with `--ignored` to see it fail.
+#[test]
+#[ignore = "KNOWN GAP: JobRepository has no completed transition; see doc comment"]
+fn a_job_whose_runner_returned_ok_is_never_run_again() {
+    let repo = Arc::new(MemRepo::new());
+    repo.admit("t1").unwrap();
+    let runs = Arc::new(AtomicUsize::new(0));
+    let clock = Arc::new(AtomicU64::new(100));
+    let w = worker(repo, Some(Arc::new(SideEffect(runs.clone()))), clock.clone(), 1);
+    let stop = StopToken::new();
+    let h = run_in_thread(w, &stop);
+    wait_for(|| runs.load(Ordering::SeqCst) >= 1);
+    clock.store(1_000, Ordering::SeqCst); // lease (10 s) long expired
+    std::thread::sleep(Duration::from_millis(100));
+    stop.stop();
+    h.join().unwrap().unwrap();
+    assert_eq!(runs.load(Ordering::SeqCst), 1, "the finished job was executed again after its lease expired");
+}

@@ -172,8 +172,8 @@ fn prefix_tricks_never_reach_the_debug_api_without_the_token() {
         format!("/pulso/..%2f{api}"),
         format!("/pulso/%2e%2e%2f{api}"),
         format!("/pulso/%252e%252e/{api}"),
-        format!("/pulso/..\{api}"),
-        format!("/pulso\..\{api}"),
+        format!("/pulso/..\\{api}"),
+        format!("/pulso\\..\\{api}"),
         format!("/pulso%2f{api}"),
         format!("/PULSO/{api}"),
         format!("/pulso/{api}%00"),
@@ -186,7 +186,8 @@ fn prefix_tricks_never_reach_the_debug_api_without_the_token() {
     ];
     for t in &tricks {
         let (st, body) = raw(s.addr, t, None);
-        assert_ne!(st, 200, "{t} answered 200 without a token: {body}");
+        // 200 is only ever the public static console shell (SPA fallback), never API data
+        assert!(st != 200 || body == "<html>console</html>", "{t} answered {st} without a token: {body}");
         assert!(!body.contains("outside") && !body.contains("\"items\""), "{t} leaked: {body}");
     }
     for t in &tricks {
