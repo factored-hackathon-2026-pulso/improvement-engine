@@ -115,3 +115,12 @@ def test_live_second_invalid_answer_is_not_retried_forever(tmp_path):
     scout = next(s for s in res["steps"] if s["n"] == 3 and s["id"] == "scout")
     assert scout["status"] == "red" and "invalid_output" in scout["error"]
     assert res["live"]["rejected_responses"] == 2 and res["live"]["reasks"] == 1
+
+
+def test_tool_schema_tells_a_responder_the_lab_query_arguments(tmp_path):
+    """A responder that sees only the request must be able to form the lab_query call (metric_id, window_id)."""
+    res, q = _live(tmp_path)
+    req = json.loads(next((q / "requests").glob("*.json")).read_text(encoding="utf-8"))
+    sch = req["inputs"]["tools"][0]["args_schema"]
+    assert set(sch["required"]) == {"metric_id", "window_id"}
+    assert sch["properties"]["metric_id"]["enum"] == ["recurrence_rate"] and sch["properties"]["window_id"]["enum"] == ["w1"]

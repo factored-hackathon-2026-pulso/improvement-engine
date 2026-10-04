@@ -274,7 +274,9 @@ class LLMDouble:
 def agent_loop(llm: LLMDouble, stage: str, goal: str, inputs: dict, db: str, cap: int) -> tuple[dict, int]:
     """One agent stage: tool calls executed against the treated lab until `final`, at most `cap` calls (M3 STEP_CAPS)."""
     tools = [{"tool": LAB_TOOL, "description": "Query treated k-anonymous aggregates.",
-              "args_schema": {"type": "object"}}]
+              "args_schema": {"type": "object", "required": ["metric_id", "window_id"], "properties": {
+                  "metric_id": {"type": "string", "enum": [lab.METRIC]},
+                  "window_id": {"type": "string", "enum": ["w1"]}}}}]
     obs: list[dict] = []
     for step in range(1, cap + 1):
         out = llm.step(stage, {"goal": goal, "inputs": inputs, "step": step, "tools": tools, "observations": obs,
