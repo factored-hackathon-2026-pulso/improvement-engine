@@ -121,3 +121,17 @@ def test_feed_does_not_leave_files_behind(pkg, tmp_path):
     before = sorted(p.name for p in tmp_path.rglob("*"))
     list(F.feed(pkg, SALT))
     assert sorted(p.name for p in tmp_path.rglob("*")) == before
+
+
+def test_small_numerator_or_complement_cell_is_suppressed(tmp_path):
+    """A group with count>=k but fewer than k recurrences (or non-recurrences) exposes a small cell via the rate."""
+    rows = [(f"c{i}", "SIGRAW-lowcell", 2 if i < 3 else 1) for i in range(40)]  # 3 recur of 40
+    rows += [(f"d{i}", "SIGRAW-ok", 2 if i % 2 else 1) for i in range(40)]
+    db = L.build_lab(tmp_path / "lab.sqlite", F.feed(_package(tmp_path / "p", rows), SALT), SALT, min_cell=L.K)
+    assert len(L.lab_groups(db)) == 1
+
+
+def test_step_error_text_never_carries_exception_message_in_e0_mode():
+    from claude_standin import thread01
+    assert thread01.safe_error(ValueError("RAWCASE-123"), True) == "ValueError"
+    assert "RAWCASE-123" in thread01.safe_error(ValueError("RAWCASE-123"), False)

@@ -347,7 +347,8 @@ def _llm(ctx: Ctx) -> LLMDouble:
             cases = feed.feed(ctx.cfg.e0_path, ctx.out["salt"])
         else:
             ctx.out["salt"], cases = LAB_SALT, _lab_cases()
-        ctx.out["lab_db"] = lab.build_lab(ctx.cfg.workdir / "lab.sqlite", cases, ctx.out["salt"])
+        ctx.out["lab_db"] = lab.build_lab(ctx.cfg.workdir / "lab.sqlite", cases, ctx.out["salt"],
+                                      min_cell=lab.K if ctx.cfg.e0_path else 0)
         ctx.out["m3"] = _m3()
     return ctx.out["llm"]
 
@@ -721,6 +722,11 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
     return report
 
 
+def safe_error(e: Exception, e0: bool) -> str:
+    """E0 mode: exception text may embed a raw value (parquet cast, key error), so only the type is reported."""
+    return type(e).__name__ if e0 else f"{type(e).__name__}: {e}"
+
+
 def run_thread(cfg: ThreadConfig) -> dict:
     cfg.workdir = Path(cfg.workdir)
     cfg.workdir.mkdir(parents=True, exist_ok=True)
@@ -737,7 +743,7 @@ def run_thread(cfg: ThreadConfig) -> dict:
             recs = res if isinstance(res, list) else [res]
             steps += [_finish(n, sid, r, ctx) for r in recs]
         except Exception as e:  # noqa: BLE001 - a step that cannot run is RED, never silently skipped
-            steps.append(_finish(n, sid, {"status": "red", "error": f"{type(e).__name__}: {e}", "data_class": None,
+            steps.append(_finish(n, sid, {"status": "red", "error": safe_error(e, bool(cfg.e0_path)), "data_class": None,
                                           "detail": {}}, ctx))
     llm = ctx.out.get("llm")  # the live counters, never a stale per-step snapshot: a miss in any stage must show
     ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls} if llm else {"misses": 1, "calls": 0}
