@@ -128,7 +128,7 @@ fn loop_ticks_on_an_interval_and_exits_0_when_stdin_closes() {
     let db = fixture(&dir);
     let work = dir.join("work");
     let mut args = base(work.to_str().unwrap(), db.to_str().unwrap());
-    args.extend(["--poll-interval-secs", "1"]);
+    args.extend(["--poll-interval-secs", "1", "--exit-on-stdin-eof"]);
     let mut child = monitor(&args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
     std::thread::sleep(Duration::from_millis(2500));
     assert!(child.try_wait().unwrap().is_none(), "the loop keeps running");
