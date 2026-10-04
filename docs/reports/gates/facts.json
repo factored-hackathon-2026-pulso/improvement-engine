@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "collected_at": "2026-10-03",
+  "collected_by": "G0gp via gh api (read-only) and local checkouts",
+  "improvement_engine": {
+    "repo": "pulso-factored/improvement-engine",
+    "main_sha": "853b029f6f3843df2f3599963ab6e8565dfff700",
+    "pr_93": {"state": "MERGED", "head_sha": "ffbab660f765bf707cce9d78cec12c0a5eb8771c", "merge_sha": "853b029f6f3843df2f3599963ab6e8565dfff700"},
+    "rust_toolchain": "1.98.1",
+    "migrations_max": "0004",
+    "adr_max": "0005",
+    "journal_max": "0067"
+  },
+  "agent_core": {
+    "repo": "pulso-factored/agent-core",
+    "pin_sha": "c814c2bad9f154d10c092326558815dca9562be7",
+    "pin_source": "local/core/doctor.core.ps1 PinSha and local/core/smoke.ps1",
+    "main_sha": "79233c4884f5854b6955f2f982f538e4bd60d281",
+    "main_ahead_of_pin_by": 2,
+    "prs": {
+      "23": {"state": "MERGED", "head_sha": "e90d2c653832691aafca2b12421ed89b6d0436e5", "merge_sha": "5705e58766292680ac1eda54357c73feb92dd8e2"},
+      "24": {"state": "MERGED", "head_sha": "12bad576af33add08fcb314ad884529830f99fb9", "merge_sha": "19e7a105f33052a5ff71810bf9b50fb8366442c0"},
+      "28": {"state": "MERGED", "head_sha": "6c8aad8637674f19c45a1ac72c230e91ac29a0fe", "merge_sha": "3499f94a653f257d51aab2936598c96171a31cb8"}
+    }
+  },
+  "llm_gateway": {
+    "repo": "pulso-factored/llm-gateway",
+    "main_sha": "63155b600d4b108ac871125cfd633c2beb11b0b5",
+    "pin_sha": "unknown",
+    "pin_note": "no committed llm-gateway pin found in the engine repo; M1 must pin one"
+  },
+  "db_versions": {
+    "engine_ci": "postgres:17 (digest-pinned, .github/workflows/ci.yml)",
+    "engine_local_core": "postgres:16 (local/core/fragments/ci.fragment.yml)",
+    "agent_core_compose": "postgres:16 (references/agent-core docker-compose.yml)"
+  }
+}
