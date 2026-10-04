@@ -20,7 +20,8 @@ use improvement_engine_core::platform_observations::{
 };
 use improvement_engine_core::platform_sensor::{
     ATTENTION_RUN_HANDOFF_RATE_METRIC_ID, ATTENTION_SOURCE_RUNS_POPULATION_REF, LayerMetricSpec,
-    PlatformLayerSensor, PlatformSignalStatus,
+    PlatformCapabilityProfile, PlatformCaseClosure, PlatformCustomerPopulationRow,
+    PlatformLayerSensor, PlatformPopulationStatus, PlatformSignalStatus, PlatformSlaCase,
 };
 use improvement_engine_core::{
     ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository, RepositoryError,
@@ -443,4 +444,821 @@ fn unknown_core_receipt_blocks_candidate_creation() {
             reason: "core_task_unknown_or_unsuccessful"
         }
     );
+}
+
+#[test]
+fn phase_one_profile_rejects_tool_call_until_superset_051() {
+    let phase_one = PlatformCapabilityProfile::product_phase_one();
+    let superset = PlatformCapabilityProfile::product_superset_0_5_1();
+
+    let unsupported = phase_one.assess_tool_call();
+    assert_eq!(unsupported.capability(), "tool_call");
+    assert_eq!(unsupported.status(), "unsupported");
+    assert!(!unsupported.is_supported());
+    assert_eq!(unsupported.profile_version(), "phase-1");
+
+    let supported = superset.assess_tool_call();
+    assert_eq!(supported.status(), "supported");
+    assert!(supported.is_supported());
+    assert_eq!(supported.profile_version(), "0.5.1");
+}
+
+#[test]
+fn repeated_case_chain_counts_once_and_customer_unresponsive_is_not_failure() {
+    let cases = [
+        eligible_case("case-a", None, Some(true), Some("error")),
+        eligible_case("case-b", None, Some(true), Some("customer_unresponsive")),
+        eligible_case("case-c", Some("case-a"), Some(false), Some("resolved")),
+        eligible_case("case-d", None, Some(true), Some("error")),
+    ];
+
+    let result = PlatformLayerSensor::assess_case_closures(&cases);
+    let PlatformSignalStatus::Measured {
+        numerator,
+        denominator,
+        missing,
+    } = result.status()
+    else {
+        panic!("complete case-chain evidence should be measured");
+    };
+
+    assert_eq!((*numerator, *denominator, *missing), (1, 3, 0));
+    assert_eq!(result.excluded_reason_count("customer_unresponsive"), 1);
+    assert!(!result.is_publishable());
+}
+
+#[test]
+fn missing_case_chain_fields_stop_at_insufficient_evidence() {
+    let cases = [
+        eligible_case("case-a", None, Some(true), Some("resolved")).without_previous_case_field()
+    ];
+
+    let result = PlatformLayerSensor::assess_case_closures(&cases);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(result.missing_fields().contains(&"previous_case_id"));
+    assert!(!result.is_publishable());
+}
+
+#[test]
+fn dangling_previous_case_link_is_insufficient() {
+    let cases = [eligible_case(
+        "case-a",
+        Some("missing-case"),
+        Some(true),
+        Some("error"),
+    )];
+
+    let result = PlatformLayerSensor::assess_case_closures(&cases);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(
+        result
+            .missing_fields()
+            .contains(&"resolved_previous_case_id")
+    );
+}
+
+#[test]
+fn cyclic_previous_case_links_are_insufficient() {
+    let cases = [
+        eligible_case("case-a", Some("case-b"), Some(true), Some("error")),
+        eligible_case("case-b", Some("case-a"), Some(false), Some("resolved")),
+    ];
+
+    let result = PlatformLayerSensor::assess_case_closures(&cases);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(
+        result
+            .missing_fields()
+            .contains(&"acyclic_previous_case_id")
+    );
+}
+
+#[test]
+fn branched_previous_case_chain_is_insufficient() {
+    let cases = [
+        eligible_case("case-a", None, Some(false), Some("resolved")),
+        eligible_case("case-b", Some("case-a"), Some(false), Some("resolved")),
+        eligible_case("case-c", Some("case-a"), Some(true), Some("error")),
+    ];
+
+    let result = PlatformLayerSensor::assess_case_closures(&cases);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(
+        result
+            .missing_fields()
+            .contains(&"unbranched_previous_case_id")
+    );
+}
+
+#[test]
+fn duplicate_case_ids_are_insufficient() {
+    let cases = [
+        eligible_case("case-a", None, Some(false), Some("resolved")),
+        eligible_case("case-a", None, Some(true), Some("error")),
+    ];
+
+    let result = PlatformLayerSensor::assess_case_closures(&cases);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(result.missing_fields().contains(&"unique_case_id"));
+}
+
+#[test]
+fn long_case_chain_resolves_to_one_terminal_without_recursion() {
+    let cases = (0..512)
+        .rev()
+        .map(|index| {
+            let previous_id = (index > 0).then(|| format!("case-{}", index - 1));
+            eligible_case(
+                format!("case-{index}"),
+                previous_id.as_deref(),
+                Some(false),
+                Some("resolved"),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let result = PlatformLayerSensor::assess_case_closures(&cases);
+
+    assert!(matches!(
+        result.status(),
+        PlatformSignalStatus::Measured {
+            numerator: 0,
+            denominator: 1,
+            missing: 0
+        }
+    ));
+}
+
+fn eligible_case(
+    case_id: impl Into<String>,
+    previous_case_id: Option<&str>,
+    is_failure: Option<bool>,
+    close_reason: Option<&str>,
+) -> PlatformCaseClosure {
+    let digest = format!("sha256:{}", "d".repeat(64));
+    PlatformCaseClosure::new(case_id, previous_case_id, is_failure, close_reason)
+        .with_snapshot_provenance(
+            Some("cases:v1"),
+            Some(&digest),
+            Some(50),
+            Some(100),
+            Some(false),
+            Some(EvidenceKind::PlatformAudit),
+        )
+        .with_available_at_ms(Some(75))
+}
+
+#[test]
+fn case_closures_require_as_of_closure_time_and_snapshot_provenance() {
+    let unprovenanced = [PlatformCaseClosure::new(
+        "case-unprovenanced",
+        None,
+        Some(true),
+        Some("error"),
+    )];
+    let future_closure =
+        [
+            PlatformCaseClosure::new("case-future-close", None, Some(true), Some("error"))
+                .with_snapshot_provenance(
+                    Some("cases:v1"),
+                    Some(&format!("sha256:{}", "e".repeat(64))),
+                    Some(101),
+                    Some(100),
+                    Some(false),
+                    Some(EvidenceKind::PlatformAudit),
+                )
+                .with_available_at_ms(Some(101)),
+        ];
+
+    let unprovenanced_result = PlatformLayerSensor::assess_case_closures(&unprovenanced);
+    let future_result = PlatformLayerSensor::assess_case_closures(&future_closure);
+
+    assert_eq!(
+        unprovenanced_result.status(),
+        &PlatformSignalStatus::InsufficientEvidence
+    );
+    assert!(
+        unprovenanced_result
+            .missing_fields()
+            .contains(&"source_ref")
+    );
+    assert!(
+        unprovenanced_result
+            .missing_fields()
+            .contains(&"source_digest")
+    );
+    assert!(
+        unprovenanced_result
+            .missing_fields()
+            .contains(&"observed_as_of")
+    );
+    assert!(unprovenanced_result.missing_fields().contains(&"closed_at"));
+    assert_eq!(
+        future_result.status(),
+        &PlatformSignalStatus::InsufficientEvidence
+    );
+    assert!(
+        future_result
+            .missing_fields()
+            .contains(&"closed_by_observed_as_of")
+    );
+}
+
+#[test]
+fn case_closure_arriving_after_cutoff_is_not_included_in_as_of_measurement() {
+    let digest = format!("sha256:{}", "9".repeat(64));
+    let late_arrival =
+        [
+            PlatformCaseClosure::new("case-late-arrival", None, Some(true), Some("error"))
+                .with_snapshot_provenance(
+                    Some("cases:v1"),
+                    Some(&digest),
+                    Some(50),
+                    Some(100),
+                    Some(false),
+                    Some(EvidenceKind::PlatformAudit),
+                )
+                .with_available_at_ms(Some(101)),
+        ];
+
+    let result = PlatformLayerSensor::assess_case_closures(&late_arrival);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(
+        result
+            .missing_fields()
+            .contains(&"available_by_observed_as_of")
+    );
+    assert!(!result.is_publishable());
+}
+
+#[test]
+fn case_closure_measurement_digest_binds_closure_values_and_observation_cutoff() {
+    let digest = format!("sha256:{}", "f".repeat(64));
+    let first = [
+        PlatformCaseClosure::new("case-private-a", None, Some(true), Some("error"))
+            .with_snapshot_provenance(
+                Some("cases:v1"),
+                Some(&digest),
+                Some(50),
+                Some(100),
+                Some(false),
+                Some(EvidenceKind::PlatformAudit),
+            )
+            .with_available_at_ms(Some(75)),
+    ];
+    let changed_cutoff =
+        [
+            PlatformCaseClosure::new("case-private-a", None, Some(true), Some("error"))
+                .with_snapshot_provenance(
+                    Some("cases:v1"),
+                    Some(&digest),
+                    Some(50),
+                    Some(101),
+                    Some(false),
+                    Some(EvidenceKind::PlatformAudit),
+                )
+                .with_available_at_ms(Some(75)),
+        ];
+    let first_result = PlatformLayerSensor::assess_case_closures(&first);
+    let changed_result = PlatformLayerSensor::assess_case_closures(&changed_cutoff);
+
+    assert_eq!(
+        first_result.status(),
+        &PlatformSignalStatus::Measured {
+            numerator: 1,
+            denominator: 1,
+            missing: 0,
+        }
+    );
+    assert_eq!(first_result.source_ref(), Some("cases:v1"));
+    assert_eq!(first_result.source_digest(), Some(digest.as_str()));
+    assert_eq!(first_result.observed_as_of_ms(), Some(100));
+    let serialized = serde_json::to_value(&first_result).unwrap();
+    assert_eq!(serialized["observed_as_of_ms"], 100);
+    assert_eq!(serialized["source_ref"], "cases:v1");
+    assert_eq!(serialized["source_digest"], digest);
+    assert!(!serialized.to_string().contains("case-private-a"));
+    assert_ne!(
+        first_result.measurement_digest(),
+        changed_result.measurement_digest()
+    );
+    assert!(!format!("{first_result:?}").contains("case-private-a"));
+}
+
+#[test]
+fn case_closures_reject_mixed_snapshot_references_digests_or_cutoffs() {
+    let digest_a = format!("sha256:{}", "7".repeat(64));
+    let digest_b = format!("sha256:{}", "8".repeat(64));
+    let mismatched = [
+        PlatformCaseClosure::new("case-a", None, Some(false), Some("resolved"))
+            .with_snapshot_provenance(
+                Some("cases:v1"),
+                Some(&digest_a),
+                Some(50),
+                Some(100),
+                Some(false),
+                Some(EvidenceKind::PlatformAudit),
+            )
+            .with_available_at_ms(Some(75)),
+        PlatformCaseClosure::new("case-b", None, Some(false), Some("resolved"))
+            .with_snapshot_provenance(
+                Some("cases:v2"),
+                Some(&digest_b),
+                Some(50),
+                Some(101),
+                Some(false),
+                Some(EvidenceKind::PlatformAudit),
+            )
+            .with_available_at_ms(Some(75)),
+    ];
+
+    let result = PlatformLayerSensor::assess_case_closures(&mismatched);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(result.missing_fields().contains(&"source_ref"));
+    assert!(result.missing_fields().contains(&"source_digest"));
+    assert!(
+        result
+            .missing_fields()
+            .contains(&"consistent_observed_as_of")
+    );
+    assert!(!result.is_publishable());
+}
+
+#[test]
+fn case_closures_exclude_simulators_and_diagnostic_evidence_with_counts() {
+    let digest = format!("sha256:{}", "d".repeat(64));
+    let cases = [
+        eligible_case("case-real", None, Some(true), Some("error")),
+        PlatformCaseClosure::new("case-simulator", None, Some(true), Some("error"))
+            .with_snapshot_provenance(
+                Some("cases:v1"),
+                Some(&digest),
+                Some(50),
+                Some(100),
+                Some(true),
+                Some(EvidenceKind::PlatformAudit),
+            )
+            .with_available_at_ms(Some(75)),
+        PlatformCaseClosure::new("case-sampled", None, Some(true), Some("error"))
+            .with_snapshot_provenance(
+                Some("cases:v1"),
+                Some(&digest),
+                Some(50),
+                Some(100),
+                Some(false),
+                Some(EvidenceKind::OtelSampledSpan),
+            )
+            .with_available_at_ms(Some(75)),
+    ];
+
+    let result = PlatformLayerSensor::assess_case_closures(&cases);
+
+    assert_eq!(
+        result.status(),
+        &PlatformSignalStatus::Measured {
+            numerator: 1,
+            denominator: 1,
+            missing: 0,
+        }
+    );
+    assert_eq!(result.excluded_reason_count("team_generated"), 1);
+    assert_eq!(
+        result.excluded_reason_count("non_platform_audit_evidence"),
+        1
+    );
+    let serialized = serde_json::to_value(&result).unwrap();
+    assert_eq!(serialized["excluded_reason_counts"]["team_generated"], 1);
+    assert!(!serialized.to_string().contains("case-real"));
+    assert!(!serialized.to_string().contains("case-simulator"));
+    assert!(!serialized.to_string().contains("case-sampled"));
+}
+
+#[test]
+fn case_closures_fail_closed_when_simulator_or_evidence_kind_is_unknown() {
+    let digest = format!("sha256:{}", "2".repeat(64));
+    let unknown_simulator = [PlatformCaseClosure::new(
+        "case-unknown-simulator",
+        None,
+        Some(false),
+        Some("resolved"),
+    )
+    .with_snapshot_provenance(
+        Some("cases:v1"),
+        Some(&digest),
+        Some(50),
+        Some(100),
+        None,
+        Some(EvidenceKind::PlatformAudit),
+    )
+    .with_available_at_ms(Some(75))];
+    let unknown_kind =
+        [
+            PlatformCaseClosure::new("case-unknown-kind", None, Some(false), Some("resolved"))
+                .with_snapshot_provenance(
+                    Some("cases:v1"),
+                    Some(&digest),
+                    Some(50),
+                    Some(100),
+                    Some(false),
+                    None,
+                )
+                .with_available_at_ms(Some(75)),
+        ];
+
+    for rows in [&unknown_simulator[..], &unknown_kind[..]] {
+        let result = PlatformLayerSensor::assess_case_closures(rows);
+        assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+        assert!(!result.is_publishable());
+    }
+}
+
+#[test]
+fn platform_sensor_debug_formats_redact_source_row_identifiers() {
+    let case = eligible_case("private-case-7f31", None, Some(false), Some("resolved"));
+    let customer = PlatformCustomerPopulationRow::new("private-customer-7f31", Some(false));
+    let sla = PlatformSlaCase::new(
+        "private-sla-case-7f31",
+        Some(10),
+        Some(11),
+        Some("private-cases-source"),
+        Some(&format!("sha256:{}", "3".repeat(64))),
+    );
+
+    assert!(!format!("{case:?}").contains("private-case-7f31"));
+    assert!(!format!("{customer:?}").contains("private-customer-7f31"));
+    assert!(!format!("{sla:?}").contains("private-sla-case-7f31"));
+    assert!(!format!("{sla:?}").contains("private-cases-source"));
+}
+
+#[test]
+fn simulator_customers_are_excluded_and_marked_team_generated() {
+    let rows = [
+        PlatformCustomerPopulationRow::new("customer-real", Some(false)),
+        PlatformCustomerPopulationRow::new("customer-simulator", Some(true)),
+    ];
+
+    let result = PlatformLayerSensor::assess_customer_population(&rows);
+
+    assert_eq!(result.status(), &PlatformPopulationStatus::Measured);
+    assert_eq!(result.eligible_customer_count(), Some(1));
+    assert_eq!(result.team_generated_excluded_count(), 1);
+    assert!(!result.is_publishable());
+    let serialized = serde_json::to_value(&result).unwrap();
+    assert_eq!(serialized["eligible_customer_count"], 1);
+    assert_eq!(
+        serialized["excluded_reason_counts"],
+        serde_json::json!({"team_generated": 1})
+    );
+    assert!(!serialized.to_string().contains("customer-real"));
+    assert!(!serialized.to_string().contains("customer-simulator"));
+    assert!(
+        !serialized.is_array(),
+        "this is an aggregate, not row-level output"
+    );
+}
+
+#[test]
+fn unknown_simulator_flag_stops_population_measurement() {
+    let rows = [PlatformCustomerPopulationRow::new("customer-unknown", None)];
+
+    let result = PlatformLayerSensor::assess_customer_population(&rows);
+
+    assert_eq!(
+        result.status(),
+        &PlatformPopulationStatus::InsufficientEvidence
+    );
+    assert!(result.missing_fields().contains(&"customers.simulator"));
+    assert_eq!(result.eligible_customer_count(), None);
+    assert!(!result.is_publishable());
+}
+
+#[test]
+fn sla_measurement_is_provenance_bound_and_descriptive_only() {
+    let source_digest = format!("sha256:{}", "a".repeat(64));
+    let rows = [
+        PlatformSlaCase::new(
+            "case-a",
+            Some(100),
+            Some(101),
+            Some("cases:v1"),
+            Some(&source_digest),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+        PlatformSlaCase::new(
+            "case-b",
+            Some(102),
+            Some(101),
+            Some("cases:v1"),
+            Some(&source_digest),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+    ];
+
+    let result = PlatformLayerSensor::measure_sla_breaches(&rows);
+
+    assert!(matches!(
+        result.status(),
+        PlatformSignalStatus::Measured {
+            numerator: 1,
+            denominator: 2,
+            missing: 0
+        }
+    ));
+    assert_eq!(result.source_ref(), Some("cases:v1"));
+    assert_eq!(result.source_digest(), Some(source_digest.as_str()));
+    assert_eq!(result.observed_as_of_ms(), Some(101));
+    assert!(result.measurement_digest().is_some());
+    let serialized = serde_json::to_value(&result).unwrap();
+    assert_eq!(serialized["observed_as_of_ms"], 101);
+    assert_eq!(
+        serialized["measurement_digest"],
+        result.measurement_digest().unwrap()
+    );
+    assert!(result.statement().to_ascii_lowercase().contains("sla"));
+    assert!(
+        result
+            .statement()
+            .to_ascii_lowercase()
+            .contains("as of the supplied observation cutoff")
+    );
+    assert!(
+        !result
+            .statement()
+            .to_ascii_lowercase()
+            .contains("regulatory")
+    );
+    assert!(!result.is_publishable());
+}
+
+#[test]
+fn sla_deadline_is_not_a_breach_at_the_exact_observation_time() {
+    let source_digest = format!("sha256:{}", "b".repeat(64));
+    let rows = [PlatformSlaCase::new(
+        "case-at-deadline",
+        Some(100),
+        Some(100),
+        Some("cases:v1"),
+        Some(&source_digest),
+    )
+    .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit))];
+
+    let result = PlatformLayerSensor::measure_sla_breaches(&rows);
+
+    assert!(matches!(
+        result.status(),
+        PlatformSignalStatus::Measured {
+            numerator: 0,
+            denominator: 1,
+            missing: 0
+        }
+    ));
+}
+
+#[test]
+fn sla_measurement_rejects_mixed_source_refs_or_digests() {
+    let digest_a = format!("sha256:{}", "a".repeat(64));
+    let digest_b = format!("sha256:{}", "b".repeat(64));
+    let ref_mismatch = [
+        PlatformSlaCase::new(
+            "case-a",
+            Some(100),
+            Some(99),
+            Some("cases:v1"),
+            Some(&digest_a),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+        PlatformSlaCase::new(
+            "case-b",
+            Some(100),
+            Some(99),
+            Some("cases:v2"),
+            Some(&digest_a),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+    ];
+    let digest_mismatch = [
+        PlatformSlaCase::new(
+            "case-a",
+            Some(100),
+            Some(99),
+            Some("cases:v1"),
+            Some(&digest_a),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+        PlatformSlaCase::new(
+            "case-b",
+            Some(100),
+            Some(99),
+            Some("cases:v1"),
+            Some(&digest_b),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+    ];
+
+    let ref_result = PlatformLayerSensor::measure_sla_breaches(&ref_mismatch);
+    let digest_result = PlatformLayerSensor::measure_sla_breaches(&digest_mismatch);
+
+    assert_eq!(
+        ref_result.status(),
+        &PlatformSignalStatus::InsufficientEvidence
+    );
+    assert!(ref_result.missing_fields().contains(&"source_ref"));
+    assert_eq!(
+        serde_json::to_value(&ref_result).unwrap()["observed_as_of_ms"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        digest_result.status(),
+        &PlatformSignalStatus::InsufficientEvidence
+    );
+    assert!(digest_result.missing_fields().contains(&"source_digest"));
+}
+
+#[test]
+fn sla_measurement_requires_one_common_observation_cutoff() {
+    let source_digest = format!("sha256:{}", "c".repeat(64));
+    let rows = [
+        PlatformSlaCase::new(
+            "case-a",
+            Some(100),
+            Some(101),
+            Some("cases:v1"),
+            Some(&source_digest),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+        PlatformSlaCase::new(
+            "case-b",
+            Some(100),
+            Some(102),
+            Some("cases:v1"),
+            Some(&source_digest),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+    ];
+
+    let result = PlatformLayerSensor::measure_sla_breaches(&rows);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(
+        result
+            .missing_fields()
+            .contains(&"consistent_observed_as_of")
+    );
+    assert_eq!(result.observed_as_of_ms(), None);
+}
+
+#[test]
+fn sla_measurement_without_deadline_or_source_provenance_is_insufficient() {
+    let rows = [PlatformSlaCase::new("case-a", None, Some(101), None, None)
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit))];
+
+    let result = PlatformLayerSensor::measure_sla_breaches(&rows);
+
+    assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+    assert!(result.missing_fields().contains(&"sla_due_at"));
+    assert!(result.missing_fields().contains(&"source_ref"));
+    assert!(result.missing_fields().contains(&"source_digest"));
+    assert!(!result.is_publishable());
+}
+
+#[test]
+fn sla_measurement_digest_binds_values_and_cutoff_even_when_source_digest_is_reused() {
+    let source_digest = format!("sha256:{}", "4".repeat(64));
+    let first = [PlatformSlaCase::new(
+        "private-sla-case-a",
+        Some(100),
+        Some(101),
+        Some("cases:v1"),
+        Some(&source_digest),
+    )
+    .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit))];
+    let changed_due = [PlatformSlaCase::new(
+        "private-sla-case-a",
+        Some(101),
+        Some(101),
+        Some("cases:v1"),
+        Some(&source_digest),
+    )
+    .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit))];
+    let changed_cutoff = [PlatformSlaCase::new(
+        "private-sla-case-a",
+        Some(100),
+        Some(102),
+        Some("cases:v1"),
+        Some(&source_digest),
+    )
+    .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit))];
+    let first_result = PlatformLayerSensor::measure_sla_breaches(&first);
+    let changed_result = PlatformLayerSensor::measure_sla_breaches(&changed_due);
+    let changed_cutoff_result = PlatformLayerSensor::measure_sla_breaches(&changed_cutoff);
+
+    assert_ne!(
+        first_result.measurement_digest(),
+        changed_result.measurement_digest()
+    );
+    assert_ne!(
+        first_result.measurement_digest(),
+        changed_cutoff_result.measurement_digest()
+    );
+    assert!(!format!("{first_result:?}").contains("private-sla-case-a"));
+}
+
+#[test]
+fn sla_measurement_excludes_simulators_and_non_audit_rows_and_counts_them() {
+    let digest = format!("sha256:{}", "5".repeat(64));
+    let rows = [
+        PlatformSlaCase::new(
+            "case-real",
+            Some(100),
+            Some(101),
+            Some("cases:v1"),
+            Some(&digest),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::PlatformAudit)),
+        PlatformSlaCase::new(
+            "case-sim",
+            Some(100),
+            Some(101),
+            Some("cases:v1"),
+            Some(&digest),
+        )
+        .with_evidence_metadata(Some(true), Some(EvidenceKind::PlatformAudit)),
+        PlatformSlaCase::new(
+            "case-sampled",
+            Some(100),
+            Some(101),
+            Some("cases:v1"),
+            Some(&digest),
+        )
+        .with_evidence_metadata(Some(false), Some(EvidenceKind::OtelSampledLog)),
+    ];
+
+    let result = PlatformLayerSensor::measure_sla_breaches(&rows);
+
+    assert_eq!(
+        result.status(),
+        &PlatformSignalStatus::Measured {
+            numerator: 1,
+            denominator: 1,
+            missing: 0,
+        }
+    );
+    assert_eq!(result.excluded_reason_count("team_generated"), 1);
+    assert_eq!(
+        result.excluded_reason_count("non_platform_audit_evidence"),
+        1
+    );
+    let serialized = serde_json::to_value(&result).unwrap();
+    assert_eq!(serialized["excluded_reason_counts"]["team_generated"], 1);
+    assert!(!serialized.to_string().contains("case-real"));
+    assert!(!serialized.to_string().contains("case-sim"));
+    assert!(!serialized.to_string().contains("case-sampled"));
+}
+
+#[test]
+fn sla_measurement_fails_closed_when_simulator_or_evidence_kind_is_unknown() {
+    let digest = format!("sha256:{}", "6".repeat(64));
+    let unknown_simulator = [PlatformSlaCase::new(
+        "case-unknown-simulator",
+        Some(100),
+        Some(101),
+        Some("cases:v1"),
+        Some(&digest),
+    )
+    .with_evidence_metadata(None, Some(EvidenceKind::PlatformAudit))];
+    let unknown_kind = [PlatformSlaCase::new(
+        "case-unknown-kind",
+        Some(100),
+        Some(101),
+        Some("cases:v1"),
+        Some(&digest),
+    )
+    .with_evidence_metadata(Some(false), None)];
+
+    for rows in [&unknown_simulator[..], &unknown_kind[..]] {
+        let result = PlatformLayerSensor::measure_sla_breaches(rows);
+        assert_eq!(result.status(), &PlatformSignalStatus::InsufficientEvidence);
+        assert!(!result.is_publishable());
+    }
+}
+
+#[test]
+fn absent_core_target_stops_at_waiting_dependency_without_publish_path() {
+    let result = PlatformLayerSensor::check_core_target(None);
+
+    assert_eq!(result.reason(), "missing_core_target");
+    assert_eq!(result.dependency_state(), "waiting_dependency");
+    assert!(!result.is_publishable());
+
+    let declared = PlatformLayerSensor::check_core_target(Some("core-task:triage"));
+    assert_eq!(declared.reason(), "core_target_declared");
+    assert_eq!(declared.dependency_state(), "declared_unverified");
+    assert!(!declared.is_publishable());
 }
