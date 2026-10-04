@@ -140,3 +140,34 @@ passed with one container-backend test skipped by its explicit opt-in
 requirement. Pester passed both groups: 10/10 E0 wrapper tests and 5/5 local-CI
 runner tests. The preflight ended with `Local CI preflight passed for the
 selected gates.` Durable PostgreSQL opt-in gates were not selected.
+
+## Deterministic evidence explanation read model — mainline port (2026-10-03)
+
+Starting from GitHub-verified `origin/main` at `0b0c919ddbc517faceda4a269af944f7d75a0c12`, the P1 explanation read model was confirmed absent and ported as a narrow additive API. The previous P1 worktree contained unrelated branch-base differences, so none of its history was merged or cherry-picked.
+
+`PlatformScoutCandidate::explanation()` returns a serializable, deterministic read model containing the measured numerator/denominator and `attention_source_runs` population, mapped layer and metric version, exact window/as-of, source contract, evidence digests, and existing eligibility boundary. Its display sentence states eligible attention-platform source runs and the rounded percentage; the coverage note distinguishes `missing=0` from a count of failed or lost handoffs. The limitation disclaims cause, customer outcome, and business value. The payload excludes tenant/customer content and model free text; it creates no new artifact or eligibility.
+
+TDD RED on the verified mainline was the public `platform_scout` test failing to compile because `PlatformScoutCandidate` had no `explanation()` method (`E0599`). After the minimal additive read model was implemented, the focused scenario passed. Local Windows/Rust 1.98.1 verification: `platform_scout` 4/4, `platform_sensor` 12/12, Core `test-support --all-targets` Clippy with `-D warnings`, `cargo fmt --all -- --check`, and `git diff --check`. Workspace-wide CI was not run. This remains descriptive evidence only.
+
+## Independent review result (2026-10-03)
+
+The read-only adversarial reviewer found no blockers and accepted the slice for a
+consolidated PR. Review confirmed same-grain eligible-run denominator, coverage
+wording, and explicit non-causal/no-business-impact claims. One non-blocking
+suggestion was to add further rounding and percentage-boundary tests; the
+reviewer did not execute Cargo. Current public-path tests verify the measured
+1/4 case and its 25.00% rendering. No production or business-lift claim is made.
+
+The suggested math coverage was added without production changes:
+`percentage_basis_points` tests cover 0%, 100%, one-third/two-thirds rounding,
+and large `u64` counts using a wide intermediate. Windows/Rust 1.98.1 validation
+passed: the focused math tests (2/2), `platform_scout` (4/4), test-support
+all-target Clippy with `-D warnings`, formatting and diff checks.
+
+The follow-up test-only hardening is commit
+`9208d8c41ef43596e085c95953f3c8c63b35e2e2` on the same feature branch. Since
+worktree creation, GitHub `main` advanced from the verified base
+`0b0c919ddbc517faceda4a269af944f7d75a0c12` to
+`594be4e4525884c80f9baaee924ffd7c6b41b3e6`; the feature branch is intentionally
+left unrebased for selective consolidation and must not be opened as a
+stale-history PR.
