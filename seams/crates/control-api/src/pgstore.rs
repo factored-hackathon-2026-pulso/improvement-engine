@@ -31,6 +31,8 @@ impl fmt::Debug for DatabaseUrl {
 
 const MIGRATION_ID: &str = "0052_pulso_control_api";
 const MIGRATION_SQL: &str = include_str!("../../../../migrations/0052_pulso_control_api.sql");
+const MIGRATION_54_ID: &str = "0054_pulso_ca_docs_release_ns";
+const MIGRATION_54_SQL: &str = include_str!("../../../../migrations/0054_pulso_ca_docs_release_ns.sql");
 
 pub struct PgStore {
     config: Config,
@@ -44,14 +46,18 @@ impl fmt::Debug for PgStore {
 }
 
 impl PgStore {
-    /// Connects, applies migration 0052 through the MIG0 runner (idempotent, advisory-locked) and returns the store.
+    /// Connects, applies migrations 0052 and 0054 through the MIG0 runner (idempotent, advisory-locked) and returns the store.
     /// Errors never contain the URL.
     pub fn connect(url: &str) -> Result<PgStore, String> {
         let config: Config = url.parse().map_err(|_| "invalid database url".to_string())?;
         let mut client = config.connect(NoTls).map_err(|e| format!("database connect failed: {e}"))?;
         let sql = MIGRATION_SQL.replace("\r\n", "\n");
         let migration = pg::Migration { id: MIGRATION_ID.into(), version: 52, checksum: pg::migrate::checksum(&sql), sql };
-        pg::migrate::migrate(&mut client, &[migration]).map_err(|e| format!("migration failed: {e}"))?;
+        let sql54 = MIGRATION_54_SQL.replace("
+", "
+");
+        let m54 = pg::Migration { id: MIGRATION_54_ID.into(), version: 54, checksum: pg::migrate::checksum(&sql54), sql: sql54 };
+        pg::migrate::migrate(&mut client, &[migration, m54]).map_err(|e| format!("migration failed: {e}"))?;
         Ok(PgStore { config, client: Mutex::new(client) })
     }
 
