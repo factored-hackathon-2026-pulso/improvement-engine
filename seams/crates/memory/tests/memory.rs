@@ -36,3 +36,15 @@ fn wiki_read_renders_notes_for_a_claim_with_status_and_refs() {
     assert!(!page.contains("unrelated"));
     assert!(m.wiki_read("k.missing").is_none());
 }
+
+#[test]
+fn confirm_marks_note_confirmed_and_appends_evidence() {
+    let mut m = Memory::new(store());
+    let id = m.add_note(nn("k.latency", "p95 latency is stable", &["ev-1"])).unwrap();
+    m.confirm(&id, vec!["ev-2".into()]).unwrap();
+    let n = m.note(&id).unwrap();
+    assert_eq!(n.status, Status::Confirmed);
+    assert_eq!(n.evidence, vec!["ev-1", "ev-2"]);
+    assert!(m.wiki_read("k.latency").unwrap().contains("[confirmed]"));
+    assert!(matches!(m.confirm("note-9999", vec![]), Err(MemError::UnknownNote(_))));
+}

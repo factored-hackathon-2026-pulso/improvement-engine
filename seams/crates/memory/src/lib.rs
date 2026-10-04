@@ -7,6 +7,7 @@ pub const SCOPE: &str = "demo1_thin";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemError {
     NotImplemented,
+    UnknownNote(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,6 +88,9 @@ impl Memory {
 ", n.id, n.status.as_str(), n.statement, n.evidence.join(", ")));
         }
         any.then_some(out)
+    }
+    pub fn confirm(&mut self, _id: &str, _evidence: Vec<String>) -> Result<(), MemError> {
+        Err(MemError::NotImplemented)
     }
     pub fn note(&self, id: &str) -> Option<&Note> {
         self.notes.get(id)
