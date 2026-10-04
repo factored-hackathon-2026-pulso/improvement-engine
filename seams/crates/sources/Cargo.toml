@@ -1,0 +1,19 @@
+[package]
+name = "sources"
+description = "Claude-owned R1M: read-only SourceAdapter port (product-sqlite, product-postgres, dataset-pg), per-source watermark store and the monitor tick; never depends on crates/core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# The same fixed-output sensor stand-in as thread10 (one file, reused; no copy) so the tick tests run the real sensor step end to end.
+[[bin]]
+name = "sources-synth-runner"
+path = "../thread10/src/bin/synth_runner.rs"
+
+[dependencies]
+engine = { path = "../engine" }
+abi = { path = "../abi" }
+postgres = "0.19"
+rusqlite = { version = "0.39.0", features = ["bundled"] }
+serde_json = "1"
+sha2 = "0.10"

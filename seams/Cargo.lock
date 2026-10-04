@@ -940,6 +940,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sources"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "engine",
+ "postgres",
+ "rusqlite",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "spki"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
