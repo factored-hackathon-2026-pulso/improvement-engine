@@ -133,7 +133,7 @@ impl App {
             return if prior["digest"] == digest { json_resp(200, prior["response"].clone()) } else { error(409, "event_conflict") };
         }
         let Some(rec) = self.store.get_doc(PUBLISHED_NS, &tenant, &release_id) else {
-            return json_resp(202, json!({"state": "unmatched", "release_id": release_id})); // nothing persisted: a retry after the engine records it matches
+            return error(503, "release_unmatched"); // nothing persisted; non-2xx so the sender retries once the engine has recorded the release
         };
         if rec["agent_id"] != p["agent_id"] || rec["alias"] != p["alias"] {
             return code(409, "release_mismatch");
