@@ -24,3 +24,30 @@ fn on_commit_sees_partial_reports_growing_one_handler_at_a_time() {
     assert!(seen.windows(2).all(|w| w[0].1.len() <= w[1].1.len()), "never shrinks");
     assert!(seen[8].1.contains(&"publish".to_string()));
 }
+
+#[test]
+fn run_exposes_the_committed_payload_and_on_payload_sees_it_growing() {
+    let seen: Rc<RefCell<Vec<usize>>> = Rc::default();
+    let sink = seen.clone();
+    let d = std::env::temp_dir().join(format!("t10-onpayload-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let mut o = Opts::new(d, env!("CARGO_BIN_EXE_synth_runner").into());
+    o.human_override = true;
+    o.on_payload = Some(Rc::new(move |_, payload| sink.borrow_mut().push(payload["out"].as_object().unwrap().len())));
+    let r = run(&o).expect("run");
+    assert_eq!(r.error, None);
+    assert_eq!(*seen.borrow(), (1..=9).collect::<Vec<_>>(), "out grows by one step output per commit");
+    let p = r.payload.expect("committed payload");
+    assert!(p["out"]["gate"]["verdict"].is_string() && p["out"]["authority"]["state"] == "approved", "{p}");
+}
+
+#[test]
+fn the_final_report_carries_the_committed_payload_so_a_report_alone_can_fill_the_panels() {
+    let d = std::env::temp_dir().join(format!("t10-committed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let mut o = Opts::new(d, env!("CARGO_BIN_EXE_synth_runner").into());
+    o.human_override = true;
+    let r = run(&o).expect("run");
+    assert_eq!(r.report["committed"], r.payload.clone().unwrap(), "the report says what the job committed");
+    assert_eq!(r.report["steps"].as_array().unwrap().len(), 12, "the C-2 steps are untouched");
+}

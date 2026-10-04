@@ -135,3 +135,47 @@ fn a_double_without_part_or_status_is_not_silently_dropped() {
         }
     }
 }
+
+fn with_committed() -> Value {
+    let mut r = report();
+    r["committed"] = serde_json::from_str(include_str!("fixtures/committed-demo0.json")).unwrap();
+    r
+}
+
+#[test]
+fn a_report_that_carries_its_committed_payload_fills_the_panels_with_the_same_projection_the_live_stream_uses() {
+    let s = Arc::new(Store::memory());
+    let id = ingest(&s, &with_committed()).unwrap();
+    let app = App::new(s.clone(), Config::default());
+    let (_, inv) = get(&app, &format!("{D}/runs/{id}/investigation"));
+    assert!(inv["hypothesis"].as_str().unwrap().contains("Scripted scout claims"), "{inv}");
+    assert_eq!(inv["verifier"], "corroborated");
+    assert_eq!(inv["hypotheses"].as_array().unwrap().len(), 2);
+    let (_, g) = get(&app, &format!("{D}/runs/{id}/gates"));
+    assert_eq!((g["improvement"]["status"].as_str(), g["improvement"]["reason_code"].as_str()), (Some("fail"), Some("no_structural_improvement")));
+    let pid = g["proposal_id"].as_str().unwrap().to_string();
+    let (st, d) = get(&app, &format!("{D}/proposals/{pid}/diff"));
+    assert_eq!(st, 200);
+    assert!(d["lines"].to_string().contains("prompt:resumen_radicado@2"));
+    let (st, dec) = get(&app, &format!("{D}/runs/{id}/decision"));
+    assert_eq!(st, 200, "{dec}");
+    assert_eq!((dec["card"]["label"].as_str(), dec["card"]["state"].as_str()), (Some("SIMULATED"), Some("approved")));
+    assert_eq!(dec["entity_ref"], json!({"kind": "decision", "id": dec["decision_id"]}));
+    let (_, alts) = get(&app, &format!("{D}/runs/{id}/alternatives"));
+    assert_eq!(alts["items"].as_array().unwrap().len(), 2);
+    // the events are exactly those of the shared projection (one projection, two producers)
+    let kinds: Vec<String> = s.events_after(&id, 0, 1000).iter().map(|e| e["kind"].as_str().unwrap_or("").to_string()).collect();
+    for k in ["investigation_set", "alternatives_set", "diff_set", "gates_set", "decision_set"] {
+        assert_eq!(kinds.iter().filter(|x| *x == k).count(), 1, "{k} once in {kinds:?}");
+    }
+}
+
+#[test]
+fn a_report_without_the_committed_payload_keeps_the_panels_honestly_empty() {
+    let s = Arc::new(Store::memory());
+    let id = ingest(&s, &report()).unwrap();
+    let app = App::new(s, Config::default());
+    let (_, inv) = get(&app, &format!("{D}/runs/{id}/investigation"));
+    assert!(inv["hypothesis"].is_null() && inv["verifier"] == "unknown");
+    assert_eq!(get(&app, &format!("{D}/runs/{id}/decision")).0, 404, "no decision was committed, none is invented");
+}

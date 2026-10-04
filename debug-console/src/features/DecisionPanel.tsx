@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { z } from 'zod';
 import { api, ApiError, type Conflict } from '../api/client';
+import type * as S from '../api/schemas';
 import { useAnnounce } from '../a11y/AnnounceContext';
 import { t } from '../i18n/es419';
 
@@ -9,10 +11,32 @@ const PHASE_TEXT: Partial<Record<Phase, Parameters<typeof t>[0]>> = {
   step_up_failed: 'dec.stepUpFailed',
 };
 
-/** Human release decision. 202 means "requested"; only the command receipt confirms. */
-export function DecisionPanel({ hookPending = false }: { hookPending?: boolean }) {
+type Card = z.infer<typeof S.RunDecision>['card'];
+const gateText = (g: { status: string | null; reason?: string | null } | null) => (g ? `${g.status ?? 'unknown'}${g.reason ? ` (${g.reason})` : ''}` : 'unknown');
+
+/** The decision a run committed (simulated or blocked) with the gate state it was taken on. Read-only: no action is offered. */
+function DecisionCard({ card }: { card: Card }) {
+  return (
+    <div data-testid="decision-card" data-state={card.state}>
+      <p><strong>{t('dec.card.simulated')}</strong></p>
+      <p>{t('dec.card.state', { state: card.state, proposal: card.proposal_id ?? 'unknown' })}</p>
+      <p>{t('dec.card.issuer', { issuer: card.issuer, actor: card.actor ?? 'unknown' })}</p>
+      <p>{t('dec.card.gate', { verdict: card.gate.verdict ?? 'unknown', safety: gateText(card.gate.safety), improvement: gateText(card.gate.improvement) })}</p>
+      <p>{card.override
+        ? t('dec.card.override', { label: card.override.label, by: card.override.by, actor: card.override.actor ?? 'unknown', gate: card.override.of_gate_verdict ?? 'unknown', reason: card.override.reason })
+        : t('dec.card.noOverride')}</p>
+      <h3>{t('dec.card.reasons')}</h3>
+      <ul>{card.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>
+      <p>{t('dec.card.noActions')}</p>
+    </div>
+  );
+}
+
+/** Human release decision. 202 means "requested"; only the command receipt confirms. With a `runId` and a committed decision, the card is shown instead. */
+export function DecisionPanel({ hookPending = false, runId, refresh = 0 }: { hookPending?: boolean; runId?: string; refresh?: number }) {
   const announce = useAnnounce();
   const [state, setState] = useState<{ commands: string[]; revision: number } | null>(null);
+  const [card, setCard] = useState<Card | null>(null);
   const [note, setNote] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [conflict, setConflict] = useState<Conflict | null>(null);
@@ -22,7 +46,11 @@ export function DecisionPanel({ hookPending = false }: { hookPending?: boolean }
   const load = useCallback(() => api.decision()
     .then((d) => setState({ commands: d.available_commands, revision: d.domain_revision }))
     .catch(() => setState(null)), []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // The run's own committed decision wins; a run with none (404) keeps the legacy single-decision behaviour.
+    if (!runId) { void load(); return; }
+    api.runDecision(runId).then((d) => setCard(d.card)).catch(() => { setCard(null); void load(); });
+  }, [load, runId, refresh]);
   useEffect(() => {
     const k = PHASE_TEXT[phase];
     if (k) announce(t(k));
@@ -57,6 +85,7 @@ export function DecisionPanel({ hookPending = false }: { hookPending?: boolean }
     await load();
   }
 
+  if (card) return <section aria-label={t('dec.card.title')} data-testid="decision"><h2>{t('dec.title')}</h2><DecisionCard card={card} /></section>;
   if (state === null) return <section aria-label={t('dec.title')} data-testid="decision"><h2>{t('dec.title')}</h2><p>{t('dec.unavailable')}</p></section>;
   const canApprove = state.commands.includes('approve');
   return (

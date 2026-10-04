@@ -15,10 +15,10 @@ const env = { schema_version: '1', tenant_id: 't', projection_revision: 1, statu
 const session = { principal: 'p', tenant_id: 't', scopes: [], expires_at: '2099-01-01T00:00:00Z', csrf_token: 'tok', auth: { simulated: false, level: 'basic', auth_at: 'x' } };
 const ev = (kind: string, sequence: number) => ({ event_id: `e${sequence}`, run_id: 'r1', sequence, entity_ref: { kind: 'run', id: 'r1' }, projection_revision: sequence, kind });
 
-let profileDoubles: string[]; let nativeStatus: string; let calls: { profile: number; gates: number };
+let profileDoubles: string[]; let nativeStatus: string; let invHypothesis: string | null; let calls: { profile: number; gates: number; inv: number };
 beforeEach(() => {
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
-  handlers = null; profileDoubles = ['early_double']; nativeStatus = 'not_evaluable'; calls = { profile: 0, gates: 0 };
+  handlers = null; profileDoubles = ['early_double']; nativeStatus = 'not_evaluable'; calls = { profile: 0, gates: 0, inv: 0 }; invHypothesis = null;
   window.location.hash = '#/run/r1';
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/config.json') return json(200, { provider: 'fixture', sseHeartbeatMs: 5000 });
@@ -26,6 +26,10 @@ beforeEach(() => {
     if (url.endsWith('/debug/profile')) { calls.profile++; return json(200, { target: 'mock', runtime_profile: 'demo', doubles: profileDoubles, pin: null, mode: 'stand_in' }); }
     if (url.endsWith('/runs/r1/graph')) return json(200, { ...env, nodes: [] });
     if (url.includes('/runs/r1/events?')) return json(200, { items: [] });
+    if (url.endsWith('/runs/r1/investigation')) {
+      calls.inv++;
+      return json(200, { ...env, hypothesis: invHypothesis, verifier: invHypothesis ? 'corroborated' : 'unknown', evidence: [] });
+    }
     if (url.endsWith('/runs/r1/gates')) {
       calls.gates++;
       return json(200, { ...env, native: { status: nativeStatus, reason_code: null }, improvement: { status: 'unknown', reason_code: null }, combined: { decision: 'hold', reason_code: null }, proposal_id: null });
@@ -56,6 +60,14 @@ describe('run view live side-panels', () => {
     nativeStatus = 'fail';
     act(() => handlers!.onEvent(ev('gates_set', 1)));
     await waitFor(() => expect(screen.getByTestId('gate-native').getAttribute('data-status')).toBe('fail'));
+  });
+  it('refetches the investigation when investigation_set arrives: never shows "sin hipótesis" after it', async () => {
+    render(<App />);
+    await ready();
+    await waitFor(() => expect(screen.getByTestId('investigation').textContent).toContain('sin hipótesis'));
+    invHypothesis = 'Scripted scout claims X';
+    act(() => handlers!.onEvent(ev('investigation_set', 1)));
+    await waitFor(() => expect(screen.getByTestId('investigation').textContent).toContain('Scripted scout claims X'));
   });
   it('debounces a burst of events into one refetch and ignores unrelated events', async () => {
     render(<App />);

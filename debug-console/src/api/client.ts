@@ -68,6 +68,7 @@ export const api = {
   diff: (proposalId: string) => request(S.Diff, `${DEBUG}/proposals/${encodeURIComponent(proposalId)}/diff`),
   alternatives: (id: string) => request(S.Alternatives, `${DEBUG}/runs/${id}/alternatives`),
   memory: () => request(S.Memory, `${DEBUG}/memory`),
+  runDecision: (id: string) => request(S.RunDecision, `${DEBUG}/runs/${id}/decision`),
   decision: () => request(S.Decision, `${DEBUG}/decisions/dec-1`),
   respond: (note: string, key: string, expectedRevision: number) =>
     post(S.Accepted, `${DEBUG}/decisions/dec-1/responses`, { expected_revision: expectedRevision, response: 'approve', note }, key),

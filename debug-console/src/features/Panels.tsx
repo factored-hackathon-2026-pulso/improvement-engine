@@ -31,8 +31,8 @@ function useLoad<T>(fn: () => Promise<T>, dep: string, refresh = 0) {
 
 const RELATIONS: [string, 'inv.contradicts' | 'inv.supports' | 'inv.limits'][] = [['contradicts', 'inv.contradicts'], ['supports', 'inv.supports'], ['limits', 'inv.limits']];
 
-export function Investigation({ runId }: { runId: string }) {
-  const { v, err } = useLoad<Inv>(() => api.investigation(runId), runId);
+export function Investigation({ runId, refresh = 0 }: { runId: string; refresh?: number }) {
+  const { v, err } = useLoad<Inv>(() => api.investigation(runId), runId, refresh);
   if (err) return <p>{t('inv.unavailable')}</p>;
   if (!v) return <p>{t('inv.loading')}</p>;
   return (
@@ -58,12 +58,12 @@ export function Investigation({ runId }: { runId: string }) {
 /** Alternatives, gates (with per-attempt history) and the diff of the proposal that THIS run produced. */
 export function RunOutcome({ runId, refresh = 0 }: { runId: string; refresh?: number }) {
   const { v, err } = useLoad<GatesT>(() => api.gates(runId), runId, refresh);
-  const alts = useLoad<AltsT | null>(() => api.alternatives(runId).catch(() => null), runId);
+  const alts = useLoad<AltsT | null>(() => api.alternatives(runId).catch(() => null), runId, refresh);
   return (
     <>
       {alts.v && <AlternativesPanel items={alts.v.items} />}
       {err ? <p>{t('gates.unavailable')}</p> : !v ? <p>{t('gates.loading')}</p> : <Gates v={v} />}
-      {err ? <p>{t('diff.unavailable')}</p> : !v ? <p>{t('diff.loading')}</p> : <DiffView proposalId={v.proposal_id ?? null} />}
+      {err ? <p>{t('diff.unavailable')}</p> : !v ? <p>{t('diff.loading')}</p> : <DiffView proposalId={v.proposal_id ?? null} refresh={refresh} />}
     </>
   );
 }
@@ -87,15 +87,15 @@ export function Gates({ v }: { v: GatesT }) {
   );
 }
 
-export function DiffView({ proposalId }: { proposalId: string | null }) {
+export function DiffView({ proposalId, refresh = 0 }: { proposalId: string | null; refresh?: number }) {
   if (!proposalId) {
     return <section aria-label={t('diff.section')} data-testid="diff"><h2>{t('diff.title')}</h2><p>{t('diff.noProposal')}</p></section>;
   }
-  return <DiffFor id={proposalId} />;
+  return <DiffFor id={proposalId} refresh={refresh} />;
 }
 
-function DiffFor({ id }: { id: string }) {
-  const { v, err } = useLoad<DiffT>(() => api.diff(id), id);
+function DiffFor({ id, refresh }: { id: string; refresh: number }) {
+  const { v, err } = useLoad<DiffT>(() => api.diff(id), id, refresh);
   if (err) return <p>{t('diff.unavailable')}</p>;
   if (!v) return <p>{t('diff.loading')}</p>;
   return (

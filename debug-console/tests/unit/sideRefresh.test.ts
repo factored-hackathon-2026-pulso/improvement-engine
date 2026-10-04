@@ -9,6 +9,9 @@ describe('needsSideRefresh', () => {
     expect(needsSideRefresh([ev('gates_set')])).toEqual({ profile: false, gates: true });
     expect(needsSideRefresh([ev('doubles_declared'), ev('gates_set', 2)])).toEqual({ profile: true, gates: true });
   });
+  it('flags the panel events a run streams (investigation, alternatives, diff, decision) as an outcome refresh, like gates_set', () => {
+    for (const k of ['investigation_set', 'alternatives_set', 'diff_set', 'decision_set']) expect(needsSideRefresh([ev(k)]), k).toEqual({ profile: false, gates: true });
+  });
   it('ignores every other event kind', () => {
     expect(needsSideRefresh([ev('node_status_changed'), ev('run_started', 2)])).toEqual({ profile: false, gates: false });
   });

@@ -8,7 +8,7 @@ const str = z.string();
  * `metadata.consumer_proposal=true` (zod description) and a tracking ref until Codex records the shape.
  */
 export const CONSUMER_PROPOSALS: Record<string, string> = {
-  Investigation: 'R5/M1', Gates: 'R5', Diff: 'R7/M2/M3', Memory: 'M2', Decision: 'R4',
+  Investigation: 'R5/M1', Gates: 'R5', RunDecision: 'R4/R1V', Diff: 'R7/M2/M3', Memory: 'M2', Decision: 'R4',
   Session: 'CO-02/CLQ-22', Profile: 'M6/CLQ-28', StepUp: 'CO-02', Alternatives: 'R5/D2',
 };
 const proposal = <T extends z.ZodTypeAny>(name: string, schema: T): T =>
@@ -69,6 +69,17 @@ export const Memory = proposal('Memory', Envelope.extend({
   items: z.array(z.object({ memory_id: str, title: str, status: str, revoked: z.boolean() })),
 }));
 export const Decision = proposal('Decision', Envelope.extend({ needs_step_up: z.boolean(), domain_revision: z.number().int().nonnegative() }));
+const GateState = z.object({ status: str.nullable(), reason: str.nullable().optional().catch(null) });
+/** The decision a run committed (simulated or blocked) and the gate state it was taken on. R1V: never a live approval surface. */
+export const RunDecision = proposal('RunDecision', Envelope.extend({
+  decision_id: str, needs_step_up: z.boolean(), domain_revision: z.number().int().nonnegative(),
+  card: z.object({
+    state: str, simulated: z.boolean(), label: str, issuer: str, actor: str.nullable().optional().catch(null),
+    gate: z.object({ verdict: str.nullable(), safety: GateState.nullable().catch(null), improvement: GateState.nullable().catch(null) }),
+    override: z.object({ label: str, by: str, actor: str.nullable().optional().catch(null), reason: str, of_gate_verdict: str.nullable().optional().catch(null) }).nullable().catch(null),
+    reasons: z.array(str), proposal_id: str.nullable().optional().catch(null), quality_claims: str,
+  }),
+}));
 export const Session = proposal('Session', z.object({
   principal: str, tenant_id: str, scopes: z.array(str), expires_at: str, csrf_token: str,
   auth: z.object({ simulated: z.boolean(), level: str, auth_at: str }),
