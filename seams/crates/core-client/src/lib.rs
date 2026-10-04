@@ -2,6 +2,7 @@
 //! K1 scope: transport (Ed25519 service JWT), error classifier, idempotency, generated pin constants.
 //! Typed DTOs per operation arrive in K2.
 pub mod client;
+pub mod dto;
 pub mod errors;
 mod generated;
 pub mod http;
