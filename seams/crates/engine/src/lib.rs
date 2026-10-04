@@ -2,12 +2,15 @@
 //! Each handler's input is persisted with compare-and-set before it runs, and each output
 //! (payload + events) is committed as one CAS record. The event log is derived from the
 //! committed records, so a kill between any two handlers resumes with an identical log.
-//! Known limits: EffectState is typed but not enforced here (a non-NoEffect output is committed like any other;
+//! `executor` (E2) supersedes this for real jobs: lease/fence/effect enforcement live there.
+//! Known limits of run_once: EffectState is typed but not enforced here (a non-NoEffect output is committed like any other;
 //! no skip-on-resume yet); the stale-fence check is read-then-commit, not atomic with the out/N CAS;
 //! lease expiry/reclaim (C-7 now>=expires) is not modelled; FileStore locking is a lock file, not OS-level.
 use abi::*;
 
 pub mod demo;
+pub mod executor;
+mod lib_codec;
 pub mod store;
 pub use store::{FileStore, JobStore};
 

@@ -51,6 +51,11 @@ pub enum HandlerError {
 pub trait JobHandler {
     fn id(&self) -> HandlerId;
     fn run(&self, fence: &Fence, input: &InputEnvelope) -> Result<OutputEnvelope, HandlerError>;
+    /// True when running the handler may cause an external effect (C-7). The executor records the
+    /// dispatch before `run`; if the run is lost the job needs reconciliation and is never re-run.
+    fn effectful(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
