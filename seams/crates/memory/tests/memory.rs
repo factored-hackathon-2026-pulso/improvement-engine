@@ -115,3 +115,33 @@ fn notes_with_secrets_or_pii_are_rejected_on_every_path() {
     assert_eq!(m.note(&id).unwrap().status, Status::Active);
     assert!(m.wiki_read("k").unwrap().matches("- note-").count() == 1);
 }
+
+#[test]
+fn contradicted_note_cannot_be_reconfirmed_or_recontradicted() {
+    let mut m = Memory::new(store());
+    let prior = m.add_note(nn("k", "a", &["ev-1"])).unwrap();
+    let new = m.contradict(&prior, nn("k", "b", &["ev-2"])).unwrap();
+    assert!(matches!(m.contradict(&prior, nn("k", "c", &["ev-2"])), Err(MemError::AlreadyContradicted(_))));
+    assert!(matches!(m.confirm(&prior, vec!["ev-2".into()]), Err(MemError::AlreadyContradicted(_))));
+    assert_eq!(m.note(&prior).unwrap().contradicted_by.as_deref(), Some(new.as_str()));
+    assert_eq!(m.note(&prior).unwrap().status, Status::Contradicted);
+    assert_eq!(m.wiki_read("k").unwrap().matches("- note-").count(), 2);
+}
+
+#[test]
+fn duplicate_evidence_refs_are_rejected() {
+    let mut m = Memory::new(store());
+    assert!(matches!(m.add_note(nn("k", "s", &["ev-1", "ev-1"])), Err(MemError::DuplicateEvidence(_))));
+    let id = m.add_note(nn("k", "s", &["ev-1"])).unwrap();
+    assert!(matches!(m.confirm(&id, vec!["ev-1".into()]), Err(MemError::DuplicateEvidence(_))));
+    assert_eq!(m.note(&id).unwrap().status, Status::Active);
+}
+
+#[test]
+fn scan_bypass_attempts_are_rejected() {
+    let mut m = Memory::new(store());
+    for text in ["Password = hunter2", "pass\u{200b}word=x", "call 555 123 4567", "call 555-123-4567", "ghp_abcdefghijklmnopqrstuvwxyz0123456789", "blob QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0MTIz", "ana [at] x.com", "\u{ff50}assword=x"] {
+        assert!(matches!(m.add_note(nn("k", text, &["ev-1"])), Err(MemError::SensitiveContent(_))), "{text:?}");
+    }
+    assert!(m.add_note(nn("k", "p95 stable over 42 samples, run 2026-10-04", &["ev-1"])).is_ok());
+}

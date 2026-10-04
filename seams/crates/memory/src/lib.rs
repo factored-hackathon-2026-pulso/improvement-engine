@@ -11,6 +11,8 @@ pub enum MemError {
     ClaimKeyMismatch,
     UnresolvedEvidence(String),
     NoEvidence,
+    DuplicateEvidence(String),
+    AlreadyContradicted(String),
     SensitiveContent(&'static str),
 }
 
