@@ -24,7 +24,7 @@ _OPAQUE = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
 _TOOLREF = re.compile(r"^[a-z0-9_.-]+/[a-z0-9_.-]+@\d+\.\d+\.\d+$")
 _ENUM = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 _HASH = re.compile(r"^[0-9a-f]{16}$")
-_EVREF = re.compile(r"^ev_[0-9a-z]{8,64}$")
+_EVREF = re.compile(r"^ev_[0-9a-f]{8,64}$")
 _EMAIL = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
 _LONG_DIGITS = re.compile(r"\d[\d\s().-]{6,}\d")
 _MAX_STATIC = 2000
@@ -32,13 +32,11 @@ _MAX_FEEDBACK = 500
 MAX_INT = 10**7
 MAX_FREE_INT = 1000  # integers in inputs/args are small ordinals/caps; national ids and phones are longer
 
-# Deny-by-default registry: a string in `inputs`/`args` passes only if it has a system-issued shape, is an enum
-# value of the payload's own tool schemas, or is a token the stage registered. "Looks like an id" is not enough.
+# Deny-by-default registry: a string in `inputs`/`args` passes only if it has a system-issued shape, is a token the stage registered. "Looks like an id" is not enough.
 KNOWN_METRICS = frozenset({"recurrence_rate", "resolution_rate", "synthetic_metric"})
 _SHAPES = tuple(re.compile(p) for p in (
     r"g_[0-9a-f]{16}",                                             # lab group hash
-    r"ev_[0-9a-z]{8,64}",                                          # evidence ref
-    r"[a-z0-9_.-]+/[a-z0-9_.-]+@\d+\.\d+\.\d+",                    # exact tool ref
+    r"ev_[0-9a-f]{8,64}",                                          # evidence ref (hex digest, never letters of a name)
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",  # uuid
     r"(binding|job|artifact)[-_:][0-9a-f]{8,32}",                  # system-issued ids (hex only)
     r"(h|hyp|alt|fam|finding)_\d{1,4}",                            # ordinal ids
@@ -66,32 +64,6 @@ def _pii_like(x: str) -> bool:
 
 _RUTLIKE = re.compile(r"\d{1,2}\.?\d{3}\.?\d{3}-?[0-9kK]")
 _DEFAULT = Registry(KNOWN_METRICS)
-
-
-def _schema_tokens(tools: Any) -> set[str]:
-    """enum/const values declared by the stage's own tool schemas."""
-    out: set[str] = set()
-
-    def walk(x: Any, d: int = 0) -> None:
-        if d > 12:
-            return
-        if isinstance(x, dict):
-            for key, val in x.items():
-                if key == "enum" and isinstance(val, list):
-                    out.update(i for i in val if isinstance(i, str))
-                elif key == "const" and isinstance(val, str):
-                    out.add(val)
-                else:
-                    walk(val, d + 1)
-        elif isinstance(x, list):
-            for i in x:
-                walk(i, d + 1)
-
-    if isinstance(tools, list):
-        for t in tools:
-            if isinstance(t, dict):
-                walk(t.get("args_schema"))
-    return out
 
 
 @dataclass(frozen=True)
@@ -126,7 +98,7 @@ def scan_payload(payload: Any, *, k: int = DEFAULT_K, registry: Registry | None 
         _static_text(payload["goal"], "goal", v)
     if "step" in payload and (not _is_int(payload["step"]) or not 0 <= payload["step"] <= 1000):
         v.append("step: not a non-negative integer")
-    allowed = set(_DEFAULT.tokens) | (registry.tokens if registry else set()) | _schema_tokens(payload.get("tools"))
+    allowed = set(_DEFAULT.tokens) | (registry.tokens if registry else set())
     if "inputs" in payload:
         _opaque_tree(payload["inputs"], "inputs", v, allowed)
     if "feedback" in payload and payload["feedback"] is not None:

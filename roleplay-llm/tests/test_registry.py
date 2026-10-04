@@ -3,7 +3,10 @@ import unittest
 
 from roleplay_llm.scanner import Registry, scan_payload
 
-from .test_scanner import payload
+try:
+    from .test_scanner import payload
+except ImportError:  # unittest discover -s tests
+    from test_scanner import payload
 
 TOOL = {"tool": "pulso/lab_query@1.0.0", "description": "Query.",
         "args_schema": {"type": "object", "properties": {
@@ -74,6 +77,33 @@ class RegistryDenyByDefault(unittest.TestCase):
         p = with_inputs(family_id="fam_001")
         p["observations"][0]["result"]["rows"][0]["count"] = 5_000_000
         self.assertTrue(scan_payload(p).ok)
+
+
+class Attacks(unittest.TestCase):
+    def test_system_shaped_strings_with_names_rejected(self):
+        for s in ("ev_mariagonzalez", "ev_juanperezsoto", "g_maria", "binding-maria", "w_2026_ab", "h_maria", "job-juanperez",
+                  "juan.perez/rut@1.0.0", "ev_ABCDEFGH12", "ev_0123456789abcdefg"):
+            self.assertFalse(scan_payload(with_inputs(x=s)).ok, s)
+
+    def test_unicode_and_case_lookalikes_rejected(self):
+        for s in ("fam_١٢", "w１", "ev_аbcdef0123", "H_1", "W1"):
+            self.assertFalse(scan_payload(with_inputs(x=s)).ok, s)
+
+    def test_request_cannot_whitelist_a_name_through_its_own_schema(self):
+        tool = {"tool": "pulso/lab_query@1.0.0", "description": "Query.", "args_schema": {"type": "object", "properties": {
+            "who": {"type": "string", "enum": ["maria_gonzalez"]}, "k": {"const": "juanperez"}}}}
+        p = payload(inputs={"x": "maria_gonzalez", "y": "juanperez"}, tools=[tool])
+        self.assertFalse(scan_payload(p).ok)
+        p = payload(inputs={"x": "maria_gonzalez"}, tools=[tool])
+        self.assertTrue(scan_payload(p, registry=Registry(tokens={"maria_gonzalez"})).ok)
+
+    def test_floats_and_nested_ints_capped(self):
+        self.assertFalse(scan_payload(with_inputs(x=123456785.0)).ok)
+        self.assertFalse(scan_payload(with_inputs(x=[{"a": [12345678]}])).ok)
+        self.assertFalse(scan_payload(with_inputs(x=-12345678)).ok)
+
+    def test_very_long_string_rejected(self):
+        self.assertFalse(scan_payload(with_inputs(x="ev_" + "a" * 5000)).ok)
 
 
 if __name__ == "__main__":
