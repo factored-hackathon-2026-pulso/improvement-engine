@@ -1,0 +1,146 @@
+//! A03 service JWT verification (mirrors the Python double `codex_standin.jwtsvc.Verifier` check for check):
+//! `typ=JWT`, EdDSA, header exactly {alg, kid, typ}, kid bound to one (iss, aud), `exp - now <= 330`, singular scope,
+//! tenant claim required, receiver-owned `jti` replay set.
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
+use ed25519_dalek::{Signature, VerifyingKey};
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Denied {
+    pub reason: &'static str,
+    pub status: u16,
+}
+
+fn deny(reason: &'static str) -> Denied {
+    Denied { reason, status: 401 }
+}
+
+pub struct KeyRing {
+    entries: HashMap<String, (String, String, VerifyingKey)>,
+}
+
+impl KeyRing {
+    /// `{kid: [iss, aud, public_key_b64url]}`.
+    pub fn from_json(v: &Value) -> Result<KeyRing, String> {
+        let obj = v.as_object().ok_or("ring must be an object")?;
+        let mut entries = HashMap::new();
+        for (kid, e) in obj {
+            let a = e.as_array().filter(|a| a.len() == 3).ok_or("ring entry must be [iss, aud, key]")?;
+            let s = |i: usize| a[i].as_str().ok_or("ring entry fields must be strings");
+            let raw = B64.decode(s(2)?.trim_end_matches('=')).map_err(|e| e.to_string())?;
+            let arr: [u8; 32] = raw.try_into().map_err(|_| "public key must be 32 bytes")?;
+            let key = VerifyingKey::from_bytes(&arr).map_err(|e| e.to_string())?;
+            entries.insert(kid.clone(), (s(0)?.to_string(), s(1)?.to_string(), key));
+        }
+        Ok(KeyRing { entries })
+    }
+}
+
+pub struct Expect<'a> {
+    pub aud: &'a str,
+    pub scope: Option<&'a str>,
+    pub purpose: Option<&'a str>,
+}
+
+/// One verifier (one jti store) per receiver.
+pub struct Verifier {
+    ring: std::sync::Arc<KeyRing>,
+    seen: Mutex<HashSet<(String, String)>>,
+}
+
+impl Verifier {
+    pub fn new(ring: std::sync::Arc<KeyRing>) -> Verifier {
+        Verifier { ring, seen: Mutex::new(HashSet::new()) }
+    }
+
+    pub fn verify(&self, token: &str, now: f64, want: &Expect) -> Result<Value, Denied> {
+        let parts: Vec<&str> = token.split('.').collect();
+        if parts.len() != 3 {
+            return Err(deny("malformed"));
+        }
+        let dec = |s: &str| B64.decode(s.trim_end_matches('=')).map_err(|_| deny("malformed"));
+        let head: Value = serde_json::from_slice(&dec(parts[0])?).map_err(|_| deny("malformed"))?;
+        let claims: Value = serde_json::from_slice(&dec(parts[1])?).map_err(|_| deny("malformed"))?;
+        let sig = dec(parts[2])?;
+        let (head, cl) = match (head.as_object(), claims.as_object()) {
+            (Some(h), Some(c)) => (h, c),
+            _ => return Err(deny("malformed")),
+        };
+        let exact: HashSet<&str> = head.keys().map(String::as_str).collect();
+        if head.get("alg").and_then(Value::as_str) != Some("EdDSA")
+            || head.get("typ").and_then(Value::as_str) != Some("JWT")
+            || exact != HashSet::from(["alg", "kid", "typ"])
+        {
+            return Err(deny("bad_header"));
+        }
+        let entry = head.get("kid").and_then(Value::as_str).and_then(|k| self.ring.entries.get(k)).ok_or(deny("unknown_kid"))?;
+        let signature = Signature::from_slice(&sig).map_err(|_| deny("bad_signature"))?;
+        entry.2.verify_strict(format!("{}.{}", parts[0], parts[1]).as_bytes(), &signature).map_err(|_| deny("bad_signature"))?;
+        let s = |k: &str| cl.get(k).and_then(Value::as_str);
+        if s("iss") != Some(entry.0.as_str()) || s("aud") != Some(entry.1.as_str()) || s("aud") != Some(want.aud) {
+            return Err(deny("wrong_audience"));
+        }
+        let exp = cl.get("exp").and_then(Value::as_f64);
+        let jti = s("jti").filter(|j| !j.is_empty());
+        let (Some(exp), Some(jti)) = (exp, jti) else { return Err(deny("missing_claims")) };
+        if exp <= now {
+            return Err(deny("expired"));
+        }
+        if exp - now > 330.0 {
+            return Err(deny("ttl_too_long"));
+        }
+        if want.scope.is_some_and(|w| s("scope") != Some(w)) {
+            return Err(Denied { reason: "scope_denied", status: 403 });
+        }
+        if want.purpose.is_some_and(|w| s("purpose") != Some(w)) {
+            return Err(Denied { reason: "purpose_denied", status: 403 });
+        }
+        if s("tenant_id").is_none_or(str::is_empty) {
+            return Err(Denied { reason: "tenant_required", status: 403 });
+        }
+        let mut seen = self.seen.lock().unwrap();
+        if !seen.insert((s("iss").unwrap().to_string(), jti.to_string())) {
+            return Err(deny("jti_replayed"));
+        }
+        Ok(claims.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core_client::jwt::{JwtParams, sign};
+    use ed25519_dalek::SigningKey;
+    use std::sync::Arc;
+
+    fn ring(sk: &SigningKey) -> Arc<KeyRing> {
+        let v = serde_json::json!({"k": ["control-api", "core-bridge", B64.encode(sk.verifying_key().to_bytes())]});
+        Arc::new(KeyRing::from_json(&v).unwrap())
+    }
+
+    #[test]
+    fn accepts_a_k1_core_client_token_once_and_then_flags_the_replay() {
+        let sk = SigningKey::from_bytes(&[9u8; 32]);
+        let v = Verifier::new(ring(&sk));
+        let tok = sign(&sk, &JwtParams { kid: "k", worker_id: "w", purpose: "core_task_invoke", tenant_id: Some("t1"), job_id: None, iat: 1000, ttl_s: 60, jti: "j1" });
+        let want = Expect { aud: "core-bridge", scope: None, purpose: Some("core_task_invoke") };
+        assert_eq!(v.verify(&tok, 1010.0, &want).unwrap()["tenant_id"], "t1");
+        assert_eq!(v.verify(&tok, 1010.0, &want), Err(deny("jti_replayed")));
+    }
+
+    #[test]
+    fn tampered_payload_and_expiry_are_rejected() {
+        let sk = SigningKey::from_bytes(&[9u8; 32]);
+        let v = Verifier::new(ring(&sk));
+        let tok = sign(&sk, &JwtParams { kid: "k", worker_id: "w", purpose: "p", tenant_id: Some("t1"), job_id: None, iat: 1000, ttl_s: 60, jti: "j2" });
+        let want = Expect { aud: "core-bridge", scope: None, purpose: None };
+        assert_eq!(v.verify(&tok, 2000.0, &want), Err(deny("expired")));
+        let mut p: Vec<&str> = tok.split('.').collect();
+        let forged = B64.encode(br#"{"iss":"control-api","aud":"core-bridge","exp":9999999999,"jti":"j3","tenant_id":"t9"}"#);
+        p[1] = &forged;
+        assert_eq!(v.verify(&p.join("."), 1010.0, &want), Err(deny("bad_signature")));
+    }
+}

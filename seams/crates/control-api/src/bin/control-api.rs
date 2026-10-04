@@ -1,0 +1,24 @@
+//! `E2E_VERIFY_KEYS` (public keys only; same JSON as the Python double), `E2E_PORT` (default 8700),
+//! `CONTROL_API_ADMIN=1` enables the `/_e2e/config` test channel. Binds 127.0.0.1 unless `CONTROL_API_HOST` is set.
+use control_api::{
+    app::{App, Config},
+    auth::KeyRing,
+    server,
+    store::MemStore,
+};
+use std::sync::Arc;
+
+fn main() {
+    let raw = std::env::var("E2E_VERIFY_KEYS").expect("E2E_VERIFY_KEYS");
+    let cfg: serde_json::Value = serde_json::from_str(&raw).expect("E2E_VERIFY_KEYS json");
+    let ring = Arc::new(KeyRing::from_json(&cfg["ring"]).expect("ring"));
+    let upload_pin = cfg["ingest"]
+        .as_object()
+        .and_then(|i| Some((i.get("binding_ref")?.as_str()?.to_string(), i.get("tenant_id")?.as_str()?.to_string())));
+    let admin = std::env::var("CONTROL_API_ADMIN").is_ok_and(|v| v == "1");
+    let app = Arc::new(App::new(Config { ring, upload_pin, admin }, Box::new(MemStore::default())));
+    let host = std::env::var("CONTROL_API_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port = std::env::var("E2E_PORT").unwrap_or_else(|_| "8700".into());
+    let server = tiny_http::Server::http(format!("{host}:{port}")).expect("bind");
+    server::serve(server, app);
+}
