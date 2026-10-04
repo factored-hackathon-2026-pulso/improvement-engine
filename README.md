@@ -30,6 +30,34 @@ infrastructure is involved. This keeps the engine's durable adapter gate
 self-contained while sibling `infra` owns Terraform, AWS deployment and
 operational infrastructure.
 
+## Python integration packages and console
+
+Besides the Rust workspace, this repository carries Team Claude's integration packages (Python 3.12 via
+`uv --python 3.12`, plus the Node debug console). They sit outside the Cargo workspace (`members` lists only
+`crates/*`) and are not yet run by `.github/workflows/ci.yml`, which is Rust-only; they are verified locally.
+Everything marked as a double is a double, never the real Agent Core, control-api or lab-broker.
+
+| Directory | What it is | Local check |
+|---|---|---|
+| [`core-bridge/`](core-bridge/README.md) | `pulso_core_runtime`: the pinned Agent Core composed with Pulso's `/internal/v1` API, tool runtime, native evaluation and read-only exporter; image and wire snapshot | `pwsh core-bridge/scripts/ci.ps1 -Job all -PostgresAdmin <throwaway PG16 DSN>` |
+| [`bridge-contract/`](bridge-contract/README.md) | published `/internal/v1` contract for the Rust client: OpenAPI, JSON Schemas, goldens, conformance kit, mock divergence report | `python bridge-contract/gen.py --check` and `python -m pytest bridge-contract` |
+| [`platform-contract/`](platform-contract/README.md) | JSON Schemas and event catalog for the allow-listed support-platform tables, goldens, conformance suite | `uv run --python 3.12 --no-project --with pytest --with jsonschema python -m pytest platform-contract/tests` |
+| [`platform-sim/`](platform-sim/README.md) | doubles: registry mock, a2 harness, bridge mock, ingest fixture; [`platform_live/`](platform-sim/platform_live/README.md) simulates the 11-table platform model with fault injection | `pwsh core-bridge/scripts/ci.ps1 -Job platform-sim` |
+| `platform-exporter/` | read-only exporter of platform `event_log` into `PlatformObservationBatch` (persist before POST, redaction, quarantine, gap findings) | `uv run --python 3.12 pytest` from `platform-exporter/` |
+| [`local-identity/`](local-identity/README.md) | sandbox-only human issuer for Core human Principal JWS; never for staging or prod | `uv sync --python 3.12 && uv run pytest` from `local-identity/` |
+| `e2e-core/` | Codex stand-in (Python) driving the real local Core stack end to end, with an honest `e2e-report.json` | `pwsh e2e-core/run.ps1 -UnitOnly` (without the stack); `pwsh e2e-core/run.ps1` (full, Podman) |
+| [`demo/`](demo/README.md) | demo steps on the real local stack, each marked `real`, `stand-in` or `simulated`; feeds the console | `pwsh demo/run.ps1 -Offline` (no stack) |
+| [`local/core/`](local/core/README.md) | standalone Podman stack for the real Core (`real_local`), doctor and smoke scripts | `Invoke-Pester local/core/tests` and `python -m pytest local/core/tests` |
+| [`agent-core-assets/`](agent-core-assets/README.md) | generic Scout/Verifier/Builder/Writer stages, worlds and expected state, with a validator | `uv run --python 3.12 --with pyyaml python tools/assetcheck.py check` from `agent-core-assets/` |
+| `debug-console/` | internal backoffice of the detection and self-improvement system (spec V3 section 25; not a product UI): see [its docs](debug-console/docs/README.md) | `npm ci && npm run typecheck && npm test && npm run build` from `debug-console/` |
+
+### Agent Core pin
+
+The engine consumes Agent Core at a pinned commit. Do not copy a SHA from this README: the authoritative value is the
+`PIN_SHA` constant in [`core-bridge/src/pulso_core_runtime/__init__.py`](core-bridge/src/pulso_core_runtime/__init__.py),
+and the reasoning for each bump is in the ADR series under [`core-bridge/docs/adr`](core-bridge/docs/adr/README.md).
+Pin history: `86a7674` -> `789d6c8` -> `894fa65` -> `c814c2b` (the last bump is in progress on another branch).
+
 ## Local engine dependencies
 
 The optional Windows-first local dependency stack belongs here, not in sibling
