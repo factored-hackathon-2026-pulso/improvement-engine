@@ -84,7 +84,7 @@ mounted; the PG exporter is the ingest path). Pass-through, untouched and off by
 `AGENTCORE_LLM_GATEWAY_TOKEN` (both or neither; neither = generation falls back to templates), `AGENTCORE_DB_POOL_MAX`,
 the S3 blob bucket and the SNS publisher.
 LLM gateway config (`pulso_core_runtime/llm/config.py`): `AGENTCORE_LLM_GATEWAY_URL`, `AGENTCORE_LLM_GATEWAY_TOKEN`, `PULSO_LLM_MODE` (`gateway|disabled`),
-`PULSO_LLM_STAGE_POLICY`, `PULSO_LLM_STAGE_POLICY_JSON`, `PULSO_LLM_POLICY_REQUIRED`.
+`PULSO_LLM_STAGE_POLICY`, `PULSO_LLM_STAGE_POLICY_JSON`, `PULSO_LLM_POLICY_REQUIRED`, `PULSO_LLM_SPEND_CEILING` (USD per job, default 5.00; `unlimited` is the only opt-out; values <0, NaN/inf or >1000000 fail startup), `PULSO_LLM_KILL_FILE` (marker file: present or unreadable blocks all model calls; `PULSO_LLM_KILL` any value other than empty/0/false/no/off does too).
 Exit code 2 means configuration error (demo double, missing factory, pin drift, unreadable key file, empty URL).
 
 ## Key delivery from env (AWS / Fargate; ADR 0009)

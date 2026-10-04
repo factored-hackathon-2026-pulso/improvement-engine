@@ -28,6 +28,7 @@ UNLIMITED = "unlimited"
 # Gateway mode without a configured ceiling is NOT unlimited: a conservative per-job default applies (USD). Opting out
 # of the ceiling requires the explicit value `unlimited`. `PULSO_LLM_MODE=disabled` makes no calls, so it has none.
 DEFAULT_CEILING_USD = Decimal("5.00")
+MAX_CEILING_USD = Decimal("1000000")  # above this a value is a typo (e.g. 1e999), not a budget
 MODES = ("gateway", "disabled")
 
 
@@ -79,8 +80,8 @@ def _ceiling(env: Mapping[str, str]) -> tuple[Decimal | None, list[str]]:
         value = Decimal(raw)
     except InvalidOperation:
         value = Decimal("NaN")
-    if not value.is_finite() or value < 0:
-        return DEFAULT_CEILING_USD, [f"{CEILING_ENV} must be a non-negative decimal USD amount or `{UNLIMITED}`"]
+    if not value.is_finite() or value < 0 or value > MAX_CEILING_USD:
+        return DEFAULT_CEILING_USD, [f"{CEILING_ENV} must be a non-negative decimal USD amount (<= 1000000) or `{UNLIMITED}`"]
     return value, []
 
 

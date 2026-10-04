@@ -47,6 +47,13 @@ MIGRATIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("CREATE INDEX IF NOT EXISTS model_call_ledger_scope ON pulso_bridge.model_call_ledger"
          " (tenant_id, job_id, stage, attempt, id)"),
     )),
+    ("l3_003_ledger_guard_outcomes", (
+        # The spend guard refuses before reserving: those refusals are ledgered too.
+        "ALTER TABLE pulso_bridge.model_call_ledger DROP CONSTRAINT IF EXISTS model_call_ledger_outcome_check",
+        ("ALTER TABLE pulso_bridge.model_call_ledger ADD CONSTRAINT model_call_ledger_outcome_check CHECK (outcome IN"
+         " ('ok','timeout','unavailable','rate_limited','invalid_output','refused','over_cap','budget_exhausted',"
+         "'policy_denied','error','kill_switch','ceiling_exceeded'))"),
+    )),
 )
 
 BOOKKEEPING = ("CREATE TABLE IF NOT EXISTS pulso_bridge.migrations (name text PRIMARY KEY, "

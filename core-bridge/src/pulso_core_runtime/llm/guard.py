@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 KILL_ENV = "PULSO_LLM_KILL"
-_TRUE = {"1", "true", "yes", "on"}
+_FALSE = {"", "0", "false", "no", "off"}
 
 
 class CeilingExceeded(Exception):
@@ -32,7 +32,7 @@ class KillSwitch:
 
     def engaged(self) -> bool:
         env = os.environ if self.env is None else self.env
-        if env.get(KILL_ENV, "").strip().lower() in _TRUE:
+        if env.get(KILL_ENV, "").strip().lower() not in _FALSE:  # any other spelling engages (fail closed)
             return True
         if self.file is None:
             return False
