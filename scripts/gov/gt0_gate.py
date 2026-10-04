@@ -139,7 +139,9 @@ def check_trn0(path):
             p.append(f"PR {pr.get('n')}: W0 receipt {prob}")
         else:
             p += check_receipt_doc(w, f"PR {pr.get('n')} W0 receipt")
-    return _res("trn0", not p, "; ".join(p) or f"{len(prs)} train PR(s), each with a passing W0 receipt")
+    dev = doc.get("deviations") or []
+    ok_msg = f"{len(prs)} train PR(s), each with a passing W0 receipt" + (f"; deviations: {' | '.join(map(str, dev))}" if dev else "")
+    return _res("trn0", not p, "; ".join(p) or ok_msg)
 
 
 def check_crv0(reviews: Path, required):
