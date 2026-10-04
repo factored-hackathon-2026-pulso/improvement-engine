@@ -4,3 +4,4 @@ pub mod doubles;
 pub mod live;
 pub mod sink;
 pub mod config;
+pub mod health;
