@@ -14,6 +14,6 @@ path = "../thread10/src/bin/synth_runner.rs"
 engine = { path = "../engine" }
 abi = { path = "../abi" }
 postgres = "0.19"
-rusqlite = { version = "0.39.0", features = ["bundled"] }
+rusqlite = { version = "0.39.0", features = ["bundled", "hooks"] }
 serde_json = "1"
 sha2 = "0.10"
