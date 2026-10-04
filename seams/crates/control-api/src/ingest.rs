@@ -6,7 +6,7 @@
 //! `(tenant, source, kind, level, native_event_id)` with `409` on a digest conflict.
 //!
 //! What the double does not do and this server does (the exporter does it on its own side in the double's world):
-//! * **type quarantine** (catalog 1.1.0, embedded read-only): admitted types are accepted; denied, planned and unknown
+//! * **type quarantine** (catalog 1.2.0, embedded read-only): admitted types are accepted; denied, planned and unknown
 //!   types (`release.*`, `team.*`...) are counted and quarantined as metadata, never the payload, and never fail the batch.
 //!   A quarantined row still counts for sequence contiguity (the checkpoint is acked past it).
 //! * **gap quarantine**: a hole in the domain `source_sequence` of a fast_poll batch (inside it, before it against the
@@ -74,7 +74,7 @@ fn catalog() -> &'static Catalog {
     })
 }
 
-/// Catalog 1.1.0 rules: listed types by status; announced prefixes are planned; everything else (including the legacy
+/// Catalog 1.2.0 rules: listed types by status; announced prefixes are planned; everything else (including the legacy
 /// `exporter.` prefix of 1.0.0) is unknown.
 pub fn classify(event_type: &str) -> Class {
     let c = catalog();

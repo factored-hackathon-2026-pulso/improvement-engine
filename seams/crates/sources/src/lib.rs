@@ -128,7 +128,7 @@ fn unesc(s: &str) -> String {
     s.replace("%7C", "|").replace("%25", "%")
 }
 
-/// One platform event (contract 1.1.0 `event_log` minus payload).
+/// One platform event (contract 1.2.0 `event_log` minus payload).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformEvent {
     /// `event_log.sequence` for product sources; `None` for dataset replays (no platform sequence exists).

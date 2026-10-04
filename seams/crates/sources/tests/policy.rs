@@ -87,3 +87,13 @@ fn event_type_lists_mirror_the_contract_catalog() {
     assert_eq!(by("admitted"), sorted(sources::monitor::ADMITTED_EVENT_TYPES));
     assert_eq!(by("denied"), sorted(sources::monitor::DENIED_EVENT_TYPES));
 }
+
+#[test]
+fn contract_1_2_0_rating_columns_are_readable_and_free_text_stays_denied() {
+    assert!(assert_columns_allowed("cases", &["id", "rating_score", "rated_at"]).is_ok());
+    for (t, c) in [("cases", "rating_comment"), ("cases", "rating_key"), ("cases", "open_escalation_id"), ("cases", "active_call_id"), ("turns", "subject")] {
+        assert!(assert_columns_allowed(t, &[c]).is_err(), "{t}.{c}");
+    }
+    assert!(assert_table_allowed("assistant_sessions").is_err());
+    assert!(assert_table_allowed("builder_proposals").is_err());
+}

@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
-/// Admitted event types of platform-contract 1.1.0 (`event-catalog.json`, drift-tested).
+/// Admitted event types of platform-contract 1.2.0 (`event-catalog.json`, drift-tested).
 pub const ADMITTED_EVENT_TYPES: &[&str] = &[
     "case.opened",
     "case.queued",
@@ -31,6 +31,46 @@ pub const ADMITTED_EVENT_TYPES: &[&str] = &[
     "auth.account_locked",
     "auth.session_started",
     "auth.session_ended",
+    // 1.2.0 (platform eeb73a8)
+    "case.priority_changed",
+    "case.rated",
+    "case.assistant_started",
+    "case.assistant_released",
+    "assistant.session_started",
+    "assistant.input_queued",
+    "assistant.turn_answered",
+    "assistant.step_up_verified",
+    "assistant.step_up_rejected",
+    "assistant.ended",
+    "copilot.query_asked",
+    "copilot.answered",
+    "builder.proposal_created",
+    "builder.proposal_tracked",
+    "builder.draft_saved",
+    "builder.proposal_validated",
+    "builder.proposal_frozen",
+    "builder.proposal_reopened",
+    "builder.proposal_evaluated",
+    "builder.proposal_approved",
+    "builder.proposal_rejected",
+    "builder.proposal_published",
+    "builder.alias_promoted",
+    "builder.release_revoked",
+    "builder.question_asked",
+    "builder.answered",
+    "escalation.opened",
+    "escalation.withdrawn",
+    "escalation.answered",
+    "escalation.taken",
+    "escalation.reassigned",
+    "escalation.closed",
+    "escalation.acknowledged",
+    "call.started",
+    "call.answered",
+    "call.held",
+    "call.resumed",
+    "call.mute_changed",
+    "call.ended",
 ];
 /// Known security/credential telemetry: counted, never packaged.
 pub const DENIED_EVENT_TYPES: &[&str] = &["auth.password_accepted", "auth.mfa_challenge_issued", "auth.mfa_failed", "customer.session_started"];
@@ -160,7 +200,7 @@ fn write_package(work: &Path, snap: &str, config: &Config, adapter: &dyn SourceA
         lines.push('\n');
     }
     std::fs::write(tmp.join("events.ndjson"), lines).map_err(io)?;
-    let manifest = json!({"contract": "platform-events-package/0", "contract_version_source": "platform_live 1.1.0", "source_id": config.source_id.as_str(), "data_mode": config.data_mode.as_str(), "adapter": adapter.adapter(), "data_class": adapter.data_class(), "watermark_from": from.encode(), "watermark_to": to.encode(), "events": events.len()});
+    let manifest = json!({"contract": "platform-events-package/0", "contract_version_source": "platform_live 1.2.0", "source_id": config.source_id.as_str(), "data_mode": config.data_mode.as_str(), "adapter": adapter.adapter(), "data_class": adapter.data_class(), "watermark_from": from.encode(), "watermark_to": to.encode(), "events": events.len()});
     std::fs::write(tmp.join("manifest.json"), manifest.to_string()).map_err(io)?;
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::rename(&tmp, &dir).map_err(io)
