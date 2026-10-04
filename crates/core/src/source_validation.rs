@@ -275,7 +275,8 @@ pub struct SourceFileSeal {
 /// Opaque mapping emitted only by the immutable source-artifact registry after
 /// it reparses the stored snapshot bytes. It deliberately carries both digest
 /// domains, rather than pretending they are interchangeable.
-pub(crate) struct VerifiedSourceArtifactBinding {
+#[cfg(feature = "local-simulation")]
+pub struct VerifiedSourceArtifactBinding {
     artifact_ref: crate::ArtifactReference,
     snapshot_binding_digest: String,
 }
@@ -340,6 +341,17 @@ pub(crate) fn resolve_source_snapshot_artifact<R: crate::ArtifactRepository>(
         artifact_ref: reference.clone(),
         snapshot_binding_digest: snapshot.binding_digest(),
     })
+}
+
+/// Local-simulation-only bridge to U02's immutable artifact reread. The
+/// returned value is opaque and can only be consumed by the corresponding
+/// U08 binding method; it is not an external or production attestation.
+#[cfg(feature = "local-simulation")]
+pub fn local_simulation_resolve_source_snapshot_artifact<R: crate::ArtifactRepository>(
+    repository: &mut R,
+    reference: &crate::ArtifactReference,
+) -> Result<VerifiedSourceArtifactBinding, SourceDefinitionError> {
+    resolve_source_snapshot_artifact(repository, reference)
 }
 
 impl SourceFileSeal {

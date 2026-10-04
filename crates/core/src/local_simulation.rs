@@ -16,13 +16,19 @@ use crate::ArtifactReference;
 use crate::autonomous_scout::{
     CandidateKind, InMemoryScoutCandidateRepository, NonProductionScoutInvocationAuthority,
     ScoutCandidateAdmissionAuthority, ScoutInvocationAuthority, ScoutResult,
-    record_scout_discovery,
+    TrustedE0ScoutComposer, record_e0_scout_discovery, record_scout_discovery,
 };
 use crate::core_task::{
     CoreTaskBinding, CoreTaskBindingRegistry, CoreTaskInvocation, CoreTaskPort, CoreTaskScope,
     CoreTaskSimulator,
 };
 use crate::deterministic_sensor::{BooleanRateSpec, DeterministicSensor, DeterministicSignal};
+#[cfg(feature = "local-simulation")]
+use crate::e0_deterministic_sensor::{
+    DiagnosticMetricPolicy, DiagnosticMetricSpec, E0DiagnosticSensor, E0DiagnosticWindow,
+};
+#[cfg(feature = "local-simulation")]
+use crate::e0_query_lab::VerifiedE0QueryResult;
 use crate::independent_verifier::{
     IndependentEvidenceVerifierPort, IndependentVerificationInput,
     IndependentVerificationPortError, IndependentVerificationReceipt, IndependentVerifier,
@@ -120,6 +126,8 @@ pub struct LocalRunInput {
     minimum_recurring_query_support: u64,
     contact_volume_projection: Option<LocalContactVolumeProjection>,
     snapshot_descriptive_contact_projection: Option<LocalSnapshotContactProjection>,
+    #[cfg(feature = "local-simulation")]
+    e0_query_evidence: Option<VerifiedE0QueryResult>,
 }
 
 /// Safe aggregate projection of an original-bank final extract. This is a
@@ -428,6 +436,8 @@ impl LocalRunInput {
             minimum_recurring_query_support: DEFAULT_MIN_RECURRING_QUERY_CASES,
             contact_volume_projection: None,
             snapshot_descriptive_contact_projection: None,
+            #[cfg(feature = "local-simulation")]
+            e0_query_evidence: None,
         }
     }
 
@@ -470,6 +480,13 @@ impl LocalRunInput {
         projection: LocalSnapshotContactProjection,
     ) -> Self {
         self.snapshot_descriptive_contact_projection = Some(projection);
+        self
+    }
+
+    #[cfg(feature = "local-simulation")]
+    #[must_use]
+    pub fn with_verified_local_e0_evidence(mut self, evidence: VerifiedE0QueryResult) -> Self {
+        self.e0_query_evidence = Some(evidence);
         self
     }
 }
@@ -527,6 +544,57 @@ pub struct CandidateSummary {
     pub admission: String,
 }
 
+/// Truthful U12-E → U13-E composition state for the E0 local runner.
+/// Until the runner receives a real U04-B/U08-E capability chain, it must
+/// report the authenticated path as blocked rather than deriving admission
+/// from the source-adapter DTO or the generic local detector.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct U12EU13ECompositionSummary {
+    pub status: &'static str,
+    pub issuer_mode: &'static str,
+    pub provider_called: bool,
+    pub agent_core_called: bool,
+    pub candidate_count: u64,
+    /// Plumbing trigger only: no support-floor calibration is claimed.
+    pub trigger_policy: &'static str,
+    /// Content commitments for admitted drafts; raw candidate/context fields are not exposed.
+    pub candidate_digests: Vec<String>,
+    pub blocker: &'static str,
+}
+
+impl U12EU13ECompositionSummary {
+    const fn missing_authenticated_evidence() -> Self {
+        Self {
+            status: "dependency_unavailable",
+            issuer_mode: "none",
+            provider_called: false,
+            agent_core_called: false,
+            candidate_count: 0,
+            trigger_policy: "positive_count_plumbing_v1",
+            candidate_digests: Vec::new(),
+            blocker: "u04_u08_authenticated_evidence_unavailable",
+        }
+    }
+
+    #[cfg(feature = "local-simulation")]
+    const fn local_status(
+        status: &'static str,
+        candidate_count: u64,
+        blocker: &'static str,
+    ) -> Self {
+        Self {
+            status,
+            issuer_mode: "local_simulated",
+            provider_called: false,
+            agent_core_called: false,
+            candidate_count,
+            trigger_policy: "positive_count_plumbing_v1",
+            candidate_digests: Vec::new(),
+            blocker,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImprovementDraft {
     pub status: String,
@@ -574,6 +642,8 @@ pub struct LocalRunResult {
     pub verification_status: Option<String>,
     pub proposal: Option<ImprovementDraft>,
     pub evaluation: Option<EvaluationSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub u12_e_u13_e: Option<U12EU13ECompositionSummary>,
     pub contact_volume_projection: Option<LocalContactVolumeProjection>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot_descriptive_envelope: Option<SnapshotDescriptiveEnvelope>,
@@ -622,6 +692,10 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         "simulated",
         "local-only execution",
     );
+    #[cfg(feature = "local-simulation")]
+    let u12_e_u13_e = compose_authenticated_u12_e0(&input, &mut events);
+    #[cfg(not(feature = "local-simulation"))]
+    let u12_e_u13_e = U12EU13ECompositionSummary::missing_authenticated_evidence();
     record_event(
         &mut events,
         "source_loaded",
@@ -714,6 +788,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             verification_status: None,
             proposal: None,
             evaluation: None,
+            u12_e_u13_e: None,
             contact_volume_projection,
             snapshot_descriptive_envelope: descriptive_envelope,
             events,
@@ -817,6 +892,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             verification_status: None,
             proposal: None,
             evaluation: None,
+            u12_e_u13_e: Some(u12_e_u13_e),
             contact_volume_projection: None,
             snapshot_descriptive_envelope: None,
             events,
@@ -955,6 +1031,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         verification_status: Some(verification_status),
         proposal: Some(improvement_draft),
         evaluation: Some(evaluation),
+        u12_e_u13_e: Some(u12_e_u13_e),
         contact_volume_projection: None,
         snapshot_descriptive_envelope: None,
         events,
@@ -1438,6 +1515,284 @@ fn select_primary_signal_index(
                 .then_with(|| priority(left_signal).cmp(&priority(right_signal)))
         })
         .map(|(index, _)| index)
+}
+
+#[cfg(feature = "local-simulation")]
+fn compose_authenticated_u12_e0(
+    input: &LocalRunInput,
+    events: &mut Vec<RunEvent>,
+) -> U12EU13ECompositionSummary {
+    if input.metadata.source_kind != LocalSourceKind::E0 {
+        return U12EU13ECompositionSummary::missing_authenticated_evidence();
+    }
+    let Some(evidence) = input.e0_query_evidence.as_ref() else {
+        record_event(
+            events,
+            "u12_e_u13_e_composition",
+            "dependency_unavailable",
+            "authenticated U04-B/U08-E evidence was not issued",
+        );
+        return U12EU13ECompositionSummary::missing_authenticated_evidence();
+    };
+
+    let spec = DiagnosticMetricSpec::from_policy(DiagnosticMetricPolicy::TechnicalErrorRateV1);
+    let cutoff = evidence.commitments().cutoff_unix_seconds();
+    let Ok(window) = E0DiagnosticWindow::new(0, cutoff) else {
+        return U12EU13ECompositionSummary::local_status(
+            "insufficient_evidence",
+            0,
+            "invalid_replay_window",
+        );
+    };
+    let Ok(signal) = E0DiagnosticSensor::measure(&spec, window, std::slice::from_ref(evidence))
+    else {
+        record_event(
+            events,
+            "u12_e_diagnostic",
+            "blocked",
+            "authenticated evidence did not satisfy the diagnostic contract",
+        );
+        return U12EU13ECompositionSummary::local_status(
+            "insufficient_evidence",
+            0,
+            "u12_diagnostic_evidence_unavailable",
+        );
+    };
+    record_event(
+        events,
+        "u12_e_diagnostic",
+        "completed",
+        "versioned technical-error metric measured from verified U08 receipts",
+    );
+    if signal.denominator() == 0 {
+        return U12EU13ECompositionSummary::local_status(
+            "insufficient_evidence",
+            0,
+            "u12_denominator_empty",
+        );
+    }
+    if signal.numerator() == 0 {
+        record_event(
+            events,
+            "u12_e_u13_e_composition",
+            "no_op",
+            "no positive technical-error signal; U09/U10 were not invoked",
+        );
+        return U12EU13ECompositionSummary::local_status(
+            "no_positive_signal",
+            0,
+            "no_positive_signal",
+        );
+    }
+
+    let binding = signal.scout_binding();
+    let job_id = format!("job_{}", input.metadata.run_id.replace('-', "_"));
+    let Ok(scope) = CoreTaskScope::new(
+        binding.tenant_id.clone(),
+        job_id,
+        binding.grant_id.clone(),
+        binding.authority_ref.clone(),
+    ) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_scope_invalid",
+        );
+    };
+    let Ok(task_binding) = CoreTaskBinding::new(
+        "pulso_scout",
+        "local_simulation_v1",
+        AGENT_CORE_CONTRACT_VERSION,
+        AGENT_CORE_CONTRACT_SHA,
+    ) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u09_binding_unavailable",
+        );
+    };
+    let Ok(registry) = CoreTaskBindingRegistry::new(vec![task_binding.clone()]) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u09_binding_unavailable",
+        );
+    };
+    let mut core = CoreTaskSimulator::new(registry);
+    if core
+        .script_success("local_u09_run", derive_digest(signal.digest()))
+        .is_err()
+    {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u09_unavailable",
+        );
+    }
+    let attempt_id = format!("attempt_{}", input.metadata.run_id.replace('-', "_"));
+    let Ok(invocation) =
+        CoreTaskInvocation::new(scope.clone(), task_binding, attempt_id, signal.digest())
+    else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u09_unavailable",
+        );
+    };
+    let Ok(core_receipt) = core.invoke(invocation) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u09_unavailable",
+        );
+    };
+    record_event(
+        events,
+        "u09_agent_core_task",
+        "local_simulated",
+        "scripted receipt only; native Agent Core was not called",
+    );
+
+    let Ok(capability) = ModelCapability::new(
+        ModelProvider::OpenRouter,
+        "https://openrouter.ai/api/v1",
+        "local/simulation-only",
+        "secret://local-simulation/not-used",
+        "local_simulation_v1",
+    ) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u10_unavailable",
+        );
+    };
+    let Ok(policy) = ModelPolicy::with_budget(
+        "local_u10_diagnostic_policy",
+        capability,
+        "diagnostic_triage",
+        RedactionPolicy::RejectMarkedInput,
+        0,
+        500,
+        ModelBudgetLimits::new(256, 32, 1).expect("fixed local budget is valid"),
+    ) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u10_unavailable",
+        );
+    };
+    let treated_input = format!(
+        "signal_digest={}\nmetric={} numerator={} denominator={} missing={} coverage_basis_points={}",
+        signal.digest(),
+        signal.metric_id(),
+        signal.numerator(),
+        signal.denominator(),
+        signal.missing(),
+        signal.coverage_basis_points(),
+    );
+    let Ok(mut broker) = HmacProjectionBroker::new_for_local_simulation(
+        b"pulso-local-simulation-u10-signal-key-32b",
+    ) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u10_unavailable",
+        );
+    };
+    let Ok(projection) = broker.authorize_projection(&scope, &policy, treated_input) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u10_unavailable",
+        );
+    };
+    let attempt_id = format!("attempt_model_{}", input.metadata.run_id.replace('-', "_"));
+    let Ok(invocation) = ModelInvocation::from_verified_for_e0_signal(
+        scope.clone(),
+        policy.clone(),
+        attempt_id,
+        projection,
+        signal.digest(),
+    ) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u10_signal_binding_failed",
+        );
+    };
+    let mut model = ModelProviderSimulator::new(policy);
+    model.script_success("local simulated diagnostic review", "local_u10_request");
+    let Ok(model_receipt) = model.invoke(invocation) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "local_simulated_u10_unavailable",
+        );
+    };
+    record_event(
+        events,
+        "u10_model_provider",
+        "local_simulated",
+        "scripted receipt only; no provider request or credential lookup occurred",
+    );
+
+    let Ok(authenticated_signal) =
+        TrustedE0ScoutComposer::seal(&scope, &signal, &core_receipt, &model_receipt)
+    else {
+        record_event(
+            events,
+            "u13_e_scout",
+            "blocked",
+            "U09/U10 receipt binding did not match the exact U12 signal",
+        );
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "u09_u10_receipt_binding_failed",
+        );
+    };
+    let Ok((scout_result, mut admission)) = record_e0_scout_discovery(
+        InMemoryScoutCandidateRepository::default(),
+        &scope,
+        &authenticated_signal,
+        &core_receipt,
+        &model_receipt,
+    ) else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "u13_e_discovery_unavailable",
+        );
+    };
+    let ScoutResult::Candidates(drafts) = scout_result else {
+        return U12EU13ECompositionSummary::local_status(
+            "dependency_unavailable",
+            0,
+            "u13_e_dependency_blocked",
+        );
+    };
+    let mut admitted_count = 0_u64;
+    let mut candidate_digests = Vec::with_capacity(drafts.len());
+    for draft in &drafts {
+        if admission.admit(&scope, draft).is_err() {
+            return U12EU13ECompositionSummary::local_status(
+                "dependency_unavailable",
+                0,
+                "u13_a_admission_failed",
+            );
+        }
+        admitted_count += 1;
+        candidate_digests.push(draft.digest.clone());
+    }
+    record_event(
+        events,
+        "u13_e_scout",
+        "local_simulated_admitted",
+        "descriptive drafts admitted in the in-memory local candidate repository",
+    );
+    let mut summary = U12EU13ECompositionSummary::local_status("admitted", admitted_count, "none");
+    summary.candidate_digests = candidate_digests;
+    summary
 }
 
 fn simulate_agent_core_and_model(

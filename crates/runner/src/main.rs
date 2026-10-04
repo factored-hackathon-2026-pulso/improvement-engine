@@ -22,8 +22,9 @@ use improvement_engine_core::local_simulation::{
 use improvement_engine_source_adapters::{
     CasePhase, E0Fact, E0HoldoutEvaluation, E0HoldoutPolicy, E0HoldoutStatus,
     OriginalPreparationProgress, PreparationConfig, PreparedSource, SourceKind,
-    attest_selected_e0_recurrence_candidate, evaluate_e0_recurrence_holdout, prepare_e0_package,
-    prepare_original_bank, prepare_original_bank_with_progress,
+    attest_selected_e0_recurrence_candidate, evaluate_e0_recurrence_holdout,
+    prepare_e0_package_for_local_simulation, prepare_original_bank,
+    prepare_original_bank_with_progress,
 };
 
 mod e0_builder_input_preparation;
@@ -53,8 +54,15 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
     .map_err(|error| format!("invalid source preparation config: {error}"))?;
     let run_id = make_run_id()?;
     progress.stage("source_preparation", "started")?;
+    let mut u12_evidence = None;
     let prepared_result = match options.source.as_str() {
-        "e0" => prepare_e0_package(&options.input, &config),
+        "e0" => match prepare_e0_package_for_local_simulation(&options.input, &config) {
+            Ok((prepared, evidence)) => {
+                u12_evidence = evidence;
+                Ok(prepared)
+            }
+            Err(error) => Err(error),
+        },
         "original" if options.progress_jsonl => {
             let mut progress_error = None;
             let prepared = prepare_original_bank_with_progress(&options.input, &config, |event| {
@@ -82,6 +90,12 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
         input
             .with_minimum_recurring_query_support(options.minimum_recurring_query_support)
             .map_err(|error| format!("invalid recurrence policy: {error:?}"))
+            .map(|mut input| {
+                if let Some(evidence) = u12_evidence {
+                    input = input.with_verified_local_e0_evidence(evidence);
+                }
+                input
+            })
     }) {
         Ok(input) => input,
         Err(error) => {
@@ -1059,6 +1073,7 @@ mod tests {
             recurrence_measurement_status: "observed".into(),
             discovery_case_count: 0,
             excluded_replay_case_count: 0,
+            u12_e_u13_e: None,
             signal: None,
             signals: Vec::new(),
             local_simulation_portfolio: None,

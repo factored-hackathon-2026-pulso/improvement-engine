@@ -17,6 +17,7 @@ pub struct E0QueryLab {
 /// Opaque read-only result after its existing U08 receipt was bound to one
 /// sealed U04-B table projection. It is not authority to write, evaluate,
 /// execute Agent Core, publish a candidate or release anything.
+#[derive(Clone)]
 pub struct VerifiedE0QueryResult {
     result: QueryResult,
     commitments: E0QueryCommitments,
@@ -25,6 +26,7 @@ pub struct VerifiedE0QueryResult {
     _capability: E0QueryCapability,
 }
 
+#[derive(Clone)]
 struct E0QueryCapability;
 
 /// Internal U04/U08 commitments carried forward with an authenticated E0
@@ -184,6 +186,17 @@ impl E0QueryLab {
             },
             _capability: E0QueryCapability,
         })
+    }
+
+    /// Local-simulation-only bridge for trusted source adapters. Both inputs
+    /// are opaque capabilities from the U04 verifier and live U08 ledger; no
+    /// row, digest or public QueryResult can be passed here.
+    #[cfg(feature = "local-simulation")]
+    pub fn local_simulation_admit(
+        projection: &VerifiedE0QueryProjection,
+        candidate: GovernedE0QueryCandidate,
+    ) -> Result<VerifiedE0QueryResult, E0QueryLabError> {
+        Self::admit(projection, candidate)
     }
 }
 

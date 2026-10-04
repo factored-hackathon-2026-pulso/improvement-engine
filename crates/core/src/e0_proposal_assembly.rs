@@ -624,6 +624,7 @@ mod tests {
             },
             discovery_case_count: 100,
             excluded_replay_case_count: 0,
+            u12_e_u13_e: None,
             signal: primary.clone(),
             signals,
             local_simulation_portfolio: Some(LocalSimulationPortfolio {

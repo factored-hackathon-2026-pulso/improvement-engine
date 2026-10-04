@@ -240,6 +240,11 @@ impl E0DiagnosticSignal {
     }
 
     #[must_use]
+    pub fn digest(&self) -> &str {
+        &self.digest
+    }
+
+    #[must_use]
     pub fn metric_policy_id(&self) -> &str {
         &self.metric_policy_id
     }
@@ -267,6 +272,11 @@ impl E0DiagnosticSignal {
     #[must_use]
     pub fn missing(&self) -> u64 {
         self.missing
+    }
+
+    #[must_use]
+    pub fn coverage_basis_points(&self) -> u16 {
+        self.coverage_basis_points
     }
 
     #[must_use]

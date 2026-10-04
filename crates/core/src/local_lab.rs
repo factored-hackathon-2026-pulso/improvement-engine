@@ -261,6 +261,17 @@ impl ApprovedLabSource {
         self.u04_source_snapshot_binding = Some(binding.snapshot_binding_digest().to_owned());
         Ok(self)
     }
+
+    /// Local-simulation-only bridge for the source-adapter composition root.
+    /// It binds the prior opaque U04 resolver capability and does not mint
+    /// source approval from caller-provided digests.
+    #[cfg(feature = "local-simulation")]
+    pub fn bind_local_simulation_verified_u04_snapshot(
+        self,
+        binding: crate::source_validation::VerifiedSourceArtifactBinding,
+    ) -> Result<Self, LabError> {
+        self.bind_verified_u04_snapshot(binding)
+    }
 }
 
 /// Separate authorization seam so U03/U04 adapters can replace the local
@@ -468,7 +479,8 @@ pub struct QueryResult {
 /// Opaque, in-process evidence that the exact completed result was retrieved
 /// from a still-authorized U08 session. It cannot be made from `QueryResult`
 /// or caller-provided manifests; only the lab ledger can mint it.
-pub(crate) struct GovernedE0QueryCandidate {
+#[cfg(feature = "local-simulation")]
+pub struct GovernedE0QueryCandidate {
     rows: QueryRows,
     receipt: QueryReceipt,
     source_table: LabTable,
@@ -710,6 +722,19 @@ impl<A: LabAuthorizationPort> LocalInvestigationLab<A> {
             source_table,
             u04_source_snapshot_binding,
         })
+    }
+
+    /// Local-simulation-only bridge that returns a candidate read back from
+    /// the live U08 ledger after the original read receipt was committed.
+    #[cfg(feature = "local-simulation")]
+    pub fn local_simulation_governed_e0_candidate(
+        &mut self,
+        session_id: &str,
+        access: &LabAccess,
+        receipt_digest: &str,
+        now: u64,
+    ) -> Result<GovernedE0QueryCandidate, LabError> {
+        self.governed_e0_candidate(session_id, access, receipt_digest, now)
     }
 
     pub fn receipts(

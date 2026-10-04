@@ -551,3 +551,22 @@ Python contracts (10 passed, one Podman-dependent skip), fixture validation,
 and Pester (20/20 + 5/5). Podman/Postgres-backed and destructive database tests
 were not run because a local backend was unavailable. No hosted Actions result
 is claimed.
+
+## Post-PR-#90 worktree audit and selective consolidation (2026-10-04)
+
+The validated base for the next consolidated change is live GitHub `main`
+`41492cb7f2b20fc2d033643798659436dffb861a`. A worktree audit compared dirty
+local deltas and remote branch candidates against that exact tree. Superseded
+P1 explanation, U13 candidate admission, original contact projection, and
+governed-memory work were excluded because current `main` already contains
+newer equivalents. No pre-existing worktree, branch, output, receipt, or
+container was deleted.
+
+The selected, still-unpublished deltas are: (1) a local-only U12-E evidence
+composition path that binds verified E0 source evidence to the U13
+non-executable composition runner; (2) a deny-by-default platform source
+privacy boundary; and (3) paired-scenario comparison explicitly labeled
+fixture-only/unverified, with no business-lift claim. These are proposed for
+one consolidated PR after independent adversarial review and the complete local
+CI preflight. They do not claim real bank-source attestations, provider/Agent
+Core execution, a native deployable proposal, or measured outcome lift.
