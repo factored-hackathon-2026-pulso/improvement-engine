@@ -175,26 +175,30 @@
       "default": null
     },
     "cutoff": {
-      "anyOf": [
+      "default": null,
+      "oneOf": [
         {
+          "description": "UTC RFC3339 with a literal Z (annex D.1)",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z$",
           "type": "string"
         },
         {
           "type": "null"
         }
-      ],
-      "default": null
+      ]
     },
     "deadline": {
-      "anyOf": [
+      "default": null,
+      "oneOf": [
         {
+          "description": "UTC RFC3339 with a literal Z (annex D.1)",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z$",
           "type": "string"
         },
         {
           "type": "null"
         }
-      ],
-      "default": null
+      ]
     },
     "extract_manifest_ref": {
       "anyOf": [
@@ -281,6 +285,7 @@
     "request_digest": {
       "anyOf": [
         {
+          "pattern": "^[0-9a-f]{64}$",
           "type": "string"
         },
         {

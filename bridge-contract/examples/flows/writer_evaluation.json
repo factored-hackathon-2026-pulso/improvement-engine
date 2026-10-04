@@ -152,7 +152,6 @@
           "candidate_hash": "<candidate_hash#1>",
           "deadline": "<deadline>",
           "evaluation_attempt": 1,
-          "evaluation_context_ref": "ctx-golden",
           "proposal_id": "<proposal_id#1>",
           "request_digest": "<request_digest#2>",
           "schema_version": "1",
@@ -168,7 +167,7 @@
       },
       "response": {
         "body": {
-          "evaluation_context_ref": "ctx-golden",
+          "evaluation_context_ref": "<evaluation_context_ref#1>",
           "schema_version": "1",
           "state": "admitted"
         },
@@ -197,7 +196,6 @@
           "candidate_hash": "<candidate_hash#1>",
           "deadline": "<deadline>",
           "evaluation_attempt": 1,
-          "evaluation_context_ref": "ctx-golden",
           "proposal_id": "<proposal_id#1>",
           "request_digest": "<request_digest#2>",
           "schema_version": "1",
@@ -213,7 +211,7 @@
       },
       "response": {
         "body": {
-          "evaluation_context_ref": "ctx-golden",
+          "evaluation_context_ref": "<evaluation_context_ref#1>",
           "schema_version": "1",
           "state": "admitted"
         },
@@ -224,7 +222,7 @@
     },
     {
       "case": "admission_conflict",
-      "description": "Same context ref, different bound field: 409 pulso:idempotency_conflict.",
+      "description": "Same derived context ref, different request digest: 409 pulso:idempotency_conflict.",
       "request": {
         "auth": {
           "alg": "EdDSA",
@@ -241,10 +239,9 @@
           "budget_ref": "bud-1",
           "candidate_hash": "<candidate_hash#1>",
           "deadline": "<deadline>",
-          "evaluation_attempt": 2,
-          "evaluation_context_ref": "ctx-golden",
+          "evaluation_attempt": 1,
           "proposal_id": "<proposal_id#1>",
-          "request_digest": "<request_digest#2>",
+          "request_digest": "<request_digest#3>",
           "schema_version": "1",
           "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
           "suite_id": "disputas-suite",
@@ -270,6 +267,51 @@
       }
     },
     {
+      "case": "admission_explicit_ref_equal",
+      "description": "A deprecated explicit ref equal to the derived one is accepted (replay).",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-eval",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_admit",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+          "budget_ref": "bud-1",
+          "candidate_hash": "<candidate_hash#1>",
+          "deadline": "<deadline>",
+          "evaluation_attempt": 1,
+          "evaluation_context_ref": "<evaluation_context_ref#1>",
+          "proposal_id": "<proposal_id#1>",
+          "request_digest": "<request_digest#2>",
+          "schema_version": "1",
+          "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+          "suite_id": "disputas-suite",
+          "suite_version": "1.0.0"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/admissions"
+      },
+      "response": {
+        "body": {
+          "evaluation_context_ref": "<evaluation_context_ref#1>",
+          "schema_version": "1",
+          "state": "admitted"
+        },
+        "content_type": "application/json",
+        "schema": "EvaluationAdmission",
+        "status": 200
+      }
+    },
+    {
       "case": "admission_stale_candidate",
       "description": "",
       "request": {
@@ -289,7 +331,6 @@
           "candidate_hash": "<candidate_hash#2>",
           "deadline": "<deadline>",
           "evaluation_attempt": 1,
-          "evaluation_context_ref": "ctx-golden-stale",
           "proposal_id": "<proposal_id#1>",
           "request_digest": "<request_digest#2>",
           "schema_version": "1",
@@ -336,7 +377,7 @@
           "candidate_hash": "<candidate_hash#1>",
           "deadline": "<deadline>",
           "evaluation_attempt": 1,
-          "evaluation_context_ref": "has space",
+          "evaluation_context_ref": "<evaluation_context_ref#2>",
           "proposal_id": "<proposal_id#1>",
           "request_digest": "<request_digest#2>",
           "schema_version": "1",
@@ -397,7 +438,7 @@
           "registry_mutation_commitment": {
             "base_release_id": "rel-demo",
             "evaluate_enabled": true,
-            "evaluation_context_ref": "ctx-golden",
+            "evaluation_context_ref": "<evaluation_context_ref#1>",
             "mode": "evaluate_only",
             "operations": [],
             "proposal_id": "<proposal_id#1>"
@@ -431,7 +472,7 @@
             "output_digest": "<output_digest#3>",
             "output_refs": [],
             "release_id": "<release:writer>",
-            "request_digest": "<request_digest#3>",
+            "request_digest": "<request_digest#4>",
             "schema_version": "1",
             "task_binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
             "trace_id": "<trace_id#3>"

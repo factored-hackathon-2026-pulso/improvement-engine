@@ -8,6 +8,14 @@ components:
       schema:
         pattern: ^[0-9a-f]{64}$
         type: string
+    IdempotencyKeyOpaque:
+      description: Admissions/arms business key (annex D.4); a body key, when present, must equal it
+      in: header
+      name: Idempotency-Key
+      required: false
+      schema:
+        pattern: ^[A-Za-z0-9_.:-]{1,200}$
+        type: string
     Traceparent:
       in: header
       name: traceparent
@@ -146,10 +154,19 @@ components:
       - runner_error
     ArmRequest:
       additionalProperties: false
+      anyOf:
+      - required:
+        - execution_profile
+      - required:
+        - mode
       description: D.4 arm request (generated from evaluation.arms.ArmRequest).
       properties:
         agent_id:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          deprecated: true
         arm:
           maxLength: 64
           minLength: 1
@@ -171,15 +188,32 @@ components:
           maxLength: 200
           minLength: 1
           type: string
+        deadline:
+          default: null
+          description: UTC RFC3339 with a literal Z (annex D.1)
+          pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$
+          type: string
+        execution_profile:
+          anyOf:
+          - enum:
+            - attention_stateful_complementary
+            - evolution_task
+            type: string
+          - type: 'null'
+          default: null
         idempotency_key:
           pattern: ^[A-Za-z0-9_.:-]{1,200}$
           type: string
         mode:
-          enum:
-          - native
-          - task_builder
-          - stateful_attention
-          type: string
+          anyOf:
+          - enum:
+            - native
+            - task_builder
+            - stateful_attention
+            type: string
+          - type: 'null'
+          default: null
+          deprecated: true
         oracle_ref:
           anyOf:
           - type: string
@@ -188,6 +222,11 @@ components:
         repetition:
           minimum: 0
           type: integer
+        sandbox_session_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
         scenario_manifest_ref:
           type: string
         schema_version:
@@ -203,6 +242,7 @@ components:
           - type: string
           - type: 'null'
           default: null
+          deprecated: true
         supersedes_execution_id:
           anyOf:
           - type: string
@@ -217,19 +257,21 @@ components:
           - type: 'null'
           default: null
       required:
-      - idempotency_key
       - binding_ref
       - case_ref
       - arm
       - repetition
       - seed
-      - mode
-      - agent_id
       - target
       - scenario_manifest_ref
       - budget_ref
       title: ArmRequest
       type: object
+      x-deprecated-aliases:
+        agent_id: derived from the target
+        mode: execution_profile (attention_stateful_complementary=stateful_attention, evolution_task=native;
+          task_builder has no annex profile)
+        seed_manifest_ref: sandbox_session_ref
     ArtifactRef:
       additionalProperties: false
       description: 'Annex D.1 ArtifactRef: treated data only, never a path/DSN/URL.'
@@ -439,10 +481,22 @@ components:
       description: CAP-33 credential request.
       properties:
         purpose:
+          maxLength: 64
+          minLength: 1
           type: string
         role:
+          maxLength: 64
+          minLength: 1
           type: string
+        schema_version:
+          anyOf:
+          - const: '1'
+            type: string
+          - type: 'null'
+          default: null
         tenant_id:
+          maxLength: 128
+          minLength: 1
           type: string
       required:
       - tenant_id
@@ -563,15 +617,19 @@ components:
           - type: 'null'
           default: null
         cutoff:
-          anyOf:
-          - type: string
-          - type: 'null'
           default: null
+          oneOf:
+          - description: UTC RFC3339 with a literal Z (annex D.1)
+            pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$
+            type: string
+          - type: 'null'
         deadline:
-          anyOf:
-          - type: string
-          - type: 'null'
           default: null
+          oneOf:
+          - description: UTC RFC3339 with a literal Z (annex D.1)
+            pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$
+            type: string
+          - type: 'null'
         extract_manifest_ref:
           anyOf:
           - maxLength: 256
@@ -624,7 +682,8 @@ components:
           type: string
         request_digest:
           anyOf:
-          - type: string
+          - pattern: ^[0-9a-f]{64}$
+            type: string
           - type: 'null'
           default: null
         schema_version:
@@ -809,6 +868,8 @@ components:
         agent_core_sha:
           pattern: ^[0-9a-f]{40}$
           type: string
+        bridge_instance_id:
+          type: string
         contracts_version:
           type: string
         doubles:
@@ -827,7 +888,12 @@ components:
           type: string
         runtime_profile:
           type: string
+        schema_version:
+          const: '1'
+          type: string
       required:
+      - schema_version
+      - bridge_instance_id
       - agent_core_sha
       - contracts_version
       - pulso_sha
@@ -955,12 +1021,16 @@ components:
           minLength: 1
           type: string
         deadline:
-          format: date-time
+          description: UTC RFC3339 with a literal Z (annex D.1)
+          pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$
           type: string
         evaluation_attempt:
           minimum: 1
           type: integer
         evaluation_context_ref:
+          deprecated: true
+          description: 'Deprecated (ADR 0011): the bridge derives the ref; an explicit value is accepted
+            only when equal to it, else 422 pulso:evaluation_context_invalid. See contract.json idempotency.admissions.derivation.'
           pattern: ^[A-Za-z0-9_.:-]{1,200}$
           type: string
         proposal_id:
@@ -968,8 +1038,7 @@ components:
           minLength: 1
           type: string
         request_digest:
-          maxLength: 128
-          minLength: 1
+          pattern: ^[0-9a-f]{64}$
           type: string
         schema_version:
           default: '1'
@@ -987,7 +1056,6 @@ components:
           minLength: 1
           type: string
       required:
-      - evaluation_context_ref
       - binding_ref
       - proposal_id
       - candidate_hash
@@ -2150,6 +2218,7 @@ paths:
       operationId: post_admit_evaluation
       parameters:
       - $ref: '#/components/parameters/Traceparent'
+      - $ref: '#/components/parameters/IdempotencyKeyOpaque'
       requestBody:
         content:
           application/json:
@@ -2314,6 +2383,7 @@ paths:
       operationId: post_run_arm
       parameters:
       - $ref: '#/components/parameters/Traceparent'
+      - $ref: '#/components/parameters/IdempotencyKeyOpaque'
       requestBody:
         content:
           application/json:
@@ -2468,6 +2538,7 @@ paths:
       operationId: post_run_arm_by_id
       parameters:
       - $ref: '#/components/parameters/Traceparent'
+      - $ref: '#/components/parameters/IdempotencyKeyOpaque'
       - in: path
         name: arm_id
         required: true

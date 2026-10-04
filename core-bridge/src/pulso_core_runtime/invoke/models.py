@@ -6,7 +6,9 @@ import hashlib
 from typing import Any, Literal
 
 from agent_core.domain import canonical_bytes
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from pulso_core_runtime.timefmt import parse_z_timestamp
 
 STAGES = ("scout", "verifier", "builder_design", "writer")
 MAX_INPUT_BYTES = 256 * 1024
@@ -50,8 +52,8 @@ class CoreTaskInvocation(BaseModel):
     input_artifact_refs: list[str] = Field(default_factory=list, max_length=64)
     lab_grant_ref: str = Field(min_length=1, max_length=256)
     budget: dict[str, Any] | None = None
-    cutoff: str | None = None
-    deadline: str | None = None
+    cutoff: str | None = None  # UTC RFC3339 `Z` (annex D.1)
+    deadline: str | None = None  # same
     logical_key: str = Field(min_length=1, max_length=256)
     lang: str | None = None
     closure_digest: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
@@ -59,9 +61,16 @@ class CoreTaskInvocation(BaseModel):
     extract_manifest_ref: str | None = Field(default=None, max_length=256)
     registry_mutation_commitment: RegistryMutationCommitmentDTO | None = None  # writer stage only
     # accepted for convenience, excluded from the digest
-    request_digest: str | None = None
+    request_digest: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
     credentials: dict[str, Any] | None = None
     trace: dict[str, Any] | None = None
+
+    @field_validator("cutoff", "deadline")
+    @classmethod
+    def _z_timestamp(cls, v: str | None) -> str | None:
+        if v is not None:
+            parse_z_timestamp(v)
+        return v
 
     @model_validator(mode="after")
     def _commitment_is_writer_only(self) -> CoreTaskInvocation:

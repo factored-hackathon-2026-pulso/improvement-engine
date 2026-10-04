@@ -48,12 +48,17 @@ def _h(purpose: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {_token(purpose)}"}
 
 
-def _body(w: World, pid: str, chash: str, ref: str = "ctx-http-1", **over: Any) -> dict[str, Any]:
-    return {"evaluation_context_ref": ref, "binding_ref": "bind-1", "proposal_id": pid, "candidate_hash": chash,
+def _ref(pid: str, chash: str) -> str:
+    from pulso_core_runtime.evaluation.admission import derive_context_ref
+    return derive_context_ref("t1", "job-1", "bind-1", pid, chash, 1)  # tenant/job of `_token`
+
+
+def _body(w: World, pid: str, chash: str, **over: Any) -> dict[str, Any]:
+    return {"binding_ref": "bind-1", "proposal_id": pid, "candidate_hash": chash,
             "suite_id": "disputas-suite", "suite_version": "1.0.0",
             "suite_digest": w.rt._suite_digest(pid, "disputas-suite", "1.0.0"), "evaluation_attempt": 1,
-            "budget_ref": "bud-1", "deadline": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
-            "request_digest": "r" * 64, **over}
+            "budget_ref": "bud-1", "deadline": (datetime.now(UTC) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "request_digest": "a" * 64, **over}
 
 
 def test_admission_lifecycle_over_http_then_flow_evaluate(pg) -> None:  # type: ignore[no-untyped-def]
@@ -64,10 +69,10 @@ def test_admission_lifecycle_over_http_then_flow_evaluate(pg) -> None:  # type: 
     assert r.status_code == 201 and r.json()["state"] == "admitted"
     again = c.post("/evaluation/admissions", json=_body(w, pid, chash), headers=_h("evaluation_admit"))
     assert again.status_code == 200
-    other = c.post("/evaluation/admissions", json=_body(w, pid, chash, request_digest="z" * 64),
+    other = c.post("/evaluation/admissions", json=_body(w, pid, chash, request_digest="b" * 64),
                    headers=_h("evaluation_admit"))
     assert other.status_code == 409 and other.json()["code"] == "pulso:idempotency_conflict"
-    assert w.evaluate(pid, evaluation_context_ref="ctx-http-1").verdict == "pass"  # the admission is usable
+    assert w.evaluate(pid, evaluation_context_ref=_ref(pid, chash)).verdict == "pass"  # the admission is usable
 
 
 @pytest.mark.parametrize("mutate,status,code", [
@@ -76,7 +81,7 @@ def test_admission_lifecycle_over_http_then_flow_evaluate(pg) -> None:  # type: 
     ({"candidate_hash": "0" * 64}, 409, "pulso:candidate_changed"),
     ({"suite_digest": "f" * 64}, 409, "pulso:suite_mismatch"),
     ({"budget_ref": "bud-missing"}, 403, "pulso:budget_unknown"),
-    ({"deadline": "2001-01-01T00:00:00+00:00"}, 409, "pulso:admission_expired"),
+    ({"deadline": "2001-01-01T00:00:00Z"}, 409, "pulso:admission_expired"),
     ({"proposal_id": "p-ghost"}, 404, "pulso:proposal_not_found"),
     ({"evaluation_attempt": 0}, 422, "pulso:invalid_request"),
     ({"surprise": 1}, 422, "pulso:invalid_request"),
@@ -87,7 +92,7 @@ def test_admission_rejections(pg, mutate: dict[str, Any], status: int, code: str
     r = _client(w).post("/evaluation/admissions", json=_body(w, pid, chash, **mutate),
                         headers=_h("evaluation_admit"))
     assert (r.status_code, r.json()["code"]) == (status, code)
-    assert w.rt.admissions.get("ctx-http-1") is None  # nothing was persisted
+    assert w.rt.admissions.get(_ref(pid, chash)) is None  # nothing was persisted
 
 
 def test_admission_broker_denied_and_wrong_purpose(pg) -> None:  # type: ignore[no-untyped-def]

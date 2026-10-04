@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from conformance.conftest import assert_error, assert_valid
-from conformance.kit import CONTRACT, binding_ref, idempotency_key, schema_errors
+from conformance.kit import CONTRACT, binding_ref, evaluation_context_ref, idempotency_key, schema_errors
 from conformance.worlds import World
 
 pytestmark = pytest.mark.needs("evaluation")
@@ -24,8 +24,13 @@ def deadline(hours: float = 1) -> str:
     return (datetime.now(UTC) + timedelta(hours=hours)).isoformat().replace("+00:00", "Z")
 
 
+def derived_ref(world: World, body: dict, job: str = "job-adm") -> str:
+    return evaluation_context_ref(world.tenant, job, body["binding_ref"], body["proposal_id"], body["candidate_hash"],
+                                  body["evaluation_attempt"])
+
+
 def admission_body(world: World, cand: dict, ref: str, *, attempt: int = 1, **over) -> dict:  # type: ignore[no-untyped-def]
-    body = {"schema_version": "1", "evaluation_context_ref": ref, "binding_ref": f"bind-{ref}",
+    body = {"schema_version": "1", "binding_ref": f"bind-{ref}",
             "proposal_id": cand["proposal_id"], "candidate_hash": cand["candidate_hash"],
             "suite_id": cand["suite_id"], "suite_version": cand["suite_version"], "suite_digest": cand["suite_digest"],
             "evaluation_attempt": attempt, "budget_ref": world.budget_ref, "deadline": deadline(),
@@ -40,23 +45,25 @@ def admit(world: World, body: dict, job: str = "job-adm", **kw):  # type: ignore
 
 # -- admissions: decided before any candidate state ----------------------------------------------------------------
 def test_admission_request_is_a_closed_dto(world: World) -> None:
-    good = {"schema_version": "1", "evaluation_context_ref": "ctx-1", "binding_ref": "b", "proposal_id": "p",
+    good = {"schema_version": "1", "binding_ref": "b", "proposal_id": "p",
             "candidate_hash": "c", "suite_id": "s", "suite_version": "1", "suite_digest": "d", "evaluation_attempt": 1,
-            "budget_ref": "bud", "deadline": "2030-01-01T00:00:00Z", "request_digest": "r"}
+            "budget_ref": "bud", "deadline": "2030-01-01T00:00:00Z", "request_digest": "a" * 64}
     assert not schema_errors("EvaluationAdmissionRequest", good)
     for bad in ({**good, "extra": 1}, {**good, "evaluation_attempt": 0}, {**good, "evaluation_context_ref": "a b"},
-                {k: v for k, v in good.items() if k != "deadline"}):
+                {k: v for k, v in good.items() if k != "deadline"},
+                {**good, "deadline": "2030-01-01T00:00:00+00:00"}, {**good, "request_digest": "A" * 64},
+                {**good, "request_digest": "r"}):
         assert schema_errors("EvaluationAdmissionRequest", bad), bad
 
 
 def test_admission_with_an_extra_field_is_422(world: World) -> None:
-    body = {"schema_version": "1", "evaluation_context_ref": "ctx-x", "surprise": 1}
+    body = {"schema_version": "1", "surprise": 1}
     assert_error(admit(world, body), 422, "pulso:invalid_request")
 
 
 def test_admission_with_an_invalid_context_ref_is_422_evaluation_context_invalid(world: World) -> None:
     body = admission_body(world, {"proposal_id": "p", "candidate_hash": "c", "suite_id": "s", "suite_version": "1",
-                                  "suite_digest": "d"}, "has space")
+                                  "suite_digest": "d"}, "x", evaluation_context_ref="has space")
     assert_error(admit(world, body), 422, "pulso:evaluation_context_invalid")
 
 
@@ -89,16 +96,24 @@ def test_admission_past_its_deadline_is_409_expired(world: World) -> None:
 @pytest.mark.needs("evaluation", "writer")
 def test_admission_is_201_then_200_on_replay_and_conflicts_on_a_different_body(world: World) -> None:
     cand = world.new_candidate(nonce())
-    ref = f"ctx-{nonce()}"
-    body = admission_body(world, cand, ref)
+    body = admission_body(world, cand, nonce())
+    ref = derived_ref(world, body)
     first = admit(world, body)
     assert first.status_code == 201, first.text
     assert_valid("EvaluationAdmission", first.json())
     assert first.json() == {"schema_version": "1", "evaluation_context_ref": ref, "state": "admitted"}
     replay = admit(world, body)
     assert replay.status_code == 200 and replay.json() == first.json()
-    other = {**body, "budget_ref": world.budget_ref, "evaluation_attempt": 2}
+    other = {**body, "request_digest": "e" * 64}  # same derived ref, other digest
     assert_error(admit(world, other), 409, "pulso:idempotency_conflict")
+    # an explicit ref is accepted only when it equals the derived one; a client-chosen ref is not annex D.4
+    assert admit(world, {**body, "evaluation_context_ref": ref}).status_code == 200
+    assert_error(admit(world, {**body, "evaluation_context_ref": "client-chosen"}), 422,
+                 "pulso:evaluation_context_invalid")
+    # a new attempt is a new admission with its own derived ref
+    two = admit(world, {**body, "evaluation_attempt": 2})
+    assert two.status_code == 201 and two.json()["evaluation_context_ref"] == derived_ref(
+        world, {**body, "evaluation_attempt": 2})
 
 
 @pytest.mark.needs("evaluation", "writer")
@@ -209,3 +224,49 @@ def test_arm_run_by_path_id_is_the_same_operation(world: World) -> None:
 def test_binding_ref_helper_is_stable(world: World) -> None:
     k = idempotency_key("t", "j", "writer", 2, "x")
     assert binding_ref("t", k) == hashlib.sha256(f"t|{k}".encode()).hexdigest()
+
+
+# -- arms: annex D.4 names, header key, deadline format -------------------------------------------------------------
+def annex_arm_body(world: World, **over) -> dict:  # type: ignore[no-untyped-def]
+    body = arm_body(world, "unused", **over.pop("base", {}))
+    for k in ("mode", "agent_id", "seed_manifest_ref", "idempotency_key"):
+        body.pop(k)
+    body.update({"execution_profile": "evolution_task", "sandbox_session_ref": None,
+                 "deadline": "2030-01-01T00:00:00Z"})
+    body.update(over)
+    return body
+
+
+def test_arm_request_schema_takes_annex_names_and_deprecated_aliases(world: World) -> None:
+    assert not schema_errors("ArmRequest", annex_arm_body(world))  # no mode/agent_id/seed_manifest_ref/body key
+    assert not schema_errors("ArmRequest", arm_body(world, "k-1"))  # deprecated spelling still valid
+    assert schema_errors("ArmRequest", annex_arm_body(world, deadline="2030-01-01T00:00:00+00:00"))
+    assert schema_errors("ArmRequest", annex_arm_body(world, execution_profile="other"))
+    no_profile = annex_arm_body(world)
+    del no_profile["execution_profile"]
+    assert schema_errors("ArmRequest", no_profile)
+
+
+def test_arm_idempotency_key_header_must_equal_the_body_key(world: World) -> None:
+    body = arm_body(world, "k-body")
+    assert_error(run_arm(world, body, headers={"Idempotency-Key": "k-other"}), 422, "pulso:invalid_request")
+    assert_error(run_arm(world, annex_arm_body(world), headers={"Idempotency-Key": "bad key!"}), 422,
+                 "pulso:invalid_request")
+
+
+def test_arm_with_a_non_z_deadline_is_422(world: World) -> None:
+    body = annex_arm_body(world, deadline="2030-01-01T00:00:00+00:00")
+    assert_error(run_arm(world, body, headers={"Idempotency-Key": f"k-{nonce()}"}), 422, "pulso:invalid_request")
+
+
+@pytest.mark.needs("evaluation", "arms")
+def test_arm_runs_with_annex_names_and_the_key_in_the_header_only(world: World) -> None:
+    ref, key = f"art-{nonce()}", f"k-{nonce()}"
+    world.seal_manifest(ref)
+    body = annex_arm_body(world, scenario_manifest_ref=ref)
+    first = run_arm(world, body, headers={"Idempotency-Key": key})
+    assert first.status_code == 200, first.text
+    assert_valid("ArmReport", first.json())
+    assert first.json()["execution_id"] == execution_id(world.tenant, key)
+    replay = run_arm(world, body, headers={"Idempotency-Key": key})
+    assert replay.status_code == 200 and replay.json() == first.json()

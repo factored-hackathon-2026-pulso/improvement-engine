@@ -39,7 +39,7 @@ def world(pg: PgDbs) -> Any:
         now = int(time.time())
         return sign_service_jwt(svc_key, kid="cp1", claims={
             "iss": "control-api", "aud": "core-bridge", "sub": "worker:1", "tenant_id": tenant, "purpose": purpose,
-            "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex})
+            "job_id": "j1", "iat": now, "exp": now + 60, "jti": uuid.uuid4().hex})
 
     return TestClient(app), token, core
 

@@ -109,7 +109,8 @@ WIRE_CODES: dict[str, dict[str, Any]] = {
                                              "doc": "Signer missing or signing failed."},
     # evaluation
     "pulso:evaluation_context_invalid": {"status": [422], "retryable": False, "routes": [ADM],
-                                         "doc": "evaluation_context_ref outside [A-Za-z0-9_.:-]{1,200}."},
+                                         "doc": "An explicit evaluation_context_ref that is not the server-derived one (or outside "
+                                                "[A-Za-z0-9_.:-]{1,200})."},
     "pulso:broker_denied": {"status": [403], "retryable": False, "routes": [ADM, ARM],
                             "doc": "Lab broker authorization check refused or failed (fail closed)."},
     "pulso:admission_expired": {"status": [409], "retryable": False, "routes": [ADM], "doc": "deadline <= now."},
@@ -122,9 +123,9 @@ WIRE_CODES: dict[str, dict[str, Any]] = {
     "pulso:idempotency_conflict": {"status": [409], "retryable": False, "routes": [ADM, ARM],
                                    "doc": "Same key (context ref / arm key) with a different body."},
     "pulso:mixed_world_rejected": {"status": [409], "retryable": False, "routes": [ARM],
-                                   "doc": "native mode with a bank pointer."},
+                                   "doc": "evolution_task/native with a `sandbox_session_ref` (a bank pointer)."},
     "pulso:sandbox_required": {"status": [409], "retryable": False, "routes": [ARM],
-                               "doc": "task mode without a sandbox / seed_manifest_ref."},
+                               "doc": "stateful/task mode without a sandbox bank or `sandbox_session_ref`."},
     "pulso:idempotency_key_invalid": {"status": [422], "retryable": False, "routes": [ARM],
                                       "doc": "Arm key outside [A-Za-z0-9_.:-]{1,200}."},
     "pulso:supersedes_invalid": {"status": [409], "retryable": False, "routes": [ARM],
@@ -266,6 +267,8 @@ S = {"type": "string"}
 SV1 = {"const": "1", "type": "string"}
 NULLABLE_S = {"type": ["string", "null"]}
 SHA256_HEX = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+Z_TS = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$",
+        "description": "UTC RFC3339 with a literal Z (annex D.1)"}
 REF = {"$ref": "ArtifactRef.schema.json"}
 
 
@@ -338,6 +341,8 @@ def build_schemas() -> dict[str, dict[str, Any]]:
         "oneOf": [{"$ref": "RegistryMutationCommitment.schema.json"}, {"type": "null"}], "default": None}
     inv["properties"]["stage"] = {"type": "string", "enum": list(STAGES)}
     inv["x-digest-excluded"] = list(DIGEST_EXCLUDED)
+    for ts in ("cutoff", "deadline"):
+        inv["properties"][ts] = {"oneOf": [Z_TS, {"type": "null"}], "default": None}
     inv["x-max-input-bytes"] = MAX_INPUT_BYTES
     rules: list[dict[str, Any]] = []
     for name, spec in CATALOG.items():
@@ -413,7 +418,9 @@ def build_schemas() -> dict[str, dict[str, Any]]:
         f"Principal JWS (typ=principal+jws), TTL <= {int(MAX_TTL.total_seconds())} s, `Cache-Control: no-store`. "
         "Never persist or log `jws`.")
     schemas["CoreVersion"] = _schema("CoreVersion", _obj(
-        ["agent_core_sha", "contracts_version", "pulso_sha", "image_digest", "runtime_profile", "doubles"], {
+        ["schema_version", "bridge_instance_id", "agent_core_sha", "contracts_version", "pulso_sha", "image_digest",
+         "runtime_profile", "doubles"], {
+            "schema_version": SV1, "bridge_instance_id": S,
             "agent_core_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "contracts_version": S,
             "pulso_sha": S, "image_digest": NULLABLE_S, "runtime_profile": S,
             "keys_reload_error": NULLABLE_S, "doubles": {"type": "array", "items": S}}, extra=True),
@@ -421,7 +428,12 @@ def build_schemas() -> dict[str, dict[str, Any]]:
 
     # -- evaluation ----------------------------------------------------------------------------------------------
     adm = _from_model(AdmissionRequest, "EvaluationAdmissionRequest", "D.4 admission request.")
-    adm["properties"]["evaluation_context_ref"] = {"type": "string", "pattern": f"^{CONTEXT_REF_RE.pattern}$"}
+    adm["properties"]["evaluation_context_ref"] = {
+        "type": "string", "pattern": f"^{CONTEXT_REF_RE.pattern}$", "deprecated": True,
+        "description": "Deprecated (ADR 0011): the bridge derives the ref; an explicit value is accepted only when "
+                       "equal to it, else 422 pulso:evaluation_context_invalid. See contract.json "
+                       "idempotency.admissions.derivation."}
+    adm["properties"]["deadline"] = Z_TS
     schemas["EvaluationAdmissionRequest"] = adm
     schemas["EvaluationAdmission"] = _schema("EvaluationAdmission", _obj(
         ["schema_version", "evaluation_context_ref", "state"], {
@@ -430,6 +442,13 @@ def build_schemas() -> dict[str, dict[str, Any]]:
         "201 on first admission, 200 on an identical replay.")
     arm = _from_model(ArmRequest, "ArmRequest", "D.4 arm request (generated from evaluation.arms.ArmRequest).")
     arm["properties"]["idempotency_key"] = {"type": "string", "pattern": f"^{CONTEXT_REF_RE.pattern}$"}
+    arm["properties"]["deadline"] = Z_TS | {"default": None}
+    arm["anyOf"] = [{"required": ["execution_profile"]}, {"required": ["mode"]}]
+    arm["x-deprecated-aliases"] = {"mode": "execution_profile (attention_stateful_complementary=stateful_attention, "
+                                           "evolution_task=native; task_builder has no annex profile)",
+                                   "seed_manifest_ref": "sandbox_session_ref", "agent_id": "derived from the target"}
+    for alias in ("mode", "seed_manifest_ref", "agent_id"):
+        arm["properties"][alias]["deprecated"] = True
     schemas["ArmRequest"] = arm
     arm_status = list(get_args(ArmStatus))
     schemas["ArmReport"] = _schema("ArmReport", _obj(["execution_id", "status"], {
@@ -549,15 +568,17 @@ def build_contract() -> dict[str, Any]:
             "token": {"typ": "JWT", "alg": "EdDSA (verifier-fixed, never from payload)",
                       "header_exact_keys": ["alg", "kid", "typ"], "iss": "control-api", "aud": "core-bridge",
                       "claims_required": ["iss", "aud", "sub", "tenant_id", "purpose", "iat", "exp", "jti"],
-                      "claims_optional": ["job_id"], "scope_claim": "absent (class i has no scope)",
+                      "claims_optional": ["job_id"], "sub_pattern": "^worker:.+ (else 403 pulso:auth_denied reason sub_not_worker)",
+                      "job_id_rule": "invoke: claim job_id must equal body job_id (403 pulso:auth_denied reason job_mismatch)", "scope_claim": "absent (class i has no scope)",
                       "max_ttl_seconds": MAX_TTL_S, "max_exp_skew_seconds": 30,
                       "key_binding": "each kid is bound to exactly one (iss, aud)",
                       "jti": "receiver-owned durable replay store; (iss, jti) consumed atomically AFTER all other "
                              "checks pass (a rejected token never burns its jti); every HTTP attempt uses a fresh jti"},
             "reasons": ["missing_token", "malformed", "bad_header", "unknown_kid", "bad_signature", "key_binding",
                         "wrong_audience", "missing_claims", "expired", "ttl_too_long", "tenant_required",
-                        "purpose_denied", "jti_replayed"],
-            "reason_status": {"tenant_required": 403, "purpose_denied": 403, "*": 401},
+                        "purpose_denied", "sub_not_worker", "job_mismatch", "jti_replayed"],
+            "reason_status": {"tenant_required": 403, "purpose_denied": 403, "sub_not_worker": 403,
+                              "job_mismatch": 403, "*": 401},
             "purposes": sorted({p for r in ROUTES for p in r.purposes}),
             "tenant_exempt_purposes": sorted(TENANT_EXEMPT)},
         "idempotency": {
@@ -568,12 +589,21 @@ def build_contract() -> dict[str, Any]:
                        "same_key_other_digest": "409 pulso:digest_conflict",
                        "wrong_header": "422 pulso:invalid_request details.fields=[Idempotency-Key]",
                        "task_binding_ref": "sha256_hex('{tenant_id}|{idempotency_key}')"},
-            "admissions": {"key": "body.evaluation_context_ref", "replay": "200 same body; 409 pulso:idempotency_conflict "
-                                                                         "when any bound field differs",
+            "admissions": {"key": "Idempotency-Key header (validated [A-Za-z0-9_.:-]{1,200}, optional); the admission is "
+                                  "identified by the derived ref below, so a replay is the same admission",
+                           "derivation": {"evaluation_context_ref": "'evc-' + sha256_hex('{tenant_id}|{job_id}|"
+                                                                   "{binding_ref}|{proposal_id}|{candidate_hash}|"
+                                                                   "{evaluation_attempt}')[:40]",
+                                          "job_id": "the `job_id` claim of the token",
+                                          "explicit_value": "optional; accepted only when equal to the derived ref "
+                                                            "(else 422 pulso:evaluation_context_invalid)"},
+                           "replay": "200 same body; 409 pulso:idempotency_conflict when any bound field differs",
                            "first": "201"},
-            "arms": {"key": "body.idempotency_key (the Idempotency-Key header is not read by the runtime)",
+            "arms": {"key": "Idempotency-Key header or body.idempotency_key; both present must be equal (else 422 "
+                            "pulso:invalid_request details.fields=[Idempotency-Key]); neither -> 422",
                      "execution_id": "'arm-' + sha256_hex('{tenant_id}|{idempotency_key}')[:32]",
-                     "replay": "200 stored report; other body -> 409 pulso:idempotency_conflict",
+                     "replay": "200 stored report; other body -> 409 pulso:idempotency_conflict (alias and annex "
+                               "spellings of the same request share one digest)",
                      "readback": ["GET /evaluation/arms/{execution_id}", "GET /evaluation/arms/by-key/{key}"]}},
         "limits": {"max_body_bytes": MAX_BODY_BYTES, "max_input_bytes": MAX_INPUT_BYTES, "fact_cap_bytes": FACT_CAP,
                    "result_cap_bytes": RESULT_CAP, "credential_max_ttl_seconds": int(MAX_TTL.total_seconds()),
@@ -660,6 +690,8 @@ def build_openapi(schemas: dict[str, dict[str, Any]], contract: dict[str, Any]) 
             "responses": _responses(r, responses)}
         if r["id"] == INV:
             op["parameters"].append({"$ref": "#/components/parameters/IdempotencyKey"})
+        elif r["id"] in (ADM, ARM):
+            op["parameters"].append({"$ref": "#/components/parameters/IdempotencyKeyOpaque"})
         for name in re.findall(r"{(\w+)}", r["path"]):
             op["parameters"].append({"name": name, "in": "path", "required": True, "schema": {"type": "string"}})
         if body:
@@ -685,6 +717,9 @@ def build_openapi(schemas: dict[str, dict[str, Any]], contract: dict[str, Any]) 
                 "IdempotencyKey": {"name": "Idempotency-Key", "in": "header", "required": True, "schema": {
                     "type": "string", "pattern": "^[0-9a-f]{64}$"},
                     "description": "sha256_hex(tenant|job|stage|attempt|logical_key)"},
+                "IdempotencyKeyOpaque": {"name": "Idempotency-Key", "in": "header", "required": False, "schema": {
+                    "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,200}$"},
+                    "description": "Admissions/arms business key (annex D.4); a body key, when present, must equal it"},
                 "Traceparent": {"name": "traceparent", "in": "header", "required": False, "schema": {"type": "string"}}},
             "schemas": components}}
 
