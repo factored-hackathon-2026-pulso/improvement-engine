@@ -149,15 +149,25 @@ impl Store for PgStore {
     }
 
     fn put_doc(&self, ns: &str, tenant: &str, id: &str, doc: Value) {
-        todo!()
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO pulso_ca_docs (ns, tenant_id, doc_id, doc) VALUES ($1, $2, $3, $4) \
+                 ON CONFLICT (ns, tenant_id, doc_id) DO UPDATE SET doc = EXCLUDED.doc, updated_at = CURRENT_TIMESTAMP",
+                &[&ns, &tenant, &id, &doc],
+            )
+            .map(|_| ())
+        });
     }
 
     fn get_doc(&self, ns: &str, tenant: &str, id: &str) -> Option<Value> {
-        todo!()
+        self.with(|c| Ok(c.query_opt("SELECT doc FROM pulso_ca_docs WHERE ns = $1 AND tenant_id = $2 AND doc_id = $3", &[&ns, &tenant, &id])?.map(|r| r.get(0))))
     }
 
     fn list_docs(&self, ns: &str, tenant: &str) -> Vec<(String, Value)> {
-        todo!()
+        self.with(|c| {
+            let rows = c.query("SELECT doc_id, doc FROM pulso_ca_docs WHERE ns = $1 AND tenant_id = $2 ORDER BY doc_id COLLATE \"C\"", &[&ns, &tenant])?;
+            Ok(rows.iter().map(|r| (r.get(0), r.get(1))).collect())
+        })
     }
 
     fn jti_claim(&self, scope: &str, iss: &str, jti: &str, exp: f64, now: f64) -> bool {
