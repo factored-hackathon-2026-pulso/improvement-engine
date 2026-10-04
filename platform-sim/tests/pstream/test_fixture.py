@@ -9,7 +9,7 @@ FX = Path(__file__).resolve().parents[2] / "product_stream" / "fixtures" / "prod
 
 
 def test_fixture_is_small_and_has_exactly_the_allow_list():
-    assert FX.exists() and FX.stat().st_size < 200_000
+    assert FX.exists() and FX.stat().st_size < 120_000
     con = sqlite3.connect(f"file:{FX}?mode=ro", uri=True)
     tables = {r[0] for r in con.execute("select name from sqlite_master where type='table'")}
     assert tables == set(cv.PRODUCT_COLUMNS) == set(cv.exporter_allowed_columns())
@@ -21,8 +21,8 @@ def test_fixture_is_small_and_has_exactly_the_allow_list():
 
 def test_fixture_is_the_documented_regeneration(tmp_path):
     out = tmp_path / "r.sqlite"
-    main(["--sqlite", str(out), "--backfill", "600", "--seed", "7", "--scenario", "escalation_rise",
-          "--horizon-events", "600"], sleep=lambda s: None)
+    main(["--sqlite", str(out), "--backfill", "300", "--seed", "7", "--scenario", "escalation_rise",
+          "--horizon-events", "300", "--customers", "100"], sleep=lambda s: None)
     q = {t: f"select * from {t} order by 1, 2" for t in ("event_log", "cases", "turns", "assignments")}
     a, b = sqlite3.connect(FX), sqlite3.connect(out)
     for t, sql in q.items():

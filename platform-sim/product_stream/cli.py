@@ -32,6 +32,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--batch", type=int, default=50, help="rows per batch")
     p.add_argument("--horizon-events", type=int, default=None,
                    help="planned total events (windows and onset derive from it); default N for backfill-only")
+    p.add_argument("--customers", type=int, default=400, help="synthetic customer pool size")
     p.add_argument("--start", default="2026-09-01T08:00:00Z", help="simulated clock start (UTC ISO)")
     p.add_argument("--manifest", metavar="FILE", help="write the planted-signal manifest here")
     p.add_argument("--stop-file", metavar="FILE", help="exit cleanly when this file exists")
@@ -71,7 +72,7 @@ def main(argv=None, sleep=time.sleep, stdin=None, connect=None) -> int:
                       file=sys.stderr)
                 return 2
             sink.reset()
-        gen = ProductStream(seed=a.seed, scenario=a.scenario, horizon_events=horizon, start=a.start,
+        gen = ProductStream(seed=a.seed, scenario=a.scenario, horizon_events=horizon, start=a.start, n_customers=a.customers,
                             **({"onset_sequence": a.onset_sequence} if a.onset_sequence is not None else {}))
         if a.backfill:
             left = a.backfill

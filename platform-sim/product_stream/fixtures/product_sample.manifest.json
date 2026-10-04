@@ -1,6 +1,6 @@
 {
   "data_origin": "synthetic product-sim",
-  "horizon_events": 600,
+  "horizon_events": 300,
   "manifest_version": 1,
   "planted": {
     "baseline": 0.05,
@@ -11,7 +11,7 @@
     "effect": "reassignment_rate_rise",
     "elevated": 0.32,
     "metric": "manual case.assigned (previous_staff_id set) per case opened",
-    "onset_sequence": 180,
+    "onset_sequence": 90,
     "present_in": [
       "discovery",
       "holdout"
@@ -20,20 +20,20 @@
   "realised": {
     "by_window": {
       "discovery": {
-        "cases": 36,
+        "cases": 20,
         "reassigns": 1,
-        "reopens": 3
+        "reopens": 1
       },
       "holdout": {
-        "cases": 22,
-        "reassigns": 1,
+        "cases": 12,
+        "reassigns": 0,
         "reopens": 3
       }
     },
-    "cases": 58,
-    "last_sequence": 600,
-    "reassigns": 2,
-    "reopens": 6
+    "cases": 32,
+    "last_sequence": 300,
+    "reassigns": 1,
+    "reopens": 4
   },
   "scenario": "escalation_rise",
   "seed": 7,
@@ -42,11 +42,11 @@
   "windows": {
     "discovery": [
       0,
-      360
+      180
     ],
     "holdout": [
-      360,
-      600
+      180,
+      300
     ]
   }
 }
