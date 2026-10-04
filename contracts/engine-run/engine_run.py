@@ -6,6 +6,7 @@ The roleplay-llm scanner id ("tps-1") is accepted on receipts; its package is no
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -26,7 +27,7 @@ KNOWN_SCANNER_IDS = frozenset({SCANNER_ID, "tps-1"})
 
 STATUSES = frozenset({"real", "real-narrow", "local-model", "agent_roleplay", "recorded", "stand-in",
                       "simulated", "not_exercised"})
-NONREAL_PROVIDERS = frozenset({"agent_roleplay", "recorded", "scripted"})
+NONREAL_PROVIDERS = frozenset({"agent_roleplay", "recorded", "scripted", "claude-standin"})
 THIRD_PARTY_PROVIDERS = frozenset({"hosted", "agent_roleplay"})
 RESTRICTED_CLASSES = frozenset({"E0", "CSV", "original-treated"})
 LABELS = ["DEMO-0", "DEMO-1a", "DEMO-1b", "DEMO-2"]
@@ -41,13 +42,28 @@ def scan_receipt(body: str) -> list:
     return _dc0.scan_receipt_body(body)
 
 
+_BLOCKED = re.compile(r"blocked\([A-Za-z0-9._-]+\)")
+
+
 def _status_ok(s):
-    return s in STATUSES or (isinstance(s, str) and s.startswith("blocked(") and s.endswith(")") and len(s) > 9)
+    return isinstance(s, str) and (s in STATUSES or _BLOCKED.fullmatch(s) is not None)
+
+
+def _norm(x):
+    """Identity normalisation: case, surrounding space, and -/_/space separators are not distinct identities."""
+    return re.sub(r"[\s_\-]+", "-", x.strip().casefold()) if isinstance(x, str) else x
+
+
+def _lies_real(st):
+    prov = (st.get("receipt") or {}).get("provider")
+    return st.get("status") == "real" and (not prov or _norm(prov) in {_norm(p) for p in NONREAL_PROVIDERS})
 
 
 def check(report: dict) -> list:
     out = []
-    steps = report.get("steps", [])
+    steps = report.get("steps") or []
+    if not steps:
+        out.append(_v("S1", "steps", "report lists no steps"))
     for st in steps:
         sid = st.get("id", "?")
         if not _status_ok(st.get("status")):
@@ -59,9 +75,9 @@ def check(report: dict) -> list:
                 out.append(_v("S1", sid, f"missing {k}"))
         rc = st.get("receipt") or {}
         prov = rc.get("provider")
-        if st.get("status") == "real" and prov in NONREAL_PROVIDERS:
-            out.append(_v("H1", sid, f"real with {prov} receipt provider"))
-        if st.get("data_class") in RESTRICTED_CLASSES and prov in THIRD_PARTY_PROVIDERS | {"hosted"}:
+        if _lies_real(st):
+            out.append(_v("H1", sid, f"real with {prov!r} receipt provider"))
+        if _norm(st.get("data_class")) in {_norm(c) for c in RESTRICTED_CLASSES} and prov in THIRD_PARTY_PROVIDERS | {"hosted"}:
             if rc.get("scanner_id") not in KNOWN_SCANNER_IDS:
                 out.append(_v("H2", sid, "restricted class to third party without passing scanner id"))
             if prov == "hosted" and rc.get("model_kind") == "real" and not rc.get("third_party_ok"):
@@ -81,7 +97,7 @@ def check(report: dict) -> list:
     missing = [r for r in roles if not a.get(r)]
     for r in missing:
         out.append(_v("H5", r, "missing author"))
-    if not missing and len({a[r] for r in roles}) != len(roles):
+    if not missing and len({_norm(a[r]) for r in roles}) != len(roles):
         out.append(_v("H5", "authors", "world, suite, effect and judge authors must be distinct"))
     sealed, cand = a.get("suite_sealed_at"), a.get("candidate_created_at")
     if not sealed or not cand or sealed >= cand:
@@ -93,7 +109,7 @@ def check(report: dict) -> list:
     s1 = next((s for s in steps if s.get("id") == "scout"), None)
     s2 = next((s for s in steps if s.get("id") == "verifier"), None)
     if s1 and s2:
-        if s1.get("actor") == s2.get("actor") or s1.get("model") == s2.get("model"):
+        if _norm(s1.get("actor")) == _norm(s2.get("actor")) or _norm(s1.get("model")) == _norm(s2.get("model")):
             out.append(_v("H7", "verifier", "scout and verifier need distinct actors and model identities"))
     return out
 
@@ -107,7 +123,7 @@ def generate_doubles(report: dict, observed: dict) -> list:
     """Engine-generated doubles[]: only from the report's observed facts, never hand-written."""
     d = []
     for st in report.get("steps", []):
-        if st.get("status") != "real":
+        if st.get("status") != "real" or _lies_real(st):
             d.append({"part": st["id"], "status": st["status"], "data_class": st.get("data_class"),
                       "provider": (st.get("receipt") or {}).get("provider")})
     for k, v in sorted(observed.items()):
