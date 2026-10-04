@@ -18,6 +18,7 @@ import random
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
+from . import effects as _fx
 from .ddl import append_only_guards_sqlite, render_ddl
 
 SLA_SECONDS = {"high": 300, "medium": 900, "low": 3600}
@@ -47,6 +48,8 @@ class PlatformLiveSim:
         self.conn = sqlite3.connect(path)
         self.now = _parse(start)
         self.faults: list[dict] = []
+        self._jobs: list[tuple[datetime, int, object]] = []
+        self._releases: dict[str, tuple[datetime, _fx.EffectSpec]] = {}
         self._ids: dict[str, int] = {}
         self._next_seq = 1
         for stmt in render_ddl("sqlite"):
@@ -316,6 +319,48 @@ class PlatformLiveSim:
     def auth_event(self, event_type: str, staff_id: str) -> None:
         self._emit(event_type, "staff", staff_id, None, "system", staff_id, {})
         self.conn.commit()
+
+    # ---- fast-forward clock, release events, effects (P2py) -------------------------------
+    def schedule(self, delay_seconds: float, fn) -> None:
+        self._job_n = getattr(self, "_job_n", 0) + 1
+        self._jobs.append((self.now + timedelta(seconds=delay_seconds), self._job_n, fn))
+
+    def fast_forward(self, seconds: float = 0, days: float = 0) -> None:
+        total = seconds + days * 86400
+        if total < 0:
+            raise ValueError("clock only moves forward")
+        target = self.now + timedelta(seconds=total)
+        while True:
+            due_jobs = sorted((j for j in self._jobs if j[0] <= target), key=lambda j: (j[0], j[1]))
+            if not due_jobs:
+                break
+            job = due_jobs[0]
+            self._jobs.remove(job)
+            self.now = max(self.now, job[0])
+            job[2]()
+        self.now = target
+
+    def publish_release(self, agent_id: str, alias: str, release_id: str, effect=None, mechanism=None,
+                        event_type: str = "release.published") -> None:
+        from platform_contract import release_events as _rel
+        if event_type not in _rel.RELEASE_EVENT_TYPES:
+            raise ValueError("not a release event type")
+        if effect is not None and mechanism is not None:
+            _fx.assert_author_separation(effect, mechanism)
+        self._emit(event_type, "release", release_id, None, "system", None,
+                   {"release_id": release_id, "agent_id": agent_id, "alias": alias})
+        if effect is not None:
+            self._releases[release_id] = (self.now, effect)
+        self.conn.commit()
+
+    def effect_series(self, release_id: str) -> list[dict]:
+        at, spec = self._releases[release_id]
+        days = int((self.now - at).total_seconds() // 86400)
+        return _fx.simulate_effect_series(spec, days=days, release_day=0)
+
+    def observation_labels(self) -> dict:
+        return {"release_event": "simulated", "effect": "simulated",
+                "memory": "not_exercised", "successor": "not_exercised"}
 
     # ---- fault injection -----------------------------------------------------------------
     def inject_late_event(self, case_id: str | None = None, lag_seconds: float = 3600,
