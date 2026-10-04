@@ -12,8 +12,8 @@ from pulso_core_runtime.stages.catalog import CATALOG
 
 LAB, WIKI = "pulso/lab_query@1.0.0", "pulso/wiki_read@1.0.0"
 DIGEST = "a" * 64
-REF = {"id": "ev_synth0001", "digest": DIGEST, "media_type": "application/json"}
-ROWS = [{"metric_id": "synthetic_metric", "window_id": "w1", "count": 40, "rate": 0.25, "evidence_ref": "ev_synth0001"}]
+REF = {"id": "ev_5a17c0de0001", "digest": DIGEST, "media_type": "application/json"}
+ROWS = [{"metric_id": "synthetic_metric", "window_id": "w1", "count": 40, "rate": 0.25, "evidence_ref": "ev_5a17c0de0001"}]
 
 # stage -> (tool for step 1, final output of step 2)
 SCRIPTS: dict[str, tuple[str, dict[str, Any]]] = {
