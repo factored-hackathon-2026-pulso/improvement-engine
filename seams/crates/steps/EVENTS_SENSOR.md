@@ -51,6 +51,6 @@ the current one, newest first, 96 MB budget), so replays only see their own past
 ## Not done (honest)
 
 Payload and free text are never read; no per-staff or per-customer analysis; cases without a dimension row are excluded;
-improvements are not candidates; no causal claim; no seasonality/week-over-week; release and observation stay simulated;
+improvements are not candidates; no causal claim; no seasonality/week-over-week; no day-clustering (overdispersion) correction, so bursty cell-days inflate the false-positive rate (independent review: ~5-15% under strong bursts vs 0-2% iid); release and observation stay simulated;
 the dataset-pg (E0) path is not served by this sensor; `read_dimension` reads at most 10000 `cases` rows per batch (cases
 beyond that cap lose their cell: counted as `cases_without_dimension`).

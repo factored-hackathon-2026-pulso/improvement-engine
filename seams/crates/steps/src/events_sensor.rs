@@ -255,6 +255,7 @@ impl Report {
             "improvements (cell better than rest) are not candidates",
             "no causal claim: an admitted signal is a replicated deviation, not a proven root cause",
             "no seasonality or week-over-week model; release and observation stay simulated",
+            "no correction for day-level clustering: bursty cell-days inflate false positives (review measured about 5% at sd 0.3 over 30 days, 15% at sd 0.5 over 10 days; iid null 0-2%)",
         ];
         Json::obj(vec![
             ("contract", Json::s("sensor-events/1")),
@@ -645,7 +646,7 @@ pub fn analyze(events: &str, cases: &str, p: &Params) -> Report {
         let min_eff = if f.is_delay() { p.min_delay_ratio } else { p.min_rate_effect };
         let weak = if f.is_delay() { eh < 1.0 + (min_eff - 1.0) / 2.0 } else { eh < min_eff / 2.0 };
         let (reason, detail) = if !support {
-            ("low_support", format!("holdout support below minimum ({} positives)", cg.s as u64))
+            ("low_support", "holdout support below minimum; count withheld (may be below k)".to_string())
         } else if ph > p.alpha / k || weak {
             ("not_replicated", format!("holdout p={ph:.4} (needed <= {:.4}) or direction/effect lost", p.alpha / k))
         } else {
