@@ -13,6 +13,7 @@ import math
 from decimal import ROUND_CEILING, Decimal
 from typing import Any
 
+from pulso_core_runtime.llm.guard import CeilingExceeded, KillSwitchEngaged
 from pulso_core_runtime.llm.policy import COST_QUANT, MTOK, ModelPolicy, cost_for
 
 SYSTEM_PROMPT_ALLOWANCE = 1000  # tokens: the registry prompt text is not visible to the wrapper
@@ -48,12 +49,12 @@ class SpendMeteringGateway:
     UNCAPPED = UNCAPPED
 
     def __init__(self, inner: Any, contexts: Any, store: Any, current: Any = None, *,
-                 policy: ModelPolicy | None = None, profiles: Any = None) -> None:
+                 policy: ModelPolicy | None = None, profiles: Any = None, guard: Any = None) -> None:
         from pulso_core_runtime.tools.context import current_binding
 
         self._inner, self._contexts, self._store = inner, contexts, store
         self._current = current or current_binding
-        self._policy, self._profiles = policy, profiles
+        self._policy, self._profiles, self._guard = policy, profiles, guard
 
     def generate(self, prompt: Any, inputs_model_view: Any, locale: Any, schema: Any = None) -> Any:
         from agent_core.domain.errors import GatewayError, GatewayErrorKind
@@ -80,6 +81,13 @@ class SpendMeteringGateway:
         if prices is not None:
             max_tokens = pinned.max_tokens if pinned is not None else int(profile.max_tokens)
             reserve = estimate_reservation(prices[0], prices[1], max_tokens, inputs_model_view)
+        if self._guard is not None:
+            try:
+                self._guard.check(scope[:2], reserve)
+            except (CeilingExceeded, KillSwitchEngaged) as exc:
+                outcome = "kill_switch" if isinstance(exc, KillSwitchEngaged) else "ceiling_exceeded"
+                self._store.ledger_record(*scope, outcome=outcome, reserved_usd=reserve, **entry)
+                raise GatewayError(GatewayErrorKind.refused) from exc
         if not self._store.meter_reserve(*scope, amount=format(reserve, "f"), cap_usd=cap):
             self._store.ledger_record(*scope, outcome="budget_exhausted", reserved_usd=reserve, **entry)
             raise GatewayError(GatewayErrorKind.refused)
