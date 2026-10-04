@@ -59,6 +59,12 @@ impl PgStore {
         PgStore::connect(url.expose())
     }
 
+    /// Empties every `pulso_ca_*` table. Test support only: the server binary calls it solely when
+    /// `CONTROL_API_DATABASE_FRESH=1` together with the loopback-only admin channel, so a black-box run starts clean.
+    pub fn reset(&self) {
+        self.with(|c| c.batch_execute("TRUNCATE pulso_ca_bindings, pulso_ca_binding_refs, pulso_ca_artifacts, pulso_ca_docs, pulso_ca_jti"));
+    }
+
     fn with<R>(&self, f: impl FnOnce(&mut Client) -> Result<R, postgres::Error>) -> R {
         let mut g = self.client.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if g.is_closed() {

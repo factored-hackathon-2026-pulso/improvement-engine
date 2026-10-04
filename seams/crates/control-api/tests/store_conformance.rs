@@ -322,3 +322,15 @@ fn jti_replay_is_rejected_across_an_app_restart_on_a_durable_store() {
         assert_eq!((st, v["code"].as_str()), (401, Some("pulso:auth_jti_replayed")), "{v}");
     });
 }
+
+#[test]
+fn reset_empties_every_table_for_a_fresh_black_box_run() {
+    let Some(db) = TempDb::create() else { return };
+    let s = PgStore::connect(&db.url()).unwrap();
+    assert!(s.put_binding("t1", "cmd-1", rec("job-1", "ref-1")));
+    s.put_doc("grant", "t1", "g1", json!({}));
+    assert!(s.jti_claim("control", "iss", "j1", 1e12, 1.0));
+    s.reset();
+    assert!(s.binding("t1", "cmd-1").is_none() && s.binding_ref_tenant("ref-1").is_none() && s.get_doc("grant", "t1", "g1").is_none());
+    assert!(s.jti_claim("control", "iss", "j1", 1e12, 2.0), "the replay set is emptied too");
+}

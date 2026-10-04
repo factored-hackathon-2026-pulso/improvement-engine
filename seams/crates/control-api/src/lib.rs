@@ -1,6 +1,6 @@
 //! control-api LITE: artifacts, authorization-checks and core-task-bindings over `tiny_http`.
 //! `App::handle` is a pure request -> response function (testable without sockets); `server` is the thin tiny_http glue.
-//! The store sits behind `store::Store`; only an in-memory implementation exists (a Postgres store is a later package).
+//! The store sits behind `store::Store`: `store::MemStore` (memory) or `pgstore::PgStore` (Postgres, migration 0052, durable).
 pub mod app;
 pub mod auth;
 pub mod debug;
