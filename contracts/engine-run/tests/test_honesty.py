@@ -163,5 +163,57 @@ class Doubles(unittest.TestCase):
         self.assertEqual(r, before)
 
 
+def gated(verdict="fail", approval="real-narrow", publish="real-narrow", override=None):
+    """A report that has the approval and publish steps and reports the gate verdict."""
+    r = good()
+    mk = lambda i, status: {"id": i, "status": status, "data_class": "synthetic", "target": "local", "sha": "a" * 40,
+                            "contract_revision": "c2-1", "host": "rust", "receipt": {"provider": "core"}}
+    r["steps"] += [mk("approval", approval), mk("publish", publish)]
+    r["gate"] = {"verdict": verdict}
+    if override is not None:
+        r["overrides"] = [override]
+    return r
+
+
+OVERRIDE = {"step": "approval", "of": "gate", "verdict": "fail", "by": "human", "label": "human_override",
+            "reason": "demo of the Core mechanics"}
+
+
+class GateHonesty(unittest.TestCase):
+    """G1: a failed gate cannot be followed by approval/publish unless an explicit labelled human override says so."""
+
+    def test_publish_after_failed_gate_without_override_is_rejected(self):
+        self.assertIn("G1", rules(gated("fail")))
+        self.assertIn("G1", rules(gated("not_evaluable")))
+
+    def test_blocked_or_unexercised_steps_after_failed_gate_are_fine(self):
+        self.assertNotIn("G1", rules(gated("fail", "blocked(gate)", "blocked(gate)")))
+        self.assertNotIn("G1", rules(gated("fail", "not_exercised", "not_exercised")))
+
+    def test_approval_alone_after_failed_gate_is_rejected(self):
+        self.assertIn("G1", rules(gated("fail", "real-narrow", "blocked(gate)")))
+
+    def test_labelled_override_allows_it_only_with_quality_claims_forbidden(self):
+        self.assertNotIn("G1", rules(gated("fail", override=OVERRIDE)))
+        r = gated("fail", override=OVERRIDE); r["quality_claims"] = "allowed"
+        self.assertIn("G1", rules(r))
+
+    def test_override_must_name_the_gate_verdict_the_human_and_a_reason(self):
+        for k, v in (("verdict", "pass"), ("by", "engine"), ("of", "safety"), ("step", "publish"), ("reason", "")):
+            self.assertIn("G1", rules(gated("fail", override={**OVERRIDE, k: v})), k)
+
+    def test_passing_gate_needs_no_override_and_a_stray_override_is_rejected(self):
+        self.assertNotIn("G1", rules(gated("pass")))
+        self.assertIn("G1", rules(gated("pass", override=OVERRIDE)))
+
+    def test_exercised_publish_without_a_gate_verdict_is_rejected(self):
+        r = gated("pass"); del r["gate"]
+        self.assertIn("G1", rules(r))
+
+    def test_doubles_lists_the_override(self):
+        d = er.generate_doubles(gated("fail", override=OVERRIDE), observed={})
+        self.assertTrue(any(x["part"] == "gate.override" and x["status"] == "human_override" for x in d))
+
+
 if __name__ == "__main__":
     unittest.main()

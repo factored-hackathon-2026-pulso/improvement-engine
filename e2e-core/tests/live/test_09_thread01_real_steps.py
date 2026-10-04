@@ -34,6 +34,11 @@ WINDOWS: list[dict[str, Any]] = []
 # The closing reply is the only model call of the seeded agent: one scripted answer for any prompt text (no PII, no digits).
 RESPOND_RULE = {"id": "t01-respond", "match": {}, "repeat_last": True,
                 "responses": [{"text": "Recibimos tu disputa y la estamos revisando.", "citations": []}]}
+# The GSIpy structural gate fails in the live windows (base and candidate complete the same cases: the Core arms observe only
+# status/closed_early/cost, and a prompt-only change cannot alter them). Steps 8-9 therefore run ONLY as an explicit,
+# labelled human override of the failed gate (G1 check() rejects a publish after a failed gate without it).
+OVERRIDE = {"by": "human", "actor": "local-supervisor",
+            "reason": "exercise the Core approve/publish mechanics although the structural gate did not pass; no quality claim"}
 PROFILE = "evolution_task"  # native arms: LocalSandbox with the scenario's scripted tools, no bank world
 
 
@@ -62,7 +67,7 @@ def test_thread01_steps_5_6_8_9_are_real_narrow_against_core(stack: Any, authori
         pytest.skip("a previous window already published to this stack's staging: run one window per fresh stack (-k '[N]')")
     t0 = time.time()
     res = T.run_thread(T.ThreadConfig(workdir=tmp_path, exe=EXE, queue_dir=T.ROOT / "e2e-core/tests/fixtures/thread01_queue",
-                                      hooks=rc.hooks()))
+                                      hooks=rc.hooks(), human_override=OVERRIDE))
     steps = {s["n"]: s for s in res["steps"]}
     rows = "; ".join(f"{s['n']}:{s['status']}:{s.get('error')}" for s in res["steps"])
     WINDOWS.append({"window": window, "seconds_total": round(time.time() - t0, 2), "calls": rc.timings})
@@ -76,6 +81,12 @@ def test_thread01_steps_5_6_8_9_are_real_narrow_against_core(stack: Any, authori
     assert pub["alias_read"]["release_id"] == pub["published"]["release_id"] and pub["registry"] == "core"
     assert pub["published"]["release_id"] != rc.base_release()  # staging moved to a new release; prod untouched
     assert rc.alias_read_raw("prod") == rc.base_release()
+    rep = res["report"]
+    if res["gate_verdict"] != "pass":  # honest: the override is labelled, the report is clean under G1 and claims no quality
+        assert [o["verdict"] for o in rep["overrides"]] == [res["gate_verdict"]] and rep["quality_claims"] == "forbidden"
+        assert steps[8]["detail"]["override"]["by"] == "human" and any(d["part"] == "gate.override" for d in rep["doubles"])
+    from test_e2e_thread_01 import ER
+    assert ER.check(rep) == []
     effect(f"thread01_window_{window}_gate", {"gate_verdict": res["gate_verdict"], "gates": res["ctx"]["gate"]["gates"],
                                               "proposal_id": fz.proposal_id, "release_id": pub["published"]["release_id"],
                                               "native_evaluation": rc.evaluate(None).get("verdict")})

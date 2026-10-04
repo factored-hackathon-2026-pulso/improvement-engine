@@ -39,7 +39,7 @@ release events. The final report must pass `contracts/engine-run` `check()`; `do
 ## Stand-in or blocked
 
 - Step 1 manual command (scheduled ingest is DEMO-2); step 3 and 4 are `agent_roleplay`; steps 5 (CMPpy) and 6
-  (GSIpy, structural only) are stand-ins unless `CoreHooks` are supplied; step 7 `not_exercised` unless a gate fails;
+  (GSIpy, structural only) are stand-ins unless `CoreHooks` are supplied; step 7 `not_exercised` unless a gate fails (then steps 8-9 are `blocked(gate)` unless a labelled human override, G1 rule);
   step 8 simulated issuer; step 9 registry double; step 10 simulated, observation only.
 - Real Core: step 5 dry run verified live once (PG16, pinned Core image). `run_arms` and `publish` need a frozen proposal
   plus a human JWS; Core does not yet verify the JWS (INT0).

@@ -14,7 +14,7 @@ from `e2e-core`; the sensor step uses the existing runner exe (`ED0_RUNNER_EXE`,
 | 5 | concrete change | real-narrow with `CoreHooks.dry_run` (live INT0); stand-in (CMPpy) in replay | |
 | 6 | base vs candidate, 2 gates | stand-in (GSIpy, structural) | `CoreHooks.run_arms` (verdict stays stand-in) |
 | 7 | revision | not_exercised unless the gate fails | V3r |
-| 8 | human authority | simulated issuer, JWS bound to the draft digest | Core verifies the JWS (INT0) |
+| 8 | human authority | simulated issuer, JWS bound to the draft digest; `blocked(gate)` after a failed gate unless a labelled human override | Core verifies the JWS (INT0) |
 | 9 | staging + alias read | stand-in (registry double) | `CoreHooks.publish` + `alias_read` |
 | 10 | observation | simulated (platform-sim), observation only | |
 
@@ -44,9 +44,17 @@ Live evidence on PG16 + the real Core image (pin c814c2b), `tests/live/test_08_*
 | 9 publish + alias read | real-narrow | publish to staging, alias read after publish shows the new release (`rel-253b52903d377aae`), prod unchanged |
 
 Honest findings of the live windows:
-- The GSIpy structural gate reports `fail: no_structural_improvement` in every window: base and candidate complete the same cases
-  (Replace Prompt changes text only; Add EvalSuite re-publishes the same scenarios, which Core classifies as no loosening). Step 7
-  (stand-in revision) runs; the runner still continues to steps 8-9 to exercise the Core mechanics. No quality claim is made.
+- The GSIpy structural gate reports `fail: no_structural_improvement` in every window: base and candidate complete the same cases.
+  This is not a world-authoring gap that can be fixed: the Core arms report only `status`, `closed_early`, cost and usage, and the
+  Core's responder absorbs every prompt-driven failure (missing locale, rejected draft, gateway error) into a template fallback, so a
+  Replace-Prompt + Add-EvalSuite change cannot move any observable arm field without the scripted model double encoding the
+  "improvement" itself (circular, authored by us). The thread therefore does NOT proceed silently: after a gate that did not pass,
+  steps 8 and 9 are `blocked(gate)` (step 10 `not_exercised`) unless `ThreadConfig.human_override` (by=human, actor, reason) is given.
+  The live windows pass it, so steps 8-9 run as an explicit labelled human OVERRIDE of a failed gate: `report.gate.verdict`,
+  `report.overrides[]` (step, of, verdict, by, label=human_override, reason, actor), a `doubles[]` entry `gate.override`,
+  `quality_claims: forbidden`; G1 `check()` rule `G1` rejects approval/publish after a gate that did not pass without it (and an
+  override on a passing gate, and an exercised approval/publish without a reported gate verdict). The Core native evaluation
+  (`evaluated` before approve) still has to pass independently of the structural gate.
 - A window publishes prompt and suite 2.0.0 (immutable in the registry): one window per fresh stack
   (`run.ps1 -PytestArgs '-k','steps_5_6_8_9 and [N]'`); a second window on the same stack is skipped.
 - A non-integer JSON number in a draft (suite seed `120.5`) made the writer's put_draft commitment be denied
