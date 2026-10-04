@@ -21,7 +21,10 @@ pub struct Rig {
     keys: HashMap<&'static str, SigningKey>,
     clock: Arc<AtomicU64>,
     jti: AtomicU64,
+    id: u64,
 }
+
+static RIGS: AtomicU64 = AtomicU64::new(0);
 
 fn pubkey(sk: &SigningKey) -> String {
     B64.encode(sk.verifying_key().to_bytes())
@@ -33,6 +36,10 @@ impl Rig {
     }
 
     pub fn with(tweak: impl FnOnce(&mut Config)) -> Rig {
+        Rig::with_store(tweak, Box::new(MemStore::default()))
+    }
+
+    pub fn with_store(tweak: impl FnOnce(&mut Config), store: Box<dyn control_api::store::Store>) -> Rig {
         let keys: HashMap<&'static str, SigningKey> =
             [("cb", 1u8), ("ob", 2), ("ex", 3)].into_iter().map(|(k, n)| (k, SigningKey::from_bytes(&[n; 32]))).collect();
         let ring = json!({
@@ -46,8 +53,8 @@ impl Rig {
         tweak(&mut cfg);
         let clock = Arc::new(AtomicU64::new((T0 * 1000.0) as u64));
         let c = clock.clone();
-        let app = Arc::new(App::with_clock(cfg, Box::new(MemStore::default()), Box::new(move || c.load(Ordering::SeqCst) as f64 / 1000.0)));
-        Rig { app, keys, clock, jti: AtomicU64::new(0) }
+        let app = Arc::new(App::with_clock(cfg, store, Box::new(move || c.load(Ordering::SeqCst) as f64 / 1000.0)));
+        Rig { app, keys, clock, jti: AtomicU64::new(0), id: RIGS.fetch_add(1, Ordering::SeqCst) }
     }
 
     pub fn now(&self) -> f64 {
@@ -62,7 +69,7 @@ impl Rig {
     pub fn token(&self, kid: &str, aud: &str, scope: &str, tenant: &str, over: Value) -> String {
         let now = self.now() as i64;
         let mut claims = json!({"iss": "core-bridge", "aud": aud, "sub": SUB, "scope": scope, "purpose": scope, "iat": now, "exp": now + 60,
-                                "jti": format!("j{}", self.jti.fetch_add(1, Ordering::SeqCst)), "tenant_id": tenant});
+                                "jti": format!("j{}-{}", self.id, self.jti.fetch_add(1, Ordering::SeqCst)), "tenant_id": tenant});
         for (k, v) in over.as_object().into_iter().flatten() {
             claims[k] = v.clone();
         }

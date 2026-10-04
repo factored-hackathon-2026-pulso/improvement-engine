@@ -6,6 +6,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use crate::store::Store;
 use std::sync::Mutex;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -52,16 +53,28 @@ pub struct Verifier {
     /// Tokens issued before this instant are refused: the jti set is process memory, so a token captured before a restart
     /// could otherwise be replayed once after it. 0 disables the rule.
     boot_floor: f64,
+    /// Durable replay set (`scope` names this verifier in it); `None` keeps the set in process memory.
+    durable: Option<(std::sync::Arc<dyn Store>, &'static str)>,
 }
 
 impl Verifier {
     pub fn new(ring: std::sync::Arc<KeyRing>) -> Verifier {
-        Verifier { ring, seen: Mutex::new(HashMap::new()), boot_floor: 0.0 }
+        Verifier { ring, seen: Mutex::new(HashMap::new()), boot_floor: 0.0, durable: None }
     }
 
     /// Refuse (`pre_boot_token`) any token whose `iat` precedes `floor` (epoch seconds, whole): replay protection across restarts.
     pub fn with_boot_floor(mut self, floor: f64) -> Verifier {
         self.boot_floor = floor.floor();
+        self
+    }
+
+    /// Keep the jti replay set in `store` under `scope` when the store persists it: a restart then forgets nothing, so the
+    /// boot floor (which exists only because the in-memory set is lost) is dropped.
+    pub fn with_store(mut self, store: std::sync::Arc<dyn Store>, scope: &'static str) -> Verifier {
+        if store.durable_replay() {
+            self.boot_floor = 0.0;
+            self.durable = Some((store, scope));
+        }
         self
     }
 
@@ -110,8 +123,17 @@ impl Verifier {
         if want.purpose.is_some_and(|w| s("purpose") != Some(w)) {
             return Err(Denied { reason: "purpose_denied", status: 403 });
         }
-        if s("tenant_id").is_none_or(str::is_empty) {
+        if jti.chars().count() > 256 || s("iss").is_some_and(|i| i.chars().count() > 256) {
+            return Err(deny("malformed")); // the durable replay set bounds both
+        }
+        if s("tenant_id").is_none_or(|t| t.is_empty() || t.chars().count() > 128 || t.contains('\0')) {
             return Err(Denied { reason: "tenant_required", status: 403 });
+        }
+        if let Some((store, scope)) = &self.durable {
+            if !store.jti_claim(scope, s("iss").unwrap(), jti, exp, now) {
+                return Err(deny("jti_replayed"));
+            }
+            return Ok(claims.clone());
         }
         let mut seen = self.seen.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         // A token past `exp` is rejected before this point, so its entry is dead weight: evict to bound memory.
