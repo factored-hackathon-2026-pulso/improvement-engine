@@ -169,3 +169,12 @@ fn approve_is_simulated_needs_csrf_and_publish_needs_approval_first() {
     assert!(ev.iter().any(|e| e["kind"] == "automation_proposal_approved_simulated"));
     assert!(ev.iter().any(|e| e["kind"] == "automation_publish_staging_simulated"));
 }
+
+#[test]
+fn e0_mapping_assumption_is_stated_in_the_read_model_only_when_e0_is_a_source() {
+    let (_, app) = app_with(full(), Config::default());
+    assert_eq!(get(&app, &format!("{A}/case-types")).1["assumptions"], json!([]));
+    let e0 = json!({"case_types": [{"type_id": "cobro_indebido", "copilot_questions": 200, "repeat_q_cases": 50}]});
+    let (_, app) = app_with(Automation::from_json(Some(&e0), None, None).unwrap(), Config::default());
+    assert_eq!(get(&app, &format!("{A}/case-types")).1["assumptions"], json!(["e0_disputar_cargo_as_cobro_indebido"]));
+}

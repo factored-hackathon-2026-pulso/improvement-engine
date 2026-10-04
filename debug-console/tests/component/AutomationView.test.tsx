@@ -101,3 +101,18 @@ describe('AutomationView (Automatizacion replica)', () => {
     expect(await screen.findByRole('alert')).toBeTruthy();
   });
 });
+
+describe('E0 mapping assumption', () => {
+  it('is shown when the read model declares it', async () => {
+    render(<AutomationView api={fake({ caseTypes: async () => ({ ...list, assumptions: ['e0_disputar_cargo_as_cobro_indebido'] }) as never })} />);
+    const n = await screen.findByTestId('auto-assumptions');
+    expect(n.textContent).toMatch(/disputar_cargo/);
+    expect(n.textContent).toMatch(/cobro_indebido/);
+  });
+  it('is absent when there is none', async () => {
+    render(<AutomationView api={fake()} />);
+    await screen.findByTestId('auto-page');
+    await screen.findByTestId('auto-banner');
+    expect(screen.queryByTestId('auto-assumptions')).toBeNull();
+  });
+});
