@@ -2,6 +2,10 @@
 import { SOURCES_ES } from './sources';
 export const ES_419 = {
   ...SOURCES_ES,
+  'decl.label': 'Declaración del origen de datos',
+  'decl.text': 'Origen: {provider} · objetivo: {target} · perfil: {profile} · dobles: {doubles}',
+  'decl.partial': 'Esta pantalla usa el cliente heredado, no el origen {provider}: sus datos NO provienen de ese origen',
+  'decl.unverified': 'Origen de datos sin verificar: no se pudo leer la declaración del modo',
   'app.title': 'Consola de depuración de Pulso',
   'nav.label': 'Principal',
   'nav.runs': 'Ejecuciones',

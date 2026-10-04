@@ -11,6 +11,7 @@ RUN npm ci
 COPY tsconfig.json vite.config.ts index.html ./
 COPY public ./public
 COPY src ./src
+COPY fixtures/demo-world.json ./fixtures/demo-world.json
 RUN npx tsc --noEmit && npx vite build
 
 FROM ${NGINX_IMAGE}
