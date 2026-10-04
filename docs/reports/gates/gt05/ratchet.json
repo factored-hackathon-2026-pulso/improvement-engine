@@ -1,0 +1,8 @@
+{
+ "command": "uv run --offline --python 3.12 --with pytest --with pyyaml python -m pytest e2e-core/tests/unit/test_e2e_thread_01_steps.py -q -p no:cacheprovider",
+ "exit_code": 1,
+ "failed": 2,
+ "passed": 5,
+ "schema": "ratchet-receipt/v1",
+ "skipped": 0
+}

@@ -1,0 +1,322 @@
+{
+ "authors": {
+  "candidate_created_at": "2026-10-04T12:00:10Z",
+  "effect": "claude-p2py-effects",
+  "judge": "claude-gsipy",
+  "suite": "agent-core-registry-demo@c814c2b",
+  "suite_sealed_at": "2026-10-04T12:00:00Z",
+  "world": "claude-wrld0"
+ },
+ "contract_revision": "engine-run/c2-1",
+ "doubles": [
+  {
+   "data_class": "generated_sample",
+   "part": "trigger",
+   "provider": "local",
+   "status": "stand-in"
+  },
+  {
+   "data_class": "generated_sample",
+   "part": "signals",
+   "provider": "local",
+   "status": "real-narrow"
+  },
+  {
+   "data_class": "generated_sample",
+   "part": "scout",
+   "provider": "agent_roleplay",
+   "status": "agent_roleplay"
+  },
+  {
+   "data_class": "generated_sample",
+   "part": "verifier",
+   "provider": "agent_roleplay",
+   "status": "agent_roleplay"
+  },
+  {
+   "data_class": "generated_sample",
+   "part": "opportunity",
+   "provider": "agent_roleplay",
+   "status": "agent_roleplay"
+  },
+  {
+   "data_class": "synthetic",
+   "part": "compile",
+   "provider": "claude-standin",
+   "status": "stand-in"
+  },
+  {
+   "data_class": "synthetic",
+   "part": "gate",
+   "provider": "claude-standin",
+   "status": "stand-in"
+  },
+  {
+   "data_class": "synthetic",
+   "part": "revision",
+   "provider": null,
+   "status": "not_exercised"
+  },
+  {
+   "data_class": null,
+   "part": "approval",
+   "provider": null,
+   "status": "red"
+  },
+  {
+   "data_class": null,
+   "part": "publish",
+   "provider": null,
+   "status": "red"
+  },
+  {
+   "data_class": "synthetic",
+   "part": "observation",
+   "provider": null,
+   "status": "not_exercised"
+  },
+  {
+   "observed": true,
+   "part": "data.origin",
+   "status": "generated_sample"
+  },
+  {
+   "observed": true,
+   "part": "gate",
+   "status": "claude-authored(structural, quality_claims forbidden)"
+  },
+  {
+   "observed": true,
+   "part": "host",
+   "status": "python"
+  },
+  {
+   "observed": true,
+   "part": "issuer",
+   "status": "red"
+  },
+  {
+   "observed": true,
+   "part": "jev",
+   "status": "not_exercised(blocked: agent-core PR 28 not on main)"
+  },
+  {
+   "observed": true,
+   "part": "model",
+   "status": "agent_roleplay"
+  },
+  {
+   "observed": true,
+   "part": "product",
+   "status": "red"
+  },
+  {
+   "part": "scanner",
+   "status": "tps-1"
+  },
+  {
+   "part": "port.llm_gateway",
+   "price_source": "placeholder-rate-card",
+   "status": "roleplay-shim:replay"
+  },
+  {
+   "part": "port.registry",
+   "price_source": "n/a",
+   "status": "in-process-double"
+  },
+  {
+   "part": "port.human_issuer",
+   "price_source": "n/a",
+   "status": "simulated-local-issuer"
+  },
+  {
+   "part": "port.platform",
+   "price_source": "n/a",
+   "status": "platform-sim"
+  }
+ ],
+ "gate": {
+  "judge": "claude-gsipy",
+  "verdict": "pass"
+ },
+ "host": "python",
+ "label": "DEMO-0",
+ "mode": "replay",
+ "ports": [
+  {
+   "port": "llm_gateway",
+   "price_source": "placeholder-rate-card",
+   "provenance": "roleplay-shim:replay"
+  },
+  {
+   "port": "registry",
+   "price_source": "n/a",
+   "provenance": "in-process-double"
+  },
+  {
+   "port": "human_issuer",
+   "price_source": "n/a",
+   "provenance": "simulated-local-issuer"
+  },
+  {
+   "port": "platform",
+   "price_source": "n/a",
+   "provenance": "platform-sim"
+  }
+ ],
+ "quality_claims": "forbidden",
+ "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+ "steps": [
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "generated_sample",
+   "host": "python",
+   "id": "trigger",
+   "n": 1,
+   "receipt": {
+    "provider": "local"
+   },
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "status": "stand-in",
+   "target": "local"
+  },
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "generated_sample",
+   "host": "python",
+   "id": "signals",
+   "n": 2,
+   "receipt": {
+    "provider": "local"
+   },
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "status": "real-narrow",
+   "target": "local"
+  },
+  {
+   "actor": "pulso-scout",
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "generated_sample",
+   "host": "python",
+   "id": "scout",
+   "model": "agent_roleplay:responder-scout",
+   "n": 3,
+   "receipt": {
+    "provider": "agent_roleplay",
+    "scanner_id": "tps-1"
+   },
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "stage_output": {
+    "source": "model"
+   },
+   "status": "agent_roleplay",
+   "target": "local"
+  },
+  {
+   "actor": "pulso-verifier",
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "generated_sample",
+   "host": "python",
+   "id": "verifier",
+   "model": "agent_roleplay:responder-verifier",
+   "n": 3,
+   "receipt": {
+    "provider": "agent_roleplay",
+    "scanner_id": "tps-1"
+   },
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "stage_output": {
+    "source": "model"
+   },
+   "status": "agent_roleplay",
+   "target": "local"
+  },
+  {
+   "actor": "pulso-builder_design",
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "generated_sample",
+   "host": "python",
+   "id": "opportunity",
+   "model": "agent_roleplay:responder-builder",
+   "n": 4,
+   "receipt": {
+    "provider": "agent_roleplay",
+    "scanner_id": "tps-1"
+   },
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "stage_output": {
+    "source": "model"
+   },
+   "status": "agent_roleplay",
+   "target": "local"
+  },
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "synthetic",
+   "host": "python",
+   "id": "compile",
+   "n": 5,
+   "receipt": {
+    "provider": "claude-standin"
+   },
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "status": "stand-in",
+   "target": "local"
+  },
+  {
+   "actor": "claude-gsipy",
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "synthetic",
+   "host": "python",
+   "id": "gate",
+   "n": 6,
+   "receipt": {
+    "provider": "claude-standin"
+   },
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "status": "stand-in",
+   "target": "local"
+  },
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "synthetic",
+   "host": "python",
+   "id": "revision",
+   "n": 7,
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "status": "not_exercised",
+   "target": "local"
+  },
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": null,
+   "host": "python",
+   "id": "approval",
+   "n": 8,
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "status": "red",
+   "target": "local"
+  },
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": null,
+   "host": "python",
+   "id": "publish",
+   "n": 9,
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "status": "red",
+   "target": "local"
+  },
+  {
+   "contract_revision": "engine-run/c2-1",
+   "data_class": "synthetic",
+   "host": "python",
+   "id": "observation",
+   "n": 10,
+   "sha": "3049c59fb895d436bbb24de05f21bfc5ba4a80b2",
+   "status": "not_exercised",
+   "target": "local"
+  }
+ ],
+ "target": "local"
+}
