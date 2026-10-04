@@ -3,6 +3,7 @@
 //! This module is only the temporal kernel: it does not execute a detector,
 //! score outcomes, update memory, or prove a frozen/prequential campaign.
 
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -78,6 +79,8 @@ impl ReplayCohort {
 pub struct ReplayPlan {
     cohorts: Vec<ReplayCohort>,
     availability_profile: ReplayAvailabilityProfile,
+    protocol: ReplayProtocol,
+    schedule_digest: String,
 }
 
 impl ReplayPlan {
@@ -87,6 +90,14 @@ impl ReplayPlan {
     pub fn availability_profile(&self) -> ReplayAvailabilityProfile {
         self.availability_profile
     }
+    pub fn protocol(&self) -> ReplayProtocol {
+        self.protocol
+    }
+    /// Commits only to the canonical cases, event clocks, availability profile,
+    /// protocol and resulting cohort visibility. It is not a full run manifest.
+    pub fn schedule_digest(&self) -> &str {
+        &self.schedule_digest
+    }
 }
 
 /// Explicit clock provenance; missing ingestion timestamps are never silently
@@ -95,6 +106,12 @@ impl ReplayPlan {
 pub enum ReplayAvailabilityProfile {
     MeasuredIngestion,
     EventTimeZeroLagAssumption,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplayProtocol {
+    Frozen,
+    Prequential,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -133,6 +150,7 @@ pub fn plan_replay(
     cases: Vec<ReplayCase>,
     events: Vec<ReplayEvent>,
     availability_profile: ReplayAvailabilityProfile,
+    protocol: ReplayProtocol,
 ) -> Result<ReplayPlan, ReplayPlanError> {
     let mut cases_by_id = BTreeMap::new();
     let mut cases_by_time: BTreeMap<i64, Vec<String>> = BTreeMap::new();
@@ -192,7 +210,7 @@ pub fn plan_replay(
     // and V returned event/cohort visibility pairs, sorting, validation,
     // assignment and per-cohort canonicalization cost
     // O(C log C + E log E + E log C + V log E) time and O(C + E + V) memory.
-    for event in events {
+    for event in &events {
         let source_opened_at = cases_by_id[&event.case_id];
         let ingestion_cutoff = event.ingested_at.unwrap_or(event.event_at);
         let availability_cutoff = event.available_at.max(ingestion_cutoff).max(event.event_at);
@@ -209,18 +227,87 @@ pub fn plan_replay(
     for cohort in &mut cohorts {
         cohort.visible_event_ids.sort();
     }
+    let schedule_digest = digest_schedule(
+        &cases_by_id,
+        &events,
+        &cohorts,
+        availability_profile,
+        protocol,
+    );
 
     Ok(ReplayPlan {
         cohorts,
         availability_profile,
+        protocol,
+        schedule_digest,
     })
+}
+
+fn digest_schedule(
+    cases: &BTreeMap<String, i64>,
+    events: &[ReplayEvent],
+    cohorts: &[ReplayCohort],
+    availability_profile: ReplayAvailabilityProfile,
+    protocol: ReplayProtocol,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"pulso-replay-clock-schedule-v1\0");
+    hasher.update([match protocol {
+        ReplayProtocol::Frozen => 0,
+        ReplayProtocol::Prequential => 1,
+    }]);
+    hasher.update([match availability_profile {
+        ReplayAvailabilityProfile::MeasuredIngestion => 0,
+        ReplayAvailabilityProfile::EventTimeZeroLagAssumption => 1,
+    }]);
+    hasher.update((cases.len() as u64).to_be_bytes());
+    for (case_id, opened_at) in cases {
+        update_string(&mut hasher, case_id);
+        hasher.update(opened_at.to_be_bytes());
+    }
+    hasher.update((events.len() as u64).to_be_bytes());
+    for event in events {
+        update_string(&mut hasher, &event.id);
+        update_string(&mut hasher, &event.case_id);
+        hasher.update(event.event_at.to_be_bytes());
+        hasher.update(event.available_at.to_be_bytes());
+        match event.ingested_at {
+            Some(ingested_at) => {
+                hasher.update([1]);
+                hasher.update(ingested_at.to_be_bytes());
+            }
+            None => hasher.update([0]),
+        }
+    }
+    hasher.update((cohorts.len() as u64).to_be_bytes());
+    for cohort in cohorts {
+        hasher.update(cohort.opened_at.to_be_bytes());
+        hasher.update((cohort.case_ids.len() as u64).to_be_bytes());
+        for case_id in &cohort.case_ids {
+            update_string(&mut hasher, case_id);
+        }
+        hasher.update((cohort.visible_event_ids.len() as u64).to_be_bytes());
+        for event_id in &cohort.visible_event_ids {
+            update_string(&mut hasher, event_id);
+        }
+    }
+    format!("sha256:{:x}", hasher.finalize())
+}
+
+fn update_string(hasher: &mut Sha256, value: &str) {
+    hasher.update((value.len() as u64).to_be_bytes());
+    hasher.update(value.as_bytes());
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ReplayAvailabilityProfile as Profile, ReplayCase, ReplayEvent, plan_replay};
+    use super::{
+        ReplayAvailabilityProfile as Profile, ReplayCase, ReplayEvent, ReplayProtocol as Protocol,
+        plan_replay,
+    };
 
     const ASSUMED: Profile = Profile::EventTimeZeroLagAssumption;
+    const FROZEN: Protocol = Protocol::Frozen;
 
     fn case(id: &str, opened_at: i64) -> ReplayCase {
         ReplayCase::new(id, opened_at)
@@ -245,6 +332,7 @@ mod tests {
                 event("boundary", "prior", 10, 10),
             ],
             ASSUMED,
+            FROZEN,
         )
         .unwrap();
 
@@ -268,6 +356,7 @@ mod tests {
                 event("future-event-time", "prior", 21, 9),
             ],
             ASSUMED,
+            FROZEN,
         )
         .unwrap();
 
@@ -278,19 +367,25 @@ mod tests {
     #[test]
     fn rejects_duplicate_case_and_event_ids_and_unknown_event_cases() {
         assert_eq!(
-            plan_replay(vec![case("", 1)], vec![], ASSUMED),
+            plan_replay(vec![case("", 1)], vec![], ASSUMED, FROZEN),
             Err(super::ReplayPlanError::EmptyCaseId)
         );
         assert_eq!(
-            plan_replay(vec![case("x", 1)], vec![event("", "x", 1, 1)], ASSUMED),
+            plan_replay(
+                vec![case("x", 1)],
+                vec![event("", "x", 1, 1)],
+                ASSUMED,
+                FROZEN
+            ),
             Err(super::ReplayPlanError::EmptyEventId)
         );
-        assert!(plan_replay(vec![case("x", 1), case("x", 2)], vec![], ASSUMED).is_err());
+        assert!(plan_replay(vec![case("x", 1), case("x", 2)], vec![], ASSUMED, FROZEN).is_err());
         assert!(
             plan_replay(
                 vec![case("x", 1)],
                 vec![event("e", "x", 1, 1), event("e", "x", 1, 1)],
                 ASSUMED,
+                FROZEN,
             )
             .is_err()
         );
@@ -298,7 +393,8 @@ mod tests {
             plan_replay(
                 vec![case("x", 1)],
                 vec![event("e", "missing", 1, 1)],
-                ASSUMED
+                ASSUMED,
+                FROZEN,
             )
             .is_err()
         );
@@ -307,6 +403,7 @@ mod tests {
                 vec![case("x", 1)],
                 vec![event("missing-ingest", "x", 1, 1)],
                 Profile::MeasuredIngestion,
+                FROZEN,
             ),
             Err(super::ReplayPlanError::MissingIngestionTime(
                 "missing-ingest".into()
@@ -320,14 +417,60 @@ mod tests {
             vec![case("z", 20), case("b", 10), case("a", 10)],
             vec![event("z-event", "b", 9, 9), event("a-event", "a", 9, 9)],
             ASSUMED,
+            FROZEN,
         )
         .unwrap();
         let right = plan_replay(
             vec![case("a", 10), case("b", 10), case("z", 20)],
             vec![event("a-event", "a", 9, 9), event("z-event", "b", 9, 9)],
             ASSUMED,
+            FROZEN,
         )
         .unwrap();
         assert_eq!(left, right);
+        assert_eq!(left.schedule_digest(), right.schedule_digest());
+        assert_eq!(
+            left.schedule_digest(),
+            "sha256:c4a5a3cfd6eb652a22b15925124748096ef1c76d452cdc86e885809bbd53035b"
+        );
+        assert_eq!(left.protocol(), FROZEN);
+    }
+
+    #[test]
+    fn schedule_digest_binds_protocol_clock_profile_and_exact_temporal_inputs() {
+        let frozen = plan_replay(
+            vec![case("prior", 1), case("target", 5)],
+            vec![event("e", "prior", 2, 3)],
+            ASSUMED,
+            Protocol::Frozen,
+        )
+        .unwrap();
+        let prequential = plan_replay(
+            vec![case("prior", 1), case("target", 5)],
+            vec![event("e", "prior", 2, 3)],
+            ASSUMED,
+            Protocol::Prequential,
+        )
+        .unwrap();
+        let changed_cutoff = plan_replay(
+            vec![case("prior", 1), case("target", 6)],
+            vec![event("e", "prior", 2, 3)],
+            ASSUMED,
+            Protocol::Frozen,
+        )
+        .unwrap();
+        let measured = plan_replay(
+            vec![case("prior", 1), case("target", 5)],
+            vec![ReplayEvent::new("e", "prior", 2, 3, Some(4))],
+            Profile::MeasuredIngestion,
+            Protocol::Frozen,
+        )
+        .unwrap();
+
+        assert!(frozen.schedule_digest().starts_with("sha256:"));
+        assert_ne!(frozen.schedule_digest(), prequential.schedule_digest());
+        assert_ne!(frozen.schedule_digest(), changed_cutoff.schedule_digest());
+        assert_ne!(frozen.schedule_digest(), measured.schedule_digest());
+        assert_eq!(prequential.protocol(), Protocol::Prequential);
     }
 }
