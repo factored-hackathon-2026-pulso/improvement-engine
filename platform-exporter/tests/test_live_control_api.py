@@ -233,3 +233,39 @@ def test_late_row_inside_the_fast_stream_is_acked_and_leaves_no_open_gap(server,
         assert ex.state.open_backfills() == []
     finally:
         ex.close(); client.close(); db.close()
+
+
+def test_exporter_withheld_unknown_type_row_keeps_continuity_with_the_real_ingest(server, tmp_path):
+    path = tmp_path / "unk.db"
+    db = make_db(path)
+    add_event(db, 1, "case.opened")
+    add_event(db, 2, "team.created", payload={"secret_marker": "DO-NOT-FORWARD"})
+    add_event(db, 3, "case.assigned")
+    ex, client, cfg = _make(server, tmp_path, "unk", path, instance="plat-unk")
+    try:
+        rep = ex.poll_once()
+        assert not rep.stopped and not rep.errors, rep
+        assert rep.unknown_event_types == {"team.created": 1}
+        assert _cursor(server, client, cfg)["cursor"] == "s.3"
+    finally:
+        ex.close(); client.close(); db.close()
+
+
+def test_faulty_sim_run_is_acked_with_unknown_types_quarantined_and_gap_declared(server, tmp_path):
+    path = tmp_path / "simf.db"
+    sim = PlatformLiveSim(seed=7, path=str(path))
+    sim.generate(n_cases=60, faults=True)
+    sim.conn.commit()
+    ex, client, cfg = _make(server, tmp_path, "simf", path, instance="plat-sim-faults", window_seconds=600)
+    try:
+        rep = ex.poll_once()
+        assert not rep.errors and not rep.stopped, rep
+        gap = next(f for f in sim.faults if f["kind"] == "sequence_gap")
+        assert (gap["after"] + 1, gap["after"] + gap["size"]) in rep.gaps  # declared by the exporter, ACKed by the server
+        assert rep.unknown_event_types["case.escalated"] == 1
+        assert ex.state.quarantined()  # release.*/team.* style types never reach the server as domain events
+        assert _cursor(server, client, cfg)["cursor"] is not None
+    finally:
+        ex.close(); client.close(); sim.conn.close()
+
+

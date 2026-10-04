@@ -205,6 +205,24 @@ class Exporter:
         start, end = self._window(ev.event_time)
         return ev.ingested_at > end + timedelta(seconds=self.cfg.allowed_lateness_seconds), start, end
 
+    def _stub(self, ev: RawEvent) -> dict[str, Any]:
+        """Payload-free continuity marker of a row the exporter withholds (type not admitted). The real ingest keeps
+        findings out of source-sequence continuity and quarantines the type itself, so the sequence slot stays covered
+        without a hole; nothing but the type, id, sequence and times leaves."""
+        assert ev.event_time is not None and ev.ingested_at is not None
+        se = {**({} if self.cfg.legacy_prefix else {"kind": "domain_event"}), **self._base(ev.event_type),
+              "event_id": ev.event_id,
+              "event_time": fmt_ts(ev.event_time), "ingested_at": fmt_ts(ev.ingested_at),
+              "available_at": fmt_ts(ev.ingested_at), "case_id": None, "entity": None, "entity_id": None,
+              "actor_role": None, "actor_ref": None, "payload": {}, "redacted_fields": [],
+              "evidence_kind": "observed", "population_excluded": False, "late": False}
+        return self._obs(ev.event_id, se, ev.sequence, None, observed_at=fmt_ts(ev.ingested_at))
+
+    def _withheld_hole(self, seq: int) -> dict[str, Any]:
+        return self._finding(f"gap_suspected:{seq}-{seq}", "gap_suspected", None, {
+            "from_sequence": seq, "to_sequence": seq, "backfill_requested": False, "verify_with_owner": False,
+            "reason": "row_withheld"})
+
     def _is_deferred_late(self, ev: RawEvent) -> bool:
         return ev.problem is None and ev.event_type in self.known_types and self._is_late(ev)[0]
 
@@ -218,13 +236,14 @@ class Exporter:
             if ev.problem:
                 bump["bad_row"] = bump.get("bad_row", 0) + 1
                 return [self._finding(f"bad_row:{ev.event_id}", "bad_row", ev.sequence,
-                                      {"event_id": ev.event_id, "reason": reason, "sequence": ev.sequence})]
+                                      {"event_id": ev.event_id, "reason": reason, "sequence": ev.sequence}),
+                        self._withheld_hole(ev.sequence)]
             if ev.event_type in DENIED_EVENT_TYPES:
                 bump["denied_event_type"] = bump.get("denied_event_type", 0) + 1
                 info["denied"][ev.event_type] = info["denied"].get(ev.event_type, 0) + 1
                 return [self._finding(f"denied_event_type:{ev.event_id}", "denied_event_type", ev.sequence, {
                     "event_type": ev.event_type, "event_id": ev.event_id, "sequence": ev.sequence,
-                    "quarantined": True, "payload_forwarded": False})]
+                    "quarantined": True, "payload_forwarded": False}), self._stub(ev)]
             status = "planned" if ev.event_type.startswith(PLANNED_PREFIXES) else "unknown"
             bump["unknown_event_type"] = bump.get("unknown_event_type", 0) + 1
             info["unknown"][ev.event_type] = info["unknown"].get(ev.event_type, 0) + 1
@@ -232,7 +251,7 @@ class Exporter:
                 "event_type": ev.event_type, "catalog_status": status, "event_id": ev.event_id,
                 "sequence": ev.sequence,
                 "event_time": fmt_ts(ev.event_time), "ingested_at": fmt_ts(ev.ingested_at),
-                "quarantined": True, "payload_forwarded": False})]
+                "quarantined": True, "payload_forwarded": False}), self._stub(ev)]
         late, wstart, wend = self._is_late(ev)
         redacted: list[str] = []
         sim = self._is_simulator(ev)
