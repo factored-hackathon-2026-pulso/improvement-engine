@@ -75,9 +75,8 @@ Findings:
 5. (Low) `PlatformTurnBody::from_source` is public and unvalidated (no size cap).
 6. (Info) `PlatformSourcePolicyError<E>` has a single variant; `positive_count_plumbing_v1`
    trigger is explicitly non-calibrated; hosted CI result for #93 was not locally inferred.
-7. (Info) Only 1 `compile_fail` doctest sits in `platform_source_policy.rs` and none in
-   `paired_scenario.rs`; the sealed `ArmBinding`/`PairPlan` guarantees have no compile-time
-   negative tests.
+7. (Info) `compile_fail` guards: 1 in `platform_source_policy.rs`, 2 in `paired_scenario.rs`;
+   `ArmBinding` forgeability (finding 1) has no negative test.
 
 Verdict: no blocking defect found; findings 1 and 2 should be carried into DGATE and DPLAT
 acceptance criteria. Codex owns the code; these are findings only.
