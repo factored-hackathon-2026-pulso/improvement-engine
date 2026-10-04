@@ -38,8 +38,44 @@ def _ref(metric, window, ghash):
     return "ev_" + hashlib.sha256(f"{metric}|{window}|{ghash}".encode()).hexdigest()[:16]
 
 
-def build_lab(path, cases, salt, k=K, min_cell=0):
+def _relations(agg, window_parts, group_parts):
+    """Additive relations among published cells: [(total_cell, [part_cells])], from the declared overlaps."""
+    rels = []
+    for total, parts in (window_parts or {}).items():
+        for g in sorted({g for g, _w in agg}):
+            cells = [(g, total)] + [(g, p) for p in parts]
+            if all(c in agg for c in cells):
+                rels.append(cells)
+    for total, parts in (group_parts or {}).items():
+        for w in sorted({w for _g, w in agg}):
+            cells = [(total, w)] + [(p, w) for p in parts]
+            if all(c in agg for c in cells):
+                rels.append(cells)
+    return rels
+
+
+def complementary_suppression(agg, hidden, window_parts=None, group_parts=None):
+    """Grow `hidden` until no relation has exactly one hidden cell (that cell would be total minus the others).
+    Hides the smallest published cell of the relation (ties by key) and iterates to a fixed point. Returns the extra cells."""
+    hidden, extra = set(hidden), set()
+    rels = _relations(agg, window_parts, group_parts)
+    changed = True
+    while changed:
+        changed = False
+        for cells in rels:
+            gone = [c for c in cells if c in hidden]
+            if len(gone) == 1:
+                pick = min((c for c in cells if c not in hidden), key=lambda c: (agg[c][1], c))
+                hidden.add(pick)
+                extra.add(pick)
+                changed = True
+    return extra
+
+
+def build_lab(path, cases, salt, k=K, min_cell=0, window_parts=None, group_parts=None):
     """cases: iterable of (case_id, group, window, outcome). case_id is read and discarded.
+    window_parts / group_parts: declared overlaps {total: [parts]} among published windows / groups; a hidden cell
+    that a published total minus its sibling cells would reveal makes another cell of that relation hidden too.
     min_cell: also drop a group whose numerator or complement is below it (real data passes K; the rate would expose it)."""
     if not isinstance(salt, bytes) or len(salt) < 16:
         raise ValueError("salt must be at least 16 bytes")
@@ -55,8 +91,10 @@ def build_lab(path, cases, salt, k=K, min_cell=0):
     con.execute("create table lab_rows (evidence_ref text primary key, metric_id text, window_id text,"
                 " g_group text, numerator integer, count integer, digest text)")
     con.execute("create table lab_meta (key text primary key, value text)")
+    primary = {c for c, (num, cnt) in agg.items() if cnt < k or num < min_cell or cnt - num < min_cell}
+    extra = complementary_suppression(agg, primary, window_parts, group_parts)
     for (group, window), (num, cnt) in sorted(agg.items()):
-        if cnt < k or num < min_cell or cnt - num < min_cell:  # small cell in either side of the rate is a disclosure
+        if (group, window) in primary or (group, window) in extra:  # small cell in either side of the rate is a disclosure
             continue
         gh = group_hash(salt, GROUP_FIELD, group)
         ref = _ref(METRIC, window, gh)
