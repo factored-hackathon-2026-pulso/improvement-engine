@@ -675,6 +675,7 @@ dependencies = [
  "improvement-engine-core",
  "improvement-engine-source-adapters",
  "parquet",
+ "serde",
  "serde_json",
  "tempfile",
 ]

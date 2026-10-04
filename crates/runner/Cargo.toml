@@ -14,6 +14,7 @@ path = "src/main.rs"
 improvement-engine-core = { path = "../core", features = ["local-simulation"] }
 improvement_engine_source_adapters = { package = "improvement-engine-source-adapters", path = "../source-adapters" }
 serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 arrow-array = "57.0.0"

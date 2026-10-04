@@ -168,6 +168,14 @@ repairing the malformed/duplicated source privacy fixture. See journal 0055.
   local CI and actual-source smoke are pending. The resolver receipt is opaque,
   resolver-minted, and bound to the exact evidence packet, so callers cannot
   reconstruct it from public route fields. See journal 0065.
+  A typed runner preparation status now follows E0 proposal assembly. It binds
+  candidate metric/signal/summary commitments to the exact run, source
+  snapshot, tenant and cutoff; this evidence-binding status is separate from
+  builder readiness. It remains `dependency_blocked` until genuine U20 plan
+  and U20-E E0 safety inputs are composed, calls no provider, and is not a
+  proposal or Core artifact. No-candidate output is `not_applicable`; the
+  OriginalBank profile receives no E0 preparation event. See
+  `docs/data/e0-builder-input-preparation.md` and journal 0066.
   The CLI additionally supports opt-in `--progress-jsonl` diagnostics on
   stderr: flushed phase-start/completion/skip/failure records with monotonic
   elapsed milliseconds and no source values, identifiers, paths, proposal
@@ -490,3 +498,31 @@ Changes enter this branch only after their own RED/GREEN evidence and an
 independent adversarial review. The branch is not evidence of release or merge
 readiness. See `docs/gaps/OPEN_GAPS.md` for dependencies that require a human
 owner; no such gap is currently recorded.
+
+## Current-main Codex consolidation (2026-10-04)
+
+After PR #83/#84, the current-main integration adds the E0 builder-input
+preparation receipt and P1 platform-signal explanation read model. The E0
+receipt binds the candidate to run/snapshot/tenant/cutoff evidence but remains
+`dependency_blocked` until trusted U20/U20-E inputs are composed; it does not
+invoke a provider or create an Agent Core proposal. P1 exposes run-grain
+evidence and explicit eligibility/causality limits without customer IDs or
+model-generated claims.
+
+The actual E0 sample was rerun on this integrated current-main tree at
+`output/e0-current-main-p1-2026-10-04/run_16760_1791072727592547400`. It
+completed 200 discovery cases, with 154/200 recurring-query evidence and
+1,433/1,539 selected holdout recurrence marked descriptive-only. It persisted
+one candidate; builder preparation is evidence-bound but blocked, the plan is
+pending-review/non-executable, and the formal route is `do_nothing`. The event
+timeline contains the preparation, mechanism-resolution, and investigation
+plan stages. This is not native Core invocation, proposal/evaluation, causal
+resolution, or lift.
+
+Local preflight passed on the integrated branch: Rust format, all-target
+Clippy (`-D warnings`), workspace unit/integration/doc tests, Python contracts
+(10 passed, one Podman-dependent skip), fixture validation, and both Pester
+suites (20/20 and 5/5). One destructive Postgres test remains intentionally
+ignored because an isolated local Podman/Postgres database was unavailable.
+An independent adversarial review found no blockers; its non-blocking assembly
+validation precondition is now documented at the code boundary.

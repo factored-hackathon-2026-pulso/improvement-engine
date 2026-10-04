@@ -512,6 +512,42 @@ impl PlatformScoutCandidate {
         &self.provenance_commitment
     }
 
+    /// Builds a deterministic read model for an insight or debug surface. It
+    /// preserves the measured counts and provenance without interpreting the
+    /// model's opaque output digest as a finding.
+    pub fn explanation(&self) -> PlatformSignalExplanation {
+        let rate_basis_points = percentage_basis_points(self.numerator, self.denominator);
+        let layer = layer_label(self.layer);
+        PlatformSignalExplanation {
+            metric_id: self.metric_id.clone(),
+            metric_version: self.metric_version,
+            layer: layer.to_owned(),
+            population_ref: self.population_ref.clone(),
+            numerator: self.numerator,
+            denominator: self.denominator,
+            missing: self.missing,
+            rate_basis_points,
+            window_start_ms: self.window_start_ms,
+            window_end_ms: self.window_end_ms,
+            received_as_of_ms: self.received_as_of_ms,
+            source_id: self.source_id.clone(),
+            contract_ref: self.contract_ref.clone(),
+            signal_digest: self.platform_signal_digest.clone(),
+            coverage_evidence_digest: self.coverage_evidence_digest.clone(),
+            mapping_resolution_digest: self.mapping_resolution_digest.clone(),
+            eligibility_boundary: self.eligibility_boundary,
+            statement: format!(
+                "Observed at least one handoff mapped to the {layer} layer in {} of {} eligible attention-platform source runs ({}.{:02}%).",
+                self.numerator,
+                self.denominator,
+                rate_basis_points / 100,
+                rate_basis_points % 100,
+            ),
+            coverage_note: "A measured rate requires complete source coverage. `missing=0` marks this coverage-qualified measurement; it is not a count of failed or missing handoffs.",
+            limitation: "This is a descriptive platform measurement; it does not establish cause, customer outcome, or business value.",
+        }
+    }
+
     pub fn has_valid_digest(&self) -> bool {
         self.provenance_commitment == platform_candidate_provenance_digest(self)
             && self.digest == platform_candidate_digest(self)
@@ -692,6 +728,114 @@ impl AutonomousScout {
     }
 }
 
+/// Serializable, read-only evidence explanation for a platform insight/debug
+/// surface. It retains measurements and provenance together and carries no
+/// customer content or opaque model result text.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PlatformSignalExplanation {
+    metric_id: String,
+    metric_version: u16,
+    layer: String,
+    population_ref: String,
+    numerator: u64,
+    denominator: u64,
+    missing: u64,
+    rate_basis_points: u16,
+    window_start_ms: i64,
+    window_end_ms: i64,
+    received_as_of_ms: i64,
+    source_id: String,
+    contract_ref: String,
+    signal_digest: String,
+    coverage_evidence_digest: String,
+    mapping_resolution_digest: String,
+    eligibility_boundary: &'static str,
+    statement: String,
+    coverage_note: &'static str,
+    limitation: &'static str,
+}
+
+impl PlatformSignalExplanation {
+    pub fn metric_id(&self) -> &str {
+        &self.metric_id
+    }
+    pub fn metric_version(&self) -> u16 {
+        self.metric_version
+    }
+    pub fn layer_label(&self) -> &str {
+        &self.layer
+    }
+    pub fn population_ref(&self) -> &str {
+        &self.population_ref
+    }
+    pub fn numerator(&self) -> u64 {
+        self.numerator
+    }
+    pub fn denominator(&self) -> u64 {
+        self.denominator
+    }
+    pub fn missing(&self) -> u64 {
+        self.missing
+    }
+    /// Percentage in hundredths of one percent; 2_500 means 25.00%.
+    pub fn rate_basis_points(&self) -> u16 {
+        self.rate_basis_points
+    }
+    pub fn window_start_ms(&self) -> i64 {
+        self.window_start_ms
+    }
+    pub fn window_end_ms(&self) -> i64 {
+        self.window_end_ms
+    }
+    pub fn received_as_of_ms(&self) -> i64 {
+        self.received_as_of_ms
+    }
+    pub fn source_id(&self) -> &str {
+        &self.source_id
+    }
+    pub fn contract_ref(&self) -> &str {
+        &self.contract_ref
+    }
+    pub fn signal_digest(&self) -> &str {
+        &self.signal_digest
+    }
+    pub fn coverage_evidence_digest(&self) -> &str {
+        &self.coverage_evidence_digest
+    }
+    pub fn mapping_resolution_digest(&self) -> &str {
+        &self.mapping_resolution_digest
+    }
+    pub fn eligibility_boundary(&self) -> &'static str {
+        self.eligibility_boundary
+    }
+    pub fn statement(&self) -> &str {
+        &self.statement
+    }
+    pub fn coverage_note(&self) -> &'static str {
+        self.coverage_note
+    }
+    pub fn limitation(&self) -> &'static str {
+        self.limitation
+    }
+}
+
+fn percentage_basis_points(numerator: u64, denominator: u64) -> u16 {
+    debug_assert!(denominator > 0);
+    (((u128::from(numerator) * 10_000) + u128::from(denominator) / 2) / u128::from(denominator))
+        as u16
+}
+
+fn layer_label(layer: Layer) -> &'static str {
+    match layer {
+        Layer::Classifier => "classifier",
+        Layer::Tree => "tree",
+        Layer::Ai1 => "ai1",
+        Layer::Ai2 => "ai2",
+        Layer::Human => "human",
+        Layer::Unknown => "unknown",
+    }
+}
+
 fn platform_candidate_provenance_digest(candidate: &PlatformScoutCandidate) -> String {
     let bytes = serde_json::to_vec(&PlatformScoutCandidateProvenance {
         eligibility_boundary: candidate.eligibility_boundary,
@@ -847,5 +991,24 @@ mod tests {
 
         assert!(matches!(result, Err(PlatformScoutError::InvalidInput)));
         assert_eq!(broker.calls, 0);
+    }
+}
+
+#[cfg(test)]
+mod explanation_percentage_tests {
+    use super::percentage_basis_points;
+
+    #[test]
+    fn rounds_fractional_hundredths_and_handles_percentage_boundaries() {
+        assert_eq!(percentage_basis_points(0, 3), 0);
+        assert_eq!(percentage_basis_points(1, 3), 3_333);
+        assert_eq!(percentage_basis_points(2, 3), 6_667);
+        assert_eq!(percentage_basis_points(3, 3), 10_000);
+    }
+
+    #[test]
+    fn wide_intermediate_preserves_percentage_for_large_counts() {
+        assert_eq!(percentage_basis_points(u64::MAX, u64::MAX), 10_000);
+        assert_eq!(percentage_basis_points(u64::MAX / 2, u64::MAX), 5_000);
     }
 }

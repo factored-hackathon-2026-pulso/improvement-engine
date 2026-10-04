@@ -207,6 +207,59 @@ fn measured_u30_evidence_yields_only_a_bounded_platform_scout_candidate() {
     assert_eq!(candidate.core_run_id(), "core-run-1");
     assert_eq!(candidate.metric_id(), ATTENTION_RUN_HANDOFF_RATE_METRIC_ID);
     assert_eq!((candidate.numerator(), candidate.denominator()), (1, 4));
+    let explanation = candidate.explanation();
+    assert_eq!(explanation.layer_label(), "tree");
+    assert_eq!(explanation.numerator(), 1);
+    assert_eq!(explanation.denominator(), 4);
+    assert_eq!(explanation.missing(), 0);
+    assert_eq!(explanation.rate_basis_points(), 2_500);
+    assert_eq!(explanation.window_start_ms(), WINDOW_START);
+    assert_eq!(explanation.window_end_ms(), WINDOW_END);
+    assert_eq!(explanation.received_as_of_ms(), AS_OF);
+    assert_eq!(
+        explanation.metric_id(),
+        ATTENTION_RUN_HANDOFF_RATE_METRIC_ID
+    );
+    assert_eq!(
+        explanation.population_ref(),
+        ATTENTION_SOURCE_RUNS_POPULATION_REF
+    );
+    assert_eq!(explanation.source_id(), "attention-platform");
+    assert_eq!(explanation.contract_ref(), "contract:attention-v1");
+    assert_eq!(
+        explanation.coverage_evidence_digest(),
+        input.coverage_evidence_digest()
+    );
+    assert_eq!(
+        explanation.mapping_resolution_digest(),
+        input.mapping_resolution_digest()
+    );
+    assert_eq!(
+        explanation.signal_digest(),
+        candidate.platform_signal_digest()
+    );
+    assert_eq!(
+        explanation.eligibility_boundary(),
+        candidate.eligibility_boundary()
+    );
+    assert_eq!(
+        explanation.statement(),
+        "Observed at least one handoff mapped to the tree layer in 1 of 4 eligible attention-platform source runs (25.00%)."
+    );
+    assert_eq!(
+        explanation.coverage_note(),
+        "A measured rate requires complete source coverage. `missing=0` marks this coverage-qualified measurement; it is not a count of failed or missing handoffs."
+    );
+    assert_eq!(
+        explanation.limitation(),
+        "This is a descriptive platform measurement; it does not establish cause, customer outcome, or business value."
+    );
+    let explanation_json = serde_json::to_value(&explanation).unwrap();
+    assert!(explanation_json.get("numerator").is_some());
+    assert!(explanation_json.get("denominator").is_some());
+    assert!(explanation_json.get("coverage_evidence_digest").is_some());
+    assert!(explanation_json.get("eligibility_boundary").is_some());
+    assert!(explanation_json.get("customer_id").is_none());
     assert_eq!(candidate.platform_signal_digest(), input.signal_digest());
     assert_eq!(candidate.projection_digest(), input.projection_digest());
     assert_eq!(candidate.batch_digest(), input.batch_digest());
