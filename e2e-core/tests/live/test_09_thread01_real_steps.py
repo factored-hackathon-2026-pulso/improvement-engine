@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -85,6 +87,8 @@ def test_thread01_steps_5_6_8_9_are_real_narrow_against_core(stack: Any, authori
     if res["gate_verdict"] != "pass":  # honest: the override is labelled, the report is clean under G1 and claims no quality
         assert [o["verdict"] for o in rep["overrides"]] == [res["gate_verdict"]] and rep["quality_claims"] == "forbidden"
         assert steps[8]["detail"]["override"]["by"] == "human" and any(d["part"] == "gate.override" for d in rep["doubles"])
+    # tests/unit is on sys.path only when unit tests were collected in the same session; live-only runs (run.ps1) need it explicit
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "unit"))
     from test_e2e_thread_01 import ER
     assert ER.check(rep) == []
     effect(f"thread01_window_{window}_gate", {"gate_verdict": res["gate_verdict"], "gates": res["ctx"]["gate"]["gates"],

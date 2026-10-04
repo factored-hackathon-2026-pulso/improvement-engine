@@ -1,0 +1,76 @@
+{
+  "expected_reason": "release_settings_not_allowed",
+  "negative": "release_settings",
+  "provenance": {
+    "command": "e2e-core/run.ps1 -BaseImage localhost/pulso-core-runtime:c814c2b-920f5e3 -Namespace claude-e2e-bknl -Keep (fresh stack), then pytest tests/live/test_10_bknl_denied_kinds.py with BKNL_RECORD_DIR",
+    "endpoint": "POST /internal/v1/core-authoring/dry-run (bridge, purpose authoring_dry_run)",
+    "image": "localhost/pulso-core-runtime:c814c2b-920f5e3",
+    "recorded_utc": "2026-10-04",
+    "redaction": "service JWT and headers are not recorded; tenant and agent ids are the synthetic e2e ones"
+  },
+  "registry_after": {
+    "aliases": {
+      "prod": "rel-aee75c258fb3b722",
+      "staging": "rel-253b52903d377aae"
+    },
+    "draft_writes": 11,
+    "proposals": 4,
+    "releases": [
+      "rel-166ab3e82a890f42",
+      "rel-1cddd55d1fe8f19f",
+      "rel-253b52903d377aae",
+      "rel-5f152bbf73ea31b4",
+      "rel-aee75c258fb3b722",
+      "rel-bf3f06148962dabb",
+      "rel-db71ae5ed04c6131",
+      "rel-e26df0070f6be82f"
+    ]
+  },
+  "registry_before": {
+    "aliases": {
+      "prod": "rel-aee75c258fb3b722",
+      "staging": "rel-253b52903d377aae"
+    },
+    "draft_writes": 11,
+    "proposals": 4,
+    "releases": [
+      "rel-166ab3e82a890f42",
+      "rel-1cddd55d1fe8f19f",
+      "rel-253b52903d377aae",
+      "rel-5f152bbf73ea31b4",
+      "rel-aee75c258fb3b722",
+      "rel-bf3f06148962dabb",
+      "rel-db71ae5ed04c6131",
+      "rel-e26df0070f6be82f"
+    ]
+  },
+  "request": {
+    "agent_id": "atencion-tarea",
+    "base_release_id": "rel-aee75c258fb3b722",
+    "changes": [
+      {
+        "content": {
+          "interrupts": []
+        },
+        "docs": {
+          "changelog": "thread01",
+          "description": "thread01 change",
+          "rationale": "recorded synthetic opportunity"
+        },
+        "kind": "release_settings"
+      }
+    ],
+    "schema_version": "1",
+    "tenant_id": "tenant-local"
+  },
+  "response": {
+    "body": {
+      "code": "pulso:release_settings_not_allowed",
+      "details": {},
+      "retryable": false,
+      "schema_version": "1",
+      "trace_id": "0dc3dd5400f1456b90efeb73f04870b0"
+    },
+    "status": 422
+  }
+}
