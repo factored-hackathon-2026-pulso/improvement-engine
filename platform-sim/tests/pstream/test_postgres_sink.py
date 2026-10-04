@@ -120,3 +120,21 @@ def test_overwrite_refuses_when_foreign_rows_survive_reset(monkeypatch, capsys):
     assert rc == 2
     assert not any("INSERT" in sql for sql, _ in conn.log)
     assert "s3cr3t" not in capsys.readouterr().err
+
+
+def test_ensure_schema_issues_no_ddl_when_tables_exist(monkeypatch):
+    """Found live: the loader role has no CREATE on the database/schema, and CREATE ... IF NOT EXISTS still checks
+    that privilege, so provisioned (db/sql) targets must be left alone."""
+
+    class ExistsCur(FakeCur):
+        def fetchone(self):
+            return ("product.event_log",)  # to_regclass() found it
+
+    class ExistsConn(FakeConn):
+        def cursor(self):
+            return ExistsCur(self.log)
+
+    conn = ExistsConn()
+    s, _ = sink(monkeypatch, conn)
+    s.ensure_schema()
+    assert not any(sql.lstrip().upper().startswith("CREATE") for sql, _ in conn.log)
