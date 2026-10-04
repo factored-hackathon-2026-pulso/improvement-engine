@@ -1,7 +1,10 @@
 //! Typed operations over the K1 transport: one method per `/internal/v1` operation (11 routes).
 use crate::canon::CanonError;
 use crate::client::{CallError, CoreClient, Response};
-use crate::dto::{ArmReport, ArmRequest, DecodeError, TaskInvocation, TaskReceipt, Version};
+use crate::dto::{
+    Admission, AdmissionOutcome, AdmissionRequest, Alias, AliasState, ArmReport, ArmRequest, CredentialIssue, CredentialRequest,
+    DecodeError, DryRunRequest, DryRunResult, TaskInvocation, TaskReceipt, Version, Violation,
+};
 use crate::errors::Disposition;
 use crate::routes;
 use serde_json::Value;
@@ -19,6 +22,8 @@ pub enum OpError {
     Invalid(String),
     /// The bridge answered something that contradicts the contract (wrong binding, digest not bound to our request).
     Contract(String),
+    /// A dry-run answered `valid: false` or with violations: HTTP 200 but NOT success.
+    DryRunRefused(Vec<Violation>),
 }
 
 impl OpError {
@@ -38,6 +43,7 @@ impl fmt::Display for OpError {
             OpError::Canon(c) => write!(f, "{c}"),
             OpError::Invalid(s) => write!(f, "invalid request: {s}"),
             OpError::Contract(s) => write!(f, "contract violation: {s}"),
+            OpError::DryRunRefused(v) => write!(f, "dry-run refused: {} violation(s): {}", v.len(), v.iter().map(|x| format!("{}: {}", x.rule, x.message)).collect::<Vec<_>>().join("; ")),
         }
     }
 }
@@ -143,5 +149,80 @@ impl CoreClient {
     pub fn read_arm_by_key(&self, tenant: &str, job_id: Option<&str>, key: &str) -> Result<ArmReport, OpError> {
         let r = self.op(&routes::READ_ARM_BY_KEY, tenant, job_id, &[key], None, None, self.attempts())?;
         Ok(ArmReport::from_json(&r.body)?)
+    }
+
+    /// `POST /evaluation/admissions`. 201 = first admission, 200 = identical replay (same derived ref). The bridge
+    /// derives `evaluation_context_ref` from the JWT `job_id` (`job_id` here); the answer must carry that ref.
+    pub fn admit_evaluation(&self, tenant: &str, job_id: &str, req: &AdmissionRequest) -> Result<AdmissionOutcome, OpError> {
+        req.validate().map_err(OpError::Invalid)?;
+        let derived = req.derived_context_ref(tenant, job_id)?;
+        let body = req.to_json();
+        let r = self.op(&routes::ADMIT_EVALUATION, tenant, Some(job_id), &[], Some(&body), None, self.attempts())?;
+        let admission = Admission::from_json(&r.body)?;
+        // Golden placeholders (`<...>`) can never come from a real bridge.
+        if !admission.evaluation_context_ref.starts_with('<') && admission.evaluation_context_ref != derived {
+            return Err(OpError::Contract(format!("evaluation_context_ref {} is not the derived {derived}", admission.evaluation_context_ref)));
+        }
+        Ok(AdmissionOutcome { admission, created: r.status == 201 })
+    }
+
+    /// `GET /core-state/aliases/{agent_id}/{alias}`.
+    pub fn read_alias(&self, tenant: &str, job_id: Option<&str>, agent_id: &str, alias: Alias) -> Result<AliasState, OpError> {
+        let r = self.op(&routes::READ_ALIAS, tenant, job_id, &[agent_id, alias.as_str()], None, None, self.attempts())?;
+        let st = AliasState::from_json(&r.body)?;
+        if st.agent_id != agent_id || st.alias != alias {
+            return Err(OpError::Contract(format!("alias answer is for {}/{}, asked {agent_id}/{}", st.agent_id, st.alias.as_str(), alias.as_str())));
+        }
+        Ok(st)
+    }
+
+    /// `POST /core-authoring/dry-run` WITHOUT acceptance checks: decodes any 200 answer, including `valid: false`.
+    /// Prefer `dry_run`.
+    pub fn dry_run_raw(&self, job_id: &str, req: &DryRunRequest) -> Result<DryRunResult, OpError> {
+        self.dry_run_as_tenant(&req.tenant_id, job_id, req)
+    }
+
+    /// Like `dry_run_raw` but with an explicit JWT tenant (diagnostics: provokes `pulso:tenant_mismatch`).
+    pub fn dry_run_as_tenant(&self, claim_tenant: &str, job_id: &str, req: &DryRunRequest) -> Result<DryRunResult, OpError> {
+        req.validate().map_err(OpError::Invalid)?;
+        let body = req.to_json();
+        let r = self.op(&routes::AUTHORING_DRY_RUN, claim_tenant, Some(job_id), &[], Some(&body), None, self.attempts())?;
+        Ok(DryRunResult::from_json(&r.body)?)
+    }
+
+    /// `POST /core-authoring/dry-run`, strict. `Ok` guarantees: `valid`, no violations, no proposal created, the
+    /// answer's `request_digest` is the digest of the body we sent, and `candidate_hash` is bare lowercase hex-64
+    /// (a `sha256:` prefix is stripped). `valid: false` is `OpError::DryRunRefused`, never success.
+    pub fn dry_run(&self, job_id: &str, req: &DryRunRequest) -> Result<DryRunResult, OpError> {
+        let mut res = self.dry_run_raw(job_id, req)?;
+        if res.valid != Some(true) || !res.violations.is_empty() {
+            return Err(OpError::DryRunRefused(res.violations));
+        }
+        let ours = crate::canon::request_digest(&req.to_json())?;
+        if res.request_digest.as_deref() != Some(ours.as_str()) {
+            return Err(OpError::Contract(format!("request_digest {:?} does not match the request sent ({ours})", res.request_digest)));
+        }
+        if res.proposal_created != Some(false) {
+            return Err(OpError::Contract("proposal_created != false (a dry-run must write nothing)".into()));
+        }
+        let h = res.candidate_hash.as_deref().map(|h| h.strip_prefix("sha256:").unwrap_or(h).to_string());
+        match h {
+            Some(h) if h.len() == 64 && h.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) => res.candidate_hash = Some(h),
+            other => return Err(OpError::Contract(format!("valid answer without a well-formed candidate_hash ({other:?})"))),
+        }
+        Ok(res)
+    }
+
+    /// `POST /core-credentials/issue`. Never retried: a repeat would mint a second credential.
+    pub fn issue_credential(&self, job_id: &str, req: &CredentialRequest) -> Result<CredentialIssue, OpError> {
+        self.issue_credential_as_tenant(&req.tenant_id, job_id, req)
+    }
+
+    /// Like `issue_credential` but with an explicit JWT tenant (diagnostics: provokes `pulso:tenant_mismatch`).
+    pub fn issue_credential_as_tenant(&self, claim_tenant: &str, job_id: &str, req: &CredentialRequest) -> Result<CredentialIssue, OpError> {
+        req.validate().map_err(OpError::Invalid)?;
+        let body = req.to_json();
+        let r = self.op(&routes::ISSUE_CREDENTIAL, claim_tenant, Some(job_id), &[], Some(&body), None, 1)?;
+        Ok(CredentialIssue::from_json(&r.body)?)
     }
 }

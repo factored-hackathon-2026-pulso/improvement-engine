@@ -41,10 +41,7 @@ fn first_admission_is_201_and_a_replay_is_200_with_the_same_ref() {
     let g = GoldenCore::play(&[("writer_evaluation", "admission_created"), ("writer_evaluation", "admission_replay")]);
     let c = client(&g.addr);
     let first = c.admit_evaluation("t1", JOB, &adm()).unwrap();
-    // a retry recomputes the deadline: it is not identity, so the request digest is unchanged
-    let mut later = adm();
-    later.deadline = "2031-06-30T12:00:00Z".into();
-    let replay = c.admit_evaluation("t1", JOB, &later).unwrap();
+    let replay = c.admit_evaluation("t1", JOB, &adm()).unwrap();
     g.finish();
     assert!(first.created && !replay.created);
     assert_eq!(first.admission.state, AdmissionState::Admitted);
@@ -53,7 +50,6 @@ fn first_admission_is_201_and_a_replay_is_200_with_the_same_ref() {
     assert!(reqs[0].headers.get("idempotency-key").is_none(), "the derived ref identifies an admission; the header is optional");
     let (b0, b1): (serde_json::Value, serde_json::Value) = (serde_json::from_slice(&reqs[0].body).unwrap(), serde_json::from_slice(&reqs[1].body).unwrap());
     assert_eq!(b0["request_digest"], b1["request_digest"]);
-    assert_ne!(b0["deadline"], b1["deadline"]);
     assert!(b0.get("evaluation_context_ref").is_none(), "deprecated: the bridge derives it");
 }
 
@@ -71,6 +67,15 @@ fn request_digest_is_jcs_of_the_body_without_deadline() {
     let mut other = adm();
     other.budget_ref = "bud-2".into();
     assert_ne!(other.to_json()["request_digest"], body["request_digest"]);
+}
+
+#[test]
+fn the_deadline_is_not_identity() {
+    // a retry recomputes the deadline: the request digest must not move
+    let mut later = adm();
+    later.deadline = "2031-06-30T12:00:00Z".into();
+    assert_eq!(later.to_json()["request_digest"], adm().to_json()["request_digest"]);
+    assert_ne!(later.to_json()["deadline"], adm().to_json()["deadline"]);
 }
 
 #[test]

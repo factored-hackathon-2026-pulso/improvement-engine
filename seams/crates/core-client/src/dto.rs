@@ -6,6 +6,10 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub use crate::admission::{Admission, AdmissionOutcome, AdmissionRequest, AdmissionState};
+pub use crate::authoring::{
+    Alias, AliasState, Change, CredentialIssue, CredentialRequest, DryRunRequest, DryRunResult, Violation,
+};
 pub use crate::arms::{ArmMode, ArmReport, ArmRequest, ArmStatus, ExecutionProfile};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
