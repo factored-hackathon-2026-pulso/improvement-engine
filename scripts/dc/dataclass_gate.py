@@ -47,7 +47,7 @@ def _is_text(raw: bytes) -> bool:
     return b"\x00" not in raw[:8192]
 
 
-_B64 = re.compile(rb"[A-Za-z0-9+/_-]{12,}={0,2}")
+_B64 = re.compile(rb"[A-Za-z0-9+/_-]{8,}={0,2}")
 _MARK_BYTES = re.compile(rb"E0[_-](?:ROW|RAW|RECORD|PAYLOAD)", re.I)
 
 
