@@ -37,13 +37,13 @@ PostgreSQL integration checks are complete.
 - TDD RED/GREEN for the local gate: the focused Pester assertion first failed
   because U24 was missing, then passed after the exact isolated command was
   added. Adversarial review found no P0–P3 findings for this change.
-- TDD RED/GREEN for the inventory: 13 focused Python tests pass. Normal
+- TDD RED/GREEN for the inventory: 14 focused Python tests pass. Normal
   `python contracts/validate_fixtures.py` passes and reports six pending
   families; `--strict-spec22` fails intentionally with those six names.
   Rust formatting and `git diff --check` pass.
 - Final `scripts/verify-local-ci.ps1` exited 0 on Windows with
   `CARGO_BUILD_JOBS=1`: Rust core 200 passed and 2 opt-in PostgreSQL tests
-  ignored; Python 24 passed and 1 container test skipped; fixture validation
+  ignored; Python 25 passed and 1 container test skipped; fixture validation
   passed; Pester 20 + 5 passed. No database service or container was started.
 - Independent adversarial review closed the initial status-label, path
   containment, and weak-test findings. No P1/P2 remains. One malformed-manifest
