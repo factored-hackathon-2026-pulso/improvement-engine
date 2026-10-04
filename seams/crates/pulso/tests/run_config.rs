@@ -24,7 +24,7 @@ fn minimal_postgres_config_has_safe_defaults() {
     assert_eq!(c.listen_addr.to_string(), "127.0.0.1:8080");
     assert_eq!(c.poll_interval, Duration::from_secs(30));
     assert_eq!(c.batch_cap, 100);
-    assert_eq!(c.grace, Duration::from_secs(50));
+    assert_eq!(c.grace, Duration::from_secs(25), "below the ECS default stopTimeout of 30 s");
     assert!(!c.exit_on_stdin_eof);
     assert!(c.debug_token.is_none());
 }

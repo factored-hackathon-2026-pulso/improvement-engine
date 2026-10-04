@@ -126,3 +126,29 @@ fn serve_exits_when_its_stdin_closes_so_a_killed_parent_leaks_nothing() {
     let _ = child.kill();
     panic!("serve outlived the closed stdin");
 }
+
+fn run_bin(args: &[&str]) -> (Option<i32>, String, String) {
+    let o = Command::new(BIN).args(args).env_remove("PULSO_DATABASE_URL").env_remove("PULSO_STORAGE").stdin(Stdio::null()).output().unwrap();
+    (o.status.code(), String::from_utf8_lossy(&o.stdout).into_owned(), String::from_utf8_lossy(&o.stderr).into_owned())
+}
+
+#[test]
+fn every_subcommand_dispatches_to_its_own_handler() {
+    // A bogus flag is refused by the handler that owns the subcommand, never by another one (exit 2, its own name in the message).
+    for (sub, needle) in [("monitor", "pulso monitor"), ("run", "pulso run"), ("healthcheck", "pulso healthcheck"), ("serve", "for serve"), ("demo", "for demo")] {
+        let (code, out, err) = run_bin(&[sub, "--no-such-flag"]);
+        assert_eq!(code, Some(2), "{sub}: {out}{err}");
+        assert!(err.contains(needle), "{sub} must be refused by its own handler ({needle}): {err}");
+    }
+}
+
+#[test]
+fn help_lists_every_subcommand_and_exits_zero() {
+    for flag in ["--help", "-h", "help"] {
+        let (code, out, err) = run_bin(&[flag]);
+        assert_eq!(code, Some(0), "{flag}: {err}");
+        for sub in ["pulso monitor", "pulso run", "pulso healthcheck", "pulso serve", "pulso demo"] {
+            assert!(out.contains(sub), "{flag} output lists {sub}: {out}");
+        }
+    }
+}
