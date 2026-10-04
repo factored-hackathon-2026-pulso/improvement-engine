@@ -115,8 +115,28 @@ def check(report: dict) -> list:
 
 
 def check_mapping_mutation(mapper, categories):
-    """Honesty test 3 skeleton: rename and permute mutation test (turned green by ED0 and SMAP)."""
-    raise NotImplementedError("ED0/SMAP provide the mapping under test")
+    """Honesty test 3: rename and permute mutation test (evidence from ED0's sensor run).
+
+    `categories` maps label -> support (evidence the label carries); `mapper(categories)`
+    returns the winning label. The winner must follow the data: after a rename the winner is
+    the renamed label of the same evidence, and after a permutation of labels over the
+    evidence it is the label that now carries the original winner's evidence. A mapping keyed
+    to the winning label fails.
+    """
+    if not categories:
+        return []
+    out = []
+    labels = sorted(categories)
+    winner = mapper(dict(categories))
+    renamed = {f"renamed-{i}": categories[l] for i, l in enumerate(labels)}
+    want = f"renamed-{labels.index(winner)}" if winner in categories else None
+    if want is None or mapper(dict(renamed)) != want:
+        out.append(_v("H3", "mapping", "winner changed or ignored the evidence when labels were renamed"))
+    rotated = {labels[(i + 1) % len(labels)]: categories[l] for i, l in enumerate(labels)}
+    want = labels[(labels.index(winner) + 1) % len(labels)] if winner in categories else None
+    if want is None or mapper(dict(rotated)) != want:
+        out.append(_v("H3", "mapping", "winner did not follow its evidence when labels were permuted"))
+    return out
 
 
 def generate_doubles(report: dict, observed: dict) -> list:

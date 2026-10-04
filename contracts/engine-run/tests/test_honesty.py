@@ -52,9 +52,13 @@ class Honesty(unittest.TestCase):
         r["steps"][0]["receipt"]["third_party_ok"] = "user sentence"
         self.assertNotIn("H2", rules(r))
 
-    @unittest.expectedFailure
-    def test_3_mapping_mutation_skeleton(self):
-        self.assertEqual(er.check_mapping_mutation(lambda cats: {}, {}), [])  # turned green by ED0/SMAP
+    def test_3_mapping_mutation(self):
+        cats = {"otp_retry": 30, "refund": 12, "login": 5}
+        follows_data = lambda c: max(c, key=c.get)  # noqa: E731
+        self.assertEqual(er.check_mapping_mutation(follows_data, cats), [])
+        keyed = lambda c: "otp_retry" if "otp_retry" in c else max(c, key=c.get)  # noqa: E731
+        self.assertEqual({v["rule"] for v in er.check_mapping_mutation(keyed, cats)}, {"H3"})
+        self.assertEqual(er.check_mapping_mutation(keyed, {}), [])
 
     def test_4_ports_and_template_fallback(self):
         r = good(); r["ports"] = []
