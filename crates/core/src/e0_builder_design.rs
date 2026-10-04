@@ -877,4 +877,3 @@ mod tests {
         assert!(!text.contains("u35_bridge_commitment"));
     }
 }
-
