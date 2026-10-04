@@ -37,6 +37,16 @@ def select_target(finding: dict, catalogue: dict):
     return c[0]["target_ref"] if len(c) == 1 else None
 
 
+def e0_mapping(finding: dict, catalogue: dict) -> dict:
+    """Honest mapping of an E0 finding. A target exists only on an EXACT match of the finding's category with a
+    catalogue entry's declared vocabulary. E0 categories are salted hashed groups (query signature) that no entry
+    declares, so the ending is `unlinked`; support, rank and the winning category are never consulted."""
+    target = select_target(finding, catalogue)
+    if target is None:
+        return {"verdict": "unlinked", "reason": "no_exact_supported_flow_mapping", "target": None}
+    return {"verdict": "linked", "reason": None, "target": target}
+
+
 def design_input(finding: dict, catalogue: dict) -> dict:
     """Design-input producer for the builder: finding facts plus the catalogue-derived candidates only."""
     return {"finding_ref": finding["finding_ref"], "category": finding["category"],
