@@ -13,6 +13,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
+import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,14 @@ def apply(root: Path, core_url: str, transport: Transport) -> dict[str, Any]:
     return report
 
 
+def valid_core_url(url: str) -> bool:
+    try:
+        u = urllib.parse.urlsplit(url)
+        return u.scheme in ("http", "https") and bool(u.hostname) and "@" not in u.netloc             and not u.query and not u.fragment
+    except ValueError:
+        return False
+
+
 def http_transport(method: str, url: str) -> tuple[int, Any]:  # pragma: no cover - live Core only
     try:
         with urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=10) as r:
@@ -90,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
     if a.apply:
         if not a.core_url:
             p.error("--apply needs --core-url")
+        if not valid_core_url(a.core_url):
+            p.error("--core-url must be http(s)://host[:port][/path] without credentials, query or fragment")
         report = apply(a.assets, a.core_url, http_transport)
     else:
         report = build_plan(a.assets)
