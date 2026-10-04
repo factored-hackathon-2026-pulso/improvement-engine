@@ -24,17 +24,40 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 from . import ed0_detect as ed0
+from . import ed0_lab as lab
 
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_REVISION = "engine-run/c2-1"
 HOST = "python"
 CATEGORY_LABELS = {"A": "closing_reply_unclear", "B": "followup_wording"}  # SMAP catalogue vocabulary
+# synthetic treated cases behind the lab: label -> (cases, recurring cases). Same shape as ed0's package (A larger).
+LAB_SHAPE = {"closing_reply_unclear": (40, 22), "followup_wording": (25, 12)}
+LAB_SALT = b"thread01-synthetic-salt"
+FAMILY_ID = "e0_recurring_copilot_query_cases"
+LAB_TOOL = "pulso/lab_query@1.0.0"
+INVOKE_TIMEOUT_S = 1800.0  # CLT0: live DEMO-0 Core invoke timeout
+HOLD_S = 55.0
+RESPONDERS = {"scout": "responder-scout", "verifier": "responder-verifier", "builder_design": "responder-builder"}
+SYSTEMS = {
+    "scout": "You are the scout. Query the treated lab, then answer with hypotheses that cite evidence refs.",
+    "verifier": "You are the verifier. Check each hypothesis against the treated lab and assess it.",
+    "builder_design": "You are the builder. Choose among the offered candidates or do nothing; cite evidence refs.",
+}
+
+
+def _ensure_paths() -> None:
+    for rel in ("roleplay-llm", "core-bridge/src", "platform-sim", "platform-contract"):
+        p = str(ROOT / rel)
+        if p not in sys.path:
+            sys.path.insert(0, p)
 
 
 @dataclass
@@ -99,8 +122,147 @@ def step_02(ctx: Ctx) -> dict:
                                            "discards", "holdout_status")}}
 
 
+# ---- the model path: agent_roleplay through the shim (replay) ---------------------------------------------------
+def _lab_cases():
+    i = 0
+    for label, (n, hits) in LAB_SHAPE.items():
+        for j in range(n):
+            i += 1
+            yield (f"private-case-{i}", label, "w1", j < hits)
+
+
+def _lab_tool(db, args: dict) -> dict:
+    return lab.lab_query(db, args["metric_id"], args["window_id"])
+
+
+def scripted_responder(stage: str, inputs: dict) -> dict:
+    """The role-played answer (deterministic). It sees only the treated, scanner-passed request, like a real responder."""
+    if stage in ("scout", "verifier") and inputs["step"] == 1:
+        return {"kind": "tool_call", "tool": LAB_TOOL, "args": {"metric_id": lab.METRIC, "window_id": "w1"}}
+    if stage == "scout":
+        rows = inputs["observations"][-1]["result"]["rows"]
+        best = max(rows, key=lambda r: (r["rate"], r["evidence_ref"]))
+        return {"kind": "final", "output": {"hypotheses": [
+            {"hypothesis_id": "h_1", "evidence_ref": best["evidence_ref"], "rate": best["rate"], "count": best["count"]}]}}
+    if stage == "verifier":
+        return {"kind": "final", "output": {"assessments": [
+            {"hypothesis_id": h["hypothesis_id"], "evidence_ref": h["evidence_ref"], "verdict": "supported"}
+            for h in inputs["inputs"]["hypotheses"]]}}
+    if stage == "builder_design":
+        cands = inputs["inputs"]["candidates"]
+        return {"kind": "final", "output": {"design_intent": {"verdict": "linked", "target_ref": cands[0]["target_ref"]},
+                                            "evidence_refs": inputs["inputs"]["evidence_refs"],
+                                            "alternatives": [{"kind": "do_nothing"}]}}
+    raise ValueError(f"no scripted answer for {stage}")
+
+
+class LLMDouble:
+    """Chat-completions caller over the roleplay shim. replay: shim.replay_only on a copy of the recorded queue.
+    record: the scripted responder writes the answer file first (what a live responder lane does), then the shim serves it."""
+
+    def __init__(self, cfg: ThreadConfig):
+        _ensure_paths()
+        from roleplay_llm import shim as S
+        self.S, self.mode = S, cfg.mode
+        if cfg.mode == "replay":
+            self.queue = cfg.workdir / "queue"
+            if self.queue.exists():
+                shutil.rmtree(self.queue)
+            shutil.copytree(cfg.queue_dir, self.queue)
+            self.shim = S.Shim(self.queue, replay_only=True)
+        else:
+            self.queue = Path(cfg.queue_dir)
+            self.shim = S.Shim(self.queue, hold_s=1.0, poll_s=0.02)
+        self.calls = 0
+        self.misses = 0
+        self.scanner_ids: set[str] = set()
+
+    def step(self, stage: str, inputs: dict) -> dict:
+        system = SYSTEMS[stage]
+        if self.mode == "record":
+            key = self.S.replay_key(system, inputs)
+            doc = {"protocol": self.S.PROTOCOL, "key": key, "provenance": "agent_roleplay",
+                   "quality_claims": "forbidden", "responder": {"id": RESPONDERS[stage], "role": stage},
+                   "content": scripted_responder(stage, inputs)}
+            path = self.queue / "responses" / f"{key}.json"
+            path.write_text(json.dumps(doc, indent=1, sort_keys=True), encoding="utf-8")
+        body = json.dumps({"model": "external-reasoning-model", "temperature": 0, "max_tokens": 4000,
+                           "messages": [{"role": "system", "content": system},
+                                        {"role": "user", "content": json.dumps(inputs, sort_keys=True,
+                                                                               separators=(",", ":"))}]}).encode()
+        status, resp = self.shim.handle(body)
+        self.calls += 1
+        if status != 200:
+            self.misses += 1
+            raise RuntimeError(f"{stage}: shim answered {status} {resp.get('error', {}).get('type')}")
+        self.scanner_ids.add("tps-1")
+        return json.loads(resp["choices"][0]["message"]["content"])
+
+
+def agent_loop(llm: LLMDouble, stage: str, goal: str, inputs: dict, db: str, cap: int) -> tuple[dict, int]:
+    """One agent stage: tool calls executed against the treated lab until `final`, at most `cap` calls (M3 STEP_CAPS)."""
+    tools = [{"tool": LAB_TOOL, "description": "Query treated k-anonymous aggregates.",
+              "args_schema": {"type": "object"}}]
+    obs: list[dict] = []
+    for step in range(1, cap + 1):
+        out = llm.step(stage, {"goal": goal, "inputs": inputs, "step": step, "tools": tools, "observations": obs,
+                               "feedback": None, "output_schema": {"type": "object"}})
+        if out["kind"] == "final":
+            return out["output"], step
+        if out["kind"] != "tool_call" or out["tool"] != LAB_TOOL:
+            raise RuntimeError(f"{stage}: tool outside the stage allow-list: {out.get('tool')}")
+        obs.append({"tool": out["tool"], "args": out["args"], "status": "ok",
+                    "result": _lab_tool(db, out["args"]), "error": None})
+    raise RuntimeError(f"{stage}: exceeded the {cap}-call cap without a final answer")
+
+
+def _m3() -> dict:
+    """M3 stage policy and timeout plan evaluated on the registry profile the Flows reference."""
+    _ensure_paths()
+    from pulso_core_runtime.stages import policy as P
+    from pulso_core_runtime.stages.catalog import STEP_CAPS
+    from pulso_core_runtime.stages.timeouts import timeout_plan
+    prof = P.load_registry_profile(ROOT / "agent-core-assets" / "worlds" / "pulso-evolution" / "model_profiles"
+                                   / "pulso-evolution-structured@1.0.0.yaml")
+    pol = P.evolution_policy(prof)
+    plan = timeout_plan(profile_timeout_s=prof.timeout_s, invoke_timeout_s=INVOKE_TIMEOUT_S, hold_s=HOLD_S)
+    return {"caps": dict(STEP_CAPS), "timeout_problems": list(plan.problems), "worst_case_s": plan.worst_case_s,
+            "pin_problems": [p for p in (pol.check(s, prof) for s in STEP_CAPS) if p]}
+
+
+def _llm(ctx: Ctx) -> LLMDouble:
+    if "llm" not in ctx.out:
+        ctx.out["llm"] = LLMDouble(ctx.cfg)
+        ctx.out["lab_db"] = lab.build_lab(ctx.cfg.workdir / "lab.sqlite", _lab_cases(), LAB_SALT)
+        ctx.out["m3"] = _m3()
+    return ctx.out["llm"]
+
+
+def _role(stage: str, **extra) -> dict:
+    return {"status": "agent_roleplay", "data_class": "generated_sample", "actor": f"pulso-{stage}",
+            "model": f"agent_roleplay:{RESPONDERS[stage]}", "stage_output": {"source": "model"},
+            "receipt": {"provider": "agent_roleplay", "scanner_id": "tps-1"}, **extra}
+
+
 def step_03(ctx: Ctx) -> list[dict]:
-    raise NotImplementedError("step 3")
+    llm, db, caps = _llm(ctx), ctx.out["lab_db"], ctx.out["m3"]["caps"]
+    out, calls = agent_loop(llm, "scout", "Find the largest recurrence in the treated lab.",
+                            {"family_id": FAMILY_ID, "binding_id": "binding-scout-0001"}, db, caps["scout"])
+    hyps = out["hypotheses"]
+    scout = _role("scout", detail={"calls": calls, "hypotheses": len(hyps)})
+    v_out, v_calls = agent_loop(llm, "verifier", "Verify the hypotheses against the treated lab.",
+                                {"family_id": FAMILY_ID, "binding_id": "binding-verifier-0001", "hypotheses": hyps},
+                                db, caps["verifier"])
+    # the verifier's verdict is only accepted if the independent ED0L recompute agrees (never from model prose)
+    recompute = {h["hypothesis_id"]: lab.verify_claim(db, h, LAB_SALT) for h in hyps}
+    supported = [a["evidence_ref"] for a in v_out["assessments"] if a["verdict"] == "supported"
+                 and recompute[a["hypothesis_id"]]["ok"]]
+    ctx.out["verified_refs"] = supported
+    ctx.out["hypotheses"] = hyps
+    ver = _role("verifier", id="verifier", detail={"calls": v_calls, "recompute_ok": bool(supported) and all(
+        r["ok"] for r in recompute.values()), "supported_refs": supported})
+    ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls}
+    return [{**scout, "id": "scout"}, ver]
 
 
 def step_04(ctx: Ctx) -> dict:
@@ -158,3 +320,27 @@ def run_thread(cfg: ThreadConfig) -> dict:
                                           "detail": {}}, ctx))
     return {"steps": steps, "mode": cfg.mode, "host": HOST, "replay": ctx.out.get("replay", {"misses": 1, "calls": 0}),
             "report": ctx.out.get("report", {}), "m3": ctx.out.get("m3", {}), "ctx": ctx.out}
+
+
+def main(argv=None) -> int:
+    """python -m claude_standin.thread01 --record QUEUE_DIR   re-record the replay fixtures with the scripted responder
+    python -m claude_standin.thread01 --replay QUEUE_DIR      replay a recorded queue; prints the labelled step table
+    The synthetic package and lab are written to a temp dir (untracked)."""
+    import argparse
+    import tempfile
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--record")
+    ap.add_argument("--replay")
+    ap.add_argument("--exe", default=os.environ.get("ED0_RUNNER_EXE", "D:/cargo-targets/claude-ed0/debug/improvement-engine.exe"))
+    a = ap.parse_args(argv)
+    qdir, mode = (a.record, "record") if a.record else (a.replay, "replay")
+    with tempfile.TemporaryDirectory() as tmp:
+        res = run_thread(ThreadConfig(workdir=Path(tmp), exe=a.exe, queue_dir=Path(qdir), mode=mode))
+    for s in res["steps"]:
+        print(f"{s['n']:>2} {s['id']:<12} {s['status']:<16} {s.get('data_class')}  {s.get('error', '')}")
+    print("replay", res["replay"])
+    return 0 if all(s["status"] != "red" for s in res["steps"]) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
