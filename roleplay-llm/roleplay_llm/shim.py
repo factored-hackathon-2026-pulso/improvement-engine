@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .scanner import DEFAULT_K, scan_payload
+from .scanner import DEFAULT_K, SCANNER_ID, scan_payload, static_text_violations
 
 PROTOCOL = "roleplay-queue/1"
 PROVENANCE = "agent_roleplay"
@@ -109,6 +109,9 @@ class Shim:
             return parsed  # type: ignore[return-value]
         model, system, inputs = parsed
         scan = scan_payload(inputs, k=self.k)
+        sys_v = static_text_violations(system, "system", 20000)
+        if sys_v:
+            scan = type(scan)(False, tuple(scan.violations) + tuple(sys_v), scan.scanner_id)
         if not scan.ok:
             self._ledger("scanner_rejected", scanner_id=scan.scanner_id, violations=list(scan.violations))
             return _error(422, "treated_payload_rejected", "payload failed the treated-payload scanner",
@@ -135,7 +138,7 @@ class Shim:
     def _parse(self, raw: bytes):
         try:
             req = json.loads(raw)
-        except ValueError:
+        except (ValueError, RecursionError):
             return _error(400, "bad_request", "body is not JSON")
         msgs = req.get("messages") if isinstance(req, dict) else None
         if (not isinstance(req, dict) or not isinstance(req.get("model"), str) or not isinstance(msgs, list)
@@ -147,7 +150,7 @@ class Shim:
             return _error(400, "bad_request", "expected system and user messages")
         try:
             inputs = json.loads(user)
-        except ValueError:
+        except (ValueError, RecursionError):
             self._ledger("scanner_rejected", scanner_id="tps-1", violations=["user message is not JSON"])
             return _error(422, "treated_payload_rejected", "user message is not canonical JSON")
         return req["model"], system, inputs
@@ -163,8 +166,11 @@ class Shim:
                 try:
                     fault = json.loads(path.read_text())
                     path.unlink()
-                    return {"status": int(fault["status"]), "type": str(fault["type"])}
-                except (ValueError, KeyError, OSError):
+                    status = int(fault["status"])
+                    if not 400 <= status <= 599:
+                        return None
+                    return {"status": status, "type": str(fault["type"])[:64]}
+                except (ValueError, KeyError, OSError, TypeError):
                     return None
         return None
 
@@ -224,6 +230,9 @@ class Shim:
         c = doc.get("content")
         if not isinstance(c, dict):
             return "content is not an object"
+        allowed = {"kind", "output"} if c.get("kind") == "final" else {"kind", "tool", "args"}
+        if set(c) - allowed:
+            return f"unexpected content fields: {sorted(set(c) - allowed)}"
         if c.get("kind") == "final":
             return None if "output" in c else "final step needs output"
         if c.get("kind") == "tool_call":
@@ -276,9 +285,14 @@ def serve(shim: Shim, *, host: str = "127.0.0.1", port: int = 8640, api_key: str
             if self.path != "/v1/chat/completions":
                 return self._send(404, {"error": {"type": "not_found"}})
             auth = self.headers.get("Authorization", "")
-            if not hmac.compare_digest(auth, f"Bearer {api_key}"):
+            if not hmac.compare_digest(auth.encode("utf-8", "replace"), f"Bearer {api_key}".encode()):
                 return self._send(401, {"error": {"type": "unauthorized"}})
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0:
+                return self._send(400, {"error": {"type": "bad_request"}})
             if length > 1 << 20:
                 return self._send(413, {"error": {"type": "payload_too_large"}})
             status, body = shim.handle(self.rfile.read(length))
