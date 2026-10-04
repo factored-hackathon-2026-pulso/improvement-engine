@@ -233,6 +233,16 @@ class Gate(unittest.TestCase):
             p.write_text(json.dumps(doc))
         self.assertIn("rg1_ratchet_tests", failed(self.run_gate(mut)))
 
+    def test_repo_review_logs_close_crv1_and_keep_the_honest_residual_risks(self):
+        reviews = ROOT / "docs" / "reviews" / "claude"
+        code, lines = gate.crv0_closure.run(reviews, gate.REQUIRED_CRV1)
+        self.assertEqual(code, 0, lines)
+        accepted = {f["id"] for p in reviews.glob("*.review.json") for f in json.loads(p.read_text())["findings"]
+                    if f["status"] == "accepted"}
+        for rid in ("CRV1-RES-JSON-DUP", "CRV1-RES-GATE-STANDIN-ARMS", "CRV1-RES-E0-RUST-UNTESTED", "CRV1-RES-ED0B-RUST-UNMAPPED",
+                    "CRV1-RES-NO-RUST-PATH-HOOKS", "CRV1-RES-REVIEWER-IDENTITY"):
+            self.assertIn(rid, accepted)
+
     def test_empty_manifest_fails_every_item(self):
         p = self.d / "m.json"
         p.write_text("{}")
