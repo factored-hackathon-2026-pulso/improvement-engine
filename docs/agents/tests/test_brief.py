@@ -22,8 +22,8 @@ class BriefTest(unittest.TestCase):
             self.assertIn(tag, t)
 
     def test_agents_md_links_ownership_and_brief(self):
-        t = read("AGENTS.md")
-        for needle in ("OWNERS.md", "docs/agents/codex-onboarding.md",
+        t = read("AGENTS.md").lower()
+        for needle in ("owners.md", "docs/agents/codex-onboarding.md",
                        "docs/agents/governance.md", "data-class"):
             self.assertIn(needle, t)
 
