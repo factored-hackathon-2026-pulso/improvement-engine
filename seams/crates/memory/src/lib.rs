@@ -98,8 +98,18 @@ impl Memory {
         n.status = Status::Confirmed;
         Ok(())
     }
-    pub fn contradict(&mut self, _prior: &str, _n: NewNote) -> Result<String, MemError> {
-        Err(MemError::NotImplemented)
+    /// Record a new note that contradicts `prior` (same claim key); the prior is kept, marked contradicted.
+    pub fn contradict(&mut self, prior: &str, n: NewNote) -> Result<String, MemError> {
+        let p = self.notes.get(prior).ok_or_else(|| MemError::UnknownNote(prior.to_string()))?;
+        if p.claim_key != n.claim_key {
+            return Err(MemError::ClaimKeyMismatch);
+        }
+        let id = self.add_note(n)?;
+        self.notes.get_mut(&id).unwrap().contradicts = Some(prior.to_string());
+        let p = self.notes.get_mut(prior).unwrap();
+        p.status = Status::Contradicted;
+        p.contradicted_by = Some(id.clone());
+        Ok(id)
     }
     pub fn note(&self, id: &str) -> Option<&Note> {
         self.notes.get(id)
