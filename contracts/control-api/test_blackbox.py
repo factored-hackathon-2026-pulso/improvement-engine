@@ -8,7 +8,9 @@ The file generates its own Ed25519 keys and starts the target itself (the double
 server as a subprocess configured with the same E2E_VERIFY_KEYS / E2E_PORT env the double's container uses).
 
 Surfaces: POST /internal/v1/core-task-bindings, POST /internal/v1/broker/authorizations/check,
-GET|POST /internal/v1/broker/artifacts, admin /_e2e/config (artifact seeding, deny_operations, faults).
+GET|POST /internal/v1/broker/artifacts, POST /internal/v1/platform/observations (+ cursor GET),
+admin /_e2e/config (artifact seeding, deny_operations, faults).
+Rust-only behaviour (type/gap quarantine, healthz, lab grants) lives in seams/crates/control-api/tests/.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+rfc8785 = pytest.importorskip("rfc8785", reason="needs the e2e venv")
 
 # Needs the e2e venv (cryptography, fastapi, uvicorn, rfc8785); skip with a clear reason instead of breaking collection.
 pytest.importorskip("cryptography", reason="control-api black-box test needs the e2e venv (see module docstring)")
@@ -48,7 +51,7 @@ def b64u(raw: bytes) -> str:
 
 class Keys:
     def __init__(self) -> None:
-        self.cb, self.ex = Ed25519PrivateKey.generate(), Ed25519PrivateKey.generate()
+        self.cb, self.ex, self.ob = (Ed25519PrivateKey.generate() for _ in range(3))
 
     @staticmethod
     def pub(k: Ed25519PrivateKey) -> str:
@@ -56,13 +59,15 @@ class Keys:
 
     def verify_keys(self) -> dict[str, Any]:
         ring = {"cb": ["core-bridge", "control-api", self.pub(self.cb)],
-                "ex": ["core-bridge", "lab-broker", self.pub(self.ex)]}
-        ingest = {"keys": {"ex": {"iss": "core-bridge", "aud": "lab-broker", "key": self.pub(self.ex)}},
+                "ex": ["core-bridge", "lab-broker", self.pub(self.ex)],
+                "ob": ["core-bridge", "control-api", self.pub(self.ob)]}
+        ingest = {"keys": {"ex": {"iss": "core-bridge", "aud": "lab-broker", "key": self.pub(self.ex)},
+                           "ob": {"iss": "core-bridge", "aud": "control-api", "key": self.pub(self.ob)}},
                   "binding_ref": SUB, "tenant_id": "t1"}
         return {"ring": ring, "ingest": ingest}
 
     def token(self, which: str, aud: str, scope: str, tenant: str | None, **over: Any) -> str:
-        key, kid = (self.cb, "cb") if which == "cb" else (self.ex, "ex")
+        key, kid = {"cb": self.cb, "ex": self.ex, "ob": self.ob}[which], which
         now = int(time.time())
         claims: dict[str, Any] = {"iss": "core-bridge", "aud": aud, "sub": over.pop("sub", "bridge:1"), "scope": scope,
                                   "purpose": over.pop("purpose", scope), "iat": now, "exp": now + 60,
@@ -322,3 +327,75 @@ def test_scout_flow_binding_then_authorization_then_artifact(t: Target) -> None:
     status, art = read_artifact(t, "t1", "scout-evidence")
     assert status == 200 and art["content"] == {"rows": [1, 2, 3]}
     assert read_artifact(t, "t2", "scout-evidence")[0] == 404
+
+
+# ---- platform observation ingest (ACK / duplicate / CAS / digest) -------------------------------------------------------
+INGEST = "/internal/v1/platform/observations"
+
+
+def obs_token(t: Target, tenant: str = "t1", scope: str = "observations") -> str:
+    return t.keys.token("ob", "control-api", scope, tenant, purpose="platform_observations", sub=SUB)
+
+
+def schema_ref(t: Target) -> dict[str, Any]:
+    return put_artifact(t, upload_body({"schema": "platform_event/1"}))[1]["artifact_ref"]
+
+
+def obs_event(seq: int, ref: dict[str, Any]) -> dict[str, Any]:
+    return {"kind": "platform_event", "level": None, "source_event": {"kind": "domain_event", "event_type": "case.opened"},
+            "native_event_id": f"EVT-{seq}", "source_event_digest": hashlib.sha256(f"e{seq}".encode()).hexdigest(),
+            "source_event_ref": None, "source_schema_ref": ref, "source_run_ref": None, "source_sequence": seq,
+            "episode_ref": None, "goal_ref": None, "layer_mapping_ref": None, "observed_at": "2026-03-01T10:00:00Z",
+            "trace_refs": [], "coverage_marker": None}
+
+
+def obs_batch(ref: dict[str, Any], seqs: list[int], revision: int | None = 0, cursor: str = "s.1",
+              tenant: str = "t1") -> dict[str, Any]:
+    body: dict[str, Any] = {"contract_version": "pulso-observations-2", "source_id": "plat-a.events", "tenant_id": tenant,
+                            "partition": "tenant.t1", "scan_mode": "fast_poll" if revision is not None else "rescan",
+                            "expected_cursor_revision": revision, "from_seq": seqs[0], "to_seq": seqs[-1], "cursor": cursor,
+                            "cut_ref": None, "events": [obs_event(s, ref) for s in seqs], "verification_receipts": []}
+    return {**body, "batch_digest": hashlib.sha256(rfc8785.dumps(body)).hexdigest()}
+
+
+def post_obs(t: Target, batch: dict[str, Any], token: str | None = None, key: str | None = None) -> tuple[int, Any]:
+    return t.http.call("POST", INGEST, batch, token or obs_token(t), {"Idempotency-Key": key or batch["batch_digest"]})
+
+
+def test_ingest_ack_then_duplicate_replays_the_committed_receipt(t: Target) -> None:
+    ref = schema_ref(t)
+    batch = obs_batch(ref, [1, 2], cursor="s.2")
+    status, ack = post_obs(t, batch)
+    assert status == 202
+    assert {k: ack[k] for k in ("batch_digest", "accepted_event_count", "duplicate_event_count", "checkpoint_advanced",
+                                "current_cursor", "cursor_revision")} == {
+        "batch_digest": batch["batch_digest"], "accepted_event_count": 2, "duplicate_event_count": 0,
+        "checkpoint_advanced": True, "current_cursor": "s.2", "cursor_revision": 1}
+    status, again = post_obs(t, batch)  # 200: committed receipt, nothing re-applied
+    assert status == 200 and again["checkpoint_advanced"] is False
+    assert (again["accepted_event_count"], again["duplicate_event_count"], again["cursor_revision"]) == (0, 2, 1)
+    cur = t.http.call("GET", "/internal/v1/platform/exporters/plat-a.events/partitions/tenant.t1/cursor", None, obs_token(t))[1]
+    assert (cur["cursor"], cur["cursor_revision"], cur["last_batch_digest"]) == ("s.2", 1, batch["batch_digest"])
+
+
+def test_ingest_stale_cursor_revision_is_409_and_rescan_never_moves_the_checkpoint(t: Target) -> None:
+    ref = schema_ref(t)
+    assert post_obs(t, obs_batch(ref, [1], cursor="s.1"))[0] == 202
+    status, body = post_obs(t, obs_batch(ref, [2], revision=0, cursor="s.2"))  # CAS on the old revision
+    assert (status, body) == (409, {"error": "stale_cursor_revision"})
+    status, ack = post_obs(t, obs_batch(ref, [1], revision=None, cursor="s.9"))  # rescan: duplicates, no checkpoint
+    assert (status, ack["checkpoint_advanced"], ack["duplicate_event_count"], ack["current_cursor"]) == (202, False, 1, "s.1")
+
+
+def test_ingest_rejects_digest_key_ref_and_tenant_violations(t: Target) -> None:
+    ref = schema_ref(t)
+    batch = obs_batch(ref, [1])
+    assert post_obs(t, {**batch, "cursor": "tampered"})[1] == {"error": "batch_digest_mismatch"}
+    assert post_obs(t, batch, key="0" * 64)[1] == {"error": "idempotency_key_mismatch"}
+    assert post_obs(t, {**batch, "extra": 1})[1] == {"error": "schema_invalid"}
+    ghost = {"id": "artifact:" + "9" * 64, "digest": "9" * 64, "media_type": "application/json"}
+    assert post_obs(t, obs_batch(ghost, [1]))[1] == {"error": "unresolvable_artifact_ref"}
+    assert post_obs(t, batch, token=obs_token(t, "t2"))[0] == 403  # the exporter binding is pinned to t1
+    assert post_obs(t, batch, token=obs_token(t, scope="binding"))[0] == 403
+    assert t.http.call("POST", INGEST, batch, None, {"Idempotency-Key": batch["batch_digest"]})[0] == 401
+    assert post_obs(t, batch)[0] == 202  # the same batch is still fine afterwards: nothing above had an effect
