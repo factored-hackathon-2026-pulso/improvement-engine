@@ -4,6 +4,7 @@
 pub mod app;
 pub mod event;
 pub mod project;
+pub mod server;
 pub mod store;
 
 pub use app::{App, Config, Req, Resp, StreamPlan};
