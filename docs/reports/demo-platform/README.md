@@ -69,8 +69,16 @@ Alternatives, Diff, Gates, Decision (blocked by the failed gate on the double) f
 
 - Postgres is compiled but not exercised here: `PgRepo::complete/admit_keyed/job_key` SQL, `product-postgres`, `dataset-pg`, `PgStore` run only with
   `PULSO_TEST_PG_ADMIN` / DSNs (none in this environment). The pipeline ledger is a file store under the work dir even in Postgres mode.
-- `PULSO_STORAGE=memory` keeps the job queue in memory: a kill after the watermark commit but before the worker finished loses that job (the run
-  record stays on disk, nothing re-queues it). A Postgres queue is durable; a "re-admit run records without a completed job" pass is not built.
+- `PULSO_STORAGE=memory` keeps the job queue in memory. Review fix: the monitor now re-admits (keyed, idempotent) every run record of its source
+  found under `<work>/runs` once per process, so a kill after the watermark commit but before the worker finished no longer loses the job; a run the
+  console store already holds as completed is a no-op. A Postgres queue is durable on its own.
+- Residual at-least-once overlap: a kill (or a failed hand-over) between reading a batch and committing the watermark replays from the same
+  watermark; if the source grew meanwhile the replayed batch has a different end, hence a different run id, and the orphaned first job also runs.
+  Events in both batches can yield the same signal twice (two proposals, two verdicts). Not fixed: it needs the batch end pinned before the read.
+- `PULSO_SOURCE_PROVENANCE` unset in platform mode is now titled `platform-mode signals; ... did not declare whether the source is real or simulated`,
+  not `real platform signals` (that label needs `PULSO_SOURCE_PROVENANCE=real`).
+- Shutdown while a job runs: the runner is not interrupted; if it outlasts the grace (default 25 s) the worker is cut, the process exits 3, and the
+  lease (900 s) simply expires so the job is reclaimed and the idempotent runner resumes. There is no explicit lease release.
 - The console projection holds one investigation/gates/decision per run: with several proposals in one tick run the panels show the LAST proposal;
   every proposal is a graph node and a `proposal_verdict` event. No console TypeScript was changed (no dedicated profile panel).
 - The thread's own `sensors` step is still the fixed-output stand-in; the real signal enters through the lab row (numerator/count of the cell). The
