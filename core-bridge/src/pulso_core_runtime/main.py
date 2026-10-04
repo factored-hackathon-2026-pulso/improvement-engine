@@ -83,14 +83,26 @@ def export_enabled(env: Mapping[str, str]) -> bool:
     return env.get(EXPORT_ENV, "").strip().lower() in {"1", "true", "yes"}
 
 
+def _core_parser_defaults() -> dict[str, Any]:
+    """Defaults of Core's real `serve` parser: a flag Core adds (`--lang-thresholds` in c814c2b) is then present on
+    our hand-built Namespace instead of raising AttributeError inside `resolve_ports`."""
+    from agent_core.composition.serve_ports import add_serve_parser
+
+    top = argparse.ArgumentParser()
+    add_serve_parser(top.add_subparsers(dest="_command"))
+    return {k: v for k, v in vars(top.parse_args(["serve"])).items() if k != "_command"}
+
+
 def synthesise_args(env: Mapping[str, str], paths: Mapping[str, str]) -> argparse.Namespace:
-    ns: dict[str, Any] = {attr: paths[name] for attr, name in FACTORIES}
+    ns: dict[str, Any] = _core_parser_defaults()
+    ns.update({attr: paths[name] for attr, name in FACTORIES})
     ns.update(
         host=env.get("PULSO_HOST", "0.0.0.0"), port=int(env.get("PULSO_PORT", "8000")), dsn=None,
         agents=None, registry_api=True, eval_dsn=None,
         identity_keys=Path(env.get("PULSO_IDENTITY_KEYS", f"{KEYS_DIR}/identity.json")),
         staff_keys=Path(env.get("PULSO_STAFF_KEYS", f"{KEYS_DIR}/staff.json")),
-        keys_reload_seconds=keys_reload_seconds(env))
+        keys_reload_seconds=keys_reload_seconds(env),
+        lang_thresholds=None)  # explicit: detection-driven language switching stays off (also a no-op on older pins)
     return argparse.Namespace(**ns)
 
 
