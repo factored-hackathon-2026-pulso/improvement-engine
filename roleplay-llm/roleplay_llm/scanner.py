@@ -24,12 +24,46 @@ _OPAQUE = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
 _TOOLREF = re.compile(r"^[a-z0-9_.-]+/[a-z0-9_.-]+@\d+\.\d+\.\d+$")
 _ENUM = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
 _HASH = re.compile(r"^[0-9a-f]{16}$")
-_EVREF = re.compile(r"^ev_[0-9a-z]{8,64}$")
+_EVREF = re.compile(r"^ev_[0-9a-f]{8,64}$")
 _EMAIL = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
 _LONG_DIGITS = re.compile(r"\d[\d\s().-]{6,}\d")
 _MAX_STATIC = 2000
 _MAX_FEEDBACK = 500
 MAX_INT = 10**7
+MAX_FREE_INT = 1000  # integers in inputs/args are small ordinals/caps; national ids and phones are longer
+
+# Deny-by-default registry: a string in `inputs`/`args` passes only if it has a system-issued shape, is a token the stage registered. "Looks like an id" is not enough.
+KNOWN_METRICS = frozenset({"recurrence_rate", "resolution_rate", "synthetic_metric"})
+_SHAPES = tuple(re.compile(p) for p in (
+    r"g_[0-9a-f]{16}",                                             # lab group hash
+    r"ev_[0-9a-f]{8,64}",                                          # evidence ref (hex digest, never letters of a name)
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",  # uuid
+    r"(binding|job|artifact)[-_:][0-9a-f]{8,32}",                  # system-issued ids (hex only)
+    r"(h|hyp|alt|fam|finding)_\d{1,4}",                            # ordinal ids
+    r"w\d{1,3}|w_\d{4}_\d{2}",                                    # window ids
+))
+
+
+class Registry:
+    """Expected exact tokens for a stage (catalogue refs, category labels, ops, metric/window ids)."""
+
+    def __init__(self, tokens=()) -> None:
+        self.tokens: set[str] = set()
+        self.allow(tokens)
+
+    def allow(self, tokens) -> None:
+        for t in tokens:
+            if not isinstance(t, str) or not _OPAQUE.fullmatch(t) or _pii_like(t):
+                raise ValueError(f"registry token is not an opaque identifier: {t!r}")
+            self.tokens.add(t)
+
+
+def _pii_like(x: str) -> bool:
+    return bool(_EMAIL.search(x) or re.fullmatch(r"\+?[\d().-]{7,}", x) or _RUTLIKE.fullmatch(x))
+
+
+_RUTLIKE = re.compile(r"\d{1,2}\.?\d{3}\.?\d{3}-?[0-9kK]")
+_DEFAULT = Registry(KNOWN_METRICS)
 
 
 @dataclass(frozen=True)
@@ -51,7 +85,7 @@ def suppress_rows(rows: list[dict[str, Any]], k: int = DEFAULT_K) -> list[dict[s
     return out
 
 
-def scan_payload(payload: Any, *, k: int = DEFAULT_K) -> ScanResult:
+def scan_payload(payload: Any, *, k: int = DEFAULT_K, registry: Registry | None = None) -> ScanResult:
     v: list[str] = []
     if not isinstance(payload, dict):
         return ScanResult(False, ("payload: not an object",))
@@ -64,14 +98,15 @@ def scan_payload(payload: Any, *, k: int = DEFAULT_K) -> ScanResult:
         _static_text(payload["goal"], "goal", v)
     if "step" in payload and (not _is_int(payload["step"]) or not 0 <= payload["step"] <= 1000):
         v.append("step: not a non-negative integer")
+    allowed = set(_DEFAULT.tokens) | (registry.tokens if registry else set())
     if "inputs" in payload:
-        _opaque_tree(payload["inputs"], "inputs", v)
+        _opaque_tree(payload["inputs"], "inputs", v, allowed)
     if "feedback" in payload and payload["feedback"] is not None:
         _static_text(payload["feedback"], "feedback", v, _MAX_FEEDBACK)
     if "output_schema" in payload:
         _static_tree(payload["output_schema"], "output_schema", v)
     _tools(payload.get("tools", []), v)
-    _observations(payload.get("observations", []), k, v)
+    _observations(payload.get("observations", []), k, v, allowed)
     return ScanResult(not v, tuple(v))
 
 
@@ -120,12 +155,25 @@ def _static_tree(x: Any, path: str, v: list[str], depth: int = 0) -> None:
         _bounded_number(x, path, v)
 
 
-def _opaque_str(x: str, path: str, v: list[str]) -> None:
-    if not _OPAQUE.fullmatch(x) or _EMAIL.search(x) or re.fullmatch(r"\+?[\d().-]{7,}", x):
+def _expected(x: str, allowed: set[str]) -> bool:
+    return x in allowed or any(s.fullmatch(x) for s in _SHAPES)
+
+
+def _opaque_str(x: str, path: str, v: list[str], allowed: set[str]) -> None:
+    if not _OPAQUE.fullmatch(x) or _pii_like(x):
         v.append(f"{path}: string is not an opaque id or enum")
+    elif not _expected(x, allowed):
+        v.append(f"{path}: string is not an expected id or registered token")
 
 
-def _opaque_tree(x: Any, path: str, v: list[str], depth: int = 0) -> None:
+def _free_number(x: Any, path: str, v: list[str]) -> None:
+    if _is_int(x) and abs(x) > MAX_FREE_INT:
+        v.append(f"{path}: free-form integer beyond {MAX_FREE_INT}")
+    else:
+        _bounded_number(x, path, v)
+
+
+def _opaque_tree(x: Any, path: str, v: list[str], allowed: set[str], depth: int = 0) -> None:
     if depth > 8:
         v.append(f"{path}: too deep")
     elif isinstance(x, dict):
@@ -133,16 +181,16 @@ def _opaque_tree(x: Any, path: str, v: list[str], depth: int = 0) -> None:
             if not isinstance(key, str) or not _ENUM.fullmatch(key):
                 v.append(f"{path}.<key>: key is not an identifier")
                 continue
-            _opaque_tree(val, f"{path}.{key}", v, depth + 1)
+            _opaque_tree(val, f"{path}.{key}", v, allowed, depth + 1)
     elif isinstance(x, list):
         for i, val in enumerate(x):
-            _opaque_tree(val, f"{path}[{i}]", v, depth + 1)
+            _opaque_tree(val, f"{path}[{i}]", v, allowed, depth + 1)
     elif isinstance(x, str):
-        _opaque_str(x, path, v)
+        _opaque_str(x, path, v, allowed)
     elif not (x is None or isinstance(x, (bool, int, float))):
         v.append(f"{path}: unsupported type")
     else:
-        _bounded_number(x, path, v)
+        _free_number(x, path, v)
 
 
 def _tools(tools: Any, v: list[str]) -> None:
@@ -162,7 +210,7 @@ def _tools(tools: Any, v: list[str]) -> None:
         _static_tree(t.get("args_schema"), f"{p}.args_schema", v)
 
 
-def _observations(obs: Any, k: int, v: list[str]) -> None:
+def _observations(obs: Any, k: int, v: list[str], allowed: set[str]) -> None:
     if not isinstance(obs, list):
         v.append("observations: not a list")
         return
@@ -178,13 +226,13 @@ def _observations(obs: Any, k: int, v: list[str]) -> None:
         if not isinstance(o.get("status"), str) or not _ENUM.fullmatch(o["status"]):
             v.append(f"{p}.status: not an enum")
         if "args" in o:
-            _opaque_tree(o["args"], f"{p}.args", v)
+            _opaque_tree(o["args"], f"{p}.args", v, allowed)
         if o.get("error") is not None and (not isinstance(o["error"], str) or not _ENUM.fullmatch(o["error"])):
             v.append(f"{p}.error: must be null or an enum code")
-        _result(o.get("result"), f"{p}.result", k, v)
+        _result(o.get("result"), f"{p}.result", k, v, allowed)
 
 
-def _result(res: Any, path: str, k: int, v: list[str]) -> None:
+def _result(res: Any, path: str, k: int, v: list[str], allowed: set[str]) -> None:
     if res is None:
         return
     if not isinstance(res, dict) or set(res) - {"rows"}:
@@ -195,10 +243,10 @@ def _result(res: Any, path: str, k: int, v: list[str]) -> None:
         v.append(f"{path}.rows: not a list")
         return
     for i, r in enumerate(rows):
-        _row(r, f"{path}.rows[{i}]", k, v)
+        _row(r, f"{path}.rows[{i}]", k, v, allowed)
 
 
-def _row(r: Any, path: str, k: int, v: list[str]) -> None:
+def _row(r: Any, path: str, k: int, v: list[str], allowed: set[str]) -> None:
     if not isinstance(r, dict):
         v.append(f"{path}: not an object")
         return
@@ -206,8 +254,8 @@ def _row(r: Any, path: str, k: int, v: list[str]) -> None:
         if not (key.startswith("g_") and _ENUM.fullmatch(key) and isinstance(r[key], str) and _HASH.fullmatch(r[key])):
             v.append(f"{path}.{key}: field not allowed (group keys are g_* HMAC hashes of 16 hex chars)")
     for key in ("metric_id", "window_id"):
-        if not isinstance(r.get(key), str) or not _ENUM.fullmatch(r[key]):
-            v.append(f"{path}.{key}: must be an enum identifier")
+        if not isinstance(r.get(key), str) or not _ENUM.fullmatch(r[key]) or not _expected(r[key], allowed):
+            v.append(f"{path}.{key}: must be a known metric/window id")
     count = r.get("count")
     if count == SUPPRESSED:
         extra = set(r) - {"metric_id", "window_id", "count"}

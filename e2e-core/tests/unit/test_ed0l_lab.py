@@ -150,3 +150,93 @@ def test_swapped_evidence_ref_fails(lab):
 def test_short_salt_rejected(tmp_path):
     with pytest.raises(ValueError):
         L.build_lab(tmp_path / "x.sqlite", cases(0), b"short")
+
+
+# ---- complementary suppression (differencing through overlapping windows / groups) ----------------------------
+def _cases_cells(spec):
+    """spec: {(group, window): (n, hits)} -> synthetic (case_id, group, window, outcome)."""
+    out, i = [], 0
+    for (g, w), (n, hits) in spec.items():
+        for j in range(n):
+            i += 1
+            out.append((f"private-case-{i}", g, w, j < hits))
+    return out
+
+
+def _published(db):
+    con = sqlite3.connect(db)
+    try:
+        return {(g, w) for g, w in con.execute("select g_group, window_id from lab_rows")}
+    finally:
+        con.close()
+
+
+def _gh(label):
+    return L.group_hash(SALT, "group", label)
+
+
+def test_overlapping_windows_do_not_let_a_suppressed_cell_be_recovered(tmp_path):
+    # alpha: w2 has 6 (<k, suppressed); w_all = w1 + w2 is published with w1: 18 - 12 = 6 would expose it
+    spec = {("alpha", "w1"): (12, 4), ("alpha", "w2"): (6, 2), ("alpha", "w_all"): (18, 6),
+            ("beta", "w1"): (30, 9), ("beta", "w2"): (30, 9), ("beta", "w_all"): (60, 18)}
+    db = L.build_lab(tmp_path / "l.sqlite", _cases_cells(spec), SALT, window_parts={"w_all": ["w1", "w2"]})
+    pub = _published(db)
+    alpha = {w for g, w in pub if g == _gh("alpha")}
+    assert "w2" not in alpha
+    assert len(alpha & {"w1", "w2", "w_all"}) <= 1, alpha  # never two of the three: the third is not derivable
+    assert {w for g, w in pub if g == _gh("beta")} == {"w1", "w2", "w_all"}  # untouched: nothing hidden there
+
+
+def test_overlapping_groups_do_not_let_a_suppressed_cell_be_recovered(tmp_path):
+    spec = {("all_a", "w1"): (30, 9), ("a_x", "w1"): (24, 8), ("a_y", "w1"): (6, 1),
+            ("all_b", "w1"): (40, 8), ("b_x", "w1"): (20, 4), ("b_y", "w1"): (20, 4)}
+    db = L.build_lab(tmp_path / "l.sqlite", _cases_cells(spec), SALT,
+                     group_parts={"all_a": ["a_x", "a_y"], "all_b": ["b_x", "b_y"]})
+    pub = {g for g, _w in _published(db)}
+    assert _gh("a_y") not in pub
+    assert len({_gh("all_a"), _gh("a_x")} & pub) <= 1  # one of total/other part goes too
+    assert {_gh("all_b"), _gh("b_x"), _gh("b_y")} <= pub
+
+
+def test_complementary_suppression_cascades_to_a_fixed_point(tmp_path):
+    # hiding alpha.w1 for w_all makes alpha.w3 the sole hidden cell of the next relation level
+    spec = {("alpha", "w1"): (12, 4), ("alpha", "w2"): (6, 2), ("alpha", "w12"): (18, 6),
+            ("alpha", "w3"): (15, 5), ("alpha", "w_all"): (33, 11)}
+    db = L.build_lab(tmp_path / "l.sqlite", _cases_cells(spec), SALT,
+                     window_parts={"w12": ["w1", "w2"], "w_all": ["w12", "w3"]})
+    alpha = {w for g, w in _published(db) if g == _gh("alpha")}
+    for total, parts in (("w12", ("w1", "w2")), ("w_all", ("w12", "w3"))):
+        hidden = [c for c in (total, *parts) if c not in alpha]
+        assert len(hidden) != 1, (total, hidden)
+
+
+def test_without_declared_overlap_nothing_extra_is_suppressed(tmp_path):
+    db = L.build_lab(tmp_path / "l.sqlite", cases(0), SALT)
+    assert len(_published(db)) == 2
+
+
+def test_complementary_suppression_leaves_no_trace_of_how_many_cells_were_hidden(tmp_path):
+    spec = {("alpha", "w1"): (12, 4), ("alpha", "w2"): (6, 2), ("alpha", "w_all"): (18, 6)}
+    db = L.build_lab(tmp_path / "l.sqlite", _cases_cells(spec), SALT, window_parts={"w_all": ["w1", "w2"]})
+    con = sqlite3.connect(db)
+    n = con.execute("select count(*) from lab_meta where key like '%suppress%' or key like '%compl%'").fetchone()[0]
+    con.close()
+    assert n == 0
+
+
+def test_published_rows_after_complementary_suppression_still_recompute_and_detect_tamper(tmp_path):
+    spec = {("alpha", "w1"): (12, 4), ("alpha", "w2"): (6, 2), ("alpha", "w_all"): (18, 6),
+            ("beta", "w1"): (30, 9), ("beta", "w2"): (30, 9), ("beta", "w_all"): (60, 18)}
+    db = L.build_lab(tmp_path / "l.sqlite", _cases_cells(spec), SALT, window_parts={"w_all": ["w1", "w2"]})
+    for g, w in _published(db):
+        row = L.lab_query(db, L.METRIC, w)["rows"]
+        assert row and all(L.verify_claim(db, {"evidence_ref": r["evidence_ref"], "rate": r["rate"],
+                                               "count": r["count"]}, SALT)["ok"] for r in row)
+
+
+def test_empty_and_singleton_part_lists_do_not_crash_and_still_protect(tmp_path):
+    spec = {("alpha", "w1"): (6, 2), ("alpha", "w_all"): (40, 9), ("beta", "w1"): (30, 9), ("beta", "w_all"): (30, 9)}
+    db = L.build_lab(tmp_path / "l.sqlite", _cases_cells(spec), SALT, window_parts={"w1": [], "w_all": ["w1"]})
+    pub = _published(db)
+    assert (_gh("alpha"), "w1") not in pub
+    assert (_gh("alpha"), "w_all") not in pub  # singleton relation: total minus nothing is the hidden part's sibling

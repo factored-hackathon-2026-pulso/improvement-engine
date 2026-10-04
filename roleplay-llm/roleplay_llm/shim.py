@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .scanner import DEFAULT_K, SCANNER_ID, scan_payload, static_text_violations
+from .scanner import DEFAULT_K, SCANNER_ID, Registry, scan_payload, static_text_violations
 
 PROTOCOL = "roleplay-queue/1"
 PROVENANCE = "agent_roleplay"
@@ -97,7 +97,8 @@ def _error(status: int, type_: str, message: str, **extra: Any) -> tuple[int, di
 
 class Shim:
     def __init__(self, queue_dir: Path | str, *, hold_s: float = HOLD_S, poll_s: float = 0.25,
-                 k: int = DEFAULT_K, replay_only: bool = False) -> None:
+                 k: int = DEFAULT_K, replay_only: bool = False, registry: Registry | None = None) -> None:
+        self.registry = registry or Registry()
         self.queue = Path(queue_dir)
         self.hold_s, self.poll_s, self.k, self.replay_only = hold_s, poll_s, k, replay_only
         for sub in ("requests", "responses", "faults"):
@@ -109,7 +110,7 @@ class Shim:
         if isinstance(parsed[0], int):
             return parsed  # type: ignore[return-value]
         model, system, inputs = parsed
-        scan = scan_payload(inputs, k=self.k)
+        scan = scan_payload(inputs, k=self.k, registry=self.registry)
         sys_v = static_text_violations(system, "system", 20000)
         if sys_v:
             scan = type(scan)(False, tuple(scan.violations) + tuple(sys_v), scan.scanner_id)
