@@ -108,8 +108,8 @@ impl RunConfig {
 
         let adapter = var("PULSO_SOURCE_ADAPTER").unwrap_or_else(|| "stub".into());
         let (allowed, other): (&[&str], &[&str]) = match data_mode {
-            DataMode::Dataset => (&["stub", "e0-raw", "e0-augmented"], &["product-sqlite", "product-postgres"]),
-            DataMode::Platform => (&["stub", "product-sqlite", "product-postgres"], &["e0-raw", "e0-augmented"]),
+            DataMode::Dataset => (&["stub", "dataset-raw", "dataset-augmented"], &["product-sqlite", "product-postgres"]),
+            DataMode::Platform => (&["stub", "product-sqlite", "product-postgres"], &["dataset-raw", "dataset-augmented"]),
         };
         if other.contains(&adapter.as_str()) {
             let mode = if data_mode == DataMode::Dataset { "dataset" } else { "platform" };

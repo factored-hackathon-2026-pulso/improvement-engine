@@ -66,10 +66,10 @@ fn database_url_must_be_postgres_and_is_never_echoed() {
 fn adapter_must_match_the_data_mode() {
     let e = err(&[("PULSO_DATABASE_URL", DSN), ("PULSO_DATA_MODE", "dataset"), ("PULSO_SOURCE_ADAPTER", "product-postgres")]);
     assert!(e.contains("config_conflict") && e.contains("dataset") && e.contains("product-postgres"), "{e}");
-    let e = err(&[("PULSO_DATABASE_URL", DSN), ("PULSO_DATA_MODE", "platform"), ("PULSO_SOURCE_ADAPTER", "e0-raw")]);
+    let e = err(&[("PULSO_DATABASE_URL", DSN), ("PULSO_DATA_MODE", "platform"), ("PULSO_SOURCE_ADAPTER", "dataset-raw")]);
     assert!(e.contains("config_conflict"), "{e}");
     assert_eq!(load(&[("PULSO_DATABASE_URL", DSN), ("PULSO_DATA_MODE", "platform"), ("PULSO_SOURCE_ADAPTER", "product-sqlite")]).unwrap().adapter, "product-sqlite");
-    assert_eq!(load(&[("PULSO_DATABASE_URL", DSN), ("PULSO_DATA_MODE", "dataset"), ("PULSO_SOURCE_ADAPTER", "e0-augmented")]).unwrap().adapter, "e0-augmented");
+    assert_eq!(load(&[("PULSO_DATABASE_URL", DSN), ("PULSO_DATA_MODE", "dataset"), ("PULSO_SOURCE_ADAPTER", "dataset-augmented")]).unwrap().adapter, "dataset-augmented");
     assert!(err(&[("PULSO_DATABASE_URL", DSN), ("PULSO_DATA_MODE", "dataset"), ("PULSO_SOURCE_ADAPTER", "nope")]).contains("PULSO_SOURCE_ADAPTER"));
 }
 

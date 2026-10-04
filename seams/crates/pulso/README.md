@@ -13,7 +13,7 @@ Environment only (twelve-factor). Invalid or ambiguous configuration exits 2 wit
 | `PULSO_DATABASE_URL` | none | `postgres://` DSN (secret, never logged). Required unless `PULSO_STORAGE=memory`. |
 | `PULSO_STORAGE` | `postgres` when a URL is set | `postgres` or `memory` (explicit, ephemeral, no migrations). Both set is a conflict. |
 | `PULSO_DATA_MODE` | required | `dataset` or `platform`. |
-| `PULSO_SOURCE_ADAPTER` | `stub` | dataset: `stub,e0-raw,e0-augmented`; platform: `stub,product-sqlite,product-postgres`. A mismatch is refused. |
+| `PULSO_SOURCE_ADAPTER` | `stub` | dataset: `stub,dataset-raw,dataset-augmented`; platform: `stub,product-sqlite,product-postgres`. A mismatch is refused. |
 | `PULSO_POLL_INTERVAL_MS` / `PULSO_BATCH_CAP` | 30000 / 100 | monitor and worker cadence; max jobs per worker cycle. |
 | `PULSO_LISTEN_ADDR` | `127.0.0.1:8080` | Container: `0.0.0.0:8080`. Non-loopback needs `PULSO_ALLOW_NON_LOOPBACK=1` **and** `PULSO_DEBUG_TOKEN` (>= 16 chars); an admin token must then differ. |
 | `PULSO_DEBUG_TOKEN`, `PULSO_ADMIN_TOKEN` | none | Bearer tokens for the debug API / admin append (from Secrets Manager). |
