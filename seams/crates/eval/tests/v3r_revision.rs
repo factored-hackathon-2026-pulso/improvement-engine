@@ -88,3 +88,29 @@ fn ceiling_stops_before_next_attempt_and_never_grows() {
 fn evaluator_error_propagates() {
     assert!(run_bounded("r", spec(), CEIL, &ShrinkPolicy, |_| Err("infra".into())).is_err());
 }
+
+#[test]
+fn judge_not_separated_stops_without_burning_attempts() {
+    let mut calls = 0;
+    let out = run_bounded("r", spec(), CEIL, &ShrinkPolicy, |_| {
+        calls += 1;
+        let mut v = gv(Verdict::NotEvaluable);
+        for g in &mut v.gates {
+            g.reason = Some("judge_not_separated".into());
+        }
+        Ok((v, 1))
+    })
+    .unwrap();
+    assert_eq!(calls, 1, "a revision cannot fix author==judge");
+    assert_eq!(out.stop, Stop::JudgeNotSeparated);
+}
+
+#[test]
+fn shrink_never_widens_and_stops_when_it_cannot_narrow() {
+    let zero = ChangeSpec { variant: "v".into(), max_files: 0, max_lines: 0 };
+    if let Some(s) = ShrinkPolicy.revise(&zero, &[], 1) {
+        assert!(s.max_files <= zero.max_files && s.max_lines <= zero.max_lines, "revision widened a zero limit");
+    }
+    let one = ChangeSpec { variant: "v".into(), max_files: 1, max_lines: 1 };
+    assert!(ShrinkPolicy.revise(&one, &[], 1).is_none(), "identical limits are not a revision");
+}

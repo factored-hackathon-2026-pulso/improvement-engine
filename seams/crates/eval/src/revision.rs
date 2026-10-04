@@ -32,8 +32,12 @@ pub struct ShrinkPolicy;
 
 impl RevisionPolicy for ShrinkPolicy {
     fn revise(&self, prev: &ChangeSpec, _findings: &[GateResult], revision: u32) -> Option<ChangeSpec> {
+        let (f, l) = ((prev.max_files / 2).max(1).min(prev.max_files), (prev.max_lines / 2).max(1).min(prev.max_lines));
+        if f == prev.max_files && l == prev.max_lines {
+            return None; // cannot narrow further (floor 1, zero stays zero): never widen
+        }
         let base = prev.variant.split("+r").next().unwrap_or(&prev.variant);
-        Some(ChangeSpec { variant: format!("{base}+r{revision}"), max_files: (prev.max_files / 2).max(1), max_lines: (prev.max_lines / 2).max(1) })
+        Some(ChangeSpec { variant: format!("{base}+r{revision}"), max_files: f, max_lines: l })
     }
 }
 
@@ -61,6 +65,8 @@ pub enum Stop {
     RevisionsExhausted,
     PolicyExhausted,
     BudgetExhausted,
+    /// No-verdict because author==judge: a revision cannot fix it.
+    JudgeNotSeparated,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +107,9 @@ where
         }
         if n >= MAX_REVISIONS {
             break Stop::RevisionsExhausted;
+        }
+        if v.verdict == Verdict::NotEvaluable && v.gates.iter().any(|g| g.reason.as_deref() == Some("judge_not_separated")) {
+            break Stop::JudgeNotSeparated;
         }
         n += 1;
         match policy.revise(&spec, &v.gates, n) {
