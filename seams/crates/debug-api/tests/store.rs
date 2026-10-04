@@ -106,3 +106,11 @@ fn file_store_survives_reopen_and_keeps_sequence_and_purge() {
     assert_eq!(s.emit("r", node("c", "running")).unwrap()["sequence"], 4);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn run_ids_that_alias_on_windows_are_refused() {
+    let s = Store::memory();
+    for bad in ["con", "NUL", "aux.x", "com1", "lpt9", "a.", "trail..", "a:b"] {
+        assert!(s.emit(bad, start("t")).is_err(), "{bad:?} must be refused");
+    }
+}

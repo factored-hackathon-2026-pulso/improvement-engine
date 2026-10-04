@@ -283,3 +283,11 @@ fn a_purged_or_unknown_future_cursor_is_410_with_both_recovery_shapes() {
     assert_eq!(get(&app, &format!("{D}/runs/run-a/events?after_sequence=0")).0, 410);
     assert_eq!(get(&app, &format!("{D}/runs/run-a/events?after_sequence=2")).0, 200);
 }
+
+#[test]
+fn the_cursor_one_past_the_head_is_already_a_different_history() {
+    let (_s, app) = seeded();
+    let head = get(&app, &format!("{D}/runs/run-a/events?after_sequence=0")).1["items"].as_array().unwrap().len();
+    assert_eq!(get(&app, &format!("{D}/runs/run-a/events?after_sequence={head}")).0, 200);
+    assert_eq!(get(&app, &format!("{D}/runs/run-a/events?after_sequence={}", head + 1)).0, 410);
+}

@@ -117,3 +117,21 @@ fn admin_ingest_route_takes_a_report_body() {
     let again = app.handle(&Req { method: "POST".into(), path: "/__admin/v1/ingest/engine-run".into(), query: String::new(), headers: h, body: REPORT.as_bytes().to_vec() });
     assert_eq!(again.status, 409);
 }
+
+#[test]
+fn a_double_without_part_or_status_is_not_silently_dropped() {
+    let s = Arc::new(Store::memory());
+    let mut r = report();
+    r["doubles"].as_array_mut().unwrap().push(json!({"part": "mystery", "note": "no status given"}));
+    r["doubles"].as_array_mut().unwrap().push(json!({"status": "fake_only"}));
+    // either refused outright or shown (never hidden)
+    match ingest(&s, &r) {
+        Err(_) => {}
+        Ok(_) => {
+            let app = App::new(s, Config::default());
+            let (_, p) = get(&app, &format!("{D}/profile"));
+            let shown = p["doubles"].to_string();
+            assert!(shown.contains("mystery") && shown.contains("fake_only"), "dropped: {shown}");
+        }
+    }
+}

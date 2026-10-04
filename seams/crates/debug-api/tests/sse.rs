@@ -113,3 +113,18 @@ fn only_loopback_addresses_can_be_bound() {
     assert!(bind_loopback("not an address").is_err());
     assert!(bind_loopback("127.0.0.1:0").is_ok());
 }
+
+#[test]
+fn a_purge_past_a_connected_cursor_ends_the_feed_instead_of_skipping_events() {
+    let (store, port) = boot(5000);
+    store.emit("r", NewEvent::new("run_started", "run", "r", json!({"title": "t", "state": "running", "origin": "manual"}))).unwrap();
+    let mut s = open(port, &format!("{D}/runs/r/events/stream"), "");
+    read_until(&mut s, |t| t.contains("id: 1"));
+    for i in 0..3 {
+        store.emit("r", ev(i)).unwrap();
+    }
+    store.purge_through("r", 3).unwrap(); // events 2 and 3 are gone before the feed could send them
+    store.emit("r", ev(3)).unwrap(); // 5? no: head 5 -> seq 5
+    let text = read_until(&mut s, |t| t.contains("id: 5"));
+    assert!(!ids(&text).contains(&5) || ids(&text).contains(&2), "silent gap: {:?}", ids(&text));
+}
