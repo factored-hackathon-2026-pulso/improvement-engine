@@ -36,7 +36,47 @@ pub struct Config {
 impl Config {
     /// Keys: data_mode, adapter, source_id, work_dir, runner_exe (required); poll_interval_secs (30), batch_cap (1000),
     /// min_history_days (14), min_history_cases (200), min_support (5).
-    pub fn from_pairs(_pairs: &[(&str, &str)]) -> Result<Config, SourceError> {
-        Err(SourceError::BadConfig("todo".into()))
+    pub fn from_pairs(pairs: &[(&str, &str)]) -> Result<Config, SourceError> {
+        let bad = |m: String| SourceError::BadConfig(m);
+        let mut get: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+        for (k, v) in pairs {
+            const KEYS: &[&str] = &["data_mode", "adapter", "source_id", "work_dir", "runner_exe", "poll_interval_secs", "batch_cap", "min_history_days", "min_history_cases", "min_support"];
+            if !KEYS.contains(k) {
+                return Err(bad(format!("unknown config key {k:?}")));
+            }
+            if get.insert(k, v).is_some() {
+                return Err(bad(format!("duplicate config key {k:?}")));
+            }
+        }
+        let req = |k: &str| get.get(k).copied().filter(|v| !v.is_empty()).ok_or_else(|| bad(format!("missing {k}")));
+        let num = |k: &str, default: u64, lo: u64, hi: u64| -> Result<u64, SourceError> {
+            let n = match get.get(k) {
+                None => default,
+                Some(v) => v.parse::<u64>().map_err(|_| bad(format!("{k} must be a whole number")))?,
+            };
+            if (lo..=hi).contains(&n) { Ok(n) } else { Err(bad(format!("{k} must be {lo}..={hi}"))) }
+        };
+        let data_mode = DataMode::parse(req("data_mode")?).ok_or_else(|| bad("data_mode must be dataset or platform".into()))?;
+        let adapter = match req("adapter")? {
+            "product-sqlite" => AdapterKind::ProductSqlite,
+            "product-postgres" => AdapterKind::ProductPostgres,
+            "dataset-pg" => AdapterKind::DatasetPg,
+            other => return Err(bad(format!("unknown adapter {other:?}"))),
+        };
+        if (data_mode == DataMode::Dataset) != (adapter == AdapterKind::DatasetPg) {
+            return Err(bad(format!("adapter {} cannot serve data_mode {}", adapter.as_str(), data_mode.as_str())));
+        }
+        Ok(Config {
+            data_mode,
+            adapter,
+            source_id: SourceId::new(data_mode, req("source_id")?)?,
+            poll_interval: Duration::from_secs(num("poll_interval_secs", 30, 1, 86_400)?),
+            batch_cap: num("batch_cap", 1000, 1, crate::policy::HARD_CAP as u64)? as usize,
+            work_dir: PathBuf::from(req("work_dir")?),
+            runner_exe: PathBuf::from(req("runner_exe")?),
+            min_history_days: num("min_history_days", 14, 0, 3650)? as u32,
+            min_history_cases: num("min_history_cases", 200, 0, 10_000_000)? as u32,
+            min_support: num("min_support", 5, 1, 1_000_000)? as u32,
+        })
     }
 }
