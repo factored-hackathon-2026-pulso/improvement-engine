@@ -16,3 +16,7 @@ Data-class rules: reports carry ids and labels only, never rows. Honesty labels:
 `agent_roleplay`, `recorded`, `stand-in`, `simulated`, `not_exercised`, `blocked(<reason>)`. Consumed by `e2e-core` (`build_report`).
 
 Owner lane: L-GOV.
+
+Freeze (GT0): `FREEZE.json` pins C-2 (`engine_run.py`, `report.schema.json`) and C-12 (roleplay `protocol.py`, `scanner.py`,
+`shim.py`, which carry the queue protocol, scanner allow-list and ledger) by sha256 (LF-normalised). `test_freeze.py` fails on
+any drift. A deliberate revision re-pins with `python contracts/engine-run/freeze.py --write` plus a journal entry.

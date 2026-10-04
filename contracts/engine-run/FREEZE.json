@@ -1,0 +1,22 @@
+{
+  "schema": "contract-freeze/v1",
+  "contracts": {
+    "C-2": {
+      "status": "frozen",
+      "digest": "sha256:9f3f922374ee76e457133ee1b693608c0d0d508200fa52ad21451f9c0a45b510",
+      "files": {
+        "contracts/engine-run/engine_run.py": "sha256:f94ec6dee8b850138c486cc53ce227fc6e1b54e68a3a149fd28c382352668a36",
+        "contracts/engine-run/report.schema.json": "sha256:ca797904b30421ae8a57da26c547639d19d8c345a8fe687d8a2b6f82a8457a61"
+      }
+    },
+    "C-12": {
+      "status": "frozen",
+      "digest": "sha256:3eeab680712eb36205af975176a8a4ef86529b2635fae4016c352282b489bbb5",
+      "files": {
+        "roleplay-llm/roleplay_llm/protocol.py": "sha256:cc261a6e9ad0288caf1f6cc9beb10a2a8430b8f33ccc9152ec64ee8c373d6ede",
+        "roleplay-llm/roleplay_llm/scanner.py": "sha256:530590ec181ae3003ea33c3bf913f947758d3205a86bf7913c1993d3ee25d208",
+        "roleplay-llm/roleplay_llm/shim.py": "sha256:13bedbfdfde752c836697210f26b4a3839d1763c633ef613235d668816090504"
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pulso/engine-run/report/c2-1",
+  "title": "engine-run report (C-2)",
+  "description": "Structure only. Honesty rules H1-H8 and G1 live in engine_run.py (check) and are frozen with this file.",
+  "type": "object",
+  "required": ["contract_revision", "target", "sha", "host", "label", "quality_claims", "steps", "ports", "authors"],
+  "properties": {
+    "contract_revision": {"type": "string"},
+    "target": {"type": "string"},
+    "sha": {"type": "string"},
+    "host": {"type": "string"},
+    "label": {"enum": ["DEMO-0", "DEMO-1a", "DEMO-1b", "DEMO-2"]},
+    "quality_claims": {"const": "forbidden"},
+    "gate": {"type": "object", "properties": {"verdict": {"type": ["string", "null"]}, "judge": {"type": "string"}}},
+    "overrides": {"type": "array", "items": {"type": "object"}},
+    "doubles": {"type": "array", "items": {"type": "object", "required": ["part", "status"]}},
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "data_class", "target", "sha", "contract_revision", "host"],
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"type": "string"},
+          "data_class": {"type": "string"},
+          "receipt": {"type": "object"}
+        }
+      }
+    },
+    "ports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "object", "required": ["port", "provenance", "price_source"]}
+    },
+    "authors": {
+      "type": "object",
+      "required": ["world", "suite", "effect", "judge", "suite_sealed_at"],
+      "properties": {
+        "world": {"type": "string"}, "suite": {"type": "string"}, "effect": {"type": "string"}, "judge": {"type": "string"},
+        "suite_sealed_at": {"type": "string"},
+        "candidate_created_at": {"type": ["string", "null"], "description": "null only when the compile step is not exercised (H5)"}
+      }
+    }
+  }
+}
