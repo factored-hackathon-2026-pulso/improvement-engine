@@ -14,6 +14,7 @@ pub mod canon;
 pub mod client;
 pub mod dto;
 pub mod errors;
+pub mod evaluate;
 mod generated;
 pub mod http;
 pub mod jwt;
