@@ -100,3 +100,23 @@ def test_write_batch_refuses_non_allow_listed(monkeypatch):
         s.write_batch({"login_accounts": [{"id": "x"}]})
     with pytest.raises(ValueError):
         s.write_batch({"staff": [{"id": "x", "email": "a@b"}]})
+
+
+def test_overwrite_refuses_when_foreign_rows_survive_reset(monkeypatch, capsys):
+    """reset() only deletes the simulator's own rows; foreign rows must stop the run, not collide on sequence."""
+    from product_stream.cli import main
+
+    class Cur(FakeCur):
+        def fetchone(self):
+            return (5,)
+
+    class Conn(FakeConn):
+        def cursor(self):
+            return Cur(self.log)
+
+    conn = Conn()
+    monkeypatch.setenv("PULSO_PRODUCT_SIM_PG_DSN", DSN)
+    rc = main(["--postgres", "--backfill", "10", "--overwrite"], sleep=lambda s: None, connect=lambda d: conn)
+    assert rc == 2
+    assert not any("INSERT" in sql for sql, _ in conn.log)
+    assert "s3cr3t" not in capsys.readouterr().err

@@ -86,3 +86,15 @@ def test_volume_drift_raises_events_per_sim_hour():
     late = third / max(1, t(ev[-1]) - t(ev[-third]))
     assert late > 1.8 * early
     assert g.manifest()["planted"]["effect"] == "volume_drift"
+
+
+def test_manifest_reports_realised_target_cell_rates_not_only_nominal():
+    from product_stream.generator import ProductStream
+    g = ProductStream(seed=1, scenario="escalation_rise", horizon_events=6000)
+    while g.last_sequence < 6000:
+        g.next_batch(500)
+    r = g.manifest()["realised"]["target_cell"]
+    assert set(r) == {"pre_onset", "post_onset"}
+    post = r["post_onset"]
+    assert post["cases"] > 0 and abs(post["reassign_rate"] - post["reassigns"] / post["cases"]) < 1e-9
+    assert post["reassign_rate"] > r["pre_onset"]["reassign_rate"]
