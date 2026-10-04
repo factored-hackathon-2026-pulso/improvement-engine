@@ -1,0 +1,107 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "TPS",
+    "M0RP",
+    "RPP"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "independent-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0041",
+    "journal CL-0044",
+    "git b555416, 3d3c79e"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "TPS-R1",
+      "loop": 1,
+      "summary": "system prompt was not scanned",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R2",
+      "loop": 1,
+      "summary": "big ints bypassed bounds",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R3",
+      "loop": 1,
+      "summary": "newline in a regex let a token pass (fullmatch needed)",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R4",
+      "loop": 1,
+      "summary": "NFKC-confusable characters not normalised",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R5",
+      "loop": 1,
+      "summary": "response content keys not validated",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R6",
+      "loop": 1,
+      "summary": "fault injection path unhardened",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R7",
+      "loop": 1,
+      "summary": "auth bytes handling",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R8",
+      "loop": 1,
+      "summary": "unbounded recursion in the scanner",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "TPS-R9",
+      "loop": 1,
+      "summary": "Content-Length handling",
+      "status": "fixed",
+      "fix_ref": "b555416"
+    },
+    {
+      "id": "RPP-R1",
+      "loop": 1,
+      "summary": "shim did not validate the responder identity (plain id, known role) before it reached the report label",
+      "status": "fixed",
+      "fix_ref": "3d3c79e",
+      "note": "commit subject only; found during the Q1r live windows"
+    },
+    {
+      "id": "TPS-R10",
+      "loop": 1,
+      "summary": "opaque ids in inputs/args (a name or national id shaped like an allowed token) pass the allow-list; needs a registry of expected ids",
+      "status": "open",
+      "note": "Open risk in CL-0041, CL-0043, CL-0044; worktree w1a-tps. Not closed here."
+    }
+  ],
+  "verdict": "open",
+  "journal_defect_count": 9
+}

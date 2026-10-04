@@ -1,0 +1,56 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "CMPpy",
+    "GSIpy",
+    "P2py"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "independent-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0042",
+    "journal CL-0044",
+    "git 7727e5b, bccfafd"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "CMP-R1",
+      "loop": 1,
+      "summary": "compile accepted bridge/bundle mismatch and duplicate targets; dry-run digest unvalidated",
+      "status": "fixed",
+      "fix_ref": "7727e5b"
+    },
+    {
+      "id": "GSI-R1",
+      "loop": 1,
+      "summary": "judge identity not canonical; run shape lax",
+      "status": "fixed",
+      "fix_ref": "7727e5b"
+    },
+    {
+      "id": "P2-R1",
+      "loop": 1,
+      "summary": "job ids not unique; nested jobs in fast_forward; release event type unvalidated",
+      "status": "fixed",
+      "fix_ref": "bccfafd"
+    },
+    {
+      "id": "GSI-R2",
+      "loop": 1,
+      "summary": "gate has no observable that moves for a prompt-only change (fails honestly: no_structural_improvement)",
+      "status": "accepted",
+      "reason": "Recorded in CL-0044 as the honest gate result; publication only under a labelled simulated-human override and quality_claims forbidden."
+    }
+  ],
+  "verdict": "closed"
+}

@@ -1,0 +1,263 @@
+"""GT0 gate evidence script (DEMO-0). Reads a manifest of receipts, recomputes every check from the artifacts and exits 1
+if any item fails or any receipt is missing. Nothing is taken from a hand-written summary.
+
+Manifest (gt0-manifest/v1), paths relative to the manifest file:
+  {"schema": "gt0-manifest/v1", "reviews_dir": "docs/reviews/claude", "required_wps": [...optional...],
+   "require_g0p_ancestry": false,
+   "artifacts": {"g0p": ..., "trn0": ..., "report": ..., "replay": ..., "live_log": ..., "capacity": ...}}
+
+Items: g0p, trn0, crv0, honesty (the 8 tests against the real report), scanner_ids, doubles, freeze (C-2/C-12 digests),
+replay (run id, 0 misses, bound to the report bytes), live_window, capacity.
+Usage: python gt0_gate.py --manifest M.json [--repo PATH] [--out RESULT.json]
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+import crv0_closure  # noqa: E402
+
+PLAN_DOUBLES = ("model", "jev", "issuer", "product", "host", "gate", "data.origin")
+HONESTY_TESTS = {"test_1": "H1", "test_2": "H2", "test_3": "H3", "test_4": "H4", "test_5": "H5", "test_6": "H6",
+                 "test_7": "H7", "test_8": "H8"}
+LEGS = ("ci", "pytest", "ratchet")
+MIN_SESSIONS = 12
+
+
+def _load(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def engine_run():
+    return sys.modules.get("gt0_engine_run") or _load("gt0_engine_run", ROOT / "contracts" / "engine-run" / "engine_run.py")
+
+
+def freeze_mod():
+    return sys.modules.get("gt0_freeze") or _load("gt0_freeze", ROOT / "contracts" / "engine-run" / "freeze.py")
+
+
+def _res(item, ok, detail):
+    return {"item": item, "ok": bool(ok), "detail": detail}
+
+
+def _json(path: Path):
+    """(doc, problem). A missing or unreadable file is a problem, never a pass."""
+    if not path.is_file():
+        return None, f"missing: {path.name}"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), None
+    except ValueError:
+        return None, f"not JSON: {path.name}"
+
+
+def sha256_of(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def check_receipt_doc(doc: dict, name: str) -> list:
+    p = []
+    if doc.get("schema") != "pre-pr-gate/v1":
+        p.append(f"{name}: schema must be pre-pr-gate/v1")
+    if doc.get("verdict") != "pass":
+        p.append(f"{name}: verdict {doc.get('verdict')!r}")
+    for leg in LEGS:
+        if (doc.get("legs") or {}).get(leg, {}).get("status") != "pass":
+            p.append(f"{name}: leg {leg} is not pass")
+    return p
+
+
+def check_g0p(path, repo, ancestry=False):
+    doc, prob = _json(path)
+    if prob:
+        return _res("g0p", False, prob)
+    p = check_receipt_doc(doc, path.name)
+    if not isinstance(doc.get("rust_files_changed"), list):
+        p.append("receipt does not state rust_files_changed")
+    if not doc.get("head_sha"):
+        p.append("receipt carries no head_sha")
+    elif ancestry:
+        r = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", doc["head_sha"], "HEAD"], capture_output=True)
+        if r.returncode != 0:
+            p.append("receipt head_sha is not an ancestor of HEAD")
+    return _res("g0p", not p, "; ".join(p) or f"pre-pr-gate pass at {doc['head_sha'][:12]}")
+
+
+def check_trn0(path):
+    doc, prob = _json(path)
+    if prob:
+        return _res("trn0", False, prob)
+    p = []
+    if doc.get("schema") != "train-receipt/v1" or doc.get("verdict") != "pass":
+        p.append("train receipt must be train-receipt/v1 with verdict pass")
+    prs = doc.get("prs") or []
+    if not prs:
+        p.append("train receipt lists no PRs")
+    for pr in prs:
+        w, prob = _json(path.parent / str(pr.get("w0_receipt", "")))
+        if prob:
+            p.append(f"PR {pr.get('n')}: W0 receipt {prob}")
+        else:
+            p += check_receipt_doc(w, f"PR {pr.get('n')} W0 receipt")
+    return _res("trn0", not p, "; ".join(p) or f"{len(prs)} train PR(s), each with a passing W0 receipt")
+
+
+def check_crv0(reviews: Path, required):
+    code, lines = crv0_closure.run(reviews, list(required))
+    bad = [l for l in lines if not l.startswith("closed")]
+    return _res("crv0", code == 0, "; ".join(bad) or f"{len(lines)} review logs closed")
+
+
+def check_freeze(root: Path):
+    try:
+        problems = freeze_mod().verify(root)
+    except (OSError, ValueError) as e:
+        problems = [f"freeze pin unreadable ({type(e).__name__})"]
+    return _res("freeze", not problems, "; ".join(problems) or "C-2 and C-12 match FREEZE.json")
+
+
+def honesty_results(report: dict, replay: dict) -> dict:
+    """The eight honesty tests evaluated on the report itself: test n fails iff rule Hn has a violation."""
+    er = engine_run()
+    viol = er.check(report) + [{"rule": "H3", "where": "mapping", "msg": str(v)} for v in replay.get("mapping_mutation_violations") or []]
+    out = {t: [v for v in viol if v["rule"] == rule] for t, rule in HONESTY_TESTS.items()}
+    out["other"] = [v for v in viol if v["rule"] not in HONESTY_TESTS.values()]
+    return out
+
+
+def check_honesty(report, replay):
+    res = honesty_results(report, replay)
+    bad = [f"{t}: " + ", ".join(f"{v['where']}: {v['msg']}" for v in vs) for t, vs in res.items() if vs]
+    return _res("honesty", not bad, " | ".join(bad) or "tests 1-8, G1 and S1 clean on the GT0 report")
+
+
+def check_scanner_ids(report):
+    er = engine_run()
+    ids, p = set(), []
+    for s in report.get("steps", []):
+        rc = s.get("receipt") or {}
+        sid = rc.get("scanner_id")
+        if sid:
+            ids.add(sid)
+            if sid not in er.KNOWN_SCANNER_IDS:
+                p.append(f"{s.get('id')}: unknown scanner id {sid!r}")
+        elif er._norm(rc.get("provider")) in {er._norm(x) for x in er.THIRD_PARTY_PROVIDERS}:
+            p.append(f"{s.get('id')}: third-party step without a scanner id")
+    if not ids:
+        p.append("no scanner id on any step")
+    return _res("scanner_ids", not p, "; ".join(p) or "scanner ids " + ", ".join(sorted(ids)))
+
+
+def check_doubles(report):
+    parts = {d.get("part") for d in report.get("doubles") or []}
+    p = [f"doubles[] lacks {x}" for x in PLAN_DOUBLES if x not in parts]
+    if report.get("label") != "DEMO-0":
+        p.append("report label must be DEMO-0")
+    if report.get("host") != "python":
+        p.append("report host must be python")
+    if report.get("quality_claims") != "forbidden":
+        p.append("quality_claims must be forbidden")
+    return _res("doubles", not p, "; ".join(p) or "doubles[] lists the plan parts; DEMO-0, host=python, quality_claims forbidden")
+
+
+def check_replay(path, report_path):
+    doc, prob = _json(path)
+    if prob:
+        return _res("replay", False, prob)
+    p = []
+    if doc.get("schema") != "gt0-replay/v1" or doc.get("mode") != "replay":
+        p.append("replay record must be gt0-replay/v1 with mode replay")
+    if not doc.get("run_id"):
+        p.append("no run_id")
+    if doc.get("misses") != 0:
+        p.append(f"digest misses {doc.get('misses')!r}, need 0")
+    if not isinstance(doc.get("calls"), int) or doc["calls"] <= 0:
+        p.append("replay served no calls")
+    if report_path is None or not report_path.is_file() or doc.get("report_sha256") != sha256_of(report_path):
+        p.append("replay record is not bound to the report bytes (report_sha256)")
+    return _res("replay", not p, "; ".join(p) or f"run {doc['run_id']}: {doc['calls']} calls, 0 misses")
+
+
+def check_live(path):
+    doc, prob = _json(path)
+    if prob:
+        return _res("live_window", False, prob)
+    ws = doc.get("windows") or []
+    p = []
+    if doc.get("schema") != "live-window-log/v1":
+        p.append("live log must be live-window-log/v1")
+    if not any(str(w.get("kind", "")).startswith("roleplay") for w in ws):
+        p.append("no live roleplay window recorded")
+    for w in ws:
+        if not isinstance(w.get("scanner_rejections"), int) or not isinstance(w.get("calls"), int):
+            p.append(f"window {w.get('id')}: needs integer calls and scanner_rejections")
+    return _res("live_window", not p, "; ".join(p) or f"{len(ws)} live window(s) logged")
+
+
+def check_capacity(path):
+    doc, prob = _json(path)
+    if prob:
+        return _res("capacity", False, prob)
+    ss = doc.get("sessions") or []
+    nums = all(isinstance(s.get("lane_hours"), (int, float)) for s in ss)
+    p = []
+    if doc.get("schema") != "capacity/v1" or len(ss) < MIN_SESSIONS or not nums:
+        p.append(f"need capacity/v1 with numeric lane_hours for sessions 1..{MIN_SESSIONS} (have {len(ss)})")
+    if not isinstance(doc.get("baseline_lane_hours_per_session"), (int, float)):
+        p.append("no baseline_lane_hours_per_session")
+    return _res("capacity", not p, "; ".join(p) or f"re-baselined from {len(ss)} sessions")
+
+
+def evaluate(manifest: Path, repo: Path = ROOT) -> list:
+    manifest = Path(manifest)
+    m, prob = _json(manifest)
+    if prob:
+        return [_res("manifest", False, prob)]
+    base = manifest.parent
+    art = {k: (base / v) for k, v in (m.get("artifacts") or {}).items() if isinstance(v, str)}
+    missing = lambda k: art.get(k) or base / f"<no {k} in manifest>"  # noqa: E731
+    out = [check_g0p(missing("g0p"), repo, bool(m.get("require_g0p_ancestry"))), check_trn0(missing("trn0")),
+           check_crv0(base / m.get("reviews_dir", "docs/reviews/claude"), m.get("required_wps", crv0_closure.DEFAULT_REQUIRED))]
+    report, p1 = _json(missing("report"))
+    replay, p2 = _json(missing("replay"))
+    if p1 or p2:
+        out += [_res(k, False, p1 or "report unavailable") for k in ("honesty", "scanner_ids", "doubles")]
+        if p2 and not p1:
+            out[-3] = _res("honesty", False, p2)
+    else:
+        out += [check_honesty(report, replay), check_scanner_ids(report), check_doubles(report)]
+    out += [check_freeze(repo), check_replay(missing("replay"), art.get("report")), check_live(missing("live_log")),
+            check_capacity(missing("capacity"))]
+    return out
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--manifest", required=True)
+    ap.add_argument("--repo", default=str(ROOT))
+    ap.add_argument("--out")
+    a = ap.parse_args(argv)
+    res = evaluate(Path(a.manifest), Path(a.repo))
+    for r in res:
+        print(f"{'PASS' if r['ok'] else 'FAIL'} {r['item']}: {r['detail']}")
+    ok = all(r["ok"] for r in res)
+    print("gt0-gate:", "pass" if ok else "fail")
+    if a.out:
+        Path(a.out).write_text(json.dumps({"schema": "gt0-gate-result/v1", "verdict": "pass" if ok else "fail",
+                                           "items": res}, indent=1) + "\n", encoding="utf-8")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

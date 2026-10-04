@@ -1,0 +1,53 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "E0-DATA-PATH"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "independent-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0045",
+    "git a35883a, c46f04c, ea28b95"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "E0-R1",
+      "loop": 1,
+      "summary": "E0-derived data was labelled generated_sample in --e0 runs",
+      "status": "fixed",
+      "fix_ref": "a35883a"
+    },
+    {
+      "id": "E0-R2",
+      "loop": 1,
+      "summary": "real-E0-derived aggregates were committed in THREAD01.md",
+      "status": "fixed",
+      "fix_ref": "ea28b95"
+    },
+    {
+      "id": "E0-R3",
+      "loop": 1,
+      "summary": "exception messages echoed values in --e0 mode (leak path)",
+      "status": "fixed",
+      "fix_ref": "c46f04c"
+    },
+    {
+      "id": "E0-R4",
+      "loop": 1,
+      "summary": "first-Windows-build receipt of the sensor exe is not in the repo; E0 path only via env var",
+      "status": "open",
+      "note": "GT0 gap analysis item 8; not evidenced by a review."
+    }
+  ],
+  "verdict": "open"
+}

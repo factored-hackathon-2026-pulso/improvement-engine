@@ -1,0 +1,10 @@
+{
+ "schema": "gt0-replay/v1",
+ "run_id": "replay-3d9e9776af748ae0",
+ "mode": "replay",
+ "calls": 5,
+ "misses": 0,
+ "fixtures_digest": "sha256:7dc26167da9ec1d5de37b5ccfe981025e988286278edcf2ae394717b9a830560",
+ "report_sha256": "sha256:edad61c42321f87e30937dad6c5280f56ee52817d7c9cbc7edefa38d2fdf51be",
+ "mapping_mutation_violations": []
+}

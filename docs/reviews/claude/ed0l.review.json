@@ -1,0 +1,48 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "ED0L"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "independent-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0043",
+    "journal CL-0045",
+    "git e081c98, c46f04c"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "EDL-R1",
+      "loop": 1,
+      "summary": "claim digest was not keyed; ref binding, suppressed-count exposure and salt length unchecked",
+      "status": "fixed",
+      "fix_ref": "e081c98"
+    },
+    {
+      "id": "EDL-R2",
+      "loop": 1,
+      "summary": "lab did not enforce min_cell; small numerator/complement cells now suppressed",
+      "status": "fixed",
+      "fix_ref": "c46f04c",
+      "note": "CL-0045 says min_cell enforced"
+    },
+    {
+      "id": "EDL-R3",
+      "loop": 1,
+      "summary": "complementary suppression not verified end to end in E0 mode",
+      "status": "open",
+      "note": "Open risk from CL-0043; c46f04c claims it, the GT0 gap analysis asks to verify. Worktree w1a-tps."
+    }
+  ],
+  "verdict": "open"
+}

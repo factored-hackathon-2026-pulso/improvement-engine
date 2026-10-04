@@ -1,0 +1,55 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "M2a",
+    "M1"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "independent-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0043",
+    "journal CL-0044",
+    "git ea577e9"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "M2-R1",
+      "loop": 1,
+      "summary": "core reached the gateway on the wrong network (needs the internal net)",
+      "status": "fixed",
+      "fix_ref": "ea577e9"
+    },
+    {
+      "id": "M2-R2",
+      "loop": 1,
+      "summary": "kill switch did not fail closed",
+      "status": "fixed",
+      "fix_ref": "ea577e9"
+    },
+    {
+      "id": "M2-R3",
+      "loop": 1,
+      "summary": "guard check and reserve were not serialised; non-finite values did not fail closed",
+      "status": "fixed",
+      "fix_ref": "ea577e9"
+    },
+    {
+      "id": "M2-R4",
+      "loop": 1,
+      "summary": "SpendGuard is not wired into the runtime (main.py builds only SpendMeteringGateway); ceiling not shown through the runtime",
+      "status": "open",
+      "note": "Open risk in CL-0043; worktree w1a-spend."
+    }
+  ],
+  "verdict": "open"
+}

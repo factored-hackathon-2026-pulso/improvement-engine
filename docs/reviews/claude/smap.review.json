@@ -1,0 +1,32 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "SMAP"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "independent-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0043",
+    "git 3b5f4f3"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "SMAP-R1",
+      "loop": 1,
+      "summary": "catalogue/world drift and malformed builder output were accepted",
+      "status": "fixed",
+      "fix_ref": "3b5f4f3"
+    }
+  ],
+  "verdict": "closed"
+}
