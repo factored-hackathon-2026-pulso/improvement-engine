@@ -37,3 +37,12 @@ Canonical vocabulary in docs/agents/triage-labels.md.
 ### Domain docs
 
 Single context CONTEXT.md and docs/adr/. See docs/agents/domain.md.
+
+## Ownership, governance and data classes
+
+- Path ownership: `OWNERS.md` (one lane per path; checked by `docs/agents/tests/test_owners.py`).
+- Journal tags, state table and Team trailer: `docs/agents/governance.md`.
+- Codex lanes: `docs/agents/codex-onboarding.md`.
+- Data-class rule for all developer agents: work from schemas, digests and synthetic
+  fixtures, never raw E0 text, CSV sources or other original data; both Claude and
+  Codex are hosted third parties.
