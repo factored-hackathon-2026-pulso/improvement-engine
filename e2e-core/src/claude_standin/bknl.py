@@ -29,6 +29,7 @@ class Negative:
     engine_op: Callable[[dict], dict] | None  # world -> ChangeSpec operation
     core_changes: Callable[[dict], list]  # world -> Core `changes`
     why: str
+    core_refuses: bool = True  # False: the real Core ACCEPTS this draft (live finding), the engine is the only guard
 
 
 def _prompt(world: dict) -> dict:
@@ -87,7 +88,7 @@ NEGATIVES: list[Negative] = [
     Negative("add_prompt", "kind_not_supported", _op_add_prompt, _core_add_prompt,
              "add on a prompt (add_prompt) is not a targetable kind of the seeded world"),
     Negative("stale_precondition", "missing_precondition", _op_stale, _core_replace,
-             "precondition_digest differs from the digest of the asset in the world"),
+             "precondition_digest differs from the digest of the asset in the world", core_refuses=False),
     Negative("outside_bridge", "outside_bridge", _op_outside, _core_outside,
              "target prompt is not the slot used by the bridged flow"),
     Negative("overwrite_published", "mutable_reference", _op_overwrite, _core_overwrite,
@@ -135,7 +136,7 @@ def classify_core(status: int, body: Any) -> dict:
         return {"outcome": "accepted"}
     if status == 200:
         return {"outcome": "refused", "rules": [v.get("rule") for v in b.get("violations", [])]}
-    code = b.get("code") or (b.get("error") or {}).get("code") if isinstance(b.get("error", {}), dict) else b.get("code")
+    code = b.get("code")
     if isinstance(code, str) and code.startswith("pulso:") and 400 <= status < 500:
         return {"outcome": "denied", "code": code, "http": status}
     return {"outcome": "error", "http": status}
