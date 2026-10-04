@@ -107,6 +107,39 @@ class Schema(unittest.TestCase):
         self.assertNotIn("S1", rules(r))
 
 
+class Loopholes(unittest.TestCase):
+    def test_blocked_forms_and_unhashable(self):
+        for bad in ("blocked()", "blocked( )", "blocked(a b)", ["real"], None, "Real"):
+            r = good(); r["steps"][3]["status"] = bad
+            self.assertIn("S1", rules(r), repr(bad))
+
+    def test_empty_steps_rejected(self):
+        r = good(); r["steps"] = []
+        self.assertIn("S1", rules(r))
+
+    def test_real_needs_real_provider(self):
+        for rc in ({"provider": "claude-standin"}, {}, None):
+            r = good(); r["steps"][2].update(status="real", receipt=rc)
+            self.assertIn("H1", rules(r), repr(rc))
+
+    def test_author_spelling_bypass(self):
+        r = good(); r["authors"]["judge"] = " Suite-X "; r["authors"]["suite"] = "suite_x"
+        self.assertIn("H5", rules(r))
+
+    def test_model_spelling_bypass(self):
+        r = good(); r["steps"][1]["model"] = "Agent_Roleplay "
+        self.assertIn("H7", rules(r))
+
+    def test_data_class_case(self):
+        r = good(); r["steps"][0]["data_class"] = "e0"; del r["steps"][0]["receipt"]["scanner_id"]
+        self.assertIn("H2", rules(r))
+
+    def test_doubles_lists_lying_real_step(self):
+        r = good(); r["steps"][2].update(status="real", receipt={"provider": "scripted"})
+        d = er.generate_doubles(r, observed={})
+        self.assertTrue(any(x["part"] == "gate" for x in d))
+
+
 class Doubles(unittest.TestCase):
     def test_generated_from_observed(self):
         r = good()
