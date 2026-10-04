@@ -5,6 +5,8 @@ agent's closing reply), the local human issuer (internal-only container), the ro
 verdict judge, platform-sim.
 
 Each parametrized case is one live "window" (a full thread run); seconds per live call are logged through `effect`.
+A window publishes prompt and suite version 2.0.0 (immutable in the registry), so run ONE window per fresh stack:
+`run.ps1 -PytestArgs '-k','steps_5_6_8_9 and [N]'`; a second window on the same stack is skipped, not failed.
 Runs after test_07 (alphabetical order): it publishes releases of `atencion-tarea` to staging (prod is never promoted)."""
 from __future__ import annotations
 
@@ -56,6 +58,8 @@ def test_thread01_steps_5_6_8_9_are_real_narrow_against_core(stack: Any, authori
     world = C.load_world(T.WORLD_FILE)
     rc = H.RealCore(engine=stack.engine, bridge=stack.bridge, registry=H.make_registry(stack.runtime), authorize=authorizer,
                     world=world, tenant=TENANT, agent_id=AGENT, arm_profile=PROFILE)
+    if rc.alias_read_raw("staging") != rc.base_release():  # publish consumes version 2.0.0 of the prompt and the suite
+        pytest.skip("a previous window already published to this stack's staging: run one window per fresh stack (-k '[N]')")
     t0 = time.time()
     res = T.run_thread(T.ThreadConfig(workdir=tmp_path, exe=EXE, queue_dir=T.ROOT / "e2e-core/tests/fixtures/thread01_queue",
                                       hooks=rc.hooks()))

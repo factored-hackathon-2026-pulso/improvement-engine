@@ -25,20 +25,40 @@ The final report is built by `build_report` and must pass `contracts/engine-run`
 
 ## INT0 status (real-Core hooks)
 
+World: the thread targets the seeded base world `attention-task` (declaration `agent-core-assets/worlds/seeded-base.world.yaml`),
+agent `atencion-tarea`: a task agent (tool, rule and respond nodes, no decision model). The conversational `atencion` agent of
+`attention-demo` needs provider `jev`, which the Core at pin c814c2b does not compose (`DecisionConfigError`, agent-core PR 28);
+`tools/worldcheck.py` (`needs_decision_provider`) keeps the seeded agent free of any decision model, so arms and the native
+evaluation complete on the pinned Core with no agent-core or Codex dependency.
+
 `claude_standin/core_hooks.py`: `make_dry_run`, `make_alias_read` and `RealCore` (frozen proposal, native evaluation, Core
 arms, human-JWS approval, publish, alias read after publish, `gate_probe`, seconds per live call in `timings`).
-Live evidence on PG16 + the real Core image (pin c814c2b), `tests/live/test_08_*` and `tests/live/test_09_*`:
+Live evidence on PG16 + the real Core image (pin c814c2b), `tests/live/test_08_*` and `tests/live/test_09_*`
+(`test_thread01_steps_5_6_8_9_are_real_narrow_against_core[1..3]`, one fresh stack per window):
 
 | Step | Now | Evidence |
 |---|---|---|
-| 5 concrete change | real-narrow | Core dry-run digest; the real writer stage then freezes the thread's OWN draft and its `candidate_hash` equals that digest (test_09 windows 1-3) |
-| 6 arms | stand-in, `blocked(jev)` | `RealCore.run_arms` is unit-tested, but every Core arm on the atencion world ends `failed_infra: DecisionConfigError` in all three profiles (test_09 `test_step_6_*`): its decision models use provider `jev`, which the Core does not compose (agent-core PR 28, `jev_base_url_not_configurable`) |
-| 8 human authority | simulated, `blocked(jev)` | Core approve needs `evaluated`; the native evaluation of the atencion suite ends `failed_infra`, so the human-issuer JWS gets `409 illegal_transition` (the JWS passes Core auth, state is refused). `RealCore.approve` is unit-tested and flips the step when the evaluation can pass |
-| 9 publish + alias read | stand-in, `blocked(jev)` | publish is refused the same way and staging is unmoved (`staging_unchanged`); `RealCore.publish/alias_read` ready (alias read refuses staging before publish; step 9 requires the alias read to show the published release) |
+| 5 concrete change | real-narrow | Core dry-run digest; the real writer stage freezes the thread's OWN draft and its `candidate_hash` equals that digest |
+| 6 arms | real-narrow (verdict judge stays the GSIpy stand-in) | 6 Core arm runs per window (3 cases x base/candidate, profile `evolution_task`, scripted tools, scripted llm-gateway double for the closing reply), all `completed` |
+| 8 human authority | real-narrow (issuer is the local human-issuer double) | Core native evaluation `pass`, then approve with the human-issuer JWS verified by Core; tampered hash and replay refused by Core |
+| 9 publish + alias read | real-narrow | publish to staging, alias read after publish shows the new release (`rel-253b52903d377aae`), prod unchanged |
 
-Doubles named in `doubles[]` when the hooks run: control-api broker/lab/bank (`e2e-fixtures`), local human issuer (internal
-container), roleplay shim (3-4), GSIpy verdict judge (6), platform-sim (10). The writer stage uses no model.
-Seconds per live call (3 windows, whole thread plus freeze/evaluate/approve/publish probes 3.7-4.4 s): alias read 0.02-0.03,
-dry-run 0.05, writer stage 0.73-0.77, admission 0.03-0.05, evaluate-only 0.58-0.64, proposal read 0.20-0.22, approve/publish
-attempt 0.22-0.25, Core arm attempt 0.11-0.13 (`effects.thread01_windows` in the e2e report).
+Honest findings of the live windows:
+- The GSIpy structural gate reports `fail: no_structural_improvement` in every window: base and candidate complete the same cases
+  (Replace Prompt changes text only; Add EvalSuite re-publishes the same scenarios, which Core classifies as no loosening). Step 7
+  (stand-in revision) runs; the runner still continues to steps 8-9 to exercise the Core mechanics. No quality claim is made.
+- A window publishes prompt and suite 2.0.0 (immutable in the registry): one window per fresh stack
+  (`run.ps1 -PytestArgs '-k','steps_5_6_8_9 and [N]'`); a second window on the same stack is skipped.
+- A non-integer JSON number in a draft (suite seed `120.5`) made the writer's put_draft commitment be denied
+  (`auth_insufficient`, `manual_reconcile`): Core and the Python draft digest canonicalise it differently. Integers and strings pass;
+  `worldcheck` rejects non-integer numbers (`non_integer_number`).
+- `RealCore.approve` now runs (once) the Core native evaluation first; the registry approves only an `evaluated` proposal.
+
+Doubles named in `doubles[]` when the hooks run: control-api broker/lab/bank (`e2e-fixtures`), scripted llm-gateway (the agent's
+closing reply), local human issuer (internal container), roleplay shim (3-4), GSIpy verdict judge (6), platform-sim (10).
+The writer stage uses no model.
+Seconds per live call (3 windows, whole thread incl. freeze, evaluation, approve, publish 6.7-6.8 s): alias read 0.01-0.06,
+dry-run 0.05, writer stage 0.69-0.77, proposal read 0.20-0.25, Core arm run 0.09-0.31 (6 per window), admission 0.03-0.05,
+evaluate-only 0.86-0.91, approve 0.22-0.23 (wrong-hash attempt 0.20-0.27, replay 0.22-0.25), publish 0.27-0.30
+(`effects.thread01_windows` in the e2e report).
 Stale note removed: `core_state_aliases_not_implemented` in `codex_standin/report.py` (alias reads answer 200).
