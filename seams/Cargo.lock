@@ -304,7 +304,9 @@ version = "0.0.0"
 dependencies = [
  "abi",
  "authority",
+ "base64",
  "core-client",
+ "ed25519-dalek",
  "eval",
  "serde_json",
  "steps",
@@ -1048,6 +1050,7 @@ dependencies = [
  "base64",
  "control-api",
  "core-client",
+ "debug-api",
  "ed25519-dalek",
  "engine",
  "memory",

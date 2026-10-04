@@ -96,6 +96,13 @@ seams/Cargo.toml -> L-CLIENT
 seams/crates/abi/src/lib.rs -> L-ENGINE
 seams/crates/steps/src/lib.rs -> L-ENGINE
 seams/crates/swap/src/lib.rs -> L-ENGINE
+seams/crates/engine/src/models/mod.rs -> L-ENGINE
+seams/crates/engine/src/models/gateway.rs -> L-ENGINE
+seams/crates/engine/src/ledger.rs -> L-ENGINE
+seams/crates/engine/src/real_core.rs -> L-ENGINE
+seams/crates/thread10/src/pipeline.rs -> L-E2E
+seams/crates/thread10/src/requests.rs -> L-E2E
+docs/journal/0220-r1e-model-port-and-viability-ledger.md -> L-ENGINE
 seams/crates/pg/src/lib.rs -> L-PG
 seams/xtask/src/main.rs -> L-ENV
 docs/reviews/codex/rev1.md -> X-REV

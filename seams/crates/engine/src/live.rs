@@ -98,6 +98,11 @@ pub struct PublishInfo {
 
 /// Everything the live handlers need from the Core. Errors are strings: the handler turns them into `HandlerError`.
 pub trait CorePort {
+    /// True only for a port that talks to the real Core (`LiveCore`). Doubles and fakes keep the default: a report derives
+    /// its `real-narrow` labels from this, never from configuration.
+    fn is_real(&self) -> bool {
+        false
+    }
     /// Core dry-run of the compiled operations (canonical JSON each): `sha256:<hex>` of the candidate.
     fn dry_run(&self, ops: &[String]) -> Result<String, String>;
     /// Dry-run, seal and freeze the draft through the writer stage (stable key per `job_id`: a replay is the same proposal).

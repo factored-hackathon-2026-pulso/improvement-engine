@@ -2,6 +2,7 @@
 //! crate). Scenarios are the E2 executor contract: C-7 lease/fence/effect semantics plus the fence-tied
 //! `out/N` commit. `run_suite` returns one line per failing scenario (empty = conforms).
 use crate::executor::{execute, read_lease, ExecError, ExecOptions};
+use crate::ledger::{Ledger, LedgerEntry, Verdict};
 use crate::{demo, event_log, CommitGuard, JobStore};
 use abi::*;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -32,6 +33,7 @@ pub const SCENARIOS: &[(&str, Scenario)] = &[
     ("uncommitted_effect_dispatch_blocks_resume", effect_blocks),
     ("failed_pure_handler_is_retried", retry_pure),
     ("max_attempts_exhausted", max_attempts),
+    ("ledger_entries_are_created_once_replay_identically_and_are_visible_to_other_handles", ledger_entries),
 ];
 
 pub fn run_suite(b: &dyn Backend) -> Vec<String> {
@@ -249,4 +251,21 @@ fn max_attempts(b: &dyn Backend) -> Result<(), String> {
     let mut o = opts("w", 3 * 60);
     o.max_attempts = 3;
     eq("exhausted", execute(&*s, &hs, "x", &o), Err(ExecError::AttemptsExhausted(3)))
+}
+
+/// The viability ledger rides on `cas`: an entry is created once, an identical replay is a no-op, a different entry under the
+/// same ordinal is refused (also from another handle), and a second handle reads what the first recorded, in order.
+fn ledger_entries(b: &dyn Backend) -> Result<(), String> {
+    let s = b.fresh("ledger");
+    let l = Ledger::new(&*s);
+    let mk = |n: u32, sig: &str| LedgerEntry::new(n, "run-1", &format!("prop-{n}"), sig, Verdict::NotEvaluable, "kind_not_supported");
+    eq("first", l.record(&mk(0, "sig-a")), Ok(true))?;
+    eq("second", l.record(&mk(1, "sig-b")), Ok(true))?;
+    eq("replay", l.record(&mk(0, "sig-a")), Ok(false))?;
+    let other = b.reopen("ledger");
+    if Ledger::new(&*other).record(&mk(1, "sig-other")).is_ok() {
+        return Err("a different entry under an existing ordinal was accepted from another handle".into());
+    }
+    let seen: Vec<String> = Ledger::new(&*other).entries()?.into_iter().map(|e| e.signal_id).collect();
+    eq("entries seen by another handle", seen, vec!["sig-a".to_string(), "sig-b".to_string()])
 }
