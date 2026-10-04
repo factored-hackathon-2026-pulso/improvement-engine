@@ -36,9 +36,12 @@ enum Json {
     Obj(Map),
 }
 
+const MAX_DEPTH: usize = 64;
+
 struct Parser<'a> {
     s: &'a [u8],
     i: usize,
+    depth: usize,
 }
 
 impl Parser<'_> {
@@ -56,6 +59,52 @@ impl Parser<'_> {
         }
     }
     fn value(&mut self) -> Result<Json, CompileError> {
+        if self.depth >= MAX_DEPTH {
+            return err("json: nesting too deep");
+        }
+        self.depth += 1;
+        let v = self.value_inner();
+        self.depth -= 1;
+        v
+    }
+    /// JSON number grammar: -?(0|[1-9][0-9]*)(.[0-9]+)?([eE][+-]?[0-9]+)?
+    fn number(&mut self) -> Result<Json, CompileError> {
+        let st = self.i;
+        let digits = |p: &mut Self| {
+            let a = p.i;
+            while p.s.get(p.i).is_some_and(u8::is_ascii_digit) {
+                p.i += 1;
+            }
+            p.i - a
+        };
+        if self.s.get(self.i) == Some(&b'-') {
+            self.i += 1;
+        }
+        match self.s.get(self.i) {
+            Some(b'0') => self.i += 1,
+            Some(b'1'..=b'9') => {
+                digits(self);
+            }
+            _ => return err("json: bad number"),
+        }
+        if self.s.get(self.i) == Some(&b'.') {
+            self.i += 1;
+            if digits(self) == 0 {
+                return err("json: bad number");
+            }
+        }
+        if matches!(self.s.get(self.i), Some(b'e' | b'E')) {
+            self.i += 1;
+            if matches!(self.s.get(self.i), Some(b'+' | b'-')) {
+                self.i += 1;
+            }
+            if digits(self) == 0 {
+                return err("json: bad number");
+            }
+        }
+        Ok(Json::Num(String::from_utf8_lossy(&self.s[st..self.i]).into_owned()))
+    }
+    fn value_inner(&mut self) -> Result<Json, CompileError> {
         self.ws();
         match self.s.get(self.i) {
             None => err("json: unexpected end"),
@@ -113,19 +162,13 @@ impl Parser<'_> {
             Some(b't') => self.lit("true", Json::Bool(true)),
             Some(b'f') => self.lit("false", Json::Bool(false)),
             Some(b'n') => self.lit("null", Json::Null),
-            Some(c) if *c == b'-' || c.is_ascii_digit() => {
-                let st = self.i;
-                while self.i < self.s.len() && matches!(self.s[self.i], b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9') {
-                    self.i += 1;
-                }
-                Ok(Json::Num(String::from_utf8_lossy(&self.s[st..self.i]).into_owned()))
-            }
+            Some(c) if *c == b'-' || c.is_ascii_digit() => self.number(),
             _ => err("json: unexpected character"),
         }
     }
     fn hex4(&mut self) -> Result<u32, CompileError> {
-        let h = self.s.get(self.i..self.i + 4).and_then(|b| std::str::from_utf8(b).ok());
-        let v = h.and_then(|h| u32::from_str_radix(h, 16).ok());
+        let h = self.s.get(self.i..self.i + 4).filter(|b| b.iter().all(u8::is_ascii_hexdigit));
+        let v = h.and_then(|b| u32::from_str_radix(std::str::from_utf8(b).ok()?, 16).ok());
         self.i += 4;
         v.ok_or_else(|| CompileError("json: bad \\u escape".into()))
     }
@@ -162,7 +205,7 @@ impl Parser<'_> {
                                 }
                                 cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
                             }
-                            char::from_u32(cp).ok_or_else(|| CompileError("json: lone surrogate".into()))?
+                            char::from_u32(cp).unwrap_or('\u{FFFD}') // lone surrogate: Python's json accepts it; never echoed
                         }
                         _ => return err("json: bad escape"),
                     };
@@ -178,7 +221,7 @@ impl Parser<'_> {
 }
 
 fn parse(src: &str) -> Result<Json, CompileError> {
-    let mut p = Parser { s: src.as_bytes(), i: 0 };
+    let mut p = Parser { s: src.as_bytes(), i: 0, depth: 0 };
     let v = p.value()?;
     p.ws();
     if p.i != p.s.len() {
@@ -198,7 +241,7 @@ fn write_str(v: &str, out: &mut String) {
             '\t' => out.push_str("\\t"),
             '\u{8}' => out.push_str("\\b"),
             '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 || (c as u32) > 0x7f => {
+            c if (c as u32) < 0x20 || (c as u32) >= 0x7f => {
                 let mut u = [0u16; 2];
                 for unit in c.encode_utf16(&mut u) {
                     out.push_str(&format!("\\u{:04x}", unit));
