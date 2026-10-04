@@ -264,7 +264,8 @@ class Shim:
                              "message": {"role": "assistant", "content": text}}],
                 "usage": {"prompt_tokens": tin, "completion_tokens": tout, "total_tokens": tin + tout},
                 "usage_estimated": True,
-                "x_roleplay": {"provenance": PROVENANCE, "quality_claims": "forbidden", "key": key}}
+                "x_roleplay": {"provenance": PROVENANCE, "quality_claims": "forbidden", "key": key,
+                               "responder": answer.get("responder")}}
 
 
 def serve(shim: Shim, *, host: str = "127.0.0.1", port: int = 8640, api_key: str = "dummy") -> ThreadingHTTPServer:

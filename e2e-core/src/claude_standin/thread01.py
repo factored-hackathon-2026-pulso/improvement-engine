@@ -28,6 +28,10 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -93,7 +97,10 @@ class ThreadConfig:
     workdir: Path
     exe: str
     queue_dir: Path
-    mode: str = "replay"  # "replay" (shim replay_only) | "record" (scripted responder writes the queue)
+    mode: str = "replay"  # "replay" (shim replay_only) | "record" (scripted responder writes the queue) | "live"
+    # live: real HTTP to the shim on the host; an EXTERNAL lane (fresh-context subagents) writes responses/ in queue_dir
+    live_hold_s: float = HOLD_S  # shim hold per call; a 504 responder_timeout is retried (the late answer serves it)
+    live_max_waits: int = 200
     hooks: CoreHooks = field(default_factory=CoreHooks)
     gate_evaluators: dict | None = None
     # Explicit human OVERRIDE of a gate that did not pass: {"by": "human", "actor": <who>, "reason": <why>}. Without it
@@ -184,12 +191,58 @@ class LLMDouble:
                 shutil.rmtree(self.queue)
             shutil.copytree(cfg.queue_dir, self.queue)
             self.shim = S.Shim(self.queue, replay_only=True)
+        elif cfg.mode == "live":
+            self.queue = Path(cfg.queue_dir)
+            self.shim = S.Shim(self.queue, hold_s=cfg.live_hold_s, poll_s=0.05)
+            self.server = S.serve(self.shim, port=0)  # real HTTP on the host, loopback only
+            self.port = self.server.server_address[1]
+            threading.Thread(target=self.server.serve_forever, daemon=True).start()
+            self.max_waits = cfg.live_max_waits
         else:
             self.queue = Path(cfg.queue_dir)
             self.shim = S.Shim(self.queue, hold_s=1.0, poll_s=0.02)
         self.calls = 0
         self.misses = 0
         self.scanner_ids: set[str] = set()
+        self.responders: dict[str, str] = {}  # stage -> responder id of the last answer (live)
+        self.stats = {"responder_calls": 0, "timeouts": 0, "scanner_rejections": 0, "rejected_responses": 0,
+                      "reasks": 0}
+        self.t0 = time.monotonic()
+
+    def close(self) -> None:
+        if self.mode == "live":
+            self.server.shutdown()
+            self.server.server_close()
+
+    def _post(self, body: bytes) -> tuple[int, dict]:
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=body, method="POST",
+                                     headers={"Content-Type": "application/json", "Authorization": "Bearer dummy"})
+        try:
+            with urllib.request.urlopen(req, timeout=self.shim.hold_s + 30) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    def _live_call(self, stage: str, body: bytes) -> tuple[int, dict]:
+        """Real HTTP; a 504 responder_timeout is retried (a late answer serves it); an invalid answer is re-asked ONCE."""
+        reasked = False
+        for _ in range(self.max_waits):
+            status, resp = self._post(body)
+            etype = resp.get("error", {}).get("type")
+            if status == 504 and etype == "responder_timeout":
+                self.stats["timeouts"] += 1
+                continue
+            if status == 502 and etype == "invalid_output":
+                self.stats["rejected_responses"] += 1
+                if reasked:
+                    return status, resp
+                reasked = True
+                self.stats["reasks"] += 1
+                continue
+            if status == 422:
+                self.stats["scanner_rejections"] += 1
+            return status, resp
+        return 504, {"error": {"type": "responder_timeout", "message": "wait budget exhausted"}}
 
     def step(self, stage: str, inputs: dict) -> dict:
         system = SYSTEMS[stage]
@@ -204,12 +257,17 @@ class LLMDouble:
                            "messages": [{"role": "system", "content": system},
                                         {"role": "user", "content": json.dumps(inputs, sort_keys=True,
                                                                                separators=(",", ":"))}]}).encode()
-        status, resp = self.shim.handle(body)
+        status, resp = self._live_call(stage, body) if self.mode == "live" else self.shim.handle(body)
         self.calls += 1
         if status != 200:
             self.misses += 1
             raise RuntimeError(f"{stage}: shim answered {status} {resp.get('error', {}).get('type')}")
         self.scanner_ids.add("tps-1")
+        if self.mode == "live":
+            self.stats["responder_calls"] += 1
+            rid = ((resp.get("x_roleplay") or {}).get("responder") or {}).get("id")
+            if isinstance(rid, str) and rid:
+                self.responders[stage] = rid
         return json.loads(resp["choices"][0]["message"]["content"])
 
 
@@ -252,9 +310,9 @@ def _llm(ctx: Ctx) -> LLMDouble:
     return ctx.out["llm"]
 
 
-def _role(stage: str, **extra) -> dict:
+def _role(stage: str, responder: str | None = None, **extra) -> dict:
     return {"status": "agent_roleplay", "data_class": "generated_sample", "actor": f"pulso-{stage}",
-            "model": f"agent_roleplay:{RESPONDERS[stage]}", "stage_output": {"source": "model"},
+            "model": f"agent_roleplay:{responder or RESPONDERS[stage]}", "stage_output": {"source": "model"},
             "receipt": {"provider": "agent_roleplay", "scanner_id": "tps-1"}, **extra}
 
 
@@ -263,7 +321,7 @@ def step_03(ctx: Ctx) -> list[dict]:
     out, calls = agent_loop(llm, "scout", "Find the largest recurrence in the treated lab.",
                             {"family_id": FAMILY_ID, "binding_id": "binding-scout-0001"}, db, caps["scout"])
     hyps = out["hypotheses"]
-    scout = _role("scout", detail={"calls": calls, "hypotheses": len(hyps)})
+    scout = _role("scout", llm.responders.get("scout"), detail={"calls": calls, "hypotheses": len(hyps)})
     v_out, v_calls = agent_loop(llm, "verifier", "Verify the hypotheses against the treated lab.",
                                 {"family_id": FAMILY_ID, "binding_id": "binding-verifier-0001", "hypotheses": hyps},
                                 db, caps["verifier"])
@@ -273,7 +331,7 @@ def step_03(ctx: Ctx) -> list[dict]:
                  and recompute[a["hypothesis_id"]]["ok"]]
     ctx.out["verified_refs"] = supported
     ctx.out["hypotheses"] = hyps
-    ver = _role("verifier", id="verifier", detail={"calls": v_calls, "recompute_ok": bool(supported) and all(
+    ver = _role("verifier", llm.responders.get("verifier"), id="verifier", detail={"calls": v_calls, "recompute_ok": bool(supported) and all(
         r["ok"] for r in recompute.values()), "supported_refs": supported})
     ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls}
     return [{**scout, "id": "scout"}, ver]
@@ -318,7 +376,7 @@ def step_04(ctx: Ctx) -> dict:
     res = smap.classify({"design_intent": di_out, "evidence_refs": out["evidence_refs"]}, finding, catalogue, world)
     ctx.out["design"] = res
     ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls}
-    return _role("builder_design", id="opportunity", detail={
+    return _role("builder_design", llm.responders.get("builder_design"), id="opportunity", detail={
         "calls": calls, "smap": res, "category": finding["category"],
         "do_nothing_considered": any(a.get("kind") == "do_nothing" for a in out.get("alternatives", []))})
 
@@ -593,7 +651,7 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
     st = lambda n: next((s["status"] for s in steps if s["n"] == n), "red")  # noqa: E731
     world = ctx.out.get("world") or {"authors": {}}
     h = ctx.cfg.hooks
-    ports = [{"port": "llm_gateway", "provenance": "roleplay-shim:replay", "price_source": "placeholder-rate-card"},
+    ports = [{"port": "llm_gateway", "provenance": f"roleplay-shim:{'live' if ctx.cfg.mode == 'live' else 'replay'}", "price_source": "placeholder-rate-card"},
              {"port": "registry", "provenance": "core-local-staging" if (h.publish and h.alias_read) else "in-process-double",
               "price_source": "n/a"},
              {"port": "human_issuer", "provenance": "local-human-issuer-double" if h.approve else "simulated-local-issuer",
@@ -620,6 +678,7 @@ def run_thread(cfg: ThreadConfig) -> dict:
     cfg.workdir.mkdir(parents=True, exist_ok=True)
     ctx = Ctx(cfg, _sha())
     steps: list[dict] = []
+    t0 = time.monotonic()
     for n, sid, fn in STEPS:
         try:
             res = fn(ctx)
@@ -631,9 +690,22 @@ def run_thread(cfg: ThreadConfig) -> dict:
     llm = ctx.out.get("llm")  # the live counters, never a stale per-step snapshot: a miss in any stage must show
     ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls} if llm else {"misses": 1, "calls": 0}
     ctx.out["report"] = build_report(ctx, steps)
-    return {"steps": steps, "mode": cfg.mode, "host": HOST, "replay": ctx.out["replay"],
+    live = None
+    if llm and cfg.mode == "live":
+        live = {**llm.stats, "wall_minutes": round((time.monotonic() - t0) / 60, 4)}
+        llm.close()
+    return {"steps": steps, "live": live, "mode": cfg.mode, "host": HOST, "replay": ctx.out["replay"],
             "report": ctx.out.get("report", {}), "m3": ctx.out.get("m3", {}), "mapper": ctx.out.get("mapper"),
             "categories": ctx.out.get("categories"), "gate_verdict": ctx.out.get("gate_verdict"), "ctx": ctx.out}
+
+
+def live_summary(res: dict) -> dict:
+    """Aggregate-only record of a window: labels, counts, G1 violations. No payloads, no rows."""
+    rep = res["report"]
+    return {"mode": res["mode"], "quality_claims": rep["quality_claims"], "live": res.get("live"),
+            "replay": res["replay"], "g1_violations": [str(v) for v in _er().check(rep)],
+            "steps": [{"n": s["n"], "id": s["id"], "status": s["status"], "data_class": s.get("data_class"),
+                       "model": s.get("model")} for s in res["steps"]]}
 
 
 def main(argv=None) -> int:
@@ -645,11 +717,20 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--record")
     ap.add_argument("--replay")
+    ap.add_argument("--live", help="queue dir answered by an external responder lane (shim over real HTTP)")
+    ap.add_argument("--workdir", help="persistent workdir (live); untracked")
+    ap.add_argument("--summary", help="write the aggregate-only window summary JSON here")
+    ap.add_argument("--hold-s", type=float, default=HOLD_S)
     ap.add_argument("--exe", default=os.environ.get("ED0_RUNNER_EXE", "D:/cargo-targets/claude-ed0/debug/improvement-engine.exe"))
     a = ap.parse_args(argv)
-    qdir, mode = (a.record, "record") if a.record else (a.replay, "replay")
+    qdir, mode = (a.record, "record") if a.record else (a.live, "live") if a.live else (a.replay, "replay")
     with tempfile.TemporaryDirectory() as tmp:
-        res = run_thread(ThreadConfig(workdir=Path(tmp), exe=a.exe, queue_dir=Path(qdir), mode=mode))
+        wd = Path(a.workdir) if a.workdir else Path(tmp)
+        res = run_thread(ThreadConfig(workdir=wd, exe=a.exe, queue_dir=Path(qdir), mode=mode, live_hold_s=a.hold_s))
+    if a.summary:
+        Path(a.summary).write_text(json.dumps(live_summary(res), indent=1, sort_keys=True), encoding="utf-8")
+    if res.get("live"):
+        print("live", res["live"])
     for s in res["steps"]:
         print(f"{s['n']:>2} {s['id']:<12} {s['status']:<16} {s.get('data_class')}  {s.get('error', '')}")
     print("replay", res["replay"])
