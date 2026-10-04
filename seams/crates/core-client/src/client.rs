@@ -79,11 +79,11 @@ fn key_ok(k: &str) -> bool {
 
 /// A path parameter is one URL segment: non-empty, not a dot segment, and free of separators, `%` (an encoded
 /// `..` would bypass the dot check on a lenient server) and control characters.
-fn path_param_ok(p: &str) -> bool {
+pub(crate) fn path_param_ok(p: &str) -> bool {
     !p.is_empty() && p != "." && p != ".." && !p.chars().any(|c| c.is_control() || matches!(c, '/' | '\u{5c}' | '%'))
 }
 
-fn pct(s: &str) -> String {
+pub(crate) fn pct(s: &str) -> String {
     s.bytes()
         .map(|b| {
             if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {

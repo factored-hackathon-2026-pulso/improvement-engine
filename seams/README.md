@@ -41,7 +41,13 @@ DTOs (`serde_json::Value`-based, no `crates/core`): `version`, `invoke`, `read_t
 
 Done and tested against the FakeCore: draft plan, dry-run, commitment, writer-stage invoke, commitment verification
 (`CommitmentMismatch`), alias readback check, JCS/digest parity with Python `rfc8785` (seeded fuzz fixture).
-NOT done, so K3 acceptance ("Prompt+EvalSuite published to staging on the real image, readback equals commitment") is
-NOT met: (1) a Rust client + authorizer for Core `/v1/registry` approve/publish; (2) sealing the draft artifact goes
+Registry path (`registry.rs`, `authorizer.rs`, `tests/registry.rs`, FakeRegistry over std TcpListener): proposal read,
+approve (client refuses wrong body hash, JWS bound to another op/proposal/hash/revision, replayed JWS; `probe_approve`
+proves Core's own `candidate_changed`/`illegal_transition`), publish (base-release answer is an error), alias/release
+reads (`staging` before publish refused). The human is a CLAUDE-STANDIN (`LocalSimAuthorizer`, `auth.simulated=true`),
+never logged. Hook (not wired): `RegistryFlow::new(..)` after `freeze_draft` + native evaluation.
+Live: `#[ignore] live_k3_registry_approve_publish_readback` (command in its doc comment; needs a stack + evaluated proposal).
+STILL NOT met, so K3 acceptance ("Prompt+EvalSuite published to staging on the real image, readback equals commitment")
+is NOT met: (1) the live registry run was not executed (no Podman here); (2) sealing the draft artifact goes
 through the e2e fixtures server `/_e2e/config`, not a bridge contract route (BRG1 gap candidate); (3) the live test
 is `#[ignore]` and was not run against the real image in this branch.

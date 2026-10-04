@@ -3,8 +3,8 @@
 //! K2 scope: typed operations (`ops`), hand-typed 1.3.0 DTOs (`dto`) and wire-format helpers (`canon`).
 //! K3 scope (PARTIAL): the compile writer path (`writer`): draft plan, sealed commitment, writer-stage invoke and
 //! commitment verification, alias readback check. K3 acceptance (Prompt+EvalSuite published to staging on the real
-//! image) is NOT met: it needs a Rust registry client + human-JWS authorizer (Core `/v1/registry`, not `/internal/v1`)
-//! and a contract route to seal the draft artifact (today the stand-in `/_e2e/config`: a BRG1 gap candidate). Only
+//! image) is NOT met: the Rust registry client + human-JWS authorizer now exist (`registry`, `authorizer`; claude-standin
+//! human, fake-registry tested, live test ignored) but were not run on the real image, and a contract route to seal the draft artifact (today the stand-in `/_e2e/config`: a BRG1 gap candidate). Only
 //! the ignored live test `live_k3_freeze_draft_matches_the_dry_run` touches a real stack, and it stops at the freeze.
 pub mod admission;
 pub mod arms;
@@ -19,6 +19,7 @@ pub mod http;
 pub mod jwt;
 pub mod ops;
 pub mod pins;
+pub mod registry;
 pub mod routes;
 pub mod writer;
 
