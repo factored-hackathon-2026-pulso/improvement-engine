@@ -51,7 +51,7 @@
       "fence_token": 1,
       "now": 131,
       "expect": {
-        "error": "stale_fence"
+        "error": "StaleFence"
       }
     }
   ]

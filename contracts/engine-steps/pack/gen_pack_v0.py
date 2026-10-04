@@ -65,7 +65,7 @@ traces = {
             STEP("claim_next_job", tenant="tenant-a", worker="w2", now=130, lease=30,
                  expect={"job": "job-a", "fence_token": 2, "attempt": 2}),
             STEP("begin_job_effect_dispatch", worker="w1", fence_token=1, now=131,
-                 expect={"error": "stale_fence"})]),
+                 expect={"error": "StaleFence"})]),
     "tenant_isolation": ("tenant_cannot_read_or_transition_another_tenants_job", [
         STEP("admit", tenant="tenant-a", trigger="t-1", expect={"admitted": True, "job": "job-a"}),
         STEP("claim_next_job", tenant="tenant-b", worker="w1", now=100, lease=30, expect=None),

@@ -7,7 +7,7 @@
       "files": {
         "parts/c7_claim_next/claim_next.v1_1.json": "sha256:de5fff04dd680ed9ebd9e1f9457abeef940931b902c04db289e8e40f5d74e969",
         "parts/c7_claim_next/traces/claim_oldest_first.json": "sha256:547ab9c8dcbc98836cec1c2bb92a35c4573074b1d9fcc85f5ecf40a17a09bfab",
-        "parts/c7_claim_next/traces/expired_lease_reclaimed_with_higher_fence.json": "sha256:cfbbfeec09fe5001b13efa5ae27ab9b5acb932b278c202801d9c843b281a63f3",
+        "parts/c7_claim_next/traces/expired_lease_reclaimed_with_higher_fence.json": "sha256:c61f3e2b51c7ab35011367730571a3316e6835a130d1e6f431e373512ec6c1a2",
         "parts/c7_claim_next/traces/invalid_lease_duration.json": "sha256:28b7e05eaa9e06e9134d076a9389c71f0ed208ddcdb4754314c7c64535806774",
         "parts/c7_claim_next/traces/paused_and_deferred_not_claimable.json": "sha256:5e85f52ab66fa28f634f36f50559da6a0aa263f87d12f980cb6d7df59748fbca",
         "parts/c7_claim_next/traces/tenant_isolation.json": "sha256:ccf20e80720ce13b735b691e2d9f748fc29487f1515ccfdaf4b1893871c4552f",
@@ -79,5 +79,5 @@
       }
     }
   ],
-  "pack_digest": "sha256:4355ce9f8c664f33d7e335063b331a615d3e00b1fdb39042b18b7b0c9af67677"
+  "pack_digest": "sha256:e6136a19f16cbadd97d21905dc3823da8a59a21327fb9c4aeb387175b44c897e"
 }

@@ -18,8 +18,29 @@ _TYPES = {
 }
 
 
+_SUPPORTED = {"type", "enum", "const", "pattern", "required", "properties",
+              "additionalProperties", "items", "minItems", "minimum", "maximum",
+              "minLength", "oneOf", "$ref"}
+_ANNOTATIONS = {"$id", "$schema", "$defs", "$comment", "title", "description",
+                "default", "examples"}
+
+
+def _same(a, b):
+    """JSON equality where True is not 1 (Python's == conflates them)."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    return a == b
+
+
 def validate(value, schema, root=None, path="$"):
     root = root if root is not None else schema
+    unknown = set(schema) - _SUPPORTED - _ANNOTATIONS
+    if unknown:
+        raise ValueError(f"unsupported schema keyword(s) {sorted(unknown)} at {path}")
     errs = []
     if "$ref" in schema:
         name = schema["$ref"].rsplit("/", 1)[-1]
@@ -29,9 +50,9 @@ def validate(value, schema, root=None, path="$"):
         ts = t if isinstance(t, list) else [t]
         if not any(_TYPES[x](value) for x in ts):
             return [f"{path}: expected {t}"]
-    if "const" in schema and value != schema["const"]:
+    if "const" in schema and not _same(value, schema["const"]):
         errs.append(f"{path}: expected const {schema['const']!r}")
-    if "enum" in schema and value not in schema["enum"]:
+    if "enum" in schema and not any(_same(value, e) for e in schema["enum"]):
         errs.append(f"{path}: not in enum")
     if isinstance(value, str):
         if "pattern" in schema and not re.search(schema["pattern"], value):
