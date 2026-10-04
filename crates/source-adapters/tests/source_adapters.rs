@@ -8,7 +8,7 @@ use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use improvement_engine_source_adapters::prepare_e0_package_for_local_simulation;
 use improvement_engine_source_adapters::{
     AdapterError, CasePhase, PreparationConfig, PreparedSource, SourceKind, evaluator,
-    prepare_e0_package, prepare_original_bank,
+    prepare_e0_package, prepare_original_bank, validate_original_contact_complaint_profile,
 };
 use parquet::arrow::ArrowWriter;
 use tempfile::TempDir;
@@ -20,6 +20,87 @@ fn config(arranque_cases: usize) -> PreparationConfig {
 
 fn config_with_cutoff(arranque_cases: usize, cutoff: &str) -> PreparationConfig {
     PreparationConfig::new("demo-tenant", cutoff, arranque_cases).expect("valid config")
+}
+
+fn original_profile_fixture(root: &Path) {
+    for (table, contract) in [
+        (
+            "call_center_interactions",
+            include_str!("../../../contracts/sources/call_center_interactions.v1.json"),
+        ),
+        (
+            "complaints",
+            include_str!("../../../contracts/sources/complaints.v1.json"),
+        ),
+    ] {
+        let columns: serde_json::Value = serde_json::from_str(contract).unwrap();
+        let header = columns["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|column| column["name"].as_str().unwrap())
+            .collect::<Vec<_>>()
+            .join(",");
+        let table_dir = root.join(table).join("year=2025/month=01");
+        fs::create_dir_all(&table_dir).unwrap();
+        fs::write(table_dir.join("part.csv"), format!("{header}\n")).unwrap();
+    }
+}
+
+#[test]
+fn original_contact_complaint_profile_accepts_both_contract_headers_and_reports_bounded_scope() {
+    let temp = TempDir::new().unwrap();
+    original_profile_fixture(temp.path());
+
+    let validated = validate_original_contact_complaint_profile(temp.path(), "1.0")
+        .expect("both required profile tables validate");
+
+    assert_eq!(validated.table_count(), 2);
+    assert_eq!(validated.file_count(), 2);
+}
+
+#[test]
+fn original_contact_complaint_profile_rejects_missing_pqr_table_and_version_mismatch() {
+    let temp = TempDir::new().unwrap();
+    let contacts = temp.path().join("call_center_interactions");
+    fs::create_dir_all(&contacts).unwrap();
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/call_center_interactions.v1.json"
+    ))
+    .unwrap();
+    let header = contract["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|column| column["name"].as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join(",");
+    fs::write(contacts.join("part.csv"), format!("{header}\n")).unwrap();
+
+    assert!(validate_original_contact_complaint_profile(temp.path(), "1.0").is_err());
+    original_profile_fixture(temp.path());
+    assert!(validate_original_contact_complaint_profile(temp.path(), "2.0").is_err());
+}
+
+#[test]
+fn original_contact_complaint_profile_rejects_wrong_header_and_malformed_rows() {
+    let temp = TempDir::new().unwrap();
+    original_profile_fixture(temp.path());
+    let contacts = temp
+        .path()
+        .join("call_center_interactions/year=2025/month=01/part.csv");
+    let original = fs::read_to_string(&contacts).unwrap();
+    fs::write(
+        &contacts,
+        original.replace("interaction_id,", " interaction_id,"),
+    )
+    .unwrap();
+    assert!(validate_original_contact_complaint_profile(temp.path(), "1.0").is_err());
+
+    original_profile_fixture(temp.path());
+    let original = fs::read_to_string(&contacts).unwrap();
+    fs::write(&contacts, format!("{original}short,row\n")).unwrap();
+    assert!(validate_original_contact_complaint_profile(temp.path(), "1.0").is_err());
 }
 
 #[test]
@@ -132,6 +213,231 @@ fn original_contacts_expose_only_k_qualified_snapshot_aggregates() {
     assert!(!serialized.contains("true"));
     assert!(!serialized.contains("rejected_rows"));
     assert!(!serialized.contains("suppressed_cells"));
+}
+
+#[test]
+fn original_complaints_expose_separate_k_qualified_descriptive_aggregates_without_row_data() {
+    let temp = TempDir::new().unwrap();
+    let table = temp.path().join("complaints");
+    fs::create_dir_all(&table).unwrap();
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/complaints.v1.json"
+    ))
+    .unwrap();
+    let columns = contract["columns"].as_array().unwrap();
+    let header = columns
+        .iter()
+        .map(|column| column["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(&header).unwrap();
+    for index in 0..5 {
+        let mut row = vec![String::new(); header.len()];
+        for (name, value) in [
+            ("complaint_id", format!("PQR-PII-{index}")),
+            ("customer_id", format!("CUSTOMER-PII-{index}")),
+            ("creation_date", "2025-01-15T12:00:00".to_owned()),
+            ("category", "Transaccional".to_owned()),
+            ("reception_channel", "Phone".to_owned()),
+            ("description", "FREE-TEXT-PII-SENTINEL".to_owned()),
+            ("sla_breached", (index == 0).to_string()),
+            (
+                "resolution_days",
+                if index == 0 { "4" } else { "" }.to_owned(),
+            ),
+            (
+                "resolution_satisfaction",
+                if index == 0 { "2" } else { "" }.to_owned(),
+            ),
+        ] {
+            let column = header.iter().position(|column| *column == name).unwrap();
+            row[column] = value;
+        }
+        writer.write_record(row).unwrap();
+    }
+    for index in 0..4 {
+        let mut row = vec![String::new(); header.len()];
+        for (name, value) in [
+            ("complaint_id", format!("SUPPRESSED-PQR-{index}")),
+            ("customer_id", format!("SUPPRESSED-CUSTOMER-{index}")),
+            ("creation_date", "2025-01-20T12:00:00".to_owned()),
+            ("category", "Card".to_owned()),
+            ("reception_channel", "Chat".to_owned()),
+            ("description", "SUPPRESSED-FREE-TEXT-SENTINEL".to_owned()),
+            ("sla_breached", "false".to_owned()),
+        ] {
+            let column = header.iter().position(|column| *column == name).unwrap();
+            row[column] = value;
+        }
+        writer.write_record(row).unwrap();
+    }
+    let bytes = writer.into_inner().unwrap();
+    fs::write(table.join("part-000.csv"), bytes).unwrap();
+
+    let prepared = prepare_original_bank(temp.path(), &config(10)).unwrap();
+    let projection = prepared
+        .agent_inputs()
+        .descriptive_complaint_projection()
+        .expect("complaints have a separate descriptive projection");
+
+    assert_eq!(projection.status(), "supported");
+    assert!(projection.missing_fields().is_empty());
+    assert_eq!(
+        projection.temporal_basis(),
+        "literal_source_wall_clock_month"
+    );
+    assert_eq!(projection.value_semantics(), "final_extract_facts_only");
+    assert_eq!(projection.coverage(), "partial");
+    assert_eq!(projection.policy_version(), 1);
+    assert_eq!(projection.minimum_cell_count(), 5);
+    assert_eq!(projection.included_complaint_count(), 5);
+    assert_eq!(projection.aggregates().len(), 1, "sub-k cell is suppressed");
+    let cell = &projection.aggregates()[0];
+    assert_eq!(cell.period(), "2025-01");
+    assert_eq!(cell.category(), "transactional");
+    assert_eq!(cell.channel(), "phone");
+    assert_eq!(cell.complaint_count(), 5);
+    assert!(cell.sla_breached_suppressed_small_denominator());
+    assert_eq!(cell.sla_breached_valid_count(), None);
+    assert_eq!(cell.sla_breached_missing_count(), None);
+    assert_eq!(cell.sla_breached_positive_count(), None);
+    assert!(cell.resolution_days_suppressed_small_denominator());
+    assert_eq!(cell.resolution_days_valid_count(), None);
+    assert_eq!(cell.resolution_days_missing_count(), None);
+    assert_eq!(cell.resolution_days_mean(), None);
+    assert!(cell.resolution_satisfaction_suppressed_small_denominator());
+    assert_eq!(cell.resolution_satisfaction_valid_count(), None);
+    assert_eq!(cell.resolution_satisfaction_missing_count(), None);
+    assert_eq!(cell.resolution_satisfaction_mean(), None);
+
+    let serialized = serde_json::to_string(&prepared).unwrap();
+    for forbidden in [
+        "PQR-PII-",
+        "CUSTOMER-PII-",
+        "FREE-TEXT-PII-SENTINEL",
+        "SUPPRESSED-FREE-TEXT-SENTINEL",
+        "SUPPRESSED-PQR-",
+        "SUPPRESSED-CUSTOMER-",
+        "origin_interaction_id",
+    ] {
+        assert!(!serialized.contains(forbidden), "serialized {forbidden}");
+    }
+    assert!(!serialized.contains("as_of_cutoff"));
+    let serialized_json: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+    fn contains_key(value: &serde_json::Value, expected: &str) -> bool {
+        match value {
+            serde_json::Value::Object(object) => {
+                object.contains_key(expected)
+                    || object.values().any(|child| contains_key(child, expected))
+            }
+            serde_json::Value::Array(items) => {
+                items.iter().any(|child| contains_key(child, expected))
+            }
+            _ => false,
+        }
+    }
+    for forbidden_key in [
+        "complaint_id",
+        "customer_id",
+        "description",
+        "origin_interaction_id",
+    ] {
+        assert!(!contains_key(&serialized_json, forbidden_key));
+    }
+}
+
+#[test]
+fn original_complaints_with_invalid_source_timestamps_report_unsupported_safely() {
+    let temp = TempDir::new().unwrap();
+    let table = temp.path().join("complaints");
+    fs::create_dir_all(&table).unwrap();
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/complaints.v1.json"
+    ))
+    .unwrap();
+    let columns = contract["columns"].as_array().unwrap();
+    let header = columns
+        .iter()
+        .map(|column| column["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(&header).unwrap();
+    for index in 0..5 {
+        let mut row = vec![String::new(); header.len()];
+        for (name, value) in [
+            ("complaint_id", format!("PRIVATE-{index}")),
+            ("customer_id", format!("CUSTOMER-{index}")),
+            ("creation_date", "not-a-source-timestamp".to_owned()),
+            ("category", "Queja".to_owned()),
+            ("reception_channel", "Phone".to_owned()),
+        ] {
+            let column = header.iter().position(|column| *column == name).unwrap();
+            row[column] = value;
+        }
+        writer.write_record(row).unwrap();
+    }
+    fs::write(table.join("part-000.csv"), writer.into_inner().unwrap()).unwrap();
+
+    let prepared = prepare_original_bank(temp.path(), &config(10)).unwrap();
+    let projection = prepared
+        .agent_inputs()
+        .descriptive_complaint_projection()
+        .expect("present complaints table has projection status");
+    assert_eq!(projection.status(), "unsupported");
+    assert_eq!(
+        projection.missing_fields(),
+        ["valid source wall-clock timestamp"]
+    );
+    assert!(projection.aggregates().is_empty());
+    let serialized = serde_json::to_string(&prepared).unwrap();
+    assert!(!serialized.contains("not-a-source-timestamp"));
+    assert!(!serialized.contains("PRIVATE-"));
+    assert!(!serialized.contains("CUSTOMER-"));
+}
+
+#[test]
+fn original_complaints_with_blank_channels_report_unsupported_safely() {
+    let temp = TempDir::new().unwrap();
+    let table = temp.path().join("complaints");
+    fs::create_dir_all(&table).unwrap();
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/complaints.v1.json"
+    ))
+    .unwrap();
+    let columns = contract["columns"].as_array().unwrap();
+    let header = columns
+        .iter()
+        .map(|column| column["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(&header).unwrap();
+    for index in 0..5 {
+        let mut row = vec![String::new(); header.len()];
+        for (name, value) in [
+            ("complaint_id", format!("PRIVATE-{index}")),
+            ("customer_id", format!("CUSTOMER-{index}")),
+            ("creation_date", "2026-09-01T12:00:00".to_owned()),
+            ("category", "Queja".to_owned()),
+            ("reception_channel", "   ".to_owned()),
+        ] {
+            let column = header.iter().position(|column| *column == name).unwrap();
+            row[column] = value;
+        }
+        writer.write_record(row).unwrap();
+    }
+    fs::write(table.join("part-000.csv"), writer.into_inner().unwrap()).unwrap();
+
+    let prepared = prepare_original_bank(temp.path(), &config(10)).unwrap();
+    let projection = prepared
+        .agent_inputs()
+        .descriptive_complaint_projection()
+        .expect("present complaints table has projection status");
+    assert_eq!(projection.status(), "unsupported");
+    assert_eq!(projection.missing_fields(), ["usable grouping rows"]);
+    assert!(projection.aggregates().is_empty());
+    let serialized = serde_json::to_string(&prepared).unwrap();
+    assert!(!serialized.contains("PRIVATE-"));
+    assert!(!serialized.contains("CUSTOMER-"));
 }
 
 #[test]

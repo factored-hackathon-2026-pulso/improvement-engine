@@ -55,6 +55,7 @@ if ($IncludePostgres) {
         [pscustomobject]@{ Name = 'U10 model attempt migration'; File = 'cargo'; Args = @('+1.98.1', 'test', '--locked', '--workspace', '--features', 'test-support', 'migration_persists_model_attempt_cas_and_unknown_across_postgres_restart', '--', '--ignored'); Database = $true },
         [pscustomobject]@{ Name = 'U29 platform observation RLS and retention'; File = 'cargo'; Args = @('+1.98.1', 'test', '--locked', '-p', 'improvement-engine-core', '--test', 'postgres_platform_observations', 'treated_batch_survives_reconnect_without_cross_tenant_read_or_double_insert', '--', '--ignored'); Database = $true },
         [pscustomobject]@{ Name = 'U07 durable run-event ledger'; File = 'cargo'; Args = @('+1.98.1', 'test', '--locked', '-p', 'improvement-engine-core', '--test', 'postgres_run_events', '--', '--ignored'); Database = $true },
+        [pscustomobject]@{ Name = 'U24 V2 tenant-scoped sequence timeline'; File = 'cargo'; Args = @('+1.98.1', 'test', '--locked', '-p', 'improvement-engine-core', '--lib', 'run_timeline_v2::tests::authenticated_scope_sequence_pagination_and_sanitization_use_real_postgres', '--', '--ignored'); Database = $true },
         [pscustomobject]@{ Name = 'P4 temporal memory receipts'; File = 'cargo'; Args = @('+1.98.1', 'test', '--locked', '-p', 'improvement-engine-core', '--test', 'postgres_memory_temporal_receipts', '--', '--ignored', '--exact', 'temporal_use_receipt_is_bound_to_event_scope_cutoff_and_current_head'); Database = $true }
     )
 }

@@ -43,7 +43,7 @@
           "logical_type": {"enum": ["text", "timestamp", "date", "bool", "decimal", "int"]},
           "nullable": {"type": "boolean"},
           "purpose": {"enum": ["identity", "join", "event_clock", "metric", "dimension", "quality"]},
-          "classification": {"enum": ["internal", "pseudonymized", "aggregated"]}
+          "classification": {"enum": ["internal", "pseudonymized", "aggregated", "restricted"]}
         }
       }
     }

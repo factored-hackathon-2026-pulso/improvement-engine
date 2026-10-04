@@ -96,6 +96,7 @@ impl JobAdmissionReceipt {
 pub struct DurableJobStore {
     quota: QuotaLedger,
     jobs: BTreeMap<String, StoredJob>,
+    next_admission_order: u64,
     idempotency: BTreeMap<(String, String), IdempotentAdmission>,
     trusted_reconciliation_authorities: BTreeSet<(String, String)>,
     control_commands: BTreeMap<(String, String, String), (String, JobControlReceipt)>,
@@ -113,6 +114,13 @@ pub trait DurableJobRepository {
         &mut self,
         request: JobAdmissionRequest,
     ) -> Result<JobAdmissionReceipt, DurableJobError>;
+    fn claim_next_job(
+        &mut self,
+        tenant_id: &str,
+        worker_id: &str,
+        now_unix_seconds: u64,
+        lease_seconds: u64,
+    ) -> Result<Option<ClaimedJob>, DurableJobError>;
     fn acquire_job_lease(
         &mut self,
         tenant_id: &str,
@@ -160,6 +168,7 @@ pub trait DurableJobRepository {
 #[derive(Debug, Clone)]
 struct StoredJob {
     receipt: JobAdmissionReceipt,
+    admission_order: u64,
     next_fence_token: u64,
     attempt_count: u64,
     active_lease: Option<JobLease>,
@@ -282,6 +291,12 @@ impl DurableJobStore {
                 trigger_idempotency_key: request.trigger_idempotency_key,
             });
         }
+        // Reserve the sequence before quota mutation so an order overflow can
+        // never leave a reservation without an admitted, ordered job.
+        let admission_order = self
+            .next_admission_order
+            .checked_add(1)
+            .ok_or(DurableJobError::AdmissionOrderExhausted)?;
         let quota_receipt = self
             .quota
             .reserve(request.quota_reservation.clone())
@@ -314,6 +329,7 @@ impl DurableJobStore {
             job_id,
             StoredJob {
                 receipt: receipt.clone(),
+                admission_order,
                 next_fence_token: 0,
                 attempt_count: 0,
                 active_lease: None,
@@ -324,6 +340,7 @@ impl DurableJobStore {
                 control_version: 1,
             },
         );
+        self.next_admission_order = admission_order;
         self.idempotency.insert(
             scope,
             IdempotentAdmission {
@@ -417,6 +434,91 @@ impl DurableJobStore {
         };
         advance_control_version(job)?;
         Ok(lease)
+    }
+
+    /// Claims the oldest eligible job in this tenant's admission order.
+    /// `&mut self` serializes claims in this reference reducer; a persistent
+    /// adapter must preserve the same predicate and update in one transaction.
+    pub fn claim_next_job(
+        &mut self,
+        tenant_id: &str,
+        worker_id: &str,
+        now_unix_seconds: u64,
+        lease_seconds: u64,
+    ) -> Result<Option<ClaimedJob>, DurableJobError> {
+        validate_identifier(tenant_id, "tenant_id")?;
+        validate_identifier(worker_id, "worker_id")?;
+        if lease_seconds == 0 {
+            return Err(DurableJobError::InvalidLeaseDuration);
+        }
+        let expires_at = now_unix_seconds
+            .checked_add(lease_seconds)
+            .ok_or(DurableJobError::InvalidLeaseDuration)?;
+
+        let candidate_id = self
+            .jobs
+            .iter()
+            .filter_map(|(job_id, job)| {
+                let belongs_to_tenant = job
+                    .receipt
+                    .job
+                    .as_ref()
+                    .is_some_and(|reference| reference.tenant_id == tenant_id);
+                let eligible_status = match (&job.status, &job.active_lease) {
+                    (JobStatus::Queued, _) => true,
+                    (JobStatus::Leased { .. }, Some(lease)) => {
+                        now_unix_seconds >= lease.expires_at_unix_seconds
+                    }
+                    _ => false,
+                };
+                (belongs_to_tenant
+                    && eligible_status
+                    && job.effect_state == JobEffectState::NoEffect)
+                    .then_some((job.admission_order, job_id))
+            })
+            .min_by_key(|(admission_order, _)| *admission_order)
+            .map(|(_, job_id)| job_id.clone());
+
+        let Some(job_id) = candidate_id else {
+            return Ok(None);
+        };
+
+        // Preflight every fallible arithmetic operation before mutating the
+        // candidate, so malformed/overflowing state remains a no-op.
+        let job = self.jobs.get(&job_id).ok_or(DurableJobError::JobNotFound)?;
+        let next_fence_token = job
+            .next_fence_token
+            .checked_add(1)
+            .ok_or(DurableJobError::FenceExhausted)?;
+        let attempt_count = job
+            .attempt_count
+            .checked_add(1)
+            .ok_or(DurableJobError::AttemptExhausted)?;
+        let control_version = job
+            .control_version
+            .checked_add(1)
+            .ok_or(DurableJobError::ControlVersionConflict)?;
+        debug_assert!(expires_at > now_unix_seconds);
+
+        let lease = JobLease {
+            worker_id: worker_id.to_owned(),
+            fence_token: next_fence_token,
+            expires_at_unix_seconds: expires_at,
+        };
+        let job = self
+            .jobs
+            .get_mut(&job_id)
+            .ok_or(DurableJobError::JobNotFound)?;
+        job.next_fence_token = next_fence_token;
+        job.attempt_count = attempt_count;
+        job.active_lease = Some(lease.clone());
+        job.status = JobStatus::Leased {
+            attempt: attempt_count,
+            fence_token: next_fence_token,
+            expires_at_unix_seconds: expires_at,
+        };
+        job.control_version = control_version;
+        Ok(Some(ClaimedJob { job_id, lease }))
     }
 
     /// Records the only safe pre-dispatch fact: an effect may have happened.
@@ -637,6 +739,15 @@ impl DurableJobRepository for DurableJobStore {
     ) -> Result<JobAdmissionReceipt, DurableJobError> {
         self.admit(request)
     }
+    fn claim_next_job(
+        &mut self,
+        tenant_id: &str,
+        worker_id: &str,
+        now_unix_seconds: u64,
+        lease_seconds: u64,
+    ) -> Result<Option<ClaimedJob>, DurableJobError> {
+        DurableJobStore::claim_next_job(self, tenant_id, worker_id, now_unix_seconds, lease_seconds)
+    }
     fn acquire_job_lease(
         &mut self,
         tenant_id: &str,
@@ -711,6 +822,22 @@ pub struct JobLease {
     worker_id: String,
     fence_token: u64,
     expires_at_unix_seconds: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClaimedJob {
+    job_id: String,
+    lease: JobLease,
+}
+
+impl ClaimedJob {
+    pub fn job_id(&self) -> &str {
+        &self.job_id
+    }
+
+    pub fn lease(&self) -> &JobLease {
+        &self.lease
+    }
 }
 impl JobLease {
     pub fn fence_token(&self) -> u64 {
@@ -983,6 +1110,7 @@ pub enum DurableJobError {
     InvalidLeaseDuration,
     FenceExhausted,
     AttemptExhausted,
+    AdmissionOrderExhausted,
     InvalidEffectReceipt,
     InvalidReconciliationEvidence,
     ReconciliationTargetMismatch,
@@ -1023,6 +1151,7 @@ impl fmt::Display for DurableJobError {
             }
             Self::FenceExhausted => f.write_str("fence token exhausted"),
             Self::AttemptExhausted => f.write_str("attempt number exhausted"),
+            Self::AdmissionOrderExhausted => f.write_str("job admission order exhausted"),
             Self::InvalidEffectReceipt => f.write_str("effect receipt must be effect:sha256"),
             Self::InvalidReconciliationEvidence => f.write_str(
                 "reconciliation evidence must be sha256 and carry a valid observed effect",

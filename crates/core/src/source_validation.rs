@@ -92,7 +92,7 @@ impl SourceContract {
                 .access_policy
                 .permitted_classifications
                 .iter()
-                .any(|classification| !is_classification(classification))
+                .any(|classification| !is_permitted_classification(classification))
             || self
                 .access_policy
                 .permitted_classifications
@@ -686,6 +686,13 @@ fn validate_rfc3339_utc(value: &str) -> Result<(), SourceDefinitionError> {
 }
 
 fn is_classification(value: &str) -> bool {
+    matches!(
+        value,
+        "internal" | "pseudonymized" | "aggregated" | "restricted"
+    )
+}
+
+fn is_permitted_classification(value: &str) -> bool {
     matches!(value, "internal" | "pseudonymized" | "aggregated")
 }
 

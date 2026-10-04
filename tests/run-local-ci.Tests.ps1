@@ -54,6 +54,7 @@ Describe 'verify-local-ci.ps1' {
         Assert-Matches $text 'migration_persists_model_attempt_cas_and_unknown_across_postgres_restart'
         Assert-Matches $text 'postgres_platform_observations'
         Assert-Matches $text 'postgres_run_events'
+        Assert-Matches $text 'cargo \+1\.98\.1 test --locked -p improvement-engine-core --lib run_timeline_v2::tests::authenticated_scope_sequence_pagination_and_sanitization_use_real_postgres -- --ignored'
         Assert-Matches $text 'postgres_memory_temporal_receipts'
         Assert-DoesNotMatch $text 'user:pass'
         Assert-Matches $ipv6Text 'postgres_memory_temporal_receipts'

@@ -9,6 +9,7 @@
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
 use crate::platform_observations::{
     EvidenceKind, InteractionEventKind, Layer, TargetSystem, WindowProjection,
@@ -228,6 +229,936 @@ pub enum PlatformSensorError {
     InvalidSpec,
     InvalidMapping,
     DuplicateMapping,
+}
+
+/// Closed Product-platform capability profile used to avoid proposing work
+/// against features that the selected Product phase cannot execute.
+///
+/// This is a detector input, not an authorization grant. The profile contains
+/// only reviewed capability names and never accepts arbitrary source fields.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PlatformCapabilityProfile {
+    version: String,
+    capabilities: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PlatformCapabilityAssessment {
+    profile_version: String,
+    capability: String,
+    supported: bool,
+}
+
+impl PlatformCapabilityProfile {
+    /// Product Phase 1 has no `tool_call` executor in its declared surface.
+    pub fn product_phase_one() -> Self {
+        Self {
+            version: "phase-1".to_owned(),
+            capabilities: BTreeSet::new(),
+        }
+    }
+
+    /// Acceptance fixture for the documented capability superset.
+    pub fn product_superset_0_5_1() -> Self {
+        Self {
+            version: "0.5.1".to_owned(),
+            capabilities: BTreeSet::from(["tool_call".to_owned()]),
+        }
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn assess_tool_call(&self) -> PlatformCapabilityAssessment {
+        PlatformCapabilityAssessment {
+            profile_version: self.version.clone(),
+            capability: "tool_call".to_owned(),
+            supported: self.capabilities.contains("tool_call"),
+        }
+    }
+}
+
+impl PlatformCapabilityAssessment {
+    pub fn status(&self) -> &'static str {
+        if self.supported {
+            "supported"
+        } else {
+            "unsupported"
+        }
+    }
+
+    pub fn profile_version(&self) -> &str {
+        &self.profile_version
+    }
+
+    pub fn capability(&self) -> &str {
+        &self.capability
+    }
+
+    pub fn is_supported(&self) -> bool {
+        self.supported
+    }
+}
+
+/// Minimal case-lifecycle projection needed to test the PL-07 chain rule.
+/// IDs remain inside the deterministic calculation and are never copied into
+/// the resulting finding.
+#[derive(Clone, Eq, PartialEq)]
+pub struct PlatformCaseClosure {
+    case_id: String,
+    previous_case_id: Option<String>,
+    previous_case_field_available: bool,
+    is_failure: Option<bool>,
+    close_reason: Option<String>,
+    closed_at_ms: Option<i64>,
+    available_at_ms: Option<i64>,
+    observed_as_of_ms: Option<i64>,
+    source_ref: Option<String>,
+    source_digest: Option<String>,
+    simulator: Option<bool>,
+    evidence_kind: Option<EvidenceKind>,
+}
+
+impl PlatformCaseClosure {
+    pub fn new(
+        case_id: impl Into<String>,
+        previous_case_id: Option<&str>,
+        is_failure: Option<bool>,
+        close_reason: Option<&str>,
+    ) -> Self {
+        Self {
+            case_id: case_id.into(),
+            previous_case_id: previous_case_id.map(str::to_owned),
+            previous_case_field_available: true,
+            is_failure,
+            close_reason: close_reason.map(str::to_owned),
+            closed_at_ms: None,
+            available_at_ms: None,
+            observed_as_of_ms: None,
+            source_ref: None,
+            source_digest: None,
+            simulator: None,
+            evidence_kind: None,
+        }
+    }
+
+    /// Binds the row to its immutable source snapshot, closure time, and
+    /// explicit observation cutoff. Unknown simulator/evidence metadata is
+    /// retained as unknown and makes the population ineligible.
+    pub fn with_snapshot_provenance(
+        mut self,
+        source_ref: Option<&str>,
+        source_digest: Option<&str>,
+        closed_at_ms: Option<i64>,
+        observed_as_of_ms: Option<i64>,
+        simulator: Option<bool>,
+        evidence_kind: Option<EvidenceKind>,
+    ) -> Self {
+        self.source_ref = source_ref.map(str::to_owned);
+        self.source_digest = source_digest.map(str::to_owned);
+        self.closed_at_ms = closed_at_ms;
+        self.observed_as_of_ms = observed_as_of_ms;
+        self.simulator = simulator;
+        self.evidence_kind = evidence_kind;
+        self
+    }
+
+    /// Records when this closure became available to the platform snapshot.
+    /// The detector rejects events arriving after its as-of cutoff.
+    pub fn with_available_at_ms(mut self, available_at_ms: Option<i64>) -> Self {
+        self.available_at_ms = available_at_ms;
+        self
+    }
+
+    /// Represents a projection whose schema omitted `previous_case_id`, which
+    /// must not be confused with an explicit null (a root case).
+    pub fn without_previous_case_field(mut self) -> Self {
+        self.previous_case_field_available = false;
+        self
+    }
+}
+
+impl fmt::Debug for PlatformCaseClosure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PlatformCaseClosure")
+            .field("case_id", &"[REDACTED]")
+            .field(
+                "previous_case_id",
+                &self.previous_case_id.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "previous_case_field_available",
+                &self.previous_case_field_available,
+            )
+            .field("is_failure", &self.is_failure)
+            .field(
+                "close_reason",
+                &self.close_reason.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("closed_at_ms", &self.closed_at_ms)
+            .field("available_at_ms", &self.available_at_ms)
+            .field("observed_as_of_ms", &self.observed_as_of_ms)
+            .field(
+                "source_ref",
+                &self.source_ref.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "source_digest",
+                &self.source_digest.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("simulator", &self.simulator)
+            .field("evidence_kind", &self.evidence_kind)
+            .finish()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct PlatformCustomerPopulationRow {
+    customer_id: String,
+    simulator: Option<bool>,
+}
+
+impl fmt::Debug for PlatformCustomerPopulationRow {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PlatformCustomerPopulationRow")
+            .field("customer_id", &"[REDACTED]")
+            .field("simulator", &self.simulator)
+            .finish()
+    }
+}
+
+impl PlatformCustomerPopulationRow {
+    pub fn new(customer_id: impl Into<String>, simulator: Option<bool>) -> Self {
+        Self {
+            customer_id: customer_id.into(),
+            simulator,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlatformPopulationStatus {
+    Measured,
+    InsufficientEvidence,
+}
+
+/// Non-ratio population summary. Simulator rows are excluded before counting,
+/// so callers cannot mistake them for eligible customers in a denominator.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PlatformPopulationAssessment {
+    status: PlatformPopulationStatus,
+    eligible_customer_count: Option<u64>,
+    team_generated_excluded_count: u64,
+    excluded_reason_counts: BTreeMap<String, u64>,
+    missing_fields: Vec<&'static str>,
+}
+
+impl PlatformPopulationAssessment {
+    pub fn status(&self) -> &PlatformPopulationStatus {
+        &self.status
+    }
+
+    pub fn eligible_customer_count(&self) -> Option<u64> {
+        self.eligible_customer_count
+    }
+
+    pub fn team_generated_excluded_count(&self) -> u64 {
+        self.team_generated_excluded_count
+    }
+
+    pub fn missing_fields(&self) -> &[&'static str] {
+        &self.missing_fields
+    }
+
+    pub fn is_publishable(&self) -> bool {
+        false
+    }
+}
+
+/// Treated SLA row. `observed_at_ms` is the upstream projection's supplied
+/// observation cutoff for the snapshot and is required to match across rows.
+/// It is not necessarily the case's resolution or closure time. The source
+/// reference and content digest bind the measurement to its immutable input;
+/// no case ID is returned and no regulatory conclusion is implied.
+#[derive(Clone, Eq, PartialEq)]
+pub struct PlatformSlaCase {
+    case_id: String,
+    sla_due_at_ms: Option<i64>,
+    observed_at_ms: Option<i64>,
+    source_ref: Option<String>,
+    source_digest: Option<String>,
+    simulator: Option<bool>,
+    evidence_kind: Option<EvidenceKind>,
+}
+
+impl PlatformSlaCase {
+    pub fn new(
+        case_id: impl Into<String>,
+        sla_due_at_ms: Option<i64>,
+        observed_at_ms: Option<i64>,
+        source_ref: Option<&str>,
+        source_digest: Option<&str>,
+    ) -> Self {
+        Self {
+            case_id: case_id.into(),
+            sla_due_at_ms,
+            observed_at_ms,
+            source_ref: source_ref.map(str::to_owned),
+            source_digest: source_digest.map(str::to_owned),
+            simulator: None,
+            evidence_kind: None,
+        }
+    }
+
+    pub fn with_evidence_metadata(
+        mut self,
+        simulator: Option<bool>,
+        evidence_kind: Option<EvidenceKind>,
+    ) -> Self {
+        self.simulator = simulator;
+        self.evidence_kind = evidence_kind;
+        self
+    }
+}
+
+impl fmt::Debug for PlatformSlaCase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PlatformSlaCase")
+            .field("case_id", &"[REDACTED]")
+            .field("sla_due_at_ms", &self.sla_due_at_ms)
+            .field("observed_at_ms", &self.observed_at_ms)
+            .field(
+                "source_ref",
+                &self.source_ref.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "source_digest",
+                &self.source_digest.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("simulator", &self.simulator)
+            .field("evidence_kind", &self.evidence_kind)
+            .finish()
+    }
+}
+
+/// Descriptive, non-publishable result of a platform sensor calculation.
+#[derive(Clone, Eq, PartialEq, Serialize)]
+pub struct PlatformSensorFinding {
+    status: PlatformSignalStatus,
+    missing_fields: Vec<&'static str>,
+    excluded_reason_counts: BTreeMap<String, u64>,
+    source_ref: Option<String>,
+    source_digest: Option<String>,
+    observed_as_of_ms: Option<i64>,
+    measurement_digest: Option<String>,
+    statement: String,
+}
+
+impl fmt::Debug for PlatformSensorFinding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PlatformSensorFinding")
+            .field("status", &self.status)
+            .field("missing_fields", &self.missing_fields)
+            .field("excluded_reason_counts", &self.excluded_reason_counts)
+            .field(
+                "source_ref",
+                &self.source_ref.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "source_digest",
+                &self.source_digest.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("observed_as_of_ms", &self.observed_as_of_ms)
+            .field(
+                "measurement_digest",
+                &self.measurement_digest.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("statement", &self.statement)
+            .finish()
+    }
+}
+
+impl PlatformSensorFinding {
+    pub fn status(&self) -> &PlatformSignalStatus {
+        &self.status
+    }
+
+    pub fn missing_fields(&self) -> &[&'static str] {
+        &self.missing_fields
+    }
+
+    pub fn excluded_reason_count(&self, reason: &str) -> u64 {
+        self.excluded_reason_counts
+            .get(reason)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub fn source_ref(&self) -> Option<&str> {
+        self.source_ref.as_deref()
+    }
+
+    pub fn source_digest(&self) -> Option<&str> {
+        self.source_digest.as_deref()
+    }
+
+    /// The common observation cutoff used by descriptive SLA measurements.
+    /// Other sensor findings and insufficient SLA results have no as-of value.
+    pub fn observed_as_of_ms(&self) -> Option<i64> {
+        self.observed_as_of_ms
+    }
+
+    /// A deterministic commitment to the exact eligible values and cutoff
+    /// used for this aggregate; it is not an identifier or a source signature.
+    pub fn measurement_digest(&self) -> Option<&str> {
+        self.measurement_digest.as_deref()
+    }
+
+    pub fn statement(&self) -> &str {
+        &self.statement
+    }
+
+    /// Platform sensors only emit evidence; proposal compilation and publish
+    /// authority are separate stages and are never implied by a finding.
+    pub fn is_publishable(&self) -> bool {
+        false
+    }
+}
+
+/// Explicit gate for the platform-to-Core handoff. It cannot publish anything.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PlatformDependencyCheck {
+    reason: &'static str,
+    dependency_state: &'static str,
+}
+
+impl PlatformDependencyCheck {
+    pub fn reason(&self) -> &'static str {
+        self.reason
+    }
+
+    pub fn dependency_state(&self) -> &'static str {
+        self.dependency_state
+    }
+
+    pub fn is_publishable(&self) -> bool {
+        false
+    }
+}
+
+impl PlatformLayerSensor {
+    /// Measures each unbranched case chain by its terminal closure only. A
+    /// terminal customer-unresponsive close is an exclusion, not a default
+    /// failure. Missing fields, dangling/cyclic links, or branched chains fail
+    /// closed as insufficient evidence.
+    pub fn assess_case_closures(cases: &[PlatformCaseClosure]) -> PlatformSensorFinding {
+        let mut missing_fields = BTreeSet::new();
+        let mut all_ids = BTreeSet::new();
+        let mut by_id = BTreeMap::new();
+        let mut eligible = Vec::new();
+        let mut source_ref: Option<&str> = None;
+        let mut source_digest: Option<&str> = None;
+        let mut observed_as_of_ms: Option<i64> = None;
+        let mut excluded_reason_counts = BTreeMap::<String, u64>::new();
+        for case in cases {
+            if case.case_id.is_empty() || !all_ids.insert(case.case_id.as_str()) {
+                missing_fields.insert("unique_case_id");
+            }
+            match case.source_ref.as_deref().filter(|value| valid_ref(value)) {
+                Some(value) if source_ref.is_none() || source_ref == Some(value) => {
+                    source_ref = Some(value);
+                }
+                _ => {
+                    missing_fields.insert("source_ref");
+                }
+            }
+            match case
+                .source_digest
+                .as_deref()
+                .filter(|value| valid_sha256_ref(value))
+            {
+                Some(value) if source_digest.is_none() || source_digest == Some(value) => {
+                    source_digest = Some(value);
+                }
+                _ => {
+                    missing_fields.insert("source_digest");
+                }
+            }
+            match case.observed_as_of_ms {
+                Some(value) if observed_as_of_ms.is_none() || observed_as_of_ms == Some(value) => {
+                    observed_as_of_ms = Some(value);
+                }
+                Some(_) => {
+                    missing_fields.insert("consistent_observed_as_of");
+                }
+                None => {
+                    missing_fields.insert("observed_as_of");
+                }
+            }
+            match case.closed_at_ms {
+                Some(closed_at) => match case.observed_as_of_ms {
+                    Some(cutoff) if closed_at <= cutoff => {}
+                    Some(_) => {
+                        missing_fields.insert("closed_by_observed_as_of");
+                    }
+                    None => {
+                        missing_fields.insert("observed_as_of");
+                    }
+                },
+                None => {
+                    missing_fields.insert("closed_at");
+                }
+            }
+            match (case.available_at_ms, case.observed_as_of_ms) {
+                (Some(available_at), Some(cutoff)) if available_at <= cutoff => {}
+                (Some(_), Some(_)) => {
+                    missing_fields.insert("available_by_observed_as_of");
+                }
+                (None, _) => {
+                    missing_fields.insert("available_at");
+                }
+                (_, None) => {
+                    missing_fields.insert("observed_as_of");
+                }
+            }
+            match (case.simulator, case.evidence_kind) {
+                (Some(_), Some(_)) => {}
+                (None, _) => {
+                    missing_fields.insert("cases.simulator");
+                }
+                (_, None) => {
+                    missing_fields.insert("evidence_kind");
+                }
+            }
+            if case.simulator == Some(true) {
+                *excluded_reason_counts
+                    .entry("team_generated".to_owned())
+                    .or_default() += 1;
+            }
+            if case
+                .evidence_kind
+                .is_some_and(|kind| kind != EvidenceKind::PlatformAudit)
+            {
+                *excluded_reason_counts
+                    .entry("non_platform_audit_evidence".to_owned())
+                    .or_default() += 1;
+            }
+            if case.simulator != Some(false)
+                || case.evidence_kind != Some(EvidenceKind::PlatformAudit)
+            {
+                continue;
+            }
+            if !case.previous_case_field_available {
+                missing_fields.insert("previous_case_id");
+            }
+            if case.is_failure.is_none() {
+                missing_fields.insert("is_failure");
+            }
+            if case.close_reason.as_deref().is_none_or(str::is_empty) {
+                missing_fields.insert("close_reason");
+            }
+            by_id.insert(case.case_id.as_str(), case);
+            eligible.push(case);
+        }
+        if cases.is_empty() {
+            missing_fields.insert("case_closures");
+        }
+        if !missing_fields.is_empty() {
+            return insufficient_finding_with_exclusions(
+                missing_fields.into_iter().collect(),
+                excluded_reason_counts,
+            );
+        }
+        if eligible.is_empty() {
+            return insufficient_finding_with_exclusions(
+                vec!["eligible_case_closures"],
+                excluded_reason_counts,
+            );
+        }
+
+        let mut child_counts = BTreeMap::<&str, usize>::new();
+        for case in eligible.iter().copied() {
+            if let Some(previous_id) = case.previous_case_id.as_deref() {
+                *child_counts.entry(previous_id).or_default() += 1;
+            }
+        }
+        if child_counts.values().any(|count| *count > 1) {
+            return insufficient_finding_with_exclusions(
+                vec!["unbranched_previous_case_id"],
+                excluded_reason_counts,
+            );
+        }
+
+        let mut root_by_id = BTreeMap::<&str, &str>::new();
+        for case in eligible.iter().copied() {
+            if root_by_id.contains_key(case.case_id.as_str()) {
+                continue;
+            }
+            let mut cursor = case;
+            let mut path = Vec::new();
+            let mut visited = BTreeSet::new();
+            let root = loop {
+                let current_id = cursor.case_id.as_str();
+                if let Some(root) = root_by_id.get(current_id).copied() {
+                    break Some(root);
+                }
+                if !visited.insert(current_id) {
+                    missing_fields.insert("acyclic_previous_case_id");
+                    break None;
+                }
+                path.push(cursor);
+                match cursor.previous_case_id.as_deref() {
+                    None => break Some(current_id),
+                    Some(previous_id) => match by_id.get(previous_id).copied() {
+                        Some(previous) => cursor = previous,
+                        None => {
+                            missing_fields.insert("resolved_previous_case_id");
+                            break None;
+                        }
+                    },
+                }
+            };
+            if let Some(root) = root {
+                for path_case in path {
+                    root_by_id.insert(path_case.case_id.as_str(), root);
+                }
+            } else {
+                break;
+            }
+        }
+        if !missing_fields.is_empty() {
+            return insufficient_finding_with_exclusions(
+                missing_fields.into_iter().collect(),
+                excluded_reason_counts,
+            );
+        }
+
+        let mut terminal_by_root = BTreeMap::<&str, &PlatformCaseClosure>::new();
+        for case in eligible.iter().copied() {
+            if child_counts
+                .get(case.case_id.as_str())
+                .copied()
+                .unwrap_or(0)
+                == 0
+            {
+                let root = root_by_id[case.case_id.as_str()];
+                if terminal_by_root.insert(root, case).is_some() {
+                    missing_fields.insert("single_terminal_case_per_chain");
+                }
+            }
+        }
+        if !missing_fields.is_empty() || terminal_by_root.is_empty() {
+            if terminal_by_root.is_empty() {
+                missing_fields.insert("terminal_case");
+            }
+            return insufficient_finding_with_exclusions(
+                missing_fields.into_iter().collect(),
+                excluded_reason_counts,
+            );
+        }
+
+        let numerator = terminal_by_root
+            .values()
+            .filter(|case| {
+                case.is_failure == Some(true)
+                    && case.close_reason.as_deref() != Some("customer_unresponsive")
+            })
+            .count() as u64;
+        let denominator = terminal_by_root.len() as u64;
+        let unresponsive_excluded = terminal_by_root
+            .values()
+            .filter(|case| case.close_reason.as_deref() == Some("customer_unresponsive"))
+            .count() as u64;
+        if unresponsive_excluded > 0 {
+            excluded_reason_counts
+                .insert("customer_unresponsive".to_owned(), unresponsive_excluded);
+        }
+        let mut result = finding(
+            PlatformSignalStatus::Measured {
+                numerator,
+                denominator,
+                missing: 0,
+            },
+            Vec::new(),
+            excluded_reason_counts,
+            source_ref.map(str::to_owned),
+            source_digest.map(str::to_owned),
+            format!(
+                "As of the supplied observation cutoff, {numerator} failed case chains were observed among {denominator} eligible chains."
+            ),
+        );
+        result.observed_as_of_ms = observed_as_of_ms;
+        let mut committed_rows = eligible
+            .iter()
+            .map(|case| {
+                (
+                    case.case_id.as_str(),
+                    case.previous_case_id.as_deref(),
+                    case.is_failure,
+                    case.close_reason.as_deref(),
+                    case.closed_at_ms,
+                    case.available_at_ms,
+                )
+            })
+            .collect::<Vec<_>>();
+        committed_rows.sort_by_key(|row| row.0);
+        result.measurement_digest = Some(measurement_digest(&(
+            "platform_case_closure_v1",
+            result.source_ref.as_deref(),
+            result.source_digest.as_deref(),
+            observed_as_of_ms,
+            committed_rows,
+            numerator,
+            denominator,
+            &result.excluded_reason_counts,
+        )));
+        result
+    }
+
+    /// Removes team-generated simulator customers before the eligible
+    /// population is counted. Unknown simulator flags make that count unsafe.
+    pub fn assess_customer_population(
+        customers: &[PlatformCustomerPopulationRow],
+    ) -> PlatformPopulationAssessment {
+        let mut missing_fields = BTreeSet::new();
+        let mut ids = BTreeSet::new();
+        let mut denominator = 0_u64;
+        let mut excluded = 0_u64;
+        for customer in customers {
+            if customer.customer_id.is_empty() || !ids.insert(customer.customer_id.as_str()) {
+                missing_fields.insert("unique_customer_id");
+            }
+            match customer.simulator {
+                Some(true) => excluded += 1,
+                Some(false) => denominator += 1,
+                None => {
+                    missing_fields.insert("customers.simulator");
+                }
+            }
+        }
+        if customers.is_empty() {
+            missing_fields.insert("customers");
+        }
+        if !missing_fields.is_empty() {
+            let excluded_reason_counts = team_generated_exclusion_counts(excluded);
+            return PlatformPopulationAssessment {
+                status: PlatformPopulationStatus::InsufficientEvidence,
+                eligible_customer_count: None,
+                team_generated_excluded_count: excluded,
+                excluded_reason_counts,
+                missing_fields: missing_fields.into_iter().collect(),
+            };
+        }
+        let excluded_reason_counts = team_generated_exclusion_counts(excluded);
+        PlatformPopulationAssessment {
+            status: PlatformPopulationStatus::Measured,
+            eligible_customer_count: Some(denominator),
+            team_generated_excluded_count: excluded,
+            excluded_reason_counts,
+            missing_fields: Vec::new(),
+        }
+    }
+
+    /// Counts cases past their stated SLA deadline at one common supplied
+    /// observation cutoff, against one immutable source reference and digest.
+    /// This is a descriptive as-of measurement, not proof of closure time or
+    /// regulatory breach. Equality with the deadline is on time; only
+    /// `observed_at > due` counts as past due.
+    pub fn measure_sla_breaches(cases: &[PlatformSlaCase]) -> PlatformSensorFinding {
+        let mut missing_fields = BTreeSet::new();
+        let mut ids = BTreeSet::new();
+        let mut denominator = 0_u64;
+        let mut numerator = 0_u64;
+        let mut eligible_rows = Vec::new();
+        let mut excluded_reason_counts = BTreeMap::<String, u64>::new();
+        let mut source_ref: Option<&str> = None;
+        let mut source_digest: Option<&str> = None;
+        let mut observed_as_of_ms: Option<i64> = None;
+        for case in cases {
+            if case.case_id.is_empty() || !ids.insert(case.case_id.as_str()) {
+                missing_fields.insert("unique_case_id");
+            }
+            match case.sla_due_at_ms {
+                Some(_) => {}
+                None => {
+                    missing_fields.insert("sla_due_at");
+                }
+            }
+            match case.observed_at_ms {
+                Some(value) if observed_as_of_ms.is_none() || observed_as_of_ms == Some(value) => {
+                    observed_as_of_ms = Some(value);
+                }
+                Some(_) => {
+                    missing_fields.insert("consistent_observed_as_of");
+                }
+                None => {
+                    missing_fields.insert("observed_at");
+                }
+            }
+            match case.source_ref.as_deref().filter(|value| valid_ref(value)) {
+                Some(value) if source_ref.is_none() || source_ref == Some(value) => {
+                    source_ref = Some(value);
+                }
+                _ => {
+                    missing_fields.insert("source_ref");
+                }
+            }
+            match case
+                .source_digest
+                .as_deref()
+                .filter(|value| valid_sha256_ref(value))
+            {
+                Some(value) if source_digest.is_none() || source_digest == Some(value) => {
+                    source_digest = Some(value);
+                }
+                _ => {
+                    missing_fields.insert("source_digest");
+                }
+            }
+            match (case.simulator, case.evidence_kind) {
+                (Some(_), Some(_)) => {}
+                (None, _) => {
+                    missing_fields.insert("cases.simulator");
+                }
+                (_, None) => {
+                    missing_fields.insert("evidence_kind");
+                }
+            }
+            if case.simulator == Some(true) {
+                *excluded_reason_counts
+                    .entry("team_generated".to_owned())
+                    .or_default() += 1;
+            }
+            if case
+                .evidence_kind
+                .is_some_and(|kind| kind != EvidenceKind::PlatformAudit)
+            {
+                *excluded_reason_counts
+                    .entry("non_platform_audit_evidence".to_owned())
+                    .or_default() += 1;
+            }
+            if case.simulator != Some(false)
+                || case.evidence_kind != Some(EvidenceKind::PlatformAudit)
+            {
+                continue;
+            }
+            if let (Some(due), Some(observed)) = (case.sla_due_at_ms, case.observed_at_ms) {
+                denominator += 1;
+                if observed > due {
+                    numerator += 1;
+                }
+                eligible_rows.push((case.case_id.as_str(), due, observed));
+            }
+        }
+        if cases.is_empty() {
+            missing_fields.insert("sla_cases");
+        }
+        if !missing_fields.is_empty() {
+            return insufficient_finding_with_exclusions(
+                missing_fields.into_iter().collect(),
+                excluded_reason_counts,
+            );
+        }
+        if denominator == 0 {
+            return insufficient_finding_with_exclusions(
+                vec!["eligible_sla_cases"],
+                excluded_reason_counts,
+            );
+        }
+        eligible_rows.sort_by_key(|row| row.0);
+        let mut result = finding(
+            PlatformSignalStatus::Measured {
+                numerator,
+                denominator,
+                missing: 0,
+            },
+            Vec::new(),
+            excluded_reason_counts,
+            source_ref.map(str::to_owned),
+            source_digest.map(str::to_owned),
+            format!(
+                "As of the supplied observation cutoff, {numerator} of {denominator} eligible cases were past their stated SLA due time."
+            ),
+        );
+        result.observed_as_of_ms = observed_as_of_ms;
+        result.measurement_digest = Some(measurement_digest(&(
+            "platform_sla_measurement_v1",
+            result.source_ref.as_deref(),
+            result.source_digest.as_deref(),
+            observed_as_of_ms,
+            eligible_rows,
+            numerator,
+            denominator,
+            &result.excluded_reason_counts,
+        )));
+        result
+    }
+
+    /// Product Phase 1 lacks a Core target for this finding. Keep the result
+    /// explicitly waiting; never manufacture a publish target.
+    pub fn check_core_target(target: Option<&str>) -> PlatformDependencyCheck {
+        match target.filter(|value| valid_ref(value)) {
+            Some(_) => PlatformDependencyCheck {
+                reason: "core_target_declared",
+                dependency_state: "declared_unverified",
+            },
+            None => PlatformDependencyCheck {
+                reason: "missing_core_target",
+                dependency_state: "waiting_dependency",
+            },
+        }
+    }
+}
+
+fn insufficient_finding_with_exclusions(
+    missing_fields: Vec<&'static str>,
+    excluded_reason_counts: BTreeMap<String, u64>,
+) -> PlatformSensorFinding {
+    finding(
+        PlatformSignalStatus::InsufficientEvidence,
+        missing_fields,
+        excluded_reason_counts,
+        None,
+        None,
+        "Insufficient platform evidence; no opportunity was emitted.".to_owned(),
+    )
+}
+
+fn finding(
+    status: PlatformSignalStatus,
+    missing_fields: Vec<&'static str>,
+    excluded_reason_counts: BTreeMap<String, u64>,
+    source_ref: Option<String>,
+    source_digest: Option<String>,
+    statement: String,
+) -> PlatformSensorFinding {
+    PlatformSensorFinding {
+        status,
+        missing_fields,
+        excluded_reason_counts,
+        source_ref,
+        source_digest,
+        observed_as_of_ms: None,
+        measurement_digest: None,
+        statement,
+    }
+}
+
+fn measurement_digest<T: Serialize>(material: &T) -> String {
+    let bytes = serde_json::to_vec(material)
+        .expect("platform measurement commitment material is JSON serializable");
+    let digest = Sha256::digest(bytes);
+    format!("sha256:{digest:x}")
+}
+
+fn team_generated_exclusion_counts(count: u64) -> BTreeMap<String, u64> {
+    if count == 0 {
+        BTreeMap::new()
+    } else {
+        BTreeMap::from([("team_generated".to_owned(), count)])
+    }
 }
 
 /// The sensor's trusted configuration boundary. Production composition builds
@@ -606,6 +1537,12 @@ fn valid_ref(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b':' | b'.'))
+}
+fn valid_sha256_ref(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("sha256:") else {
+        return false;
+    };
+    hex.len() == 64 && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 #[cfg(test)]

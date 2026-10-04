@@ -14,9 +14,11 @@ sys.path.insert(0, str(REPOSITORY))
 
 from contracts.validate_fixtures import (  # noqa: E402
     validate_envelope,
+    spec22_coverage_report,
     validate_source_contract,
     validate_source_ref,
     validate_source_snapshot,
+    validate_spec22_coverage,
 )
 
 
@@ -107,6 +109,118 @@ class ArtifactEnvelopeContractTest(unittest.TestCase):
             / "call_center_interactions.header.csv"
         ).read_text(encoding="utf-8").rstrip("\r\n").split(",")
         self.assertEqual(header, [column["name"] for column in contract["columns"]])
+
+    def test_spec22_initial_family_inventory_entries_are_all_present(self) -> None:
+        report = spec22_coverage_report()
+        self.assertEqual(report["family_count"], 11)
+        self.assertEqual(report["missing_families"], [])
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(
+            report["missing_wire_contracts"],
+            ["signal", "workflow_bridge", "tree", "release_ack", "memory_wiki", "read_model"],
+        )
+
+    def test_spec22_strict_gate_fails_when_a_family_is_removed(self) -> None:
+        report = spec22_coverage_report()
+        report["families"] = [item for item in report["families"] if item["name"] != "tree"]
+        # The data-only evaluator lets CI test a mutated inventory without
+        # writing to the repository fixture manifest.
+        from contracts.validate_fixtures import validate_spec22_inventory
+
+        self.assertIn("missing_family:tree", validate_spec22_inventory(report["families"]))
+
+    def test_spec22_strict_gate_reports_unpublished_wire_contracts(self) -> None:
+        errors = validate_spec22_coverage(strict=True)
+        self.assertEqual(
+            errors,
+            [
+                "wire_contract_not_published:signal",
+                "wire_contract_not_published:workflow_bridge",
+                "wire_contract_not_published:tree",
+                "wire_contract_not_published:release_ack",
+                "wire_contract_not_published:memory_wiki",
+                "wire_contract_not_published:read_model",
+            ],
+        )
+
+    def test_spec22_read_model_internal_types_are_not_published_wire_schema(self) -> None:
+        from copy import deepcopy
+
+        from contracts.validate_fixtures import validate_spec22_inventory
+
+        read_model = next(
+            family for family in spec22_coverage_report()["families"] if family["name"] == "read_model"
+        )
+        self.assertEqual(read_model["contract_status"], "partial")
+        self.assertNotIn("contracts/validate_fixtures.py", read_model["contract_refs"])
+        self.assertNotIn("crates/core/src/run_activity.rs", read_model["contract_refs"])
+
+        promoted_without_schema = deepcopy(spec22_coverage_report()["families"])
+        next(item for item in promoted_without_schema if item["name"] == "read_model")["contract_status"] = "published"
+        self.assertIn(
+            "published_schema_missing_ref:read_model",
+            validate_spec22_inventory(promoted_without_schema),
+        )
+
+    def test_spec22_inventory_rejects_invalid_fixture_refs(self) -> None:
+        from copy import deepcopy
+
+        from contracts.validate_fixtures import validate_spec22_inventory
+
+        families = deepcopy(spec22_coverage_report()["families"])
+        family = next(item for item in families if item["name"] == "source_snapshot")
+        family["fixture_refs"] = "not-a-list"
+        self.assertIn("invalid_fixture_refs:source_snapshot", validate_spec22_inventory(families))
+
+    def test_spec22_inventory_rejects_absolute_and_parent_fixture_refs(self) -> None:
+        from copy import deepcopy
+
+        from contracts.validate_fixtures import validate_spec22_inventory
+
+        for unsafe_ref in ("C:/outside/fixture.json", "../../outside/fixture.json", "/outside/fixture.json"):
+            with self.subTest(ref=unsafe_ref):
+                families = deepcopy(spec22_coverage_report()["families"])
+                family = next(item for item in families if item["name"] == "source_snapshot")
+                family["fixture_refs"] = [unsafe_ref]
+                self.assertIn(
+                    f"unsafe_fixture_ref:source_snapshot:{unsafe_ref}",
+                    validate_spec22_inventory(families),
+                )
+
+    def test_spec22_inventory_rejects_fixture_paths_outside_repository(self) -> None:
+        from copy import deepcopy
+
+        from contracts.validate_fixtures import validate_spec22_inventory
+
+        families = deepcopy(spec22_coverage_report()["families"])
+        family = next(item for item in families if item["name"] == "source_snapshot")
+        family["fixture_refs"] = ["contracts/fixtures/spec22-v1/../../../../outside.json"]
+        self.assertIn(
+            "unsafe_fixture_ref:source_snapshot:contracts/fixtures/spec22-v1/../../../../outside.json",
+            validate_spec22_inventory(families),
+        )
+
+    def test_spec22_report_returns_validation_errors_for_malformed_manifest(self) -> None:
+        from unittest.mock import patch
+
+        with patch(
+            "contracts.validate_fixtures._load",
+            return_value={"families": [{"contract_status": {}, "contract_refs": [], "fixture_refs": []}]},
+        ):
+            report = spec22_coverage_report()
+
+        self.assertIn("invalid_family_entry", report["errors"])
+
+    def test_spec22_report_returns_validation_error_for_unhashable_status(self) -> None:
+        from copy import deepcopy
+        from unittest.mock import patch
+
+        families = deepcopy(spec22_coverage_report()["families"])
+        next(item for item in families if item["name"] == "read_model")["contract_status"] = []
+        with patch("contracts.validate_fixtures._load", return_value={"families": families}):
+            report = spec22_coverage_report()
+
+        self.assertIn("invalid_contract_status:read_model", report["errors"])
 
 
 if __name__ == "__main__":

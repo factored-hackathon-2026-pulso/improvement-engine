@@ -9,14 +9,25 @@
   "access_policy": {"permitted_classifications": ["internal", "pseudonymized", "aggregated"]},
   "columns": [
     {"name": "interaction_id", "logical_type": "text", "nullable": false, "purpose": "identity", "classification": "pseudonymized"},
-    {"name": "customer_id", "logical_type": "text", "nullable": false, "purpose": "join", "classification": "pseudonymized"},
     {"name": "interaction_date", "logical_type": "timestamp", "nullable": false, "purpose": "event_clock", "classification": "internal"},
-    {"name": "contact_reason", "logical_type": "text", "nullable": true, "purpose": "dimension", "classification": "internal"},
-    {"name": "channel", "logical_type": "text", "nullable": true, "purpose": "dimension", "classification": "internal"},
-    {"name": "was_resolved", "logical_type": "bool", "nullable": true, "purpose": "metric", "classification": "internal"},
-    {"name": "requires_followup", "logical_type": "bool", "nullable": true, "purpose": "quality", "classification": "internal"},
+    {"name": "process_date", "logical_type": "date", "nullable": false, "purpose": "dimension", "classification": "internal"},
+    {"name": "customer_id", "logical_type": "text", "nullable": false, "purpose": "join", "classification": "pseudonymized"},
     {"name": "agent_id", "logical_type": "text", "nullable": true, "purpose": "dimension", "classification": "pseudonymized"},
-    {"name": "duration_seconds", "logical_type": "decimal", "nullable": true, "purpose": "metric", "classification": "internal"},
-    {"name": "wait_time_seconds", "logical_type": "decimal", "nullable": true, "purpose": "metric", "classification": "internal"}
+    {"name": "interaction_type", "logical_type": "text", "nullable": false, "purpose": "dimension", "classification": "internal"},
+    {"name": "channel", "logical_type": "text", "nullable": false, "purpose": "dimension", "classification": "internal"},
+    {"name": "contact_reason", "logical_type": "text", "nullable": false, "purpose": "dimension", "classification": "internal"},
+    {"name": "reason_category", "logical_type": "text", "nullable": false, "purpose": "dimension", "classification": "internal"},
+    {"name": "duration_seconds", "logical_type": "int", "nullable": true, "purpose": "metric", "classification": "internal"},
+    {"name": "wait_time_seconds", "logical_type": "int", "nullable": true, "purpose": "metric", "classification": "internal"},
+    {"name": "was_resolved", "logical_type": "bool", "nullable": true, "purpose": "metric", "classification": "internal"},
+    {"name": "requires_followup", "logical_type": "bool", "nullable": false, "purpose": "quality", "classification": "internal"},
+    {"name": "detected_sentiment", "logical_type": "text", "nullable": true, "purpose": "dimension", "classification": "internal"},
+    {"name": "sentiment_score", "logical_type": "decimal", "nullable": true, "purpose": "metric", "classification": "internal"},
+    {"name": "customer_detected_accent", "logical_type": "text", "nullable": true, "purpose": "dimension", "classification": "internal"},
+    {"name": "agent_used_accent", "logical_type": "text", "nullable": true, "purpose": "dimension", "classification": "internal"},
+    {"name": "was_escalated", "logical_type": "bool", "nullable": false, "purpose": "quality", "classification": "internal"},
+    {"name": "mentioned_products", "logical_type": "text", "nullable": true, "purpose": "dimension", "classification": "internal"},
+    {"name": "has_transcript", "logical_type": "bool", "nullable": false, "purpose": "quality", "classification": "internal"},
+    {"name": "has_recording", "logical_type": "bool", "nullable": false, "purpose": "quality", "classification": "internal"}
   ]
 }

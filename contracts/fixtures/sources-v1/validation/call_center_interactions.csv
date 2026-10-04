@@ -1,2 +1,2 @@
-interaction_id,customer_id,interaction_date,contact_reason,channel,was_resolved,requires_followup,agent_id,duration_seconds,wait_time_seconds
-synthetic-001,customer-001,2026-08-31T08:00:00Z,technical,chat,true,false,agent-001,45,10
+interaction_id,interaction_date,process_date,customer_id,agent_id,interaction_type,channel,contact_reason,reason_category,duration_seconds,wait_time_seconds,was_resolved,requires_followup,detected_sentiment,sentiment_score,customer_detected_accent,agent_used_accent,was_escalated,mentioned_products,has_transcript,has_recording
+synthetic-001,2026-08-31T08:00:00Z,2026-08-31,customer-001,agent-001,chat,chat,technical,technical_support,45,10,true,false,neutral,0.2,neutral,neutral,false,account,true,false

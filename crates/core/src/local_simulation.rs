@@ -61,6 +61,10 @@ const MIN_REPORTABLE_RETRY_ERROR_OVERLAP_CASES: u64 = 5;
 const SNAPSHOT_CONTACT_POLICY: &str = "original_contact_literal_month_k_v1";
 const SNAPSHOT_CONTACT_POLICY_VERSION: u32 = 1;
 const SNAPSHOT_CONTACT_MINIMUM_CELL_COUNT: u64 = 5;
+const SNAPSHOT_COMPLAINT_POLICY: &str = "original_complaint_literal_month_k_v1";
+const SNAPSHOT_COMPLAINT_POLICY_VERSION: u32 = 1;
+const SNAPSHOT_COMPLAINT_MINIMUM_CELL_COUNT: u64 = 5;
+const SNAPSHOT_COMPLAINT_METRIC_MINIMUM_GROUP_COUNT: u64 = 5;
 
 /// Minimal, treated event projection passed from a local source adapter.
 /// Identity, prompts, transcripts, customer values and evaluator labels have
@@ -126,6 +130,7 @@ pub struct LocalRunInput {
     minimum_recurring_query_support: u64,
     contact_volume_projection: Option<LocalContactVolumeProjection>,
     snapshot_descriptive_contact_projection: Option<LocalSnapshotContactProjection>,
+    snapshot_descriptive_complaint_projection: Option<LocalSnapshotComplaintProjection>,
     #[cfg(feature = "local-simulation")]
     e0_query_evidence: Option<VerifiedE0QueryResult>,
 }
@@ -232,7 +237,307 @@ impl LocalSnapshotContactProjection {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+/// Aggregated PQR-table values from the final source extract. This is
+/// intentionally separate from complaint-labeled contact counts.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct LocalSnapshotComplaintAggregate {
+    pub period: String,
+    pub category: String,
+    pub channel: String,
+    pub complaint_count: u64,
+    pub sla_breached_suppressed_small_denominator: bool,
+    pub sla_breached_valid_count: Option<u64>,
+    pub sla_breached_missing_count: Option<u64>,
+    pub sla_breached_positive_count: Option<u64>,
+    pub resolution_days_suppressed_small_denominator: bool,
+    pub resolution_days_valid_count: Option<u64>,
+    pub resolution_days_missing_count: Option<u64>,
+    pub resolution_days_mean: Option<f64>,
+    pub resolution_satisfaction_suppressed_small_denominator: bool,
+    pub resolution_satisfaction_valid_count: Option<u64>,
+    pub resolution_satisfaction_missing_count: Option<u64>,
+    pub resolution_satisfaction_mean: Option<f64>,
+}
+
+impl LocalSnapshotComplaintAggregate {
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub fn new(
+        period: impl Into<String>,
+        category: impl Into<String>,
+        channel: impl Into<String>,
+        complaint_count: u64,
+        sla_breached_suppressed_small_denominator: bool,
+        sla_breached_valid_count: Option<u64>,
+        sla_breached_missing_count: Option<u64>,
+        sla_breached_positive_count: Option<u64>,
+        resolution_days_suppressed_small_denominator: bool,
+        resolution_days_valid_count: Option<u64>,
+        resolution_days_missing_count: Option<u64>,
+        resolution_days_mean: Option<f64>,
+        resolution_satisfaction_suppressed_small_denominator: bool,
+        resolution_satisfaction_valid_count: Option<u64>,
+        resolution_satisfaction_missing_count: Option<u64>,
+        resolution_satisfaction_mean: Option<f64>,
+    ) -> Self {
+        Self {
+            period: period.into(),
+            category: category.into(),
+            channel: channel.into(),
+            complaint_count,
+            sla_breached_suppressed_small_denominator,
+            sla_breached_valid_count,
+            sla_breached_missing_count,
+            sla_breached_positive_count,
+            resolution_days_suppressed_small_denominator,
+            resolution_days_valid_count,
+            resolution_days_missing_count,
+            resolution_days_mean,
+            resolution_satisfaction_suppressed_small_denominator,
+            resolution_satisfaction_valid_count,
+            resolution_satisfaction_missing_count,
+            resolution_satisfaction_mean,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct LocalSnapshotComplaintProjection {
+    status: String,
+    missing_fields: Vec<String>,
+    temporal_basis: String,
+    value_semantics: String,
+    coverage: String,
+    policy_id: String,
+    policy_version: u32,
+    minimum_cell_count: u64,
+    included_complaint_count: u64,
+    aggregates: Vec<LocalSnapshotComplaintAggregate>,
+}
+
+impl LocalSnapshotComplaintProjection {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        status: impl Into<String>,
+        missing_fields: Vec<String>,
+        temporal_basis: impl Into<String>,
+        value_semantics: impl Into<String>,
+        coverage: impl Into<String>,
+        policy_version: u32,
+        minimum_cell_count: u64,
+        included_complaint_count: u64,
+        aggregates: Vec<LocalSnapshotComplaintAggregate>,
+    ) -> Result<Self, LocalRunError> {
+        let projection = Self {
+            status: status.into(),
+            missing_fields,
+            temporal_basis: temporal_basis.into(),
+            value_semantics: value_semantics.into(),
+            coverage: coverage.into(),
+            policy_id: SNAPSHOT_COMPLAINT_POLICY.into(),
+            policy_version,
+            minimum_cell_count,
+            included_complaint_count,
+            aggregates,
+        };
+        let unique_cells = projection
+            .aggregates
+            .iter()
+            .map(|cell| {
+                (
+                    cell.period.as_str(),
+                    cell.category.as_str(),
+                    cell.channel.as_str(),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        let count_sum = projection
+            .aggregates
+            .iter()
+            .try_fold(0_u64, |sum, cell| sum.checked_add(cell.complaint_count));
+        let metadata_invalid = projection.temporal_basis != "literal_source_wall_clock_month"
+            || projection.value_semantics != "final_extract_facts_only"
+            || projection.coverage != "partial"
+            || projection.policy_id != SNAPSHOT_COMPLAINT_POLICY
+            || projection.policy_version != SNAPSHOT_COMPLAINT_POLICY_VERSION
+            || projection.minimum_cell_count != SNAPSHOT_COMPLAINT_MINIMUM_CELL_COUNT;
+        let supported_invalid = projection.status == "supported"
+            && (!projection.missing_fields.is_empty()
+                || unique_cells.len() != projection.aggregates.len()
+                || count_sum != Some(projection.included_complaint_count)
+                || projection.aggregates.iter().any(|cell| {
+                    !is_literal_month(&cell.period)
+                        || !matches!(
+                            cell.category.as_str(),
+                            "complaint"
+                                | "transactional"
+                                | "technical"
+                                | "general_inquiry"
+                                | "product"
+                                | "account"
+                                | "card"
+                                | "loan"
+                                | "other"
+                                | "unclassified"
+                        )
+                        || !matches!(
+                            cell.channel.as_str(),
+                            "phone" | "web" | "chat" | "email" | "branch" | "mobile_app" | "other"
+                        )
+                        || cell.complaint_count < projection.minimum_cell_count
+                        || !valid_binary_metric_disclosure(
+                            cell.sla_breached_suppressed_small_denominator,
+                            cell.sla_breached_valid_count,
+                            cell.sla_breached_missing_count,
+                            cell.sla_breached_positive_count,
+                            cell.complaint_count,
+                        )
+                        || !valid_numeric_metric_disclosure(
+                            cell.resolution_days_suppressed_small_denominator,
+                            cell.resolution_days_valid_count,
+                            cell.resolution_days_missing_count,
+                            cell.resolution_days_mean,
+                            cell.complaint_count,
+                            None,
+                        )
+                        || !valid_numeric_metric_disclosure(
+                            cell.resolution_satisfaction_suppressed_small_denominator,
+                            cell.resolution_satisfaction_valid_count,
+                            cell.resolution_satisfaction_missing_count,
+                            cell.resolution_satisfaction_mean,
+                            cell.complaint_count,
+                            Some((1.0, 5.0)),
+                        )
+                }));
+        let unsupported_invalid = projection.status == "unsupported"
+            && (projection.missing_fields.is_empty()
+                || projection.included_complaint_count != 0
+                || !projection.aggregates.is_empty()
+                || !valid_complaint_missing_fields(&projection.missing_fields));
+        if metadata_invalid
+            || !(projection.status == "supported" || projection.status == "unsupported")
+            || supported_invalid
+            || unsupported_invalid
+        {
+            return Err(LocalRunError::InvalidEventProjection);
+        }
+        Ok(projection)
+    }
+
+    #[must_use]
+    pub fn is_supported(&self) -> bool {
+        self.status == "supported"
+    }
+
+    #[must_use]
+    pub fn has_reportable_aggregates(&self) -> bool {
+        self.is_supported() && !self.aggregates.is_empty()
+    }
+
+    fn output_status(&self) -> &'static str {
+        if !self.is_supported() {
+            "unsupported"
+        } else if self.aggregates.is_empty() {
+            "supported_no_reportable_cells"
+        } else {
+            "supported"
+        }
+    }
+
+    #[must_use]
+    pub fn status(&self) -> &str {
+        &self.status
+    }
+
+    #[must_use]
+    pub fn missing_fields(&self) -> &[String] {
+        &self.missing_fields
+    }
+
+    #[must_use]
+    pub fn policy_id(&self) -> &str {
+        &self.policy_id
+    }
+
+    #[must_use]
+    pub fn included_complaint_count(&self) -> u64 {
+        self.included_complaint_count
+    }
+
+    #[must_use]
+    pub fn aggregates(&self) -> &[LocalSnapshotComplaintAggregate] {
+        &self.aggregates
+    }
+}
+
+fn small_nonzero_metric_group(count: u64) -> bool {
+    (1..SNAPSHOT_COMPLAINT_METRIC_MINIMUM_GROUP_COUNT).contains(&count)
+}
+
+fn valid_binary_metric_disclosure(
+    suppressed: bool,
+    valid_count: Option<u64>,
+    missing_count: Option<u64>,
+    positive_count: Option<u64>,
+    total_count: u64,
+) -> bool {
+    if suppressed {
+        return valid_count.is_none() && missing_count.is_none() && positive_count.is_none();
+    }
+    let (Some(valid), Some(missing), Some(positive)) = (valid_count, missing_count, positive_count)
+    else {
+        return false;
+    };
+    let Some(negative) = valid.checked_sub(positive) else {
+        return false;
+    };
+    valid.checked_add(missing) == Some(total_count)
+        && !small_nonzero_metric_group(valid)
+        && !small_nonzero_metric_group(missing)
+        && !small_nonzero_metric_group(positive)
+        && !small_nonzero_metric_group(negative)
+}
+
+fn valid_numeric_metric_disclosure(
+    suppressed: bool,
+    valid_count: Option<u64>,
+    missing_count: Option<u64>,
+    mean: Option<f64>,
+    total_count: u64,
+    bounds: Option<(f64, f64)>,
+) -> bool {
+    if suppressed {
+        return valid_count.is_none() && missing_count.is_none() && mean.is_none();
+    }
+    let (Some(valid), Some(missing)) = (valid_count, missing_count) else {
+        return false;
+    };
+    valid.checked_add(missing) == Some(total_count)
+        && !small_nonzero_metric_group(valid)
+        && !small_nonzero_metric_group(missing)
+        && match bounds {
+            Some((minimum, maximum)) => valid_bounded_summary_mean(valid, mean, minimum, maximum),
+            None => valid_summary_mean(valid, mean),
+        }
+}
+
+fn valid_summary_mean(valid_count: u64, mean: Option<f64>) -> bool {
+    match (valid_count, mean) {
+        (0, None) => true,
+        (0, Some(_)) | (_, None) => false,
+        (_, Some(value)) => value.is_finite() && value >= 0.0,
+    }
+}
+
+fn valid_bounded_summary_mean(valid_count: u64, mean: Option<f64>, min: f64, max: f64) -> bool {
+    match (valid_count, mean) {
+        (0, None) => true,
+        (0, Some(_)) | (_, None) => false,
+        (_, Some(value)) => value.is_finite() && (min..=max).contains(&value),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SnapshotDescriptiveFinding {
     pub signal_id: String,
     pub source_snapshot_digest: String,
@@ -246,6 +551,7 @@ pub struct SnapshotDescriptiveFinding {
     pub minimum_cell_count: u64,
     pub supported_contact_count: u64,
     pub complaint_contact_count: u64,
+    pub complaint_table_projection: Option<LocalSnapshotComplaintProjection>,
     pub literal_months: Vec<String>,
     pub claim_scope: String,
 }
@@ -260,11 +566,18 @@ pub struct SnapshotDescriptiveProposal {
     pub proposed_artifact_intent: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SnapshotDescriptiveEnvelope {
     pub agent_core_candidate: String,
     pub finding: SnapshotDescriptiveFinding,
     pub proposal: SnapshotDescriptiveProposal,
+}
+
+/// Safe adapter diagnostic: only a status and allowlisted missing field names.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ComplaintProjectionStatus {
+    pub status: String,
+    pub missing_fields: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -436,6 +749,7 @@ impl LocalRunInput {
             minimum_recurring_query_support: DEFAULT_MIN_RECURRING_QUERY_CASES,
             contact_volume_projection: None,
             snapshot_descriptive_contact_projection: None,
+            snapshot_descriptive_complaint_projection: None,
             #[cfg(feature = "local-simulation")]
             e0_query_evidence: None,
         }
@@ -480,6 +794,15 @@ impl LocalRunInput {
         projection: LocalSnapshotContactProjection,
     ) -> Self {
         self.snapshot_descriptive_contact_projection = Some(projection);
+        self
+    }
+
+    #[must_use]
+    pub fn with_snapshot_descriptive_complaint_projection(
+        mut self,
+        projection: LocalSnapshotComplaintProjection,
+    ) -> Self {
+        self.snapshot_descriptive_complaint_projection = Some(projection);
         self
     }
 
@@ -647,6 +970,8 @@ pub struct LocalRunResult {
     pub contact_volume_projection: Option<LocalContactVolumeProjection>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot_descriptive_envelope: Option<SnapshotDescriptiveEnvelope>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaint_projection_status: Option<ComplaintProjectionStatus>,
     pub events: Vec<RunEvent>,
 }
 
@@ -705,12 +1030,55 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
 
     if input.metadata.source_kind == LocalSourceKind::OriginalBank {
         let contact_volume_projection = input.contact_volume_projection.clone();
-        let descriptive_envelope = input
-            .snapshot_descriptive_contact_projection
+        let supported_complaint_projection = input
+            .snapshot_descriptive_complaint_projection
             .as_ref()
-            .and_then(|projection| build_snapshot_descriptive_envelope(&input, projection));
+            .filter(|projection| {
+                projection.is_supported() && projection.included_complaint_count > 0
+            });
+        let descriptive_envelope = build_snapshot_descriptive_envelope(
+            &input,
+            input.snapshot_descriptive_contact_projection.as_ref(),
+            supported_complaint_projection,
+        );
         let supported_snapshot = contact_volume_projection.is_some()
-            || input.snapshot_descriptive_contact_projection.is_some();
+            || input.snapshot_descriptive_contact_projection.is_some()
+            || input
+                .snapshot_descriptive_complaint_projection
+                .as_ref()
+                .is_some_and(LocalSnapshotComplaintProjection::has_reportable_aggregates);
+        let complaint_projection_status = input
+            .snapshot_descriptive_complaint_projection
+            .as_ref()
+            .map(|projection| ComplaintProjectionStatus {
+                status: projection.output_status().into(),
+                missing_fields: projection.missing_fields.clone(),
+            })
+            .or_else(|| {
+                (input.metadata.source_kind == LocalSourceKind::OriginalBank).then(|| {
+                    ComplaintProjectionStatus {
+                        status: "absent".into(),
+                        missing_fields: Vec::new(),
+                    }
+                })
+            });
+        if let Some(status) = &complaint_projection_status {
+            record_event(
+                &mut events,
+                "complaint_projection",
+                status.status.as_str(),
+                match status.status.as_str() {
+                    "supported" => "separate complaint-table aggregate projection admitted",
+                    "supported_no_reportable_cells" => {
+                        "complaint source grouping was usable, but no k-qualified aggregates were available; no complaint evidence admitted"
+                    }
+                    "unsupported" => {
+                        "complaint-table aggregate projection unsupported; no complaint evidence admitted"
+                    }
+                    _ => "complaints source table is absent; no complaint evidence was inferred",
+                },
+            );
+        }
         record_event(
             &mut events,
             "detection",
@@ -791,6 +1159,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             u12_e_u13_e: None,
             contact_volume_projection,
             snapshot_descriptive_envelope: descriptive_envelope,
+            complaint_projection_status,
             events,
         });
     }
@@ -895,6 +1264,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
             u12_e_u13_e: Some(u12_e_u13_e),
             contact_volume_projection: None,
             snapshot_descriptive_envelope: None,
+            complaint_projection_status: None,
             events,
         });
     }
@@ -1034,6 +1404,7 @@ pub fn run_local_simulation(input: LocalRunInput) -> Result<LocalRunResult, Loca
         u12_e_u13_e: Some(u12_e_u13_e),
         contact_volume_projection: None,
         snapshot_descriptive_envelope: None,
+        complaint_projection_status: None,
         events,
     })
 }
@@ -1052,6 +1423,11 @@ fn validate_input(input: &LocalRunInput) -> Result<(), LocalRunError> {
         return Err(LocalRunError::InvalidInput);
     }
     if input.snapshot_descriptive_contact_projection.is_some()
+        && input.metadata.source_kind != LocalSourceKind::OriginalBank
+    {
+        return Err(LocalRunError::InvalidEventProjection);
+    }
+    if input.snapshot_descriptive_complaint_projection.is_some()
         && input.metadata.source_kind != LocalSourceKind::OriginalBank
     {
         return Err(LocalRunError::InvalidEventProjection);
@@ -2184,6 +2560,28 @@ fn valid_code(value: &str) -> bool {
             .all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'_' | b'-' | b'.'))
 }
 
+fn valid_complaint_missing_field(value: &str) -> bool {
+    matches!(
+        value,
+        "creation_date"
+            | "category"
+            | "reception_channel"
+            | "valid_source_wall_clock_timestamp"
+            | "usable_grouping_rows"
+    )
+}
+
+fn valid_complaint_missing_fields(values: &[String]) -> bool {
+    const MAX_DIAGNOSTIC_COUNT: usize = 5;
+
+    !values.is_empty()
+        && values.len() <= MAX_DIAGNOSTIC_COUNT
+        && values.iter().collect::<BTreeSet<_>>().len() == values.len()
+        && values
+            .iter()
+            .all(|value| valid_complaint_missing_field(value))
+}
+
 fn is_opaque_query_signature(value: &str) -> bool {
     value.len() == 63
         && value.starts_with("sha256_")
@@ -2206,39 +2604,88 @@ fn is_digest(value: &str) -> bool {
 
 fn build_snapshot_descriptive_envelope(
     input: &LocalRunInput,
-    projection: &LocalSnapshotContactProjection,
+    contact_projection: Option<&LocalSnapshotContactProjection>,
+    complaint_projection: Option<&LocalSnapshotComplaintProjection>,
 ) -> Option<SnapshotDescriptiveEnvelope> {
-    let complaint_contact_count = projection
-        .aggregates
-        .iter()
-        .filter(|cell| cell.reason_category == "complaint")
-        .try_fold(0_u64, |sum, cell| sum.checked_add(cell.contact_count))?;
-    if complaint_contact_count == 0 {
+    let complaint_contact_count = if let Some(projection) = contact_projection {
+        projection
+            .aggregates
+            .iter()
+            .filter(|cell| cell.reason_category == "complaint")
+            .try_fold(0_u64, |sum, cell| sum.checked_add(cell.contact_count))?
+    } else {
+        0
+    };
+    let has_complaint_table_evidence =
+        complaint_projection.is_some_and(|projection| projection.included_complaint_count > 0);
+    if complaint_contact_count == 0 && !has_complaint_table_evidence {
         return None;
     }
-    let projection_json = serde_json::to_string(projection).ok()?;
-    let literal_months = projection
-        .aggregates
-        .iter()
-        .map(|cell| cell.period.clone())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
+    let projection_json =
+        serde_json::to_string(&(contact_projection, complaint_projection)).ok()?;
+    let literal_months =
+        contact_projection
+            .into_iter()
+            .flat_map(|projection| projection.aggregates.iter().map(|cell| cell.period.clone()))
+            .chain(complaint_projection.into_iter().flat_map(|projection| {
+                projection.aggregates.iter().map(|cell| cell.period.clone())
+            }))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+    let temporal_basis = contact_projection
+        .map(|projection| projection.temporal_basis.as_str())
+        .or_else(|| complaint_projection.map(|projection| projection.temporal_basis.as_str()))?;
+    let value_semantics = contact_projection
+        .map(|projection| projection.value_semantics.as_str())
+        .or_else(|| complaint_projection.map(|projection| projection.value_semantics.as_str()))?;
+    let coverage = contact_projection
+        .map(|projection| projection.coverage.as_str())
+        .or_else(|| complaint_projection.map(|projection| projection.coverage.as_str()))?;
+    let policy_id = contact_projection
+        .map(|_| SNAPSHOT_CONTACT_POLICY)
+        .or_else(|| complaint_projection.map(|projection| projection.policy_id.as_str()))?;
+    let policy_version = contact_projection
+        .map(|projection| projection.policy_version)
+        .or_else(|| complaint_projection.map(|projection| projection.policy_version))?;
+    let minimum_cell_count = contact_projection
+        .map(|projection| projection.minimum_cell_count)
+        .or_else(|| complaint_projection.map(|projection| projection.minimum_cell_count))?;
+    let supported_contact_count =
+        contact_projection.map_or(0, |projection| projection.included_contact_count);
+    let signal_id = if complaint_contact_count > 0 {
+        "original_contact_complaint_volume_by_literal_month_v1"
+    } else {
+        "original_complaints_literal_month_descriptive_v1"
+    };
+    let hypothesis = match (complaint_contact_count > 0, has_complaint_table_evidence) {
+        (true, true) => {
+            "Complaint-labeled contacts and complaint-table records are present as separate final-extract aggregates; no linkage, cause, or impact is inferred."
+        }
+        (true, false) => {
+            "Complaint contacts are present in the final extract; assess a bounded handling improvement as a hypothesis, without inferring cause or business impact."
+        }
+        (false, true) => {
+            "Complaint-table records are present in the final extract; assess a bounded handling improvement as a hypothesis, without inferring linkage, cause, or business impact."
+        }
+        (false, false) => return None,
+    };
     Some(SnapshotDescriptiveEnvelope {
         agent_core_candidate: "dependency_blocked_snapshot_semantics".into(),
         finding: SnapshotDescriptiveFinding {
-            signal_id: "original_contact_complaint_volume_by_literal_month_v1".into(),
+            signal_id: signal_id.into(),
             source_snapshot_digest: input.metadata.snapshot_ref.digest.clone(),
             source_manifest_digest: input.metadata.manifest_digest.clone(),
             projection_digest: derive_digest(&projection_json),
-            temporal_basis: projection.temporal_basis.clone(),
-            value_semantics: projection.value_semantics.clone(),
-            coverage: projection.coverage.clone(),
-            policy_id: SNAPSHOT_CONTACT_POLICY.into(),
-            policy_version: projection.policy_version,
-            minimum_cell_count: projection.minimum_cell_count,
-            supported_contact_count: projection.included_contact_count,
+            temporal_basis: temporal_basis.to_owned(),
+            value_semantics: value_semantics.to_owned(),
+            coverage: coverage.to_owned(),
+            policy_id: policy_id.to_owned(),
+            policy_version,
+            minimum_cell_count,
+            supported_contact_count,
             complaint_contact_count,
+            complaint_table_projection: complaint_projection.cloned(),
             literal_months,
             claim_scope: "descriptive_only_no_causal_or_roi_claim".into(),
         },
@@ -2247,8 +2694,9 @@ fn build_snapshot_descriptive_envelope(
             execution_status: "not_executed".into(),
             publication_eligible: false,
             formal_route: "do_nothing".into(),
-            hypothesis: "Complaint contacts are present in the final extract; assess a bounded handling improvement as a hypothesis, without inferring cause or business impact.".into(),
-            proposed_artifact_intent: "agent_core_artifact_design_required_after_snapshot_contract_extension".into(),
+            hypothesis: hypothesis.into(),
+            proposed_artifact_intent:
+                "agent_core_artifact_design_required_after_snapshot_contract_extension".into(),
         },
     })
 }

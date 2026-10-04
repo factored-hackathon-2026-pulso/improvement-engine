@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+pub mod artifact_kind_flow;
+pub mod authority;
 pub mod autonomous_scout;
 pub mod change_compiler;
 pub mod core_task;
@@ -38,6 +40,12 @@ pub mod e0_query_lab;
 pub mod e0_safety_oracle;
 pub mod enriched_history;
 pub mod evaluation_plan;
+pub mod facade_steps;
+pub use facade_steps::{
+    ArmBinding, ArmObservation, InfrastructureFailure, PairError, PairPlan, PairVerdict,
+    PlatformColumn, PlatformRelation, PlatformSourceReadPlan, PlatformSourceText,
+    PlatformTreatedText,
+};
 pub mod final_eligibility;
 pub mod governed_memory_use;
 pub mod governed_registry;
@@ -51,21 +59,29 @@ pub mod memory_temporal_protocol;
 pub mod model_provider;
 pub mod native_evaluation;
 pub mod paired_scenario;
+pub mod pipeline;
 pub mod platform_discovery;
 pub mod platform_observations;
 pub mod platform_sensor;
 pub mod platform_source_policy;
 pub mod quota_grant;
+pub mod replay_clock;
+pub mod replay_protocol;
 pub mod run_activity;
 pub mod run_config;
 pub mod run_fork;
 pub(crate) mod run_timeline_v2;
 pub mod sandbox;
+pub mod scenario_factory;
 pub mod signal_portfolio;
 pub mod source_validation;
 pub mod value_model;
 pub mod wiki_scratch;
 pub mod workflow_bridge;
+
+pub mod detectors {
+    pub mod family_01;
+}
 
 /// Stable identifier used by diagnostics and future service composition.
 pub fn service_name() -> &'static str {
