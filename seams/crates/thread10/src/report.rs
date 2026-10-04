@@ -77,8 +77,9 @@ pub fn build_with(i: &Input, x: &Extras) -> Value {
     let gate_v = get("gate").and_then(|g| g.get("verdict")).and_then(Value::as_str).map(str::to_string);
     let validation_v = get("validation").and_then(|v| v.get("verdict")).and_then(Value::as_str).map(str::to_string);
 
+    let narrow = if x.core_real { "real-narrow" } else { "stand-in" };
     let compile_status = if compiled {
-        "stand-in".to_string()
+        narrow.to_string()
     } else if let Some(r) = compile.and_then(|c| c.get("denied_reason")).and_then(Value::as_str) {
         blocked(r)
     } else if let Some((_, code)) = x.stop.as_ref().filter(|(_, c)| c == "kind_not_supported" || c == "release_settings_not_allowed") {
@@ -98,7 +99,7 @@ pub fn build_with(i: &Input, x: &Extras) -> Value {
         "not_exercised".to_string()
     };
     let publish_status = if ran("publish") {
-        "stand-in".to_string()
+        narrow.to_string()
     } else if gate_blocked {
         blocked("gate")
     } else {
@@ -116,11 +117,11 @@ pub fn build_with(i: &Input, x: &Extras) -> Value {
         step(i, 3, "recompute", &ex("recompute", "real-narrow"), "claude-standin", json!({"semantics": "claude-standin", "recompute": "Rust recompute step over the synthetic lab row"})),
         step(i, 4, "opportunity", &opportunity.0, &opportunity.1, json!({"model": x.models.iter().find(|m| m["role"] == "builder"), "why": "the change spec comes from the model port; see models[] for what answered"})),
         step(i, 4, "validation", &ex("validation", "real-narrow"), "claude-standin", json!({"verdict": validation_v, "model_verifier": x.models.iter().find(|m| m["role"] == "verifier")})),
-        step(i, 5, "compile", &compile_status, "claude-standin", json!({"dry_run": "offline double digest, not a Core dry-run"})),
-        step(i, 6, "gate", &ex("gate", "stand-in"), "claude-standin", json!({"verdict": gate_v, "arms": "offline double: both sides complete the same cases", "judge": JUDGE})),
+        step(i, 5, "compile", &compile_status, if x.core_real { "core-bridge+claude-standin" } else { "claude-standin" }, json!({"dry_run": if x.core_real { "Core dry-run digest via the bridge; the compile step itself is the claude-standin" } else { "offline double digest, not a Core dry-run" }})),
+        step(i, 6, "gate", &ex("gate", narrow), if x.core_real { "core-bridge+claude-gsipy" } else { "claude-standin" }, json!({"verdict": gate_v, "arms": if x.core_real { "real Core arm runs (oracle: the suite's own expect blocks)" } else { "offline double: both sides complete the same cases" }, "judge": JUDGE})),
         step(i, 7, "revision", "not_exercised", "claude-standin", json!({"why": "V3r bounded revision is a library hook, not wired into this job"})),
         step(i, 8, "approval", &approval_status, "simulated-issuer", json!({"authority": auth})),
-        step(i, 9, "publish", &publish_status, "claude-standin", json!({"registry": "offline double", "publish": publish})),
+        step(i, 9, "publish", &publish_status, if x.core_real { "core-registry+simulated-issuer" } else { "claude-standin" }, json!({"registry": if x.core_real { "Core registry, staging alias readback" } else { "offline double" }, "publish": publish})),
         step(i, 10, "observation", &ex("publish", "simulated"), "platform-sim", json!({"window": "simulated"})),
     ];
     let mut overrides = vec![];
@@ -131,7 +132,7 @@ pub fn build_with(i: &Input, x: &Extras) -> Value {
         "contract_revision": CONTRACT_REVISION, "target": "local", "sha": i.sha, "host": "rust", "label": "DEMO-0", "quality_claims": "forbidden",
         "gate": {"verdict": gate_v, "judge": JUDGE}, "steps": steps,
         "ports": [
-            {"port": "core", "provenance": "offline-double(thread10::DoublePort)", "price_source": "n/a"},
+            {"port": "core", "provenance": if x.core_real { "real-core-live(engine::live_core::LiveCore over core-client; the platform sealer and the human issuer are stand-ins)" } else { "offline-double(thread10::DoublePort)" }, "price_source": "n/a"},
             {"port": "llm_gateway", "provenance": gateway_provenance(&x.models), "price_source": "n/a"},
             {"port": "registry", "provenance": "in-process-double", "price_source": "n/a"},
             {"port": "human_issuer", "provenance": "simulated-local-issuer", "price_source": "n/a"},

@@ -73,7 +73,7 @@ fn full() -> Vec<(&'static str, String)> {
     ]
 }
 
-fn pairs(v: &[(&'static str, String)]) -> Vec<(&'static str, &str)> {
+fn pairs<'a>(v: &'a [(&'static str, String)]) -> Vec<(&'static str, &'a str)> {
     v.iter().map(|(k, x)| (*k, x.as_str())).collect()
 }
 

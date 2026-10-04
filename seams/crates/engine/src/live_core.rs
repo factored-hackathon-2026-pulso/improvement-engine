@@ -144,6 +144,51 @@ impl LiveCore {
     }
 }
 
+/// The e2e fixtures double over HTTP (`POST /_e2e/config`): the platform stand-in that holds sealed artifacts and issues
+/// evaluation bindings (BRG1 gap candidate, NOT a Core route). Library twin of the live tests' `Fx`.
+pub struct E2eFixtures {
+    pub addr: String,
+    pub tenant: String,
+}
+
+impl E2eFixtures {
+    fn config(&self, body: &Value) -> Result<(), String> {
+        let bytes = serde_json::to_vec(body).map_err(|e| e.to_string())?;
+        let r = core_client::http::request(&self.addr, "POST", "/_e2e/config", &[], Some(&bytes), std::time::Duration::from_secs(10)).map_err(|e| format!("fixtures server: {e:?}"))?;
+        if r.status == 200 { Ok(()) } else { Err(format!("fixtures server answered {}", r.status)) }
+    }
+}
+
+impl ArtifactSealer for E2eFixtures {
+    fn seal(&self, plan_ref: &str, content: &Value) -> Result<(), String> {
+        self.config(&json!({"artifacts": [{"tenant": self.tenant, "id": plan_ref, "content": content}]}))
+    }
+}
+
+impl BindingPreauthorizer for E2eFixtures {
+    fn preauthorize(&self, tenant: &str, binding_ref: &str) -> Result<(), String> {
+        self.config(&json!({"preauthorized_bindings": [{"tenant": tenant, "binding_ref": binding_ref}]}))
+    }
+}
+
+/// What a live window needs to know before it starts: the bridge reports exactly our pin and the agent has a prod release.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Readiness {
+    pub agent_core_sha: String,
+    pub contracts_version: String,
+    pub prod_release_id: Option<String>,
+}
+
+impl LiveCore {
+    /// Version probe (must equal the pin) plus a read of the prod alias. Fails closed; reaches only the bridge.
+    pub fn readiness(&self, job_id: &str) -> Result<Readiness, String> {
+        let v = self.client.version().map_err(|x| Self::e("version", format!("{x:?}")))?;
+        v.check_pin().map_err(|x| Self::e("version", x))?;
+        let a = self.client.read_alias(&self.cfg.tenant, Some(job_id), &self.cfg.agent_id, Alias::Prod).map_err(|x| Self::e("prod alias", x))?;
+        Ok(Readiness { agent_core_sha: v.agent_core_sha, contracts_version: v.contracts_version, prod_release_id: a.release_id })
+    }
+}
+
 impl CorePort for LiveCore {
     fn is_real(&self) -> bool {
         true

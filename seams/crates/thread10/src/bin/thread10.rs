@@ -1,6 +1,6 @@
 //! thread10 <work_dir> [--override] [--denied-kind] [--claimed-rate X] [--marker FILE IDX] [--now N] [--sha S]
 //! Runs the offline Rust-shell thread and prints the report (JSON, one line) on stdout. Exit 0 job completed, 1 job stopped
-//! (the report is still printed and says where), 2 usage. Env: STEPS_RUNNER_EXE (default: synth_runner next to this exe),
+//! (the report is still printed and says where), 2 usage. Env: STEPS_RUNNER_EXE (default: synth_runner next to this exe), PULSO_CORE_PORT=live (+ the PULSO_* of engine::real_core),
 //! THREAD10_SHA. The report has no `doubles[]`: the Python twin (claude_standin.thread01_rust) adds them with G1 `generate_doubles`.
 use thread10::{Opts, run};
 
@@ -22,6 +22,11 @@ fn main() {
         eprintln!("thread10: {m}");
         std::process::exit(2)
     };
+    // PULSO_CORE_PORT=live selects the real Core port (see engine::real_core for the env); default: the offline double.
+    match engine::real_core::core_from_env(&|k| std::env::var(k).ok()) {
+        Ok(c) => o.core = c,
+        Err(e) => usage(&e),
+    }
     while let Some(f) = it.next() {
         match f.as_str() {
             "--override" => o.human_override = true,
