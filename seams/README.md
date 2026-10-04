@@ -87,3 +87,11 @@ teardown with `local\core\stop.ps1` + `reset.ps1 -Confirm`). Evidence: `docs/rep
   revisions, ceiling fixed; `ShrinkPolicy` is a rule-driven stand-in (no model).
 - `authority::flow::HumanFlow`: `request_decision(card)` -> `waiting_human`, `approve`/`reject` quote the card digest,
   `publish`, `alias_read`. H1r supplies a real `HumanIssuer` and a `CardRecorder` (records the card digest).
+
+## Reconcile (K5a)
+
+`CoreClient::run_arm_reconciled` reads an unknown outcome (`Transport{sent:true}`) back by idempotency key
+before any resend, resends only with the same key, and is bounded (default 3 writes, `Retry-After` in delta-seconds
+capped). If the read-back itself fails the call returns `Err` (still unknown). Limits: `EffectReconciler` is only a
+trait, NOT wired into the engine executor; `invoke` and admissions have no `reconcile_*`; HTTP-date `Retry-After`
+is ignored (backoff used); the test fake does not verify the JWT signature.
