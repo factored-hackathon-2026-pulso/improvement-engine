@@ -62,13 +62,24 @@ async def test_call_under_timeout_succeeds() -> None:
     assert resp.status == 201 and resp.body == {"run_id": "r1"}
 
 
-@pytest.mark.parametrize("case", ["a", "b", "c"])
-async def test_timeout_then_retry_same_key_has_no_duplicate_effect(case: str) -> None:
+async def test_timeout_cancels_core_call_and_never_resends_internally() -> None:
+    """The client must not retry on its own (a resend is the service's reconcile decision) and must cancel the
+    in-flight app call rather than leave it running detached. The fake app does NOT dedupe, so any internal retry
+    would show up as a second effect."""
     effects: list[str] = []
-    stored: dict[str, Any] = {}
-    client = AsgiCoreClient(lambda: _app(0.3, effects, stored), timeout_s=0.05)
+    cancelled: list[bool] = []
+
+    async def app(scope: dict, receive: Any, send: Any) -> None:
+        await receive()
+        effects.append("effect")
+        try:
+            await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    client = AsgiCoreClient(lambda: app, timeout_s=0.05)
     with pytest.raises(CoreCallTimeout):
-        await client.start_run("b", f"key-{case}", {})
-    resp = await client.start_run("b", f"key-{case}", {})
-    assert resp.status == 201
-    assert effects == [f"key-{case}"]
+        await client.start_run("b", "k", {})
+    await asyncio.sleep(0.05)
+    assert effects == ["effect"] and cancelled == [True]
