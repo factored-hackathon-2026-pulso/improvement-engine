@@ -489,6 +489,44 @@ def _finish(n: int, sid: str, rec: dict, ctx: Ctx) -> dict:
             "contract_revision": CONTRACT_REVISION, "host": HOST, **{k: v for k, v in rec.items() if k != "id"}}
 
 
+def _er():
+    import importlib.util
+    if "engine_run" in sys.modules:
+        return sys.modules["engine_run"]
+    spec = importlib.util.spec_from_file_location("engine_run", ROOT / "contracts" / "engine-run" / "engine_run.py")
+    m = importlib.util.module_from_spec(spec)
+    sys.modules["engine_run"] = m
+    spec.loader.exec_module(m)
+    return m
+
+
+def build_report(ctx: Ctx, steps: list[dict]) -> dict:
+    """The final engine-run report (C-2): per-step labels, per-port provenance, authors, engine-generated doubles[]."""
+    keep = ("id", "n", "status", "data_class", "target", "sha", "contract_revision", "host", "receipt", "actor",
+            "model", "stage_output")
+    rep_steps = [{k: s[k] for k in keep if k in s} for s in steps]
+    by = {(s["n"], s["id"]): s for s in steps}
+    st = lambda n: next((s["status"] for s in steps if s["n"] == n), "red")  # noqa: E731
+    world = ctx.out.get("world") or {"authors": {}}
+    h = ctx.cfg.hooks
+    ports = [{"port": "llm_gateway", "provenance": "roleplay-shim:replay", "price_source": "placeholder-rate-card"},
+             {"port": "registry", "provenance": "core-local-staging" if (h.publish and h.alias_read) else "in-process-double",
+              "price_source": "n/a"},
+             {"port": "human_issuer", "provenance": "simulated-local-issuer", "price_source": "n/a"},
+             {"port": "platform", "provenance": "platform-sim", "price_source": "n/a"}]
+    report = {"contract_revision": CONTRACT_REVISION, "target": "local", "sha": ctx.sha, "host": HOST, "label": "DEMO-0",
+              "quality_claims": "forbidden", "mode": ctx.cfg.mode, "steps": rep_steps, "ports": ports,
+              "authors": {"world": world["authors"].get("world"), "suite": world["authors"].get("suite"),
+                          "effect": ctx.out.get("effect_author"), "judge": JUDGE,
+                          "suite_sealed_at": SUITE_SEALED_AT, "candidate_created_at": ctx.out.get("candidate_created_at")}}
+    observed = {"model": by.get((3, "scout"), {}).get("status", "red"),
+                "jev": "not_exercised(blocked: agent-core PR 28 not on main)",
+                "issuer": st(8), "product": "simulated" if st(9) == "stand-in" else st(9), "host": HOST,
+                "gate": "claude-authored(structural, quality_claims forbidden)", "data_origin": "generated_sample"}
+    report["doubles"] = _er().generate_doubles(report, observed)
+    return report
+
+
 def run_thread(cfg: ThreadConfig) -> dict:
     cfg.workdir = Path(cfg.workdir)
     cfg.workdir.mkdir(parents=True, exist_ok=True)
@@ -502,6 +540,7 @@ def run_thread(cfg: ThreadConfig) -> dict:
         except Exception as e:  # noqa: BLE001 - a step that cannot run is RED, never silently skipped
             steps.append(_finish(n, sid, {"status": "red", "error": f"{type(e).__name__}: {e}", "data_class": None,
                                           "detail": {}}, ctx))
+    ctx.out["report"] = build_report(ctx, steps)
     return {"steps": steps, "mode": cfg.mode, "host": HOST, "replay": ctx.out.get("replay", {"misses": 1, "calls": 0}),
             "report": ctx.out.get("report", {}), "m3": ctx.out.get("m3", {}), "mapper": ctx.out.get("mapper"),
             "categories": ctx.out.get("categories"), "gate_verdict": ctx.out.get("gate_verdict"), "ctx": ctx.out}

@@ -175,7 +175,7 @@ def test_final_report_passes_g1_check(thread):
     parts = {d["part"]: d for d in rep["doubles"]}
     assert parts["model"]["status"] == "agent_roleplay" and parts["jev"]["status"].startswith("not_exercised")
     assert parts["issuer"]["status"] == "simulated" and parts["host"]["status"] == "python"
-    assert parts["gate"]["status"].startswith("claude-authored") and parts["data_origin"]["status"] == "generated_sample"
+    assert parts["gate"]["status"].startswith("claude-authored") and parts["data.origin"]["status"] == "generated_sample"
     assert parts["product"]["status"] in ("simulated", "stand-in")
 
 
