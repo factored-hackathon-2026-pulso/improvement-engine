@@ -96,7 +96,12 @@ impl App {
         }
     }
 
+    /// A store failure (the port is infallible, so the durable store panics) answers 503 for that request only.
     pub fn handle(&self, r: &Req) -> Resp {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.route(r))).unwrap_or_else(|_| code(503, "store_unavailable"))
+    }
+
+    fn route(&self, r: &Req) -> Resp {
         let broker_path = r.path.strip_prefix(BROKER);
         match (r.method.as_str(), r.path.as_str(), broker_path) {
             ("POST", "/internal/v1/core-task-bindings", _) => self.binding(r),
@@ -168,6 +173,9 @@ impl App {
         if r.headers.get("idempotency-key").map(String::as_str) != Some(command_key.as_str()) {
             return code(422, "idempotency_key_mismatch");
         }
+        if [&command_key, &request_digest, &job_id, &core_run_id, &task_binding_ref].iter().any(|v| v.is_empty() || v.chars().count() > 256 || v.contains('\0')) {
+            return code(422, "schema_invalid"); // the durable store bounds every key (and Postgres text cannot hold NUL)
+        }
         let mode = self.fault("bind");
         let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let prior = self.store.binding(&tenant, &command_key);
@@ -182,8 +190,14 @@ impl App {
         }
         if prior.is_none() {
             let attempt = b.get("attempt").and_then(Value::as_i64).unwrap_or(0);
+            let digest = request_digest.clone();
             if !self.store.put_binding(&tenant, &command_key, BindingRec { request_digest, job_id: job_id.clone(), core_run_id, attempt, task_binding_ref }) {
-                return code(409, "binding_conflict"); // lost a race for the job id or the binding ref is another tenant's
+                // lost a race (another process sharing the database): the winner's row decides, never a silent overwrite
+                return match self.store.binding(&tenant, &command_key) {
+                    Some(w) if w.request_digest == digest => json_resp(200, json!({"schema_version": "1", "state": "confirmed", "tenant_id": tenant, "job_id": job_id})),
+                    Some(_) => code(409, "digest_mismatch"),
+                    None => code(409, "binding_conflict"), // the job id belongs to another command key or the ref is another tenant's
+                };
             }
         }
         if mode.as_deref() == Some("applied_then_503") {
@@ -241,6 +255,9 @@ impl App {
             return error(413, "artifact_too_large");
         }
         let Some(up) = Self::parse(r).and_then(Self::validate_upload) else { return error(422, "schema_invalid") };
+        if up["content"].to_string().contains("\\u0000") {
+            return error(422, "schema_invalid"); // Postgres JSONB cannot hold U+0000 (every store answers alike)
+        }
         if up["source_schema_ref"].is_null() && up["artifact_kind"] != "schema" {
             return error(422, "source_schema_ref_required");
         }

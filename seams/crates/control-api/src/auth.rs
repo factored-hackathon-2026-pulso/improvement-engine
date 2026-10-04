@@ -123,7 +123,10 @@ impl Verifier {
         if want.purpose.is_some_and(|w| s("purpose") != Some(w)) {
             return Err(Denied { reason: "purpose_denied", status: 403 });
         }
-        if s("tenant_id").is_none_or(str::is_empty) {
+        if jti.chars().count() > 256 || s("iss").is_some_and(|i| i.chars().count() > 256) {
+            return Err(deny("malformed")); // the durable replay set bounds both
+        }
+        if s("tenant_id").is_none_or(|t| t.is_empty() || t.chars().count() > 128 || t.contains('\0')) {
             return Err(Denied { reason: "tenant_required", status: 403 });
         }
         if let Some((store, scope)) = &self.durable {

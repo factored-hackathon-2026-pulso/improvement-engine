@@ -4,6 +4,7 @@
 mod common;
 use common::*;
 use control_api::pgstore::PgStore;
+use core_client::canon::sha256_hex;
 use control_api::store::{BindingRec, MemStore, PutOutcome, Store};
 use postgres::{Client, Config, NoTls};
 use serde_json::{Value, json};
@@ -229,8 +230,8 @@ fn jti_replay_set_claims_once_scopes_apart_and_evicts_expired() {
         assert!(!s.jti_claim("control", "iss", "j1", 100.0, 51.0), "{}: replay", fx.name);
         assert!(s.jti_claim("broker", "iss", "j1", 100.0, 51.0), "{}: other verifier scope", fx.name);
         assert!(s.jti_claim("control", "other", "j1", 100.0, 51.0), "{}: other issuer", fx.name);
-        assert!(s.jti_claim("control", "iss", "j1", 400.0, 200.0), "{}: the expired entry was evicted", fx.name);
-        assert!(!s.jti_claim("control", "iss", "j1", 400.0, 201.0));
+        assert!(s.jti_claim("control", "iss", "j1", 400.0, 300.0), "{}: the expired entry was evicted (after exp + skew)", fx.name);
+        assert!(!s.jti_claim("control", "iss", "j1", 400.0, 301.0));
     });
 }
 
@@ -333,4 +334,67 @@ fn reset_empties_every_table_for_a_fresh_black_box_run() {
     s.reset();
     assert!(s.binding("t1", "cmd-1").is_none() && s.binding_ref_tenant("ref-1").is_none() && s.get_doc("grant", "t1", "g1").is_none());
     assert!(s.jti_claim("control", "iss", "j1", 1e12, 2.0), "the replay set is emptied too");
+}
+
+// ---- CPGR review: adversarial cases -----------------------------------------------------------------------------
+
+#[test]
+fn jti_entry_is_kept_for_clock_skew_between_processes_after_exp() {
+    each(|fx| {
+        let s = fx.open();
+        assert!(s.jti_claim("control", "iss", "j1", 1100.0, 1000.0), "{}", fx.name);
+        // another process whose clock is ahead evicts "expired" rows ...
+        assert!(s.jti_claim("control", "iss", "j2", 1400.0, 1100.0));
+        // ... but a process whose clock is 50 s behind still accepts j1 (exp > its now): it must stay claimed
+        assert!(!s.jti_claim("control", "iss", "j1", 1100.0, 1050.0), "{}: replay inside the skew window", fx.name);
+    });
+}
+
+fn nul_upload(rig: &Rig) -> (u16, Value) {
+    let content = "a\u{0}b";
+    let digest = sha256_hex(content.as_bytes());
+    let body = json!({"schema_version": "1", "binding_ref": SUB, "source_schema_ref": null, "classification": "treated",
+                      "information_partition": "p1", "artifact_kind": "schema", "media_type": "text/plain", "encoding": "utf8",
+                      "content": content, "content_digest": digest});
+    let tok = rig.token("ex", "lab-broker", "artifact_write", "t1", json!({"purpose": "artifact_upload"}));
+    rig.call("POST", "/internal/v1/broker/artifacts", Some(&body), Some(&tok), &[("Idempotency-Key", &digest)])
+}
+
+#[test]
+fn values_the_database_cannot_hold_are_a_4xx_never_a_panic() {
+    each(|fx| {
+        let rig = rig(fx);
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| nul_upload(&rig)));
+        assert!(out.as_ref().is_ok_and(|(st, _)| (400..500).contains(st)), "{}: NUL in artifact content -> {:?}", fx.name, out.map(|o| o.0));
+        let long = "k".repeat(300);
+        let tok = rig.token("cb", "control-api", "binding", "t1", json!({"purpose": "core_task_binding"}));
+        let body = json!({"tenant_id": "t1", "command_key": long, "request_digest": "d", "job_id": "j", "core_run_id": "r", "attempt": 1, "task_binding_ref": "tb"});
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rig.call("POST", "/internal/v1/core-task-bindings", Some(&body), Some(&tok), &[("Idempotency-Key", &long)])));
+        assert!(out.as_ref().is_ok_and(|(st, _)| (400..500).contains(st)), "{}: 300-char command key -> {:?}", fx.name, out.map(|o| o.0));
+        // the store still works afterwards (no poisoned/half-open connection)
+        assert_eq!(rig.upload_schema()["id"].as_str().map(|s| s.starts_with("artifact:")), Some(true), "{}", fx.name);
+    });
+}
+
+#[test]
+fn concurrent_identical_binding_posts_from_separate_processes_all_confirm_once() {
+    each(|fx| {
+        let body = json!({"tenant_id": "t1", "command_key": "kr", "request_digest": "d1", "job_id": "job-r", "core_run_id": "r1", "attempt": 1, "task_binding_ref": "tb-r"});
+        let rigs: Vec<Rig> = (0..6).map(|_| rig(fx)).collect(); // each rig = own App (own write lock) on its own connection
+        let results: Vec<(u16, Value)> = std::thread::scope(|sc| {
+            let hs: Vec<_> = rigs
+                .iter()
+                .map(|r| {
+                    let b = &body;
+                    sc.spawn(move || {
+                        let tok = r.token("cb", "control-api", "binding", "t1", json!({"purpose": "core_task_binding"}));
+                        r.call("POST", "/internal/v1/core-task-bindings", Some(b), Some(&tok), &[("Idempotency-Key", "kr")])
+                    })
+                })
+                .collect();
+            hs.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        assert!(results.iter().all(|(st, _)| *st == 200), "{}: {results:?}", fx.name);
+        assert_eq!(fx.open().binding_effects("t1", "job-r"), 1, "{}", fx.name);
+    });
 }
