@@ -88,6 +88,15 @@ contracts/engine-handlers/abi.md -> L-ENGINE
 roleplay-llm/server.py -> L-MODEL
 roleplay-llm/tests/test_scanner.py -> L-MODEL
 local/pg/init.sql -> L-PG
+seams/crates/pulso/build.rs -> L-E2E
+seams/crates/pulso/README.md -> L-E2E
+seams/crates/pulso/src/config.rs -> L-E2E
+seams/crates/pulso/src/health.rs -> L-E2E
+seams/crates/pulso/src/healthcheck.rs -> L-E2E
+seams/crates/pulso/src/run/supervisor.rs -> L-E2E
+seams/crates/pulso/src/run/tasks.rs -> L-E2E
+seams/crates/pulso/src/run/db.rs -> L-E2E
+seams/crates/pulso/tests/run_process.rs -> L-E2E
 local/observability/alerts.yaml -> L-OPS
 local/compose.d/l-pg.yaml -> L-PG
 local/compose.d/l-model.yaml -> L-MODEL

@@ -47,6 +47,11 @@ impl PgRepo {
         let ns = format!("ns{}x{}-", std::process::id(), NS.fetch_add(1, Ordering::SeqCst));
         Self { cfg, ns }
     }
+    /// A repository over the REAL tenant ids (no per-instance namespace): every process and instance pointed at the
+    /// same database sees and claims the same jobs. This is what a deployed worker uses; `new` is for isolated tests.
+    pub fn shared(cfg: Config) -> Self {
+        Self { cfg, ns: String::new() }
+    }
     fn client(&self) -> Result<Client, RepoError> {
         self.cfg.connect(NoTls).map_err(db)
     }
