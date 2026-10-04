@@ -11,11 +11,11 @@
     },
     "C-12": {
       "status": "frozen",
-      "digest": "sha256:3eeab680712eb36205af975176a8a4ef86529b2635fae4016c352282b489bbb5",
+      "digest": "sha256:4128f5d8fcf0b602ef8e2237bedf0c576f7b452a3609a079fa2fe153e002dc86",
       "files": {
         "roleplay-llm/roleplay_llm/protocol.py": "sha256:cc261a6e9ad0288caf1f6cc9beb10a2a8430b8f33ccc9152ec64ee8c373d6ede",
-        "roleplay-llm/roleplay_llm/scanner.py": "sha256:530590ec181ae3003ea33c3bf913f947758d3205a86bf7913c1993d3ee25d208",
-        "roleplay-llm/roleplay_llm/shim.py": "sha256:13bedbfdfde752c836697210f26b4a3839d1763c633ef613235d668816090504"
+        "roleplay-llm/roleplay_llm/scanner.py": "sha256:138a725148b30edad70a61788f9cf46b557c2ddfb971291db311a05b85840697",
+        "roleplay-llm/roleplay_llm/shim.py": "sha256:7219c302bfcbb3b38aada2f1145265a0d613f99fcfafc04da46c74bf9bc52ce7"
       }
     }
   }
