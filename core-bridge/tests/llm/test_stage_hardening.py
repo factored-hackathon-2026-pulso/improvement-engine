@@ -31,7 +31,7 @@ from roleplay_llm.scanner import scan_payload  # noqa: E402
 from roleplay_llm.shim import HOLD_S, Shim, replay_key  # noqa: E402
 
 LLM_STAGES = ("scout", "verifier", "builder_design")
-PROFILE_SHA256 = hashlib.sha256(PROFILE_FILE.read_bytes()).hexdigest()
+PROFILE_SHA256 = "f79cda6cbe50e464df7d86bda78a2597ac236971f1ab8cb6b48732792fd794c7"  # literal: a self-computed pin cannot fail
 
 
 def test_registry_profile_bytes_are_untouched() -> None:
@@ -99,6 +99,13 @@ def test_a_profile_that_does_not_match_the_registry_is_rejected(over: dict, reas
     assert [policy.check(s, drifted) for s in LLM_STAGES] == [reason] * 3
 
 
+def test_a_profile_with_a_larger_max_tokens_is_rejected() -> None:
+    base = load_registry_profile(PROFILE_FILE)
+    policy = evolution_policy(base)
+    drifted = SimpleNamespace(**{**vars(base), "max_tokens": base.max_tokens + 1})
+    assert [policy.check(s, drifted) for s in LLM_STAGES] == ["max_tokens_exceeds_pin"] * 3
+
+
 # -- step caps and timeout plan ------------------------------------------------------------------------
 def test_step_caps_match_the_responder_protocol_and_exclude_the_writer() -> None:
     assert STEP_CAPS == {"scout": 5, "verifier": 5, "builder_design": 7}
@@ -109,11 +116,11 @@ def test_step_caps_match_the_responder_protocol_and_exclude_the_writer() -> None
 def test_default_timeout_plan_fits_the_core_invoke_timeout() -> None:
     plan = timeout_plan(profile_timeout_s=60, invoke_timeout_s=600, hold_s=HOLD_S)
     assert plan.problems == [] and CLIENT_MARGIN_S == 5.0
-    assert plan.client_wait_s == 65 and plan.worst_case_s == {"scout": 275, "verifier": 275, "builder_design": 385}
+    assert plan.client_wait_s == 65 and plan.worst_case_s == {"scout": 325, "verifier": 325, "builder_design": 455}  # cap x (timeout+5)
 
 
 @pytest.mark.parametrize(("kwargs", "needle"), [
-    ({"invoke_timeout_s": 300}, "builder_design"),            # 7 x 55 s = 385 s > 300 s
+    ({"invoke_timeout_s": 300}, "builder_design"),            # 7 x 65 s = 455 s > 300 s
     ({"profile_timeout_s": 50}, "hold"),                      # gateway would time out before the shim answers
     ({"profile_timeout_s": 301}, "gateway maximum"),          # llm-gateway rejects timeout_s > 300
     ({"hold_s": 0}, "hold")])
