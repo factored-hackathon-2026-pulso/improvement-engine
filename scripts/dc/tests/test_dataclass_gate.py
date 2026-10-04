@@ -26,11 +26,11 @@ def test_scanner_fails_tracked_file_with_e0_marker(tmp_path: Path) -> None:
     assert findings[0].line == 2
 
 
-def test_scanner_passes_clean_file_and_skips_binary(tmp_path: Path) -> None:
+def test_scanner_passes_clean_file_and_flags_binary(tmp_path: Path) -> None:
     (tmp_path / "a.txt").write_text("treated aggregate, k=25\n", "utf-8")
     (tmp_path / "b.bin").write_bytes(b"\x00\x01" + E0_SENTINEL.encode())
     assert dc.scan_file(tmp_path / "a.txt", root=tmp_path) == []
-    assert dc.scan_file(tmp_path / "b.bin", root=tmp_path) == []
+    assert dc.scan_file(tmp_path / "b.bin", root=tmp_path)  # binary is scanned at byte level, not skipped
 
 
 def test_marker_variants_detected(tmp_path: Path) -> None:
@@ -92,3 +92,15 @@ def test_push_scan_ignores_staged_deletion(tmp_path: Path) -> None:
     _git(root, "add", ".")
     (root / "leak.txt").unlink()
     assert dc.push_scan(root) == []
+
+
+def test_marker_case_utf16_binary_and_base64_detected(tmp_path: Path) -> None:
+    import base64
+
+    assert dc.scan_text(E0_SENTINEL.lower())
+    (tmp_path / "b.bin").write_bytes(b"\x00\x01" + E0_SENTINEL.encode())
+    assert dc.scan_file(tmp_path / "b.bin", root=tmp_path)
+    (tmp_path / "u.txt").write_bytes(("x " + E0_SENTINEL).encode("utf-16"))
+    assert dc.scan_file(tmp_path / "u.txt", root=tmp_path)
+    (tmp_path / "e.txt").write_text(base64.b64encode(("a " + E0_SENTINEL).encode()).decode(), "utf-8")
+    assert dc.scan_file(tmp_path / "e.txt", root=tmp_path)

@@ -102,3 +102,18 @@ def test_compose_fragment_declares_internal_network() -> None:
     text = (GATEWAY / "compose.gateway.yaml").read_text("utf-8")
     assert pc.compose_has_internal_network(text, "pulso-gw-e0")
     assert not pc.compose_has_internal_network(text, "pulso-gw-hosted")
+
+
+def test_e0_external_route_under_non_url_key_or_fallback_string_fails() -> None:
+    base = load("gw-e0")
+    for mut in ({"upstream": {"kind": "local", "endpoint": "https://api.openai.com/v1"}},
+                {"fallbacks": ["https://api.openai.com/v1"]},
+                {"upstream": {"kind": "external", "base_url": "http://llm-local:8080"}}):
+        p = {**base, **mut}
+        assert pc.check_profile(p), mut
+
+
+def test_restricted_class_never_on_non_local_upstream() -> None:
+    p = {"name": "x", "data_classes": ["csv"], "network": {"internal": False},
+         "api_key_env": "K", "upstream": {"kind": "external", "base_url": "https://a.example.com"}}
+    assert pc.check_profile(p)
