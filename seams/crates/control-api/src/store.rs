@@ -21,6 +21,10 @@ pub enum PutOutcome {
     Conflict,
 }
 
+/// A replay-set row outlives its `exp` by this many seconds: processes sharing one database may disagree on `now`, and a token
+/// is still accepted (`exp > now`) by a process whose clock is behind the one that evicts.
+pub const JTI_SKEW_SECS: f64 = 120.0;
+
 pub trait Store: Send + Sync {
     fn binding(&self, tenant: &str, command_key: &str) -> Option<BindingRec>;
     fn job_owner(&self, tenant: &str, job_id: &str) -> Option<String>;
@@ -119,7 +123,7 @@ impl Store for MemStore {
     }
     fn jti_claim(&self, scope: &str, iss: &str, jti: &str, exp: f64, now: f64) -> bool {
         let mut g = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        g.jti.retain(|_, e| *e > now);
+        g.jti.retain(|_, e| *e + JTI_SKEW_SECS > now);
         match g.jti.entry((scope.into(), iss.into(), jti.into())) {
             std::collections::hash_map::Entry::Occupied(_) => false,
             std::collections::hash_map::Entry::Vacant(v) => {

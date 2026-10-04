@@ -179,7 +179,7 @@ impl Store for PgStore {
     fn jti_claim(&self, scope: &str, iss: &str, jti: &str, exp: f64, now: f64) -> bool {
         self.with(|c| {
             let mut tx = c.transaction()?;
-            tx.execute("DELETE FROM pulso_ca_jti WHERE expires_at <= $1", &[&now])?; // a token past exp is refused earlier: dead weight
+            tx.execute("DELETE FROM pulso_ca_jti WHERE expires_at + $2 <= $1", &[&now, &crate::store::JTI_SKEW_SECS])?; // a token past exp is refused earlier: dead weight
             let n = tx.execute("INSERT INTO pulso_ca_jti (scope, iss, jti, expires_at) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING", &[&scope, &iss, &jti, &exp])?;
             tx.commit()?;
             Ok(n == 1)
