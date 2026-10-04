@@ -141,3 +141,67 @@ fn healthcheck_honours_the_prefix_and_fails_fast_when_nothing_listens() {
     assert!(!e.contains(TOKEN));
     assert_eq!(healthcheck::main(&["--port".into(), "notaport".into()]), 2);
 }
+
+// ---- adversarial review (CL): normalisation tricks around the prefix ----
+
+/// Raw request line, so encodings reach the server exactly as written.
+fn raw(addr: SocketAddr, target: &str, bearer: Option<&str>) -> (u16, String) {
+    let mut s = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let auth = bearer.map(|b| format!("Authorization: Bearer {b}\r\n")).unwrap_or_default();
+    let _ = write!(s, "GET {target} HTTP/1.1\r\nHost: x\r\n{auth}Connection: close\r\n\r\n");
+    let mut buf = Vec::new();
+    let _ = s.read_to_end(&mut buf);
+    let raw = String::from_utf8_lossy(&buf).to_string();
+    (raw.split(' ').nth(1).and_then(|c| c.parse().ok()).unwrap_or(0), raw.split("\r\n\r\n").nth(1).unwrap_or("").to_string())
+}
+
+#[test]
+fn prefix_tricks_never_reach_the_debug_api_without_the_token() {
+    let dir = console_dir("c");
+    let outside = dir.parent().unwrap().join("pulso-secret-outside.txt");
+    std::fs::write(&outside, "outside").unwrap();
+    let s = start("/pulso", Some(&dir));
+    let api = "internal/v1/debug/runs";
+    let tricks = [
+        format!("//{api}"),
+        format!("/pulso//{api}"),
+        format!("/pulso/./{api}"),
+        format!("/pulso/%2e%2e/{api}"),
+        format!("/pulso/%2E%2E/{api}"),
+        format!("/pulso/..%2f{api}"),
+        format!("/pulso/%2e%2e%2f{api}"),
+        format!("/pulso/%252e%252e/{api}"),
+        format!("/pulso/..\{api}"),
+        format!("/pulso\..\{api}"),
+        format!("/pulso%2f{api}"),
+        format!("/PULSO/{api}"),
+        format!("/pulso/{api}%00"),
+        format!("/pulso/{}", api.to_uppercase()),
+        format!("http://evil.example/{api}"),
+        format!("http://evil.example/pulso/{api}"),
+        "/pulso/..%5c..%5cpulso-secret-outside.txt".to_string(),
+        "/pulso/....//pulso-secret-outside.txt".to_string(),
+        "/pulso/%2e%2e/pulso-secret-outside.txt".to_string(),
+    ];
+    for t in &tricks {
+        let (st, body) = raw(s.addr, t, None);
+        assert_ne!(st, 200, "{t} answered 200 without a token: {body}");
+        assert!(!body.contains("outside") && !body.contains("\"items\""), "{t} leaked: {body}");
+    }
+    for t in &tricks {
+        let (_, body) = raw(s.addr, t, Some(TOKEN));
+        assert!(!body.contains("outside"), "{t} leaked a file outside the console dir: {body}");
+    }
+    let _ = std::fs::remove_file(outside);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn oversized_request_targets_are_refused_and_the_front_stays_up() {
+    let s = start("/pulso", None);
+    let long = "a".repeat(100_000);
+    let (st, _) = raw(s.addr, &format!("/pulso/{long}"), None);
+    assert_ne!(st, 200);
+    assert_eq!(get(s.addr, "/readyz", None).0, 200);
+}

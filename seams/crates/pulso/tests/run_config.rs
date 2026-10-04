@@ -150,3 +150,40 @@ fn base_path_is_normalised_and_validated() {
         assert!(err(&with(bad)).contains("PULSO_BASE_PATH"), "{bad}");
     }
 }
+
+// ---- adversarial review (CL): bind/token combinations that must never yield an unauthenticated public listener ----
+
+#[test]
+fn every_exposed_bind_shape_demands_opt_in_and_a_token() {
+    let base = |addr: &'static str| vec![("PULSO_STORAGE", "memory"), ("PULSO_DATA_MODE", "dataset"), ("PULSO_LISTEN_ADDR", addr)];
+    // exposed shapes: IPv4/IPv6 wildcards, v4-mapped (even of loopback: not treated as loopback), private/public addresses
+    for addr in ["0.0.0.0:8080", "[::]:8080", "[::ffff:127.0.0.1]:8080", "[::ffff:0.0.0.0]:8080", "10.1.2.3:80", "192.168.0.5:80", "8.8.8.8:80"] {
+        assert!(err(&base(addr)).contains("PULSO_ALLOW_NON_LOOPBACK"), "{addr}: needs opt-in");
+        let mut b = base(addr);
+        b.push(("PULSO_ALLOW_NON_LOOPBACK", "1"));
+        assert!(err(&b).contains("PULSO_DEBUG_TOKEN"), "{addr}: needs token");
+        // 15 bytes, whitespace-only and whitespace-padded short tokens never count
+        for t in ["123456789012345", "                ", "  short   "] {
+            let mut w = b.clone();
+            w.push(("PULSO_DEBUG_TOKEN", t));
+            assert!(err(&w).contains("PULSO_DEBUG_TOKEN"), "{addr}: weak token {t:?}");
+        }
+        b.push(("PULSO_DEBUG_TOKEN", TOKEN));
+        assert!(load(&b).is_ok(), "{addr}: opt-in plus strong token is accepted");
+    }
+    // hostnames are not resolved: they are refused rather than silently bound somewhere unexpected
+    for addr in ["localhost:8080", "example.com:80", ":8080", "8080", "0.0.0.0", "[::1]"] {
+        assert!(err(&base(addr)).contains("PULSO_LISTEN_ADDR"), "{addr}");
+    }
+    // all of 127.0.0.0/8 and ::1 are loopback
+    for addr in ["127.0.0.1:1", "127.9.9.9:1", "[::1]:1"] {
+        assert!(load(&base(addr)).is_ok(), "{addr}");
+    }
+    // the opt-in flag spelled loosely does not count
+    for flag in ["0", "false", "no", "TRUE", "on", "2"] {
+        let mut b = base("0.0.0.0:8080");
+        b.push(("PULSO_ALLOW_NON_LOOPBACK", flag));
+        b.push(("PULSO_DEBUG_TOKEN", TOKEN));
+        assert!(err(&b).contains("PULSO_ALLOW_NON_LOOPBACK"), "flag {flag:?}");
+    }
+}
