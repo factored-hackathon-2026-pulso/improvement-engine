@@ -85,7 +85,7 @@ fn rollback_has_no_successor_and_unknown_or_mismatched_releases_do_not_schedule(
     let (st, r) = f.post(&event("r1", "release.rolled_back", "rel-1"));
     assert_eq!((st, r["state"].as_str(), r["successor"].is_null()), (202, Some("correlated"), true), "{r}");
     let (st, r) = f.post(&event("u1", "release.published", "rel-unknown"));
-    assert_eq!((st, r["state"].as_str()), (202, Some("unmatched")), "{r}");
+    assert_eq!(st, 503, "unmatched must be retryable, not acknowledged: {r}");
     let mut bad = event("m1", "release.published", "rel-1");
     bad["event"]["payload"]["alias"] = json!("staging");
     assert_eq!(f.post(&bad).0, 409);
