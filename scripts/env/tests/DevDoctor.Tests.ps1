@@ -80,3 +80,11 @@ Describe 'Test-DevOneShot' {
         Test-DevOneShot -Service ([pscustomobject]@{ restart = 'unless-stopped' }) | Should Be $false
     }
 }
+
+Describe 'Get-DevSkippedChecks' {
+    It 'names the engine checks the fixture profile does not apply, so they are reported as skipped not passed' {
+        $all = @('core_not_ready', 'insufficient_memory') | ForEach-Object { [pscustomobject]@{ check = $_; status = 'pass' } }
+        @(Get-DevSkippedChecks -Checks $all -Profile 'fixture') | Should Be @('core_not_ready')
+        @(Get-DevSkippedChecks -Checks $all -Profile 'real_local').Count | Should Be 0
+    }
+}
