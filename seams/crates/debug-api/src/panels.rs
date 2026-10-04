@@ -107,7 +107,10 @@ fn investigation(committed: &Value, at: &str) -> Option<Value> {
         let mechanism = s(&spec["compile"]["change_spec"], "expected_mechanism").unwrap_or("unspecified mechanism");
         let what = ops.map_or_else(
             || "the requested change".to_string(),
-            |o| o.iter().map(|x| format!("{} {}", s(x, "op").unwrap_or("?"), s(x, "target_ref").unwrap_or("?"))).collect::<Vec<_>>().join(" + "),
+            |o| o.iter().map(|x| match s(x, "op") {
+                Some("add") => format!("add {}", s(x, "new_ref").unwrap_or("?")),
+                op => format!("{} {} -> {}", op.unwrap_or("?"), s(x, "target_ref").unwrap_or("?"), s(x, "new_ref").unwrap_or("?")),
+            }).collect::<Vec<_>>().join(" + "),
         );
         let mut refs = vec![];
         let hverdict = if s(compile, "status") != Some("compiled") {
