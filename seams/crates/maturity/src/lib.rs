@@ -86,8 +86,8 @@ pub trait InputSource {
     fn inputs(&self, type_id: &str) -> Option<TypeInputs>;
 }
 
-const ALLOWED: [&str; 12] = [
-    "type_id", "label", "group", "stage_since", "copilot_questions", "repeat_q_cases", "tool_applicable", "tool_used", "drafts", "has_agent", "agent_handled", "agent_resolved",
+const ALLOWED: [&str; 15] = [
+    "type_id", "label", "group", "stage_since", "copilot_questions", "repeat_q_cases", "tool_applicable", "tool_used", "drafts", "has_agent", "agent_handled", "agent_resolved", "agent_handed", "copilot_cases", "cases_total",
 ];
 
 /// Aggregates parsed from JSON `{"case_types":[{type_id, ...counts}]}`. Unknown keys (ids, free text) are refused.

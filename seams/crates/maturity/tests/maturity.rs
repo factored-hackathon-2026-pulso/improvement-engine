@@ -185,3 +185,10 @@ fn to_json_carries_source_and_simulated_on_every_metric() {
     assert_eq!(j["metrics"]["draft_accept_100"]["simulated"], true);
     assert_eq!(j["metrics"]["agent_resolved"]["status"], "not_computable");
 }
+
+#[test]
+fn display_only_counts_are_admitted_in_rows() {
+    let v = json!({"case_types": [{"type_id": "x", "agent_handed": 7, "copilot_cases": 3, "cases_total": 9, "label": "X", "group": "G", "stage_since": {"1": "2026-08-04"}}]});
+    let s = JsonSource::from_json(Source::SimDraftStream, true, &v).unwrap();
+    assert_eq!(s.row("x").unwrap()["cases_total"], 9);
+}
