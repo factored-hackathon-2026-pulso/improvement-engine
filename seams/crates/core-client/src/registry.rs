@@ -318,7 +318,7 @@ impl<'a, A: Authorizer> RegistryFlow<'a, A> {
 
     /// Alias read through the registry. `staging` before a publish is refused: it cannot show this proposal's release.
     pub fn alias_read(&self, alias: &str) -> Result<RegAliasState, RegistryError> {
-        if alias == "staging" && self.published.is_none() {
+        if alias.trim().eq_ignore_ascii_case("staging") && self.published.is_none() {
             return Err(RegistryError::Flow("alias read before publish: staging cannot show the proposal's release yet".into()));
         }
         self.client.alias(&self.agent_id, alias, &self.bot)

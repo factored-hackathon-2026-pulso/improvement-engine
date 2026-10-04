@@ -241,6 +241,11 @@ fn alias_read_of_staging_before_publish_is_refused_without_calling_core() {
     assert!(matches!(flow.alias_read("staging"), Err(RegistryError::Flow(m)) if m.contains("before publish")));
     assert_eq!(f.log().len(), before);
     assert_eq!(flow.alias_read("prod").unwrap().release_id, BASE, "other aliases stay readable");
+    let before = f.log().len();
+    for v in ["Staging", "STAGING", " staging", "staging "] {
+        assert!(matches!(flow.alias_read(v), Err(RegistryError::Flow(_))), "{v:?}");
+    }
+    assert_eq!(f.log().len(), before);
 }
 
 #[test]

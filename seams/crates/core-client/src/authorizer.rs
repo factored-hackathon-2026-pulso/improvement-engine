@@ -99,7 +99,68 @@ pub fn iso_z(epoch_s: i64) -> String {
 
 /// `sha256` of the canonical binding (sorted keys, compact), as `principal.py::binding_digest`.
 pub fn binding_digest(binding: &Value) -> String {
-    Sha256::digest(serde_json::to_string(binding).expect("json").as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+    let mut out = String::new();
+    canon_py(binding, &mut out);
+    Sha256::digest(out.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True)`: explicit key sort and `\uXXXX` escapes.
+fn canon_py(v: &Value, out: &mut String) {
+    match v {
+        Value::Object(m) => {
+            let mut keys: Vec<&String> = m.keys().collect();
+            keys.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
+            out.push('{');
+            for (i, k) in keys.into_iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                canon_str(k, out);
+                out.push(':');
+                canon_py(&m[k], out);
+            }
+            out.push('}');
+        }
+        Value::Array(a) => {
+            out.push('[');
+            for (i, x) in a.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                canon_py(x, out);
+            }
+            out.push(']');
+        }
+        Value::String(s) => canon_str(s, out),
+        other => out.push_str(&other.to_string()),
+    }
+}
+
+fn canon_str(s: &str, out: &mut String) {
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            c if (' '..='\u{7f}').contains(&c) => out.push(c),
+            c => {
+                let mut b = [0u16; 2];
+                for u in c.encode_utf16(&mut b) {
+                    out.push_str(&format!("\\u{u:04x}"));
+                }
+            }
+        }
+    }
+    out.push('"');
+}
+
+fn is_ref(s: &str) -> bool {
+    (1..=200).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-'))
 }
 
 fn is_hex64(s: &str) -> bool {
@@ -117,8 +178,8 @@ impl LocalSimAuthorizer {
         if !matches!(operation, "approve" | "reject" | "publish") {
             return Err(AuthError::UnsupportedOperation(operation.into()));
         }
-        if target.proposal_id.is_empty() || !is_hex64(&target.candidate_hash) {
-            return Err(AuthError::InvalidTarget("proposal_id empty or candidate_hash not hex-64".into()));
+        if !is_ref(&target.proposal_id) || !is_hex64(&target.candidate_hash) {
+            return Err(AuthError::InvalidTarget("proposal_id not a valid ref or candidate_hash not hex-64".into()));
         }
         let n = SEQ.fetch_add(1, Ordering::SeqCst);
         let command_ref = format!("cmd-{operation}-{n}-{now}");
@@ -223,5 +284,21 @@ mod tests {
             assert!(!shown.contains(needle), "leaked {needle}");
         }
         assert!(shown.contains("<redacted>"));
+    }
+
+    #[test]
+    fn binding_digest_matches_python_for_non_ascii_and_unsorted_keys() {
+        // python: binding_digest({'tenant_id':'t\u00e9','actor_ref':'a','target':{'kind':'proposal','n':3}})
+        let b = json!({"tenant_id": "t\u{e9}", "target": {"n": 3, "kind": "proposal"}, "actor_ref": "a"});
+        assert_eq!(binding_digest(&b), "eae3f574b2c20efb8317779e8a8aebfa6453adfe22aab0b1726c4da54a715c41");
+    }
+
+    #[test]
+    fn proposal_id_must_match_the_python_ref_pattern() {
+        for bad in ["a b", "p/1", "p\u{e9}", &"x".repeat(201)] {
+            let mut t = tgt();
+            t.proposal_id = bad.into();
+            assert!(matches!(auth().authorize_at("approve", &t, 5), Err(AuthError::InvalidTarget(_))), "{bad}");
+        }
     }
 }
