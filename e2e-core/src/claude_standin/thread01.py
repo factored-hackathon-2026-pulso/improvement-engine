@@ -84,6 +84,7 @@ class CoreHooks:
     publish: Callable | None = None
     alias_read: Callable | None = None
     doubles: list = field(default_factory=list)
+    blocked: dict = field(default_factory=dict)  # step number -> dependency that blocks the real hook (reported, never hidden)
 
 
 @dataclass
@@ -376,7 +377,8 @@ def step_06(ctx: Ctx) -> dict:
     return {"status": "real-narrow" if core_arms else "stand-in", "data_class": "synthetic", "actor": JUDGE,
             "receipt": {"provider": "core-arms" if core_arms else "claude-standin"},
             "detail": {"verdict": out["verdict"], "gates": out["gates"], "judge_actor": out["judge_actor"],
-                       "quality_claims": out["quality_claims"], "arms": arms_from, "verdict_judge": "stand-in"}}
+                       "quality_claims": out["quality_claims"], "arms": arms_from, "verdict_judge": "stand-in",
+                       **({"blocked": ctx.cfg.hooks.blocked[6]} if ctx.cfg.hooks.blocked.get(6) and not core_arms else {})}}
 
 
 MAX_REVISION_ROUNDS = 1
@@ -437,7 +439,12 @@ def step_08(ctx: Ctx) -> dict:
     return {"status": "simulated", "data_class": "synthetic", "receipt": {"provider": "simulated-issuer"},
             "detail": {"bound_to_digest": digest, "tampered_rejected": tampered, "payload_tamper_rejected": payload_rej,
                        "expired_rejected": expired_rej, "verified_by": "local-stand-in-verifier",
-                       "issuer": "simulated"}}
+                       "issuer": "simulated", **_blocked(ctx, 8)}}
+
+
+def _blocked(ctx: Ctx, n: int) -> dict:
+    b = ctx.cfg.hooks.blocked.get(n)
+    return {"blocked": b} if b else {}
 
 
 def _step_08_core(ctx: Ctx, digest: str) -> dict:
@@ -487,7 +494,8 @@ def step_09(ctx: Ctx) -> dict:
     ctx.out["alias_read"] = alias
     return {"status": "real-narrow" if both else "stand-in", "data_class": "synthetic",
             "receipt": {"provider": "core-local-staging" if both else "claude-standin"},
-            "detail": {"published": published, "alias_read": alias, "registry": "core" if both else "in-process-double"}}
+            "detail": {"published": published, "alias_read": alias, "registry": "core" if both else "in-process-double",
+                       **({} if both else _blocked(ctx, 9))}}
 
 
 EFFECT_AUTHOR = "claude-p2py-effects"

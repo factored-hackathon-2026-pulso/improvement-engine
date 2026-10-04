@@ -88,6 +88,7 @@ class Frozen:
     changes: list
     binding_ref: str
     title: str
+    plan_ref: str
 
 
 def _drafts_digest(changes: list[dict]) -> str:
@@ -123,9 +124,9 @@ class RealCore:
     human-issuer command-authorization JWS (the local issuer, see `make_human_authorizer`)."""
 
     def __init__(self, *, engine: Any, bridge: Any, registry: Callable, authorize: Callable, world: dict, tenant: str,
-                 agent_id: str) -> None:
+                 agent_id: str, arm_profile: str | None = None) -> None:
         self.engine, self.registry, self.authorize = engine, registry, authorize
-        self.world, self.tenant, self.agent_id = world, tenant, agent_id
+        self.world, self.tenant, self.agent_id, self.arm_profile = world, tenant, agent_id, arm_profile
         self.timings: list[dict] = []
         self.bridge = _Timed(bridge, self.timings)
         self._base: str | None = None
@@ -196,7 +197,7 @@ class RealCore:
             raise RuntimeError("core writer did not commit create_proposal, put_draft, freeze")
         if wr.get("candidate_hash") != digest:
             raise RuntimeError(f"frozen candidate_hash {wr.get('candidate_hash')} differs from the draft digest {digest}")
-        self._frozen = Frozen(wr["proposal_id"], digest, base, changes, st.out["task_binding_ref"], title)
+        self._frozen = Frozen(wr["proposal_id"], digest, base, changes, st.out["task_binding_ref"], title, plan_id)
         return self._frozen
 
     # -- step 6 ----------------------------------------------------------------------------------------------------
@@ -213,13 +214,70 @@ class RealCore:
         for sc in scenarios:  # one arm run per scenario: the ArmReport is per run, the gate compares per case
             mid = self.engine.seal(f"manifest-t01-{n}-{sc['id']}", {"scenarios": [sc], "entries": {sc["id"]: {}}})
             for arm, target, side in (("baseline", target_b, "base"), ("candidate", target_c, "candidate")):
-                body = arm_request(key=f"t01-{n}-{sc['id']}-{arm}", binding_ref=fz.binding_ref, manifest_ref=mid, profile=None,
+                body = arm_request(key=f"t01-{n}-{sc['id']}-{arm}", binding_ref=fz.binding_ref, manifest_ref=mid, profile=self.arm_profile,
                                    target=target, arm=arm, case_ref=sc["id"])
                 r = self.bridge.arm_run(self.tenant, body)
                 if r.status_code != 200:
                     raise RuntimeError(f"core arm {arm}/{sc['id']} http {r.status_code}")
                 out[side].append(_run_of(r.json(), arm, sc["id"]))
         return out
+
+    # -- Core's native evaluation (the registry requires `evaluated` before approval) --------------------------------
+    def evaluate(self, ctx: Any) -> dict:
+        import hashlib
+
+        from agent_core.registry import EvalSuite
+        from agent_core.registry.entities import content_hash
+        from codex_standin.dto import admission, evaluation_context_ref, idempotency_key
+        fz = self.freeze(ctx)
+        suite = next(c for c in fz.changes if c["kind"] == "eval_suite")["content"]
+        n = str(time.time_ns())[-12:]
+        job = f"job-evalonly-t01-{n}"
+        key = idempotency_key(self.tenant, job, "writer", 1, "evalonly")
+        bref = hashlib.sha256(f"{self.tenant}|{key}".encode()).hexdigest()
+        self.engine.configure(preauthorized_bindings=[{"tenant": self.tenant, "binding_ref": bref}])
+        body = admission(binding_ref=bref, proposal_id=fz.proposal_id, candidate_hash=fz.candidate_hash, suite_id=suite["id"],
+                         suite_version=suite["version"], suite_digest=str(content_hash(EvalSuite.model_validate(suite))),
+                         budget_ref="bud-e2e")
+        adm = self._timed("admit", lambda: self.engine.bridge.admit(self.tenant, job, body))
+        if adm.status_code not in (200, 201):
+            raise RuntimeError(f"core evaluation admission http {adm.status_code} {_code(adm)}")
+        ctx_ref = evaluation_context_ref(self.tenant, job, bref, fz.proposal_id, fz.candidate_hash, 1)
+        st = self._timed("evaluate_only invoke", lambda: self.engine.stage(
+            "writer", job, "evalonly", WRITER, {"draft_plan_ref": fz.plan_ref, "proposal_id": fz.proposal_id,
+                                               "base_release_id": fz.base_release_id, "evaluate_enabled": True,
+                                               "evaluation_suite_id": suite["id"], "evaluation_suite_version": suite["version"]},
+            registry_mutation_commitment={"mode": "evaluate_only", "proposal_id": fz.proposal_id,
+                                          "base_release_id": fz.base_release_id, "evaluate_enabled": True,
+                                          "evaluation_context_ref": ctx_ref, "operations": []}))
+        if st.response.status_code != 200 or not st.out.get("core_run_id"):
+            raise RuntimeError(f"core evaluate-only stage http {st.response.status_code} {_code(st.response)}")
+        wr = (self.engine.facts(st.out["core_run_id"]).get("pulso_writer_receipts") or {}).get("value") or {}
+        return wr.get("native_evaluation") or {}
+
+    def gate_probe(self, ctx: Any) -> dict:
+        """What the real Core does with the thread's frozen draft when the human acts on it: used to document a blocked
+        step 8/9 (the registry needs `evaluated` first). Moves nothing when blocked; reports the exact refusals."""
+        fz = self.freeze(ctx)
+        before = self.alias_read_raw("staging")
+        ev = self.evaluate(ctx)
+        a = self._reg("approve", "POST", f"/proposals/{fz.proposal_id}/approve",
+                      self.authorize("approve", self._target(fz, self._rev(fz))), json={"candidate_hash": fz.candidate_hash})
+        p = self._reg("publish", "POST", f"/proposals/{fz.proposal_id}/publish",
+                      self.authorize("publish", self._target(fz, self._rev(fz))),
+                      headers={"Idempotency-Key": "pub-" + uuid.uuid4().hex})
+        return {"evaluation": ev.get("verdict"), "approve": [a.status_code, _code_of(a)], "publish": [p.status_code, _code_of(p)],
+                "staging_unchanged": self.alias_read_raw("staging") == before}
+
+    def alias_read_raw(self, alias: str) -> str:
+        return make_alias_read(self.bridge, tenant=self.tenant, agent_id=self.agent_id)(None, alias)["release_id"]
+
+    def _timed(self, name: str, fn: Callable) -> Any:
+        t0 = time.monotonic()
+        try:
+            return fn()
+        finally:
+            self.timings.append({"call": name, "seconds": round(time.monotonic() - t0, 3)})
 
     # -- step 8 ----------------------------------------------------------------------------------------------------
     def approve(self, ctx: Any) -> dict:
@@ -231,7 +289,7 @@ class RealCore:
         jws = self.authorize("approve", self._target(fz, self._rev(fz)))
         r = self._reg("approve", "POST", f"/proposals/{fz.proposal_id}/approve", jws, json={"candidate_hash": fz.candidate_hash})
         if r.status_code != 200:
-            raise RuntimeError(f"core approve http {r.status_code}")
+            raise RuntimeError(f"core approve http {r.status_code} {_code(r)}")
         body = r.json()
         again = self._reg("approve_replay", "POST", f"/proposals/{fz.proposal_id}/approve", jws,
                           json={"candidate_hash": fz.candidate_hash})
@@ -249,7 +307,7 @@ class RealCore:
         r = self._reg("publish", "POST", f"/proposals/{fz.proposal_id}/publish", jws,
                       headers={"Idempotency-Key": "pub-" + uuid.uuid4().hex})
         if r.status_code != 200 or not r.json().get("release_id"):
-            raise RuntimeError(f"core publish http {r.status_code}")
+            raise RuntimeError(f"core publish http {r.status_code} {_code(r)}")
         self._published = r.json()["release_id"]
         return {"release_id": self._published, "alias": "staging"}
 
@@ -258,11 +316,12 @@ class RealCore:
             raise RuntimeError("alias read before publish: staging cannot show the thread's release yet")
         return make_alias_read(self.bridge, tenant=self.tenant, agent_id=self.agent_id)(ctx, alias)
 
-    def hooks(self) -> Any:
+    def hooks(self, *, arms: bool = True, blocked: dict | None = None) -> Any:
+        """`arms=False` leaves step 6 on the stand-in (e.g. blocked(jev): the Core has no `jev` decision provider)."""
         from . import thread01 as T
         return T.CoreHooks(
-            dry_run=self.dry_run, run_arms=self.run_arms, approve=self.approve, publish=self.publish,
-            alias_read=self.alias_read,
+            dry_run=self.dry_run, run_arms=self.run_arms if arms else None, approve=self.approve, publish=self.publish,
+            alias_read=self.alias_read, blocked=dict(blocked or {}),
             doubles=[{"port": "control_api", "provenance": "e2e-fixtures-double (binding, authz, broker, lab, bank)"}])
 
 
@@ -296,3 +355,18 @@ def make_human_authorizer(port: Any, *, tenant: str, actor: str = SUPERVISOR) ->
         it = port.create_intention(tenant_id=tenant, actor_ref=actor, operation=operation, target=target)
         return port.authorize(it.intention_id).reveal()
     return authorize
+
+
+def _code(r: Any) -> str:
+    try:
+        b = r.json()
+        return f"{b.get('code') or b.get('state')}: {str(b.get('message') or b.get('detail') or b.get('reason') or '')[:160]} {b.get('outcome') or ''}"
+    except Exception:  # noqa: BLE001 - diagnostics only
+        return ""
+
+
+def _code_of(r: Any) -> str | None:
+    try:
+        return r.json().get("code")
+    except Exception:  # noqa: BLE001
+        return None

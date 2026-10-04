@@ -22,6 +22,8 @@ class Resp:
 class FakeEngine:
     def __init__(self, cand=CAND):
         self.cand, self.sealed, self.stages, self.releases = cand, {}, [], {"pulso-writer": "rel-writer"}
+        self.eval_verdict = "pass"
+        self.bridge = SimpleNamespace(admit=lambda tenant, job, body: Resp(201, {"state": "admitted"}))
 
     def seal(self, art_id, content):
         self.sealed[art_id] = content
@@ -35,7 +37,10 @@ class FakeEngine:
         return SimpleNamespace(out={"core_run_id": "run-1", "task_binding_ref": "bind-1"}, response=Resp())
 
     def facts(self, run_id):
+        evaluating = bool(self.stages) and self.stages[-1][3].get("evaluate_enabled")
+        native = {"verdict": self.eval_verdict, "eval_run_ref": "er-1", "report_digest": "d" * 64} if evaluating else None
         return {"pulso_writer_receipts": {"value": {"proposal_id": "prop-1", "candidate_hash": self.cand,
+                                                    "native_evaluation": native,
                                                     "write_receipts": [{"op": o, "verified": True} for o in
                                                                        ("create_proposal", "put_draft", "freeze")]}}}
 
@@ -61,7 +66,7 @@ class FakeBridge:
 
 class FakeRegistry:
     def __init__(self, bridge):
-        self.calls, self.bridge, self.state = [], bridge, "candidate"
+        self.calls, self.bridge, self.state, self.needs_eval = [], bridge, "candidate", False
 
     def __call__(self, method, path, bearer, **kw):
         self.calls.append((method, path, bearer, kw))
@@ -70,11 +75,13 @@ class FakeRegistry:
         if path.endswith("/approve"):
             if kw["json"]["candidate_hash"] != CAND:
                 return Resp(409, {"code": "candidate_changed"})
-            if self.state == "approved":
+            if self.state == "approved" or self.needs_eval:
                 return Resp(409, {"code": "illegal_transition"})
             self.state = "approved"
             return Resp(200, {"actor": "local-supervisor", "decision": "approved", "candidate_hash": CAND})
         if path.endswith("/publish"):
+            if self.needs_eval:
+                return Resp(409, {"code": "illegal_transition"})
             self.bridge.aliases["staging"] = "rel-new"
             return Resp(200, {"release_id": "rel-new"})
         raise AssertionError(path)
@@ -182,3 +189,29 @@ def test_hooks_supply_all_real_core_hooks_and_time_every_call():
     assert all([h.dry_run, h.run_arms, h.approve, h.publish, h.alias_read])
     rc.run_arms(ctx())
     assert rc.timings and all(set(t) == {"call", "seconds"} and t["seconds"] >= 0 for t in rc.timings)
+
+
+def test_hooks_can_leave_step_6_on_the_stand_in_with_the_blocking_dependency_named():
+    rc, _, _ = core()
+    h = rc.hooks(arms=False, blocked={6: "blocked(jev)"})
+    assert h.run_arms is None and h.blocked == {6: "blocked(jev)"} and all([h.dry_run, h.approve, h.publish, h.alias_read])
+
+
+def test_evaluate_runs_the_cores_native_evaluation_on_the_frozen_proposal_with_the_threads_suite():
+    rc, _, _ = core()
+    ev = rc.evaluate(ctx())
+    assert ev["verdict"] == "pass" and ev["eval_run_ref"] == "er-1"
+    stage, job, agent, inp, extra = rc.engine.stages[-1]
+    assert inp["evaluate_enabled"] is True and inp["proposal_id"] == "prop-1" and inp["draft_plan_ref"] == rc.freeze(ctx()).plan_ref
+    assert inp["evaluation_suite_id"] == "disputas-suite" and inp["evaluation_suite_version"] == "2.0.0"
+    assert extra["registry_mutation_commitment"]["mode"] == "evaluate_only"
+
+
+def test_gate_probe_reports_why_approval_and_publish_cannot_move_staging():
+    rc, bridge, reg = core()
+    reg.needs_eval = True
+    rc.engine.eval_verdict = "failed_infra"
+    res = rc.gate_probe(ctx())
+    assert res["evaluation"] == "failed_infra"
+    assert res["approve"] == [409, "illegal_transition"] and res["publish"] == [409, "illegal_transition"]
+    assert res["staging_unchanged"] is True and bridge.aliases["staging"] == BASE

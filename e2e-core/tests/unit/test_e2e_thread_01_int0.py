@@ -56,3 +56,14 @@ def test_step_09_alias_read_runs_after_publish(tmp_path):
                         alias_read=lambda ctx, alias: order.append("read") or {"release_id": "r", "alias": alias})
     assert step(T.run_thread(cfg(tmp_path, hooks=hooks)), 9)["status"] == "real-narrow"
     assert order == ["publish", "read"]
+
+
+def test_step_06_stays_stand_in_and_reports_the_blocking_dependency(tmp_path):
+    s = step(T.run_thread(cfg(tmp_path, hooks=T.CoreHooks(blocked={6: "blocked(jev)"}))), 6)
+    assert s["status"] == "stand-in" and s["detail"]["blocked"] == "blocked(jev)" and s["detail"]["arms"] == "stand-in"
+
+
+def test_steps_8_and_9_stay_stand_in_and_report_the_blocking_dependency(tmp_path):
+    t = T.run_thread(cfg(tmp_path, hooks=T.CoreHooks(blocked={8: "blocked(jev)", 9: "blocked(jev)"})))
+    assert step(t, 8)["status"] == "simulated" and step(t, 8)["detail"]["blocked"] == "blocked(jev)"
+    assert step(t, 9)["status"] == "stand-in" and step(t, 9)["detail"]["blocked"] == "blocked(jev)"
