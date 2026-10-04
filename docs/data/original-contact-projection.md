@@ -39,11 +39,42 @@ counts are not serialized to agent inputs or `result.json`; suppressed values
 and their counts are not disclosed. This is a technical small-cell disclosure
 control, not a formal anonymity or legal guarantee.
 
-The local motor can consume and report this descriptive projection, but this
-slice does not calculate repeat-contact rates, PQR/SLA measures, technical
-errors, causal associations, or an improvement candidate/proposal. Such outputs
-remain unsupported rather than being inferred from contact volume. In
-particular, `customer_id` is not used to calculate recurrence.
+The local runner also consumes a separate snapshot-descriptive projection from
+the `complaints` (PQR) table. It groups only by literal creation month,
+normalized category, and normalized reception channel. `complaint_count` counts
+rows that passed the required timestamp/channel grouping checks; it is not a
+deduplicated count of complaint IDs. Category and channel are coarse normalized
+labels, not the source's full category/subcategory taxonomy. For visible `k=5`
+cells it emits complaint counts and source-provided final-extract SLA-breach,
+resolution-days, and resolution-satisfaction summaries. Each metric has its
+own small-denominator suppression: when a nonzero valid, missing, or (for the
+binary SLA flag) positive/negative subgroup contains 1–4 rows, that metric's
+counts and value are withheld and marked `suppressed_small_denominator`. This
+protects a lone valid outcome hidden inside an otherwise five-row cell. It does
+not derive first-response time, calculate a legal/business SLA, or interpret
+final outcomes as known at the run cutoff.
+The result labels the measure `final_extract_facts_only` and preserves a
+complaint-specific policy ID. The `k=5` and per-metric suppression are a
+technical disclosure-control heuristic, not formal anonymization, a guarantee
+against linkage or complementary inference, or a legal/privacy certification.
+A complaints table with no inventoried partitions is reported as `absent`; an
+inventoried table with the exact v1 header but no usable timestamp/channel
+grouping rows is `unsupported`; a usable source whose every aggregate cell is
+suppressed is reported as `supported_no_reportable_cells`, with no complaint
+evidence admitted to detection. `supported` means at least one k-qualified
+aggregate is reportable. A malformed or mismatched source schema fails
+preparation rather than being mislabeled as a semantic `unsupported` result.
+Neither absence, unsupported coverage, nor an all-suppressed source becomes a
+fabricated zero. PQR rows are never joined to contacts,
+customers, or interactions. `complaint_contact_count` continues to mean only
+contact rows whose own normalized reason is complaint, not PQR-table rows.
+
+Together, the two projections make complaint-tagged contact volume and PQR
+volume/outcomes independently visible; they do not establish that a given PQR
+caused a contact, that one represents a repeat interaction, or that changing a
+flow would improve business outcomes. `customer_id` is not used to calculate
+recurrence, attribution, or impact. Technical-error rates and causal/financial
+effects remain unsupported by these two projections.
 
 ## Monthly projection contracts
 
@@ -107,16 +138,23 @@ k requires a new policy version and release.
 
 ## Availability and interpretation
 
-The local original-bank runner consumes the separate snapshot-only descriptive
-projection for discovery and retains the flat contact-volume projection for
-basic counts. The descriptive output carries snapshot binding, coverage, and
+The local original-bank runner consumes separate snapshot-only descriptive
+projections for contacts and complaints, while retaining the flat
+contact-volume projection for basic counts. Each carries its own safe evidence
+and policy metadata; the result distinguishes complaint-table state (`absent`,
+`unsupported`, `supported_no_reportable_cells`, or `supported`) from complaint-
+contact counts. `supported` in the result means at least one k-qualified PQR
+aggregate is reportable; a source can be structurally usable yet have no
+reportable cells. Descriptive output carries snapshot binding, coverage, and
 literal-month/final-extract semantics without assigning an as-of cutoff.
 
-The projection is `unsupported` and emits no aggregates if any input partition
-lacks a required grouping/date field, no partition is provided, or there is no
-row with a valid source timestamp and nonblank channel to group. `Supported`
-means at least one usable grouping row exists; rejected rows may coexist with
-usable rows. `available_metrics` is the
+The source projection is `unsupported` and emits no aggregates if any input
+partition lacks a required grouping/date field, no partition is provided, or
+there is no row with a valid source timestamp and nonblank channel to group.
+Source-level `Supported` means at least one usable grouping row exists;
+rejected rows may coexist with usable rows. The runner separately reports
+`supported_no_reportable_cells` when all source groups are below `k` and
+`supported` only when a k-qualified aggregate is visible. `available_metrics` is the
 intersection of fields present across all partitions; `missing_metrics` names
 fields absent in at least one partition. A metric denominator remains its
 explicit denominator; nulls do not become false/zero. Metric columns are
@@ -137,25 +175,17 @@ the source snapshot binding; it neither compares source rows to that field nor
 copies it into the result.
 
 The call-center source contract declares `interaction_date` as `timestamp`
-without a timezone, and the supplied contact values are naive. There is not
-yet a canonical Complaints SourceContract; its dictionary lists
-`creation_date`, `first_response_date`, `resolution_date`, and
-`closing_date` as timestamps, but provides no timezone. The CSV header confirms
-those columns exist; their availability does not establish when the outcomes
-became observable relative to the UTC snapshot cutoff. Therefore complaint
-rows are a cohort selected by `creation_date <= observed_cutoff`, while
-`final_sla_breached`, `final_first_response_elapsed_days`,
-`final_resolution_days`, and `final_resolution_satisfaction` are retrospective
-final-extract outcomes that may occur after that cutoff. They are not as-of
-metrics and must not be used for online/as-of decisions or leakage-sensitive
-evaluation. No reliable outcome censoring is attempted until a timezone/same-
-clock contract exists. The UTC as-of projection therefore remains fail-closed
-on current naive timestamps. The snapshot-descriptive complaint projection
-intentionally omits derived first-response elapsed time (which needs a
-shared-clock interpretation) and exposes only source-provided final
-`sla_breached`, `resolution_days`, and `resolution_satisfaction`, tagged as
-final-extract facts. Neither output supports a point-in-time or online claim
-for these fields.
+without a timezone, and the supplied contact values are naive. The versioned
+Complaints SourceContract is dictionary-aligned; its `creation_date`,
+`first_response_date`, `resolution_date`, and `closing_date` fields still have
+no timezone semantics. The header confirms column presence, not when outcomes
+became observable relative to the UTC snapshot cutoff. The UTC as-of complaint
+projector remains fail-closed on these naive timestamps. The snapshot-
+descriptive projection instead groups by literal source wall-clock month and
+exposes source-provided SLA/resolution fields strictly as retrospective
+final-extract facts; it does not compare outcomes to a cutoff or make
+online/as-of or leakage-sensitive claims. It omits derived first-response
+elapsed time because that requires a reliable shared-clock interpretation.
 
 For call-center contacts, `EventDateCohort` means only that rows are selected
 by `interaction_date`; it does not claim the attached `was_resolved`,

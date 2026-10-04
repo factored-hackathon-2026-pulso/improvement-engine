@@ -1504,8 +1504,10 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("original-bank");
     let contacts = input.join("call_center_interactions");
+    let complaints = input.join("complaints");
     let output = temp.path().join("runs-original");
     fs::create_dir_all(&contacts).expect("contact table directory");
+    fs::create_dir_all(&complaints).expect("complaint table directory");
     let mut csv =
         String::from("interaction_id,customer_id,interaction_date,contact_reason,channel\n");
     for (month, day) in [("2027-03", 1), ("2027-04", 1)] {
@@ -1527,6 +1529,73 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
         "private-rejected-timestamp,private-customer-rejected-timestamp,not-a-date,Complaint,Phone\n",
     );
     fs::write(contacts.join("part-000.csv"), csv).expect("write synthetic contacts");
+
+    let complaint_contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/complaints.v1.json"
+    ))
+    .expect("complaints source contract");
+    let complaint_columns = complaint_contract["columns"]
+        .as_array()
+        .expect("complaints contract columns")
+        .iter()
+        .map(|column| column["name"].as_str().expect("contract column name"))
+        .collect::<Vec<_>>();
+    let mut complaint_csv = complaint_columns.join(",");
+    complaint_csv.push('\n');
+    for offset in 0..5 {
+        let mut row = vec![String::new(); complaint_columns.len()];
+        for (name, value) in [
+            ("complaint_id", format!("private-complaint-{offset}")),
+            ("customer_id", format!("private-pqr-customer-{offset}")),
+            ("creation_date", "2027-03-02 11:00:00".to_owned()),
+            ("category", "Queja".to_owned()),
+            ("reception_channel", "Phone".to_owned()),
+            ("description", format!("private-description-{offset}")),
+            ("sla_breached", "true".to_owned()),
+            ("resolution_days", "3".to_owned()),
+            ("resolution_satisfaction", "2".to_owned()),
+        ] {
+            let column = complaint_columns
+                .iter()
+                .position(|column| *column == name)
+                .expect("fixture field exists in contract");
+            row[column] = value;
+        }
+        complaint_csv.push_str(&row.join(","));
+        complaint_csv.push('\n');
+    }
+    for offset in 0..4 {
+        let mut row = vec![String::new(); complaint_columns.len()];
+        for (name, value) in [
+            (
+                "complaint_id",
+                format!("private-suppressed-complaint-{offset}"),
+            ),
+            (
+                "customer_id",
+                format!("private-suppressed-pqr-customer-{offset}"),
+            ),
+            ("creation_date", "2027-04-02 11:00:00".to_owned()),
+            ("category", "Card".to_owned()),
+            ("reception_channel", "Web".to_owned()),
+            (
+                "description",
+                format!("private-suppressed-description-{offset}"),
+            ),
+            ("sla_breached", "false".to_owned()),
+            ("resolution_days", "1".to_owned()),
+            ("resolution_satisfaction", "5".to_owned()),
+        ] {
+            let column = complaint_columns
+                .iter()
+                .position(|column| *column == name)
+                .expect("fixture field exists in contract");
+            row[column] = value;
+        }
+        complaint_csv.push_str(&row.join(","));
+        complaint_csv.push('\n');
+    }
+    fs::write(complaints.join("part-000.csv"), complaint_csv).expect("write synthetic complaints");
 
     let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
         .args([
@@ -1590,6 +1659,36 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
     assert!(envelope["finding"].get("rejected_rows").is_none());
     assert!(envelope["finding"].get("suppressed_cells").is_none());
     assert_eq!(envelope["finding"]["complaint_contact_count"], 10);
+    assert_eq!(result["complaint_projection_status"]["status"], "supported");
+    assert_eq!(
+        envelope["finding"]["complaint_table_projection"]["included_complaint_count"],
+        5
+    );
+    assert_eq!(
+        envelope["finding"]["complaint_table_projection"]["policy_id"],
+        "original_complaint_literal_month_k_v1"
+    );
+    assert_eq!(
+        envelope["finding"]["complaint_table_projection"]["aggregates"],
+        serde_json::json!([{
+            "period": "2027-03",
+            "category": "complaint",
+            "channel": "phone",
+            "complaint_count": 5,
+            "sla_breached_suppressed_small_denominator": false,
+            "sla_breached_valid_count": 5,
+            "sla_breached_missing_count": 0,
+            "sla_breached_positive_count": 5,
+            "resolution_days_suppressed_small_denominator": false,
+            "resolution_days_valid_count": 5,
+            "resolution_days_missing_count": 0,
+            "resolution_days_mean": 3.0,
+            "resolution_satisfaction_suppressed_small_denominator": false,
+            "resolution_satisfaction_valid_count": 5,
+            "resolution_satisfaction_missing_count": 0,
+            "resolution_satisfaction_mean": 2.0
+        }])
+    );
     assert_eq!(
         envelope["agent_core_candidate"],
         "dependency_blocked_snapshot_semantics"
@@ -1601,6 +1700,10 @@ fn original_bank_cli_emits_snapshot_descriptive_opportunity_without_publishing_c
         "private-interaction",
         "private-customer",
         "private-suppressed",
+        "private-complaint",
+        "private-pqr-customer",
+        "private-description",
+        "private-suppressed-description",
         "technical",
         "chat",
         "rejected_rows",
@@ -1749,6 +1852,174 @@ fn e0_cli_zero_positive_u12_signal_is_a_noop_without_u09_u10_dispatch() {
     assert_eq!(result["u12_e_u13_e"]["candidate_count"], 0);
     assert!(!timeline.contains("u09_agent_core_task"));
     assert!(!timeline.contains("u10_model_provider"));
+}
+
+#[test]
+fn original_bank_cli_reports_absent_complaints_without_fabricating_pqr_evidence() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("original-bank");
+    let contacts = input.join("call_center_interactions");
+    let output = temp.path().join("runs-original-absent-complaints");
+    fs::create_dir_all(&contacts).expect("contact table directory");
+    let mut csv =
+        String::from("interaction_id,customer_id,interaction_date,contact_reason,channel\n");
+    for index in 0..5 {
+        csv.push_str(&format!(
+            "private-interaction-{index},private-customer-{index},2027-03-01 10:00:00,Complaint,Phone\n"
+        ));
+    }
+    fs::write(contacts.join("part-000.csv"), csv).expect("write synthetic contacts");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run original source CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result JSON");
+    assert_eq!(result["complaint_projection_status"]["status"], "absent");
+    assert!(
+        result["snapshot_descriptive_envelope"]["finding"]["complaint_table_projection"].is_null()
+    );
+    assert!(
+        result["events"].as_array().unwrap().iter().any(|event| {
+            event["stage"] == "complaint_projection" && event["status"] == "absent"
+        })
+    );
+    let serialized = result.to_string();
+    assert!(!serialized.contains("included_complaint_count"));
+}
+
+#[test]
+fn original_bank_cli_reports_unsupported_complaints_with_safe_diagnostics() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("original-bank");
+    let complaints = input.join("complaints");
+    let output = temp.path().join("runs-original-unsupported-complaints");
+    fs::create_dir_all(&complaints).expect("complaint table directory");
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/complaints.v1.json"
+    ))
+    .expect("complaints source contract");
+    let columns = contract["columns"]
+        .as_array()
+        .expect("complaints columns")
+        .iter()
+        .map(|column| column["name"].as_str().expect("column name"))
+        .collect::<Vec<_>>();
+    let mut csv = columns.join(",");
+    csv.push('\n');
+    let mut row = vec![String::new(); columns.len()];
+    for (name, value) in [
+        ("complaint_id", "private-complaint"),
+        ("customer_id", "private-customer"),
+        ("creation_date", "not-a-date"),
+        ("category", "Queja"),
+        ("reception_channel", "Phone"),
+        ("description", "private-description"),
+    ] {
+        let index = columns
+            .iter()
+            .position(|column| *column == name)
+            .expect("fixture field exists in contract");
+        row[index] = value.to_owned();
+    }
+    csv.push_str(&row.join(","));
+    csv.push('\n');
+    fs::write(complaints.join("part-000.csv"), csv).expect("write unsupported complaints");
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "local-sim",
+            "--mode",
+            "local-simulation",
+            "--source",
+            "original",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--output"])
+        .arg(&output)
+        .args([
+            "--tenant-id",
+            "pulso_local",
+            "--observed-cutoff",
+            "2025-07-01T00:00:00Z",
+            "--arranque-cases",
+            "1",
+        ])
+        .output()
+        .expect("run original source CLI");
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let run_dir = fs::read_dir(&output)
+        .expect("output directory")
+        .next()
+        .expect("run directory")
+        .expect("read run directory")
+        .path();
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("result.json")).expect("result file"))
+            .expect("valid result JSON");
+    assert_eq!(
+        result["complaint_projection_status"]["status"],
+        "unsupported"
+    );
+    assert_eq!(
+        result["complaint_projection_status"]["missing_fields"],
+        serde_json::json!(["valid_source_wall_clock_timestamp"])
+    );
+    assert!(
+        result["snapshot_descriptive_envelope"]["finding"]["complaint_table_projection"].is_null()
+    );
+    assert!(result["events"].as_array().unwrap().iter().any(|event| {
+        event["stage"] == "complaint_projection"
+            && event["status"] == "unsupported"
+            && event["detail"]
+                .as_str()
+                .unwrap()
+                .contains("no complaint evidence admitted")
+    }));
+    let serialized = result.to_string();
+    for forbidden in [
+        "private-complaint",
+        "private-customer",
+        "private-description",
+    ] {
+        assert!(!serialized.contains(forbidden));
+    }
 }
 
 #[test]

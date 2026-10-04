@@ -16,7 +16,8 @@ use improvement_engine_core::e0_proposal_assembly::{
 };
 use improvement_engine_core::local_simulation::{
     LocalContactVolumeCell, LocalContactVolumeProjection, LocalObservedEvent, LocalObservedQuery,
-    LocalRunInput, LocalRunMetadata, LocalRunResult, LocalSnapshotContactAggregate,
+    LocalRunInput, LocalRunMetadata, LocalRunResult, LocalSnapshotComplaintAggregate,
+    LocalSnapshotComplaintProjection, LocalSnapshotContactAggregate,
     LocalSnapshotContactProjection, LocalSourceKind, RunEvent, run_local_simulation,
 };
 use improvement_engine_source_adapters::{
@@ -446,6 +447,52 @@ fn to_run_input(
         })?;
         input = input.with_snapshot_descriptive_contact_projection(projection);
     }
+    if let Some(projection) = prepared.agent_inputs().descriptive_complaint_projection() {
+        let missing_fields = projection
+            .missing_fields()
+            .iter()
+            .map(|field| safe_complaint_missing_field(field))
+            .collect::<Result<Vec<_>, _>>()?;
+        let aggregates = projection
+            .aggregates()
+            .iter()
+            .map(|cell| {
+                LocalSnapshotComplaintAggregate::new(
+                    cell.period(),
+                    cell.category(),
+                    cell.channel(),
+                    cell.complaint_count(),
+                    cell.sla_breached_suppressed_small_denominator(),
+                    cell.sla_breached_valid_count(),
+                    cell.sla_breached_missing_count(),
+                    cell.sla_breached_positive_count(),
+                    cell.resolution_days_suppressed_small_denominator(),
+                    cell.resolution_days_valid_count(),
+                    cell.resolution_days_missing_count(),
+                    cell.resolution_days_mean(),
+                    cell.resolution_satisfaction_suppressed_small_denominator(),
+                    cell.resolution_satisfaction_valid_count(),
+                    cell.resolution_satisfaction_missing_count(),
+                    cell.resolution_satisfaction_mean(),
+                )
+            })
+            .collect();
+        let projection = LocalSnapshotComplaintProjection::new(
+            projection.status(),
+            missing_fields,
+            projection.temporal_basis(),
+            projection.value_semantics(),
+            projection.coverage(),
+            projection.policy_version(),
+            projection.minimum_cell_count(),
+            projection.included_complaint_count(),
+            aggregates,
+        )
+        .map_err(|_| {
+            "source adapter emitted an invalid descriptive complaint projection".to_owned()
+        })?;
+        input = input.with_snapshot_descriptive_complaint_projection(projection);
+    }
     Ok(input)
 }
 
@@ -458,6 +505,22 @@ fn safe_code(value: &str) -> Result<String, String> {
     {
         return Err("source adapter emitted a non-code value; refusing unsafe output".into());
     }
+    Ok(value.to_owned())
+}
+
+fn safe_complaint_missing_field(value: &str) -> Result<String, String> {
+    let value = match value {
+        "creation_date" => "creation_date",
+        "category" => "category",
+        "reception_channel" => "reception_channel",
+        "valid source wall-clock timestamp" => "valid_source_wall_clock_timestamp",
+        "usable grouping rows" => "usable_grouping_rows",
+        _ => {
+            return Err(
+                "source adapter emitted an unknown complaint projection diagnostic".to_owned(),
+            );
+        }
+    };
     Ok(value.to_owned())
 }
 
@@ -1091,6 +1154,7 @@ mod tests {
             evaluation: None,
             contact_volume_projection: None,
             snapshot_descriptive_envelope: None,
+            complaint_projection_status: None,
             events: Vec::new(),
         };
 

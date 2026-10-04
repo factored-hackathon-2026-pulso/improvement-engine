@@ -1,6 +1,7 @@
 use improvement_engine_core::ArtifactReference;
 use improvement_engine_core::local_simulation::{
     LocalObservedEvent, LocalObservedQuery, LocalRunError, LocalRunInput, LocalRunMetadata,
+    LocalSnapshotComplaintAggregate, LocalSnapshotComplaintProjection,
     LocalSnapshotContactAggregate, LocalSnapshotContactProjection, LocalSourceKind,
     run_local_simulation,
 };
@@ -12,6 +13,46 @@ fn snapshot() -> ArtifactReference {
         revision: 1,
         digest: format!("sha256:{}", "a".repeat(64)),
     }
+}
+
+fn complaint_projection(
+    status: &str,
+    missing_fields: Vec<String>,
+) -> LocalSnapshotComplaintProjection {
+    let aggregates = if status == "supported" {
+        vec![LocalSnapshotComplaintAggregate::new(
+            "2026-08",
+            "transactional",
+            "phone",
+            5,
+            false,
+            Some(5),
+            Some(0),
+            Some(5),
+            false,
+            Some(5),
+            Some(0),
+            Some(4.0),
+            false,
+            Some(5),
+            Some(0),
+            Some(2.0),
+        )]
+    } else {
+        Vec::new()
+    };
+    LocalSnapshotComplaintProjection::new(
+        status,
+        missing_fields,
+        "literal_source_wall_clock_month",
+        "final_extract_facts_only",
+        "partial",
+        1,
+        5,
+        if status == "supported" { 5 } else { 0 },
+        aggregates,
+    )
+    .unwrap()
 }
 
 #[test]
@@ -43,6 +84,10 @@ fn original_snapshot_emits_descriptive_non_publishable_improvement_envelope() {
     .with_snapshot_descriptive_contact_projection(projection);
 
     let result = run_local_simulation(input).unwrap();
+    assert_eq!(
+        result.complaint_projection_status.as_ref().unwrap().status,
+        "absent"
+    );
     let envelope = result.snapshot_descriptive_envelope.unwrap();
     assert_eq!(
         envelope.finding.temporal_basis,
@@ -77,6 +122,321 @@ fn original_snapshot_emits_descriptive_non_publishable_improvement_envelope() {
         json["finding"]["claim_scope"],
         "descriptive_only_no_causal_or_roi_claim"
     );
+}
+
+#[test]
+fn original_snapshot_can_emit_pqr_only_evidence_without_fabricating_contact_counts() {
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "original-pqr-only-run",
+            "pulso_local",
+            LocalSourceKind::OriginalBank,
+            format!("sha256:{}", "b".repeat(64)),
+            snapshot(),
+            1_751_328_000,
+            "2025-07-01T00:00:00Z",
+        ),
+        Vec::new(),
+        0,
+        Vec::new(),
+    )
+    .with_snapshot_descriptive_complaint_projection(complaint_projection("supported", Vec::new()));
+
+    let result = run_local_simulation(input).unwrap();
+    let envelope = result.snapshot_descriptive_envelope.unwrap();
+    assert_eq!(
+        envelope.finding.signal_id,
+        "original_complaints_literal_month_descriptive_v1"
+    );
+    assert_eq!(envelope.finding.supported_contact_count, 0);
+    assert_eq!(envelope.finding.complaint_contact_count, 0);
+    let pqr = envelope
+        .finding
+        .complaint_table_projection
+        .as_ref()
+        .unwrap();
+    assert_eq!(pqr.policy_id(), "original_complaint_literal_month_k_v1");
+    assert_eq!(pqr.included_complaint_count(), 5);
+    assert_eq!(pqr.aggregates()[0].complaint_count, 5);
+    assert_eq!(
+        result.complaint_projection_status.unwrap().status,
+        "supported"
+    );
+    assert_eq!(result.formal_route, "do_nothing");
+    assert!(!envelope.proposal.publication_eligible);
+    let serialized = serde_json::to_string(&envelope).unwrap();
+    assert!(serialized.contains("final_extract_facts_only"));
+    assert!(serialized.contains("descriptive_only_no_causal_or_roi_claim"));
+    for forbidden in [
+        "customer_id",
+        "complaint_id",
+        "description",
+        "observed_cutoff",
+    ] {
+        assert!(!serialized.contains(forbidden));
+    }
+}
+
+#[test]
+fn unsupported_complaint_projection_is_distinct_from_absent_and_emits_no_finding() {
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "original-pqr-unsupported-run",
+            "pulso_local",
+            LocalSourceKind::OriginalBank,
+            format!("sha256:{}", "b".repeat(64)),
+            snapshot(),
+            1_751_328_000,
+            "2025-07-01T00:00:00Z",
+        ),
+        Vec::new(),
+        0,
+        Vec::new(),
+    )
+    .with_snapshot_descriptive_complaint_projection(complaint_projection(
+        "unsupported",
+        vec!["usable_grouping_rows".into()],
+    ));
+
+    let result = run_local_simulation(input).unwrap();
+    assert_eq!(
+        result.complaint_projection_status.as_ref().unwrap().status,
+        "unsupported"
+    );
+    assert_eq!(
+        result
+            .complaint_projection_status
+            .as_ref()
+            .unwrap()
+            .missing_fields,
+        ["usable_grouping_rows"]
+    );
+    assert!(result.snapshot_descriptive_envelope.is_none());
+    assert_eq!(result.terminal_status, "unsupported_source");
+}
+
+#[test]
+fn unsupported_complaint_projection_rejects_unbounded_diagnostic_codes() {
+    let projection = LocalSnapshotComplaintProjection::new(
+        "unsupported",
+        vec!["alex".into()],
+        "literal_source_wall_clock_month",
+        "final_extract_facts_only",
+        "partial",
+        1,
+        5,
+        0,
+        Vec::new(),
+    );
+    assert!(projection.is_err());
+
+    let repeated_diagnostics = LocalSnapshotComplaintProjection::new(
+        "unsupported",
+        vec!["usable_grouping_rows".into(); 6],
+        "literal_source_wall_clock_month",
+        "final_extract_facts_only",
+        "partial",
+        1,
+        5,
+        0,
+        Vec::new(),
+    );
+    assert!(repeated_diagnostics.is_err());
+
+    let duplicate_diagnostics = LocalSnapshotComplaintProjection::new(
+        "unsupported",
+        vec!["usable_grouping_rows".into(), "usable_grouping_rows".into()],
+        "literal_source_wall_clock_month",
+        "final_extract_facts_only",
+        "partial",
+        1,
+        5,
+        0,
+        Vec::new(),
+    );
+    assert!(duplicate_diagnostics.is_err());
+}
+
+#[test]
+fn usable_complaint_source_with_only_suppressed_cells_reports_no_public_evidence() {
+    let projection = LocalSnapshotComplaintProjection::new(
+        "supported",
+        Vec::new(),
+        "literal_source_wall_clock_month",
+        "final_extract_facts_only",
+        "partial",
+        1,
+        5,
+        0,
+        Vec::new(),
+    )
+    .unwrap();
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "original-pqr-no-visible-cells-run",
+            "pulso_local",
+            LocalSourceKind::OriginalBank,
+            format!("sha256:{}", "b".repeat(64)),
+            snapshot(),
+            1_751_328_000,
+            "2025-07-01T00:00:00Z",
+        ),
+        Vec::new(),
+        0,
+        Vec::new(),
+    )
+    .with_snapshot_descriptive_complaint_projection(projection);
+
+    let result = run_local_simulation(input).unwrap();
+    let status = result.complaint_projection_status.unwrap();
+    assert_eq!(status.status, "supported_no_reportable_cells");
+    assert!(result.snapshot_descriptive_envelope.is_none());
+    assert!(result.events.iter().any(|event| {
+        event.stage == "complaint_projection"
+            && event.status == "supported_no_reportable_cells"
+            && event.detail.contains("no complaint evidence admitted")
+    }));
+    assert!(!result.events.iter().any(|event| {
+        event.stage == "detection" && event.status == "snapshot_projection_complete"
+    }));
+}
+
+#[test]
+fn complaint_projection_rejects_undersuppressed_duplicate_and_inconsistent_cells() {
+    let cell = || {
+        LocalSnapshotComplaintAggregate::new(
+            "2026-08",
+            "transactional",
+            "phone",
+            5,
+            false,
+            Some(5),
+            Some(0),
+            Some(5),
+            false,
+            Some(5),
+            Some(0),
+            Some(4.0),
+            false,
+            Some(5),
+            Some(0),
+            Some(2.0),
+        )
+    };
+    let build = |minimum, count, cells| {
+        LocalSnapshotComplaintProjection::new(
+            "supported",
+            Vec::new(),
+            "literal_source_wall_clock_month",
+            "final_extract_facts_only",
+            "partial",
+            1,
+            minimum,
+            count,
+            cells,
+        )
+    };
+    assert!(build(4, 5, vec![cell()]).is_err());
+    assert!(build(5, 10, vec![cell(), cell()]).is_err());
+    let inconsistent = LocalSnapshotComplaintAggregate::new(
+        "2026-08",
+        "transactional",
+        "phone",
+        5,
+        false,
+        Some(4),
+        Some(1),
+        Some(2),
+        false,
+        Some(5),
+        Some(0),
+        Some(4.0),
+        false,
+        Some(5),
+        Some(0),
+        Some(2.0),
+    );
+    assert!(build(5, 5, vec![inconsistent]).is_err());
+}
+
+#[test]
+fn complaint_projection_rejects_small_metric_denominators_unless_suppressed() {
+    let build = |cell| {
+        LocalSnapshotComplaintProjection::new(
+            "supported",
+            Vec::new(),
+            "literal_source_wall_clock_month",
+            "final_extract_facts_only",
+            "partial",
+            1,
+            5,
+            5,
+            vec![cell],
+        )
+    };
+    let small_binary_group = LocalSnapshotComplaintAggregate::new(
+        "2026-08",
+        "transactional",
+        "phone",
+        5,
+        false,
+        Some(5),
+        Some(0),
+        Some(1),
+        false,
+        Some(5),
+        Some(0),
+        Some(4.0),
+        false,
+        Some(5),
+        Some(0),
+        Some(2.0),
+    );
+    assert!(build(small_binary_group).is_err());
+
+    let small_numeric_denominator = LocalSnapshotComplaintAggregate::new(
+        "2026-08",
+        "transactional",
+        "phone",
+        5,
+        false,
+        Some(5),
+        Some(0),
+        Some(5),
+        true,
+        None,
+        None,
+        None,
+        false,
+        Some(5),
+        Some(0),
+        Some(2.0),
+    );
+    assert!(build(small_numeric_denominator).is_ok());
+}
+
+#[test]
+fn complaint_projection_cannot_be_attached_to_e0_source() {
+    let input = LocalRunInput::new(
+        LocalRunMetadata::new(
+            "e0-wrong-complaint-projection",
+            "pulso_local",
+            LocalSourceKind::E0,
+            format!("sha256:{}", "b".repeat(64)),
+            snapshot(),
+            1_751_328_000,
+            "2025-07-01T00:00:00Z",
+        ),
+        vec![1],
+        0,
+        vec![],
+    )
+    .with_snapshot_descriptive_complaint_projection(complaint_projection("supported", Vec::new()));
+
+    assert!(matches!(
+        run_local_simulation(input),
+        Err(LocalRunError::InvalidEventProjection)
+    ));
 }
 
 #[test]

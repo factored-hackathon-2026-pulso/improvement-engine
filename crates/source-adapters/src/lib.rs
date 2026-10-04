@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::{self, File};
-use std::io::{BufReader, Read};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,7 +19,6 @@ use arrow_array::{
 };
 use arrow_schema::{DataType, SchemaRef};
 use bytes::Bytes;
-use improvement_engine_core::ArtifactReference;
 #[cfg(feature = "local-simulation")]
 use improvement_engine_core::e0_query_lab::{E0QueryLab, VerifiedE0QueryResult};
 #[cfg(feature = "local-simulation")]
@@ -34,13 +33,17 @@ use improvement_engine_core::local_lab::{
     LocalInvestigationLab,
 };
 use improvement_engine_core::original_contact_projection::source_wall_clock_month;
+use improvement_engine_core::original_contact_projection::{
+    CsvPartition, ManifestPartition, ProjectionCoverage, ProjectionTable,
+    SnapshotDescriptiveManifest, SupportStatus, canonical_partition_inventory_digest,
+    project_complaints_descriptive,
+};
 #[cfg(feature = "local-simulation")]
 use improvement_engine_core::source_validation::{
     SourceSnapshot, local_simulation_resolve_source_snapshot_artifact,
 };
-#[cfg(feature = "local-simulation")]
 use improvement_engine_core::{
-    ArtifactDraft, ArtifactKind, ArtifactRepository, InMemoryArtifactRepository,
+    ArtifactDraft, ArtifactKind, ArtifactReference, ArtifactRepository, InMemoryArtifactRepository,
 };
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde::Serialize;
@@ -60,6 +63,9 @@ pub use e0_package_validation::{
 const PREPARATION_POLICY_VERSION: &str = "pulso.source-preparation.v1";
 const CONTACT_PROJECTION_POLICY_VERSION: u32 = 1;
 const CONTACT_PROJECTION_MINIMUM_CELL_COUNT: u64 = 5;
+const COMPLAINT_PROJECTION_POLICY_VERSION: u32 = 1;
+const COMPLAINT_PROJECTION_MINIMUM_CELL_COUNT: u64 = 5;
+const COMPLAINT_METRIC_MINIMUM_GROUP_COUNT: u64 = 5;
 const E0_DISCOVERY_TABLES: &[&str] = &[
     "case",
     "identity_check",
@@ -248,6 +254,7 @@ pub struct AgentInputSet {
     contact_volumes: Vec<SnapshotContactVolume>,
     contact_projection: Option<ContactProjectionSummary>,
     descriptive_contact_projection: Option<DescriptiveContactProjection>,
+    descriptive_complaint_projection: Option<DescriptiveComplaintProjection>,
     unsupported_metrics: Vec<UnsupportedMetric>,
     available_tables: Vec<String>,
 }
@@ -276,6 +283,11 @@ impl AgentInputSet {
     #[must_use]
     pub fn descriptive_contact_projection(&self) -> Option<&DescriptiveContactProjection> {
         self.descriptive_contact_projection.as_ref()
+    }
+
+    #[must_use]
+    pub fn descriptive_complaint_projection(&self) -> Option<&DescriptiveComplaintProjection> {
+        self.descriptive_complaint_projection.as_ref()
     }
 
     #[must_use]
@@ -429,6 +441,192 @@ impl DescriptiveContactAggregate {
     #[must_use]
     pub fn channel(&self) -> &'static str {
         contact_channel_label(self.channel)
+    }
+}
+
+/// Privacy-safe, partial snapshot aggregates from the original complaints table.
+/// They are final-extract descriptive facts and are never an as-of-cutoff view.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DescriptiveComplaintProjection {
+    status: &'static str,
+    missing_fields: Vec<String>,
+    temporal_basis: &'static str,
+    value_semantics: &'static str,
+    coverage: &'static str,
+    policy_version: u32,
+    minimum_cell_count: u64,
+    included_complaint_count: u64,
+    aggregates: Vec<DescriptiveComplaintAggregate>,
+}
+
+impl DescriptiveComplaintProjection {
+    #[must_use]
+    pub fn status(&self) -> &'static str {
+        self.status
+    }
+
+    #[must_use]
+    pub fn missing_fields(&self) -> &[String] {
+        &self.missing_fields
+    }
+
+    #[must_use]
+    pub fn temporal_basis(&self) -> &'static str {
+        self.temporal_basis
+    }
+
+    #[must_use]
+    pub fn value_semantics(&self) -> &'static str {
+        self.value_semantics
+    }
+
+    #[must_use]
+    pub fn coverage(&self) -> &'static str {
+        self.coverage
+    }
+
+    #[must_use]
+    pub fn policy_version(&self) -> u32 {
+        self.policy_version
+    }
+
+    #[must_use]
+    pub fn minimum_cell_count(&self) -> u64 {
+        self.minimum_cell_count
+    }
+
+    #[must_use]
+    pub fn included_complaint_count(&self) -> u64 {
+        self.included_complaint_count
+    }
+
+    #[must_use]
+    pub fn aggregates(&self) -> &[DescriptiveComplaintAggregate] {
+        &self.aggregates
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DescriptiveComplaintAggregate {
+    period: String,
+    category: String,
+    channel: String,
+    complaint_count: u64,
+    sla_breached_suppressed_small_denominator: bool,
+    sla_breached_valid_count: Option<u64>,
+    sla_breached_missing_count: Option<u64>,
+    sla_breached_positive_count: Option<u64>,
+    resolution_days_suppressed_small_denominator: bool,
+    resolution_days_valid_count: Option<u64>,
+    resolution_days_missing_count: Option<u64>,
+    resolution_days_mean: Option<FiniteMean>,
+    resolution_satisfaction_suppressed_small_denominator: bool,
+    resolution_satisfaction_valid_count: Option<u64>,
+    resolution_satisfaction_missing_count: Option<u64>,
+    resolution_satisfaction_mean: Option<FiniteMean>,
+}
+
+impl DescriptiveComplaintAggregate {
+    #[must_use]
+    pub fn period(&self) -> &str {
+        &self.period
+    }
+
+    #[must_use]
+    pub fn category(&self) -> &str {
+        &self.category
+    }
+
+    #[must_use]
+    pub fn channel(&self) -> &str {
+        &self.channel
+    }
+
+    #[must_use]
+    pub fn complaint_count(&self) -> u64 {
+        self.complaint_count
+    }
+
+    #[must_use]
+    pub fn sla_breached_suppressed_small_denominator(&self) -> bool {
+        self.sla_breached_suppressed_small_denominator
+    }
+
+    #[must_use]
+    pub fn sla_breached_valid_count(&self) -> Option<u64> {
+        self.sla_breached_valid_count
+    }
+
+    #[must_use]
+    pub fn sla_breached_missing_count(&self) -> Option<u64> {
+        self.sla_breached_missing_count
+    }
+
+    #[must_use]
+    pub fn sla_breached_positive_count(&self) -> Option<u64> {
+        self.sla_breached_positive_count
+    }
+
+    #[must_use]
+    pub fn resolution_days_suppressed_small_denominator(&self) -> bool {
+        self.resolution_days_suppressed_small_denominator
+    }
+
+    #[must_use]
+    pub fn resolution_days_valid_count(&self) -> Option<u64> {
+        self.resolution_days_valid_count
+    }
+
+    #[must_use]
+    pub fn resolution_days_missing_count(&self) -> Option<u64> {
+        self.resolution_days_missing_count
+    }
+
+    #[must_use]
+    pub fn resolution_days_mean(&self) -> Option<f64> {
+        self.resolution_days_mean.map(|mean| mean.0)
+    }
+
+    #[must_use]
+    pub fn resolution_satisfaction_suppressed_small_denominator(&self) -> bool {
+        self.resolution_satisfaction_suppressed_small_denominator
+    }
+
+    #[must_use]
+    pub fn resolution_satisfaction_valid_count(&self) -> Option<u64> {
+        self.resolution_satisfaction_valid_count
+    }
+
+    #[must_use]
+    pub fn resolution_satisfaction_missing_count(&self) -> Option<u64> {
+        self.resolution_satisfaction_missing_count
+    }
+
+    #[must_use]
+    pub fn resolution_satisfaction_mean(&self) -> Option<f64> {
+        self.resolution_satisfaction_mean.map(|mean| mean.0)
+    }
+}
+
+/// The core projector guarantees finite means; bitwise equality lets the
+/// containing source input retain its existing Eq contract without lossy rounding.
+#[derive(Clone, Copy, Debug)]
+struct FiniteMean(f64);
+
+impl PartialEq for FiniteMean {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_bits() == other.0.to_bits()
+    }
+}
+
+impl Eq for FiniteMean {}
+
+impl Serialize for FiniteMean {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_f64(self.0)
     }
 }
 
@@ -882,6 +1080,7 @@ pub fn prepare_original_bank_with_progress(
             contact_files,
             contact_bytes,
         )?;
+    let descriptive_complaint_projection = project_complaint_snapshot(root, config, &files)?;
     let available_tables = files.iter().map(|entry| entry.table.clone()).collect();
     let mut manifest = DatasetManifest::new(
         SourceKind::OriginalBank,
@@ -904,6 +1103,7 @@ pub fn prepare_original_bank_with_progress(
             contact_volumes,
             contact_projection,
             descriptive_contact_projection,
+            descriptive_complaint_projection,
             unsupported_metrics: vec![
                 UnsupportedMetric::TechnicalErrorNotPresentInOriginalBankHistory,
             ],
@@ -1190,6 +1390,7 @@ fn prepare_e0_package_internal(
             contact_volumes: Vec::new(),
             contact_projection: None,
             descriptive_contact_projection: None,
+            descriptive_complaint_projection: None,
             unsupported_metrics: Vec::new(),
             available_tables,
         },
@@ -2019,6 +2220,291 @@ mod original_progress_tests {
                 .any(|event| event.status == "completed")
         );
     }
+}
+
+fn project_complaint_snapshot(
+    root: &Path,
+    config: &PreparationConfig,
+    entries: &[ManifestEntry],
+) -> Result<Option<DescriptiveComplaintProjection>, AdapterError> {
+    let mut complaint_entries = entries
+        .iter()
+        .filter(|entry| entry.table == "complaints")
+        .collect::<Vec<_>>();
+    complaint_entries.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    if complaint_entries.is_empty() {
+        return Ok(None);
+    }
+
+    let contract_raw = include_str!("../../../contracts/sources/complaints.v1.json");
+    let contract: serde_json::Value =
+        serde_json::from_str(contract_raw).map_err(AdapterError::Serialization)?;
+    let expected_header = contract["columns"]
+        .as_array()
+        .ok_or(AdapterError::InvalidInput(
+            "complaints source contract columns are invalid",
+        ))?
+        .iter()
+        .map(|column| {
+            column
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .ok_or(AdapterError::InvalidInput(
+                    "complaints source contract column is invalid",
+                ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let contract_version = contract
+        .get("contract_version")
+        .and_then(|version| version.get("major"))
+        .and_then(serde_json::Value::as_u64)
+        .ok_or(AdapterError::InvalidInput(
+            "complaints source contract version is invalid",
+        ))?;
+    if contract.get("table").and_then(serde_json::Value::as_str) != Some("complaints")
+        || contract
+            .get("source_namespace")
+            .and_then(serde_json::Value::as_str)
+            != Some("bank_history")
+        || contract_version != 1
+        || expected_header.is_empty()
+    {
+        return Err(AdapterError::InvalidInput(
+            "complaints source contract identity is invalid",
+        ));
+    }
+
+    let mut partitions = Vec::with_capacity(complaint_entries.len());
+    let mut header_digest = None;
+    let mut row_count = 0_u64;
+    let mut partition_records = Vec::with_capacity(complaint_entries.len());
+    let mut inventory_binding_parts = Vec::with_capacity(complaint_entries.len());
+    for (index, entry) in complaint_entries.iter().enumerate() {
+        let id = format!("partition-{index:08}");
+        let path = root.join(&entry.relative_path);
+        let file = File::open(&path).map_err(|source| AdapterError::ReadFile {
+            path: "complaints".to_owned(),
+            source,
+        })?;
+        let mut csv = csv::ReaderBuilder::new().flexible(false).from_reader(file);
+        let headers = csv
+            .headers()
+            .map_err(|_| AdapterError::InvalidInput("complaints CSV header is malformed"))?;
+        if headers.iter().ne(expected_header.iter().copied()) {
+            return Err(AdapterError::UnsupportedSchema(
+                "complaints CSV header does not match its versioned contract".to_owned(),
+            ));
+        }
+        let actual_header_digest = source_header_digest(&path)?;
+        match &header_digest {
+            Some(expected) if expected != &actual_header_digest => {
+                return Err(AdapterError::UnsupportedSchema(
+                    "complaints partitions have different headers".to_owned(),
+                ));
+            }
+            None => header_digest = Some(actual_header_digest),
+            _ => {}
+        }
+        row_count = row_count
+            .checked_add(entry.row_count)
+            .ok_or(AdapterError::InvalidInput(
+                "complaints source row count overflow",
+            ))?;
+        partitions.push(ManifestPartition::new(
+            id.clone(),
+            entry.file_digest.clone(),
+        ));
+        inventory_binding_parts.push(format!("{id}:{}", entry.file_digest));
+        partition_records.push((id, entry));
+    }
+    let source_header_digest = header_digest.ok_or(AdapterError::MissingInput(
+        "complaints source header is missing",
+    ))?;
+    let partition_inventory_digest = canonical_partition_inventory_digest(&partitions).ok_or(
+        AdapterError::InvalidInput("complaints partition inventory is invalid"),
+    )?;
+    let contract_digest = digest(contract_raw.as_bytes());
+    let inventory_binding = inventory_binding_parts.join("\n");
+    let snapshot_json = serde_json::json!({
+        "contract_version": { "major": 1, "minor": 0 },
+        "tenant_id": config.tenant_id(),
+        "source_namespace": "bank_history",
+        "world_ref": "original_bank_local",
+        "observed_cutoff": config.observed_cutoff(),
+        "sources": [{
+            "table": "complaints",
+            "uri": "file://original_bank/complaints",
+            "file_digest": digest(inventory_binding.as_bytes()),
+            "partition_inventory_digest": partition_inventory_digest,
+            "header_digest": source_header_digest,
+            "row_count": row_count,
+            "source_contract_ref": {
+                "id": "complaints",
+                "version": format!("v{contract_version}"),
+                "digest": contract_digest,
+            }
+        }]
+    })
+    .to_string();
+    let source_snapshot_raw = snapshot_json.as_str();
+    let mut repository = InMemoryArtifactRepository::default();
+    let source_snapshot_ref = repository
+        .append(
+            None,
+            ArtifactDraft::new(
+                config.tenant_id(),
+                uuid_v7(),
+                1,
+                ArtifactKind::SourceSnapshot,
+                serde_json::json!({ "source_snapshot_json": source_snapshot_raw }),
+                None,
+            ),
+        )
+        .map_err(|_| AdapterError::InvalidInput("complaints source snapshot could not be sealed"))?
+        .reference();
+    let manifest = SnapshotDescriptiveManifest::new(
+        &mut repository,
+        source_snapshot_ref,
+        ProjectionTable::Complaints,
+        partitions,
+        ProjectionCoverage::Partial,
+    )
+    .map_err(|_| AdapterError::InvalidInput("complaints projection manifest is invalid"))?;
+    let csv_partitions = partition_records
+        .into_iter()
+        .map(|(id, entry)| {
+            let file = File::open(root.join(&entry.relative_path)).map_err(|source| {
+                AdapterError::ReadFile {
+                    path: "complaints".to_owned(),
+                    source,
+                }
+            })?;
+            Ok(CsvPartition::new(id, BufReader::new(file)))
+        })
+        .collect::<Result<Vec<_>, AdapterError>>()?;
+    let projected = project_complaints_descriptive(&manifest, csv_partitions)
+        .map_err(|_| AdapterError::InvalidInput("complaints descriptive projection failed"))?;
+    let (status, missing_fields) = match projected.status {
+        SupportStatus::Supported => ("supported", Vec::new()),
+        SupportStatus::Unsupported { missing_fields } => (
+            "unsupported",
+            missing_fields.into_iter().map(str::to_owned).collect(),
+        ),
+    };
+    let mut included_complaint_count = 0_u64;
+    let aggregates = projected
+        .aggregates
+        .into_iter()
+        .map(|aggregate| {
+            included_complaint_count = included_complaint_count
+                .checked_add(aggregate.complaint_count)
+                .ok_or(AdapterError::InvalidInput(
+                    "complaints aggregate count overflow",
+                ))?;
+            let sla_valid = aggregate.final_sla_breached.valid_count;
+            let sla_missing = aggregate.final_sla_breached.missing_count;
+            let sla_positive = aggregate.final_sla_breached.positive_count;
+            let sla_negative = sla_valid.saturating_sub(sla_positive);
+            let sla_suppressed = contains_small_nonzero_group(sla_valid)
+                || contains_small_nonzero_group(sla_missing)
+                || contains_small_nonzero_group(sla_positive)
+                || contains_small_nonzero_group(sla_negative);
+
+            let resolution_valid = aggregate.final_resolution_days.valid_count;
+            let resolution_missing = aggregate.final_resolution_days.missing_count;
+            let resolution_suppressed = contains_small_nonzero_group(resolution_valid)
+                || contains_small_nonzero_group(resolution_missing);
+
+            let satisfaction_valid = aggregate.final_resolution_satisfaction.valid_count;
+            let satisfaction_missing = aggregate.final_resolution_satisfaction.missing_count;
+            let satisfaction_suppressed = contains_small_nonzero_group(satisfaction_valid)
+                || contains_small_nonzero_group(satisfaction_missing);
+            Ok(DescriptiveComplaintAggregate {
+                period: aggregate.period,
+                category: aggregate.category.as_str().to_owned(),
+                channel: aggregate.channel.as_str().to_owned(),
+                complaint_count: aggregate.complaint_count,
+                sla_breached_suppressed_small_denominator: sla_suppressed,
+                sla_breached_valid_count: (!sla_suppressed).then_some(sla_valid),
+                sla_breached_missing_count: (!sla_suppressed).then_some(sla_missing),
+                sla_breached_positive_count: (!sla_suppressed).then_some(sla_positive),
+                resolution_days_suppressed_small_denominator: resolution_suppressed,
+                resolution_days_valid_count: (!resolution_suppressed).then_some(resolution_valid),
+                resolution_days_missing_count: (!resolution_suppressed)
+                    .then_some(resolution_missing),
+                resolution_days_mean: if resolution_suppressed {
+                    None
+                } else {
+                    finite_mean(aggregate.final_resolution_days.mean)?
+                },
+                resolution_satisfaction_suppressed_small_denominator: satisfaction_suppressed,
+                resolution_satisfaction_valid_count: (!satisfaction_suppressed)
+                    .then_some(satisfaction_valid),
+                resolution_satisfaction_missing_count: (!satisfaction_suppressed)
+                    .then_some(satisfaction_missing),
+                resolution_satisfaction_mean: if satisfaction_suppressed {
+                    None
+                } else {
+                    finite_mean(aggregate.final_resolution_satisfaction.mean)?
+                },
+            })
+        })
+        .collect::<Result<Vec<_>, AdapterError>>()?;
+    Ok(Some(DescriptiveComplaintProjection {
+        status,
+        missing_fields,
+        temporal_basis: "literal_source_wall_clock_month",
+        value_semantics: "final_extract_facts_only",
+        coverage: "partial",
+        policy_version: COMPLAINT_PROJECTION_POLICY_VERSION,
+        minimum_cell_count: COMPLAINT_PROJECTION_MINIMUM_CELL_COUNT,
+        included_complaint_count,
+        aggregates,
+    }))
+}
+
+fn contains_small_nonzero_group(count: u64) -> bool {
+    (1..COMPLAINT_METRIC_MINIMUM_GROUP_COUNT).contains(&count)
+}
+
+fn source_header_digest(path: &Path) -> Result<String, AdapterError> {
+    let file = File::open(path).map_err(|source| AdapterError::ReadFile {
+        path: "complaints".to_owned(),
+        source,
+    })?;
+    let mut reader = BufReader::new(file);
+    let mut header = Vec::new();
+    reader
+        .read_until(b'\n', &mut header)
+        .map_err(|source| AdapterError::ReadFile {
+            path: "complaints".to_owned(),
+            source,
+        })?;
+    if header.is_empty() {
+        return Err(AdapterError::InvalidInput(
+            "complaints CSV header is missing",
+        ));
+    }
+    if header.last() == Some(&b'\n') {
+        header.pop();
+    }
+    if header.last() == Some(&b'\r') {
+        header.pop();
+    }
+    Ok(digest(&header))
+}
+
+fn finite_mean(value: Option<f64>) -> Result<Option<FiniteMean>, AdapterError> {
+    value
+        .map(|value| {
+            value
+                .is_finite()
+                .then_some(FiniteMean(value))
+                .ok_or(AdapterError::InvalidInput(
+                    "complaints projection contains a non-finite metric",
+                ))
+        })
+        .transpose()
 }
 
 type ContactSnapshotProjection = (
