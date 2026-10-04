@@ -216,3 +216,20 @@ def test_recorded_queue_matches_the_scripted_responder(tmp_path):
     new = {p.name: p.read_text() for p in (tmp_path / "q" / "responses").glob("*.json")}
     old = {p.name: p.read_text() for p in (FIXTURE_QUEUE / "responses").glob("*.json")}
     assert new == old and new
+
+
+# ---- adversarial review additions -------------------------------------------------------------------------------
+def test_replay_drift_deleted_fixture_is_counted_as_a_miss(tmp_path):
+    import shutil
+    q = tmp_path / "q"; shutil.copytree(FIXTURE_QUEUE, q)
+    # the builder answer is the last recorded stage: dropping it must show up as a digest miss, not as 0
+    for p in (q / "responses").glob("*.json"):
+        if json.loads(p.read_text())["responder"]["role"] == "builder_design":
+            p.unlink()
+    t = T.run_thread(T.ThreadConfig(workdir=tmp_path / "w", exe=EXE, queue_dir=q, mode="replay"))
+    assert step(t, 4)["status"] == "red" and t["replay"]["misses"] >= 1
+
+
+def test_step_08_payload_tamper_and_expiry_are_rejected(thread):
+    d = step(thread, 8)["detail"]
+    assert d["payload_tamper_rejected"] is True and d["expired_rejected"] is True
