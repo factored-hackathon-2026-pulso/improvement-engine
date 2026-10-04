@@ -117,6 +117,11 @@ fn run_demo(a: DemoArgs) {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some("run") => std::process::exit(pulso::run::main(&args[1..])),
+        Some("healthcheck") => std::process::exit(pulso::healthcheck::main(&args[1..])),
+        _ => {}
+    }
     match parse(&args) {
         Ok(Cmd::Serve(a)) => run_serve(a),
         Ok(Cmd::Demo(a)) => run_demo(a),
