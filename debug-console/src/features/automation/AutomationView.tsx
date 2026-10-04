@@ -201,6 +201,7 @@ export function AutomationView({ api = httpAutomationApi }: { api?: AutomationAp
         <h1>{t('auto.title')}</h1>
         <p className="auto-intro">{t('auto.intro')}</p>
         {data && <p className="auto-sim" role="note" data-testid="auto-simulated-notice">{data.doubles.length ? t('auto.simNotice', { scope }) : t('auto.simNoticeNone')}</p>}
+        {data && data.assumptions.length > 0 && <ul className="auto-sim" data-testid="auto-assumptions">{data.assumptions.map((a) => <li key={a}>{`auto.assume.${a}` in ASSUME ? t(K(`auto.assume.${a}`)) : a}</li>)}</ul>}
         {failed && <p role="alert">{t('auto.unavailable')}</p>}
         {!data && !failed && <p>{t('auto.loading')}</p>}
         {data && proposal && <ProposalView id={proposal} api={api} onBack={() => setProposal(null)} />}
@@ -256,3 +257,5 @@ const AUTO_SCOPES = {
   'auto.scope.draft_dispositions': 1, 'auto.scope.case_types': 1, 'auto.scope.stage_history': 1, 'auto.scope.cases_today': 1,
   'auto.scope.agent_runs': 1, 'auto.scope.approval': 1, 'auto.scope.publish_staging': 1,
 };
+
+const ASSUME: Record<string, true> = { 'auto.assume.e0_disputar_cargo_as_cobro_indebido': true };

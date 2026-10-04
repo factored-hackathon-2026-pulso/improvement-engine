@@ -78,6 +78,11 @@ impl Automation {
         }
     }
 
+    /// Stated assumptions behind real (E0) numbers; empty when E0 is not a source.
+    fn assumptions(&self) -> Value {
+        if self.e0.is_some() { json!(["e0_disputar_cargo_as_cobro_indebido"]) } else { json!([]) }
+    }
+
     fn doubles(&self) -> Value {
         if self.sim.is_some() {
             json!([{"id": "sim_draft_stream", "mode": "simulated", "scope": ["draft_dispositions", "case_types", "stage_history", "cases_today", "agent_runs", "approval", "publish_staging"]}])
@@ -140,7 +145,7 @@ impl Automation {
             let ps = self.proposal_view(id, &st);
             json!({"type_id": id, "label": c["label"], "proposal_id": ps["proposal_id"], "simulated": c["simulated"], "numerator": c["metrics"]["draft_accept_100"]["numerator"], "denominator": c["metrics"]["draft_accept_100"]["denominator"]})
         });
-        json!({"as_of": self.as_of, "data_origin": self.origin(), "doubles": self.doubles(), "thresholds": maturity::thresholds_to_json(&st.thresholds), "revision": st.revision, "banner": banner, "case_types": items})
+        json!({"as_of": self.as_of, "data_origin": self.origin(), "doubles": self.doubles(), "thresholds": maturity::thresholds_to_json(&st.thresholds), "revision": st.revision, "banner": banner, "assumptions": self.assumptions(), "case_types": items})
     }
 
     fn detail(&self, id: &str) -> Option<Value> {

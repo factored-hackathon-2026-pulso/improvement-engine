@@ -8,6 +8,7 @@ export const AUTOMATION_ES = {
   'auto.tabTypes': 'Tipos de caso',
   'auto.tabAgents': 'Agentes',
   'auto.simNotice': 'Réplica de Pulso de la pantalla Automatización (vista previa; no es la plataforma). Son SIMULADOS: {scope}. Las cifras con la insignia «E0 tratado» salen de datos reales tratados (solo agregados). Cada número lleva su origen.',
+  'auto.assume.e0_disputar_cargo_as_cobro_indebido': 'Supuesto sobre datos reales (E0): todo disputar_cargo se cuenta como cobro_indebido, porque E0 no distingue un tipo más fino.',
   'auto.simNoticeNone': 'Réplica de Pulso de la pantalla Automatización (vista previa; no es la plataforma). Ningún dato de esta vista es simulado; cada número lleva su origen.',
   'auto.scope.draft_dispositions': 'los borradores del copiloto',
   'auto.scope.case_types': 'los tipos de caso',

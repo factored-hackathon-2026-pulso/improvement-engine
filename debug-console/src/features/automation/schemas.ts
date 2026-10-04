@@ -21,7 +21,7 @@ export const Banner = z.object({
 export const CaseTypeList = z.object({
   as_of: str, data_origin: str, revision: z.number(),
   doubles: z.array(z.object({ id: str, mode: str, scope: z.array(str) })),
-  thresholds: z.record(z.unknown()), banner: Banner.nullable(), case_types: z.array(CaseType),
+  thresholds: z.record(z.unknown()), assumptions: z.array(str).default([]), banner: Banner.nullable(), case_types: z.array(CaseType),
 });
 export const ThresholdRow = z.object({ key: str, metric: str, min: z.number(), unit: str, today: Metric, met: z.boolean(), window: z.number().optional() });
 export const Proposal = z.object({
