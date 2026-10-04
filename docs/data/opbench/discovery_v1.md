@@ -54,8 +54,9 @@ subcategory, description, or free text is emitted.
 
 Contact/survey channels use the existing vocabulary:
 `phone`, `web`, `chat`, `email`, `branch`, `mobile_app`, `other`. The known
-Spanish/English aliases match the current source adapter; known PQR `Call
-Center` maps to `phone`, while `Regulator` maps to `other`. Unknown nonblank
+Spanish/English aliases match the current source adapter; M6 additionally maps
+survey delivery `IVR` to `phone` and `App` to `mobile_app`. PQR reception
+channel is not used in M4/M5. Unknown nonblank
 channels map to `other`; missing channels are excluded from channel-specific
 cells but remain in eligible overall metrics where the source permits.
 
