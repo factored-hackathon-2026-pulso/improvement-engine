@@ -116,3 +116,11 @@ def test_administration_types_stay_quarantined(rig):
     assert findings and findings[0]["details"]["catalog_status"] == "planned"
     assert findings[0]["details"]["payload_forwarded"] is False
     assert "ana@example.invalid" not in json.dumps(rig.ingest.batches)
+
+
+def test_free_text_drop_keys_match_case_and_separator_insensitively():
+    from platform_exporter.catalog import treat_payload
+
+    red: list[str] = []
+    out = treat_payload({"Comment": "x", "answer_text": "y", "keep": 1}, red, drop_keys=frozenset({"comment", "answerText"}))
+    assert out == {"keep": 1}, out
