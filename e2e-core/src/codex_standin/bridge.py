@@ -42,8 +42,9 @@ class Bridge:
         return self.call("GET", "/version", "version", None).json()  # type: ignore[no-any-return]
 
     def invoke(self, tenant: str, key: str, body: dict[str, Any]) -> httpx.Response:
+        # Annex D auth alignment (A03 i): the signed `job_id` claim must equal the invoked body job.
         return self.call("POST", "/core-tasks/invoke", "invoke", tenant, json=body,
-                         headers={"Idempotency-Key": key})
+                         headers={"Idempotency-Key": key}, job_id=body.get("job_id"))
 
     def read_task(self, tenant: str, task_id: str) -> httpx.Response:
         return self.call("GET", f"/core-tasks/{task_id}", "read", tenant)

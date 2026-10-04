@@ -18,7 +18,8 @@ approval is not written back into the file.
 | [0009](0009-key-delivery-from-env.md) | Key delivery from env secrets in the image entrypoint | accepted |
 | [0010](0010-agent-core-pin-894fa65.md) | Agent Core pin bump `789d6c8` -> `894fa65` (dual-pin rule) | proposed (merged) |
 | [0011](0011-annex-d-alignment.md) | Annex D / V3 31.5 alignment of the runtime | accepted |
+| [0012](0012-agent-core-pin-c814c2b.md) | Agent Core pin bump `894fa65` -> `c814c2b` (wire identical except MANIFEST sha lines; `synthesise_args` fix) | proposed |
 
-The next number is `0012`. The pin bump `894fa65` -> `c814c2b` is in progress on another branch and will take it. The
+The next number is `0013`. The
 current pin is the `PIN_SHA` constant in
 [`../../src/pulso_core_runtime/__init__.py`](../../src/pulso_core_runtime/__init__.py); do not duplicate it elsewhere.

@@ -30,7 +30,7 @@ def _restart(stack: Any) -> None:
 
 def test_receipts_and_jti_store_survive_a_runtime_restart_without_second_effects(stack: Any, pipeline: Any, effect: Any) -> None:
     e = stack.engine
-    used = stack.bridge.token("core_task_invoke", TENANT)
+    used = stack.bridge.token("core_task_invoke", TENANT, job_id=pipeline.writer.body["job_id"])
     hdr = {"Authorization": "Bearer " + used, "Idempotency-Key": pipeline.writer.key}
     assert httpx.post(stack.bridge.base + "/core-tasks/invoke", json=pipeline.writer.body, headers=hdr).status_code == 200
     before = {"props": stack.runtime_db.one("select count(*) from reg_proposals"),

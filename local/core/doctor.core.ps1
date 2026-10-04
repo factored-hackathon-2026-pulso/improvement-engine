@@ -8,10 +8,10 @@
 #>
 [CmdletBinding()]
 param([switch]$Json, [switch]$SkipEngine, [string]$Machine = 'pulso-dev', [string]$Namespace,
-      [string]$Checkout = 'D:\.codex\factored\references\agent-core-894fa65', [string]$Profile = 'real_local')
+      [string]$Checkout = 'D:\.codex\factored\references\agent-core-c814c2b', [string]$Profile = 'real_local')
 $ErrorActionPreference = 'Stop'
 foreach ($f in 'errors', 'machine', 'namespace', 'ports', 'runner', 'memory', 'keys', 'humanissuer') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
-$PinSha = '894fa65575d83420523f33ec1c6919b8965f7ebe'
+$PinSha = 'c814c2bad9f154d10c092326558815dca9562be7'
 $checks = New-Object System.Collections.Generic.List[object]
 function Add-C([string]$check, [string]$status, $code, [string]$detail) { $checks.Add([pscustomobject]@{ check = $check; status = $status; code = $code; detail = $detail }) }
 

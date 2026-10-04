@@ -1,6 +1,8 @@
 """CAP-57 / N-11: old binary vs new schema and the reverse, on a real PG16 (ADR 0022 s3 of the pin is policy only;
-this is the executable half). The OLD pin is the previous reference checkout + venv (789d6c8); the NEW pin is the
-current one (894fa65, PR #29: run_idempotency reservation + runs.change_xid). Skipped (and said so) when the old toolchain is not on this machine.
+this is the executable half). The OLD pin is the previous reference checkout + venv (894fa65); the NEW pin is the
+current one (c814c2b, PR #30: no schema, migration or registry change; only serve composition). The 789d6c8 -> 894fa65 step
+(run_idempotency reservation + runs.change_xid) was the last schema change and is recorded in ADR 0010. Skipped (and said so)
+when the old toolchain is not on this machine.
 
     PULSO_OLD_CORE_CHECKOUT / PULSO_OLD_CORE_PYTHON override the defaults below."""
 
@@ -22,12 +24,12 @@ pytestmark = [pytest.mark.integration, pytest.mark.pg]
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "scripts" / "expand_contract_worker.py"
-OLD_CHECKOUT = Path(os.environ.get("PULSO_OLD_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-789d6c8"))
+OLD_CHECKOUT = Path(os.environ.get("PULSO_OLD_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-894fa65"))
 OLD_PY = Path(os.environ.get("PULSO_OLD_CORE_PYTHON",
-                             str(Path(os.environ.get("TEMP", ".")) / "pulso-wire-venv-789d6c8" / "Scripts" / "python.exe")))
-OLD_SHA = "789d6c89b2fca90fc10e2abf157da51dc81c5d51"
-NEW_CHECKOUT = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-894fa65"))
-NEW_SHA = "894fa65575d83420523f33ec1c6919b8965f7ebe"
+                             str(Path(os.environ.get("TEMP", ".")) / "pulso-wire-venv-894fa65" / "Scripts" / "python.exe")))
+OLD_SHA = "894fa65575d83420523f33ec1c6919b8965f7ebe"
+NEW_CHECKOUT = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-c814c2b"))
+NEW_SHA = "c814c2bad9f154d10c092326558815dca9562be7"
 Toolchains = dict[str, tuple[Path, Path]]
 
 
@@ -72,15 +74,11 @@ def _migrate(tc: Toolchains, which: str, dsn: str, **extra_env: str) -> None:
     assert r.returncode == 0, f"{which} migrate failed: {r.stdout[-300:]} {r.stderr[-300:]}"
 
 
-def test_only_the_adapters_schema_changed_and_only_by_expansion(toolchains: Toolchains) -> None:
-    """Static half. PR #29 touches ONE script: `change_xid` column + index, `reserved_until`, and a relaxed NOT NULL."""
-    for rel in ("agent_core/adapters/sql/audit_events.sql", "agent_core/registry/postgres/schema.sql"):
+def test_no_sql_script_changed_between_the_pins(toolchains: Toolchains) -> None:
+    """Static half. PR #30 touches no schema: every SQL script Core migrates with is byte-identical."""
+    for rel in ("agent_core/adapters/sql/audit_events.sql", "agent_core/registry/postgres/schema.sql",
+                "agent_core/adapters/sql/schema.sql"):
         assert (toolchains["old"][1] / rel).read_bytes() == (toolchains["new"][1] / rel).read_bytes(), rel
-    rel = "agent_core/adapters/sql/schema.sql"
-    old, new = ((toolchains[w][1] / rel).read_text(encoding="utf-8") for w in ("old", "new"))
-    assert old != new and "change_xid" in new and "reserved_until" in new
-    assert "change_xid" not in old and "reserved_until" not in old
-    assert "DROP TABLE" not in new and "DROP COLUMN" not in new
 
 
 def test_new_schema_with_old_binary_and_back(toolchains: Toolchains, dsn: str) -> None:
@@ -104,22 +102,17 @@ def test_new_schema_with_old_binary_and_back(toolchains: Toolchains, dsn: str) -
     assert _run(tc, "new", "fingerprint", dsn)["fingerprint"] == fp_new
 
 
-def test_old_schema_with_new_binary(toolchains: Toolchains, dsn: str) -> None:
+def test_old_schema_with_new_binary_and_rollback_is_clean(toolchains: Toolchains, dsn: str) -> None:
     tc = toolchains
     _migrate(tc, "old", dsn)
     fp_old = _run(tc, "old", "fingerprint", dsn)["fingerprint"]
     _migrate(tc, "new", dsn)
-    assert _run(tc, "new", "fingerprint", dsn)["fingerprint"] != fp_old  # 894fa65 expands the schema (change_xid, ...)
+    assert _run(tc, "new", "fingerprint", dsn)["fingerprint"] == fp_old  # c814c2b changes no schema
     _run(tc, "new", "seed", dsn)
     assert _run(tc, "new", "exercise", dsn)["proposal_state"] == "draft"
-    # ROLLBACK HAZARD (data, not schema): 894fa65 seeds `locked: true` on the demo interrupt (`Interrupt.locked`,
-    # extra=forbid in 789d6c8), so the old binary can no longer read that release. Rolling back is only safe while no
-    # release written by the new pin carries a locked interrupt (our four pulso-evolution releases have no interrupts).
-    py, checkout = tc["old"]
-    env = {**os.environ, "PULSO_CORE_CHECKOUT": str(checkout), "PYTHONPATH": str(checkout)}
-    r = subprocess.run([str(py), "-W", "ignore", str(WORKER), "exercise", dsn], capture_output=True, text=True,
-                       env=env, timeout=300)
-    assert r.returncode != 0 and "interrupts.0.locked" in r.stderr
+    # Rollback is clean at this step: the seeded release carries no field the old binary rejects (the
+    # `Interrupt.locked` hazard of ADR 0010 already lives in 894fa65, the OLD pin here).
+    assert _run(tc, "old", "exercise", dsn)["proposal_state"] == "draft"
 
 
 def test_blob_bucket_migrate_is_the_one_non_expand_step_and_the_old_binary_survives_it(toolchains: Toolchains,

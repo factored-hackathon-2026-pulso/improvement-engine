@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from codex_standin.dto import admission, digest_json, idempotency_key
+from codex_standin.dto import admission, arm_request, digest_json, evaluation_context_ref, idempotency_key
 from codex_standin.engine import (
     ASSETS,
     DESIGN,
@@ -50,12 +50,16 @@ def smoke_scenarios() -> list[dict[str, Any]]:
     return suite["scenarios"]  # type: ignore[no-any-return]
 
 
+LEGACY_MODE_TO_PROFILE: dict[str, str | None] = {
+    "native": "evolution_task", "stateful_attention": "attention_stateful_complementary", "task_builder": None}
+
+
 def arm_body(key: str, binding_ref: str, manifest: str, mode: str, target: dict[str, Any],
              **over: Any) -> dict[str, Any]:
-    return {"idempotency_key": key, "binding_ref": binding_ref, "campaign_ref": "camp-e2e", "case_ref": "case-e2e",
-            "arm": "baseline", "repetition": 0, "seed": 7, "mode": mode, "agent_id": "pulso-scout", "target": target,
-            "scenario_manifest_ref": manifest, "budget_ref": "bud-e2e",
-            "seed_manifest_ref": None if mode == "native" else "seed-e2e", **over}
+    """Annex D.4 ArmRequest (`dto.arm_request`); `mode` keeps the stand-in's scenario vocabulary and maps to the annex
+    `execution_profile` (task_builder: no annex profile, alias-only)."""
+    return arm_request(key=key, binding_ref=binding_ref, manifest_ref=manifest,
+                       profile=LEGACY_MODE_TO_PROFILE[mode], target=target, **over)
 
 
 def run_arm(e: Engine, body: dict[str, Any], tenant: str = TENANT) -> SimpleNamespace:
@@ -101,18 +105,19 @@ def run_pipeline(e: Engine, db: Any) -> SimpleNamespace:
     p.proposal_id, p.candidate_hash = wr.get("proposal_id"), wr.get("candidate_hash")
     p.suite_digest = suite_digest(p.changes)
     # -- evaluation admission, then the evaluate-only invocation
-    p.ctx_ref = f"ctx-{n}"
     # The admission is bound to the evaluate-only invocation's OWN (job_id, binding_ref): the runtime derives that
     # binding_ref as sha256_text("tenant|Idempotency-Key") before the invocation runs, so the stand-in computes it.
     p.eval_job = f"job-evalonly-{n}"
     p.eval_key = idempotency_key(TENANT, p.eval_job, "writer", 1, "evalonly")
     p.eval_binding_ref = hashlib.sha256(f"{TENANT}|{p.eval_key}".encode()).hexdigest()
-    p.admission_body = admission(ref=p.ctx_ref, binding_ref=p.eval_binding_ref,
-                                 proposal_id=p.proposal_id, candidate_hash=p.candidate_hash, suite_id="pulso-smoke",
+    p.admission_body = admission(binding_ref=p.eval_binding_ref, proposal_id=p.proposal_id, candidate_hash=p.candidate_hash, suite_id="pulso-smoke",
                                  suite_version="1.1.0", suite_digest=p.suite_digest, budget_ref="bud-e2e")
     # control-api double: the platform issued the evaluate-only task's binding_ref (derivable from tenant|key) before the
     # evaluation admission is requested; the runtime's own bind callback later confirms the same ref.
     e.configure(preauthorized_bindings=[{"tenant": TENANT, "binding_ref": p.eval_binding_ref}])
+    # The bridge derives the context ref (ADR 0011 item 4); the engine computes the same value from the contract
+    # formula for its writer commitment and checks it against the admission response.
+    p.ctx_ref = evaluation_context_ref(TENANT, p.eval_job, p.eval_binding_ref, p.proposal_id, p.candidate_hash, 1)
     p.admit = e.bridge.admit(TENANT, p.eval_job, p.admission_body)
     p.admit_replay = e.bridge.admit(TENANT, p.eval_job, p.admission_body)  # before the evaluate-only run consumes it
     p.eval_only = e.stage("writer", p.eval_job, "evalonly", "pulso-writer", {

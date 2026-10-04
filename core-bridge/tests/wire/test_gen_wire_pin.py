@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-FALLBACK_SHA = "894fa65575d83420523f33ec1c6919b8965f7ebe"
+FALLBACK_SHA = "c814c2bad9f154d10c092326558815dca9562be7"
 pytestmark = pytest.mark.wire
 
 

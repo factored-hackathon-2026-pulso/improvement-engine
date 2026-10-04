@@ -14,8 +14,8 @@ from pathlib import Path
 import httpx
 
 PLATFORM_SIM = Path(__file__).resolve().parents[2]
-DEFAULT_CHECKOUT = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-894fa65"))
-DEFAULT_CORE_PY = Path(os.environ.get("TEMP", ".")) / "pulso-wire-venv-894fa65" / "Scripts" / "python.exe"
+DEFAULT_CHECKOUT = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-c814c2b"))
+DEFAULT_CORE_PY = Path(os.environ.get("TEMP", ".")) / "pulso-wire-venv-c814c2b" / "Scripts" / "python.exe"
 
 
 def free_port() -> int:
