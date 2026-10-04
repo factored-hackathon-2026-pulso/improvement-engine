@@ -17,7 +17,7 @@ pub const SUB: &str = "exporter-binding-1";
 pub const T0: f64 = 1_800_000_000.0;
 
 pub struct Rig {
-    pub app: App,
+    pub app: Arc<App>,
     keys: HashMap<&'static str, SigningKey>,
     clock: Arc<AtomicU64>,
     jti: AtomicU64,
@@ -46,7 +46,7 @@ impl Rig {
         tweak(&mut cfg);
         let clock = Arc::new(AtomicU64::new((T0 * 1000.0) as u64));
         let c = clock.clone();
-        let app = App::with_clock(cfg, Box::new(MemStore::default()), Box::new(move || c.load(Ordering::SeqCst) as f64 / 1000.0));
+        let app = Arc::new(App::with_clock(cfg, Box::new(MemStore::default()), Box::new(move || c.load(Ordering::SeqCst) as f64 / 1000.0)));
         Rig { app, keys, clock, jti: AtomicU64::new(0) }
     }
 
