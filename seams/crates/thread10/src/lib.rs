@@ -30,11 +30,14 @@ pub struct Opts {
     pub now: u64,
     /// After handler N commits, create the file and block (the process is then killed by the test).
     pub kill_marker: Option<(PathBuf, usize)>,
+    /// Live hook: called after handler `i` commits with the PARTIAL report built from what is committed so far (steps whose
+    /// handler has not run say `not_exercised`). Used by `pulso demo` to stream the run; it never alters the run.
+    pub on_commit: Option<Rc<dyn Fn(usize, &Value)>>,
 }
 
 impl Opts {
     pub fn new(work: PathBuf, runner: PathBuf) -> Opts {
-        Opts { work, runner, human_override: false, denied_kind: false, claimed_rate: None, sha: "0".repeat(40), now: 1000, kill_marker: None }
+        Opts { work, runner, human_override: false, denied_kind: false, claimed_rate: None, sha: "0".repeat(40), now: 1000, kill_marker: None, on_commit: None }
     }
 }
 
@@ -88,24 +91,32 @@ pub fn run(o: &Opts) -> Result<Run, String> {
         // an `add` of a prompt is not a supported (op, kind) pair of the seeded base world: kind_not_supported
         spec = spec.replacen(r#""op":"replace""#, r#""op":"add""#, 1);
     }
-    let store = FileStore::open(o.work.join("store"))?;
+    let store = Rc::new(FileStore::open(o.work.join("store"))?);
     let port: Rc<dyn CorePort> = Rc::new(double::DoublePort);
     let over = o.human_override.then(|| Override { by: "human".into(), actor: double::ACTOR.into(), reason: "exercise approve/publish of a failed structural gate; no quality claim".into() });
     let cfg = LiveConfig { human_actor: double::ACTOR.into(), human_override: over, decision_ttl_seconds: 600 };
     let hs: Vec<Box<dyn JobHandler>> = live_handlers(thread_handlers(env, Some(dry_run_hook(port.clone()))), port, cfg);
     let mut eo = ExecOptions::new(JOB, "w1", o.now);
-    if let Some((marker, n)) = o.kill_marker.clone() {
+    let (live, live_store, live_sha, n_handlers) = (o.on_commit.clone(), store.clone(), o.sha.clone(), hs.len());
+    let kill = o.kill_marker.clone();
+    if live.is_some() || kill.is_some() {
         eo.after_commit = Some(Box::new(move |i| {
-            if i == n {
-                std::fs::write(&marker, "x").unwrap();
+            if let Some(f) = &live {
+                let events = event_log(&*live_store, n_handlers).unwrap_or_default();
+                let payload = committed_payload(&live_store, i + 1).ok().flatten();
+                f(i, &report::build(&report::Input { sha: &live_sha, payload: payload.as_ref(), events: &events, error: None }));
+            }
+            let Some((marker, n)) = &kill else { return };
+            if i == *n {
+                std::fs::write(marker, "x").unwrap();
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(1));
                 }
             }
         }));
     }
-    let res = execute(&store, &hs, &spec, &eo);
-    let events = event_log(&store, hs.len())?;
+    let res = execute(&*store, &hs, &spec, &eo);
+    let events = event_log(&*store, hs.len())?;
     let payload = committed_payload(&store, hs.len())?;
     let error = res.err().map(|e| format!("{e:?}"));
     let mut report = report::build(&report::Input { sha: &o.sha, payload: payload.as_ref(), events: &events, error: error.as_deref() });
@@ -114,7 +125,7 @@ pub fn run(o: &Opts) -> Result<Run, String> {
         Some(r) => correlate(r)?,
         None => Value::Null,
     };
-    let attempt = read_lease(&store).ok().flatten().map_or(0, |l| l.attempt);
+    let attempt = read_lease(&*store).ok().flatten().map_or(0, |l| l.attempt);
     report["run"] = serde_json::json!({"job": JOB, "attempt": attempt, "store": "engine FileStore"});
     let gate = report["gate"]["verdict"].as_str().map(str::to_string);
     report["memory_note"] = note::post_run_note(JOB, &events, gate.as_deref(), release.is_some())?;
