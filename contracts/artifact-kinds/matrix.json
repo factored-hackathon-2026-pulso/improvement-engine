@@ -138,12 +138,12 @@
           "note": "Engine compile step (CMP stand-in and CMPpy) accepts only replace_prompt and add_eval_suite; every other op/kind pair returns kind_not_supported."
         },
         "validate": {
-          "verdict": "supported",
+          "verdict": "not_exercised",
           "evidence_level": "real-core-dry-run",
           "evidence": [
             "core-bridge/tests/authoring/test_authoring_routes.py::test_dry_run_node_limit_is_enforced_by_core_validation_with_the_configured_limit"
           ],
-          "note": "Real Core in-process dry-run validates a flow draft (node-limit violation reported); not reachable through the engine compile step."
+          "note": "Downgraded after independent review: the only evidence is a real Core in-process dry-run that asserts a node-limit VIOLATION (rejection path), not a valid pass, and it is not reachable through the engine compile step. Treat validate as not exercised for the engine until a valid-flow dry-run is shown."
         },
         "evaluate": {
           "verdict": "not_exercised",
