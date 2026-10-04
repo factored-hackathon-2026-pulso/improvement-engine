@@ -66,6 +66,21 @@ impl From<CanonError> for OpError {
     }
 }
 
+/// Each of the 11 `/internal/v1` routes with the typed `CoreClient` method that drives it.
+pub const TYPED_OPERATIONS: &[(&routes::Route, &str)] = &[
+    (&routes::VERSION, "version"),
+    (&routes::INVOKE, "invoke"),
+    (&routes::READ_TASK, "read_task"),
+    (&routes::RUN_ARM, "run_arm"),
+    (&routes::RUN_ARM_BY_ID, "run_arm_by_id"),
+    (&routes::READ_ARM, "read_arm"),
+    (&routes::READ_ARM_BY_KEY, "read_arm_by_key"),
+    (&routes::ADMIT_EVALUATION, "admit_evaluation"),
+    (&routes::READ_ALIAS, "read_alias"),
+    (&routes::AUTHORING_DRY_RUN, "dry_run"),
+    (&routes::ISSUE_CREDENTIAL, "issue_credential"),
+];
+
 impl CoreClient {
     /// Every typed call goes through here: retries only what K1 deems safe (same key, fresh jti).
     #[allow(clippy::too_many_arguments)]
