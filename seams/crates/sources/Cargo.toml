@@ -12,6 +12,7 @@ path = "../thread10/src/bin/synth_runner.rs"
 
 [dependencies]
 engine = { path = "../engine" }
+steps = { path = "../steps" }
 abi = { path = "../abi" }
 postgres = "0.19"
 rusqlite = { version = "0.39.0", features = ["bundled", "hooks"] }
