@@ -140,6 +140,8 @@ pub fn run(o: &Opts) -> Result<Run, String> {
         None => Value::Null,
     };
     let attempt = read_lease(&*store).ok().flatten().map_or(0, |l| l.attempt);
+    // What the job committed (spec + step outputs): lets a read-only projection (debug-api panels) work from the report alone.
+    report["committed"] = payload.clone().unwrap_or(Value::Null);
     report["run"] = serde_json::json!({"job": JOB, "attempt": attempt, "store": "engine FileStore"});
     let gate = report["gate"]["verdict"].as_str().map(str::to_string);
     report["memory_note"] = note::post_run_note(JOB, &events, gate.as_deref(), release.is_some())?;
