@@ -237,6 +237,7 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         lab_broker_minter,
     )
     from pulso_core_runtime.llm.config import llm_doubles, parse_llm_config
+    from pulso_core_runtime.llm.guard import build_spend_guard
     from pulso_core_runtime.llm.probe import llm_gateway_check
     from pulso_core_runtime.pin import PinnedRegistryPort
     from pulso_core_runtime.readiness import (
@@ -339,7 +340,8 @@ def _compose(env: dict[str, str], err: TextIO, paths: dict[str, str], serve: Cal
         live = dataclasses.replace(
             ports, gateway=BindingGuardGateway(
                 SpendMeteringGateway(ports.gateway, l3.registry, l3.store, policy=llm_cfg.policy,
-                                     profiles=_profile_lookup(pinned)), l3.registry),
+                                     profiles=_profile_lookup(pinned),
+                                     guard=build_spend_guard(llm_cfg, l3.store, env)), l3.registry),
             providers={name: BindingGuardProvider(p, l3.registry) for name, p in ports.providers.items()})
         if not export_enabled(env):
             live = dataclasses.replace(live, run_export=None)  # N-08: no `/v1/export/*` unless explicitly enabled

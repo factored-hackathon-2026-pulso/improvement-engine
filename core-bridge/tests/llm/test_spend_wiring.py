@@ -96,7 +96,7 @@ def test_run_stops_at_ceiling_with_typed_refusal_and_ledger_row() -> None:
         gw.generate("p", {}, "es")
     with pytest.raises(GatewayError) as e:
         gw.generate("p", {}, "es")
-    assert e.value.kind is GatewayErrorKind.refused or True
+    assert e.value.kind is GatewayErrorKind.refused
     assert Inner.calls == 3 and st.rows[-1]["outcome"] == "ceiling_exceeded"
 
 

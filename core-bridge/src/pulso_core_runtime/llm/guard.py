@@ -99,3 +99,15 @@ def reconcile_ledger(ledger_rows: Iterable[Mapping[str, Any]], gateway_rows: Ite
     lt, unknown = _tokens(ledger_rows)
     gt, _ = _tokens(gateway_rows)
     return Reconciliation(lt, gt, unknown, tolerance)
+
+
+def build_spend_guard(cfg: Any, store: Any, env: Mapping[str, str] | None = None) -> SpendGuard:
+    """Production guard: ceiling and kill file from `LlmConfig`, spend read from the bridge meter (settled + held, all
+    stages/attempts of the job). Cross-process atomicity stays with the store's `meter_reserve` cap; this check is the
+    per-job ceiling layered on top (serialised in-process by `guard.lock`)."""
+
+    def spent(scope: tuple) -> Decimal:
+        return Decimal(store.meter_job_total(scope[0], scope[1]))
+
+    return SpendGuard(ceiling_usd=cfg.ceiling_usd, spent=spent,
+                      kill=KillSwitch(env=env, file=getattr(cfg, "kill_file", None)))
