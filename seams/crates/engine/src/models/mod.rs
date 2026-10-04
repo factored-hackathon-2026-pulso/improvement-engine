@@ -2,6 +2,7 @@
 //! Implementations: `Scripted` (fixed answers, no model), `Roleplay` (replay of the roleplay-llm queue), `Gateway`
 //! (HTTP to an llm-gateway-compatible endpoint). Every call is recorded with the label and model id of the port that
 //! handled it, so a report never calls an answer `real` unless the Gateway actually answered it.
+pub mod gateway;
 pub mod roleplay;
 pub mod scripted;
 pub mod tps;
