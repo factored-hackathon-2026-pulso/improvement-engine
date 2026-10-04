@@ -90,7 +90,7 @@ def test_step_05_concrete_change_versions_and_diff(thread):
     assert s["status"] == "stand-in" and s["detail"]["compiler_label"] == "claude-standin(python)"
     assert [o["op"] for o in s["detail"]["draft_plan"]["operations"]] == ["replace", "add"]
     assert s["detail"]["diff"] == [{"target": "prompt:resumen_radicado@1", "to": "prompt:resumen_radicado@2"},
-                                   {"target": "eval_suite:disputas-suite@1", "to": "eval_suite:disputas-suite@2"}]
+                                   {"target": "eval_suite:disputas-tarea-suite@1", "to": "eval_suite:disputas-tarea-suite@2"}]
 
 
 def test_step_05_core_dry_run_hook_replaces_the_stand_in_digest(tmp_path):

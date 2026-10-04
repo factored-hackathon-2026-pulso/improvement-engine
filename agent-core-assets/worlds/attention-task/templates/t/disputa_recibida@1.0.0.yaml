@@ -1,0 +1,5 @@
+id: t/disputa_recibida
+version: 1.0.0
+locales:
+  es: "Recibimos tu disputa y la estamos revisando."
+  pt: "Recebemos sua contestação e estamos analisando."

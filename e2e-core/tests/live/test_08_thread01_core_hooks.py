@@ -18,10 +18,10 @@ EXE = os.environ.get("ED0_RUNNER_EXE", "D:/cargo-targets/claude-ed0/debug/improv
 
 def test_thread01_with_real_core_dry_run_and_alias_read(stack: Any, tmp_path: Any, effect: Any) -> None:
     world = C.load_world(T.WORLD_FILE)
-    ar = H.make_alias_read(stack.bridge, tenant=TENANT, agent_id="atencion")
+    ar = H.make_alias_read(stack.bridge, tenant=TENANT, agent_id="atencion-tarea")
     t0 = time.time()
     base = ar(None, "prod")["release_id"]
-    hooks = T.CoreHooks(dry_run=H.make_dry_run(stack.bridge, world, tenant=TENANT, agent_id="atencion",
+    hooks = T.CoreHooks(dry_run=H.make_dry_run(stack.bridge, world, tenant=TENANT, agent_id="atencion-tarea",
                                                base_release_id=base))
     res = T.run_thread(T.ThreadConfig(workdir=tmp_path, exe=EXE, queue_dir=T.ROOT / "e2e-core/tests/fixtures/thread01_queue",
                                       hooks=hooks))

@@ -40,6 +40,16 @@ def load_world(path) -> dict:
     return w
 
 
+def bundle_ref(world: dict) -> str:
+    """Base bundle ref named by the seeded world (`bundle:<world>@1`)."""
+    return f"bundle:{world['world']}@{_BRIDGE_MAJOR}"
+
+
+def bridge_ref(world: dict) -> str:
+    """Workflow bridge ref of the flow that uses the replaceable prompt (`bridge:<flow>@1`)."""
+    return f"bridge:{world['replaceable_prompt']['used_by']['flow']}@{_BRIDGE_MAJOR}"
+
+
 def _slots(world: dict) -> dict:
     p = world["replaceable_prompt"]
     s = world["eval_suite_slot"]["current"]

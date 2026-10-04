@@ -7,10 +7,10 @@
       "addresses": [
         "coverage_gap_dispute"
       ],
-      "new_ref": "eval_suite:disputas-suite@2",
+      "new_ref": "eval_suite:disputas-tarea-suite@2",
       "op": "add",
       "target_kind": "eval_suite",
-      "target_ref": "eval_suite:disputas-suite@1"
+      "target_ref": "eval_suite:disputas-tarea-suite@1"
     },
     {
       "addresses": [

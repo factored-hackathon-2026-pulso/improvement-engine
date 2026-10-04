@@ -132,6 +132,7 @@ class RealCore:
         self._base: str | None = None
         self._frozen: Frozen | None = None
         self._approved = False
+        self._evaluation: dict | None = None
         self._published: str | None = None
         self._bot: str | None = None
 
@@ -191,7 +192,7 @@ class RealCore:
             registry_mutation_commitment=commitment)
         self.timings.append({"call": "writer_stage invoke", "seconds": round(time.monotonic() - t0, 3)})
         if st.response.status_code != 200 or not st.out.get("core_run_id"):
-            raise RuntimeError(f"core writer stage http {st.response.status_code}")
+            raise RuntimeError(f"core writer stage http {st.response.status_code} {_code(st.response)} {st.out.get('state')} {st.out.get('outcome')}")
         wr = (self.engine.facts(st.out["core_run_id"]).get("pulso_writer_receipts") or {}).get("value") or {}
         if [r.get("op") for r in wr.get("write_receipts", [])] != OPS or not all(r.get("verified") for r in wr["write_receipts"]):
             raise RuntimeError("core writer did not commit create_proposal, put_draft, freeze")
@@ -224,6 +225,12 @@ class RealCore:
 
     # -- Core's native evaluation (the registry requires `evaluated` before approval) --------------------------------
     def evaluate(self, ctx: Any) -> dict:
+        """One native evaluation per thread (a second one would be a second `evaluated` transition)."""
+        if self._evaluation is None:
+            self._evaluation = self._evaluate(ctx)
+        return self._evaluation
+
+    def _evaluate(self, ctx: Any) -> dict:
         import hashlib
 
         from agent_core.registry import EvalSuite
@@ -282,6 +289,9 @@ class RealCore:
     # -- step 8 ----------------------------------------------------------------------------------------------------
     def approve(self, ctx: Any) -> dict:
         fz = self.freeze(ctx)
+        ev = self.evaluate(ctx)  # the registry approves only an `evaluated` proposal (approve-before-evaluation is illegal)
+        if ev.get("verdict") != "pass":
+            raise RuntimeError(f"core native evaluation did not pass ({ev.get('verdict')}): the registry cannot approve")
         bad = "0" * 64  # a JWS authorised for a hash that is not the candidate must be refused by Core
         r = self._reg("approve_wrong_hash", "POST", f"/proposals/{fz.proposal_id}/approve",
                       self.authorize("approve", self._target(fz, self._rev(fz), bad)), json={"candidate_hash": bad})

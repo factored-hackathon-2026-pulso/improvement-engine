@@ -1,6 +1,6 @@
 """INT0: thread steps 6, 8, 9 with real-Core hooks (fake hooks here; the live evidence is tests/live/test_08)."""
 from claude_standin import thread01 as T
-from test_e2e_thread_01 import cfg, step
+from test_e2e_thread_01 import ER, cfg, step
 
 
 def _arm_runs(done, cases=("c1", "c2")):
@@ -67,3 +67,67 @@ def test_steps_8_and_9_stay_stand_in_and_report_the_blocking_dependency(tmp_path
     t = T.run_thread(cfg(tmp_path, hooks=T.CoreHooks(blocked={8: "blocked(jev)", 9: "blocked(jev)"})))
     assert step(t, 8)["status"] == "simulated" and step(t, 8)["detail"]["blocked"] == "blocked(jev)"
     assert step(t, 9)["status"] == "stand-in" and step(t, 9)["detail"]["blocked"] == "blocked(jev)"
+
+
+# ---- a failed gate must not be followed silently by approval and publish --------------------------------------------
+def _same_arms(ctx):  # base and candidate complete the same cases: GSIpy reports fail: no_structural_improvement
+    runs = _arm_runs(("completed", "completed", "completed"), cases=("a", "b", "c"))
+    return {"base": runs, "candidate": [dict(r) for r in runs]}
+
+
+def _spy_hooks(calls):
+    def approve(ctx):
+        calls.append("approve")
+        return {"approver": "local-supervisor", "decision": "approved",
+                "candidate_hash": ctx.out["compiled"]["draft_plan"]["digest"].split(":")[1],
+                "tamper_refused": True, "replay_refused": True}
+    return T.CoreHooks(run_arms=_same_arms, approve=approve,
+                       publish=lambda ctx: calls.append("publish") or {"release_id": "r", "alias": "staging"},
+                       alias_read=lambda ctx, alias: {"release_id": "r", "alias": alias})
+
+
+def test_failed_gate_blocks_approval_and_publish_without_a_human_override(tmp_path):
+    calls = []
+    t = T.run_thread(cfg(tmp_path, hooks=_spy_hooks(calls)))
+    assert t["gate_verdict"] == "fail"
+    assert calls == []  # neither the approval nor the publish hook ran
+    assert step(t, 8)["status"] == "blocked(gate)" and step(t, 9)["status"] == "blocked(gate)"
+    assert step(t, 8)["detail"]["gate_verdict"] == "fail"
+    assert step(t, 10)["status"] == "not_exercised"  # nothing was published, nothing to observe
+    assert all(s["status"] != "red" for s in t["steps"])
+    assert ER.check(t["report"]) == [] and t["report"]["gate"]["verdict"] == "fail" and not t["report"].get("overrides")
+
+
+def test_human_override_of_a_failed_gate_is_labelled_everywhere(tmp_path):
+    calls = []
+    ov = {"by": "human", "actor": "local-supervisor", "reason": "exercise the Core approve/publish mechanics on a failed gate"}
+    t = T.run_thread(cfg(tmp_path, hooks=_spy_hooks(calls), human_override=ov))
+    assert calls == ["approve", "publish"]
+    s8 = step(t, 8)
+    assert s8["detail"]["override"]["of"] == "gate" and s8["detail"]["override"]["verdict"] == "fail"
+    rep = t["report"]
+    assert rep["overrides"] == [{"step": "approval", "of": "gate", "verdict": "fail", "by": "human", "label": "human_override",
+                                 "reason": ov["reason"], "actor": "local-supervisor"}]
+    assert rep["quality_claims"] == "forbidden" and rep["gate"]["verdict"] == "fail"
+    assert any(d["part"] == "gate.override" for d in rep["doubles"])
+    assert ER.check(rep) == []
+
+
+def test_override_without_a_human_or_a_reason_does_not_unblock(tmp_path):
+    for ov in ({"by": "engine", "actor": "x", "reason": "r"}, {"by": "human", "actor": "x", "reason": ""}, {}):
+        calls = []
+        t = T.run_thread(cfg(tmp_path, hooks=_spy_hooks(calls), human_override=ov))
+        assert calls == [] and step(t, 8)["status"] == "blocked(gate)", ov
+
+
+def test_override_is_ignored_when_the_gate_passes(tmp_path):
+    arms = {"base": _arm_runs(("failed", "completed")), "candidate": _arm_runs(("completed", "completed"))}
+    ov = {"by": "human", "actor": "x", "reason": "unneeded"}
+    t = T.run_thread(cfg(tmp_path, hooks=T.CoreHooks(run_arms=lambda ctx: arms), human_override=ov))
+    assert t["gate_verdict"] == "pass" and not t["report"].get("overrides") and ER.check(t["report"]) == []
+
+
+def test_replay_default_gate_passes_and_report_states_it(tmp_path):
+    t = T.run_thread(cfg(tmp_path))
+    assert t["report"]["gate"]["verdict"] == "pass" and step(t, 9)["status"] == "stand-in"
+    assert ER.check(t["report"]) == []

@@ -1,0 +1,7 @@
+id: perfil-generacion
+version: 1.0.0
+endpoint_alias: llm-sintetico
+model: modelo-sintetico-1
+temperature: 0
+max_tokens: 400
+price: {input_per_mtok: 1, output_per_mtok: 2, source: tarifa sintetica de pruebas, as_of: 2026-09-29}

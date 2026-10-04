@@ -24,7 +24,7 @@ def reports(base, cand):
 def gin(judge="claude-gsipy", authors=("claude-wrld0",)):
     return {"contract_version": "engine-steps/0", "step": "gate", "run_id": "run-gate-0001", "data_class": "synthetic",
             "base_arm_report_ref": "arm_report:base@1", "candidate_arm_report_ref": "arm_report:cand@1",
-            "suite_ref": "eval_suite:disputas-suite@1", "judge_actor": judge, "author_actors": list(authors)}
+            "suite_ref": "eval_suite:disputas-tarea-suite@1", "judge_actor": judge, "author_actors": list(authors)}
 
 
 BASE_BAD = [run("c1", status="failed"), run("c2")]

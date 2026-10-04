@@ -48,11 +48,12 @@ def _dry_run(entry: dict, world: dict) -> str:
     op = {"op": entry["op"], "target_kind": entry["target_kind"], "target_ref": entry["target_ref"],
           "new_ref": entry["new_ref"], "precondition_digest": C.asset_digest(world, entry["target_ref"])}
     spec = {"contract_version": "engine-steps/0", "step": "compile", "run_id": "run-smap-0001", "data_class": "synthetic",
-            "base_bundle_ref": "bundle:attention-demo@1",
-            "change_spec": {"base_bundle_ref": "bundle:attention-demo@1", "opportunity_ref": "opportunity:smap@1",
-                            "workflow_bridge_ref": "bridge:disputa-cargo@1", "operations": [op],
-                            "expected_mechanism": "recorded synthetic", "affected_routes": ["disputa-cargo"],
-                            "rollback_ref": "bundle:attention-demo@1"}}
+            "base_bundle_ref": C.bundle_ref(world),
+            "change_spec": {"base_bundle_ref": C.bundle_ref(world), "opportunity_ref": "opportunity:smap@1",
+                            "workflow_bridge_ref": C.bridge_ref(world), "operations": [op],
+                            "expected_mechanism": "recorded synthetic",
+                            "affected_routes": [world["replaceable_prompt"]["used_by"]["flow"]],
+                            "rollback_ref": C.bundle_ref(world)}}
     return C.compile_change_spec(spec, world)["status"]
 
 

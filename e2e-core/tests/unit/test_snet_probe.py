@@ -29,7 +29,9 @@ def test_unreachable_shim_fails() -> None:
 
 def test_call_within_limit_is_measured(shim: str) -> None:
     r = sp.timed_call(shim, sleep_s=0.2, limit_s=5)
-    assert r["outcome"] == "ok" and 0.2 <= r["elapsed_s"] < 3
+    # time.sleep and time.monotonic have ~15 ms granularity on Windows and elapsed_s is rounded to 2 decimals, so a 0.2 s
+    # sleep can be measured as 0.19: the lower bound allows one clock tick (it flaked at an exact 0.2 bound).
+    assert r["outcome"] == "ok" and 0.2 - 0.03 <= r["elapsed_s"] < 3
 
 
 def test_call_over_limit_is_typed_timeout(shim: str) -> None:

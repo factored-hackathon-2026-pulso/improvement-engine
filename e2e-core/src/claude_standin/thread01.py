@@ -12,6 +12,7 @@ Steps and honest labels in replay (plan 2.1):
   5 concrete change            stand-in      CMPpy generic compile                         [hook: dry_run]
   6 base vs candidate, gates   stand-in      structural GSIpy verdict over stand-in arms   [hook: run_arms]
   7 failure -> revision        not_exercised unless the gate fails (then rule-driven stand-in, bounded)
+  8-9 after a failed gate      blocked(gate) unless ThreadConfig.human_override (labelled human override, G1 check())
   8 human only for authority   simulated     local Ed25519 issuer, bound to the draft digest
   9 staging + alias read       stand-in      in-process registry double                    [hooks: publish, alias_read]
  10 observation                simulated     platform-sim release.* and effect series; observation only
@@ -95,6 +96,9 @@ class ThreadConfig:
     mode: str = "replay"  # "replay" (shim replay_only) | "record" (scripted responder writes the queue)
     hooks: CoreHooks = field(default_factory=CoreHooks)
     gate_evaluators: dict | None = None
+    # Explicit human OVERRIDE of a gate that did not pass: {"by": "human", "actor": <who>, "reason": <why>}. Without it
+    # steps 8 and 9 are blocked(gate) after a failed gate; with it they run and the report labels the override.
+    human_override: dict | None = None
 
 
 @dataclass
@@ -332,11 +336,12 @@ def step_05(ctx: Ctx) -> dict:
     ops = [{"op": e["op"], "target_kind": e["target_kind"], "target_ref": e["target_ref"], "new_ref": e["new_ref"],
             "precondition_digest": cmp.asset_digest(world, e["target_ref"])} for e in (entries[design["target"]], suite)]
     doc = {"contract_version": "engine-steps/0", "step": "compile", "run_id": "run-thread01-0001",
-           "data_class": "synthetic", "base_bundle_ref": "bundle:attention-demo@1",
-           "change_spec": {"base_bundle_ref": "bundle:attention-demo@1", "opportunity_ref": "opportunity:thread01@1",
-                           "workflow_bridge_ref": "bridge:disputa-cargo@1", "operations": ops,
-                           "expected_mechanism": "recorded synthetic", "affected_routes": ["disputa-cargo"],
-                           "rollback_ref": "bundle:attention-demo@1"}}
+           "data_class": "synthetic", "base_bundle_ref": cmp.bundle_ref(world),
+           "change_spec": {"base_bundle_ref": cmp.bundle_ref(world), "opportunity_ref": "opportunity:thread01@1",
+                           "workflow_bridge_ref": cmp.bridge_ref(world), "operations": ops,
+                           "expected_mechanism": "recorded synthetic",
+                           "affected_routes": [world["replaceable_prompt"]["used_by"]["flow"]],
+                           "rollback_ref": cmp.bundle_ref(world)}}
     hook = ctx.cfg.hooks.dry_run
     out = cmp.compile_change_spec(doc, world, dry_run=hook)
     if out["status"] != "compiled":
@@ -369,9 +374,10 @@ def step_06(ctx: Ctx) -> dict:
     core_arms = hook(ctx) if hook else None
     arms, arms_from = (core_arms, "core") if core_arms else (_standin_arms(), "stand-in")
     reports = {"arm_report:base@1": {"runs": arms["base"]}, "arm_report:cand@1": {"runs": arms["candidate"]}}
+    slot = cmp._slots(world)["eval_suite"]
     doc = {"contract_version": "engine-steps/0", "step": "gate", "run_id": "run-thread01-0001", "data_class": "synthetic",
            "base_arm_report_ref": "arm_report:base@1", "candidate_arm_report_ref": "arm_report:cand@1",
-           "suite_ref": "eval_suite:disputas-suite@1", "judge_actor": JUDGE, "author_actors": ["claude-wrld0"]}
+           "suite_ref": f"eval_suite:{slot['name']}@{cmp._major(slot['version'])}", "judge_actor": JUDGE, "author_actors": ["claude-wrld0"]}
     out = gate.gate_verdict(doc, reports, world, evaluators=ctx.cfg.gate_evaluators)
     ctx.out.update(gate_verdict=out["verdict"], gate=out, arms=arms)
     return {"status": "real-narrow" if core_arms else "stand-in", "data_class": "synthetic", "actor": JUDGE,
@@ -405,7 +411,32 @@ def _denied(fn) -> bool:
     return False
 
 
+def _gate_blocks(ctx: Ctx) -> dict | None:
+    """After a gate that did not pass, approval and publish run only under an explicit labelled human override."""
+    verdict = ctx.out.get("gate_verdict")
+    if verdict == "pass":
+        return None
+    ov = ctx.cfg.human_override or {}
+    ok = (ov.get("by") == "human" and isinstance(ov.get("actor"), str) and ov["actor"].strip()
+          and isinstance(ov.get("reason"), str) and ov["reason"].strip())
+    if not ok:
+        return {"gate_verdict": verdict, "reason": "gate_not_passed_and_no_human_override"}
+    ctx.out["override"] = {"step": "approval", "of": "gate", "verdict": verdict, "by": "human", "label": "human_override",
+                           "reason": ov["reason"].strip(), "actor": ov["actor"].strip()}
+    return None
+
+
 def step_08(ctx: Ctx) -> dict:
+    blocked = _gate_blocks(ctx)
+    if blocked:
+        return {"status": "blocked(gate)", "data_class": "synthetic", "detail": blocked}
+    res = _step_08(ctx)
+    if ctx.out.get("override") and res.get("status") != "red":
+        res["detail"] = {**res["detail"], "override": ctx.out["override"]}
+    return res
+
+
+def _step_08(ctx: Ctx) -> dict:
     """Human only for authority: a SIMULATED local issuer signs an approval bound to the compiled draft digest.
     Replay verifies it with the local A03 Verifier; on the real Core the same JWS is verified by Core (INT0)."""
     src = str(ROOT / "e2e-core" / "src")
@@ -479,6 +510,9 @@ class RegistryDouble:
 
 
 def step_09(ctx: Ctx) -> dict:
+    if ctx.out.get("gate_verdict") != "pass" and not ctx.out.get("override"):
+        return {"status": "blocked(gate)", "data_class": "synthetic",
+                "detail": {"gate_verdict": ctx.out.get("gate_verdict"), "reason": "gate_not_passed_and_no_human_override"}}
     if not ctx.out.get("approval"):
         raise RuntimeError("no approval: nothing to publish")
     reg, h = RegistryDouble(), ctx.cfg.hooks
@@ -505,6 +539,8 @@ MECHANISM_AUTHOR = "claude-ed0"
 def step_10(ctx: Ctx) -> dict:
     """Observation only: platform-sim emits release.* and a simulated effect series. Nothing here feeds a decision,
     the gate or a revision; memory and successor are not exercised in DEMO-0."""
+    if not ctx.out.get("published"):
+        return {"status": "not_exercised", "data_class": "synthetic", "detail": {"reason": "nothing was published"}}
     _ensure_paths()
     from platform_live import PlatformLiveSim
     from platform_live import effects as fx
@@ -513,7 +549,7 @@ def step_10(ctx: Ctx) -> dict:
                            baseline=300.0, delta_pct=-20.0, ramp_days=2, noise_sd=0.0, seed=7)
     planted = fx.PlantedMechanism(mechanism_id="mech-thread01", author=MECHANISM_AUTHOR, kind="recurrence")
     sim = PlatformLiveSim(seed=1)
-    sim.publish_release("atencion", ctx.out["published"]["alias"], rid, effect=effect, mechanism=planted)
+    sim.publish_release(ctx.out["world"]["agent"]["id"], ctx.out["published"]["alias"], rid, effect=effect, mechanism=planted)
     sim.fast_forward(days=3)
     series = sim.effect_series(rid)
     types = sorted({r[0] for r in sim.conn.execute("select event_type from event_log")})
@@ -565,9 +601,11 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
              {"port": "platform", "provenance": "platform-sim", "price_source": "n/a"},
              *[{"price_source": "n/a", **d} for d in h.doubles]]
     report = {"contract_revision": CONTRACT_REVISION, "target": "local", "sha": ctx.sha, "host": HOST, "label": "DEMO-0",
-              "quality_claims": "forbidden", "mode": ctx.cfg.mode, "steps": rep_steps, "ports": ports,
+              "quality_claims": "forbidden", "mode": ctx.cfg.mode,
+              "gate": {"verdict": ctx.out.get("gate_verdict"), "judge": JUDGE},
+              **({"overrides": [ctx.out["override"]]} if ctx.out.get("override") else {}), "steps": rep_steps, "ports": ports,
               "authors": {"world": world["authors"].get("world"), "suite": world["authors"].get("suite"),
-                          "effect": ctx.out.get("effect_author"), "judge": JUDGE,
+                          "effect": ctx.out.get("effect_author") or EFFECT_AUTHOR, "judge": JUDGE,
                           "suite_sealed_at": SUITE_SEALED_AT, "candidate_created_at": ctx.out.get("candidate_created_at")}}
     observed = {"model": by.get((3, "scout"), {}).get("status", "red"),
                 "jev": "not_exercised(blocked: agent-core PR 28 not on main)",

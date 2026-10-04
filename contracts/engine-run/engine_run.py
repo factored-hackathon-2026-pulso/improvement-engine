@@ -59,6 +59,34 @@ def _lies_real(st):
     return st.get("status") == "real" and (not prov or _norm(prov) in {_norm(p) for p in NONREAL_PROVIDERS})
 
 
+def _exercised(st):
+    s = st.get("status")
+    return s != "not_exercised" and not (isinstance(s, str) and _BLOCKED.fullmatch(s))
+
+
+def _check_gate(report: dict, steps: list) -> list:
+    """G1: approval or publish after a gate that did not pass needs an explicit, labelled human override
+    (`overrides[]`: step=approval, of=gate, verdict=<the gate verdict>, by=human, a reason) and quality_claims forbidden.
+    A report that exercises approval/publish must state the gate verdict. A stray override on a passing gate is rejected."""
+    out = []
+    ran = [s for s in steps if s.get("id") in ("approval", "publish") and _exercised(s)]
+    gate = (report.get("gate") or {}).get("verdict")
+    ovs = report.get("overrides") or []
+    if ran and not gate:
+        out.append(_v("G1", "gate", "approval/publish exercised without a reported gate verdict"))
+    if gate == "pass" and ovs:
+        out.append(_v("G1", "overrides", "override recorded although the gate passed"))
+    if ran and gate and gate != "pass":
+        good = [o for o in ovs if isinstance(o, dict) and o.get("step") == "approval" and o.get("of") == "gate"
+                and o.get("verdict") == gate and o.get("by") == "human" and o.get("label") == "human_override"
+                and isinstance(o.get("reason"), str) and o["reason"].strip()]
+        if not good:
+            out.append(_v("G1", "gate", f"approval/publish after gate verdict {gate!r} without a labelled human override"))
+        elif report.get("quality_claims") != "forbidden":
+            out.append(_v("G1", "quality_claims", "a human override of a failed gate requires quality_claims forbidden"))
+    return out
+
+
 def check(report: dict) -> list:
     out = []
     steps = report.get("steps") or []
@@ -111,6 +139,7 @@ def check(report: dict) -> list:
     if s1 and s2:
         if _norm(s1.get("actor")) == _norm(s2.get("actor")) or _norm(s1.get("model")) == _norm(s2.get("model")):
             out.append(_v("H7", "verifier", "scout and verifier need distinct actors and model identities"))
+    out.extend(_check_gate(report, steps))
     return out
 
 
@@ -150,6 +179,8 @@ def generate_doubles(report: dict, observed: dict) -> list:
         d.append({"part": k.replace("_", ".", 1), "status": v, "observed": True})
     scanners = sorted({(s.get("receipt") or {}).get("scanner_id") for s in report.get("steps", [])} - {None})
     d.extend({"part": "scanner", "status": sid} for sid in scanners)
+    for o in report.get("overrides") or []:
+        d.append({"part": f"{o.get('of')}.override", "status": o.get("label"), "verdict": o.get("verdict"), "by": o.get("by")})
     for p in report.get("ports", []):
         d.append({"part": f"port.{p.get('port')}", "status": p.get("provenance"), "price_source": p.get("price_source")})
     return d
