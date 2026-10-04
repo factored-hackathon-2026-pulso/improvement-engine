@@ -16,6 +16,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -66,6 +67,14 @@ def sha256_of(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _git_lines(repo, *args):
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    return None if r.returncode != 0 else [x for x in r.stdout.splitlines() if x]
+
+
+RUST_RE = re.compile(r"\.rs$|(^|/)Cargo\.(toml|lock)$|(^|/)rust-toolchain")
+
+
 def check_receipt_doc(doc: dict, name: str) -> list:
     p = []
     if doc.get("schema") != "pre-pr-gate/v1":
@@ -73,25 +82,45 @@ def check_receipt_doc(doc: dict, name: str) -> list:
     if doc.get("verdict") != "pass":
         p.append(f"{name}: verdict {doc.get('verdict')!r}")
     for leg in LEGS:
-        if (doc.get("legs") or {}).get(leg, {}).get("status") != "pass":
+        lg = (doc.get("legs") or {}).get(leg)
+        lg = lg if isinstance(lg, dict) else {}
+        if lg.get("status") != "pass":
             p.append(f"{name}: leg {leg} is not pass")
+        elif not (isinstance(lg.get("command"), str) and lg["command"].strip()) or lg.get("exit_code") != 0                 or isinstance(lg.get("exit_code"), bool):
+            p.append(f"{name}: leg {leg} claims pass without a command and exit_code 0")
     return p
 
 
-def check_g0p(path, repo, ancestry=False):
+def check_g0p(path, repo, ancestry=True):
     doc, prob = _json(path)
     if prob:
         return _res("g0p", False, prob)
     p = check_receipt_doc(doc, path.name)
-    if not isinstance(doc.get("rust_files_changed"), list):
+    declared = doc.get("rust_files_changed")
+    if not isinstance(declared, list):
         p.append("receipt does not state rust_files_changed")
-    if not doc.get("head_sha"):
-        p.append("receipt carries no head_sha")
+    head = doc.get("head_sha")
+    if not (isinstance(head, str) and re.fullmatch(r"[0-9a-f]{40}", head)):
+        p.append("receipt carries no valid head_sha")
     elif ancestry:
-        r = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", doc["head_sha"], "HEAD"], capture_output=True)
+        r = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", head, "HEAD"], capture_output=True)
         if r.returncode != 0:
             p.append("receipt head_sha is not an ancestor of HEAD")
-    return _res("g0p", not p, "; ".join(p) or f"pre-pr-gate pass at {doc['head_sha'][:12]}")
+        else:
+            later = _git_lines(repo, "diff", "--name-only", head, "HEAD")
+            if later is None or any(RUST_RE.search(f) for f in later):
+                p.append("Rust files changed after the receipt head (receipt is stale for Rust)")
+            base = doc.get("base_ref")
+            actual = _git_lines(repo, "diff", "--name-only", base, "HEAD") if isinstance(base, str) and base else None
+            if actual is None:
+                p.append("receipt base_ref missing or unresolvable; rust_files_changed cannot be recomputed")
+            else:
+                rust = sorted(f for f in actual if RUST_RE.search(f))
+                if isinstance(declared, list) and sorted(declared) != rust:
+                    p.append(f"rust_files_changed does not match git ({len(rust)} Rust file(s) since {base})")
+                if rust and "cargo" not in str((doc.get("legs") or {}).get("ci", {}).get("command", "")).lower():
+                    p.append("Rust files changed but the ci leg did not run cargo")
+    return _res("g0p", not p, "; ".join(p) or f"pre-pr-gate pass at {head[:12]}")
 
 
 def check_trn0(path):
@@ -171,7 +200,7 @@ def check_doubles(report):
     return _res("doubles", not p, "; ".join(p) or "doubles[] lists the plan parts; DEMO-0, host=python, quality_claims forbidden")
 
 
-def check_replay(path, report_path):
+def check_replay(path, report_path, repo=ROOT):
     doc, prob = _json(path)
     if prob:
         return _res("replay", False, prob)
@@ -184,6 +213,11 @@ def check_replay(path, report_path):
         p.append(f"digest misses {doc.get('misses')!r}, need 0")
     if not isinstance(doc.get("calls"), int) or doc["calls"] <= 0:
         p.append("replay served no calls")
+    fx = Path(repo) / "e2e-core" / "tests" / "fixtures" / "thread01_queue"
+    if fx.is_dir():
+        import gt0_collect
+        if doc.get("fixtures_digest") != gt0_collect.fixtures_digest(fx):
+            p.append("fixtures_digest does not match the recorded fixtures")
     if report_path is None or not report_path.is_file() or doc.get("report_sha256") != sha256_of(report_path):
         p.append("replay record is not bound to the report bytes (report_sha256)")
     return _res("replay", not p, "; ".join(p) or f"run {doc['run_id']}: {doc['calls']} calls, 0 misses")
@@ -227,8 +261,8 @@ def evaluate(manifest: Path, repo: Path = ROOT) -> list:
     base = manifest.parent
     art = {k: (base / v) for k, v in (m.get("artifacts") or {}).items() if isinstance(v, str)}
     missing = lambda k: art.get(k) or base / f"<no {k} in manifest>"  # noqa: E731
-    out = [check_g0p(missing("g0p"), repo, bool(m.get("require_g0p_ancestry"))), check_trn0(missing("trn0")),
-           check_crv0(base / m.get("reviews_dir", "docs/reviews/claude"), m.get("required_wps", crv0_closure.DEFAULT_REQUIRED))]
+    out = [check_g0p(missing("g0p"), repo, m.get("require_g0p_ancestry", True) is not False), check_trn0(missing("trn0")),
+           check_crv0(base / m.get("reviews_dir", "docs/reviews/claude"), sorted(set(crv0_closure.DEFAULT_REQUIRED) | {w for w in (m.get("required_wps") or []) if isinstance(w, str)}))]
     report, p1 = _json(missing("report"))
     replay, p2 = _json(missing("replay"))
     if p1 or p2:
@@ -237,7 +271,7 @@ def evaluate(manifest: Path, repo: Path = ROOT) -> list:
             out[-3] = _res("honesty", False, p2)
     else:
         out += [check_honesty(report, replay), check_scanner_ids(report), check_doubles(report)]
-    out += [check_freeze(repo), check_replay(missing("replay"), art.get("report")), check_live(missing("live_log")),
+    out += [check_freeze(repo), check_replay(missing("replay"), art.get("report"), repo), check_live(missing("live_log")),
             check_capacity(missing("capacity"))]
     return out
 

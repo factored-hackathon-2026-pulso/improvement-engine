@@ -10,9 +10,11 @@ from pathlib import Path
 GOV = Path(__file__).resolve().parents[1]
 ROOT = GOV.parents[1]
 sys.path.insert(0, str(GOV))
+import gt0_collect as collect  # noqa: E402
 import gt0_gate as gate  # noqa: E402
 
 SHA = "a" * 40
+HEAD = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
 
 
 def step(i, status, dc="generated_sample", **kw):
@@ -50,7 +52,7 @@ def build(d, mutate=None):
     """Write a complete, good artifact set under d and return the manifest path."""
     d = Path(d)
     files = {
-        "g0p.json": {"schema": "pre-pr-gate/v1", "verdict": "pass", "head_sha": SHA, "rust_files_changed": [],
+        "g0p.json": {"schema": "pre-pr-gate/v1", "verdict": "pass", "head_sha": HEAD, "base_ref": HEAD, "rust_files_changed": [],
                      "legs": {k: {"status": "pass", "exit_code": 0, "command": "c"} for k in ("ci", "pytest", "ratchet")}},
         "report.json": report(),
         "live.json": {"schema": "live-window-log/v1", "windows": [
@@ -62,7 +64,7 @@ def build(d, mutate=None):
         (d / n).write_text(json.dumps(doc), encoding="utf-8")
     rep_sha = "sha256:" + hashlib.sha256((d / "report.json").read_bytes()).hexdigest()
     (d / "replay.json").write_text(json.dumps({"schema": "gt0-replay/v1", "run_id": "run-1", "mode": "replay", "calls": 12,
-                                               "misses": 0, "fixtures_digest": "sha256:" + "0" * 64, "report_sha256": rep_sha,
+                                               "misses": 0, "fixtures_digest": collect.fixtures_digest(collect.FIXTURES), "report_sha256": rep_sha,
                                                "mapping_mutation_violations": []}), encoding="utf-8")
     (d / "w0-pr-1.json").write_text((d / "g0p.json").read_text(), encoding="utf-8")
     (d / "trn0.json").write_text(json.dumps({"schema": "train-receipt/v1", "verdict": "pass", "prs": [
@@ -70,7 +72,7 @@ def build(d, mutate=None):
     rv = d / "reviews"
     rv.mkdir()
     (rv / "x.review.json").write_text(json.dumps({
-        "schema": "review-log/v1", "wps": ["TPS"], "author": {"id": "a"}, "reviewer": {"id": "b"}, "provenance": "contemporaneous",
+        "schema": "review-log/v1", "wps": list(gate.crv0_closure.DEFAULT_REQUIRED), "author": {"id": "a"}, "reviewer": {"id": "b"}, "provenance": "contemporaneous",
         "findings": [], "verdict": "closed"}), encoding="utf-8")
     m = {"schema": "gt0-manifest/v1", "reviews_dir": "reviews", "required_wps": ["TPS"],
          "artifacts": {"g0p": "g0p.json", "trn0": "trn0.json", "report": "report.json", "replay": "replay.json",
@@ -136,7 +138,53 @@ class Gate(unittest.TestCase):
             doc["verdict"] = "open"
         self.assertIn("crv0", failed(self.run_gate(lambda d, m: self.edit("reviews/x.review.json", open_f)(d, m))))
         self.setUp()
-        self.assertIn("crv0", failed(self.run_gate(lambda d, m: m.update(required_wps=["TPS", "DC0"]))))
+        self.assertIn("crv0", failed(self.run_gate(lambda d, m: m.update(required_wps=["TPS", "ZZ9"]))))
+
+    def test_empty_required_wps_cannot_waive_the_default_closure(self):
+        def mut(d, m):
+            (d / "reviews" / "x.review.json").write_text(json.dumps({
+                "schema": "review-log/v1", "wps": ["TPS"], "author": {"id": "a"}, "reviewer": {"id": "b"},
+                "provenance": "contemporaneous", "findings": [], "verdict": "closed"}))
+            m["required_wps"] = []
+        self.assertIn("crv0", failed(self.run_gate(mut)))
+
+    def test_g0p_leg_needs_a_command_and_exit_code_zero(self):
+        self.assertIn("g0p", failed(self.run_gate(self.edit("g0p.json", lambda g: g["legs"]["ci"].pop("command")))))
+        self.setUp()
+        self.assertIn("g0p", failed(self.run_gate(self.edit("g0p.json", lambda g: g["legs"]["ci"].update(exit_code=1)))))
+
+    def test_g0p_ancestry_is_checked_even_if_the_manifest_does_not_ask(self):
+        res = self.run_gate(self.edit("g0p.json", lambda g: g.update(head_sha=SHA)))
+        self.assertIn("g0p", failed(res))
+
+    def test_g0p_rust_claim_is_recomputed_from_git(self):
+        repo = self.d / "repo"
+        repo.mkdir()
+        g = lambda *a: subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@x.invalid", *a],
+                                      capture_output=True, text=True, check=True).stdout.strip()
+        g("init", "-q")
+        (repo / "a.txt").write_text("1")
+        g("add", "-A"); g("commit", "-qm", "base")
+        base = g("rev-parse", "HEAD")
+        (repo / "x.rs").write_text("fn main(){}")
+        g("add", "-A"); g("commit", "-qm", "rust")
+        head = g("rev-parse", "HEAD")
+        doc = json.loads(json.dumps({"schema": "pre-pr-gate/v1", "verdict": "pass", "head_sha": head, "base_ref": base,
+                                     "rust_files_changed": [],
+                                     "legs": {k: {"status": "pass", "exit_code": 0, "command": "c"} for k in gate.LEGS}}))
+        p = self.d / "r.json"
+        p.write_text(json.dumps(doc))
+        self.assertFalse(gate.check_g0p(p, repo, True)["ok"])            # claims no Rust, git shows x.rs
+        doc["rust_files_changed"] = ["x.rs"]
+        p.write_text(json.dumps(doc))
+        self.assertFalse(gate.check_g0p(p, repo, True)["ok"])            # Rust changed but no cargo leg ran
+        doc["legs"]["ci"]["command"] = "cargo test"
+        p.write_text(json.dumps(doc))
+        self.assertTrue(gate.check_g0p(p, repo, True)["ok"])
+
+    def test_replay_fixtures_digest_is_recomputed(self):
+        res = self.run_gate(self.edit("replay.json", lambda r: r.update(fixtures_digest="sha256:" + "0" * 64)))
+        self.assertIn("replay", failed(res))
 
     def test_honesty_runs_the_eight_tests_against_the_real_report(self):
         def bad(d, m):
