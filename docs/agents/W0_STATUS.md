@@ -39,10 +39,13 @@ release events. The final report must pass `contracts/engine-run` `check()`; `do
 ## Stand-in or blocked
 
 - Step 1 manual command (scheduled ingest is DEMO-2); step 3 and 4 are `agent_roleplay`; steps 5 (CMPpy) and 6
-  (GSIpy, structural only) are stand-ins unless `CoreHooks` are supplied; step 7 `not_exercised` unless a gate fails (then steps 8-9 are `blocked(gate)` unless a labelled human override, G1 rule);
+  (GSIpy, structural only; verdict judge stays a stand-in) are stand-ins unless `CoreHooks` are supplied; step 7 `not_exercised` unless a gate fails (then steps 8-9 are `blocked(gate)` unless a labelled human override, G1 rule);
   step 8 simulated issuer; step 9 registry double; step 10 simulated, observation only.
-- Real Core: step 5 dry run verified live once (PG16, pinned Core image). `run_arms` and `publish` need a frozen proposal
-  plus a human JWS; Core does not yet verify the JWS (INT0).
+- Real Core (INT0, `e2e-core/THREAD01.md`): with `CoreHooks` steps 5, 6 (arms; the verdict judge stays the GSIpy stand-in),
+  8 (local human-issuer double; Core verifies the JWS, tamper and replay refused) and 9 are `real-narrow` on the pinned Core
+  (PG16, 3 live windows); the world is `attention-task`, so nothing is `blocked(jev)`. The structural gate fails in every
+  window, so 8-9 run only under a SIMULATED human override (DEMO-0) that the report labels; no quality claim.
+- E0 window: data class is `E0` (steps 1-2) and `original-treated` (3-4), responders get scanner-passed aggregates only.
 - Real gateway: live smoke skipped until containers run; healthcheck path unverified. SNET container-side network
   measurements blocked (rootless cgroups). PG-recorded claim traces in FRZ0 still to come.
 - CONTRACT-PUBLISHED for the pack is pending until it is on GitHub main (Codex asked for a source SHA and digests).
@@ -52,7 +55,7 @@ release events. The final report must pass `contracts/engine-run` `check()`; `do
 1. TPS cannot detect opaque ids (a name or national id shaped like an allowed token passes); needs a registry of expected ids.
 2. The ED0L lab has no complementary suppression.
 3. The M2a spend guard is not wired into `main.py`/factories yet.
-4. Core-side steps (dry run, evaluation, publish, alias read) stay stand-in until INT0.
+4. Without `CoreHooks` (replay) the Core-side steps stay stand-in; the live evidence is per window on a fresh stack.
 5. `release.published`/`release.rolled_back` classify as `unknown` (quarantined) until Codex admits them in event-catalog 1.1.0.
 6. G0gr facts for Codex: `ArmBinding` fields are public (forgeable); `PlatformTreatedText::from_authoritative_treatment` always returns AuthorityUnavailable; the default read plan includes EventPayloadLocalOnly; `read_relation` returns `Result<(), E>`.
 7. Machine load is high (about 4 GB free); no cargo or containers were run for this document.

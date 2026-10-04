@@ -21,7 +21,14 @@ from `e2e-core`; the sensor step uses the existing runner exe (`ED0_RUNNER_EXE`,
 Replay fixtures: `tests/fixtures/thread01_queue/responses` (synthetic, role-played). Re-record with
 `python -m claude_standin.thread01 --record <dir>`; a drift test fails if the scripted responder and the fixtures differ.
 The final report is built by `build_report` and must pass `contracts/engine-run` `check()`; `doubles[]` comes from
-`generate_doubles`. Raw E0 is never read: packages are synthetic and live in a temp workdir.
+`generate_doubles`. Default runs never read E0: packages are synthetic and live in a temp workdir. Only the explicit
+`--e0` window reads a local E0 package at runtime; there steps 1-2 carry `data_class: E0`, steps 3-4 `original-treated`
+(never `generated_sample`, the class `gw-hosted` accepts), and only scanner-passed k-anonymous aggregates reach a responder.
+The responder id in a step's `model` label (`agent_roleplay:<id>`) is DECLARED by the answering lane in its response file
+(shim-validated for form only); it is not a verified model identity.
+In DEMO-0 the "human" of a gate override and of the issuer is SIMULATED: `human_override` is a config value written by the
+run's author, so `report.overrides[].simulated` is `true` (G1 rejects a DEMO-0 override without it) and `doubles[]` says
+"simulated human".
 
 ## INT0 status (real-Core hooks)
 
