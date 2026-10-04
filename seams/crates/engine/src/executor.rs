@@ -7,10 +7,12 @@
 //! - committed outputs are skipped on resume; effect states DispatchBegun/UnknownPendingReconciliation block.
 //!
 //! Store keys: `lease` (worker|fence|attempt|expires), `in/N`, `out/N` (E1 record + `F <effect>` line), `eff/N`.
-//! Known limit: the lease touch and the `out/N` CAS are two store operations; safety rests on the `out/N`
-//! CAS having exactly one winner (a superseded worker that loses it reports `StaleFence`).
+//! `out/N` is committed with `JobStore::commit_guarded`: the store re-verifies the current fence and an unexpired
+//! lease atomically with the write (PgJobStore: one transaction; FileStore: under its lock), so a superseded or
+//! clock-skewed worker cannot commit even if it reaches the store after the new worker claimed (closes CL-0050).
+//! Remaining limit: the lease renewal and the commit are still two store operations (both fence-checked).
 use crate::lib_codec::{decode_full, encode_full};
-use crate::store::JobStore;
+use crate::store::{CommitGuard, JobStore};
 use abi::*;
 
 pub struct ExecOptions {
@@ -187,7 +189,10 @@ pub fn execute(
         let v = verify(store, &fence, now)?;
         let renewed = Lease { expires_at: now + opts.lease_seconds, ..lease.clone() };
         lease_ver = store.cas("lease", v, &fmt_lease(&renewed)).map_err(|_| ExecError::StaleFence)?;
-        store.cas(&format!("out/{i}"), 0, &encode_full(&out)).map_err(|_| ExecError::StaleFence)?;
+        // out/N is created ONLY if the store re-checks, atomically with the write, that our fence is still the
+        // current one and the lease unexpired (closes the verify-then-CAS window for skewed/superseded workers)
+        let guard = CommitGuard { worker_id: &fence.worker_id, fence_token: fence.fence_token, now: (opts.now)() };
+        store.commit_guarded(&format!("out/{i}"), &encode_full(&out), &guard).map_err(|_| ExecError::StaleFence)?;
         payload = out.payload.clone();
         if let Some(f) = &opts.after_commit {
             f(i);

@@ -12,6 +12,33 @@ pub trait JobStore {
     fn get(&self, key: &str) -> Result<Option<(u64, String)>, String>;
     /// Compare-and-set: `expected` 0 = key must be absent. Returns the new version.
     fn cas(&self, key: &str, expected: u64, value: &str) -> Result<u64, String>;
+    /// Create `key` (must be absent) iff the `lease` record currently names `guard` as an unexpired holder.
+    /// Stores that can make check-and-write ONE atomic step (a transaction, the file lock) must override this;
+    /// the default is read-then-write and leaves a window between the two.
+    fn commit_guarded(&self, key: &str, value: &str, guard: &CommitGuard) -> Result<u64, String> {
+        match self.get("lease")? {
+            Some((_, l)) if guard.holds(&l) => self.cas(key, 0, value),
+            _ => Err("stale fence".into()),
+        }
+    }
+}
+
+/// Who is committing: the worker, the fence it was issued and its clock (unix seconds).
+pub struct CommitGuard<'a> {
+    pub worker_id: &'a str,
+    pub fence_token: u64,
+    pub now: u64,
+}
+
+impl CommitGuard<'_> {
+    /// True when the `lease` record (`worker|fence|attempt|expires`) is this guard's, current and unexpired.
+    pub fn holds(&self, lease_record: &str) -> bool {
+        let p: Vec<&str> = lease_record.split('|').collect();
+        p.len() == 4
+            && p[0] == self.worker_id
+            && p[1].parse::<u64>() == Ok(self.fence_token)
+            && p[3].parse::<u64>().is_ok_and(|exp| self.now < exp)
+    }
 }
 
 pub struct FileStore {
@@ -85,9 +112,24 @@ impl JobStore for FileStore {
             Err(e) => Err(e.to_string()),
         }
     }
+    fn commit_guarded(&self, key: &str, value: &str, guard: &CommitGuard) -> Result<u64, String> {
+        check_key(key)?;
+        let _lock = self.lock()?;
+        match self.get("lease")? {
+            Some((_, l)) if guard.holds(&l) => self.cas_locked(key, 0, value),
+            _ => Err("stale fence".into()),
+        }
+    }
     fn cas(&self, key: &str, expected: u64, value: &str) -> Result<u64, String> {
         check_key(key)?;
         let _lock = self.lock()?;
+        self.cas_locked(key, expected, value)
+    }
+}
+
+impl FileStore {
+    /// CAS body; the caller holds the lock file.
+    fn cas_locked(&self, key: &str, expected: u64, value: &str) -> Result<u64, String> {
         let current = self.get(key)?.map(|(v, _)| v).unwrap_or(0);
         if current != expected {
             return Err(format!("cas conflict on {key}: have {current}, expected {expected}"));

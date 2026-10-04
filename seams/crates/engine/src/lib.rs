@@ -9,13 +9,14 @@
 use abi::*;
 
 pub mod adapters;
+pub mod conformance;
 pub mod demo;
 pub mod executor;
 pub mod live;
 mod lib_codec;
 pub mod store;
 pub mod synth;
-pub use store::{FileStore, JobStore};
+pub use store::{CommitGuard, FileStore, JobStore};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum RunError {
