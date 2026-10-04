@@ -186,6 +186,21 @@ function Invoke-LocalCargoRun {
     return $LASTEXITCODE
 }
 
+function Invoke-LocalE0SourceValidation {
+    param([Parameter(Mandatory = $true)][string[]] $Arguments)
+
+    try {
+        $cargoExitCode = Invoke-LocalCargoRun -Arguments $Arguments
+    }
+    catch {
+        throw 'E0 source validation failed: could not start Cargo. No run was started.'
+    }
+
+    if ($cargoExitCode -ne 0) {
+        throw "E0 source validation failed (Cargo exit code $cargoExitCode). No run was started."
+    }
+}
+
 function Format-SafeCount {
     param([Parameter(Mandatory = $true)][long] $Value)
     return $Value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
@@ -247,6 +262,34 @@ $effectiveArranqueCasesText = [Convert]::ToString(
     $effectiveArranqueCases,
     [System.Globalization.CultureInfo]::InvariantCulture
 )
+
+if ($Source -eq 'e0') {
+    $validationArguments = @(
+        'run',
+        '--locked',
+        '--offline',
+        '--target-dir',
+        'target-local-e2e',
+        '-p',
+        'improvement-engine-runner',
+        '--',
+        'source',
+        'validate',
+        '--kind',
+        'enriched_history',
+        '--input',
+        $inputFullPath,
+        '--contract-version',
+        '0.5.1'
+    )
+    Push-Location -LiteralPath $repositoryRoot
+    try {
+        Invoke-LocalE0SourceValidation -Arguments $validationArguments
+    }
+    finally {
+        Pop-Location
+    }
+}
 
 $cargoArguments = @(
     'run',

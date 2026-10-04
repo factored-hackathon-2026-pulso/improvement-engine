@@ -30,6 +30,7 @@ use improvement_engine_source_adapters::{
 mod e0_builder_input_preparation;
 use e0_builder_input_preparation::E0BuilderInputPreparation;
 mod e0_candidate_explanation;
+mod source_validate;
 
 fn main() {
     if let Err(error) = run(env::args_os().skip(1)) {
@@ -39,6 +40,13 @@ fn main() {
 }
 
 fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
+    let args = args.into_iter().collect::<Vec<_>>();
+    if args.first().and_then(|arg| arg.to_str()) == Some("source") {
+        if args.get(1).and_then(|arg| arg.to_str()) == Some("validate") {
+            return source_validate::run(args.into_iter().skip(2));
+        }
+        return Err("expected source validate (try --help)".to_owned());
+    }
     let options = Options::parse(args)?;
     if options.help {
         print_help();
