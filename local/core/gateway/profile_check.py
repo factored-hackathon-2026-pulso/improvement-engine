@@ -41,7 +41,13 @@ def collect_keys(profile: dict) -> list[str]:
 
 
 def collect_urls(profile: dict) -> list[str]:
-    return [v for p, v in _walk(profile) if isinstance(v, str) and p.endswith("url")]
+    """Every string that is a URL or sits under a url/uri/endpoint/host/base key, wherever it is (incl. fallbacks)."""
+    hostish = re.compile(r"(url|uri|endpoint|host|address|origin)", re.I)
+    return [
+        v
+        for p, v in _walk(profile)
+        if isinstance(v, str) and (re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", v) or hostish.search(p.rsplit(".", 1)[-1]))
+    ]
 
 
 def is_internal_url(url: str) -> bool:
@@ -59,21 +65,21 @@ def is_internal_url(url: str) -> bool:
 def check_profile(profile: dict) -> list[Violation]:
     name = profile.get("name", "?")
     out: list[Violation] = []
-    classes = {str(c).lower() for c in profile.get("data_classes", [])}
+    classes = {str(c).strip().lower() for c in profile.get("data_classes", [])}
     body = json.dumps({k: v for k, v in profile.items() if k not in _IGNORED_KEYS})
     if _SECRET_VALUE.search(body):
         out.append(Violation(name, "secret_value"))
-    if "e0" in classes:
+    if classes & RESTRICTED:
         if collect_keys(profile):
             out.append(Violation(name, "e0_has_key"))
         if any(not is_internal_url(u) for u in collect_urls(profile)):
             out.append(Violation(name, "e0_external_route"))
         if profile.get("network", {}).get("internal") is not True:
             out.append(Violation(name, "network_not_internal"))
-    if profile.get("upstream", {}).get("kind") == "hosted":
+    if profile.get("upstream", {}).get("kind") != "local":  # anything not explicitly local is third-party
         if classes & RESTRICTED:
             out.append(Violation(name, "hosted_accepts_restricted"))
-        if not profile.get("api_key_env"):
+        if not profile.get("api_key_env") and profile.get("upstream", {}).get("kind") == "hosted":
             out.append(Violation(name, "hosted_missing_key_ref"))
     return out
 

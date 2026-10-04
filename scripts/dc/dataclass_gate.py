@@ -21,7 +21,7 @@ from pathlib import Path
 SCANNER_ID = "dc0-content-scan/1"
 
 # Sentinels carried by raw E0 rows or payloads. Written as regexes so this source never matches itself.
-E0_MARKERS = (re.compile(r"\bE0[_-](?:ROW|RAW|RECORD|PAYLOAD)\b"),)
+E0_MARKERS = (re.compile(r"\bE0[_-](?:ROW|RAW|RECORD|PAYLOAD)\b", re.I),)
 # Receipt bodies: `data=E0` (text) or a data / data_class key whose value is E0 (JSON).
 _RECEIPT_TEXT = re.compile(r"\bdata(?:_class)?\s*=\s*E0\b")
 _DATA_KEYS = frozenset({"data", "data_class", "dataclass"})
@@ -47,15 +47,45 @@ def _is_text(raw: bytes) -> bool:
     return b"\x00" not in raw[:8192]
 
 
+_B64 = re.compile(rb"[A-Za-z0-9+/_-]{12,}={0,2}")
+_MARK_BYTES = re.compile(rb"E0[_-](?:ROW|RAW|RECORD|PAYLOAD)", re.I)
+
+
+def _decoded_views(raw: bytes) -> list[str]:
+    """Text views of raw bytes: utf-8, utf-16 and ascii-in-binary, plus base64 runs. Binary/large files are not skipped."""
+    import base64
+
+    views = [raw.decode("utf-8", errors="replace")]
+    if b"\x00" in raw:
+        views += [raw.decode(enc, errors="ignore") for enc in ("utf-16-le", "utf-16-be")]
+        views.append(raw.replace(b"\x00", b"").decode("latin-1"))
+    for m in _B64.finditer(raw):
+        chunk = m.group(0)
+        for alt in (chunk, chunk.replace(b"-", b"+").replace(b"_", b"/")):
+            for off in range(4):  # alignment inside a longer run
+                piece = alt[off:]
+                piece = piece[: len(piece) // 4 * 4]
+                try:
+                    dec = base64.b64decode(piece)
+                except ValueError:
+                    continue
+                if _MARK_BYTES.search(dec):
+                    views.append(dec.decode("utf-8", errors="replace"))
+    return views
+
+
 def scan_file(path: Path, root: Path | None = None) -> list[Finding]:
     rel = str(path.relative_to(root)).replace("\\", "/") if root else str(path)
     try:
         raw = path.read_bytes()
     except OSError:
         return []
-    if len(raw) > MAX_BYTES or not _is_text(raw):
-        return []
-    return scan_text(raw.decode("utf-8", errors="replace"), rel)
+    out: list[Finding] = []
+    for view in _decoded_views(raw):
+        out += scan_text(view, rel)
+        if out:
+            break
+    return out
 
 
 def _json_has_e0(node: object) -> bool:
