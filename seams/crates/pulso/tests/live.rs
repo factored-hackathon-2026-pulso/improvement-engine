@@ -141,3 +141,25 @@ fn a_blocked_approval_streams_a_blocked_decision_card_and_no_diff_when_compile_w
     assert!(st["diff"].is_null() && st["decision"].is_null(), "no proposal, no decision: nothing is invented");
     assert!(st["investigation"]["hypotheses"][1]["verdict"].as_str().unwrap().starts_with("blocked("));
 }
+
+/// Drops the wall-clock stamps so two producers of the same projection can be compared.
+fn unstamped(v: &Value) -> Value {
+    match v {
+        Value::Object(m) => Value::Object(m.iter().filter(|(k, _)| !matches!(k.as_str(), "checked_at" | "available_at")).map(|(k, x)| (k.clone(), unstamped(x))).collect()),
+        Value::Array(a) => Value::Array(a.iter().map(unstamped).collect()),
+        o => o.clone(),
+    }
+}
+
+#[test]
+fn live_stream_and_report_ingest_leave_identical_panels_for_the_same_run() {
+    let live_store = Arc::new(Store::memory());
+    let run = demo(live_store.clone(), &opts("parity", 0)).expect("demo");
+    let ing = Arc::new(Store::memory());
+    let id = debug_api::ingest::engine_run_report(&*ing, &|i| ing.head(i).is_some(), &run.report).expect("ingest");
+    let (a, b) = (live_store.state("run-demo0-test").unwrap(), ing.state(&id).unwrap());
+    for panel in ["investigation", "alternatives", "diff", "gates", "decision"] {
+        assert!(!a[panel].is_null(), "{panel} filled live");
+        assert_eq!(unstamped(&a[panel]), unstamped(&b[panel]), "{panel}: same projection from both producers");
+    }
+}

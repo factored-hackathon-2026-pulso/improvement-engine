@@ -167,3 +167,14 @@ fn partial_payloads_fill_only_what_is_committed_and_the_projection_is_determinis
     let data = |c: &Value| serde_json::to_string(&project(c, None, AT).iter().map(|e| &e.data).collect::<Vec<_>>()).unwrap();
     assert_eq!(data(&full()), data(&full()));
 }
+
+#[test]
+fn an_approval_without_override_never_claims_both_gates_passed_unless_the_committed_gates_say_so() {
+    let mut c = full();
+    c["out"]["authority"].as_object_mut().unwrap().remove("override");
+    let d = pick(&project(&c, None, AT), "decision_set");
+    let text = d["card"]["reasons"].to_string();
+    assert_eq!(d["card"]["gate"]["improvement"]["status"], "fail", "fixture: improvement failed");
+    assert!(!text.contains("Both gates passed"), "reason invented a pass the committed gate does not carry: {text}");
+    assert!(text.contains("SIMULATED"), "{text}");
+}
