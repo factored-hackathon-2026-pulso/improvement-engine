@@ -39,6 +39,9 @@ def check_log(log: dict) -> list:
         p.append("reviewer.id missing")
     if _norm(a) and _norm(a) == _norm(r):
         p.append("reviewer must differ from author")
+    rv = log.get("reviewer") or {}
+    if rv.get("identity_recorded") is False and "independent" in str(r or "").casefold():
+        p.append("reviewer identity is not recorded, so the id may not claim 'independent'")
     prov = log.get("provenance")
     if prov not in PROVENANCE:
         p.append("provenance must be contemporaneous or reconstructed")
@@ -94,7 +97,8 @@ def run(reviews: Path, required: list) -> tuple[int, list]:
             lines.append(f"OPEN {path.name} [{','.join(wps)}]: {n} open finding(s), verdict {log['verdict']}")
         else:
             covered.update(wps)
-            lines.append(f"closed {path.name} [{','.join(wps)}] ({log['provenance']})")
+            note = ", reviewer identity not recorded" if (log.get("reviewer") or {}).get("identity_recorded") is False else ""
+            lines.append(f"closed {path.name} [{','.join(wps)}] ({log['provenance']}{note})")
     for w in required:
         if w not in covered:
             ok = False

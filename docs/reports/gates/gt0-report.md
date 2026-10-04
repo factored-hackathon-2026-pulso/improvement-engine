@@ -15,7 +15,7 @@ Verdict: FAIL
 |---|---|---|
 | g0p | PASS | pre-pr-gate pass at cd24162f2b55 |
 | trn0 | FAIL | missing: trn0.json |
-| crv0 | FAIL | OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP TPS; MISSING closed log for required WP M2a; MISSING closed log for required WP M0RP; MISSING closed log for required WP ED0L; MISSING closed log for required WP E0-DATA-PATH |
+| crv0 | FAIL | OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP E0-DATA-PATH; MISSING closed log for required WP ED0L; MISSING closed log for required WP M0RP; MISSING closed log for required WP M2a; MISSING closed log for required WP TPS |
 | honesty | PASS | tests 1-8, G1 and S1 clean on the GT0 report |
 | scanner_ids | PASS | scanner ids tps-1 |
 | doubles | PASS | doubles[] lists the plan parts; DEMO-0, host=python, quality_claims forbidden |
@@ -94,8 +94,8 @@ MISSING: live-windows.json
 
 ## 8. Frozen contracts
 
-- C-12 (frozen): sha256:3eeab680712eb36205af975176a8a4ef86529b2635fae4016c352282b489bbb5; files: roleplay-llm/roleplay_llm/protocol.py, roleplay-llm/roleplay_llm/scanner.py, roleplay-llm/roleplay_llm/shim.py
-- C-2 (frozen): sha256:9f3f922374ee76e457133ee1b693608c0d0d508200fa52ad21451f9c0a45b510; files: contracts/engine-run/engine_run.py, contracts/engine-run/report.schema.json
+- C-12 (frozen): sha256:4128f5d8fcf0b602ef8e2237bedf0c576f7b452a3609a079fa2fe153e002dc86; files: roleplay-llm/roleplay_llm/protocol.py, roleplay-llm/roleplay_llm/scanner.py, roleplay-llm/roleplay_llm/shim.py
+- C-2 (frozen): sha256:3be5bd92cc1e812ded1be9f6858f64904215dd5f31d45e6a1169fe5031664009; files: contracts/engine-run/engine_run.py, contracts/engine-run/report.schema.json, e2e-core/src/claude_standin/thread01.py
 
 ## 9. Receipts
 
@@ -104,7 +104,7 @@ MISSING: live-windows.json
   - leg pytest: pass (`uv run --python 3.12 --with pytest --with pyyaml --with cryptography --with jsonschema --with fastapi --with httpx --with uvicorn --with pydantic python -m pytest -q -p no:cacheprovider contracts/engine-run/tests scripts/gov/tests scripts/dc/tests`)
   - leg ratchet: pass (`uv run --python 3.12 --with pytest --with pyyaml --with cryptography --with jsonschema --with fastapi --with httpx --with uvicorn --with pydantic python -m pytest -q -p no:cacheprovider e2e-core/tests/unit/test_e2e_thread_01.py e2e-core/tests/unit/test_e2e_thread_01_live_replay.py`)
 - TRN0: MISSING: trn0.json
-- CRV0 closure: NOT closed: OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP TPS; MISSING closed log for required WP M2a; MISSING closed log for required WP M0RP; MISSING closed log for required WP ED0L; MISSING closed log for required WP E0-DATA-PATH
+- CRV0 closure: NOT closed: OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP E0-DATA-PATH; MISSING closed log for required WP ED0L; MISSING closed log for required WP M0RP; MISSING closed log for required WP M2a; MISSING closed log for required WP TPS
 
 ## 10. Capacity re-baseline
 
@@ -117,6 +117,6 @@ MISSING: capacity.json
 - M2-R4 (M2a,M1): SpendGuard is not wired into the runtime (main.py builds only SpendMeteringGateway); ceiling not shown through the runtime
 - TPS-R10 (TPS,M0RP,RPP): opaque ids in inputs/args (a name or national id shaped like an allowed token) pass the allow-list; needs a registry of expected ids
 - gate item trn0 fails: missing: trn0.json
-- gate item crv0 fails: OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP TPS; MISSING closed log for required WP M2a; MISSING closed log for required WP M0RP; MISSING closed log for required WP ED0L; MISSING closed log for required WP E0-DATA-PATH
+- gate item crv0 fails: OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP E0-DATA-PATH; MISSING closed log for required WP ED0L; MISSING closed log for required WP M0RP; MISSING closed log for required WP M2a; MISSING closed log for required WP TPS
 - gate item live_window fails: missing: live-windows.json
 - gate item capacity fails: missing: capacity.json

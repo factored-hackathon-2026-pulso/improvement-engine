@@ -15,7 +15,7 @@
   {
    "item": "crv0",
    "ok": false,
-   "detail": "OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP TPS; MISSING closed log for required WP M2a; MISSING closed log for required WP M0RP; MISSING closed log for required WP ED0L; MISSING closed log for required WP E0-DATA-PATH"
+   "detail": "OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP E0-DATA-PATH; MISSING closed log for required WP ED0L; MISSING closed log for required WP M0RP; MISSING closed log for required WP M2a; MISSING closed log for required WP TPS"
   },
   {
    "item": "honesty",

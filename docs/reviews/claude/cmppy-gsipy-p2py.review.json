@@ -10,7 +10,7 @@
     "role": "implementer (lane worktree agent)"
   },
   "reviewer": {
-    "id": "independent-reviewer-subagent-cl",
+    "id": "fresh-context-reviewer-subagent-cl",
     "context": "fresh",
     "identity_recorded": false,
     "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"

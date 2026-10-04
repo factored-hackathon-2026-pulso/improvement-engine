@@ -28,6 +28,11 @@ def write(d, name, doc):
 
 
 class Format(unittest.TestCase):
+    def test_a_log_with_unrecorded_identity_may_not_claim_independence(self):
+        lg = log(provenance="reconstructed", sources=["CL-0001"])
+        lg["reviewer"] = {"id": "independent-reviewer-x", "identity_recorded": False}
+        self.assertTrue(any("independent" in p for p in crv.check_log(lg)))
+
     def test_good_log_is_valid_and_closed(self):
         self.assertEqual(crv.check_log(log()), [])
         self.assertTrue(crv.is_closed(log()))
@@ -118,6 +123,14 @@ class BackfilledLogs(unittest.TestCase):
             self.assertEqual(lg["provenance"], "reconstructed")
             self.assertTrue(any("CL-00" in s for s in lg["sources"]))
             self.assertIs(lg["reviewer"]["identity_recorded"], False)
+
+    def test_unrecorded_reviewer_identity_is_not_called_independent(self):
+        for lg in self.logs():
+            self.assertNotIn("independent", lg["reviewer"]["id"].lower())
+
+    def test_unrecorded_identity_is_disclosed_in_the_closure_line(self):
+        code, lines = crv.run(REVIEWS, [])
+        self.assertTrue(any(l.startswith("closed") and "identity not recorded" in l for l in lines))
 
     def test_required_dependency_set_is_covered(self):
         covered = {w for lg in self.logs() for w in lg["wps"]}
