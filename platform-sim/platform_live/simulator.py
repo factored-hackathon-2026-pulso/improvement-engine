@@ -322,21 +322,29 @@ class PlatformLiveSim:
 
     # ---- fast-forward clock, release events, effects (P2py) -------------------------------
     def schedule(self, delay_seconds: float, fn) -> None:
-        self._jobs.append((self.now + timedelta(seconds=delay_seconds), len(self._jobs), fn))
+        self._job_n = getattr(self, "_job_n", 0) + 1
+        self._jobs.append((self.now + timedelta(seconds=delay_seconds), self._job_n, fn))
 
     def fast_forward(self, seconds: float = 0, days: float = 0) -> None:
         total = seconds + days * 86400
         if total < 0:
             raise ValueError("clock only moves forward")
         target = self.now + timedelta(seconds=total)
-        for due, i, fn in sorted(j for j in self._jobs if j[0] <= target):
-            self.now = max(self.now, due)
-            fn()
-        self._jobs = [j for j in self._jobs if j[0] > target]
+        while True:
+            due_jobs = sorted((j for j in self._jobs if j[0] <= target), key=lambda j: (j[0], j[1]))
+            if not due_jobs:
+                break
+            job = due_jobs[0]
+            self._jobs.remove(job)
+            self.now = max(self.now, job[0])
+            job[2]()
         self.now = target
 
     def publish_release(self, agent_id: str, alias: str, release_id: str, effect=None, mechanism=None,
                         event_type: str = "release.published") -> None:
+        from platform_contract import release_events as _rel
+        if event_type not in _rel.RELEASE_EVENT_TYPES:
+            raise ValueError("not a release event type")
         if effect is not None and mechanism is not None:
             _fx.assert_author_separation(effect, mechanism)
         self._emit(event_type, "release", release_id, None, "system", None,
