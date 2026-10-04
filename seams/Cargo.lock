@@ -728,10 +728,14 @@ name = "pulso"
 version = "0.0.0"
 dependencies = [
  "debug-api",
+ "engine",
+ "pg",
+ "postgres",
  "rusqlite",
  "serde_json",
  "sources",
  "thread10",
+ "tiny_http",
 ]
 
 [[package]]
