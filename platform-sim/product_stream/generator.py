@@ -9,7 +9,8 @@ import heapq
 import random
 from datetime import datetime, timedelta, timezone
 
-from .scenarios import CELLS, Scenario
+from .catalog_view import PRODUCT_COLUMNS  # noqa: F401
+from .scenarios import CELLS, Scenario, build_scenario
 
 SLA_SECONDS = {"high": 300, "medium": 900, "low": 3600}
 CELL_W = (0.4, 0.3, 0.15, 0.15)
@@ -21,21 +22,19 @@ def iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def make_scenario(name: str, horizon_events: int, **kw) -> Scenario:
-    return Scenario(name=name)
-
-
 class ProductStream:
     def __init__(self, seed: int = 0, scenario: str | Scenario = "null", horizon_events: int = 20000,
-                 start: str = "2026-09-01T08:00:00Z", n_customers: int = 400, mean_gap_s: float = 20.0,
+                 start: str = "2026-09-01T08:00:00Z", n_customers: int = 400, mean_gap_s: float = 60.0,
                  tenant: str = TENANT, **scenario_kw):
         self.seed = seed
         self.rng = random.Random(seed)
         self.horizon = horizon_events
         self.tenant = tenant
         self.mean_gap = mean_gap_s
-        self.scn = scenario if isinstance(scenario, Scenario) else make_scenario(scenario, horizon_events,
-                                                                                 **scenario_kw)
+        self.scn = scenario if isinstance(scenario, Scenario) else build_scenario(scenario, horizon_events,
+                                                                                  **scenario_kw)
+        self.start = start
+        self.event_times: list[str] = []  # every 10th event_time (bounded memory)
         self.now = datetime.fromisoformat(start.replace("Z", "+00:00"))
         self._seq = 0
         self._ctr: dict[str, int] = {}
@@ -230,7 +229,22 @@ class ProductStream:
                 self._step()
             ev, side = self._buf.pop(0)
             self._seq += 1
+            if self._seq % 10 == 1:
+                self.event_times.append(ev["event_time"])
             out["event_log"].append({"sequence": self._seq, **ev})
             for t, rows in side.items():
                 out.setdefault(t, []).extend(rows)
         return out
+
+    def manifest(self) -> dict:
+        """What was planted and what was realised, for tests and the sensor-evaluation harness."""
+        def cnt(key, lo, hi):
+            return sum(1 for s, _ in self.stats[key] if lo < s <= hi)
+        w = self.scn.windows()
+        real = {"last_sequence": self._seq, "cases": len(self.stats["cases"]),
+                "reassigns": len(self.stats["reassigns"]), "reopens": len(self.stats["reopens"]),
+                "by_window": {k: {"cases": cnt("cases", *v), "reassigns": cnt("reassigns", *v),
+                                  "reopens": cnt("reopens", *v)} for k, v in w.items()}}
+        return {"manifest_version": 1, "data_origin": "synthetic product-sim", "scenario": self.scn.name,
+                "seed": self.seed, "horizon_events": self.horizon, "tenant_id": self.tenant, "start": self.start,
+                "planted": self.scn.planted(), "windows": w, "realised": real}
