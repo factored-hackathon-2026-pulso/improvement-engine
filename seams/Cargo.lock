@@ -26,6 +26,9 @@ dependencies = [
 [[package]]
 name = "authority"
 version = "0.0.0"
+dependencies = [
+ "core-client",
+]
 
 [[package]]
 name = "base64"

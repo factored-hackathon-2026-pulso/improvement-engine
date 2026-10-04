@@ -6,3 +6,4 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+core-client = { path = "../core-client" }

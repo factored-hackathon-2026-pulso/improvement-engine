@@ -79,3 +79,11 @@ teardown with `local\core\stop.ps1` + `reset.ps1 -Confirm`). Evidence: `docs/rep
   (keys from job/step/fence/attempt) feed the V2 gate, native_eval, authority (blocked(gate) unless labelled simulated override),
   publish effectful.
 - Findings: drafts are validated against the STAGING alias (base = staging, not prod, after a publish); one publish window per stack.
+
+## V3r / H1 hooks (pure library, not wired to a real Core)
+
+- `eval::revision::run_bounded(run_id, spec, ceiling, &policy, evaluate)`: a live job handler passes a closure that runs
+  arms + `wire_gate` for the attempt (using `Attempt::idempotency_key`) and returns `(GateVerdict, spend)`. Max 2
+  revisions, ceiling fixed; `ShrinkPolicy` is a rule-driven stand-in (no model).
+- `authority::flow::HumanFlow`: `request_decision(card)` -> `waiting_human`, `approve`/`reject` quote the card digest,
+  `publish`, `alias_read`. H1r supplies a real `HumanIssuer` and a `CardRecorder` (records the card digest).
