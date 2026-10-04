@@ -503,4 +503,3 @@ fn mapped_resolution_for_another_packet_cannot_be_rebound_to_candidate_a() {
         Err(E0InvestigationPlanError::RouteEvidenceMismatch)
     );
 }
-
