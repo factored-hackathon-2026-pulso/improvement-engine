@@ -76,10 +76,22 @@ impl CoreClient {
     /// failure is an error (the outcome is still unknown, stay blocked).
     pub fn reconcile_arm(&self, tenant: &str, job_id: Option<&str>, key: &str) -> Result<Reconciled<ArmReport>, OpError> {
         match self.read_arm_by_key(tenant, job_id, key) {
-            Ok(r) => Ok(Reconciled::Found(r)),
+            Ok(r) => {
+                self.check_found(tenant, key, &r)?;
+                Ok(Reconciled::Found(r))
+            }
             Err(e) if is_absent(&e) => Ok(Reconciled::Absent),
             Err(e) => Err(e),
         }
+    }
+
+    /// A read-back must be the run of THIS key (execution id derives from tenant+key).
+    fn check_found(&self, tenant: &str, key: &str, r: &ArmReport) -> Result<(), OpError> {
+        let expected = crate::canon::arm_execution_id(tenant, key)?;
+        if !(self.placeholders_ok() && r.execution_id.starts_with('<')) && r.execution_id != expected {
+            return Err(OpError::Contract(format!("read-back execution_id {} is not the id of this key ({expected})", r.execution_id)));
+        }
+        Ok(())
     }
 
     /// `run_arm` with reconcile semantics: bounded attempts, same key on every attempt, an unknown outcome is
@@ -105,8 +117,18 @@ impl CoreClient {
             if let CallError::Transport { sent: true, .. } = &err {
                 // Unknown outcome: the effect may exist. Read it back before deciding anything.
                 match self.reconcile_arm(tenant, job_id, key) {
-                    Ok(Reconciled::Found(r)) => return Ok(r),
-                    Ok(Reconciled::Absent) | Err(_) => {}
+                    Ok(Reconciled::Found(r)) => {
+                        let same = r.arm.as_deref().is_none_or(|a| a == req.arm)
+                            && r.case_ref.as_deref().is_none_or(|c| c == req.case_ref)
+                            && r.repetition.is_none_or(|n| n == i64::from(req.repetition));
+                        if !same {
+                            return Err(OpError::Contract("read-back run for this key has a different body (key reuse)".into()));
+                        }
+                        return Ok(r);
+                    }
+                    Ok(Reconciled::Absent) => {}
+                    // Still unknown: never resend blindly.
+                    Err(e) => return Err(e),
                 }
             }
             let retry = matches!(err, CallError::Transport { .. }) || err.disposition() == Disposition::Retry;
