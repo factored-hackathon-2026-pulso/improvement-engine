@@ -66,3 +66,39 @@ def test_reconcile_ignores_unknown_usage_rows_but_counts_them() -> None:
     r = reconcile_ledger([{"tokens_in": 4, "tokens_out": 1}, {"tokens_in": 0, "tokens_out": 0, "usage_known": False}],
                          [{"tokens_in": 4, "tokens_out": 1}])
     assert r.ok and r.unknown_rows == 1
+
+
+def _metering_with_guard(guard):
+    pytest.importorskip("agent_core")
+    from types import SimpleNamespace
+
+    from pulso_core_runtime.llm.metering import SpendMeteringGateway
+
+    class Store:
+        def __init__(self): self.rows = []
+        def context_row(self, ref): return {"context": {"budget": {}}}
+        def ledger_record(self, *a, **k): self.rows.append(k)
+        def meter_reserve(self, *a, **k): return True
+        def model_call_settle(self, *a, **k): return (D(0), False)
+
+    class Inner:
+        called = 0
+        def generate(self, *a): Inner.called += 1; return SimpleNamespace(tokens_in=1, tokens_out=1, cost_usd="0", usage_known=True)
+
+    ic = SimpleNamespace(tenant_id="t", job_id="j", stage="scout", attempt=1)
+    st = Store()
+    gw = SpendMeteringGateway(Inner(), SimpleNamespace(lookup=lambda r: ic), st, lambda: "ref", guard=guard)
+    return gw, st, Inner
+
+
+def test_metering_refuses_on_ceiling_and_kill_and_logs_ledger() -> None:
+    pytest.importorskip("agent_core")
+    from agent_core.domain.errors import GatewayError
+
+    for guard, outcome in ((SpendGuard(ceiling_usd=D("0"), spent=lambda s: D("1")), "ceiling_exceeded"),
+                           (SpendGuard(ceiling_usd=None, spent=lambda s: D(0),
+                                       kill=KillSwitch(env={"PULSO_LLM_KILL": "1"})), "kill_switch")):
+        gw, st, Inner = _metering_with_guard(guard)
+        with pytest.raises(GatewayError):
+            gw.generate("p", {}, "es")
+        assert st.rows[-1]["outcome"] == outcome and Inner.called == 0
