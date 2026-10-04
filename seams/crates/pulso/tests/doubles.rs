@@ -24,7 +24,7 @@ fn every_non_real_step_every_port_and_every_override_is_a_double() {
     assert!(parts.contains(&("revision".into(), "not_exercised".into())));
     assert!(parts.contains(&("port.core".into(), "offline-double(thread10::DoublePort)".into())));
     assert!(parts.iter().any(|(p, s)| p == "gate.override" && s.contains("simulated human")));
-    assert!(!parts.iter().any(|(p, _)| p == "pretend") || d.iter().any(|x| x["part"] == "pretend" && x["provider"] == "scripted"), "a real step with a non-real provider is still listed");
+    assert!(d.iter().any(|x| x["part"] == "pretend" && x["provider"] == "scripted"), "a real step with a non-real provider is still listed");
 }
 
 #[test]

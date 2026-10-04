@@ -722,6 +722,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulso"
+version = "0.0.0"
+dependencies = [
+ "debug-api",
+ "serde_json",
+ "thread10",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
