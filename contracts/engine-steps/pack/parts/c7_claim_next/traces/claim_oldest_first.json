@@ -1,0 +1,60 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "name": "claim_oldest_first",
+  "kind": "specification_trace",
+  "recorded": false,
+  "derived_from_test": "crates/core/tests/durable_jobs.rs::equivalent_triggers_admit_one_job_and_reserve_quota_once",
+  "note": "Derived by reading the in-memory reducer tests (cargo is not run by the pack author); a PG-recorded variant replaces `recorded` with true when DJC runs.",
+  "steps": [
+    {
+      "op": "admit",
+      "trigger": "t-1",
+      "expect": {
+        "admitted": true,
+        "job": "job-a"
+      }
+    },
+    {
+      "op": "admit",
+      "trigger": "t-2",
+      "expect": {
+        "admitted": true,
+        "job": "job-b"
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w1",
+      "now": 100,
+      "lease": 30,
+      "expect": {
+        "job": "job-a",
+        "fence_token": 1,
+        "attempt": 1,
+        "expires_at": 130
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w2",
+      "now": 101,
+      "lease": 30,
+      "expect": {
+        "job": "job-b",
+        "fence_token": 1,
+        "attempt": 1,
+        "expires_at": 131
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w3",
+      "now": 102,
+      "lease": 30,
+      "expect": null
+    }
+  ]
+}

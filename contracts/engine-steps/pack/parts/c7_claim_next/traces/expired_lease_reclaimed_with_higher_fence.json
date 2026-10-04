@@ -1,0 +1,58 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "name": "expired_lease_reclaimed_with_higher_fence",
+  "kind": "specification_trace",
+  "recorded": false,
+  "derived_from_test": "crates/core/tests/durable_jobs.rs::stale_worker_cannot_dispatch_or_acknowledge_after_its_lease_is_replaced",
+  "note": "Derived by reading the in-memory reducer tests (cargo is not run by the pack author); a PG-recorded variant replaces `recorded` with true when DJC runs.",
+  "steps": [
+    {
+      "op": "admit",
+      "trigger": "t-1",
+      "expect": {
+        "admitted": true,
+        "job": "job-a"
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w1",
+      "now": 100,
+      "lease": 30,
+      "expect": {
+        "job": "job-a",
+        "fence_token": 1
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w2",
+      "now": 110,
+      "lease": 30,
+      "expect": null
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w2",
+      "now": 130,
+      "lease": 30,
+      "expect": {
+        "job": "job-a",
+        "fence_token": 2,
+        "attempt": 2
+      }
+    },
+    {
+      "op": "begin_job_effect_dispatch",
+      "worker": "w1",
+      "fence_token": 1,
+      "now": 131,
+      "expect": {
+        "error": "stale_fence"
+      }
+    }
+  ]
+}

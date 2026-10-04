@@ -1,0 +1,15 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "output_id": "bo-03-do-nothing",
+  "data_class": "synthetic",
+  "finding_ref": "sig-0001",
+  "evidence_refs": [
+    "ev-0004"
+  ],
+  "design_intent": {
+    "verdict": "do_nothing",
+    "target_ref": null,
+    "mechanism": "synthetic mechanism text for bo-03-do-nothing",
+    "affected_routes": []
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "name": "unknown_effect_not_claimable",
+  "kind": "specification_trace",
+  "recorded": false,
+  "derived_from_test": "crates/core/tests/durable_jobs.rs::crash_after_dispatch_is_unknown_and_recovery_never_releases_it_for_retry",
+  "note": "Derived by reading the in-memory reducer tests (cargo is not run by the pack author); a PG-recorded variant replaces `recorded` with true when DJC runs.",
+  "steps": [
+    {
+      "op": "admit",
+      "trigger": "t-1",
+      "expect": {
+        "admitted": true,
+        "job": "job-a"
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w1",
+      "now": 100,
+      "lease": 30,
+      "expect": {
+        "job": "job-a",
+        "fence_token": 1
+      }
+    },
+    {
+      "op": "begin_job_effect_dispatch",
+      "worker": "w1",
+      "fence_token": 1,
+      "now": 101,
+      "expect": "ok"
+    },
+    {
+      "op": "recover_job_after_restart",
+      "now": 200,
+      "expect": {
+        "status": "UnknownPendingReconciliation"
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w2",
+      "now": 201,
+      "lease": 30,
+      "expect": null
+    }
+  ]
+}

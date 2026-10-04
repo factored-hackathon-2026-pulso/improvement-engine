@@ -1,0 +1,8 @@
+{
+  "sources": [
+    "bridge-contract/examples/flows/authoring.json",
+    "bridge-contract/examples/flows/writer_evaluation.json"
+  ],
+  "copied_at_main": "853b029",
+  "note": "byte copies; dry-run is flow authoring, writer is writer_evaluation"
+}

@@ -1,0 +1,15 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "output_id": "bo-06-unlinked-no-route",
+  "data_class": "synthetic",
+  "finding_ref": "sig-0001",
+  "evidence_refs": [
+    "ev-0003"
+  ],
+  "design_intent": {
+    "verdict": "unlinked",
+    "target_ref": null,
+    "mechanism": "synthetic mechanism text for bo-06-unlinked-no-route",
+    "affected_routes": []
+  }
+}

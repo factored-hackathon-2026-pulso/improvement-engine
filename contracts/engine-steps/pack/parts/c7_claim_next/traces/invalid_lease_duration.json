@@ -1,0 +1,28 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "name": "invalid_lease_duration",
+  "kind": "specification_trace",
+  "recorded": false,
+  "derived_from_test": "crates/core/tests/durable_jobs.rs::(error path of acquire_lease)",
+  "note": "Derived by reading the in-memory reducer tests (cargo is not run by the pack author); a PG-recorded variant replaces `recorded` with true when DJC runs.",
+  "steps": [
+    {
+      "op": "admit",
+      "trigger": "t-1",
+      "expect": {
+        "admitted": true,
+        "job": "job-a"
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w1",
+      "now": 100,
+      "lease": 0,
+      "expect": {
+        "error": "InvalidLeaseDuration"
+      }
+    }
+  ]
+}

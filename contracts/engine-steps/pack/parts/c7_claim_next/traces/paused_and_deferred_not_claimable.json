@@ -1,0 +1,49 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "name": "paused_and_deferred_not_claimable",
+  "kind": "specification_trace",
+  "recorded": false,
+  "derived_from_test": "crates/core/tests/durable_jobs.rs::pause_is_an_atomic_durable_transition_with_idempotent_audit_receipt",
+  "note": "Derived by reading the in-memory reducer tests (cargo is not run by the pack author); a PG-recorded variant replaces `recorded` with true when DJC runs.",
+  "steps": [
+    {
+      "op": "admit",
+      "trigger": "t-1",
+      "expect": {
+        "admitted": true,
+        "job": "job-a"
+      }
+    },
+    {
+      "op": "control_job_atomically",
+      "kind": "pause",
+      "expect": {
+        "status": "Paused"
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w1",
+      "now": 100,
+      "lease": 30,
+      "expect": null
+    },
+    {
+      "op": "admit",
+      "trigger": "t-over-quota",
+      "expect": {
+        "admitted": false,
+        "job": null
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w1",
+      "now": 100,
+      "lease": 30,
+      "expect": null
+    }
+  ]
+}

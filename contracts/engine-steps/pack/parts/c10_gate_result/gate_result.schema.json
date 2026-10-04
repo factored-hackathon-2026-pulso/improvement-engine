@@ -1,0 +1,115 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "base_ref",
+    "candidate_ref",
+    "suite_digest",
+    "verdict",
+    "gates",
+    "judge_actor",
+    "quality_claims"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "engine-steps-pack/0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "base_ref": {
+      "type": "string",
+      "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+    },
+    "candidate_ref": {
+      "type": "string",
+      "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+    },
+    "suite_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "verdict": {
+      "enum": [
+        "pass",
+        "fail",
+        "not_evaluable"
+      ]
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gate",
+          "status"
+        ],
+        "properties": {
+          "gate": {
+            "enum": [
+              "safety",
+              "improvement"
+            ]
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "not_evaluable"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "judge_actor": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "quality_claims": {
+      "const": "forbidden"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "GateResult",
+  "title": "Gate result shape (C-10); semantics are filled by Codex",
+  "oneOf": [
+    {
+      "properties": {
+        "verdict": {
+          "const": "pass"
+        },
+        "gates": {
+          "items": {
+            "properties": {
+              "status": {
+                "const": "pass"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "verdict": {
+          "const": "fail"
+        }
+      }
+    },
+    {
+      "properties": {
+        "verdict": {
+          "const": "not_evaluable"
+        }
+      }
+    }
+  ]
+}

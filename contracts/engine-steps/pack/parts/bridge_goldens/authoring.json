@@ -1,0 +1,368 @@
+{
+  "contract_revision": "pulso-two-teams-1",
+  "description": "Alias read (CAP-08) and authoring dry-run (CAP-16 L2): 200/404/422 alias cases, a valid dry-run (base release alone, candidate_hash set), violations and request errors.",
+  "flow": "authoring",
+  "steps": [
+    {
+      "case": "alias_read",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "alias_read",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-state/aliases/atencion/prod"
+      },
+      "response": {
+        "body": {
+          "agent_id": "atencion",
+          "alias": "prod",
+          "observed_at": "<observed_at>",
+          "release_id": "rel-demo",
+          "runtime_profile": "agent_core_real",
+          "schema_version": "1",
+          "source": "core_store",
+          "status": "active"
+        },
+        "content_type": "application/json",
+        "schema": "AliasState",
+        "status": 200
+      }
+    },
+    {
+      "case": "alias_unknown_agent",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "alias_read",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-state/aliases/no-such-agent/prod"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:alias_unknown",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 404
+      }
+    },
+    {
+      "case": "alias_bad_name",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "alias_read",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/core-state/aliases/atencion/canary"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:invalid_request",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 422
+      }
+    },
+    {
+      "case": "dry_run_valid",
+      "description": "The base release alone is a valid candidate: valid=true, candidate_hash set, no proposal created.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "authoring_dry_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "base_release_id": "rel-demo",
+          "changes": [],
+          "schema_version": "1",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-authoring/dry-run"
+      },
+      "response": {
+        "body": {
+          "auto_bumped": [],
+          "candidate_hash": "<candidate_hash#1>",
+          "content_hashes": {
+            "agent:atencion@1.0.0": "9cba0662d6769eaff17fabe924294bc821414a412babb1e9c2e9bdad497a5294",
+            "decision_model:match-cargo@2.0.0": "e3f2936729678f764e5e24cf26fb65b02e9d8c4043f68592dd6a003b73e6e75d",
+            "decision_model:understand-turno@1.0.0": "011cdc30f5e4a0763f7b0920faeb187689d4d56bc7daa8a575474ced1729ec0b",
+            "flow:disputa-cargo@1.0.0": "6b5b579464f54370d2eed81b5c1a460c6a3ab270c0c8244fe17ed0a80d953b11",
+            "injection_ruleset:injection-rules@1.0.0": "172c1c4c0a20480fff9d2221e1df155bd5765b3a87e2d5591d42ba5ef82e361f",
+            "language_detection:lang-es-pt@1.0.0": "819529d6716a28ce54252f7975958b38790c7d05b4fe972516020d0a4e674d6c",
+            "model_profile:perfil-generacion@1.0.0": "d685c8c3161a94542e3337a8c5950a3d90bdc9ea180b8a09805311219d7a4129",
+            "policy:escalamiento-disputa-monto@1.0.0": "e67997e2d2a2356ad1d1e4fd6733a7c33b4754a8a54054c43e15fe897f37b6bf",
+            "prompt:p/resumen_radicado@1.0.0": "26389427d9931d33d38fb69d86959b0c95e162664fd964f8f898b38cda50d639",
+            "template:t/abstencion@1.0.0": "cc0289873212eaaa029239618c0e10a037f8656892c8a677364f79338f763705",
+            "template:t/aclarar@1.0.0": "56206672b53310b8c4cb1c30bd33bcee1d6abfbfd89cbe470d2fd658fd248179",
+            "template:t/aclarar_cargo@1.0.0": "543147ce52f54cea888536f6296a1b957ee0c9ccbddc5ca43c9555c07430b968",
+            "template:t/acuse@1.0.0": "9061fefb66a06575d9941f7b2dcd83efa5765ed1c5954e07b1d86e74a05d0fce",
+            "template:t/idioma_no_soportado@1.0.0": "63a73d2237109534ada31082b64486dda7c498b5a7d5fb19659594ccfc6f3ef5",
+            "template:t/mensaje_largo@1.0.0": "93427eb0c1696c0e9fad0a9eb60ed950c2928d2813c7e6e4a939f3fd22d1020f",
+            "template:t/no_confirmado@1.0.0": "19eb7f8d529389961ff1ed14ec66283cd303128435d41dfe78623b2071abf754",
+            "template:t/oferta@1.0.0": "cdcd2ac3f37ecbb0fd3cf052764980d36276cdd602f9b216b31e3b77e43e8eab",
+            "template:t/pedir_cargo@1.0.0": "d916ce88da49e354d7f9cc89247da6bc7167a2fabfab9b1b6399a0baaa944def",
+            "template:t/pqr_radicado@1.0.0": "b9a7fed3a2be46a9fb33e8890216e1876f1d5923bfb3ad571c93c0841f498dff",
+            "template:t/resumen_pqr@1.0.0": "9895ee51f07535ed517dd468d6168387cb5248139b4587be6c8595f91d7baf5c",
+            "template:t/traspaso@1.0.0": "aa993133401ef31c971efdd2a0c3a74881663df95299dabd83bb700c4c04a481",
+            "tool:buscar_transacciones@1.0.0": "a7e05d1d46c07c8add95eba12f6fc200e973dad31b659dd7c800b35948903deb",
+            "tool:convertir_moneda@1.0.0": "3b0addb9f12b20cd58beda0958a04ebb397ad62f8a0f82f5e6760f7f9953a86b",
+            "tool:obtener_pqr@1.0.0": "72446b11c64d7eccc6f6e22244f7a0aa983be10a844d12eeac534d37e326d27b",
+            "tool:radicar_pqr@1.0.0": "e0f54302e353c787b15a1e738147ede6b7c5eeeab1c06fd39a94694c220d810f",
+            "tool:seleccionar@1.0.0": "087dc355351dd0b082f72996af259de5748a16c13f0d4a3d95e5b270c0faba36"
+          },
+          "new_versions": [],
+          "proposal_created": false,
+          "release_hash": "e26df0070f6be82f9813caf03864442ee870b1626806eb096705e0351b6bfe6a",
+          "release_id_preview": "rel-d5a4da2840e74f4b",
+          "request_digest": "<request_digest#1>",
+          "runtime_profile": "agent_core_real",
+          "schema_version": "1",
+          "valid": true,
+          "violations": []
+        },
+        "content_type": "application/json",
+        "schema": "CoreAuthoringDryRun",
+        "status": 200
+      }
+    },
+    {
+      "case": "dry_run_base_release_unknown",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "authoring_dry_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "base_release_id": "rel-nope",
+          "changes": [],
+          "schema_version": "1",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-authoring/dry-run"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:base_release_unknown",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 404
+      }
+    },
+    {
+      "case": "dry_run_violations",
+      "description": "HTTP 200 with violations is NOT success: candidate_hash is null.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "authoring_dry_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "base_release_id": null,
+          "changes": [
+            {
+              "content": {},
+              "docs": {},
+              "kind": "no-such-kind"
+            }
+          ],
+          "schema_version": "1",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-authoring/dry-run"
+      },
+      "response": {
+        "body": {
+          "auto_bumped": [],
+          "candidate_hash": null,
+          "content_hashes": {},
+          "new_versions": [],
+          "proposal_created": false,
+          "release_hash": null,
+          "release_id_preview": null,
+          "request_digest": "<request_digest#2>",
+          "runtime_profile": "agent_core_real",
+          "schema_version": "1",
+          "valid": false,
+          "violations": [
+            {
+              "flow": null,
+              "message": "the change is not a valid EntityDraft (kind, content with text `id` and `version`, docs)",
+              "node_id": null,
+              "path": "changes/0",
+              "rule": "REG-SCHEMA"
+            }
+          ]
+        },
+        "content_type": "application/json",
+        "schema": "CoreAuthoringDryRun",
+        "status": 200
+      }
+    },
+    {
+      "case": "dry_run_tenant_mismatch",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "authoring_dry_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "base_release_id": null,
+          "changes": [],
+          "schema_version": "1",
+          "tenant_id": "t2"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-authoring/dry-run"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:tenant_mismatch",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 403
+      }
+    },
+    {
+      "case": "dry_run_unknown_field",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "authoring_dry_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "base_release_id": null,
+          "changes": [],
+          "schema_version": "1",
+          "surprise": 1,
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-authoring/dry-run"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:invalid_request",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "0123456789abcdef0123456789abcdef"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 422
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "output_id": "bo-02-linked-suite",
+  "data_class": "synthetic",
+  "finding_ref": "sig-0001",
+  "evidence_refs": [
+    "ev-0002",
+    "ev-0003"
+  ],
+  "design_intent": {
+    "verdict": "linked",
+    "target_ref": "eval_suite:pqr-core@1",
+    "mechanism": "synthetic mechanism text for bo-02-linked-suite",
+    "affected_routes": [
+      "pqr_status_lookup"
+    ]
+  }
+}

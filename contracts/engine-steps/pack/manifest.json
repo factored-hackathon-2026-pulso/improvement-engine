@@ -1,0 +1,83 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "parts": [
+    {
+      "id": "c7_claim_next",
+      "name": "C-7 v1.1 claim-next signature and claim traces",
+      "files": {
+        "parts/c7_claim_next/claim_next.v1_1.json": "sha256:de5fff04dd680ed9ebd9e1f9457abeef940931b902c04db289e8e40f5d74e969",
+        "parts/c7_claim_next/traces/claim_oldest_first.json": "sha256:547ab9c8dcbc98836cec1c2bb92a35c4573074b1d9fcc85f5ecf40a17a09bfab",
+        "parts/c7_claim_next/traces/expired_lease_reclaimed_with_higher_fence.json": "sha256:cfbbfeec09fe5001b13efa5ae27ab9b5acb932b278c202801d9c843b281a63f3",
+        "parts/c7_claim_next/traces/invalid_lease_duration.json": "sha256:28b7e05eaa9e06e9134d076a9389c71f0ed208ddcdb4754314c7c64535806774",
+        "parts/c7_claim_next/traces/paused_and_deferred_not_claimable.json": "sha256:5e85f52ab66fa28f634f36f50559da6a0aa263f87d12f980cb6d7df59748fbca",
+        "parts/c7_claim_next/traces/tenant_isolation.json": "sha256:ccf20e80720ce13b735b691e2d9f748fc29487f1515ccfdaf4b1893871c4552f",
+        "parts/c7_claim_next/traces/unknown_effect_not_claimable.json": "sha256:42fad80586bdb5d3b9bd4edf1eb35bf83dbc5b9e95278c48eb4b4aa50dffd707"
+      }
+    },
+    {
+      "id": "c8_schemas",
+      "name": "C-8 ChangeSpec and ScenarioCase schemas",
+      "files": {
+        "parts/c8_schemas/ChangeSpec.schema.json": "sha256:c511f7ef6b324f0ac7383d3a5c607381b6bff6874c9787058557f77b6726b0e0",
+        "parts/c8_schemas/invalid-ChangeSpec.json": "sha256:42aba1aa2ea9feb75801726881fc2c1bf6759afd7169081018453bd05e487837",
+        "parts/c8_schemas/invalid-ScenarioCase.json": "sha256:1b4d12cde623ebc1986b6a14c2839e8a9a69370603057a9380865937bb952eb4",
+        "parts/c8_schemas/ScenarioCase.schema.json": "sha256:356c104a95b573cc8949eb676195f393e1c1e98e6990e7146edaafabdb5af26c",
+        "parts/c8_schemas/valid-ChangeSpec.json": "sha256:2144f1bd8ab668747e6a85814d3db3322b3bd069fb8250bd4a66ed0d9ef2dc32",
+        "parts/c8_schemas/valid-ScenarioCase.json": "sha256:e0089d195db0eacfdc05b629f1428ee0b5e56d208adebb545bf91ed23be7100c"
+      }
+    },
+    {
+      "id": "c9_transcript",
+      "name": "C-9 pipeline transcript seed",
+      "files": {
+        "parts/c9_transcript/transcript.seed.json": "sha256:b5e815c669318dfdf1458ee0e7dc13dc22cd38945692c8e88de0fb52867fdcf5"
+      }
+    },
+    {
+      "id": "c10_gate_result",
+      "name": "C-10 gate result shape",
+      "files": {
+        "parts/c10_gate_result/gate_result.schema.json": "sha256:e08f52548c51deaaafb3641d1925ba4d65bc4ecc2642252f226169c120792fb3",
+        "parts/c10_gate_result/invalid-pass-with-failed-gate.json": "sha256:c35c87923a2007fa16698870655f5524edf108342028e8fd7070c2b5d0efdf05",
+        "parts/c10_gate_result/valid-pass.json": "sha256:4ec662a71e0fdd202526414a9a1eae1c2b1c2da95877746fc04ff93bd1d51c99"
+      }
+    },
+    {
+      "id": "builder_corpus",
+      "name": "builder-output corpus v0 (10 synthetic outputs) and verdicts",
+      "files": {
+        "parts/builder_corpus/builder_output.schema.json": "sha256:543f815162745d73416f0827db9f3032c23fec31779b84ae2ac640910029bbe5",
+        "parts/builder_corpus/catalogue.json": "sha256:94a1963754f994e237387baa9479a107de80aa70f14a66e8db50c41b12334067",
+        "parts/builder_corpus/outputs/bo-01-linked-prompt.json": "sha256:b9d3f2d942519739a828acfa7c8f2e6456dc88e1188c891df902c9d84ded42b5",
+        "parts/builder_corpus/outputs/bo-02-linked-suite.json": "sha256:1403028031bb6d7671fc94338d306905fbaffce597994d165b30ba7185ca0dc3",
+        "parts/builder_corpus/outputs/bo-03-do-nothing.json": "sha256:9683254e4975476a974333275a4c369783a4a5fe6d72fba8a125d1afcab32ba2",
+        "parts/builder_corpus/outputs/bo-04-linked-second-prompt.json": "sha256:08b9db05d82f35a155acb0f54b155af8bfeca23e044215eb5ec434679a7ade28",
+        "parts/builder_corpus/outputs/bo-05-unlinked.json": "sha256:d793d86e035658291ba8cecda9469170e493c5ba5959cffed37173b344965035",
+        "parts/builder_corpus/outputs/bo-06-unlinked-no-route.json": "sha256:aceaaa339559582be1293105a1193af84ae1c03042deb7f86a61868f1d86e52a",
+        "parts/builder_corpus/outputs/bo-07-not-evaluable.json": "sha256:9a36f94fff023848b1ed3271f9a0aecebde105411805bf8446da604944266c05",
+        "parts/builder_corpus/outputs/bo-08-not-evaluable-empty-evidence.json": "sha256:603bf82f0ec75f110475e584e3b5a768d6be2cee1793ae7b88393b500bb35573",
+        "parts/builder_corpus/outputs/bo-09-invented-evidence.json": "sha256:d1ad3805a0b5fa9a16e3c386a656addb1faaa076d015f62b0066d70c67e64e61",
+        "parts/builder_corpus/outputs/bo-10-invented-target.json": "sha256:f616a06a79591646a7cd95d859a0993748ce0431fdda783fc1189a4ee29a529a",
+        "parts/builder_corpus/verdicts.json": "sha256:ae9a434303f8117b6f0291c749cdefe246cec7b023ed421051809bab722cd5b4"
+      }
+    },
+    {
+      "id": "arm_report_goldens",
+      "name": "arm-report goldens",
+      "files": {
+        "parts/arm_report_goldens/arms.json": "sha256:0b0c2be5bddb018eaae6ad81dd3cb023ac39c10ffad9e80b7c23b77d2d0e0f09",
+        "parts/arm_report_goldens/PROVENANCE.json": "sha256:788fcee61826c00c7bd2881fdc93400387d847ec08f0a6502665fc2ed7c93111"
+      }
+    },
+    {
+      "id": "bridge_goldens",
+      "name": "bridge dry-run and writer goldens",
+      "files": {
+        "parts/bridge_goldens/authoring.json": "sha256:fd86f52156af4544a240cfb761bddb580288c03b494ec3b2f1cfdbf74ffcd07b",
+        "parts/bridge_goldens/PROVENANCE.json": "sha256:e948ee0f087af5c2855062f8c0ab5b94a179aff19b4fed52bbd39d13bd1d6202",
+        "parts/bridge_goldens/writer_evaluation.json": "sha256:3c98ba0f07e3e57e3b7e2fdc097764a03122e81cff3b242f22b229c866a4e32e"
+      }
+    }
+  ],
+  "pack_digest": "sha256:4355ce9f8c664f33d7e335063b331a615d3e00b1fdb39042b18b7b0c9af67677"
+}

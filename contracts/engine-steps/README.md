@@ -13,3 +13,12 @@ JSON in/out schemas for the engine steps `sensors`, `recompute`, `validation`,
 Every document carries `contract_version`, `step`, `run_id` and `data_class`
 (`synthetic`, `treated`, `e0`, `original`). Draft status: changes before the freeze
 need no stanza; afterwards `[CONTRACT-CHANGE]`.
+
+## FRZ0 pack (`pack/`)
+
+Digest-pinned pack for Codex lanes: `pack/manifest.json` lists 7 parts (C-7 v1.1
+claim-next signature plus claim traces, C-8 schemas, C-9 transcript seed, C-10 gate
+result shape, builder-output corpus v0, arm-report goldens, bridge dry-run and writer
+goldens) under one `pack_digest`. Verify offline: `python pack/verify_pack.py`.
+The claim traces are specification traces derived from the in-memory reducer tests
+(`recorded: false`); PG-recorded traces are still to come.

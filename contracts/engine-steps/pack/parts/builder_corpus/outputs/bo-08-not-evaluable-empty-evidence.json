@@ -1,0 +1,13 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "output_id": "bo-08-not-evaluable-empty-evidence",
+  "data_class": "synthetic",
+  "finding_ref": "sig-0001",
+  "evidence_refs": [],
+  "design_intent": {
+    "verdict": "not_evaluable",
+    "target_ref": null,
+    "mechanism": "synthetic mechanism text for bo-08-not-evaluable-empty-evidence",
+    "affected_routes": []
+  }
+}

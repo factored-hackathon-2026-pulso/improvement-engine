@@ -1,0 +1,15 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "data_class": "synthetic",
+  "evidence_refs": [
+    "ev-0001",
+    "ev-0002",
+    "ev-0003",
+    "ev-0004"
+  ],
+  "target_refs": [
+    "prompt:pqr-followup@1",
+    "prompt:status-lookup@1",
+    "eval_suite:pqr-core@1"
+  ]
+}

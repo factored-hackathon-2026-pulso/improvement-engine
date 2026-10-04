@@ -1,0 +1,76 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "contract": "C-9",
+  "revision": "seed-1",
+  "note": "Seed only: step order, status vocabulary and data class per step; X-FACADE and L-GOV extend it.",
+  "status_vocabulary": [
+    "manual_command",
+    "real-narrow",
+    "agent_roleplay",
+    "simulated",
+    "claude-standin",
+    "not_exercised"
+  ],
+  "events": [
+    {
+      "step": 1,
+      "name": "data_wakes_engine",
+      "status": "manual_command",
+      "data_class": "e0"
+    },
+    {
+      "step": 2,
+      "name": "signals_and_discards",
+      "status": "real-narrow",
+      "data_class": "e0"
+    },
+    {
+      "step": 3,
+      "name": "scout_and_verifier",
+      "status": "agent_roleplay",
+      "data_class": "treated"
+    },
+    {
+      "step": 4,
+      "name": "opportunity_and_alternatives",
+      "status": "agent_roleplay",
+      "data_class": "treated"
+    },
+    {
+      "step": 5,
+      "name": "concrete_change",
+      "status": "claude-standin",
+      "data_class": "synthetic"
+    },
+    {
+      "step": 6,
+      "name": "base_vs_candidate_gates",
+      "status": "real-narrow",
+      "data_class": "synthetic"
+    },
+    {
+      "step": 7,
+      "name": "bounded_revision",
+      "status": "not_exercised",
+      "data_class": "synthetic"
+    },
+    {
+      "step": 8,
+      "name": "human_authority",
+      "status": "simulated",
+      "data_class": "synthetic"
+    },
+    {
+      "step": 9,
+      "name": "staging_alias_read",
+      "status": "real-narrow",
+      "data_class": "synthetic"
+    },
+    {
+      "step": 10,
+      "name": "observations_and_memory",
+      "status": "not_exercised",
+      "data_class": "synthetic"
+    }
+  ]
+}

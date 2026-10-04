@@ -1,0 +1,28 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "rule": "valid = refs resolve in catalogue.json; unlinked and not_evaluable are decided without the catalogue; invalid = any evidence or target ref absent from the catalogue",
+  "verdicts": {
+    "bo-01-linked-prompt": "valid",
+    "bo-02-linked-suite": "valid",
+    "bo-03-do-nothing": "valid",
+    "bo-04-linked-second-prompt": "valid",
+    "bo-05-unlinked": "unlinked",
+    "bo-06-unlinked-no-route": "unlinked",
+    "bo-07-not-evaluable": "not_evaluable",
+    "bo-08-not-evaluable-empty-evidence": "not_evaluable",
+    "bo-09-invented-evidence": "invalid",
+    "bo-10-invented-target": "invalid"
+  },
+  "needs_catalogue": {
+    "bo-01-linked-prompt": false,
+    "bo-02-linked-suite": false,
+    "bo-03-do-nothing": false,
+    "bo-04-linked-second-prompt": true,
+    "bo-05-unlinked": false,
+    "bo-06-unlinked-no-route": false,
+    "bo-07-not-evaluable": false,
+    "bo-08-not-evaluable-empty-evidence": false,
+    "bo-09-invented-evidence": true,
+    "bo-10-invented-target": true
+  }
+}

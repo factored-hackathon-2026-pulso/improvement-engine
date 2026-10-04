@@ -1,0 +1,17 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "output_id": "bo-01-linked-prompt",
+  "data_class": "synthetic",
+  "finding_ref": "sig-0001",
+  "evidence_refs": [
+    "ev-0001"
+  ],
+  "design_intent": {
+    "verdict": "linked",
+    "target_ref": "prompt:pqr-followup@1",
+    "mechanism": "synthetic mechanism text for bo-01-linked-prompt",
+    "affected_routes": [
+      "pqr_status_lookup"
+    ]
+  }
+}
