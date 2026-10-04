@@ -70,3 +70,32 @@ dry-run 0.05, writer stage 0.69-0.77, proposal read 0.20-0.25, Core arm run 0.09
 evaluate-only 0.86-0.91, approve 0.22-0.23 (wrong-hash attempt 0.20-0.27, replay 0.22-0.25), publish 0.27-0.30
 (`effects.thread01_windows` in the e2e report).
 Stale note removed: `core_state_aliases_not_implemented` in `codex_standin/report.py` (alias reads answer 200).
+
+## Live roleplay window 1 (synthetic package, 2026-10-04)
+
+Label `model=agent_roleplay`, `quality_claims: forbidden`, `data_origin=generated_sample`, host python. Shim in LIVE mode
+(`python -m claude_standin.thread01 --live <queue> --workdir <dir> --summary <json>`): the thread talks to the shim over real HTTP
+on loopback, the queue directory lives outside tracked paths, and each request was answered by a fresh-context subagent that saw
+only its one request file and the RUNBOOK responder contract: scout (haiku), verifier (opus), builder (fable); distinct responder
+ids per call; none is the implementer of the code. The llm-gateway container was not used (the thread calls the shim directly);
+no containers ran. Only treated payloads passed the TPS scanner (0 rejections).
+
+| Measure | Value |
+|---|---|
+| Responder calls served | 6 (scout 2, verifier 2, builder 2); 7 subagents spawned (1 re-ask) |
+| Wall minutes (whole thread, incl. subagent latency) | 4.14 |
+| Scanner rejections | 0 |
+| Shim response rejections | 1 (scout step 1: the answer omitted `quality_claims`; renamed `.rejected.json`, ledger `response_rejected`), re-asked once, valid |
+| `responder_timeout` (55 s hold) | 2, both on the builder's last call; the late answer served the retry |
+| Steps | 1 stand-in, 2 real-narrow, 3 scout and verifier agent_roleplay, 4 agent_roleplay, 5 stand-in, 6 stand-in, 7 not_exercised, 8 simulated, 9 stand-in, 10 simulated |
+| G1 `check()` | no violations; ED0L recompute accepted the verifier's verdict |
+
+Findings fixed on the way (a responder sees only the request): the `lab_query` tool schema now names `metric_id` and `window_id`,
+and each stage request carries a real `output_schema` for its final answer (it was a stub). Scripted fixtures re-recorded for the
+new keys (`thread01_queue`, drift test green). Live answers are kept as a second replay fixture set
+`tests/fixtures/thread01_live_queue` (synthetic only), replayed with 0 misses by `test_e2e_thread_01_live_replay.py`.
+Haiku omitted a required field once; the lane needs the literal field list in the responder prompt.
+
+Real-E0 window: NOT run. The path convention (`ED0_E0_PATH`, runtime read, git-ignored derived dir) allows it, but the lab
+feeder for the real parquet (pyarrow, group = query signature, outcome = recurrence) and the mapping from an E0 category to the
+SMAP catalogue (ending `unlinked` is valid) do not exist yet; the thread's lab and labels are synthetic. No raw E0 reached any responder.

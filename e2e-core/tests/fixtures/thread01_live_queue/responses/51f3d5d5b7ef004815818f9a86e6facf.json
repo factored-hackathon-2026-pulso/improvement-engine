@@ -1,0 +1,18 @@
+{
+  "protocol": "roleplay-queue/1",
+  "key": "51f3d5d5b7ef004815818f9a86e6facf",
+  "provenance": "agent_roleplay",
+  "quality_claims": "forbidden",
+  "responder": {
+    "id": "resp-scout-haiku-2",
+    "role": "scout"
+  },
+  "content": {
+    "kind": "tool_call",
+    "tool": "pulso/lab_query@1.0.0",
+    "args": {
+      "metric_id": "recurrence_rate",
+      "window_id": "w1"
+    }
+  }
+}

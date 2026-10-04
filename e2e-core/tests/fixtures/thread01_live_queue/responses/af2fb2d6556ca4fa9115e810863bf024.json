@@ -1,0 +1,1 @@
+{"protocol":"roleplay-queue/1","key":"af2fb2d6556ca4fa9115e810863bf024","provenance":"agent_roleplay","quality_claims":"forbidden","responder":{"id":"resp-verifier-opus-1","role":"verifier"},"content":{"kind":"tool_call","tool":"pulso/lab_query@1.0.0","args":{"metric_id":"recurrence_rate","window_id":"w1"}}}
