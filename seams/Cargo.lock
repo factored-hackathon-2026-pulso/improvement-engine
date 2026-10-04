@@ -282,6 +282,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "eval"
+version = "0.0.0"
+dependencies = [
+ "core-client",
+ "serde_json",
+ "steps",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
