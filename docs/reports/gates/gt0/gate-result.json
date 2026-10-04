@@ -40,12 +40,12 @@
   {
    "item": "replay",
    "ok": true,
-   "detail": "run replay-3d9e9776af748ae0: 5 calls, 0 misses"
+   "detail": "run replay-e2a94dbff2463c01: 5 calls, 0 misses"
   },
   {
    "item": "live_window",
-   "ok": false,
-   "detail": "missing: live-windows.json"
+   "ok": true,
+   "detail": "2 live window(s) logged, consistent with THREAD01.md"
   },
   {
    "item": "capacity",
