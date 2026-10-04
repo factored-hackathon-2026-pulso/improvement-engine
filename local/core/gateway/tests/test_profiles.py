@@ -65,7 +65,7 @@ def test_e0_fallback_route_external_fails() -> None:
 
 
 def test_hosted_accepting_e0_fails() -> None:
-    for cls in ("E0", "csv", "original-treated"):
+    for cls in ("E0", "csv", "original-treated", "E0-derived", "e0_treated", "Original Treated"):
         p = copy.deepcopy(load("gw-hosted"))
         p["data_classes"].append(cls)
         assert "hosted_accepts_restricted" in rules(pc.check_profile(p)), cls

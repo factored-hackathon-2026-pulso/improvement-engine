@@ -54,6 +54,12 @@ def _norm(x):
     return re.sub(r"[\s_\-]+", "-", x.strip().casefold()) if isinstance(x, str) else x
 
 
+def _restricted(dc):
+    """Restricted data class by normalised prefix: E0-derived, e0_treated, CSV, Original Treated all count."""
+    n = _norm(dc)
+    return isinstance(n, str) and n.startswith(("e0", "csv", "original"))
+
+
 def _lies_real(st):
     prov = (st.get("receipt") or {}).get("provider")
     return st.get("status") == "real" and (not prov or _norm(prov) in {_norm(p) for p in NONREAL_PROVIDERS})
@@ -82,6 +88,8 @@ def _check_gate(report: dict, steps: list) -> list:
                 and isinstance(o.get("reason"), str) and o["reason"].strip()]
         if not good:
             out.append(_v("G1", "gate", f"approval/publish after gate verdict {gate!r} without a labelled human override"))
+        elif report.get("label") == "DEMO-0" and not all(o.get("simulated") is True for o in good):
+            out.append(_v("G1", "overrides", "a DEMO-0 override is a SIMULATED human and must say simulated: true"))
         elif report.get("quality_claims") != "forbidden":
             out.append(_v("G1", "quality_claims", "a human override of a failed gate requires quality_claims forbidden"))
     return out
@@ -105,10 +113,11 @@ def check(report: dict) -> list:
         prov = rc.get("provider")
         if _lies_real(st):
             out.append(_v("H1", sid, f"real with {prov!r} receipt provider"))
-        if _norm(st.get("data_class")) in {_norm(c) for c in RESTRICTED_CLASSES} and prov in THIRD_PARTY_PROVIDERS | {"hosted"}:
+        nprov = _norm(prov)
+        if _restricted(st.get("data_class")) and nprov in {_norm(p) for p in THIRD_PARTY_PROVIDERS}:
             if rc.get("scanner_id") not in KNOWN_SCANNER_IDS:
                 out.append(_v("H2", sid, "restricted class to third party without passing scanner id"))
-            if prov == "hosted" and rc.get("model_kind") == "real" and not rc.get("third_party_ok"):
+            if nprov == "hosted" and rc.get("model_kind") == "real" and not rc.get("third_party_ok"):
                 out.append(_v("H2", sid, "hosted real model needs third_party_ok"))
         if (st.get("stage_output") or {}).get("source") == "template_fallback":
             out.append(_v("H4", sid, "template-fallback stage output"))
@@ -180,7 +189,8 @@ def generate_doubles(report: dict, observed: dict) -> list:
     scanners = sorted({(s.get("receipt") or {}).get("scanner_id") for s in report.get("steps", [])} - {None})
     d.extend({"part": "scanner", "status": sid} for sid in scanners)
     for o in report.get("overrides") or []:
-        d.append({"part": f"{o.get('of')}.override", "status": o.get("label"), "verdict": o.get("verdict"), "by": o.get("by")})
+        d.append({"part": f"{o.get('of')}.override",
+                  "status": f"{o.get('label')}(simulated human, DEMO-0 stand-in)" if o.get("simulated") else o.get("label"), "verdict": o.get("verdict"), "by": o.get("by")})
     for p in report.get("ports", []):
         d.append({"part": f"port.{p.get('port')}", "status": p.get("provenance"), "price_source": p.get("price_source")})
     return d

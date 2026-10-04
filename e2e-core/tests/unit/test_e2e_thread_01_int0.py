@@ -107,7 +107,7 @@ def test_human_override_of_a_failed_gate_is_labelled_everywhere(tmp_path):
     assert s8["detail"]["override"]["of"] == "gate" and s8["detail"]["override"]["verdict"] == "fail"
     rep = t["report"]
     assert rep["overrides"] == [{"step": "approval", "of": "gate", "verdict": "fail", "by": "human", "label": "human_override",
-                                 "reason": ov["reason"], "actor": "local-supervisor"}]
+                                 "simulated": True, "reason": ov["reason"], "actor": "local-supervisor"}]
     assert rep["quality_claims"] == "forbidden" and rep["gate"]["verdict"] == "fail"
     assert any(d["part"] == "gate.override" for d in rep["doubles"])
     assert ER.check(rep) == []

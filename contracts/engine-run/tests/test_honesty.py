@@ -52,6 +52,13 @@ class Honesty(unittest.TestCase):
         r["steps"][0]["receipt"]["third_party_ok"] = "user sentence"
         self.assertNotIn("H2", rules(r))
 
+    def test_2b_restricted_class_and_provider_are_normalised(self):
+        for dc in ("E0-derived", "e0_treated", "CSV", "Original Treated"):
+            for prov in ("agent_roleplay", "Hosted", " HOSTED "):
+                r = good(); r["steps"][0]["data_class"] = dc
+                r["steps"][0]["receipt"] = {"provider": prov}
+                self.assertIn("H2", rules(r), (dc, prov))
+
     def test_3_mapping_mutation(self):
         cats = {"otp_retry": 30, "refund": 12, "login": 5}
         follows_data = lambda c: max(c, key=c.get)  # noqa: E731
@@ -209,6 +216,14 @@ class GateHonesty(unittest.TestCase):
     def test_exercised_publish_without_a_gate_verdict_is_rejected(self):
         r = gated("pass"); del r["gate"]
         self.assertIn("G1", rules(r))
+
+    def test_demo0_override_must_be_labelled_simulated(self):
+        r = gated("fail", override=OVERRIDE); r["label"] = "DEMO-0"
+        self.assertIn("G1", rules(r))
+        r["overrides"] = [{**OVERRIDE, "simulated": True}]
+        self.assertNotIn("G1", rules(r))
+        d = er.generate_doubles(r, observed={})
+        self.assertTrue(any(x["part"] == "gate.override" and "simulated" in x["status"] for x in d))
 
     def test_doubles_lists_the_override(self):
         d = er.generate_doubles(gated("fail", override=OVERRIDE), observed={})

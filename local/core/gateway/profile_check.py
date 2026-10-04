@@ -66,6 +66,8 @@ def check_profile(profile: dict) -> list[Violation]:
     name = profile.get("name", "?")
     out: list[Violation] = []
     classes = {str(c).strip().lower() for c in profile.get("data_classes", [])}
+    if any(re.sub(r"[\s_-]+", "-", c).startswith(("e0", "csv", "original")) for c in classes):
+        classes |= RESTRICTED  # E0-derived, e0_treated, Original Treated: a restricted class by prefix
     body = json.dumps({k: v for k, v in profile.items() if k not in _IGNORED_KEYS})
     if _SECRET_VALUE.search(body):
         out.append(Violation(name, "secret_value"))

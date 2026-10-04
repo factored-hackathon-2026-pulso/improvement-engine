@@ -527,7 +527,8 @@ def _gate_blocks(ctx: Ctx) -> dict | None:
     if not ok:
         return {"gate_verdict": verdict, "reason": "gate_not_passed_and_no_human_override"}
     ctx.out["override"] = {"step": "approval", "of": "gate", "verdict": verdict, "by": "human", "label": "human_override",
-                           "reason": ov["reason"].strip(), "actor": ov["actor"].strip()}
+                           "reason": ov["reason"].strip(), "actor": ov["actor"].strip(),
+                           "simulated": True}  # DEMO-0: the "human" is a config value written by the run's author
     return None
 
 
@@ -673,7 +674,14 @@ STEPS: list[tuple[int, str, Callable]] = [
 ]
 
 
+# E0 window: the data really is E0 (steps 1-2 local) or treated aggregates derived from it (3-4, sent to a responder
+# through the TPS scanner). It is never labelled generated_sample: that class is what gw-hosted accepts.
+E0_STEP_CLASS = {1: "E0", 2: "E0", 3: "original-treated", 4: "original-treated"}
+
+
 def _finish(n: int, sid: str, rec: dict, ctx: Ctx) -> dict:
+    if ctx.cfg.e0_path and n in E0_STEP_CLASS and rec.get("data_class") == "generated_sample":
+        rec = {**rec, "data_class": E0_STEP_CLASS[n]}
     return {"n": n, "id": rec.get("id", sid), "target": "local", "sha": ctx.sha,
             "contract_revision": CONTRACT_REVISION, "host": HOST, **{k: v for k, v in rec.items() if k != "id"}}
 
@@ -698,7 +706,7 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
     st = lambda n: next((s["status"] for s in steps if s["n"] == n), "red")  # noqa: E731
     world = ctx.out.get("world") or {"authors": {}}
     h = ctx.cfg.hooks
-    ports = [{"port": "llm_gateway", "provenance": f"roleplay-shim:{'live' if ctx.cfg.mode == 'live' else 'replay'}", "price_source": "placeholder-rate-card"},
+    ports = [{"port": "llm_gateway", "provenance": {"live": "roleplay-shim:live", "record": "roleplay-shim:record(scripted-responder)"}.get(ctx.cfg.mode, "roleplay-shim:replay"), "price_source": "placeholder-rate-card"},
              {"port": "registry", "provenance": "core-local-staging" if (h.publish and h.alias_read) else "in-process-double",
               "price_source": "n/a"},
              {"port": "human_issuer", "provenance": "local-human-issuer-double" if h.approve else "simulated-local-issuer",
@@ -717,7 +725,7 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
     observed = {"model": by.get((3, "scout"), {}).get("status", "red"),
                 "jev": "not_exercised(blocked: agent-core PR 28 not on main)",
                 "issuer": st(8), "product": "simulated" if st(9) == "stand-in" else st(9), "host": HOST,
-                "gate": "claude-authored(structural, quality_claims forbidden)", "data_origin": "generated_sample"}
+                "gate": "claude-authored(structural, quality_claims forbidden)", "data_origin": "E0-treated-aggregates" if ctx.cfg.e0_path else "generated_sample"}
     report["doubles"] = _er().generate_doubles(report, observed)
     return report
 

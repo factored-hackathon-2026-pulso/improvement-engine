@@ -66,11 +66,13 @@ def test_e0_window_steps_and_honest_unlinked_ending(run):
         assert "no_exact_supported_flow_mapping" in s["detail"]["reason"]
 
 
-def test_e0_report_passes_g1_and_is_generated_sample(run):
+def test_e0_report_passes_g1_and_never_calls_e0_derived_data_generated(run):
     rep = run["res"]["report"]
     assert _er().check(rep) == []
     assert rep["quality_claims"] == "forbidden"
-    assert {s["data_class"] for s in rep["steps"] if s["status"] != "not_exercised"} == {"generated_sample"}
+    classes = {s["n"]: s["data_class"] for s in rep["steps"] if s["status"] != "not_exercised"}
+    assert classes == {1: "E0", 2: "E0", 3: "original-treated", 4: "original-treated"}
+    assert {d["part"]: d["status"] for d in rep["doubles"]}["data.origin"] == "E0-treated-aggregates"
 
 
 def test_category_is_a_hashed_group_never_a_label(run):
