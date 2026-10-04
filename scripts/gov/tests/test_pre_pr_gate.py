@@ -10,11 +10,11 @@ OK = "exit 0"
 BAD = "exit 3"
 
 
-def run(**legs):
+def run(packages="pkg-a,pkg-b", **legs):
     with tempfile.TemporaryDirectory() as d:
         rec = Path(d, "receipt.json")
         args = ["pwsh", "-NoProfile", "-File", str(GATE), "-ReceiptPath", str(rec),
-                "-TouchedPackages", "pkg-a,pkg-b"]
+                "-TouchedPackages", packages]
         for k, v in legs.items():
             if v is not None:
                 args += [f"-{k}", v]
@@ -32,7 +32,7 @@ class Gate(unittest.TestCase):
         self.assertEqual(d["legs"]["pytest"]["status"], "pass")
 
     def test_missing_pytest_leg_exits_1(self):
-        r, d = run(CiCommand=OK, RatchetCommand=OK)
+        r, d = run(packages="", CiCommand=OK, RatchetCommand=OK)
         self.assertEqual(r.returncode, 1)
         self.assertEqual(d["legs"]["pytest"]["status"], "missing")
         self.assertEqual(d["verdict"], "fail")

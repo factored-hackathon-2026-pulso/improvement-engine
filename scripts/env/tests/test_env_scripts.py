@@ -17,11 +17,11 @@ def ps(script, *args):
 
 class TargetDirs(unittest.TestCase):
     def test_equal_dirs_fail(self):
-        r = ps("check-target-dirs.ps1", "-Assignment", r"a=D:\t\x", r"b=d:\T\x\\")
+        r = ps("check-target-dirs.ps1", "-Assignment", "a=D:/t/x,b=d:/T/x/")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
 
     def test_distinct_dirs_pass(self):
-        r = ps("check-target-dirs.ps1", "-Assignment", r"a=D:\t\a", r"b=D:\t\b")
+        r = ps("check-target-dirs.ps1", "-Assignment", r"a=D:\t\a,b=D:\t\b")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_c_drive_fails(self):
@@ -36,7 +36,7 @@ class TargetDirs(unittest.TestCase):
 
     def test_lane_target_dir_rejects_c_root_and_bad_lane(self):
         self.assertEqual(ps("lane-target-dir.ps1", "-Lane", "x", "-Root", r"C:\cargo").returncode, 1)
-        self.assertEqual(ps("lane-target-dir.ps1", "-Lane", "..\x").returncode, 1)
+        self.assertEqual(ps("lane-target-dir.ps1", "-Lane", "../x").returncode, 1)
 
     def test_slot_protocol_documented(self):
         self.assertIn("CARGO_TARGET_DIR", (ENV / "SLOT_PROTOCOL.md").read_text(encoding="utf-8"))
