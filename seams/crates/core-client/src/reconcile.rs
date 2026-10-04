@@ -113,7 +113,11 @@ impl CoreClient {
             if !retry || attempt >= policy.max_attempts {
                 return Err(err.into());
             }
-            clock.sleep(policy.backoff(key, attempt));
+            let wait = match &err {
+                CallError::Api(a) if a.retry_after.is_some() => a.retry_after.unwrap().min(policy.cap),
+                _ => policy.backoff(key, attempt),
+            };
+            clock.sleep(wait);
             attempt += 1;
         }
     }

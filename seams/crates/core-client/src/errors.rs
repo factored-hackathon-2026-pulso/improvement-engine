@@ -58,6 +58,8 @@ pub struct ApiError {
     pub reason: Option<String>,
     pub trace_id: Option<String>,
     pub details: Value,
+    /// `Retry-After` header (delta-seconds) when the Core sent one.
+    pub retry_after: Option<std::time::Duration>,
     /// True when `code` is in the contract table.
     pub known: bool,
 }
@@ -84,5 +86,6 @@ pub fn parse_envelope(status: u16, body: &[u8]) -> Option<ApiError> {
         code,
         retryable,
         details,
+        retry_after: None,
     })
 }

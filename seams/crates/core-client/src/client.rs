@@ -178,7 +178,16 @@ impl CoreClient {
                 .map_err(|e| CallError::Malformed { status: raw.status, message: e.to_string() });
         }
         Err(match errors::parse_envelope(raw.status, &raw.body) {
-            Some(a) => CallError::Api(a),
+            Some(a) => {
+                let mut a = a;
+                a.retry_after = raw
+                    .headers
+                    .iter()
+                    .find(|(k, _)| k == "retry-after")
+                    .and_then(|(_, v)| v.trim().parse::<u64>().ok())
+                    .map(Duration::from_secs);
+                CallError::Api(a)
+            }
             None => CallError::Malformed { status: raw.status, message: "not an error envelope".into() },
         })
     }
