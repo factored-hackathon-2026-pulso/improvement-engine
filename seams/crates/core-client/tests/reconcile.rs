@@ -41,3 +41,38 @@ fn lost_response_returns_the_same_run_with_one_effect() {
     assert_eq!(core.effects(), 1, "lost-response must not create a duplicate");
     assert_eq!(rep.execution_id, core_client::canon::arm_execution_id("t1", "k5a-arm-1").unwrap());
 }
+
+fn run(core: &ArmCore, clock: &TestClock, policy: &RetryPolicy) -> Result<core_client::dto::ArmReport, core_client::OpError> {
+    client(&core.addr).run_arm_reconciled("t1", Some("job-1"), &req(), policy, clock)
+}
+
+#[test]
+fn throttle_honours_retry_after_and_reuses_the_key() {
+    let core = ArmCore::start(vec![Fault::Throttle(Some(3))]);
+    let clock = TestClock::default();
+    run(&core, &clock, &RetryPolicy::default()).unwrap();
+    assert_eq!(core.effects(), 1);
+    assert_eq!(*clock.0.lock().unwrap(), vec![Duration::from_secs(3)], "must wait exactly Retry-After");
+    let keys: Vec<_> = core.requests().into_iter().map(|r| r.2).collect();
+    assert_eq!(keys, vec![Some("k5a-arm-1".to_string()); 2]);
+}
+
+#[test]
+fn throttle_is_bounded_and_retry_after_is_capped() {
+    let core = ArmCore::start(vec![Fault::Throttle(Some(3600)); 5]);
+    let clock = TestClock::default();
+    let p = RetryPolicy::default();
+    assert!(run(&core, &clock, &p).is_err());
+    assert_eq!(core.requests().len(), 3, "default 3 attempts");
+    assert_eq!(core.effects(), 0);
+    assert!(clock.0.lock().unwrap().iter().all(|d| *d <= p.cap), "waits capped");
+}
+
+#[test]
+fn unknown_error_classification_fails_closed() {
+    let core = ArmCore::start(vec![Fault::ThrottleUnknownCode]);
+    let clock = TestClock::default();
+    assert!(run(&core, &clock, &RetryPolicy::default()).is_err());
+    assert_eq!(core.requests().len(), 1, "unknown code is never retried");
+    assert!(clock.0.lock().unwrap().is_empty());
+}
