@@ -417,8 +417,37 @@ def step_08(ctx: Ctx) -> dict:
                        "issuer": "simulated"}}
 
 
+class RegistryDouble:
+    """In-process stand-in for the Core registry writer and alias table (INT0 replaces it through CoreHooks)."""
+
+    def __init__(self):
+        self.aliases: dict[str, str] = {}
+
+    def publish(self, ctx: "Ctx") -> dict:
+        digest = ctx.out["approval"]["digest"]  # only an approved digest can be published
+        rid = "rel-" + digest.split(":")[1][:12]
+        self.aliases["staging"] = rid
+        return {"release_id": rid, "alias": "staging"}
+
+    def alias_read(self, ctx: "Ctx", alias: str) -> dict:
+        return {"release_id": self.aliases[alias], "alias": alias}
+
+
 def step_09(ctx: Ctx) -> dict:
-    raise NotImplementedError("step 9")
+    if not ctx.out.get("approval"):
+        raise RuntimeError("no approval: nothing to publish")
+    reg, h = RegistryDouble(), ctx.cfg.hooks
+    published = (h.publish or reg.publish)(ctx)
+    ctx.out["published"] = published
+    read = (h.alias_read or (reg.alias_read if not h.publish else None))
+    if read is None:
+        raise RuntimeError("publish hook supplied without an alias_read hook")
+    alias = read(ctx, published["alias"])
+    both = bool(h.publish and h.alias_read)
+    ctx.out["alias_read"] = alias
+    return {"status": "real-narrow" if both else "stand-in", "data_class": "synthetic",
+            "receipt": {"provider": "core-local-staging" if both else "claude-standin"},
+            "detail": {"published": published, "alias_read": alias, "registry": "core" if both else "in-process-double"}}
 
 
 def step_10(ctx: Ctx) -> dict:
