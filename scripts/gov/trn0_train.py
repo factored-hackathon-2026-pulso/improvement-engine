@@ -153,7 +153,76 @@ def check_all(repo, m: dict) -> list:
     return problems
 
 
+def observed_merge_order(repo, base: str, train_branch: str, lanes: list):
+    """For a train that is already merged: each lane's position is the first first-parent commit of the train that
+    contains its tip. Returns (order, problems); nothing is asserted, everything is read from git."""
+    log = _git(repo, "rev-list", "--first-parent", "--reverse", f"{base}..{train_branch}", check=False)
+    commits = log.stdout.split()
+    order, problems = [], []
+    for l in lanes:
+        if _bad_ref(l.get("branch")):
+            problems.append(f"{l.get('id')}: unsafe branch name {l.get('branch')!r}")
+            continue
+        pos = next((i for i, c in enumerate(commits) if _is_ancestor(repo, l["branch"], c)), None)
+        if pos is None:
+            problems.append(f"{l['id']}: branch {l['branch']} is not merged into {train_branch}")
+        else:
+            order.append({"lane": l["id"], "branch": l["branch"], "first_train_commit": commits[pos], "position": pos})
+    where = {o["lane"]: o["position"] for o in order}
+    for l in lanes:
+        for d in l.get("deps", []):
+            if l["id"] in where and d in where and where[d] > where[l["id"]]:
+                problems.append(f"{l['id']}: merged before its dependency {d}")
+    return order, problems
+
+
+def make_consolidated_receipt(repo, m: dict, out: Path) -> dict:
+    """train-receipt/v1 for an already-merged train carried by ONE consolidated PR (m['pr']). Lane-hours may be null
+    (unknown, never invented); a PR over the cap is a disclosed deviation that needs a recorded authority."""
+    import datetime
+    import shutil
+    lanes, cap, base, branch = m["lanes"], m.get("pr_cap_hours", DEFAULT_CAP), m.get("base", "main"), m["train_branch"]
+    problems, deviations = [], []
+    for l in lanes:
+        h = l.get("lane_hours")
+        if h is not None and (isinstance(h, bool) or not isinstance(h, (int, float)) or not h > 0):
+            problems.append(f"{l.get('id')}: lane_hours must be a positive number or null, got {h!r}")
+    ids = [l["id"] for l in lanes]
+    problems += [f"duplicate lane id {i}" for i in {x for x in ids if ids.count(x) > 1}]
+    problems += [f"{l['id']}: unknown dependency {d}" for l in lanes for d in l.get("deps", []) if d not in ids]
+    order, p2 = observed_merge_order(repo, base, branch, lanes)
+    problems += p2
+    known = [l for l in lanes if isinstance(l.get("lane_hours"), (int, float)) and not isinstance(l.get("lane_hours"), bool)]
+    total = sum(l["lane_hours"] for l in known)
+    unknown = [l["id"] for l in lanes if l not in known]
+    if total > cap:
+        auth = ((m.get("cap_deviation") or {}).get("authority") or "").strip()
+        if auth:
+            deviations.append(f"PR {m['pr']} carries {total} known lane-hours, over the {cap} cap; authority: {auth}")
+        else:
+            problems.append(f"PR {m['pr']} carries {total} lane-hours, over the {cap} cap, with no recorded cap_deviation.authority")
+    n = m["pr"]
+    src = Path(m["receipts_dir"]) / f"pr-{n}.json"
+    problems += check_receipt(src)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    ref = None
+    if src.is_file():
+        ref = f"w0-pr-{n}.json"
+        shutil.copyfile(src, out.parent / ref)
+    head = _git(repo, "rev-parse", branch, check=False).stdout.strip()
+    doc = {"schema": "train-receipt/v1", "mode": "consolidated",
+           "generated_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+           "base": base, "train_branch": branch, "head_sha": head, "pr_cap_hours": cap,
+           "merge_order": order, "deviations": deviations,
+           "prs": [{"n": n, "lanes": ids, "lane_hours": total, "lane_hours_unknown": unknown, "w0_receipt": ref}],
+           "problems": problems, "verdict": "fail" if problems else "pass"}
+    out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return doc
+
+
 def make_receipt(repo, m: dict, out: Path) -> dict:
+    if m.get("mode") == "consolidated":
+        return make_consolidated_receipt(repo, m, out)
     """Write a train-receipt/v1: the check verdict plus, per train PR, its lanes, lane-hours and a copy of its W0 receipt."""
     import datetime
     import shutil
