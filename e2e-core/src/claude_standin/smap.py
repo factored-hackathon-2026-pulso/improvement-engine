@@ -57,9 +57,11 @@ def _dry_run(entry: dict, world: dict) -> str:
 
 
 def classify(output: dict, finding: dict, catalogue: dict, world: dict) -> dict:
-    di = output["design_intent"]
-    verdict, claimed = di["verdict"], di.get("target_ref")
     res = {"verdict": None, "target": None, "dry_run": None, "reason": None}
+    di = output.get("design_intent") if isinstance(output, dict) else None
+    if not isinstance(di, dict) or di.get("verdict") not in ("linked", "unlinked", "do_nothing", "not_evaluable"):
+        return {**res, "verdict": "invalid", "reason": "malformed_output"}
+    verdict, claimed = di["verdict"], di.get("target_ref")
     if not set(output.get("evidence_refs", [])) <= set(finding["evidence_refs"]):
         return {**res, "verdict": "invalid", "reason": "invented_evidence"}
     if verdict == "not_evaluable":
@@ -79,6 +81,8 @@ def classify(output: dict, finding: dict, catalogue: dict, world: dict) -> dict:
 
 
 def run_harness(recorded: dict, catalogue: dict, world: dict) -> dict:
+    if catalogue != catalogue_from_world(world):
+        raise ValueError("catalogue_world_drift: catalogue does not match the seeded world slots")
     results, counts = [], dict.fromkeys(COUNT_KEYS, 0)
     for rec in recorded["outputs"]:
         r = classify(rec["builder_output"], rec["finding"], catalogue, world)

@@ -90,3 +90,18 @@ def test_harness_is_deterministic_and_does_not_mutate_inputs():
     a, b = copy.deepcopy(REC), copy.deepcopy(CAT)
     assert S.run_harness(REC, CAT, WORLD) == S.run_harness(REC, CAT, WORLD)
     assert a == REC and b == CAT
+
+
+def test_catalogue_drift_against_world_is_detected():
+    import pytest
+    drift = copy.deepcopy(CAT)
+    drift["entries"][0]["target_ref"] = "prompt:resumen_radicado@9"
+    with pytest.raises(ValueError, match="catalogue_world_drift"):
+        S.run_harness(REC, drift, WORLD)
+
+
+def test_malformed_builder_output_is_invalid_not_a_crash():
+    f = finding("closing_reply_unclear")
+    for bad in ({}, {"design_intent": {}}, {"design_intent": {"verdict": "linked"}, "evidence_refs": ["ev-0001"]}):
+        r = S.classify(bad, f, CAT, WORLD)
+        assert r["verdict"] == "invalid" and r["target"] is None
