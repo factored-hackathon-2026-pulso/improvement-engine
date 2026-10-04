@@ -34,6 +34,8 @@ def _rows(root: Path, case_col: str, group_col: str):
             head = next(rd, None) or []
             if case_col not in head or group_col not in head:
                 raise ValueError("mapped column missing in csv header")
+            if head.count(case_col) != 1 or head.count(group_col) != 1:
+                raise ValueError("mapped column is ambiguous in csv header")
             ci, gi = head.index(case_col), head.index(group_col)
             for r in rd:
                 if len(r) > max(ci, gi):
@@ -44,6 +46,8 @@ def feed(root: str, salt: bytes, table: str, case_col: str, group_col: str, wind
     """Iterable of (case_key, group, window, outcome), one per (case, group); same shape as ed0_feed.feed."""
     if not all(_NAME.fullmatch(x or "") for x in (table, case_col, group_col)):
         raise ValueError("table and column names must be plain identifiers")
+    if case_col == group_col:
+        raise ValueError("case and group columns must differ")
     pairs = [(c, g) for c, g in _rows(Path(root) / table, case_col, group_col) if c and g]
     per_case = Counter(c for c, _g in pairs)
     for case_id, grp in sorted(set(pairs)):

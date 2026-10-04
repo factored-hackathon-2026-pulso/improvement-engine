@@ -140,6 +140,10 @@ class ThreadConfig:
     original_path: str | None = None
     original_map: dict | None = None
 
+    def __post_init__(self):
+        if self.e0_path and self.original_path:
+            raise ValueError("e0_path and original_path are mutually exclusive data classes")
+
     @property
     def treated(self) -> bool:
         return bool(self.e0_path or self.original_path)
@@ -826,6 +830,8 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.source == "original" and (a.e0 or not a.original_map or a.original_map.count(",") != 2):
         ap.error("--source original needs --original-map table,case_col,group_col and excludes --e0")
+    if a.original_map and a.source != "original":
+        ap.error("--original-map requires --source original")
     omap = dict(zip(("table", "case_col", "group_col"), a.original_map.split(","))) if a.source == "original" else None
     qdir, mode = (a.record, "record") if a.record else (a.live, "live") if a.live else (a.replay, "replay")
     with tempfile.TemporaryDirectory() as tmp:

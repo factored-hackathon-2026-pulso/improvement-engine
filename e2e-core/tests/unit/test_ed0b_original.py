@@ -160,3 +160,28 @@ def test_hosted_gateway_profile_still_rejects_original_classes():
         p = copy.deepcopy(prof)
         p["data_classes"].append(cls)
         assert "hosted_accepts_restricted" in {v.rule for v in pc.check_profile(p)}, cls
+
+
+def test_same_column_for_case_and_group_is_rejected(pkg):
+    with pytest.raises(ValueError):
+        list(O.feed(pkg, SALT, "complaints", "customer_id", "customer_id"))
+
+
+def test_duplicate_mapped_header_is_rejected(tmp_path):
+    d = tmp_path / "complaints" / "year=2025"
+    d.mkdir(parents=True)
+    (d / "p.csv").write_text("customer_id,customer_id,g\nRAWCUST-1,RAWCUST-2,RAWCAT\n", encoding="utf-8")
+    with pytest.raises(ValueError) as e:
+        list(O.feed(str(tmp_path), SALT, "complaints", "customer_id", "g"))
+    assert "RAWCUST" not in str(e.value)
+
+
+def test_config_rejects_e0_and_original_together(tmp_path):
+    with pytest.raises(ValueError):
+        T.ThreadConfig(workdir=tmp_path, exe=EXE, queue_dir=tmp_path, mode="replay", e0_path="x",
+                       original_path="y", original_map=MAP)
+
+
+def test_cli_rejects_original_map_without_source_original():
+    with pytest.raises(SystemExit):
+        T.main(["--replay", "q", "--original-map", "a,b,c"])
