@@ -12,6 +12,7 @@ pub mod adapters;
 pub mod conformance;
 pub mod demo;
 pub mod executor;
+pub mod ledger;
 pub mod live;
 pub mod live_core;
 pub mod models;
