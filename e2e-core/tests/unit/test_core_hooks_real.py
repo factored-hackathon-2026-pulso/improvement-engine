@@ -215,3 +215,24 @@ def test_gate_probe_reports_why_approval_and_publish_cannot_move_staging():
     assert res["evaluation"] == "failed_infra"
     assert res["approve"] == [409, "illegal_transition"] and res["publish"] == [409, "illegal_transition"]
     assert res["staging_unchanged"] is True and bridge.aliases["staging"] == BASE
+
+
+def test_each_registry_call_carries_the_jws_of_its_own_operation():
+    rc, _, reg = core()
+    rc.approve(ctx())
+    rc.publish(ctx())
+    bearers = {(m, p.rsplit("/", 1)[-1]): b for m, p, b, _ in reg.calls}
+    assert bearers[("POST", "approve")] == "jws.approve.sig" and bearers[("POST", "publish")] == "jws.publish.sig"
+    assert bearers[("GET", "prop-1")] == "bot.jws.x"  # reads use the bot credential, never a human JWS
+
+
+def test_publish_that_answers_the_base_release_did_not_publish_the_draft():
+    rc, bridge, reg = core()
+    rc.approve(ctx())
+    reg.__class__.__call__, orig = (lambda self, m, p, b, **k: Resp(200, {"release_id": BASE})
+                                    if p.endswith("/publish") else orig(self, m, p, b, **k)), reg.__class__.__call__
+    try:
+        with pytest.raises(RuntimeError, match="base release"):
+            rc.publish(ctx())
+    finally:
+        reg.__class__.__call__ = orig

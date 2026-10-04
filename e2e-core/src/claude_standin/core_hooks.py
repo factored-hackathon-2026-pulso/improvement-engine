@@ -308,6 +308,8 @@ class RealCore:
                       headers={"Idempotency-Key": "pub-" + uuid.uuid4().hex})
         if r.status_code != 200 or not r.json().get("release_id"):
             raise RuntimeError(f"core publish http {r.status_code} {_code(r)}")
+        if r.json()["release_id"] == fz.base_release_id:
+            raise RuntimeError("core publish answered the base release: the thread's draft was not published")
         self._published = r.json()["release_id"]
         return {"release_id": self._published, "alias": "staging"}
 
