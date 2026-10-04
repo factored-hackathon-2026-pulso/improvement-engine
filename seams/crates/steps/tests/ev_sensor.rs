@@ -184,3 +184,17 @@ fn report_states_what_the_sensor_did_not_do() {
     assert!(j.contains("not_done") && j.contains("payload"), "{j}");
     assert!(j.contains("bonferroni"), "method documented: {j}");
 }
+
+#[test]
+#[ignore = "slow measurement: 200 null seeds; run with --ignored --nocapture"]
+fn measure_null_false_positive_rate_over_200_seeds() {
+    let (mut adm, mut screened) = (0, 0);
+    for seed in 1..=200u64 {
+        let d = make(Scn::Null, 5000 + seed, 2500);
+        let r = analyze(&d.events, &d.cases, &p());
+        adm += usize::from(!r.signals.is_empty());
+        screened += usize::from(r.discards.iter().any(|x| matches!(x.reason.as_str(), "not_replicated" | "multiple_comparison")));
+    }
+    eprintln!("R1G null 200 seeds: admitted runs {adm}/200, runs with a screened-out candidate {screened}/200");
+    assert!(adm <= 10);
+}
