@@ -21,3 +21,19 @@ a492bfa). Pulso-side counterpart of `core_mock`, for exporter and engine tests.
 
 Tests: `uv run --python 3.12 --no-project --with pytest --with jsonschema --with sqlglot python -m pytest platform-sim/tests/plive`
 (conformance via `platform-contract`).
+
+## Release events, fast-forward clock and effects (P2py)
+
+- `publish_release(agent_id, alias, release_id, effect=None, mechanism=None)` emits
+  `release.published` (payload: ids only; contract in `platform_contract/release_events.py`,
+  not admitted in catalog 1.1.0, so it classifies `unknown` until the engine admits it).
+- `schedule(delay, fn)` and `fast_forward(seconds=, days=)` move the clock forward only and run
+  due jobs in order.
+- `effect_series(release_id)`: daily `simulated` points from an `EffectSpec`.
+- **Author-separation rule.** The simulated effect of a release is authored from an independent
+  `EffectSpec` (own author, seed, baseline, delta, ramp, noise). It must not be derived from the
+  planted detection mechanism: `simulate_effect_series` cannot see a `PlantedMechanism`,
+  `assert_author_separation` rejects equal authors or declared derivation, and tests prove the
+  series is invariant to the planted parameters.
+- `observation_labels()`: release event and effect are `simulated`; memory and successor are
+  `not_exercised` (observation only).
