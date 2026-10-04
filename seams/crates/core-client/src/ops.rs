@@ -139,6 +139,11 @@ impl CoreClient {
         let expected = crate::canon::arm_execution_id(tenant, &req.idempotency_key)?;
         let body = req.to_json();
         let r = self.op(&routes::RUN_ARM, tenant, job_id, &[], Some(&body), Some(&req.idempotency_key), self.attempts())?;
+        self.decode_arm(&expected, &r)
+    }
+
+    /// Decodes a `run_arm` answer and checks it is the run of this key.
+    pub(crate) fn decode_arm(&self, expected: &str, r: &Response) -> Result<ArmReport, OpError> {
         let rep = ArmReport::from_json(&r.body)?;
         if !rep.execution_id_well_formed(self.placeholders_ok()) {
             return Err(OpError::Contract(format!("execution_id {:?} is not arm-<32 hex>", rep.execution_id)));
