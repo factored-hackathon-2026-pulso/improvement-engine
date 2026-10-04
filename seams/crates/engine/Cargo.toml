@@ -1,0 +1,9 @@
+[package]
+name = "engine"
+description = "Run-once harness over a job store port: linear JobHandler list, CAS-persisted inputs, resume after kill. std only."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abi = { path = "../abi" }
