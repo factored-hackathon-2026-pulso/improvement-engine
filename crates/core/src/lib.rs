@@ -61,6 +61,7 @@ pub(crate) mod run_timeline_v2;
 pub mod sandbox;
 pub mod signal_portfolio;
 pub mod source_validation;
+pub mod value_model;
 pub mod wiki_scratch;
 pub mod workflow_bridge;
 
