@@ -9,6 +9,7 @@ from . import compile_step as C
 # Declared category vocabulary of the catalogue (synthetic labels; categories are data, not code paths).
 _ADDRESSES = {"prompt": ["closing_reply_unclear", "followup_wording"], "eval_suite": ["coverage_gap_dispute"]}
 _OPS = {"prompt": "replace", "eval_suite": "add"}
+UNLINKED_REASON = "no_exact_supported_flow_mapping"
 COUNT_KEYS = ("valid", "unlinked", "not_evaluable", "invalid")
 
 
@@ -35,6 +36,16 @@ def _candidates(finding: dict, catalogue: dict) -> list:
 def select_target(finding: dict, catalogue: dict):
     c = _candidates(finding, catalogue)
     return c[0]["target_ref"] if len(c) == 1 else None
+
+
+def e0_mapping(finding: dict, catalogue: dict) -> dict:
+    """Honest mapping of an E0 finding. A target exists only on an EXACT match of the finding's category with a
+    catalogue entry's declared vocabulary. E0 categories are salted hashed groups (query signature) that no entry
+    declares, so the ending is `unlinked`; support, rank and the winning category are never consulted."""
+    target = select_target(finding, catalogue)
+    if target is None:
+        return {"verdict": "unlinked", "reason": UNLINKED_REASON, "target": None}
+    return {"verdict": "linked", "reason": None, "target": target}
 
 
 def design_input(finding: dict, catalogue: dict) -> dict:

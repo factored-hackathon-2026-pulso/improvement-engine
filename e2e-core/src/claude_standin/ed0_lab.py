@@ -94,6 +94,17 @@ def lab_query(db, metric_id, window_id):
                       "evidence_ref": e} for e, m, w, g, n, c in rows]}
 
 
+def lab_groups(db, metric_id=METRIC, window_id="w1"):
+    """Treated group view for the orchestrator: hashed group key -> evidence ref, numerator, count (never raw labels)."""
+    con = sqlite3.connect(db)
+    try:
+        rows = con.execute("select g_group, evidence_ref, numerator, count from lab_rows where metric_id = ? and"
+                           " window_id = ? order by g_group", (metric_id, window_id)).fetchall()
+    finally:
+        con.close()
+    return {g: {"evidence_ref": e, "numerator": n, "count": c} for g, e, n, c in rows}
+
+
 def scout_figure(db, ref):
     r = _fetch(db, ref)
     if r is None:

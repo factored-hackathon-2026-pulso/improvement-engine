@@ -96,6 +96,27 @@ new keys (`thread01_queue`, drift test green). Live answers are kept as a second
 `tests/fixtures/thread01_live_queue` (synthetic only), replayed with 0 misses by `test_e2e_thread_01_live_replay.py`.
 Haiku omitted a required field once; the lane needs the literal field list in the responder prompt.
 
-Real-E0 window: NOT run. The path convention (`ED0_E0_PATH`, runtime read, git-ignored derived dir) allows it, but the lab
-feeder for the real parquet (pyarrow, group = query signature, outcome = recurrence) and the mapping from an E0 category to the
-SMAP catalogue (ending `unlinked` is valid) do not exist yet; the thread's lab and labels are synthetic. No raw E0 reached any responder.
+## Live roleplay window 2 (real local E0, treated aggregates only, 2026-10-04)
+
+Path: `ED0_E0_PATH` read at runtime by the Rust sensor and by the pyarrow feeder `claude_standin/ed0_feed.py` (columns
+`case_id`, `query_signature` only). Group = query signature, outcome = recurrence (case with at least two copilot queries;
+the same-signature repeat is empty on the real shape). Case keys and group keys are salted HMACs, the salt is ephemeral and never
+stored; k = 10. Run: `python -m claude_standin.thread01 --live <queue> --workdir <dir> --summary <json> --e0` with queue, workdir and
+summary under the git-ignored `output/`; no fixture from it is committed. Responders: scout (haiku), verifier (opus), builder
+(fable), fresh context, distinct ids per call.
+
+| Measure | Value |
+|---|---|
+| Treated lab | 3 groups, counts 1587 / 314 / 300, recurrence rates 0.31 / 0.80 / 0.80 (aggregates only) |
+| Sensor (arranque 200, min support 20) | admitted `e0_recurring_copilot_query_cases`, support 154 of 200, holdout replicated, 2 discards |
+| Responder calls / wall minutes | 5 (scout 2, verifier 2, builder 1) / 2.46 |
+| Scanner rejections, shim response rejections, timeouts, re-asks | 0 / 0 / 0 / 0 |
+| Steps | 1 stand-in, 2 real-narrow, 3 scout and verifier agent_roleplay, 4 agent_roleplay, 5-10 not_exercised |
+| SMAP ending | `unlinked`, reason `no_exact_supported_flow_mapping`; no key to the winning category |
+| G1 `check()` | no violations; `data_origin generated_sample`, `quality_claims: forbidden` |
+| Leak scan | 0 raw case, query, customer or analyst ids or signatures in queue, workdir, summary, log; DC0 scan clean |
+
+Mapping: E0 categories are hashed query-signature groups that no catalogue entry declares, so `smap.e0_mapping` ends `unlinked`
+(valid honest ending); steps 5-10 report `not_exercised` with that reason. Contract gap: G1 rule H5 demands
+`candidate_created_at` even when no candidate exists; the report carries the reserved ordering slot. A contract change to
+accept null when step 5 is not_exercised is proposed, not made here.
