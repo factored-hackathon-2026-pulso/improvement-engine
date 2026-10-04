@@ -11,6 +11,9 @@ from .model import (
     DENIED_COLUMNS,
     DENIED_TABLES,
     EVENT_CATALOG_VERSION,
+    EVENT_DATA_CLASSES,
+    EVENT_FREE_TEXT_KEYS,
+    EVENT_PAYLOAD_KEYS,
     EVENT_TYPES,
     EVIDENCE_KINDS,
     FINDING_CODES,
@@ -26,6 +29,7 @@ from .model import (
     PLANNED_TABLES,
     PROFILE,
     TABLES,
+    event_data_class,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,7 +67,7 @@ def _prop(kind, nullable, extra):
     else:
         s = {"type": kind}
     for k, v in extra.items():
-        if k in ("pattern", "enum", "minimum", "maxLength", "minLength"):
+        if k in ("pattern", "enum", "minimum", "maximum", "maxLength", "minLength"):
             s[k] = v
     if extra.get("sensitive_text"):
         s["x-sensitive-text"] = True
@@ -186,6 +190,17 @@ def build_source_schema(name: str) -> dict:
     }
 
 
+def _event_entry(t: str, f: str, e: str, s: str) -> dict:
+    entry = {"event_type": t, "family": f, "entity": e, "status": s}
+    if s == "admitted":
+        entry["data_class"] = event_data_class(t)
+    if t in EVENT_PAYLOAD_KEYS:
+        entry["payload_keys"] = list(EVENT_PAYLOAD_KEYS[t])
+    if t in EVENT_FREE_TEXT_KEYS:
+        entry["free_text_keys"] = list(EVENT_FREE_TEXT_KEYS[t])
+    return entry
+
+
 def build_event_catalog() -> dict:
     return {
         "catalog_version": EVENT_CATALOG_VERSION,
@@ -206,14 +221,13 @@ def build_event_catalog() -> dict:
         },
         "legacy_exporter_prefix": {
             "prefix": LEGACY_EXPORTER_PREFIX,
-            "valid_for_contract_versions": [PREVIOUS_CONTRACT_VERSION],
+            "valid_for_contract_versions": ["1.0.0"],
             "status": "interim rule of 1.0.0; under 1.1.0 only exporters with legacy_prefix=True still emit it",
         },
         "unknown_policy": "count, quarantine with a quality finding, never fail the batch",
         "planned_prefixes": list(PLANNED_EVENT_PREFIXES),
-        "event_types": [
-            {"event_type": t, "family": f, "entity": e, "status": s} for t, f, e, s in EVENT_TYPES
-        ],
+        "data_classes": dict(EVENT_DATA_CLASSES),
+        "event_types": [_event_entry(t, f, e, s) for t, f, e, s in EVENT_TYPES],
     }
 
 
@@ -259,4 +273,5 @@ __all__ = [
     "assert_table_readable", "build_event_catalog", "build_schema", "classify_event_type",
     "generate_artifacts", "load_schema", "load_source_schema", "build_source_schema", "SOURCE_SCHEMAS",
     "PREVIOUS_CONTRACT_VERSION", "MAX_FINDING_DETAILS_BYTES", "LEGACY_EXPORTER_PREFIX",
+    "EVENT_DATA_CLASSES", "EVENT_FREE_TEXT_KEYS", "EVENT_PAYLOAD_KEYS", "event_data_class",
 ]

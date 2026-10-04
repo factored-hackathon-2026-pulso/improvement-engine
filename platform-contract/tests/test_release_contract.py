@@ -52,7 +52,7 @@ def test_release_payload_schema_matches_python_validator():
 
 
 def test_release_event_types_stay_unknown_and_catalog_unchanged():
-    assert pc.CONTRACT_VERSION == "1.1.0"
+    assert pc.CONTRACT_VERSION == "1.2.0"
     for t in ("release.published", "release.rolled_back"):
         assert pc.classify_event_type(t) == "unknown"
     assert not any(e["event_type"].startswith("release.") for e in pc.build_event_catalog()["event_types"])

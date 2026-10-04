@@ -75,7 +75,7 @@ GRANT USAGE ON SCHEMA product TO pulso_product_ro, pulso_loader;
 REVOKE ALL ON SCHEMA product FROM PUBLIC;
 GRANT SELECT (sequence, event_id, event_type, entity, entity_id, case_id, actor_role, actor_id, event_time, ingested_at, payload, tenant_id, _batch_id, _source_file, _ingested_at) ON product.event_log TO pulso_product_ro;
 GRANT SELECT, INSERT, DELETE ON product.event_log TO pulso_loader;
-GRANT SELECT (id, customer_id, channel, language, priority, opened_at, sla_due_at, previous_case_id, tenant_id, _batch_id, _source_file, _ingested_at) ON product.cases TO pulso_product_ro;
+GRANT SELECT (id, customer_id, channel, language, priority, opened_at, sla_due_at, previous_case_id, rating_score, rated_at, tenant_id, _batch_id, _source_file, _ingested_at) ON product.cases TO pulso_product_ro;
 GRANT SELECT, INSERT, DELETE ON product.cases TO pulso_loader;
 GRANT SELECT (id, simulator, _batch_id, _source_file, _ingested_at) ON product.customers TO pulso_product_ro;
 GRANT SELECT, INSERT, DELETE ON product.customers TO pulso_loader;

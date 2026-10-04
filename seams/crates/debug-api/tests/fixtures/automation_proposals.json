@@ -1,0 +1,31 @@
+{
+  "cobro_indebido": {
+    "proposal_id": "prop-cobro-001",
+    "simulated": true,
+    "target": {
+      "agent_id": "copiloto-asesor",
+      "alias": "staging",
+      "artifact": "p/copiloto@1.0.0",
+      "candidate_artifact": "p/copiloto@1.1.0",
+      "eval_suite": "copiloto-quejas-suite@1.0.0"
+    },
+    "related_agents": [
+      "recepcion",
+      "disputas",
+      "consultas"
+    ],
+    "candidate_hash": "sha256:0f3a9c51d1b7e2a4c6b8d0e2f4a6c8e0a2b4d6f8091a2b3c4d5e6f708192a3b4",
+    "ledger_verdict": "viable_pending_approval",
+    "link_grade": "mechanism_proxy",
+    "run_id": "run-cobro-001",
+    "change": "prompt_replace",
+    "origin": "auto_detect",
+    "evaluability": "unverified_advisor_agent",
+    "alternative_target": {
+      "agent_id": "disputas",
+      "alias": "staging",
+      "artifact": "p/resumen_radicado@1.0.0",
+      "evaluability": "customer_scripted_scenarios"
+    }
+  }
+}

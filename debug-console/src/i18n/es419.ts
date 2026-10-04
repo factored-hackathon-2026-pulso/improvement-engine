@@ -1,7 +1,9 @@
 // UI strings: es-419. Machine codes (status, reason_code, scenario ids) are shown verbatim, never translated.
 import { SOURCES_ES } from './sources';
+import { AUTOMATION_ES } from '../features/automation/strings';
 export const ES_419 = {
   ...SOURCES_ES,
+  ...AUTOMATION_ES,
   'decl.label': 'Declaración del origen de datos',
   'decl.text': 'Origen: {provider} · objetivo: {target} · perfil: {profile} · dobles: {doubles}',
   'decl.partial': 'Esta pantalla usa el cliente heredado, no el origen {provider}: sus datos NO provienen de ese origen',

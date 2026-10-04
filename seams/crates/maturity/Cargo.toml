@@ -1,0 +1,9 @@
+[package]
+name = "maturity"
+description = "Claude-owned pure case-type maturity model (stage 0..3, Con agente): metrics with source and simulated flags, configurable thresholds, honest not_computable. No I/O."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json = "1"

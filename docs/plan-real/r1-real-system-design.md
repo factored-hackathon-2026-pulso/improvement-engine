@@ -55,7 +55,7 @@ proposal.
 | Ledger, approval | durable run control (U34), control-api | viable/non-viable ledger rows keyed by `source_id` |
 | Release/observation | simulator events | real events: EXT-2 (product) |
 | New `pulso` binary, console | other agents' work (do not touch) | wiring to `data_mode` and profile display |
-| Platform in Postgres | none: support-platform is SQLite by default, Postgres untested, no migrations, slice 12 vs our 1.1.0 (a492bfa) | product team deliverable (gap G1) |
+| Platform in Postgres | none: support-platform is SQLite by default, Postgres untested, no migrations, slice 12 vs our 1.1.0 (a492bfa, unreachable since 2026-10-04; contract refreshed to 1.2.0 against `eeb73a8`) | product team deliverable (gap G1) |
 
 ## 4. Data modes
 
@@ -189,7 +189,7 @@ bootstrap from Secrets Manager, never in SQL or Git.
 ## 11. Risks
 
 1. Product Postgres backing does not exist (SQLite default, no migrations): adapter (2) snapshot is the fallback.
-2. Contract drift: platform is at slice 12, our contract 1.1.0 at a492bfa; fingerprint check fails closed.
+2. Contract drift: platform is at slice 12, our contract 1.1.0 at a492bfa (unreachable since 2026-10-04: history rewritten; the closest old commit `7d2ae3a` is an INFERENCE; now 1.2.0 at `eeb73a8`, digest-pinned in `scripts/contracts/pinned_digests.json`); fingerprint check fails closed.
 3. Enum and id reconciliation (channel, priority, PSN-/CLI-) between E0, bank and platform.
 4. No release/observation events: improvement stays unproven in platform mode (honestly `simulated`).
 5. Small volumes: few proposals; do not tune thresholds to manufacture activity.

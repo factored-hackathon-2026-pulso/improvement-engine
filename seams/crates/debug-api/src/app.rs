@@ -25,11 +25,13 @@ pub struct Config {
     pub static_dir: Option<std::path::PathBuf>,
     /// Body served for `/config.json` instead of the file in `static_dir` (points the console's data provider at this server).
     pub config_json: Option<String>,
+    /// Case-type maturity read model served under `/internal/v1/automation`; `None` = the surface does not exist (404).
+    pub automation: Option<Arc<crate::automation::Automation>>,
 }
 
 impl Default for Config {
     fn default() -> Config {
-        Config { tenant: "tenant-local".into(), token: None, admin_token: None, heartbeat: Duration::from_secs(5), static_dir: None, config_json: None }
+        Config { tenant: "tenant-local".into(), token: None, admin_token: None, heartbeat: Duration::from_secs(5), static_dir: None, config_json: None, automation: None }
     }
 }
 
@@ -56,7 +58,7 @@ pub struct StreamPlan {
 pub struct App {
     pub(crate) store: Arc<Store>,
     pub(crate) cfg: Config,
-    csrf: String,
+    pub(crate) csrf: String,
     cookie: String,
 }
 
@@ -66,15 +68,15 @@ fn opaque(tag: &str) -> String {
     h.iter().take(16).map(|b| format!("{b:02x}")).collect()
 }
 
-fn resp(status: u16, body: &Value, headers: Vec<(String, String)>) -> Resp {
+pub(crate) fn resp(status: u16, body: &Value, headers: Vec<(String, String)>) -> Resp {
     let mut h = vec![("Content-Type".to_string(), "application/json".to_string()), ("Cache-Control".to_string(), "no-store".to_string())];
     h.extend(headers);
     Resp { status, headers: h, body: body.to_string().into_bytes() }
 }
-fn ok(body: &Value) -> Resp {
+pub(crate) fn ok(body: &Value) -> Resp {
     resp(200, body, vec![])
 }
-fn problem(code: &str, status: u16, extra: Value) -> Resp {
+pub(crate) fn problem(code: &str, status: u16, extra: Value) -> Resp {
     let mut b = json!({"code": code, "message": code, "correlation_id": opaque("corr"), "retryable": false, "current_ref": null, "blocking_refs": [], "conflict": null});
     if let (Some(m), Some(e)) = (b.as_object_mut(), extra.as_object()) {
         m.extend(e.clone());
@@ -89,7 +91,7 @@ fn query_param<'a>(q: &'a str, key: &str) -> Option<&'a str> {
     q.split('&').find_map(|kv| kv.strip_prefix(key)?.strip_prefix('='))
 }
 
-fn bearer_ok(r: &Req, expected: &str) -> bool {
+pub(crate) fn bearer_ok(r: &Req, expected: &str) -> bool {
     let got = r.headers.get("authorization").and_then(|v| v.strip_prefix("Bearer ")).unwrap_or_default();
     // fixed-time compare over equal-length digests
     Sha256::digest(got) == Sha256::digest(expected)
@@ -128,6 +130,9 @@ impl App {
         let (p, m) = (r.path.as_str(), r.method.as_str());
         if p == "/healthz" {
             return ok(&json!({"ok": true}));
+        }
+        if p.starts_with(crate::automation::AUTOMATION_PREFIX) {
+            return self.automation_route(r);
         }
         if let Some(tail) = p.strip_prefix("/__admin/v1/") {
             return self.admin(r, tail);
