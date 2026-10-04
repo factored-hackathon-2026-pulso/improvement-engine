@@ -57,3 +57,26 @@ Describe 'Get-DevDoctorVerdict' {
         (Get-DevDoctorVerdict -Expected @() -States @{}).ok | Should Be $false
     }
 }
+
+Describe 'Select-DevCoreChecks' {
+    $all = @('core_not_ready', 'human_issuer_ready', 'human_issuer_internal_only', 'bridge_executor_key', 'core_demo_doubles_active', 'core_unreachable_from_stack', 'insufficient_memory', 'core_postgres_unavailable') |
+        ForEach-Object { [pscustomobject]@{ check = $_; status = 'fail'; code = $_; detail = '' } }
+    It 'fixture drops runtime-and-issuer checks that the fixture stack does not run' {
+        $names = @(Select-DevCoreChecks -Checks $all -Profile 'fixture') | ForEach-Object check
+        $names -contains 'core_not_ready' | Should Be $false
+        $names -contains 'human_issuer_ready' | Should Be $false
+        $names -contains 'bridge_executor_key' | Should Be $false
+        $names -contains 'insufficient_memory' | Should Be $true
+        $names -contains 'core_postgres_unavailable' | Should Be $true
+    }
+    It 'real_local keeps every check' {
+        @(Select-DevCoreChecks -Checks $all -Profile 'real_local').Count | Should Be 8
+    }
+}
+Describe 'Test-DevOneShot' {
+    It 'a restart-no service without a healthcheck is one-shot; with a healthcheck it is long-running' {
+        Test-DevOneShot -Service ([pscustomobject]@{ restart = 'no' }) | Should Be $true
+        Test-DevOneShot -Service ([pscustomobject]@{ restart = 'no'; healthcheck = [pscustomobject]@{ test = 'x' } }) | Should Be $false
+        Test-DevOneShot -Service ([pscustomobject]@{ restart = 'unless-stopped' }) | Should Be $false
+    }
+}
