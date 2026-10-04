@@ -201,3 +201,16 @@ impl ModelPort for Recording {
         r
     }
 }
+
+/// Policy shared by every port that talks to a third party (hosted or not): E0/original data is never sent, and the
+/// payload must pass the treated-payload scan. Both refusals happen before anything is read or sent.
+pub(crate) fn guard(req: &ModelRequest) -> Result<(), ModelError> {
+    if !req.data_class.may_reach_hosted_model() {
+        return Err(ModelError::Refused(format!("data_class {} never reaches a hosted model", req.data_class.as_str())));
+    }
+    let scan = tps::scan_payload(&req.payload, tps::DEFAULT_K, &req.registry);
+    if !scan.ok {
+        return Err(ModelError::Refused(format!("tps: {}", scan.violations.join("; "))));
+    }
+    Ok(())
+}
