@@ -28,8 +28,10 @@ def rate_of(numerator, count):
     return float(q)
 
 
-def _digest(metric, window, ghash, numerator, count):
-    return hashlib.sha256(f"{metric}|{window}|{ghash}|{numerator}|{count}".encode()).hexdigest()
+def _digest(salt, ref, metric, window, ghash, numerator, count):
+    """Keyed digest (HMAC, salt not stored in the lab) binding ref, fields, numerator and count."""
+    return hmac.new(salt, f"digest|{ref}|{metric}|{window}|{ghash}|{numerator}|{count}".encode(),
+                    hashlib.sha256).hexdigest()
 
 
 def _ref(metric, window, ghash):
@@ -38,6 +40,8 @@ def _ref(metric, window, ghash):
 
 def build_lab(path, cases, salt, k=K):
     """cases: iterable of (case_id, group, window, outcome). case_id is read and discarded."""
+    if not isinstance(salt, bytes) or len(salt) < 16:
+        raise ValueError("salt must be at least 16 bytes")
     agg = defaultdict(lambda: [0, 0])
     for _case_id, group, window, outcome in cases:
         a = agg[(group, window)]
@@ -50,15 +54,14 @@ def build_lab(path, cases, salt, k=K):
     con.execute("create table lab_rows (evidence_ref text primary key, metric_id text, window_id text,"
                 " g_group text, numerator integer, count integer, digest text)")
     con.execute("create table lab_meta (key text primary key, value text)")
-    suppressed = 0
     for (group, window), (num, cnt) in sorted(agg.items()):
         if cnt < k:
-            suppressed += 1
             continue
         gh = group_hash(salt, GROUP_FIELD, group)
+        ref = _ref(METRIC, window, gh)
         con.execute("insert into lab_rows values (?,?,?,?,?,?,?)",
-                    (_ref(METRIC, window, gh), METRIC, window, gh, num, cnt, _digest(METRIC, window, gh, num, cnt)))
-    con.executemany("insert into lab_meta values (?,?)", [("k", str(k)), ("suppressed_groups", str(suppressed))])
+                    (ref, METRIC, window, gh, num, cnt, _digest(salt, ref, METRIC, window, gh, num, cnt)))
+    con.executemany("insert into lab_meta values (?,?)", [("k", str(k))])
     con.commit()
     con.close()
     return str(path)
@@ -98,15 +101,19 @@ def scout_figure(db, ref):
     return {"evidence_ref": r[0], "rate": rate_of(r[4], r[5]), "count": r[5]}
 
 
-def verify_claim(db, claim):
+def verify_claim(db, claim, salt):
     """Independent recompute from the stored numerator; fails on unresolved ref, digest or figure mismatch."""
     r = _fetch(db, claim.get("evidence_ref"))
     if r is None:
         return {"ok": False, "reasons": ["evidence ref does not resolve in the lab"], "recomputed": None}
     ref, metric, window, gh, num, cnt, digest = r
     reasons = []
-    if digest != _digest(metric, window, gh, num, cnt):
+    if ref != _ref(metric, window, gh):
+        reasons.append("evidence ref does not match row identity")
+    if digest != _digest(salt, ref, metric, window, gh, num, cnt):
         reasons.append("row digest mismatch (numerator tampered)")
+    if cnt < K:
+        reasons.append("row count below k")
     recomputed = rate_of(num, cnt)
     if claim.get("count") != cnt:
         reasons.append("claimed count differs from lab")
