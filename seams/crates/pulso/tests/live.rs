@@ -49,7 +49,7 @@ fn streams_steps_while_the_job_runs_and_ends_completed_with_doubles_and_gate() {
     let doubles: Vec<&str> = st["doubles"].as_array().unwrap().iter().map(|d| d["id"].as_str().unwrap()).collect();
     assert!(doubles.iter().any(|d| d.starts_with("port.core:offline-double")), "{doubles:?}");
     assert!(doubles.iter().any(|d| d.starts_with("gate.override:")), "{doubles:?}");
-    assert_eq!(st["gates"]["native"]["status"], "fail");
+    assert_eq!(st["gates"]["improvement"]["status"], "fail", "the improvement gate failed on the committed arms");
     let first_doubles = log.iter().position(|(k, _)| k == "doubles_declared").unwrap();
     assert!(first_doubles < pos("signals|signals [pending]") + 20, "doubles are declared up front, not only at the end");
 }
@@ -90,4 +90,53 @@ fn http_sink_appends_to_a_real_server_and_refuses_a_wrong_token() {
     assert!(bad.emit("run-x", NewEvent::new("run_state_changed", "run", "run-x", json!({"state": "completed"}))).unwrap_err().contains("401"));
     let off = HttpSink::new("127.0.0.1:1", "tok");
     assert!(off.emit("run-x", NewEvent::new("run_started", "run", "run-x", json!({}))).is_err());
+}
+
+/// Every panel event, in order, with the node labels, so a test can say which step had committed when it appeared.
+fn kinds(tap: &Tap) -> Vec<String> {
+    tap.1.lock().unwrap().iter().map(|(k, e)| format!("{k}|{e}")).collect()
+}
+
+#[test]
+fn panels_fill_as_each_step_commits_not_only_at_the_end() {
+    let store = Arc::new(Store::memory());
+    let tap = Arc::new(Tap(store.clone(), Mutex::default()));
+    demo(tap.clone(), &opts("panels", 0)).expect("demo");
+    let log = kinds(&tap);
+    let first = |needle: &str| log.iter().position(|l| l.starts_with(needle) || l.contains(needle)).unwrap_or_else(|| panic!("{needle} in {log:?}"));
+    assert!(first("investigation_set") < first("compile|compile [stand-in]"), "the investigation appears once validation committed, before compile completes: {log:?}");
+    assert!(first("diff_set") < first("gate|gate [stand-in]"), "the diff appears when compile committed, before the gate: {log:?}");
+    assert!(first("gates_set") < first("approval|approval [simulated]"), "gate details appear when the gate committed: {log:?}");
+    assert!(first("decision_set") < first("publish|publish [stand-in]"), "the decision card appears when authority committed, before publish: {log:?}");
+    let count = |k: &str| log.iter().filter(|l| l.starts_with(&format!("{k}|"))).count();
+    assert!(count("decision_set") == 1 && count("diff_set") == 1, "unchanged panels are not re-sent: {log:?}");
+    assert!(count("gates_set") <= 2 && count("investigation_set") <= 3, "{log:?}");
+
+    let st = store.state("run-demo0-test").unwrap();
+    assert!(st["investigation"]["hypothesis"].as_str().unwrap().contains("Scripted scout claims"));
+    assert_eq!(st["investigation"]["verifier"], "corroborated");
+    assert!(st["diff"]["lines"].to_string().contains("prompt:resumen_radicado@2"));
+    assert_eq!(st["decision"]["card"]["label"], "SIMULATED");
+    assert_eq!(st["gates"]["combined"]["decision"], "override_simulated_human", "the final gates carry the authority outcome");
+    assert_eq!(st["gates"]["native"]["status"], "pass");
+    assert_eq!(st["alternatives"].as_array().unwrap().len(), 2);
+    assert!(st["nodes"].as_array().unwrap().iter().all(|n| n["trace_id"].is_null()), "no trace id is ever invented");
+}
+
+#[test]
+fn a_blocked_approval_streams_a_blocked_decision_card_and_no_diff_when_compile_was_denied() {
+    let store = Arc::new(Store::memory());
+    let mut o = opts("blocked", 0);
+    o.human_override = false;
+    demo(store.clone(), &o).expect("demo");
+    let st = store.state("run-demo0-test").unwrap();
+    assert_eq!(st["decision"]["card"]["state"], "blocked", "{}", st["decision"]);
+    assert!(st["decision"]["card"]["reasons"][0].as_str().unwrap().contains("blocked(gate)"));
+    let store = Arc::new(Store::memory());
+    let mut o = opts("denied", 0);
+    o.denied_kind = true;
+    demo(store.clone(), &o).expect("demo");
+    let st = store.state("run-demo0-test").unwrap();
+    assert!(st["diff"].is_null() && st["decision"].is_null(), "no proposal, no decision: nothing is invented");
+    assert!(st["investigation"]["hypotheses"][1]["verdict"].as_str().unwrap().starts_with("blocked("));
 }
