@@ -18,7 +18,7 @@ scenarios:
         seleccionar:
           - result: {transaction_id: tx-1, amount: "120.50", currency: USD}
         convertir_moneda:
-          - result: 120.5
+          - result: 120
     expect: {outcome: completed, escalated: false}
   - id: escalado_por_monto
     principal: {id: cust-002, attrs: {country: CO}}

@@ -192,7 +192,7 @@ class RealCore:
             registry_mutation_commitment=commitment)
         self.timings.append({"call": "writer_stage invoke", "seconds": round(time.monotonic() - t0, 3)})
         if st.response.status_code != 200 or not st.out.get("core_run_id"):
-            raise RuntimeError(f"core writer stage http {st.response.status_code}")
+            raise RuntimeError(f"core writer stage http {st.response.status_code} {_code(st.response)} {st.out.get('state')} {st.out.get('outcome')}")
         wr = (self.engine.facts(st.out["core_run_id"]).get("pulso_writer_receipts") or {}).get("value") or {}
         if [r.get("op") for r in wr.get("write_receipts", [])] != OPS or not all(r.get("verified") for r in wr["write_receipts"]):
             raise RuntimeError("core writer did not commit create_proposal, put_draft, freeze")

@@ -138,3 +138,12 @@ def test_suite_scenarios_are_start_only(assets: Path) -> None:
     suite = assets / "worlds/attention-task/eval_suites/disputas-tarea-suite@1.0.0.yaml"
     _edit(suite, "- {op: start}", "- {op: start}\n      - {op: turn, text: hola}")
     assert "needs_decision_provider" in codes(worldcheck.check_seeded_base(assets))
+
+
+def test_suite_seeds_carry_no_non_integer_numbers(assets: Path) -> None:
+    """Live INT0 finding: a float in the draft (suite seed) canonicalises differently in Core and in the Python draft
+    digest, so the writer's put_draft commitment is denied (auth_insufficient) and the thread never freezes."""
+    assert "non_integer_number" not in codes(worldcheck.check_seeded_base(assets))
+    suite = assets / "worlds/attention-task/eval_suites/disputas-tarea-suite@1.0.0.yaml"
+    _edit(suite, "result: 120\n", "result: 120.5\n")
+    assert "non_integer_number" in codes(worldcheck.check_seeded_base(assets))

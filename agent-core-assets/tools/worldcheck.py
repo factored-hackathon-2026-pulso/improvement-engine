@@ -71,6 +71,11 @@ def check_evaluable(world: Path, agent_id: str) -> list[Violation]:
         if s["agent_id"] != agent_id:
             continue
         for sc in s.get("scenarios", []):
+            for where, _key, val in walk(sc):
+                if isinstance(val, float):
+                    out.append(Violation("non_integer_number", f"{world.name}/eval_suites/{s['id']}#{sc['id']}{where}",
+                                         "a non-integer JSON number in a draft is canonicalised differently by Core and by "
+                                         "the Python draft digest; the writer commitment is denied (use integers or strings)"))
             if any(step.get("op") != "start" for step in sc.get("steps", [])):
                 out.append(Violation("needs_decision_provider", f"{world.name}/eval_suites/{s['id']}#{sc['id']}",
                                      "a turn or confirm step needs `understand`; task scenarios only start"))
