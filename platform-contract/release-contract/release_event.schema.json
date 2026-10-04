@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/release-contract/release_event.schema.json",
+  "title": "release_event",
+  "description": "Candidate event_log projection for release.* events. NOT admitted in event-catalog 1.1.0: the engine classifies these as `unknown` (quarantine with finding) until Codex admits them. Identity only: never an effect size or a reference to a planted mechanism.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_type", "entity", "entity_id", "payload"],
+  "properties": {
+    "event_type": {"enum": ["release.published", "release.rolled_back"]},
+    "entity": {"const": "release"},
+    "entity_id": {"type": "string", "minLength": 1},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_id", "agent_id", "alias"],
+      "properties": {
+        "release_id": {"type": "string", "minLength": 1},
+        "agent_id": {"type": "string", "minLength": 1},
+        "alias": {"type": "string", "minLength": 1},
+        "previous_release_id": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

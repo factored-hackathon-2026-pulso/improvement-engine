@@ -353,6 +353,23 @@ class PlatformLiveSim:
             self._releases[release_id] = (self.now, effect)
         self.conn.commit()
 
+    def consume_release(self, resolve, agent_id: str, alias: str) -> dict:
+        """Product-consumer flow (PX0, simulated): resolve the registry alias, expose `release.published`,
+        return the observation. `resolve(agent_id, alias) -> (http_status, body)`. Nothing is emitted when the
+        alias does not resolve to an active release."""
+        import platform_contract as _pc
+        status, body = resolve(agent_id, alias)
+        if status != 200 or body.get("status") != "active":
+            raise LookupError("alias does not resolve to an active release")
+        release_id = body["release_id"]
+        self.publish_release(agent_id, alias, release_id)
+        seq = self.conn.execute(
+            "SELECT max(sequence) FROM event_log WHERE event_type='release.published'").fetchone()[0]
+        return {"source_sequence": seq, "event_type": "release.published", "release_id": release_id,
+                "agent_id": agent_id, "alias": alias,
+                "catalog_class": _pc.classify_event_type("release.published"),
+                "labels": {"platform": "simulated(product-consumer)", "registry": "wire-shape-real"}}
+
     def effect_series(self, release_id: str) -> list[dict]:
         at, spec = self._releases[release_id]
         days = int((self.now - at).total_seconds() // 86400)
