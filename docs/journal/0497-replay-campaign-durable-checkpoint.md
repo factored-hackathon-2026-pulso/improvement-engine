@@ -1,7 +1,7 @@
 # CX-0497 — Durable replay campaign checkpoints
 
-**Status:** implemented; final focused local tests pass; isolated PostgreSQL execution remains environment-gated.  
-**Owner:** X-LEARN  
+**Status:** implemented; final focused local tests pass; isolated PostgreSQL execution remains environment-gated.
+**Owner:** X-LEARN
 **Recorded:** 2026-10-04 13:00 UTC
 
 ## Goal
