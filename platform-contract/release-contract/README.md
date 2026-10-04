@@ -15,7 +15,7 @@ The platform side is **simulated (product-consumer)**: the real product has not 
 This stays so until EXT-2 (product answer on `event_log.payload` shapes and release exposure) is received.
 The registry side is the real Core wire shape (mock verified by parity tests).
 
-## Event catalog 1.1.0 is unchanged
+## Event catalog: release.* is still absent (1.1.0, unchanged by 1.2.0)
 
 `release.published` / `release.rolled_back` are NOT in `event-catalog.json` (still 1.1.0). Codex's Rust digests
 that catalog, so under 1.1.0 these types classify as `unknown`: counted, quarantined with a quality finding, and

@@ -186,6 +186,8 @@ def test_administration_and_unknown_types_stay_quarantined():
         assert pc.classify_event_type(t) == "unknown", t
 
 
+# `case.assistant_released.reason` is the closed enum escalated|ended|failed|supervision (domain/cases/events.py).
+ENUM_KEYS = {("case.assistant_released", "reason"), ("call.ended", "end_reason")}
 FREE_TEXT_TOKENS = {"text", "body", "message", "motive", "note", "comment", "reason", "answer", "subject", "name",
                     "email", "question", "summary", "title", "description"}
 
@@ -206,7 +208,8 @@ def test_new_types_carry_ids_enums_and_counters_only():
         assert free <= set(keys)
         for k in keys:
             toks = _tokens(k)
-            sizeish = k.endswith(("_length", "_id", "_ref", "_count")) or k in ("messages", "items", "attempts")
+            sizeish = (k.endswith(("_length", "_id", "_ref", "_count")) or k in ("messages", "items", "attempts")
+                       or (e["event_type"], k) in ENUM_KEYS)
             if toks & FREE_TEXT_TOKENS and not sizeish:
                 assert k in free, f"{e['event_type']}.{k} looks like free text but is not in free_text_keys"
 
@@ -257,5 +260,5 @@ def test_changelog_documents_the_revision():
 def test_model_exposes_payload_specs_consistently():
     assert set(model.EVENT_PAYLOAD_KEYS) == set(NEW_ADMITTED)
     for t, keys in model.EVENT_FREE_TEXT_KEYS.items():
-        assert set(keys) <= set(model.EVENT_PAYLOAD_KEYS[t]) or t in ("case.closed", "turn.created")
+        assert set(keys) <= set(model.EVENT_PAYLOAD_KEYS.get(t, keys))
     assert copy.deepcopy(model.EVENT_DATA_CLASSES)

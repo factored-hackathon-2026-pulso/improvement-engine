@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "platform_live/1.1.0/domain_event.schema.json",
+  "$id": "platform_live/1.2.0/domain_event.schema.json",
   "title": "domain_event",
   "description": "Domain row of the platform event_log (event_type must not use the legacy `exporter.` prefix).",
   "type": "object",
@@ -120,5 +120,5 @@
     "late"
   ],
   "additionalProperties": false,
-  "x-contract-version": "1.1.0"
+  "x-contract-version": "1.2.0"
 }

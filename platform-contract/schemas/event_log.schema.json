@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "platform_live/1.1.0/event_log.schema.json",
+  "$id": "platform_live/1.2.0/event_log.schema.json",
   "title": "event_log",
   "description": "platform_live row from source table `event_log` (append-only).",
   "type": "object",
@@ -47,6 +47,7 @@
         "supervisor",
         "admin",
         "system",
+        "assistant",
         null
       ]
     },
@@ -88,5 +89,5 @@
     "sequence"
   ],
   "x-denied-columns": [],
-  "x-contract-version": "1.1.0"
+  "x-contract-version": "1.2.0"
 }
