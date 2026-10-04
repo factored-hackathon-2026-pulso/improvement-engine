@@ -215,3 +215,20 @@ def test_gate_probe_reports_why_approval_and_publish_cannot_move_staging():
     assert res["evaluation"] == "failed_infra"
     assert res["approve"] == [409, "illegal_transition"] and res["publish"] == [409, "illegal_transition"]
     assert res["staging_unchanged"] is True and bridge.aliases["staging"] == BASE
+
+
+def test_approve_runs_the_native_evaluation_first_because_the_registry_approves_only_evaluated_proposals():
+    rc, _, reg = core()
+    rc.approve(ctx())
+    modes = [s[4]["registry_mutation_commitment"]["mode"] for s in rc.engine.stages]
+    assert modes == ["write", "evaluate_only"]  # freeze, then the evaluation, then the approve call
+    assert [p for m, p, b, k in reg.calls if p.endswith("/approve")]
+    assert rc.evaluate(ctx()) is rc.evaluate(ctx()) and len(rc.engine.stages) == 2  # memoised: one evaluation per thread
+
+
+def test_approve_refuses_without_calling_the_registry_when_the_native_evaluation_does_not_pass():
+    rc, _, reg = core()
+    rc.engine.eval_verdict = "fail"
+    with pytest.raises(RuntimeError, match="native evaluation.*fail"):
+        rc.approve(ctx())
+    assert not [p for m, p, b, k in reg.calls if p.endswith("/approve")]
