@@ -58,3 +58,23 @@ fn two_supervisors_on_one_database_do_not_both_migrate() {
     assert!(kv);
     assert_eq!(ping, Ok(()));
 }
+
+#[test]
+fn shared_repo_instances_over_one_database_see_the_same_jobs() {
+    let Ok(admin_dsn) = std::env::var("PULSO_TEST_PG_ADMIN") else {
+        eprintln!("SKIP: PULSO_TEST_PG_ADMIN not set");
+        return;
+    };
+    let admin: Config = admin_dsn.parse().expect("admin dsn");
+    let name = format!("r1r_shared_{}", std::process::id());
+    admin.connect(NoTls).unwrap().batch_execute(&format!("CREATE DATABASE {name}")).unwrap();
+    let mut cfg = admin.clone();
+    cfg.dbname(&name);
+    db::apply(&cfg).unwrap();
+    use pg::repo::JobRepository;
+    let (a, b) = (pg::pgrepo::PgRepo::shared(cfg.clone()), pg::pgrepo::PgRepo::shared(cfg.clone()));
+    let id = a.admit("tenant-x").unwrap();
+    let claimed = b.claim_next("tenant-x", "w2", 1_000, 10).unwrap();
+    let _ = admin.connect(NoTls).unwrap().batch_execute(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"));
+    assert_eq!(claimed.map(|c| c.job), Some(id), "a second process must claim what the first admitted");
+}
