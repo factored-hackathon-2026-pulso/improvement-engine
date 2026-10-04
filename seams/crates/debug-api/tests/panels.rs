@@ -187,7 +187,7 @@ fn limit_text(report: Option<&Value>) -> (String, String) {
 }
 
 fn scout_report(label: &str, provider: &str, outcome: &str, real: bool) -> Value {
-    json!({"models": [{"role": "scout", "label": label, "model_id": "m-1", "outcome": outcome, "provider": provider, "real": real, "status": if real { "real" } else { "stand-in" }}]})
+    json!({"models": [{"role": "scout", "label": label, "model_id": provider.strip_prefix("gateway:").unwrap_or("m-1"), "outcome": outcome, "provider": provider, "real": real, "status": if real { "real" } else { "stand-in" }}]})
 }
 
 #[test]

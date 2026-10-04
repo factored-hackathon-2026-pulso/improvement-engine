@@ -43,7 +43,32 @@ fn gate_of<'a>(gate: &'a Value, name: &str) -> Option<&'a Value> {
     gate.get("gates")?.as_array()?.iter().find(|g| s(g, "gate") == Some(name))
 }
 
-fn investigation(committed: &Value, at: &str) -> Option<Value> {
+/// The scout's model record in the report (`models[]`, role `scout`), when the run recorded one.
+fn scout_model(report: Option<&Value>) -> Option<&Value> {
+    report?.get("models")?.as_array()?.iter().find(|m| m["role"] == "scout")
+}
+
+/// (limit text, is the claim a scripted value). Truthful per provider; no record keeps the offline-thread wording.
+fn scout_limit(model: Option<&Value>) -> (String, bool) {
+    let Some(m) = model else {
+        return ("The scout claim is a scripted value of the job spec: no model produced it and no real source was read".into(), true);
+    };
+    let (provider, id) = (m["provider"].as_str().unwrap_or("scripted"), m["model_id"].as_str().unwrap_or("unknown"));
+    if m["outcome"].as_str().is_some_and(|o| o != "answered") {
+        return (format!("The scout model ({provider}, {id}) did not answer ({}): the claim below is the job spec's value, no model produced it", m["outcome"].as_str().unwrap_or("unknown")), true);
+    }
+    if m["real"] == true || provider.starts_with("gateway") {
+        (format!("The scout claim was answered by the LLM gateway (model {id}); it was not recomputed from a real source, only by the synthetic lab sample"), false)
+    } else if provider.contains("roleplay") {
+        (format!("The scout claim is a replay of the roleplay-llm queue ({id}): an agent role-play, not a real model, and no real source was read"), false)
+    } else if provider.contains("local") {
+        (format!("The scout claim came from a locally declared model endpoint ({id}), not a hosted real model; no real source was read"), false)
+    } else {
+        ("The scout claim is a scripted value of the job spec: no model produced it and no real source was read".into(), true)
+    }
+}
+
+fn investigation(committed: &Value, report: Option<&Value>, at: &str) -> Option<Value> {
     let (spec, out) = (&committed["spec"], &committed["out"]);
     let (recompute, validation) = (out.get("recompute"), out.get("validation"));
     if recompute.is_none() && validation.is_none() {
@@ -87,18 +112,20 @@ fn investigation(committed: &Value, at: &str) -> Option<Value> {
             "engine_step", "stand_in", &json!({"scout_actor": scout, "verifier_actor": verifier}),
         ));
     }
+    let (scout_text, scripted) = scout_limit(scout_model(report));
     main_refs.push(ev.add(
         "ev-limit-scripted-scout", "limits",
-        "The scout claim is a scripted value of the job spec: no model produced it and no real source was read".into(), "job_spec", "stand_in", &claim.cloned().unwrap_or(Value::Null),
+        scout_text, "job_spec", "stand_in", &claim.cloned().unwrap_or(Value::Null),
     ));
     if let Some(sensed) = out.get("sensors") {
         let n = |k: &str| sensed[k].as_array().map_or(0, Vec::len);
         main_refs.push(ev.add("ev-limit-sensor", "limits", format!("The sensor stand-in produced {} signal(s) and {} discard(s) from a fixed-output runner; it reads no data", n("signals"), n("discards")), "engine_step", "stand_in", sensed));
     }
 
+    let who = if scripted { "Scripted scout" } else { "Scout" };
     let statement = match claimed {
-        Some(c) => format!("Scripted scout claims signal {sid} has rate {c:.2}"),
-        None => format!("Scripted scout claim about signal {sid}"),
+        Some(c) => format!("{who} claims signal {sid} has rate {c:.2}"),
+        None => format!("{who} claim about signal {sid}"),
     };
     let mut hypotheses = vec![json!({"hypothesis_id": "main", "statement": statement, "verdict": verdict, "evidence_refs": main_refs})];
 
@@ -264,7 +291,7 @@ fn decision(committed: &Value, report: Option<&Value>) -> Option<Value> {
 /// alternatives, diff, gates, decision. A panel with no committed inputs yields no event.
 pub fn project(committed: &Value, report: Option<&Value>, at: &str) -> Vec<NewEvent> {
     let mut v = vec![];
-    if let Some(d) = investigation(committed, at) {
+    if let Some(d) = investigation(committed, report, at) {
         v.push(NewEvent::new("investigation_set", "run", "investigation", d));
     }
     if let Some(d) = alternatives(committed) {
