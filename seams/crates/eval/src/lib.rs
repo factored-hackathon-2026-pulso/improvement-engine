@@ -4,3 +4,4 @@ pub mod capture;
 pub mod gate;
 pub mod outcomes;
 pub mod suite;
+pub mod revision;
