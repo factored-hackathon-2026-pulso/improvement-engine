@@ -60,6 +60,11 @@ class SqliteSink:
                                  [_val(r[c]) for c in cols])
         self.con.commit()
 
+    def reset(self) -> None:
+        for t in PRODUCT_COLUMNS:
+            self.con.execute(f"DELETE FROM {t}")
+        self.con.commit()
+
     def close(self) -> None:
         self.con.close()
 
@@ -115,6 +120,13 @@ class PostgresSink:
                 sql = (f"INSERT INTO product.{t} ({', '.join(cols)}, _batch_id, _source_file) "
                        f"VALUES ({', '.join(ph)})")
                 cur.executemany(sql, [[_pg_val(r[c]) for c in cols] + [batch_id, SOURCE_FILE] for r in rows])
+        self._con.commit()
+
+    def reset(self) -> None:
+        """Delete only rows written by this simulator (lineage _source_file)."""
+        with self._con.cursor() as cur:
+            for t in PRODUCT_COLUMNS:
+                cur.execute(f"DELETE FROM product.{t} WHERE _source_file = %s", (SOURCE_FILE,))
         self._con.commit()
 
     def close(self) -> None:

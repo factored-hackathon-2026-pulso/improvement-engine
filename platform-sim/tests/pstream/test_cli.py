@@ -1,4 +1,4 @@
-import io
+import time
 import json
 import sqlite3
 
@@ -66,11 +66,27 @@ def test_follow_paces_by_rate_and_stops_on_stop_file(tmp_path):
 
 
 def test_follow_stops_on_stdin_eof(tmp_path):
+    import threading
     db = tmp_path / "p.sqlite"
+    closed = threading.Event()
+
+    class Stdin:
+        def read(self):
+            closed.wait(5)
+            return ""
+
+    calls = []
+
+    def sleep(s):
+        calls.append(s)
+        if len(calls) == 2:
+            closed.set()  # the parent closes the pipe
+            time.sleep(0.2)
+
     rc = main(["--sqlite", str(db), "--follow", "--rate", "100", "--batch", "10", "--stop-on-stdin-eof"],
-              sleep=lambda s: None, stdin=io.StringIO(""))
+              sleep=sleep, stdin=Stdin())
     assert rc == 0
-    assert ev_count(db) >= 10
+    assert 20 <= ev_count(db) <= 30
 
 
 def test_backfill_then_follow(tmp_path):
