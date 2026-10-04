@@ -9,7 +9,7 @@ fn tmp(name: &str) -> std::path::PathBuf {
 }
 
 pub fn opts(name: &str, over: bool) -> Opts {
-    Opts { work: tmp(name), runner: env!("CARGO_BIN_EXE_synth_runner").into(), human_override: over, denied_kind: false, sha: "0".repeat(40) }
+    Opts { human_override: over, ..Opts::new(tmp(name), env!("CARGO_BIN_EXE_synth_runner").into()) }
 }
 
 fn status(r: &Value, n: u64, id: &str) -> String {
