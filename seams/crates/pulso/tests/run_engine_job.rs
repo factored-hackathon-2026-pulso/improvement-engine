@@ -279,7 +279,7 @@ fn an_undeclared_platform_source_is_not_titled_real_platform_signals() {
     run_job(&f).unwrap();
     let title = f.store.state(RUN).unwrap()["run"]["title"].as_str().unwrap().to_lowercase();
     assert!(!title.contains("real platform"), "{title}");
-    assert!(title.contains("not declared"), "{title}");
+    assert!(title.contains("did not declare"), "{title}");
     let profile = &of_kind(&events(&f.store, RUN), "run_profile_set")[0]["data"];
     assert!(!profile["label"].as_str().unwrap().to_lowercase().contains("real platform"), "{profile}");
 }
