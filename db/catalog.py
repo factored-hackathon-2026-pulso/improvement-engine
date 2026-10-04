@@ -102,10 +102,10 @@ _SENSITIVE_EXTRA = frozenset({("bank_complaints", "resolution")})
 _SPLIT = re.compile(r"[^A-Za-z0-9]+")
 
 
-def is_sensitive(table: str, column: str) -> bool:
+def is_sensitive(table: str, column: str, schema: str | None = None) -> bool:
     """Free text, names, contact data and identifiers: not granted to readers (mirrors the platform denylist).
     Product columns are already allow-listed, so nothing there is sensitive."""
-    if table in PRODUCT:
+    if (schema == "product") if schema else (table in PRODUCT):
         return False
     if (table, column) in _SENSITIVE_EXTRA:
         return True

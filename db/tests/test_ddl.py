@@ -73,3 +73,13 @@ def test_grants_are_column_level_and_exclude_sensitive():
     assert "pulso_product_ro" in sql and "login_accounts" not in sql
     assert not re.search(r"ON raw\.\S+ TO pulso_product_ro", sql)
     assert not re.search(r"(INSERT|UPDATE|DELETE|TRUNCATE)[^;]*TO pulso_\w+_ro", sql)
+
+
+def test_augmented_readers_never_get_free_text_columns():
+    # regression: augmented.turns/cases share names with product tables; sensitivity must key on schema.
+    sql = gen_ddl.render_all()["090_grants.sql"]
+    for s, role in catalog.READER_ROLE.items():
+        for m in re.finditer(rf"GRANT SELECT \(([^)]*)\) ON {s}\.(\w+) TO {role}", sql):
+            cols = [c.strip() for c in m.group(1).split(",")]
+            if s != "product":
+                assert not {"text", "question_text", "answer"} & set(cols), (s, m.group(2))

@@ -56,7 +56,7 @@ GRANT SELECT (case_id, customer_id, opened_at, channel, language, origin, topic,
 GRANT SELECT, INSERT, DELETE ON augmented.cases TO pulso_loader;
 GRANT SELECT (case_id, closed_at, closed_by_role, resolved, contact_reason, resolution_code, followup_at, csat, csat_raw, source_system, _batch_id, _source_file, _ingested_at) ON augmented.case_closes TO pulso_augmented_ro;
 GRANT SELECT, INSERT, DELETE ON augmented.case_closes TO pulso_loader;
-GRANT SELECT (turn_id, case_id, event_time, author_role, author_id, text, language, from_suggestion_id, evidence_ids, text_source, source_system, _batch_id, _source_file, _ingested_at) ON augmented.turns TO pulso_augmented_ro;
+GRANT SELECT (turn_id, case_id, event_time, author_role, author_id, language, from_suggestion_id, evidence_ids, source_system, _batch_id, _source_file, _ingested_at) ON augmented.turns TO pulso_augmented_ro;
 GRANT SELECT, INSERT, DELETE ON augmented.turns TO pulso_loader;
 GRANT SELECT (check_id, case_id, started_at, ended_at, actor_role, actor_id, channel_session, questions, questions_version, correct, result, attempt, policy_rule_id, trigger, source_system, _batch_id, _source_file, _ingested_at) ON augmented.identity_checks TO pulso_augmented_ro;
 GRANT SELECT, INSERT, DELETE ON augmented.identity_checks TO pulso_loader;

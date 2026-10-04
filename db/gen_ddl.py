@@ -50,7 +50,7 @@ def _grants() -> str:
         out.append(f"GRANT USAGE ON SCHEMA {s} TO {r}, {c.LOADER_ROLE};")
         out.append(f"REVOKE ALL ON SCHEMA {s} FROM PUBLIC;")
         for t, cols in tables.items():
-            readable = [n for n, _ in cols if not c.is_sensitive(t, n)]
+            readable = [n for n, _ in cols if not c.is_sensitive(t, n, s)]
             readable += list(c.LINEAGE_NAMES)
             out.append(f"GRANT SELECT ({', '.join(readable)}) ON {s}.{t} TO {r};")
             out.append(f"GRANT SELECT, INSERT, DELETE ON {s}.{t} TO {c.LOADER_ROLE};")
