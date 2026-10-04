@@ -29,8 +29,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+# Needs the e2e venv (cryptography, fastapi, uvicorn, rfc8785); skip with a clear reason instead of breaking collection.
+pytest.importorskip("cryptography", reason="control-api black-box test needs the e2e venv (see module docstring)")
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 BIN = os.environ.get("CONTROL_API_BIN", "D:/cargo-targets/claude-seams-capi/debug/control-api.exe")
