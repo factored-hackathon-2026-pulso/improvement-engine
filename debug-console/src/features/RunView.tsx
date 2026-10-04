@@ -4,6 +4,7 @@ import { api, loadConfig, streamEvents } from '../api/client';
 import { isStale } from '../api/reconnect';
 import type * as S from '../api/schemas';
 import { acceptRevision, applyEvent, initStream, type DebugEvent, type StreamState } from '../state/runStore';
+import { createDebounced, needsSideRefresh, SIDE_REFRESH_DEBOUNCE_MS, type SideRefresh } from '../state/sideRefresh';
 import { Drawer } from '../components/Drawer';
 import { label, Investigation, RunOutcome, TracePanel } from './Panels';
 import { hookState } from './demoModel';
@@ -18,12 +19,13 @@ const KNOWN_NODE = ['planned', 'queued', 'running', 'complete', 'dead', 'cancell
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MAX_NODE_ANNOUNCEMENTS = 3;
 
-export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: string | null; onNode: (id: string | null) => void }) {
+export function RunView({ runId, nodeId, onNode, onProfileChanged }: { runId: string; nodeId: string | null; onNode: (id: string | null) => void; onProfileChanged?: () => void }) {
   const announce = useAnnounce();
   const [graph, setGraph] = useState<GraphT | null>(null);
   const [failed, setFailed] = useState(false);
   const [pulse, setPulse] = useState<string[]>([]);
   const [purged, setPurged] = useState<{ floor: number | null } | null>(null);
+  const [gatesTick, setGatesTick] = useState(0);
   const [conn, setConnState] = useState<Conn>('connecting');
   const rev = useRef(-1);
   const prevNodes = useRef<GraphT['nodes'] | null>(null);
@@ -57,14 +59,31 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
     setTimeout(() => setPulse((p) => p.filter((x) => !ids.includes(x))), 1000);
   }, []);
 
+  // gates_set / doubles_declared: refetch the profile (banner) and the gates, debounced (one refetch per burst).
+  const pending = useRef<SideRefresh>({ profile: false, gates: false });
+  const onProfileRef = useRef(onProfileChanged);
+  onProfileRef.current = onProfileChanged;
+  const sideRefresh = useRef(createDebounced(() => {
+    const p = pending.current; pending.current = { profile: false, gates: false };
+    if (p.profile) onProfileRef.current?.();
+    if (p.gates) setGatesTick((n) => n + 1);
+  }, SIDE_REFRESH_DEBOUNCE_MS)).current;
+  useEffect(() => () => sideRefresh.cancel(), [sideRefresh]);
+  const noteSide = useCallback((events: DebugEvent[]) => {
+    const n = needsSideRefresh(events);
+    if (!n.profile && !n.gates) return;
+    pending.current = { profile: pending.current.profile || n.profile, gates: pending.current.gates || n.gates };
+    sideRefresh();
+  }, [sideRefresh]);
+
   const handle = useCallback((ev: DebugEvent, live: boolean) => {
     const r = applyEvent(stream.current, ev);
     stream.current = r.state;
-    if (r.effect.type === 'apply') { void reload(); if (live) animate(r.effect.events); }
+    if (r.effect.type === 'apply') { void reload(); noteSide(r.effect.events); if (live) animate(r.effect.events); }
     else if (r.effect.type === 'catchup') {
       void api.events(runId, r.effect.after_sequence).then((p) => p.items.forEach((e) => handle(e, false)));
     }
-  }, [animate, reload, runId]);
+  }, [animate, reload, runId, noteSide]);
 
   useEffect(() => { void loadConfig().then((c) => { heartbeatMs.current = c.sseHeartbeatMs; }); }, []);
 
@@ -162,7 +181,7 @@ export function RunView({ runId, nodeId, onNode }: { runId: string; nodeId: stri
       )}
       <TracePanel nodes={graph.nodes} />
       <Investigation runId={runId} />
-      <RunOutcome runId={runId} />
+      <RunOutcome runId={runId} refresh={gatesTick} />
       <DecisionPanel hookPending={graph.nodes.some((n) => hookState(n) === 'decision_pending')} />
     </div>
   );

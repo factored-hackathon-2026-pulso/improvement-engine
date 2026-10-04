@@ -43,6 +43,8 @@ The e2e run starts the fixture API/SSE (:4010) and Vite (:5173, same-origin prox
   `simulated`, fed by `demo/` output.
 - Origin of the Sources and demo data: [`journal-pl-0005.md`](journal-pl-0005.md), [`journal-c-0001.md`](journal-c-0001.md).
 
+- Live side-panels: `doubles_declared` refetches the profile (mode banner) and `gates_set` refetches the run's gates, also when caught up after a reconnect; debounced 150 ms (`src/state/sideRefresh.ts`), latest response wins, the Gates panel is not blanked during a refetch and focus never moves (`tests/component/RunLiveRefresh.test.tsx`). Closes the stale-banner/Gates gap noted in `docs/reports/demo-magic/README.md`.
+
 ## Review-defect closure
 
 - Single rate-limited live region (`src/a11y`), only changed nodes are announced; no other `role=status/alert/aria-live`.
