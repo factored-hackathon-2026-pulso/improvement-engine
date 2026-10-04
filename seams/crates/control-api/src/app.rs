@@ -39,12 +39,16 @@ pub struct Config {
     pub upload_pin: Option<(String, String)>,
     /// `/_e2e/config` admin channel (seeding, denials, faults). Off unless explicitly enabled.
     pub admin: bool,
+    /// Treated lab (sqlite, ED0L shape) per tenant; a tenant without an entry has no lab (`lab_unavailable`).
+    pub labs: HashMap<String, std::path::PathBuf>,
+    /// Floor of the k-anonymity threshold: rows with fewer cases are never served, whatever the lab file says.
+    pub min_k: i64,
 }
 
 impl Config {
     /// Everything optional off: no upload pin, no admin channel.
     pub fn new(ring: Arc<KeyRing>) -> Config {
-        Config { ring, upload_pin: None, admin: false }
+        Config { ring, upload_pin: None, admin: false, labs: HashMap::new(), min_k: 10 }
     }
 }
 
