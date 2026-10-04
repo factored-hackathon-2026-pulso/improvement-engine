@@ -1,0 +1,64 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "DC0"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "fresh-context-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0042",
+    "journal CL-0044",
+    "git ccafdc5, 6fe8ce5, 87202be"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "findings": [
+    {
+      "id": "DC0-R1",
+      "loop": 1,
+      "summary": "scanner missed binary/utf-16/base64/case-varied markers",
+      "status": "fixed",
+      "fix_ref": "6fe8ce5",
+      "red_ref": "ccafdc5"
+    },
+    {
+      "id": "DC0-R2",
+      "loop": 1,
+      "summary": "gateway egress reachable under any url-like field, not only url",
+      "status": "fixed",
+      "fix_ref": "6fe8ce5",
+      "red_ref": "ccafdc5"
+    },
+    {
+      "id": "DC0-R3",
+      "loop": 1,
+      "summary": "restricted classes accepted a non-local upstream",
+      "status": "fixed",
+      "fix_ref": "6fe8ce5",
+      "red_ref": "ccafdc5"
+    },
+    {
+      "id": "DC0-R4",
+      "loop": 1,
+      "summary": "base64 run threshold too long (false negatives)",
+      "status": "fixed",
+      "fix_ref": "87202be"
+    },
+    {
+      "id": "DC0-R5",
+      "loop": 1,
+      "summary": "gateway profile never run in a container",
+      "status": "accepted",
+      "reason": "Labelled gateway=stand-in in doubles[]; the container run is blocked by machine load and is a GT0 open risk, not a DC0 defect."
+    }
+  ],
+  "verdict": "closed"
+}

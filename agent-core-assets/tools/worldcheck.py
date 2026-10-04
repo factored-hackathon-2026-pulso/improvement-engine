@@ -40,6 +40,48 @@ def _prompt_refs(world: Path, agent_id: str) -> set[str]:
     return refs
 
 
+def _agent_doc(world: Path, agent_id: str) -> dict[str, Any] | None:
+    return next((a for a in (load_yaml(p) for p in yaml_files(world, "agents")) if a["id"] == agent_id), None)
+
+
+def check_evaluable(world: Path, agent_id: str) -> list[Violation]:
+    """The pinned Core (c814c2b) composes no `jev` provider and serves only an empty scripted `classifier`, so a seeded
+    agent can only be evaluated (native evaluation, arms) when no step of it needs a decision model: a task agent, no
+    `understand`/`slots_model`, no `decide` node in its entry flow, and a suite whose scenarios only start the run."""
+    out: list[Violation] = []
+    agent = _agent_doc(world, agent_id)
+    if agent is None:
+        return out
+    at = f"{world.name}/agents/{agent_id}"
+    if agent.get("mode") != "task":
+        out.append(Violation("needs_decision_provider", at, "conversational turns need an `understand` model"))
+    for field in ("understand", "slots_model"):
+        if agent.get(field):
+            out.append(Violation("needs_decision_provider", at, f"agent declares {field}"))
+    flow_id = str(agent["entry_flow"]).split("@")[0]
+    for p in yaml_files(world, "flows"):
+        f = load_yaml(p)
+        if f["id"] == flow_id:
+            for n in f.get("nodes", []):
+                if n.get("type") in ("decide", "collect", "confirm", "transfer", "await_approval"):
+                    out.append(Violation("needs_decision_provider", f"{world.name}/flows/{flow_id}#{n.get('id')}",
+                                         f"node type {n.get('type')} needs a model or a principal turn"))
+    for p in yaml_files(world, "eval_suites"):
+        s = load_yaml(p)
+        if s["agent_id"] != agent_id:
+            continue
+        for sc in s.get("scenarios", []):
+            for where, _key, val in walk(sc):
+                if isinstance(val, float):
+                    out.append(Violation("non_integer_number", f"{world.name}/eval_suites/{s['id']}#{sc['id']}{where}",
+                                         "a non-integer JSON number in a draft is canonicalised differently by Core and by "
+                                         "the Python draft digest; the writer commitment is denied (use integers or strings)"))
+            if any(step.get("op") != "start" for step in sc.get("steps", [])):
+                out.append(Violation("needs_decision_provider", f"{world.name}/eval_suites/{s['id']}#{sc['id']}",
+                                     "a turn or confirm step needs `understand`; task scenarios only start"))
+    return out
+
+
 def check_seeded_base(root: Path) -> list[Violation]:
     path = root / DECLARATION
     if not path.is_file():
@@ -68,6 +110,7 @@ def check_seeded_base(root: Path) -> list[Violation]:
         out.append(Violation("no_replaceable_prompt", DECLARATION, f"agent {agent_id} flow does not use prompt {prompt_id}"))
     if not any(load_yaml(p)["id"] == prompt_id for p in yaml_files(world, "prompts")):
         out.append(Violation("prompt_missing", DECLARATION, f"prompt {prompt_id} is not in the world"))
+    out += check_evaluable(world, agent_id)
     slot_agent = (meta.get("eval_suite_slot") or {}).get("agent_id")
     if not any(load_yaml(p)["agent_id"] == slot_agent for p in yaml_files(world, "eval_suites")):
         out.append(Violation("suite_slot_empty", DECLARATION, f"no eval suite for agent {slot_agent}"))

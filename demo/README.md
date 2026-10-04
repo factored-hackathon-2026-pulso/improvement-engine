@@ -1,5 +1,10 @@
 # demo/ - the 'demo magica' on our side (Codex stand-in, honestly labelled)
 
+> **DEMO-0 is `demo/run-demo0.ps1`** (replay of the ten-step E2E-THREAD-01, no containers, writes the engine-run report and prints the
+> doubles[] first, then the steps; `-Live` and `-RealCore` document the live roleplay window and the real-Core steps).
+> Everything below describes the **legacy planted-mechanism demo** (`demo/run.ps1`, planted judge/effect/revision wiring), kept for the
+> console preview only; it is not DEMO-0 and makes no DEMO-0 claim.
+
 Plan section 2 (10 steps) made visible end to end **without** the Rust engine: the e2e-core Codex stand-in drives the REAL `real_local` Core
 stack (scripted LLM double, bank/lab fixtures), a data-derived analysis supplies the findings, and translators turn the REAL outputs into the
 debug-console fixture-server world.

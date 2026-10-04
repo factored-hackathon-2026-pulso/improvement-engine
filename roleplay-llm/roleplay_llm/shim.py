@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .scanner import DEFAULT_K, SCANNER_ID, scan_payload, static_text_violations
+from .scanner import DEFAULT_K, SCANNER_ID, Registry, scan_payload, static_text_violations
 
 PROTOCOL = "roleplay-queue/1"
 PROVENANCE = "agent_roleplay"
@@ -33,6 +33,7 @@ HOLD_S = 55.0
 VOLATILE_KEYS = {"run_id", "turn_id", "session_id", "labels"}
 _UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
 _PREFIXED = re.compile(r"\b(binding|job|artifact)[-_:][0-9A-Za-z][0-9A-Za-z-]{5,}")
+_ROLES = {"scout", "verifier", "builder", "builder_design"}
 _FORBIDDEN_RESPONSE_KEYS = ("quality", "score", "confidence", "rating")
 _RESPONSE_KEYS = {"protocol", "key", "provenance", "quality_claims", "responder", "content"}
 
@@ -96,7 +97,8 @@ def _error(status: int, type_: str, message: str, **extra: Any) -> tuple[int, di
 
 class Shim:
     def __init__(self, queue_dir: Path | str, *, hold_s: float = HOLD_S, poll_s: float = 0.25,
-                 k: int = DEFAULT_K, replay_only: bool = False) -> None:
+                 k: int = DEFAULT_K, replay_only: bool = False, registry: Registry | None = None) -> None:
+        self.registry = registry or Registry()
         self.queue = Path(queue_dir)
         self.hold_s, self.poll_s, self.k, self.replay_only = hold_s, poll_s, k, replay_only
         for sub in ("requests", "responses", "faults"):
@@ -108,7 +110,7 @@ class Shim:
         if isinstance(parsed[0], int):
             return parsed  # type: ignore[return-value]
         model, system, inputs = parsed
-        scan = scan_payload(inputs, k=self.k)
+        scan = scan_payload(inputs, k=self.k, registry=self.registry)
         sys_v = static_text_violations(system, "system", 20000)
         if sys_v:
             scan = type(scan)(False, tuple(scan.violations) + tuple(sys_v), scan.scanner_id)
@@ -227,6 +229,10 @@ class Shim:
         extra = set(doc) - _RESPONSE_KEYS
         if extra or any(w in k.lower() for k in doc for w in _FORBIDDEN_RESPONSE_KEYS if k != "quality_claims"):
             return f"unexpected or quality-claiming fields: {sorted(extra)}"
+        r = doc.get("responder")
+        if (not isinstance(r, dict) or set(r) != {"id", "role"} or not isinstance(r["id"], str)
+                or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", r["id"]) or r["role"] not in _ROLES):
+            return "responder must be {id: [A-Za-z0-9._-]{1,64}, role: scout|verifier|builder}"
         c = doc.get("content")
         if not isinstance(c, dict):
             return "content is not an object"
@@ -264,7 +270,8 @@ class Shim:
                              "message": {"role": "assistant", "content": text}}],
                 "usage": {"prompt_tokens": tin, "completion_tokens": tout, "total_tokens": tin + tout},
                 "usage_estimated": True,
-                "x_roleplay": {"provenance": PROVENANCE, "quality_claims": "forbidden", "key": key}}
+                "x_roleplay": {"provenance": PROVENANCE, "quality_claims": "forbidden", "key": key,
+                               "responder": answer.get("responder")}}
 
 
 def serve(shim: Shim, *, host: str = "127.0.0.1", port: int = 8640, api_key: str = "dummy") -> ThreadingHTTPServer:

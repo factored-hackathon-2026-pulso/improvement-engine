@@ -1,0 +1,14 @@
+{
+  "contract_version": "engine-steps/0",
+  "step": "validation",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "signal_id": "sig-0001",
+  "recompute_ref": "recompute:sample-1@1",
+  "checks": [
+    "denominator",
+    "temporality"
+  ],
+  "scout_actor": "actor-scout",
+  "verifier_actor": "actor-verifier"
+}

@@ -1,0 +1,66 @@
+{
+ "schema": "gt05-gate-result/v1",
+ "verdict": "fail",
+ "items": [
+  {
+   "item": "rust_flips",
+   "ok": true,
+   "detail": "steps 2-6 real-narrow, host=python, semantics=claude-standin, Rust-labelled"
+  },
+  {
+   "item": "exe_sha256",
+   "ok": true,
+   "detail": "5 step(s) match the binary on disk (0af44264059d)"
+  },
+  {
+   "item": "fallback_disclosure",
+   "ok": true,
+   "detail": "no silent Python fallback among steps 2-6"
+  },
+  {
+   "item": "g1_check",
+   "ok": true,
+   "detail": "engine_run.check() clean (G1, S1, tests 1-8)"
+  },
+  {
+   "item": "no_red_steps",
+   "ok": true,
+   "detail": "no red step"
+  },
+  {
+   "item": "run_record",
+   "ok": true,
+   "detail": "rust-mode run, exit 0, 5 calls, 0 misses, bound to the report"
+  },
+  {
+   "item": "gt0_dependency",
+   "ok": true,
+   "detail": "GT0 gate: 9/10 items pass (capacity excluded by design)"
+  },
+  {
+   "item": "ratchet_default",
+   "ok": true,
+   "detail": "default run unchanged (python steps, no Rust keys); untouched steps agree with the Rust run"
+  },
+  {
+   "item": "crv1",
+   "ok": true,
+   "detail": "16 review logs closed; required STP1, CMP, GSI, E3b, K0, ED0b, M5a, PX0, G2, TA0 covered"
+  },
+  {
+   "item": "rg1",
+   "ok": true,
+   "detail": "all 5 real-narrow step(s) are served by a Rust step"
+  },
+  {
+   "item": "rg1_ratchet_tests",
+   "ok": true,
+   "detail": "7 ratchet test(s) passed"
+  },
+  {
+   "item": "rg1_original",
+   "ok": false,
+   "detail": "MISSING: no Rust-steps run of the ED0b original source (the Rust sensor is not mapped to the original CSV)"
+  }
+ ]
+}

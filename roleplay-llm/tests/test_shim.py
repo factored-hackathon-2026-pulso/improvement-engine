@@ -22,7 +22,7 @@ def inputs(run_id=None, step=1, binding=None, rows=None):
         "step": step,
         "tools": [{"tool": TOOL, "description": "Query treated aggregates.",
                    "args_schema": {"type": "object"}}],
-        "observations": [] if rows is None else [{"tool": TOOL, "args": {"metric_id": "m1"}, "status": "ok",
+        "observations": [] if rows is None else [{"tool": TOOL, "args": {"metric_id": "recurrence_rate"}, "status": "ok",
                                                   "result": {"rows": rows}, "error": None}],
         "feedback": None,
         "output_schema": {"type": "object"},
@@ -54,7 +54,7 @@ def respond(queue: Path, key: str, content, **over):
     tmp.replace(queue / "responses" / f"{key}.json")
 
 
-TOOL_STEP = {"kind": "tool_call", "tool": TOOL, "args": {"metric_id": "m1"}}
+TOOL_STEP = {"kind": "tool_call", "tool": TOOL, "args": {"metric_id": "recurrence_rate"}}
 FINAL_STEP = {"kind": "final", "output": {"summary": "ok"}}
 
 
@@ -94,6 +94,23 @@ class ReplayKey(Base):
         n = normalise_inputs(a)
         self.assertEqual(n["inputs"]["other"], n["inputs"]["same_as_other"])
         self.assertNotEqual(n["inputs"]["other"], n["inputs"]["binding_id"])
+
+
+class RegistryAtTheShim(Base):
+    def test_name_like_input_never_reaches_a_responder(self):
+        inp = clean()
+        inp["inputs"]["owner"] = "Maria_Gonzalez"
+        status, _ = self.shim().handle(chat_body(inp))
+        self.assertEqual(status, 422)
+        self.assertEqual(self.request_files(), [])
+
+    def test_registered_stage_token_is_served(self):
+        from roleplay_llm.scanner import Registry
+        inp = clean()
+        inp["inputs"]["category"] = "closing_reply_unclear"
+        self.assertEqual(self.shim().handle(chat_body(inp))[0], 422)
+        shim = self.shim(replay_only=True, registry=Registry({"closing_reply_unclear"}))
+        self.assertNotEqual(shim.handle(chat_body(inp))[0], 422)
 
 
 class RoundTrip(Base):
@@ -199,6 +216,11 @@ class ResponseValidation(Base):
         self.assertEqual(body["error"]["type"], "invalid_output")
         status, _ = self._bad(content={"kind": "final", "output": {}}, quality_score=0.9)
         self.assertEqual(status, 502)
+
+    def test_responder_identity_must_be_a_small_plain_object(self):
+        for bad in ("real-model", {"id": "x" * 200, "role": "scout"}, {"id": "a b/../c", "role": "scout"},
+                    {"id": "r1", "role": "scout", "model": "claims"}, {"id": "r1", "role": "oracle"}, {"role": "scout"}):
+            self.assertEqual(self._bad(responder=bad)[0], 502, bad)
 
     def test_must_be_labelled_agent_roleplay(self):
         self.assertEqual(self._bad(provenance="real")[0], 502)

@@ -1,0 +1,9 @@
+[package]
+name = "authority"
+description = "Claude-owned U21 human-authority state-machine stand-in (authority=claude-standin); never depends on crates/core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-client = { path = "../core-client" }

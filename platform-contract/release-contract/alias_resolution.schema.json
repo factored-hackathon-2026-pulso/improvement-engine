@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform_live/release-contract/alias_resolution.schema.json",
+  "title": "alias_resolution",
+  "description": "Response of the registry alias read GET /v1/registry/aliases/{agent_id}/{alias}: what the product platform resolves before consuming a published release. Platform side: simulated (product-consumer).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent_id", "alias", "release_id", "status"],
+  "properties": {
+    "agent_id": {"type": "string", "minLength": 1},
+    "alias": {"type": "string", "minLength": 1},
+    "release_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "revoked"]}
+  }
+}

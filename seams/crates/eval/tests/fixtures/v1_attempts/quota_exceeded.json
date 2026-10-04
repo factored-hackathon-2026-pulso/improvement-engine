@@ -1,0 +1,9 @@
+{
+  "outcome": "quota_exceeded",
+  "status": "not_captured",
+  "date": "2026-10-04",
+  "stack_image": "localhost/pulso-core-runtime:c814c2b-920f5e3",
+  "reason": "The only 429 quotas of the pinned Core (agent_core/registry/quotas.py: proposals_per_day=10, evals_per_proposal=20, enforced in registry/service.py create_proposal and evaluate) apply to origin `auto_detect` only. The pulso-writer flow (agent-core-assets/worlds/pulso-evolution/flows/pulso-writer@1.0.0.yaml, create node) hard-codes origin `builder_chat`, and the Core commitment check (core-bridge tools/builder.py _commitment_mismatch) denies any other create_origin. Tried live: a writer stage committing create_origin `auto_detect` is escalated (state manual_reconcile, reason unexpected_outcome). The quota constants are not configurable (DEFAULT_QUOTAS) and the budget table (PULSO_EVAL_BUDGETS_JSON, bud-e2e) exhausts into failed_infra, not 429. The bridge maps an upstream 429 of arms to 503 (invoke/service.py).",
+  "what_would_produce_it": "a Core change or composition that lets the evolution writer create auto_detect proposals, or configurable Quotas (agent-core / Codex-owned); or driving /v1/registry directly with a constructor credential (creates 429 on create_proposal, which is registry-level, not an evaluate outcome).",
+  "classifier": "eval::outcomes::classify_http(429, quota_exceeded) is covered by unit tests only; no real report exists"
+}

@@ -169,6 +169,128 @@
     "release_hash": "e26df0070f6be82f9813caf03864442ee870b1626806eb096705e0351b6bfe6a",
     "release_id": "rel-e26df0070f6be82f"
   },
+  "atencion-tarea": {
+    "agent_version": "1.0.0",
+    "entities": [
+      {
+        "content_hash": "ac01ec5b75345ca4e413f9899cb62831c67452379dba3dcbad11427b5395988a",
+        "id": "atencion-tarea",
+        "kind": "agent",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "56a3f1b134a6e691fcea79dc45123eef10ddd45c6a74575660e8279760598bd5",
+        "id": "disputa-tarea",
+        "kind": "flow",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "172c1c4c0a20480fff9d2221e1df155bd5765b3a87e2d5591d42ba5ef82e361f",
+        "id": "injection-rules",
+        "kind": "injection_ruleset",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "819529d6716a28ce54252f7975958b38790c7d05b4fe972516020d0a4e674d6c",
+        "id": "lang-es-pt",
+        "kind": "language_detection",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "d685c8c3161a94542e3337a8c5950a3d90bdc9ea180b8a09805311219d7a4129",
+        "id": "perfil-generacion",
+        "kind": "model_profile",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "e67997e2d2a2356ad1d1e4fd6733a7c33b4754a8a54054c43e15fe897f37b6bf",
+        "id": "escalamiento-disputa-monto",
+        "kind": "policy",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "26389427d9931d33d38fb69d86959b0c95e162664fd964f8f898b38cda50d639",
+        "id": "p/resumen_radicado",
+        "kind": "prompt",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "cc0289873212eaaa029239618c0e10a037f8656892c8a677364f79338f763705",
+        "id": "t/abstencion",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "56206672b53310b8c4cb1c30bd33bcee1d6abfbfd89cbe470d2fd658fd248179",
+        "id": "t/aclarar",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "9061fefb66a06575d9941f7b2dcd83efa5765ed1c5954e07b1d86e74a05d0fce",
+        "id": "t/acuse",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "2acb5bcbe8df9fbd8daf65356604d096101e9dfc41924465677dda3b54801518",
+        "id": "t/disputa_recibida",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "63a73d2237109534ada31082b64486dda7c498b5a7d5fb19659594ccfc6f3ef5",
+        "id": "t/idioma_no_soportado",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "93427eb0c1696c0e9fad0a9eb60ed950c2928d2813c7e6e4a939f3fd22d1020f",
+        "id": "t/mensaje_largo",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "cdcd2ac3f37ecbb0fd3cf052764980d36276cdd602f9b216b31e3b77e43e8eab",
+        "id": "t/oferta",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "aa993133401ef31c971efdd2a0c3a74881663df95299dabd83bb700c4c04a481",
+        "id": "t/traspaso",
+        "kind": "template",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "a7e05d1d46c07c8add95eba12f6fc200e973dad31b659dd7c800b35948903deb",
+        "id": "buscar_transacciones",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "3b0addb9f12b20cd58beda0958a04ebb397ad62f8a0f82f5e6760f7f9953a86b",
+        "id": "convertir_moneda",
+        "kind": "tool",
+        "version": "1.0.0"
+      },
+      {
+        "content_hash": "087dc355351dd0b082f72996af259de5748a16c13f0d4a3d95e5b270c0faba36",
+        "id": "seleccionar",
+        "kind": "tool",
+        "version": "1.0.0"
+      }
+    ],
+    "eval_suites": [
+      {
+        "content_hash": "f19475f0e21397f3f4cdcb575b536014baa68064153278a2a1468092647e3207",
+        "id": "disputas-tarea-suite",
+        "version": "1.0.0"
+      }
+    ],
+    "release_hash": "aee75c258fb3b72262039518aed5673b0c3922e0bbc161d21fa242e4eae69059",
+    "release_id": "rel-aee75c258fb3b722"
+  },
   "pulso-builder-design": {
     "agent_version": "1.0.0",
     "entities": [

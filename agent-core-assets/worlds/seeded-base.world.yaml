@@ -2,24 +2,26 @@
 # files_digest, release id or expected state. Checked by tools/worldcheck.py. Category-neutral by design: it names no
 # finding, category or winner; any dispute finding that fits the slots below may target them.
 base_world: seeded
-world: attention-demo
+world: attention-task
 description: >-
-  Pinned attention-demo dispute world used as the base for the improvement loop. The agent handles card-charge
-  disputes; its closing reply is generated from one replaceable prompt, and its eval suite occupies the single suite slot.
+  Dispute world used as the base for the improvement loop. The agent is a task agent (no decision model, no turns)
+  that triages a card-charge dispute from its scripted tools; its closing reply is generated from one replaceable
+  prompt, and its eval suite occupies the single suite slot. It is evaluable end to end on the pinned Core (c814c2b),
+  which composes no `jev` decision provider (the conversational `atencion` agent of attention-demo needs one).
 agent:
-  id: atencion
+  id: atencion-tarea
   version: 1.0.0
-  purpose: customer dispute intake (charge not recognised, confirm, file, verify)
+  purpose: dispute triage task (find the charge, convert, apply the amount policy, reply or escalate)
 replaceable_prompt:
   id: p/resumen_radicado
   version: 1.0.0
-  used_by: {flow: disputa-cargo, node: responder_ok}
+  used_by: {flow: disputa-tarea, node: responder_ok}
 eval_suite_slot:
-  agent_id: atencion
-  current: disputas-suite@1.0.0
+  agent_id: atencion-tarea
+  current: disputas-tarea-suite@1.0.0
   note: one suite per agent (assetcheck suite_count); Add EvalSuite publishes the next suite version into this slot
 targetable_kinds: [replace_prompt, add_eval_suite]
 authors:
   world: claude-wrld0
-  suite: agent-core-registry-demo@c814c2b
+  suite: agent-core-registry-demo@c814c2b  # scenario set adapted by the world author to start-only task runs
   judge: claude-gsipy

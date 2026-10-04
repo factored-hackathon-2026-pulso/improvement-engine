@@ -1,0 +1,1 @@
+{"protocol":"roleplay-queue/1","key":"73f2ac6c1a81cac7fda8a913c04ae5c5","provenance":"agent_roleplay","quality_claims":"forbidden","responder":{"id":"resp-verifier-opus-2","role":"verifier"},"content":{"kind":"final","output":{"assessments":[{"hypothesis_id":"h_largest_recurrence","evidence_ref":"ev_66fd2583201f4506","verdict":"supported"}]}}}

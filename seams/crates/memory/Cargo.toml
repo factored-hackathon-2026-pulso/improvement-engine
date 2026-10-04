@@ -1,0 +1,10 @@
+[package]
+name = "memory"
+description = "Claude-owned thin memory for DEMO-1 (MEM1): note artifact, wiki read, confirm or contradict. In-process only; durable memory is NOT claimed (DMEMC)."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json = "1"
+sha2 = "0.10"

@@ -30,10 +30,6 @@ KNOWN_STACK_GAPS: list[dict[str, str]] = [
      "detail": "agent_core HttpJevTransport uses a fixed DEFAULT_BASE_URL (no env), so decision-provider scenarios "
                "(atencion/disputas-suite) cannot be scripted in the real image; E2E uses LLM-only pulso agents.",
      "request": "UP (agent-core): AGENTCORE_JEV_BASE_URL (or inject JevTransport through a factory) for local runs."},
-    {"code": "core_state_aliases_not_implemented",
-     "detail": "GET /internal/v1/core-state/aliases answers 501; `pin release` is verified against the manifest and "
-               "reg_release_status only.",
-     "request": "L3: implement alias_read or document it as not part of H4."},
     {"code": "windows_host_unreachable_from_containers",
      "detail": "Containers on pulso-dev cannot reach listeners on the Windows host (host.containers.internal refuses, "
                "172.17.128.1 times out: WSL NAT/firewall), so the control-api/broker/LLM doubles run as a labelled "

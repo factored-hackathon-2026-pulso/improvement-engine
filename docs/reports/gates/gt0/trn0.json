@@ -1,0 +1,174 @@
+{
+  "schema": "train-receipt/v1",
+  "mode": "consolidated",
+  "generated_utc": "2026-10-04T07:35:34.353489+00:00",
+  "base": "origin/main",
+  "train_branch": "claude/w0-train",
+  "head_sha": "081721634b2d7a75b565a887de18965c8c8e195f",
+  "pr_cap_hours": 35,
+  "merge_order": [
+    {
+      "lane": "g1",
+      "branch": "claude/w0b-g1",
+      "first_train_commit": "2f02726bc3248b4a943765ffe4a53ec2ffbe0691",
+      "position": 3
+    },
+    {
+      "lane": "p2py",
+      "branch": "claude/w0b-plat",
+      "first_train_commit": "28c4ba575db3579b5ddf63aae521fb8e1103ed27",
+      "position": 5
+    },
+    {
+      "lane": "cmppy_gsipy",
+      "branch": "claude/w0b-e2e",
+      "first_train_commit": "9cca8b9325b6fb1b667ef443087ec9b167152aab",
+      "position": 4
+    },
+    {
+      "lane": "m3",
+      "branch": "claude/w0b-model",
+      "first_train_commit": "9c2e52a18726de4b42e9fa614ddf839bf1006ebf",
+      "position": 6
+    },
+    {
+      "lane": "ed0",
+      "branch": "claude/w0c-ed0",
+      "first_train_commit": "5219186173208258cf95cf10a0f31bddb9ff38f3",
+      "position": 8
+    },
+    {
+      "lane": "m1_m2a",
+      "branch": "claude/w0c-m1",
+      "first_train_commit": "e0836ac34966dba9ee94f73de8f15a830812320d",
+      "position": 14
+    },
+    {
+      "lane": "ed0l",
+      "branch": "claude/w0d-edl",
+      "first_train_commit": "e081c98e86f77fa0f3bb60b67f9ed13219fbc300",
+      "position": 12
+    },
+    {
+      "lane": "smap",
+      "branch": "claude/w0d-smap",
+      "first_train_commit": "f0f4ae285969a664ff6018e1e77a6f0a8aaf87ed",
+      "position": 13
+    },
+    {
+      "lane": "q1r",
+      "branch": "claude/w0e-q1r",
+      "first_train_commit": "2b74b042b350e95a825a24fc0882550efc6a2d96",
+      "position": 25
+    },
+    {
+      "lane": "int0",
+      "branch": "claude/w0f-int0",
+      "first_train_commit": "c4e60147f0fd445ed67520e53fc8eee66c9522f0",
+      "position": 33
+    },
+    {
+      "lane": "docs",
+      "branch": "claude/w0g-docs",
+      "first_train_commit": "6323a0abcf8907343ac5461560f5e0951e43f12f",
+      "position": 29
+    },
+    {
+      "lane": "world",
+      "branch": "claude/w0h-world",
+      "first_train_commit": "17dfcbf1bf7e2b55698ec89d5500a967c88af99b",
+      "position": 34
+    },
+    {
+      "lane": "q1r_live",
+      "branch": "claude/w0i-live",
+      "first_train_commit": "8db137d87df25504c3db0c8a19b379ab1302fa00",
+      "position": 40
+    },
+    {
+      "lane": "e0_feeder",
+      "branch": "claude/w0j-e0",
+      "first_train_commit": "58b990426731a4db6f3f95ef6cc42fcca199a40e",
+      "position": 42
+    },
+    {
+      "lane": "tps_registry",
+      "branch": "claude/w1a-tps",
+      "first_train_commit": "207e96e1c821740791865222696a80f0ba16d8fd",
+      "position": 52
+    },
+    {
+      "lane": "spend_wiring",
+      "branch": "claude/w1a-spend",
+      "first_train_commit": "e14119d22819b8185bd7cf91ebabb5a317d2552d",
+      "position": 50
+    },
+    {
+      "lane": "spend_pg",
+      "branch": "claude/w1b-pg",
+      "first_train_commit": "2fba23399cd224952234e89c1eaf54ea223584a6",
+      "position": 51
+    },
+    {
+      "lane": "gt0_gate",
+      "branch": "claude/w1a-gt0",
+      "first_train_commit": "9a888a07c038918e04d1445a94caa8a52a07170e",
+      "position": 53
+    },
+    {
+      "lane": "demo0",
+      "branch": "claude/w1c-demo0",
+      "first_train_commit": "081721634b2d7a75b565a887de18965c8c8e195f",
+      "position": 60
+    },
+    {
+      "lane": "review",
+      "branch": "claude/w1c-review",
+      "first_train_commit": "3c6e3d41db719e096be872b94256bde3f72b5e11",
+      "position": 59
+    }
+  ],
+  "deviations": [
+    "PR 96 carries 174 known lane-hours, over the 35 cap; authority: user ruling: few, large PRs (journal CL-0042, CL-0045: one consolidated open PR #96); lanes were merged into claude/w0-train before this receipt, so the order is observed from git, not enforced"
+  ],
+  "prs": [
+    {
+      "n": 96,
+      "lanes": [
+        "g1",
+        "p2py",
+        "cmppy_gsipy",
+        "m3",
+        "ed0",
+        "m1_m2a",
+        "ed0l",
+        "smap",
+        "q1r",
+        "int0",
+        "docs",
+        "world",
+        "q1r_live",
+        "e0_feeder",
+        "tps_registry",
+        "spend_wiring",
+        "spend_pg",
+        "gt0_gate",
+        "demo0",
+        "review"
+      ],
+      "lane_hours": 174,
+      "lane_hours_unknown": [
+        "docs",
+        "q1r_live",
+        "e0_feeder",
+        "spend_wiring",
+        "spend_pg",
+        "demo0",
+        "review"
+      ],
+      "w0_receipt": "w0-pr-96.json"
+    }
+  ],
+  "problems": [],
+  "verdict": "pass"
+}

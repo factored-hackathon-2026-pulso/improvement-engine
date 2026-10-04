@@ -1,0 +1,26 @@
+{
+  "base_world": "seeded",
+  "contract_version": "smap/0",
+  "data_class": "synthetic",
+  "entries": [
+    {
+      "addresses": [
+        "coverage_gap_dispute"
+      ],
+      "new_ref": "eval_suite:disputas-tarea-suite@2",
+      "op": "add",
+      "target_kind": "eval_suite",
+      "target_ref": "eval_suite:disputas-tarea-suite@1"
+    },
+    {
+      "addresses": [
+        "closing_reply_unclear",
+        "followup_wording"
+      ],
+      "new_ref": "prompt:resumen_radicado@2",
+      "op": "replace",
+      "target_kind": "prompt",
+      "target_ref": "prompt:resumen_radicado@1"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+id: demo-task
+agents:
+  - {agent: "atencion-tarea@^1", aliases: [prod]}
+flows: ["disputa-tarea@^1"]
+interrupts: []
+language_detection: "lang-es-pt@1"
+injection_ruleset: "injection-rules@1"

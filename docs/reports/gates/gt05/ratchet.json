@@ -1,0 +1,8 @@
+{
+ "command": "uv run --offline --python 3.12 --with cryptography --with pyyaml --with httpx --with fastapi --with jsonschema --with pydantic --with anyio --with rfc8785 --with psycopg[binary] --with boto3 --with sqlalchemy --with moto --with pyarrow --with pytest python -m pytest tests/unit/test_e2e_thread_01_steps.py -q -p no:cacheprovider",
+ "exit_code": 0,
+ "failed": 0,
+ "passed": 7,
+ "schema": "ratchet-receipt/v1",
+ "skipped": 0
+}

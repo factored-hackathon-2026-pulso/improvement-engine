@@ -13,3 +13,5 @@ data/
 output/
 .scratch/
 *.tfstate*
+.nexus-outbox/
+/seams/target/

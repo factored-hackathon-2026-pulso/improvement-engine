@@ -1,0 +1,8 @@
+[package]
+name = "abi"
+description = "JobHandler ABI mirrored from the FRZ0 C-7 pack (contracts/engine-steps); std only, never depends on crates/core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]

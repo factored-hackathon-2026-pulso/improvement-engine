@@ -1,0 +1,60 @@
+{
+  "agent_core_sha": "c814c2bad9f154d10c092326558815dca9562be7",
+  "approver": "local-supervisor",
+  "approver_simulated": true,
+  "base_release": "rel-aee75c258fb3b722",
+  "candidate_hash": "253b52903d377aaec062ebcf1027dac22bbbf3aa982209b76d966333842e9509",
+  "dry_run_candidate_hash": "253b52903d377aaec062ebcf1027dac22bbbf3aa982209b76d966333842e9509",
+  "image": "localhost/pulso-core-runtime:c814c2b-920f5e3",
+  "namespace": "claude-w4a-1",
+  "native_verdict": "pass",
+  "prod_after": "rel-aee75c258fb3b722",
+  "proposal_id": "01a106ae-158d-7479-bf49-8becb462128c",
+  "published_release": "rel-253b52903d377aae",
+  "release_id_preview": "rel-253b52903d377aae",
+  "replay_refused": true,
+  "staging_after": "rel-253b52903d377aae",
+  "tamper_refused": true,
+  "timings": [
+    {
+      "seconds": 0.013,
+      "step": "version_probe"
+    },
+    {
+      "seconds": 0.02,
+      "step": "alias_prod"
+    },
+    {
+      "seconds": 0.035,
+      "step": "dry_run"
+    },
+    {
+      "seconds": 0.728,
+      "step": "freeze_writer_stage"
+    },
+    {
+      "seconds": 0.072,
+      "step": "freeze_replay"
+    },
+    {
+      "seconds": 1.219,
+      "step": "evaluate_only"
+    },
+    {
+      "seconds": 0.01,
+      "step": "issue_bot_credential"
+    },
+    {
+      "seconds": 0.059,
+      "step": "approve"
+    },
+    {
+      "seconds": 0.056,
+      "step": "publish"
+    },
+    {
+      "seconds": 0.015,
+      "step": "alias_staging"
+    }
+  ]
+}

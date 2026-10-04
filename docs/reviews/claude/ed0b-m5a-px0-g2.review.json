@@ -1,0 +1,110 @@
+{
+  "schema": "review-log/v1",
+  "wps": [
+    "ED0b",
+    "M5a",
+    "PX0",
+    "G2"
+  ],
+  "author": {
+    "id": "implementer-subagent-cl",
+    "role": "implementer (lane worktree agent)"
+  },
+  "reviewer": {
+    "id": "fresh-context-reviewer-subagent-cl",
+    "context": "fresh",
+    "identity_recorded": false,
+    "note": "the journal records an independent fresh-context reviewer per package but not a per-review identifier"
+  },
+  "provenance": "reconstructed",
+  "sources": [
+    "journal CL-0047",
+    "git b8691ab, 95fe0cf, e828bef",
+    "git 753db38, 66a53bf, 0c198cd, 661360b",
+    "git bfab71a, cc5cd1d",
+    "git 0117f80, 48eae83"
+  ],
+  "note": "Reconstructed after the fact on 2026-10-04 (CRV1) from the shared journal and commit history. Findings are only those the journal or the cited commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "verdict": "closed",
+  "findings": [
+    {
+      "id": "ED0b-R1",
+      "loop": 1,
+      "summary": "ambiguous or identical mapped columns were accepted",
+      "status": "fixed",
+      "fix_ref": "b8691ab",
+      "red_ref": "95fe0cf"
+    },
+    {
+      "id": "ED0b-R2",
+      "loop": 1,
+      "summary": "original-source and E0 source were not mutually exclusive in the config and the CLI",
+      "status": "fixed",
+      "fix_ref": "b8691ab",
+      "red_ref": "95fe0cf"
+    },
+    {
+      "id": "M5a-R1",
+      "loop": 1,
+      "summary": "Jev shim returned a 500 on unhashable type/choice and non-object input",
+      "status": "fixed",
+      "fix_ref": "66a53bf",
+      "red_ref": "753db38"
+    },
+    {
+      "id": "M5a-R2",
+      "loop": 1,
+      "summary": "score levels were not bounded",
+      "status": "fixed",
+      "fix_ref": "66a53bf",
+      "red_ref": "753db38"
+    },
+    {
+      "id": "M5a-R3",
+      "loop": 1,
+      "summary": "volatile keys were masked outside state.input (collision)",
+      "status": "fixed",
+      "fix_ref": "66a53bf",
+      "red_ref": "753db38"
+    },
+    {
+      "id": "M5a-R4",
+      "loop": 1,
+      "summary": "the Jev shim socket had no timeout",
+      "status": "fixed",
+      "fix_ref": "66a53bf",
+      "red_ref": "753db38"
+    },
+    {
+      "id": "CRV1-RES-ED0B-RUST-UNMAPPED",
+      "loop": 1,
+      "summary": "the ED0b original-source run is not mapped to the Rust steps: step 2 is not_exercised (sensor_not_mapped_to_original_csv) and the original run has not been executed through --steps rust",
+      "status": "accepted",
+      "reason": "The Rust sensor reads the E0 parquet shape and no honest original-CSV mapping exists yet, so the original run cannot show RG-1 (every real-narrow step served by Rust) for its own steps.",
+      "owner": "Team CL, lane L-E2E (ED0b)",
+      "tier": "T0.5 (wp_table CRV1)",
+      "tracking": "gt05 gate item rg1_original reports MISSING until a Rust-steps original run exists"
+    },
+    {
+      "id": "CRV1-RES-PX0-G2-NOT-ITEMISED",
+      "loop": 1,
+      "summary": "the journal records 7 defects across ED0b, M5a, PX0 and G2 but itemises none for PX0 and G2",
+      "status": "accepted",
+      "reason": "No PX0 or G2 defect is invented here; the 6 itemised above come from the cited commits. PX0 stays simulated(product-consumer) and G2 reports readiness only (agent-core main 79233c4 vs pin c814c2b).",
+      "owner": "Team CL, lane L-GOV (CRV1)",
+      "tier": "T0.5 (wp_table CRV1)",
+      "tracking": "journal CL-0047"
+    }
+  ],
+  "closure_verification": {
+    "by": "implementer agent of Team Claude, GT05 lane (verification by commit inspection and gate runs; NOT an independent reviewer)",
+    "date": "2026-10-04",
+    "head_at_verification": "claude/w1i-gt05 (from claude/w0-train, PR #96)",
+    "evidence": [
+      "git show --stat b8691ab 66a53bf (ED0b and M5a fixes)",
+      "RED commits 95fe0cf, 753db38, 0117f80, bfab71a precede the matching GREEN commits"
+    ],
+    "independence": "The journal cites independent fresh-context reviews but their reviewer identifiers were not recorded; this log does not claim more than the journal states."
+  },
+  "journal_defect_count": 7
+}

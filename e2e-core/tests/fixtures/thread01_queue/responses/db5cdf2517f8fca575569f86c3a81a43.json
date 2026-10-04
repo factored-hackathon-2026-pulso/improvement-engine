@@ -1,0 +1,27 @@
+{
+ "content": {
+  "kind": "final",
+  "output": {
+   "alternatives": [
+    {
+     "kind": "do_nothing"
+    }
+   ],
+   "design_intent": {
+    "target_ref": "prompt:resumen_radicado__at__1",
+    "verdict": "linked"
+   },
+   "evidence_refs": [
+    "ev_66fd2583201f4506"
+   ]
+  }
+ },
+ "key": "db5cdf2517f8fca575569f86c3a81a43",
+ "protocol": "roleplay-queue/1",
+ "provenance": "agent_roleplay",
+ "quality_claims": "forbidden",
+ "responder": {
+  "id": "responder-builder",
+  "role": "builder_design"
+ }
+}
