@@ -111,6 +111,8 @@ def test_ids_and_enums_of_ai_events_are_forwarded(rig):
 def test_administration_types_stay_quarantined(rig):
     add_event(rig.db, 1, "staff.created", payload={"name": "Ana", "email": "ana@example.invalid"})
     rig.make().poll_once()
-    sent = [e for b in rig.ingest.batches for e in b["events"] if e["kind"] == "platform_event"]
-    assert not any(e["source_event"].get("event_type") == "staff.created" for e in sent)
+    ses = [e["source_event"] for b in rig.ingest.batches for e in b["events"] if e["kind"] == "platform_event"]
+    findings = [s for s in ses if s.get("kind") == "exporter_finding" and s["finding_code"] == "unknown_event_type"]
+    assert findings and findings[0]["details"]["catalog_status"] == "planned"
+    assert findings[0]["details"]["payload_forwarded"] is False
     assert "ana@example.invalid" not in json.dumps(rig.ingest.batches)
