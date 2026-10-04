@@ -32,6 +32,7 @@ pub struct SourceTick {
     store: Box<dyn WatermarkStore + Send>,
     repo: Arc<dyn JobRepository>,
     tenant: String,
+    swept: bool,
 }
 
 fn dsn(var: &str) -> Result<String, SourceError> {
@@ -74,7 +75,7 @@ impl SourceTick {
             "product-postgres" => Some("product".to_string()),
             _ => None,
         };
-        Ok(SourceTick { cfg: source_config(c, runner)?, sqlite: c.source_sqlite.clone(), schema: c.source_schema.clone().or(default_schema), store, repo, tenant: tenant.to_string() })
+        Ok(SourceTick { cfg: source_config(c, runner)?, sqlite: c.source_sqlite.clone(), schema: c.source_schema.clone().or(default_schema), store, repo, tenant: tenant.to_string(), swept: false })
     }
 
     fn build_adapter(&self) -> Result<Box<dyn SourceAdapter>, SourceError> {
@@ -87,8 +88,36 @@ impl SourceTick {
     }
 }
 
+impl SourceTick {
+    /// Once per process: queue again (keyed, so idempotent) every run record of this source already on disk. The watermark is durable but
+    /// an in-memory queue is not: a kill after the watermark commit and before the worker finished would otherwise lose the job for good.
+    /// Finished runs are cheap to re-admit: the engine job finds them completed in the console store and does nothing.
+    fn sweep(&mut self) -> Result<(), String> {
+        let Some(dir) = self.cfg.work_dir.join("runs").read_dir().ok() else { return Ok(()) };
+        let mut runs: Vec<(String, String)> = vec![];
+        for e in dir.flatten() {
+            let Some(rec) = std::fs::read_to_string(e.path()).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else { continue };
+            if rec["source_id"] != self.cfg.source_id.as_str() {
+                continue;
+            }
+            if let Some(id) = rec["run_id"].as_str() {
+                runs.push((rec["observed_until"].as_str().unwrap_or("").to_string(), id.to_string()));
+            }
+        }
+        runs.sort();
+        for (_, id) in runs {
+            self.repo.admit_keyed(&self.tenant, &format!("{JOB_KEY_PREFIX}{id}")).map_err(|e| format!("cannot re-queue run {id}: {e:?}"))?;
+        }
+        self.swept = true;
+        Ok(())
+    }
+}
+
 impl Tick for SourceTick {
     fn tick(&mut self, _ctx: &TickCtx) -> Result<TickReport, String> {
+        if !self.swept {
+            self.sweep()?;
+        }
         let adapter = self.build_adapter().map_err(|e| scrub(&e))?;
         let (repo, tenant) = (self.repo.clone(), self.tenant.clone());
         let hand_over = |run_id: &str, _record: &serde_json::Value| -> Result<(), SourceError> {

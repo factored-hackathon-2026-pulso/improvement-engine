@@ -106,11 +106,12 @@ impl EngineRunner {
         if self.core_live { "live (real Core over the bridge; the human issuer and the sealer stay stand-ins)" } else { "offline-double" }
     }
 
-    /// The monitor labels a platform source "real platform signals". When the operator declared the source simulated, that label would
-    /// be false: it is replaced here, in the title, the profile and the doubles.
+    /// The monitor labels a platform source "real platform signals". When the operator declared the source simulated, or declared nothing,
+    /// that label would be false or unproven: it is replaced here, in the title, the profile and the doubles.
     fn label(&self, rec: &Value) -> String {
         match (self.data_mode, self.provenance) {
             (DataMode::Platform, Provenance::Simulated) => "simulated platform-shaped signals (the source is declared simulated by the operator; this is not the actual platform); release and observation simulated".into(),
+            (DataMode::Platform, Provenance::Unspecified) => "platform-mode signals; the operator did not declare whether the source is real or simulated (PULSO_SOURCE_PROVENANCE); release and observation simulated".into(),
             _ => rec["label"].as_str().unwrap_or("unlabelled").to_string(),
         }
     }
