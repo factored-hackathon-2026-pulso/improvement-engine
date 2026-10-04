@@ -1,0 +1,14 @@
+# engine-run (G1)
+
+Purpose: `engine_run.py`, which checks an
+engine-run report against honesty rules H1-H8 (`check()`) and generates the `doubles[]` list from the steps that
+are stand-ins (`generate_doubles`). A report that claims a real step while using a double, or hides a double, fails.
+
+Tests (verified):
+
+    uv run --python 3.12 --with pytest --with pyyaml python -m pytest contracts/engine-run/tests -q -p no:cacheprovider
+
+Data-class rules: reports carry ids and labels only, never rows. Honesty labels: `real`, `real-narrow`, `local-model`,
+`agent_roleplay`, `recorded`, `stand-in`, `simulated`, `not_exercised`, `blocked(<reason>)`. Consumed by `e2e-core` (`build_report`).
+
+Owner lane: L-GOV.
