@@ -23,6 +23,10 @@ pub enum Fault {
     Throttle(Option<u64>),
     /// Answer 429 with a code that is not in the contract table.
     ThrottleUnknownCode,
+    /// The next by-key read answers a report of ANOTHER run (execution_id of a different key).
+    ReadOtherRun,
+    /// The next by-key read answers this key's id but with a different arm (key reused with another body).
+    ReadOtherBody,
 }
 
 #[derive(Default)]
@@ -124,7 +128,15 @@ fn serve(mut s: TcpStream, st: &Arc<Mutex<ArmState>>) {
     } else if method == "GET" && path.starts_with("/internal/v1/evaluation/arms/by-key/") {
         let key = &path["/internal/v1/evaluation/arms/by-key/".len()..];
         match g.reports.get(&(tenant, key.to_string())) {
-            Some((_, r)) => respond(&mut s, 200, "", r),
+            Some((_, r)) => {
+                let mut r = r.clone();
+                match fault {
+                    Some(Fault::ReadOtherRun) => r["execution_id"] = json!(core_client::canon::arm_execution_id("t1", "someone-else").unwrap()),
+                    Some(Fault::ReadOtherBody) => r["arm"] = json!("other-arm"),
+                    _ => {}
+                }
+                respond(&mut s, 200, "", &r)
+            }
             None => respond(&mut s, 404, "", &envelope("pulso:not_found", false)),
         }
     } else {

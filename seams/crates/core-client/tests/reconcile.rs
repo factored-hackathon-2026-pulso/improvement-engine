@@ -117,3 +117,30 @@ fn crash_after_write_reconcile_finds_the_effect_or_reports_absent() {
     resumed.run_arm_reconciled("t1", Some("job-1"), &req(), &RetryPolicy::default(), &TestClock::default()).unwrap();
     assert_eq!(core.effects(), 1);
 }
+
+fn posts(core: &ArmCore) -> usize {
+    core.requests().iter().filter(|r| r.0 == "POST").count()
+}
+
+#[test]
+fn failed_read_back_after_unknown_outcome_stays_unknown_and_does_not_resend() {
+    // POST lands and the response is lost; the read-back itself is lost too (sent=true on the read).
+    let core = ArmCore::start(vec![Fault::DropAfterEffect, Fault::DropBeforeEffect, Fault::DropBeforeEffect, Fault::DropBeforeEffect]);
+    let c = client(&core.addr).with_attempts(1);
+    let clock = TestClock::default();
+    assert!(c.run_arm_reconciled("t1", Some("job-1"), &req(), &RetryPolicy::default(), &clock).is_err());
+    assert_eq!(posts(&core), 1, "unknown outcome + unreadable effect must not be resent blindly");
+    assert_eq!(core.effects(), 1);
+}
+
+#[test]
+fn read_back_of_another_run_is_a_contract_error_not_adopted() {
+    let core = ArmCore::start(vec![Fault::DropAfterEffect, Fault::ReadOtherRun]);
+    assert!(matches!(run(&core, &TestClock::default(), &RetryPolicy::default()), Err(core_client::OpError::Contract(_))));
+}
+
+#[test]
+fn read_back_with_a_different_body_is_a_contract_error_not_adopted() {
+    let core = ArmCore::start(vec![Fault::DropAfterEffect, Fault::ReadOtherBody]);
+    assert!(matches!(run(&core, &TestClock::default(), &RetryPolicy::default()), Err(core_client::OpError::Contract(_))));
+}
