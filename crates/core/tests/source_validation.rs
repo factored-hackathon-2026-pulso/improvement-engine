@@ -24,8 +24,9 @@ fn loads_canonical_json_contracts_in_deterministic_filename_order() {
     let contracts = load_canonical_contracts(Path::new("../../contracts/sources"))
         .expect("canonical contracts are readable");
 
-    assert_eq!(contracts.len(), 1);
+    assert_eq!(contracts.len(), 2);
     assert_eq!(contracts[0].table, "call_center_interactions");
+    assert_eq!(contracts[1].table, "complaints");
 }
 
 #[test]
@@ -141,10 +142,7 @@ fn reports_disallowed_policy_classifications_in_stable_column_order() {
         report.findings[1].kind,
         QualityFindingKind::PolicyClassificationViolation
     );
-    assert_eq!(
-        report.findings[1].column.as_deref(),
-        Some("wait_time_seconds")
-    );
+    assert_eq!(report.findings[1].column.as_deref(), Some("has_recording"));
 }
 
 #[test]
@@ -171,8 +169,19 @@ fn rejects_contracts_that_break_readonly_or_schema_invariants() {
     let unknown_field = CONTRACT.replacen('{', "{\"unexpected\":true,", 1);
     assert!(SourceContract::from_json(&unknown_field).is_err());
 
-    let unknown_classification = CONTRACT.replace("\"internal\"", "\"restricted\"");
+    let unknown_classification = CONTRACT.replace("\"internal\"", "\"unclassified\"");
     assert!(SourceContract::from_json(&unknown_classification).is_err());
+}
+
+#[test]
+fn restricted_source_columns_cannot_be_added_to_projection_allowlist() {
+    let complaint_contract = include_str!("../../../contracts/sources/complaints.v1.json");
+    let widened_policy = complaint_contract.replace(
+        "\"permitted_classifications\": [\"internal\", \"pseudonymized\", \"aggregated\"]",
+        "\"permitted_classifications\": [\"internal\", \"pseudonymized\", \"aggregated\", \"restricted\"]",
+    );
+
+    assert!(SourceContract::from_json(&widened_policy).is_err());
 }
 
 #[test]

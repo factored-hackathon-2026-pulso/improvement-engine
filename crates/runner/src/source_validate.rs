@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use improvement_engine_source_adapters::{
     PackageValidationError, PreparationConfig, PreparedSource, SourceKind, prepare_e0_package,
-    validate_e0_operational_package,
+    validate_e0_operational_package, validate_original_contact_complaint_profile,
 };
 use serde::Serialize;
 
@@ -52,6 +52,7 @@ struct Summary {
     manifest_digest: Option<String>,
     snapshot_digest: Option<String>,
     operational_table_count: Option<usize>,
+    validated_table_count: Option<usize>,
     findings: Vec<&'static str>,
 }
 
@@ -66,6 +67,7 @@ impl Summary {
             manifest_digest: None,
             snapshot_digest: None,
             operational_table_count: None,
+            validated_table_count: None,
             findings: vec![finding],
         }
     }
@@ -73,32 +75,76 @@ impl Summary {
     fn valid(
         source_kind: &'static str,
         contract_version: String,
+        validation_scope: &'static str,
         table_count: Option<usize>,
         prepared: &PreparedSource,
+    ) -> Self {
+        Self::valid_with_digests(
+            source_kind,
+            contract_version,
+            validation_scope,
+            table_count,
+            Some(prepared.manifest_digest().to_owned()),
+            Some(prepared.snapshot_ref().digest.clone()),
+        )
+    }
+
+    fn bounded_valid(
+        source_kind: &'static str,
+        contract_version: String,
+        validation_scope: &'static str,
+        table_count: usize,
     ) -> Self {
         Self {
             schema_version: 1,
             source_kind,
             validation_status: "valid",
-            validation_scope: "operational",
+            validation_scope,
             contract_version: Some(contract_version),
-            manifest_digest: Some(prepared.manifest_digest().to_owned()),
-            snapshot_digest: Some(prepared.snapshot_ref().digest.clone()),
-            operational_table_count: table_count,
+            manifest_digest: None,
+            snapshot_digest: None,
+            operational_table_count: None,
+            validated_table_count: Some(table_count),
             findings: Vec::new(),
         }
     }
 
-    fn invalid(source_kind: &'static str, finding: &'static str) -> Self {
+    fn valid_with_digests(
+        source_kind: &'static str,
+        contract_version: String,
+        validation_scope: &'static str,
+        table_count: Option<usize>,
+        manifest_digest: Option<String>,
+        snapshot_digest: Option<String>,
+    ) -> Self {
+        Self {
+            schema_version: 1,
+            source_kind,
+            validation_status: "valid",
+            validation_scope,
+            contract_version: Some(contract_version),
+            manifest_digest,
+            snapshot_digest,
+            operational_table_count: table_count,
+            validated_table_count: None,
+            findings: Vec::new(),
+        }
+    }
+
+    fn invalid(kind: SourceKindArg, source_kind: &'static str, finding: &'static str) -> Self {
         Self {
             schema_version: 1,
             source_kind,
             validation_status: "invalid_source",
-            validation_scope: "operational",
+            validation_scope: match kind {
+                SourceKindArg::EnrichedHistory => "operational",
+                SourceKindArg::OriginalBank => "contacts_and_complaints_header_structure",
+            },
             contract_version: None,
             manifest_digest: None,
             snapshot_digest: None,
             operational_table_count: None,
+            validated_table_count: None,
             findings: vec![finding],
         }
     }
@@ -106,7 +152,6 @@ impl Summary {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ValidationFailure {
-    Unsupported(&'static str),
     Invalid(&'static str),
 }
 
@@ -128,10 +173,9 @@ pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
 
     let summary = match validate_source(&options) {
         Ok(summary) => summary,
-        Err(ValidationFailure::Unsupported(finding)) => {
-            Summary::unsupported(options.kind.label(), finding)
+        Err(ValidationFailure::Invalid(finding)) => {
+            Summary::invalid(options.kind, options.kind.label(), finding)
         }
-        Err(ValidationFailure::Invalid(finding)) => Summary::invalid(options.kind.label(), finding),
     };
     write_summary(&summary)?;
     if summary.validation_status == "valid" {
@@ -169,12 +213,23 @@ fn validate_source(options: &Options) -> Result<Summary, ValidationFailure> {
             Ok(Summary::valid(
                 options.kind.label(),
                 validated.contract_version().to_owned(),
+                "operational",
                 Some(validated.table_count()),
                 &prepared,
             ))
         }
         SourceKindArg::OriginalBank => {
-            Err(ValidationFailure::Unsupported("source_mapping_unverified"))
+            let validated = validate_original_contact_complaint_profile(
+                &options.input,
+                &options.contract_version,
+            )
+            .map_err(|_| ValidationFailure::Invalid("contract_or_schema_invalid"))?;
+            Ok(Summary::bounded_valid(
+                options.kind.label(),
+                options.contract_version.clone(),
+                "contacts_and_complaints_header_structure",
+                validated.table_count(),
+            ))
         }
     }
 }
@@ -207,7 +262,7 @@ fn write_summary(summary: &Summary) -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "improvement-engine source validate --kind <enriched_history|original_bank> --input <path> --contract-version <version>\nValidation status is scoped: E0 valid/invalid means operational tables only; unsupported sources have scope not_validated."
+        "improvement-engine source validate --kind <enriched_history|original_bank> --input <path> --contract-version <version>\nE0 validation covers operational tables. original_bank covers only the versioned contacts+complaints header/row-structure profile, not all 13 source tables or value types."
     );
 }
 

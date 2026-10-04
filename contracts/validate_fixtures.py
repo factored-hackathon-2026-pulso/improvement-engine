@@ -414,7 +414,7 @@ def validate_source_contract(value: object) -> list[str]:
     names: set[str] = set()
     allowed_types = {"text", "timestamp", "date", "bool", "decimal", "int"}
     allowed_purposes = {"identity", "join", "event_clock", "metric", "dimension", "quality"}
-    allowed_classifications = {"internal", "pseudonymized", "aggregated"}
+    allowed_classifications = {"internal", "pseudonymized", "aggregated", "restricted"}
     for column in columns:
         if not isinstance(column, dict) or not isinstance(column.get("name"), str) or not column["name"]:
             errors.append("invalid_source_column")
@@ -438,7 +438,12 @@ def validate_source_contract(value: object) -> list[str]:
         errors.append("event_clock_not_declared")
     if isinstance(access_policy, dict) and isinstance(access_policy.get("permitted_classifications"), list):
         permitted = set(access_policy["permitted_classifications"])
-        if any(isinstance(column, dict) and column.get("classification") not in permitted for column in columns):
+        if any(
+            isinstance(column, dict)
+            and column.get("classification") not in permitted
+            and column.get("classification") != "restricted"
+            for column in columns
+        ):
             errors.append("source_column_classification_not_permitted")
     return errors
 

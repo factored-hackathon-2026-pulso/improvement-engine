@@ -591,7 +591,7 @@ fn source_validate_reports_invalid_e0_relationship_as_invalid_not_unsupported() 
 }
 
 #[test]
-fn source_validate_original_fails_closed_without_reading_malformed_input() {
+fn source_validate_original_rejects_malformed_input_without_disclosing_source_values() {
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("original-source-validation");
     let contacts = input.join("call_center_interactions");
@@ -613,11 +613,14 @@ fn source_validate_original_fails_closed_without_reading_malformed_input() {
     let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
     let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
     assert_eq!(summary["source_kind"], "original_bank");
-    assert_eq!(summary["validation_status"], "unsupported_source");
-    assert_eq!(summary["validation_scope"], "not_validated");
+    assert_eq!(summary["validation_status"], "invalid_source");
+    assert_eq!(
+        summary["validation_scope"],
+        "contacts_and_complaints_header_structure"
+    );
     assert_eq!(
         summary["findings"],
-        serde_json::json!(["source_mapping_unverified"])
+        serde_json::json!(["contract_or_schema_invalid"])
     );
     let stderr = String::from_utf8(completed.stderr).expect("UTF-8 error");
     for forbidden in [
@@ -631,7 +634,7 @@ fn source_validate_original_fails_closed_without_reading_malformed_input() {
 }
 
 #[test]
-fn source_validate_original_stays_unsupported_until_its_mapping_is_verified() {
+fn source_validate_original_rejects_contact_only_input_instead_of_claiming_a_complete_profile() {
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("original-valid-looking-unverified");
     let contacts = input.join("call_center_interactions");
@@ -656,11 +659,14 @@ fn source_validate_original_stays_unsupported_until_its_mapping_is_verified() {
     let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
     let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
     assert_eq!(summary["source_kind"], "original_bank");
-    assert_eq!(summary["validation_status"], "unsupported_source");
-    assert_eq!(summary["validation_scope"], "not_validated");
+    assert_eq!(summary["validation_status"], "invalid_source");
+    assert_eq!(
+        summary["validation_scope"],
+        "contacts_and_complaints_header_structure"
+    );
     assert_eq!(
         summary["findings"],
-        serde_json::json!(["source_mapping_unverified"])
+        serde_json::json!(["contract_or_schema_invalid"])
     );
     let stderr = String::from_utf8(completed.stderr).expect("UTF-8 error");
     for forbidden in [
@@ -675,8 +681,63 @@ fn source_validate_original_stays_unsupported_until_its_mapping_is_verified() {
     }
 }
 
+fn write_contract_header(root: &Path, table: &str, contract: &str) {
+    let contract: serde_json::Value = serde_json::from_str(contract).unwrap();
+    let header = contract["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|column| column["name"].as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join(",");
+    let directory = root.join(table).join("year=2025/month=01");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("part.csv"), format!("{header}\n")).unwrap();
+}
+
 #[test]
-fn source_validate_original_rejects_before_reading_any_input_or_version() {
+fn source_validate_original_accepts_only_the_versioned_contact_and_pqr_header_profile() {
+    let temp = TempDir::new().expect("temp directory");
+    write_contract_header(
+        temp.path(),
+        "call_center_interactions",
+        include_str!("../../../contracts/sources/call_center_interactions.v1.json"),
+    );
+    write_contract_header(
+        temp.path(),
+        "complaints",
+        include_str!("../../../contracts/sources/complaints.v1.json"),
+    );
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args(["source", "validate", "--kind", "original_bank", "--input"])
+        .arg(temp.path())
+        .args(["--contract-version", "1.0"])
+        .output()
+        .expect("validate bounded original profile through public CLI");
+
+    assert!(
+        completed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&completed.stderr)
+    );
+    let stdout = String::from_utf8(completed.stdout).expect("UTF-8 JSON summary");
+    let summary: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON summary");
+    assert_eq!(summary["source_kind"], "original_bank");
+    assert_eq!(summary["validation_status"], "valid");
+    assert_eq!(
+        summary["validation_scope"],
+        "contacts_and_complaints_header_structure"
+    );
+    assert_eq!(summary["contract_version"], "1.0");
+    assert!(summary["operational_table_count"].is_null());
+    assert_eq!(summary["validated_table_count"], 2);
+    assert!(summary["manifest_digest"].is_null());
+    assert!(summary["snapshot_digest"].is_null());
+}
+
+#[test]
+fn source_validate_original_rejects_unknown_contract_version_without_disclosing_input() {
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("must-not-be-opened");
 
@@ -691,17 +752,19 @@ fn source_validate_original_rejects_before_reading_any_input_or_version() {
     let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
     let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
     assert_eq!(summary["source_kind"], "original_bank");
-    assert_eq!(summary["validation_status"], "unsupported_source");
-    assert_eq!(summary["validation_scope"], "not_validated");
+    assert_eq!(summary["validation_status"], "invalid_source");
+    assert_eq!(
+        summary["validation_scope"],
+        "contacts_and_complaints_header_structure"
+    );
     assert_eq!(
         summary["findings"],
-        serde_json::json!(["source_mapping_unverified"])
+        serde_json::json!(["contract_or_schema_invalid"])
     );
     let stderr = String::from_utf8(completed.stderr).expect("UTF-8 error");
     for forbidden in [
         input.to_string_lossy().as_ref(),
         "not found",
-        "contract_or_schema_invalid",
         "contract_version_mismatch",
     ] {
         assert!(!stdout.contains(forbidden), "summary exposed {forbidden}");

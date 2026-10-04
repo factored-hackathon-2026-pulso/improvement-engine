@@ -8,7 +8,7 @@ use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use improvement_engine_source_adapters::prepare_e0_package_for_local_simulation;
 use improvement_engine_source_adapters::{
     AdapterError, CasePhase, PreparationConfig, PreparedSource, SourceKind, evaluator,
-    prepare_e0_package, prepare_original_bank,
+    prepare_e0_package, prepare_original_bank, validate_original_contact_complaint_profile,
 };
 use parquet::arrow::ArrowWriter;
 use tempfile::TempDir;
@@ -20,6 +20,87 @@ fn config(arranque_cases: usize) -> PreparationConfig {
 
 fn config_with_cutoff(arranque_cases: usize, cutoff: &str) -> PreparationConfig {
     PreparationConfig::new("demo-tenant", cutoff, arranque_cases).expect("valid config")
+}
+
+fn original_profile_fixture(root: &Path) {
+    for (table, contract) in [
+        (
+            "call_center_interactions",
+            include_str!("../../../contracts/sources/call_center_interactions.v1.json"),
+        ),
+        (
+            "complaints",
+            include_str!("../../../contracts/sources/complaints.v1.json"),
+        ),
+    ] {
+        let columns: serde_json::Value = serde_json::from_str(contract).unwrap();
+        let header = columns["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|column| column["name"].as_str().unwrap())
+            .collect::<Vec<_>>()
+            .join(",");
+        let table_dir = root.join(table).join("year=2025/month=01");
+        fs::create_dir_all(&table_dir).unwrap();
+        fs::write(table_dir.join("part.csv"), format!("{header}\n")).unwrap();
+    }
+}
+
+#[test]
+fn original_contact_complaint_profile_accepts_both_contract_headers_and_reports_bounded_scope() {
+    let temp = TempDir::new().unwrap();
+    original_profile_fixture(temp.path());
+
+    let validated = validate_original_contact_complaint_profile(temp.path(), "1.0")
+        .expect("both required profile tables validate");
+
+    assert_eq!(validated.table_count(), 2);
+    assert_eq!(validated.file_count(), 2);
+}
+
+#[test]
+fn original_contact_complaint_profile_rejects_missing_pqr_table_and_version_mismatch() {
+    let temp = TempDir::new().unwrap();
+    let contacts = temp.path().join("call_center_interactions");
+    fs::create_dir_all(&contacts).unwrap();
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/sources/call_center_interactions.v1.json"
+    ))
+    .unwrap();
+    let header = contract["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|column| column["name"].as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join(",");
+    fs::write(contacts.join("part.csv"), format!("{header}\n")).unwrap();
+
+    assert!(validate_original_contact_complaint_profile(temp.path(), "1.0").is_err());
+    original_profile_fixture(temp.path());
+    assert!(validate_original_contact_complaint_profile(temp.path(), "2.0").is_err());
+}
+
+#[test]
+fn original_contact_complaint_profile_rejects_wrong_header_and_malformed_rows() {
+    let temp = TempDir::new().unwrap();
+    original_profile_fixture(temp.path());
+    let contacts = temp
+        .path()
+        .join("call_center_interactions/year=2025/month=01/part.csv");
+    let original = fs::read_to_string(&contacts).unwrap();
+    fs::write(
+        &contacts,
+        original.replace("interaction_id,", " interaction_id,"),
+    )
+    .unwrap();
+    assert!(validate_original_contact_complaint_profile(temp.path(), "1.0").is_err());
+
+    original_profile_fixture(temp.path());
+    let original = fs::read_to_string(&contacts).unwrap();
+    fs::write(&contacts, format!("{original}short,row\n")).unwrap();
+    assert!(validate_original_contact_complaint_profile(temp.path(), "1.0").is_err());
 }
 
 #[test]

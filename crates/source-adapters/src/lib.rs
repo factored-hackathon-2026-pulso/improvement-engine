@@ -689,6 +689,141 @@ pub fn prepare_original_bank(
     prepare_original_bank_with_progress(root, config, |_| {})
 }
 
+/// Validates the bounded original-bank contact/PQR profile without claiming
+/// that the other tables in the bank extract have been mapped. The source
+/// contract's ordered column list is the runtime header contract. Every CSV
+/// row is parsed with fixed-width records, but field value types and business
+/// relations are deliberately outside this structural profile.
+pub fn validate_original_contact_complaint_profile(
+    root: &Path,
+    contract_version: &str,
+) -> Result<OriginalProfileValidation, AdapterError> {
+    const PROFILE_TABLES: [(&str, &str); 2] = [
+        (
+            "call_center_interactions",
+            include_str!("../../../contracts/sources/call_center_interactions.v1.json"),
+        ),
+        (
+            "complaints",
+            include_str!("../../../contracts/sources/complaints.v1.json"),
+        ),
+    ];
+
+    let mut file_count = 0usize;
+    for (table, contract_json) in PROFILE_TABLES {
+        let contract: serde_json::Value = serde_json::from_str(contract_json)
+            .map_err(|_| AdapterError::InvalidInput("original source contract is invalid"))?;
+        let declared_version = contract
+            .get("contract_version")
+            .and_then(|version| {
+                Some(format!(
+                    "{}.{}",
+                    version.get("major")?.as_u64()?,
+                    version.get("minor")?.as_u64()?
+                ))
+            })
+            .ok_or(AdapterError::InvalidInput(
+                "original source contract version is invalid",
+            ))?;
+        if declared_version != contract_version {
+            return Err(AdapterError::InvalidInput(
+                "original source contract version mismatch",
+            ));
+        }
+        if contract.get("table").and_then(serde_json::Value::as_str) != Some(table) {
+            return Err(AdapterError::InvalidInput(
+                "original source contract table mismatch",
+            ));
+        }
+        let expected_headers = contract
+            .get("columns")
+            .and_then(serde_json::Value::as_array)
+            .ok_or(AdapterError::InvalidInput(
+                "original source contract columns are invalid",
+            ))?
+            .iter()
+            .map(|column| {
+                column
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+                    .ok_or(AdapterError::InvalidInput(
+                        "original source contract column is invalid",
+                    ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if expected_headers.is_empty() {
+            return Err(AdapterError::InvalidInput(
+                "original source contract has no columns",
+            ));
+        }
+
+        let table_root = root.join(table);
+        let table_metadata = fs::symlink_metadata(&table_root)
+            .map_err(|_| AdapterError::MissingInput("required original source table is missing"))?;
+        if table_metadata.file_type().is_symlink() || !table_metadata.is_dir() {
+            return Err(AdapterError::MissingInput(
+                "required original source table is missing",
+            ));
+        }
+        let mut paths = Vec::new();
+        collect_csv_paths(&table_root, &mut paths)?;
+        paths.sort();
+        if paths.is_empty() {
+            return Err(AdapterError::MissingInput(
+                "required original source table is missing",
+            ));
+        }
+        for path in paths {
+            let file = File::open(&path).map_err(|source| AdapterError::ReadFile {
+                path: table.to_owned(),
+                source,
+            })?;
+            let mut csv = csv::ReaderBuilder::new().flexible(false).from_reader(file);
+            let headers = csv
+                .headers()
+                .map_err(|_| AdapterError::InvalidInput("original source CSV is malformed"))?;
+            if headers
+                .iter()
+                .ne(expected_headers.iter().map(String::as_str))
+            {
+                return Err(AdapterError::UnsupportedSchema(
+                    "original source table header does not match its contract".to_owned(),
+                ));
+            }
+            for record in csv.records() {
+                record.map_err(|_| {
+                    AdapterError::InvalidInput("original source CSV row is malformed")
+                })?;
+            }
+            file_count = file_count.saturating_add(1);
+        }
+    }
+
+    Ok(OriginalProfileValidation {
+        table_count: PROFILE_TABLES.len(),
+        file_count,
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OriginalProfileValidation {
+    table_count: usize,
+    file_count: usize,
+}
+
+impl OriginalProfileValidation {
+    #[must_use]
+    pub const fn table_count(self) -> usize {
+        self.table_count
+    }
+
+    #[must_use]
+    pub const fn file_count(self) -> usize {
+        self.file_count
+    }
+}
+
 /// OriginalBank preparation with an optional aggregate progress observer.
 /// Observer events are metadata-only and do not participate in manifest
 /// construction, ordering, or digest calculation.
