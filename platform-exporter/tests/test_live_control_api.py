@@ -215,3 +215,21 @@ def test_tenant_scoping_a_token_for_another_tenant_is_refused(server, tmp_path):
         assert r2.status_code == 401, r2.text
     finally:
         ex.close(); client.close(); db.close()
+
+
+def test_late_row_inside_the_fast_stream_is_acked_and_leaves_no_open_gap(server, tmp_path):
+    path = tmp_path / "late.db"
+    db = make_db(path)
+    add_event(db, 1, "case.viewed", event_time="2026-03-01T10:30:00Z", ingested_at="2026-03-01T10:31:00Z")
+    add_event(db, 2, "case.viewed", event_time="2026-03-01T10:40:00Z", ingested_at="2026-03-01T11:20:00Z")  # late
+    add_event(db, 3, "case.viewed", event_time="2026-03-01T11:30:00Z", ingested_at="2026-03-01T11:31:00Z")
+    ex, client, cfg = _make(server, tmp_path, "late", path, instance="plat-late", window_seconds=3600)
+    try:
+        rep = ex.poll_once()
+        assert not rep.stopped and not rep.errors, rep
+        assert rep.late_events == ["EVT-2"]
+        cur = _cursor(server, client, cfg)
+        assert cur["cursor"] == "s.3" and cur["open_gaps"] == []
+        assert ex.state.open_backfills() == []
+    finally:
+        ex.close(); client.close(); db.close()

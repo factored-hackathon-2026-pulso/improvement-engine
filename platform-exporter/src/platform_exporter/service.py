@@ -205,6 +205,9 @@ class Exporter:
         start, end = self._window(ev.event_time)
         return ev.ingested_at > end + timedelta(seconds=self.cfg.allowed_lateness_seconds), start, end
 
+    def _is_deferred_late(self, ev: RawEvent) -> bool:
+        return ev.problem is None and ev.event_type in self.known_types and self._is_late(ev)[0]
+
     def _event_obs(self, ev: RawEvent, force_late: bool, info: dict[str, Any], delta: dict[str, Any]
                    ) -> list[dict[str, Any]]:
         assert ev.event_time is not None and ev.ingested_at is not None
@@ -300,12 +303,21 @@ class Exporter:
             delta["counters"]["gap_suspected"] = delta["counters"].get("gap_suspected", 0) + 1
             events.append(self._finding(f"gap_suspected:{lo}-{hi}", "gap_suspected", None, {
                 "from_sequence": lo, "to_sequence": hi, "backfill_requested": True, "verify_with_owner": True}))
+        deferred: list[list[int]] = []
         for ev in rows:
+            if mode == "fast_poll" and self._is_deferred_late(ev):
+                # The real ingest keeps late rows out of source-sequence continuity: declare the slot as a hole now and
+                # deliver the row through the late path, which closes it (one backfill request, no suspected loss).
+                deferred.append([ev.sequence, ev.sequence])
+                events.append(self._finding(f"gap_suspected:{ev.sequence}-{ev.sequence}", "gap_suspected", None, {
+                    "from_sequence": ev.sequence, "to_sequence": ev.sequence, "backfill_requested": True,
+                    "verify_with_owner": False, "reason": "late_row_deferred"}))
+                continue
             events.extend(self._event_obs(ev, force_late, info, delta))
         events.extend(extra)
         delta["meta"].update(meta)
         if mode == "fast_poll":
-            delta["holes_skipped"], delta["holes_unskipped_below"] = sk, last
+            delta["holes_skipped"], delta["holes_unskipped_below"] = sk + deferred, last
             prefix = "s"
         else:
             prefix = "late"
