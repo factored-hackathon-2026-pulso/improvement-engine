@@ -97,6 +97,10 @@ fn stream(request: tiny_http::Request, app: &App, plan: &StreamPlan) {
             }
             for e in batch {
                 let seq = e["sequence"].as_i64().unwrap_or(*last);
+                if seq != *last + 1 {
+                    // a purge overtook this feed: end it so the client reconnects and gets 410, never a silent gap
+                    return Err(io::Error::new(io::ErrorKind::Other, "purged past cursor"));
+                }
                 w.write_all(format!("id: {seq}\ndata: {e}\n\n").as_bytes())?;
                 (*last, *quiet) = (seq, Instant::now());
             }

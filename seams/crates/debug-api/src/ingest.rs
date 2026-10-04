@@ -53,7 +53,9 @@ pub fn engine_run_report(sink: &dyn RunEventSink, exists: &dyn Fn(&str) -> bool,
 
     let mut doubles: Vec<Value> = Vec::new();
     for d in report["doubles"].as_array().into_iter().flatten() {
-        let (Some(part), Some(status)) = (d["part"].as_str(), d["status"].as_str()) else { continue };
+        let (Some(part), Some(status)) = (d["part"].as_str().filter(|x| !x.is_empty()), d["status"].as_str().filter(|x| !x.is_empty())) else {
+            return Err("every doubles[] entry needs a part and a status (a stand-in is never dropped)".into());
+        };
         let id = format!("{part}:{status}");
         if !doubles.iter().any(|x| x["id"] == id) {
             doubles.push(json!({"id": id, "what": double_what(d)}));

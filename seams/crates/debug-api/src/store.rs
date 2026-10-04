@@ -39,6 +39,15 @@ pub struct Store {
 
 pub fn valid_run_id(s: &str) -> bool {
     !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')) && !s.starts_with('.')
+        && !s.ends_with('.')
+        && !is_windows_device(s)
+}
+
+/// `con`, `nul`, `com1.x` ... open a device, not a file, on Windows.
+fn is_windows_device(s: &str) -> bool {
+    let stem = s.split('.').next().unwrap_or(s).to_ascii_lowercase();
+    matches!(stem.as_str(), "con" | "prn" | "aux" | "nul")
+        || (stem.len() == 4 && (stem.starts_with("com") || stem.starts_with("lpt")) && stem.ends_with(|c: char| c.is_ascii_digit() && c != '0'))
 }
 
 /// RFC 3339 UTC, seconds precision (civil-from-days, no time crate).
