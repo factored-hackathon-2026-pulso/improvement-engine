@@ -483,6 +483,11 @@ class Exporter:
         if ack.get("batch_digest") != p.idem_key:
             self.state.stop(p.partition, "ack_digest_mismatch")
             return False
+        if ack.get("disposition") == "quarantined":  # the server kept the batch aside and did not move the checkpoint
+            reason = str(ack.get("quarantine_reason") or "quarantined")
+            self.state.quarantine_batch(p.idem_key, p.partition, reason, p.body)
+            self.state.stop(p.partition, f"quarantined:{reason}")
+            return False
         if status == 200:
             rep.duplicate_acks += 1
         if self.crash_after_ack:
