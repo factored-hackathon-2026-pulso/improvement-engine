@@ -62,21 +62,26 @@ cells but remain in eligible overall metrics where the source permits.
 ## Replication and discovery rule
 
 Each bank row is assigned to discovery or replication using the first bit of
-`SHA-256(UTF-8("opbench-lite:v1:" + table + ":" + customer_id))`. The key is
-read and hashed locally; the hash and customer key are never written. This
-keeps all records for a customer in one half. Rows with missing customer keys
+`SHA-256(UTF-8("opbench-lite:v1:bank:" + customer_id))`. The key is read and
+hashed locally; the hash and customer key are never written. The bank split
+does not include table name, so the same customer remains in the same half
+across contact, PQR, and survey measurements. Rows with missing customer keys
 remain in the overall descriptive count but are excluded from split-based
 replication and its coverage denominator; no exact small count is released.
-E0 has no approved customer linkage for this metric, so `case_id` is hashed
-with the same domain separator and used only to assign cases to halves.
+E0 has no approved customer linkage for this metric, so
+`SHA-256(UTF-8("opbench-lite:v1:e0:" + case_id))` is used only to assign
+operational cases to halves; neither case ID nor digest is written.
 
 For each pre-enumerated applicable cell in the discovery half, compare its
 adverse-event proportion against the pooled complement for that metric. Use a
 two-sided two-proportion z test (pooled null variance). The complete planned
 test family is every metric/cell pair in the fixed registry, including cells
 that are inapplicable, under-supported, or non-significant. Apply
-Benjamini-Hochberg FDR correction at `q <= 0.05` across all testable planned
-cells, with family size and adjusted q recorded. A cell is a discovery
+Benjamini-Hochberg FDR correction at `q <= 0.05` across all 181 planned cells,
+with family size and adjusted q recorded. Cells that are overall reference
+rows, inapplicable, or under-supported are assigned p=1 and remain listed in
+the cell audit. This makes multiplicity cover every explored cell, not only
+cells that happened to be testable. A cell is a discovery
 candidate only if (a) numerator and denominator are each at least `k=10`,
 (b) the comparison complement has at least 10 events and 10 non-events, and
 (c) absolute rate difference is at least 0.05. These floors are fixed and not
@@ -91,6 +96,16 @@ replication two-proportion test is significant at `p < 0.05` after
 Benjamini-Hochberg correction across the entire frozen candidate set. Cells
 not selected in discovery do not become candidates merely because replication
 looks favorable.
+
+### Preregistration clarification (v1.1, still before any result artifact)
+
+The original draft domain-separated bank hashes by table, which could split a
+customer's contact and survey/PQR records across halves. Before any computation
+or result file, v1.1 removes that table component. It also fixes the
+multiplicity family to all 181 planned cells by assigning p=1 to non-testable
+cells rather than shrinking the family after observing support. These are
+methodological safeguards; no results were generated before this
+clarification. The initial registered commit remains preserved in history.
 
 ## Status vocabulary and interpretation
 
