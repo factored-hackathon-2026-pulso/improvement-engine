@@ -24,3 +24,20 @@ groups with count >= k (default 10) in a sqlite lab (`lab_rows`, `lab_meta`). Gr
 (numerator stays in the lab); `verify_claim` recomputes the rate exactly and checks a per-row digest.
 The salt and any real-E0-derived lab stay local and untracked. Reading the real E0 parquet needs a reader
 (not in the stdlib); until then the lab is fed by any iterable of (case_id, group, window, outcome).
+
+## ED0b: original bank CSV (`--source original`)
+
+The original dataset is hive-partitioned CSV (`<table>/year=/month=/day=/*.csv`) under the local data directory.
+`claude_standin/ed0_original.py` reads one table at runtime (env `ED0_ORIGINAL_PATH`), keeps only the two columns the
+caller names, and yields the same `(case_key, group, window, outcome)` shape as ED0F into the same ED0L lab (k and
+min_cell as in `--e0`). Run:
+`python -m claude_standin.thread01 --replay <queue> --source original --original-map table,case_col,group_col --summary <out outside repo>`.
+
+Labels: steps 1-2 `original`, steps 3-4 `original-treated`, `doubles[]` `data.origin = original-treated-aggregates`; never
+`generated_sample` and never mixed with E0. G1 treats `original*` as restricted, and `gw-hosted` rejects it (DC0).
+Errors report the exception type only. Raw rows, ids and group labels exist only in memory.
+
+Known gap (not forced): nothing in the original schema is declared as "a recurring case with a catalogue-matching
+flow", and the Rust sensor reads the E0 parquet shape. So step 2 is `not_exercised(sensor_not_mapped_to_original_csv)`,
+the SMAP ending is `unlinked`, steps 5-10 `not_exercised`. Which table, case and group columns mean "recurrence" is a
+human decision passed via `--original-map`; an original-only finding is never reported as supported.

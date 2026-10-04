@@ -39,6 +39,7 @@ from typing import Any, Callable
 
 from . import ed0_detect as ed0
 from . import ed0_feed as feed
+from . import ed0_original as original
 from . import compile_step as cmp
 from . import ed0_lab as lab
 from . import gate_step as gate
@@ -133,6 +134,15 @@ class ThreadConfig:
     e0_path: str | None = None
     e0_arranque: int = 200
     e0_min_support: int = 20
+    # ED0b original window (`--source original`): the original bank CSV dataset, its own data class and namespace
+    # (`original` / `original-treated`), never mixed with generated_sample or E0. original_map names
+    # {table, case_col, group_col}; nothing is inferred. The ending is honest `unlinked` (no catalogue entry).
+    original_path: str | None = None
+    original_map: dict | None = None
+
+    @property
+    def treated(self) -> bool:
+        return bool(self.e0_path or self.original_path)
 
 
 @dataclass
@@ -152,6 +162,10 @@ def _sha() -> str:
 
 # ---- step 1 ----------------------------------------------------------------------------------------------------
 def step_01(ctx: Ctx) -> dict:
+    if ctx.cfg.original_path:
+        ctx.out["package"] = str(ctx.cfg.original_path)
+        return {"status": "stand-in", "data_class": "generated_sample", "receipt": {"provider": "local"},
+                "detail": {"trigger": "manual_command", "package": "original CSV dataset (read at runtime, not copied)"}}
     if ctx.cfg.e0_path:
         ctx.out["package"] = str(ctx.cfg.e0_path)
         return {"status": "stand-in", "data_class": "generated_sample", "receipt": {"provider": "local"},
@@ -165,6 +179,9 @@ def step_01(ctx: Ctx) -> dict:
 
 # ---- step 2 ----------------------------------------------------------------------------------------------------
 def step_02(ctx: Ctx) -> dict:
+    if ctx.cfg.original_path:  # the Rust sensor reads the E0 parquet shape; no honest original-CSV mapping exists
+        return {"status": "not_exercised", "data_class": "generated_sample",
+                "detail": {"reason": "sensor_not_mapped_to_original_csv"}}
     if not (ctx.cfg.exe and os.path.exists(ctx.cfg.exe)):
         return {"status": "blocked(sensor-exe)", "data_class": "generated_sample", "detail": {}}
     kw = {"arranque": ctx.cfg.e0_arranque, "min_support": ctx.cfg.e0_min_support} if ctx.cfg.e0_path else {}
@@ -343,13 +360,16 @@ def _m3() -> dict:
 def _llm(ctx: Ctx) -> LLMDouble:
     if "llm" not in ctx.out:
         ctx.out["llm"] = LLMDouble(ctx.cfg)
-        if ctx.cfg.e0_path:
+        if ctx.cfg.original_path:
+            ctx.out["salt"] = feed.lab_salt()
+            cases = original.feed(ctx.cfg.original_path, ctx.out["salt"], **(ctx.cfg.original_map or {}))
+        elif ctx.cfg.e0_path:
             ctx.out["salt"] = feed.lab_salt()  # ephemeral (or env), never stored
             cases = feed.feed(ctx.cfg.e0_path, ctx.out["salt"])
         else:
             ctx.out["salt"], cases = LAB_SALT, _lab_cases()
         ctx.out["lab_db"] = lab.build_lab(ctx.cfg.workdir / "lab.sqlite", cases, ctx.out["salt"],
-                                      min_cell=lab.K if ctx.cfg.e0_path else 0)
+                                      min_cell=lab.K if ctx.cfg.treated else 0)
         ctx.out["m3"] = _m3()
     return ctx.out["llm"]
 
@@ -401,7 +421,7 @@ def step_04(ctx: Ctx) -> dict:
     llm, db, caps = _llm(ctx), ctx.out["lab_db"], ctx.out["m3"]["caps"]
     world = cmp.load_world(WORLD_FILE)
     catalogue = smap.catalogue_from_world(world)
-    if ctx.cfg.e0_path:  # categories are the lab's hashed groups: no raw label exists outside the feeder's memory
+    if ctx.cfg.treated:  # categories are the lab's hashed groups: no raw label exists outside the feeder's memory
         groups = lab.lab_groups(db)
         refs = {g: v["evidence_ref"] for g, v in groups.items()}
     else:
@@ -413,7 +433,7 @@ def step_04(ctx: Ctx) -> dict:
     categories = {label: lab._fetch(db, ref)[4] for label, ref in refs.items()}  # label -> support (lab numerator)
     finding = {"finding_ref": "finding_1", "category": by_ref[verified[0]], "evidence_refs": sorted(verified)}
     ctx.out.update(world=world, catalogue=catalogue, finding=finding, categories=categories, mapper=smap.winning_category)
-    if not ctx.cfg.e0_path and ctx.out["detection"]["winner_support"] != categories[smap.winning_category(categories)]:
+    if not ctx.cfg.treated and ctx.out["detection"]["winner_support"] != categories[smap.winning_category(categories)]:
         raise RuntimeError("lab categories disagree with the sensor's winner support")
     di = smap.design_input(finding, catalogue)
     inputs = {"binding_id": "binding-builder-0001", "finding_ref": di["finding_ref"], "category": di["category"],
@@ -684,10 +704,15 @@ STEPS: list[tuple[int, str, Callable]] = [
 # E0 window: the data really is E0 (steps 1-2 local) or treated aggregates derived from it (3-4, sent to a responder
 # through the TPS scanner). It is never labelled generated_sample: that class is what gw-hosted accepts.
 E0_STEP_CLASS = {1: "E0", 2: "E0", 3: "original-treated", 4: "original-treated"}
+# ED0b: the original dataset has its own class pair. Raw-touching steps are `original`; steps fed treated aggregates
+# are `original-treated`; later (not exercised) steps keep `original` rather than falling back to generated_sample.
+ORIGINAL_STEP_CLASS = {1: "original", 2: "original", 3: "original-treated", 4: "original-treated"}
 
 
 def _finish(n: int, sid: str, rec: dict, ctx: Ctx) -> dict:
-    if ctx.cfg.e0_path and n in E0_STEP_CLASS and rec.get("data_class") == "generated_sample":
+    if ctx.cfg.original_path and rec.get("data_class") == "generated_sample":
+        rec = {**rec, "data_class": ORIGINAL_STEP_CLASS.get(n, "original")}
+    elif ctx.cfg.e0_path and n in E0_STEP_CLASS and rec.get("data_class") == "generated_sample":
         rec = {**rec, "data_class": E0_STEP_CLASS[n]}
     return {"n": n, "id": rec.get("id", sid), "target": "local", "sha": ctx.sha,
             "contract_revision": CONTRACT_REVISION, "host": HOST, **{k: v for k, v in rec.items() if k != "id"}}
@@ -731,7 +756,7 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
     observed = {"model": by.get((3, "scout"), {}).get("status", "red"),
                 "jev": "not_exercised(blocked: agent-core PR 28 not on main)",
                 "issuer": st(8), "product": "simulated" if st(9) == "stand-in" else st(9), "host": HOST,
-                "gate": "claude-authored(structural, quality_claims forbidden)", "data_origin": "E0-treated-aggregates" if ctx.cfg.e0_path else "generated_sample"}
+                "gate": "claude-authored(structural, quality_claims forbidden)", "data_origin": "original-treated-aggregates" if ctx.cfg.original_path else "E0-treated-aggregates" if ctx.cfg.e0_path else "generated_sample"}
     report["doubles"] = _er().generate_doubles(report, observed)
     return report
 
@@ -757,7 +782,7 @@ def run_thread(cfg: ThreadConfig) -> dict:
             recs = res if isinstance(res, list) else [res]
             steps += [_finish(n, sid, r, ctx) for r in recs]
         except Exception as e:  # noqa: BLE001 - a step that cannot run is RED, never silently skipped
-            steps.append(_finish(n, sid, {"status": "red", "error": safe_error(e, bool(cfg.e0_path)), "data_class": None,
+            steps.append(_finish(n, sid, {"status": "red", "error": safe_error(e, cfg.treated), "data_class": None,
                                           "detail": {}}, ctx))
     llm = ctx.out.get("llm")  # the live counters, never a stale per-step snapshot: a miss in any stage must show
     ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls} if llm else {"misses": 1, "calls": 0}
@@ -793,14 +818,21 @@ def main(argv=None) -> int:
     ap.add_argument("--workdir", help="persistent workdir (live); untracked")
     ap.add_argument("--summary", help="write the aggregate-only window summary JSON here")
     ap.add_argument("--e0", action="store_true", help="read the local E0 package named by ED0_E0_PATH at runtime (needs pyarrow)")
+    ap.add_argument("--source", choices=("generated", "original"), default="generated",
+                    help="original: the local original bank CSV dataset named by ED0_ORIGINAL_PATH (needs --original-map)")
+    ap.add_argument("--original-map", help="table,case_col,group_col of the original CSV (nothing is inferred)")
     ap.add_argument("--hold-s", type=float, default=HOLD_S)
     ap.add_argument("--exe", default=os.environ.get("ED0_RUNNER_EXE", "D:/cargo-targets/claude-ed0/debug/improvement-engine.exe"))
     a = ap.parse_args(argv)
+    if a.source == "original" and (a.e0 or not a.original_map or a.original_map.count(",") != 2):
+        ap.error("--source original needs --original-map table,case_col,group_col and excludes --e0")
+    omap = dict(zip(("table", "case_col", "group_col"), a.original_map.split(","))) if a.source == "original" else None
     qdir, mode = (a.record, "record") if a.record else (a.live, "live") if a.live else (a.replay, "replay")
     with tempfile.TemporaryDirectory() as tmp:
         wd = Path(a.workdir) if a.workdir else Path(tmp)
         res = run_thread(ThreadConfig(workdir=wd, exe=a.exe, queue_dir=Path(qdir), mode=mode, live_hold_s=a.hold_s,
-                                    e0_path=feed.e0_path() if a.e0 else None))
+                                    e0_path=feed.e0_path() if a.e0 else None,
+                                    original_path=original.original_path() if omap else None, original_map=omap))
     if a.summary:
         Path(a.summary).write_text(json.dumps(live_summary(res), indent=1, sort_keys=True), encoding="utf-8")
     if res.get("live"):
