@@ -89,6 +89,13 @@ fn canon(v: &Value, out: &mut String) {
     }
 }
 
+/// Canonical JSON string of `v` (what a gateway or the shim receives as the user message).
+pub(crate) fn canonical(v: &Value) -> String {
+    let mut s = String::new();
+    canon(v, &mut s);
+    s
+}
+
 fn normalise(v: &Value) -> Value {
     match v {
         Value::Object(m) => Value::Object(m.iter().map(|(k, x)| (k.clone(), if VOLATILE.contains(&k.as_str()) { Value::String("<volatile>".into()) } else { normalise(x) })).collect()),
