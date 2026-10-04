@@ -92,3 +92,25 @@ def test_the_admission_route_turns_a_delimiter_field_into_422() -> None:
     r = _client().post("/evaluation/admissions", json=body,
                        headers={"Authorization": f"Bearer {_tok('evaluation_admit')}"})
     assert r.status_code == 422 and r.json()["code"] == "pulso:invalid_request"
+
+
+@pytest.mark.parametrize("value", [
+    "2030-01-01T00:00:00z",                 # lowercase z
+    "2030-01-01T00:00:00.1234567890Z",      # 10 fraction digits
+    "2030-01-01T00:00:00.Z",                # empty fraction
+    "2030-01-01T23:59:60Z",                 # leap second
+    "2030-13-01T00:00:00Z", "2030-02-30T00:00:00Z", "0000-01-01T00:00:00Z", "2030-01-01T24:00:00Z",
+    "2030-01-01T00:00:00Z\n", " 2030-01-01T00:00:00Z", "2030-01-01 00:00:00Z", "2030-01-01T00:00:00+00:00",
+    "2030-01-01T00:00:00-00:00", "２０３０-01-01T00:00:00Z", "", "Z", pytest.param("9" * 100_000, id="huge"),
+])
+def test_z_timestamp_reject_matrix(value: str) -> None:
+    from pulso_core_runtime.timefmt import parse_z_timestamp
+    with pytest.raises(ValueError):
+        parse_z_timestamp(value)
+
+
+@pytest.mark.parametrize("value", ["2030-01-01T00:00:00Z", "2030-01-01T00:00:00.5Z", "2030-01-01T00:00:00.123456789Z",
+                                   "9999-12-31T23:59:59Z"])
+def test_z_timestamp_accept_matrix(value: str) -> None:
+    from pulso_core_runtime.timefmt import parse_z_timestamp
+    assert parse_z_timestamp(value).utcoffset().total_seconds() == 0  # type: ignore[union-attr]
