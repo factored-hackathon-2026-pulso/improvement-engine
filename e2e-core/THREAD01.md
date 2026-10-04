@@ -114,8 +114,8 @@ summary under the git-ignored `output/`; no fixture from it is committed. Respon
 
 | Measure | Value |
 |---|---|
-| Treated lab | 3 groups, counts 1587 / 314 / 300, recurrence rates 0.31 / 0.80 / 0.80 (aggregates only) |
-| Sensor (arranque 200, min support 20) | admitted `e0_recurring_copilot_query_cases`, support 154 of 200, holdout replicated, 2 discards |
+| Treated lab | 3 groups, every cell k>=10 (the per-group counts and rates stay in the git-ignored local summary; real-E0-derived numbers are not committed) |
+| Sensor (arranque 200, min support 20) | admitted `e0_recurring_copilot_query_cases`, support and holdout figures kept in the local summary, holdout replicated, 2 discards |
 | Responder calls / wall minutes | 5 (scout 2, verifier 2, builder 1) / 2.46 |
 | Scanner rejections, shim response rejections, timeouts, re-asks | 0 / 0 / 0 / 0 |
 | Steps | 1 stand-in, 2 real-narrow, 3 scout and verifier agent_roleplay, 4 agent_roleplay, 5-10 not_exercised |
