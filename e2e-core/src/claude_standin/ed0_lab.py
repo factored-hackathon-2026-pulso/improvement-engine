@@ -38,8 +38,9 @@ def _ref(metric, window, ghash):
     return "ev_" + hashlib.sha256(f"{metric}|{window}|{ghash}".encode()).hexdigest()[:16]
 
 
-def build_lab(path, cases, salt, k=K):
-    """cases: iterable of (case_id, group, window, outcome). case_id is read and discarded."""
+def build_lab(path, cases, salt, k=K, min_cell=0):
+    """cases: iterable of (case_id, group, window, outcome). case_id is read and discarded.
+    min_cell: also drop a group whose numerator or complement is below it (real data passes K; the rate would expose it)."""
     if not isinstance(salt, bytes) or len(salt) < 16:
         raise ValueError("salt must be at least 16 bytes")
     agg = defaultdict(lambda: [0, 0])
@@ -55,7 +56,7 @@ def build_lab(path, cases, salt, k=K):
                 " g_group text, numerator integer, count integer, digest text)")
     con.execute("create table lab_meta (key text primary key, value text)")
     for (group, window), (num, cnt) in sorted(agg.items()):
-        if cnt < k:
+        if cnt < k or num < min_cell or cnt - num < min_cell:  # small cell in either side of the rate is a disclosure
             continue
         gh = group_hash(salt, GROUP_FIELD, group)
         ref = _ref(METRIC, window, gh)
