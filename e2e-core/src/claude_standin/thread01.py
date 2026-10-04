@@ -34,6 +34,7 @@ from typing import Any, Callable
 from . import ed0_detect as ed0
 from . import compile_step as cmp
 from . import ed0_lab as lab
+from . import gate_step as gate
 from . import smap
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -312,16 +313,80 @@ def step_04(ctx: Ctx) -> dict:
         "do_nothing_considered": any(a.get("kind") == "do_nothing" for a in out.get("alternatives", []))})
 
 
+SUITE_SEALED_AT = "2026-10-04T12:00:00Z"  # the suite (world slot) is sealed before any candidate exists
+CANDIDATE_CREATED_AT = "2026-10-04T12:00:10Z"
+
+
 def step_05(ctx: Ctx) -> dict:
-    raise NotImplementedError("step 5")
+    world, catalogue, design = ctx.out["world"], ctx.out["catalogue"], ctx.out["design"]
+    if design["verdict"] != "valid" or not design["target"]:
+        raise RuntimeError(f"no compilable design: {design['verdict']}")
+    entries = {e["target_ref"]: e for e in catalogue["entries"]}
+    suite = next(e for e in catalogue["entries"] if e["target_kind"] == "eval_suite")
+    ops = [{"op": e["op"], "target_kind": e["target_kind"], "target_ref": e["target_ref"], "new_ref": e["new_ref"],
+            "precondition_digest": cmp.asset_digest(world, e["target_ref"])} for e in (entries[design["target"]], suite)]
+    doc = {"contract_version": "engine-steps/0", "step": "compile", "run_id": "run-thread01-0001",
+           "data_class": "synthetic", "base_bundle_ref": "bundle:attention-demo@1",
+           "change_spec": {"base_bundle_ref": "bundle:attention-demo@1", "opportunity_ref": "opportunity:thread01@1",
+                           "workflow_bridge_ref": "bridge:disputa-cargo@1", "operations": ops,
+                           "expected_mechanism": "recorded synthetic", "affected_routes": ["disputa-cargo"],
+                           "rollback_ref": "bundle:attention-demo@1"}}
+    hook = ctx.cfg.hooks.dry_run
+    out = cmp.compile_change_spec(doc, world, dry_run=hook)
+    if out["status"] != "compiled":
+        raise RuntimeError(f"compile denied: {out.get('denied_reason')}")
+    ctx.out["compiled"] = out
+    ctx.out["candidate_created_at"] = CANDIDATE_CREATED_AT
+    return {"status": "real-narrow" if hook else "stand-in", "data_class": "synthetic",
+            "receipt": {"provider": "core-dry-run" if hook else "claude-standin"},
+            "detail": {"compiler_label": out["compiler_label"], "draft_plan": out["draft_plan"],
+                       "diff": [{"target": o["target_ref"], "to": o["new_ref"]} for o in out["draft_plan"]["operations"]]}}
+
+
+def _run(case: str, status: str = "completed") -> dict:
+    return {"arm": "x", "case_ref": case, "status": status, "closed_early": False, "cost_known": True,
+            "oracle_ref": "oracle:handwritten@1", "final_state_ref": "state:s@1", "effect_receipts": [], "reason": None}
+
+
+def _standin_arms() -> dict:
+    """Stand-in ArmReport runs (assets_handwritten suite): the base fails two cases, the candidate completes all."""
+    cases = ["c1", "c2", "c3", "c4"]
+    return {"base": [_run(c, "failed" if c in ("c1", "c2") else "completed") for c in cases],
+            "candidate": [_run(c) for c in cases]}
+
+
+JUDGE = "claude-gsipy"
 
 
 def step_06(ctx: Ctx) -> dict:
-    raise NotImplementedError("step 6")
+    world, hook = ctx.out["world"], ctx.cfg.hooks.run_arms
+    core_arms = hook(ctx) if hook else None
+    arms, arms_from = (core_arms, "core") if core_arms else (_standin_arms(), "stand-in")
+    reports = {"arm_report:base@1": {"runs": arms["base"]}, "arm_report:cand@1": {"runs": arms["candidate"]}}
+    doc = {"contract_version": "engine-steps/0", "step": "gate", "run_id": "run-thread01-0001", "data_class": "synthetic",
+           "base_arm_report_ref": "arm_report:base@1", "candidate_arm_report_ref": "arm_report:cand@1",
+           "suite_ref": "eval_suite:disputas-suite@1", "judge_actor": JUDGE, "author_actors": ["claude-wrld0"]}
+    out = gate.gate_verdict(doc, reports, world, evaluators=ctx.cfg.gate_evaluators)
+    ctx.out.update(gate_verdict=out["verdict"], gate=out, arms=arms)
+    return {"status": "stand-in", "data_class": "synthetic", "actor": JUDGE,
+            "receipt": {"provider": "claude-standin"},
+            "detail": {"verdict": out["verdict"], "gates": out["gates"], "judge_actor": out["judge_actor"],
+                       "quality_claims": out["quality_claims"], "arms": arms_from}}
+
+
+MAX_REVISION_ROUNDS = 1
 
 
 def step_07(ctx: Ctx) -> dict:
-    raise NotImplementedError("step 7")
+    if ctx.out["gate_verdict"] == "pass":
+        return {"status": "not_exercised", "data_class": "synthetic", "detail": {"reason": "gate passed"}}
+    # gate failed: a rule-driven stand-in revision, bounded; the same arms are re-judged and the loop then stops
+    rounds, final = 0, ctx.out["gate_verdict"]
+    while final != "pass" and rounds < MAX_REVISION_ROUNDS:
+        rounds += 1  # rule: no model, no new candidate; the revision is recorded, not claimed to improve anything
+    return {"status": "stand-in", "data_class": "synthetic", "receipt": {"provider": "claude-standin"},
+            "detail": {"rounds": rounds, "bounded": rounds <= MAX_REVISION_ROUNDS, "final_decision": "do_nothing",
+                       "last_verdict": final}}
 
 
 def step_08(ctx: Ctx) -> dict:
