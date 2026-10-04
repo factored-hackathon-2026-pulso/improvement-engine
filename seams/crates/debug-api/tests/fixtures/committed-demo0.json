@@ -1,0 +1,316 @@
+{
+ "out": {
+  "arms": {
+   "frozen": {
+    "base_release_id": "rel-base-double",
+    "candidate_hash": "9d00dc3bd497a3fc36a5fcf21128e106bd17a33bc98b2b3a7d719069b468cf8a",
+    "plan_ref": "plan-double",
+    "proposal_id": "prop-double-thread-1",
+    "rev": 1,
+    "task_binding_ref": "bind-double",
+    "title": "pulso-key:thread-1",
+    "version": "2.0.0"
+   },
+   "runs": [
+    {
+     "case": "c1",
+     "execution_id": "arm-30a92fccedf9901564c2235adfa8b6ac",
+     "key": "arm-653d49e1b4a599eb8d5dabededc6fcac1bfa287ff6236cb5",
+     "side": "base",
+     "status": "completed"
+    },
+    {
+     "case": "c2",
+     "execution_id": "arm-a200f753833876a80b3964e8c5ab4867",
+     "key": "arm-cbd66aa10309c074419d729b56b6ed65ddc773759c9eca05",
+     "side": "base",
+     "status": "completed"
+    },
+    {
+     "case": "c1",
+     "execution_id": "arm-dcb95872c66a1ffec070bdc7842a5288",
+     "key": "arm-99f0a1ac7d85d42f348466936adc87bd0e839f66a607e5fc",
+     "side": "cand",
+     "status": "completed"
+    },
+    {
+     "case": "c2",
+     "execution_id": "arm-6af221a46b3c40d7d6d5f18736afab4c",
+     "key": "arm-5d58da7689a77cb6ddcbc8e6ee95af1b5d0d70c93f592c7e",
+     "side": "cand",
+     "status": "completed"
+    }
+   ],
+   "suite_digest": "07a48e83e7e0e0efd2763abc3cc8e3aee63a22192bce5e3481bead2766f44c68"
+  },
+  "authority": {
+   "actor": "local-supervisor",
+   "decision_id": "dec-thread-1-prop-double-thread-1",
+   "override": {
+    "actor": "local-supervisor",
+    "by": "human",
+    "label": "human_override",
+    "of_gate_verdict": "fail",
+    "reason": "exercise approve/publish of a failed structural gate; no quality claim",
+    "simulated": true
+   },
+   "simulated": true,
+   "state": "approved"
+  },
+  "compile": {
+   "compiler_label": "claude-standin",
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "draft_plan": {
+    "digest": "sha256:9d00dc3bd497a3fc36a5fcf21128e106bd17a33bc98b2b3a7d719069b468cf8a",
+    "operations": [
+     {
+      "new_ref": "prompt:resumen_radicado@2",
+      "op": "replace",
+      "precondition_digest": "sha256:727341c7f278859de2b2a8e997305012d9094e02ac60d4af7a722101fa9eb089",
+      "target_kind": "prompt",
+      "target_ref": "prompt:resumen_radicado@1"
+     },
+     {
+      "new_ref": "eval_suite:disputas-tarea-suite@2",
+      "op": "add",
+      "precondition_digest": "sha256:4136704fa37d584b4de65be3a56b725b41f3bbc95f59f95b6273649994d4e216",
+      "target_kind": "eval_suite",
+      "target_ref": "eval_suite:disputas-tarea-suite@1"
+     }
+    ]
+   },
+   "run_id": "run-thread01-0001",
+   "status": "compiled",
+   "step": "compile"
+  },
+  "gate": {
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "gates": [
+    {
+     "gate": "safety",
+     "status": "pass"
+    },
+    {
+     "gate": "improvement",
+     "reason": "no_structural_improvement",
+     "status": "fail"
+    }
+   ],
+   "judge_actor": "claude-gsipy",
+   "quality_claims": "forbidden",
+   "run_id": "run-thread01-0001",
+   "step": "gate",
+   "verdict": "fail"
+  },
+  "native_eval": {
+   "verdict": "pass"
+  },
+  "publish": {
+   "alias": "staging",
+   "approver": "local-supervisor",
+   "override": "human_override",
+   "readback_release_id": "rel-9d00dc3bd497a3fc",
+   "release_id": "rel-9d00dc3bd497a3fc",
+   "simulated_human": true
+  },
+  "recompute": {
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "recomputes": [
+    {
+     "claimed_rate": 0.3,
+     "evidence_ref": "ev-0001",
+     "match": true,
+     "recomputed_rate": 0.3,
+     "signal_id": "sig-0001"
+    }
+   ],
+   "run_id": "run-thread01-0001",
+   "step": "recompute"
+  },
+  "sensors": {
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "discards": [
+    {
+     "metric_id": "e0_technical_error_rate",
+     "reason": "below_k"
+    }
+   ],
+   "run_id": "run-thread01-0001",
+   "signals": [
+    {
+     "denominator": 30,
+     "evidence_ref": "ev-0001",
+     "holdout_checked": true,
+     "metric_id": "e0_recurring_copilot_query_cases",
+     "numerator": 22,
+     "population": "e0/copilot_query",
+     "signal_id": "sig-0001"
+    }
+   ],
+   "step": "sensors"
+  },
+  "validation": {
+   "check_results": [
+    {
+     "check": "denominator",
+     "status": "pass"
+    },
+    {
+     "check": "temporality",
+     "status": "not_applicable"
+    }
+   ],
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "evidence_refs": [
+    "ev-0001"
+   ],
+   "run_id": "run-thread01-0001",
+   "signal_id": "sig-0001",
+   "step": "validation",
+   "verdict": "corroborated",
+   "verifier_actor": "actor-verifier"
+  }
+ },
+ "spec": {
+  "compile": {
+   "base_bundle_ref": "bundle:attention-task@1",
+   "change_spec": {
+    "affected_routes": [
+     "disputa-tarea"
+    ],
+    "base_bundle_ref": "bundle:attention-task@1",
+    "expected_mechanism": "shorter closing reply",
+    "operations": [
+     {
+      "new_ref": "prompt:resumen_radicado@2",
+      "op": "replace",
+      "precondition_digest": "sha256:727341c7f278859de2b2a8e997305012d9094e02ac60d4af7a722101fa9eb089",
+      "target_kind": "prompt",
+      "target_ref": "prompt:resumen_radicado@1"
+     },
+     {
+      "new_ref": "eval_suite:disputas-tarea-suite@2",
+      "op": "add",
+      "precondition_digest": "sha256:4136704fa37d584b4de65be3a56b725b41f3bbc95f59f95b6273649994d4e216",
+      "target_kind": "eval_suite",
+      "target_ref": "eval_suite:disputas-tarea-suite@1"
+     }
+    ],
+    "opportunity_ref": "opportunity:o1@1",
+    "rollback_ref": "bundle:attention-task@1",
+    "workflow_bridge_ref": "bridge:disputa-tarea@1"
+   },
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "run_id": "run-thread01-0001",
+   "step": "compile"
+  },
+  "gate": {
+   "gate_in": {
+    "author_actors": [
+     "claude-wrld0"
+    ],
+    "base_arm_report_ref": "arm_report:base-run-thread01-0001@1",
+    "candidate_arm_report_ref": "arm_report:cand-run-thread01-0001@1",
+    "contract_version": "engine-steps/0",
+    "data_class": "synthetic",
+    "judge_actor": "claude-gsipy",
+    "run_id": "run-thread01-0001",
+    "step": "gate",
+    "suite_ref": "eval_suite:07a48e83e7e0e0efd2763abc3cc8e3aee63a22192bce5e3481bead2766f44c68@1"
+   },
+   "reports": {
+    "arm_report:base-run-thread01-0001@1": {
+     "runs": [
+      {
+       "case_ref": "c1",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:suite-expect@handwritten",
+       "status": "completed"
+      },
+      {
+       "case_ref": "c2",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:suite-expect@handwritten",
+       "status": "completed"
+      }
+     ]
+    },
+    "arm_report:cand-run-thread01-0001@1": {
+     "runs": [
+      {
+       "case_ref": "c1",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:suite-expect@handwritten",
+       "status": "completed"
+      },
+      {
+       "case_ref": "c2",
+       "closed_early": false,
+       "cost_known": true,
+       "oracle_ref": "oracle:suite-expect@handwritten",
+       "status": "completed"
+      }
+     ]
+    }
+   },
+   "world_authors": {
+    "suite": "agent-core-registry-demo@c814c2b",
+    "world": "claude-wrld0"
+   }
+  },
+  "recompute": {
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "lab_ref": "lab:sample-1@1",
+   "run_id": "run-thread01-0001",
+   "scout_claims": [
+    {
+     "claimed_rate": 0.3,
+     "signal_id": "sig-0001"
+    }
+   ],
+   "signal_ids": [
+    "sig-0001"
+   ],
+   "step": "recompute"
+  },
+  "sensors": {
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "discovery_config_ref": "discovery_config:sample-1@1",
+   "metric_spec_refs": [
+    "metric_spec:sample-1@1"
+   ],
+   "run_id": "run-thread01-0001",
+   "source_snapshot_ref": "source_snapshot:sample-1@1",
+   "step": "sensors",
+   "window": {
+    "end": "2026-06-17",
+    "start": "2026-04-18"
+   }
+  },
+  "validation": {
+   "checks": [
+    "denominator",
+    "temporality"
+   ],
+   "contract_version": "engine-steps/0",
+   "data_class": "synthetic",
+   "recompute_ref": "recompute:sample-1@1",
+   "run_id": "run-thread01-0001",
+   "scout_actor": "actor-scout",
+   "signal_id": "sig-0001",
+   "step": "validation",
+   "verifier_actor": "actor-verifier"
+  }
+ }
+}

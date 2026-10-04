@@ -4,6 +4,7 @@
 pub mod app;
 pub mod event;
 pub mod ingest;
+pub mod panels;
 pub mod project;
 pub mod server;
 pub mod store;
