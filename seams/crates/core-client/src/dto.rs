@@ -235,3 +235,201 @@ impl TaskReceipt {
         self.result.as_ref().and_then(|r| r.facts.get(name))
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Invoke request (CoreTaskInvocation)
+// ---------------------------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    Scout,
+    Verifier,
+    BuilderDesign,
+    Writer,
+}
+
+impl Stage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Stage::Scout => "scout",
+            Stage::Verifier => "verifier",
+            Stage::BuilderDesign => "builder_design",
+            Stage::Writer => "writer",
+        }
+    }
+}
+
+/// `CoreTaskInvocation` request. `credentials`, `trace` and `request_digest` are never sent: the first two are
+/// outside the digest by contract, and the bridge computes the digest itself.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskInvocation {
+    pub tenant_id: String,
+    pub job_id: String,
+    pub stage: Stage,
+    pub attempt: u32,
+    pub logical_key: String,
+    pub agent_id: String,
+    pub agent_version: String,
+    pub release_id: String,
+    pub pulso_run_ref: String,
+    pub lab_grant_ref: String,
+    /// A JSON object (stage-specific slots; the bridge rejects unknown slots).
+    pub input: Value,
+    pub input_artifact_refs: Vec<String>,
+    pub extract_manifest_ref: Option<String>,
+    pub memory_snapshot_ref: Option<String>,
+    pub registry_mutation_commitment: Option<Value>,
+    pub deadline: Option<String>,
+    pub cutoff: Option<String>,
+    pub lang: Option<String>,
+    pub closure_digest: Option<String>,
+    pub budget: Option<Value>,
+}
+
+impl TaskInvocation {
+    pub fn new(tenant_id: &str, job_id: &str, stage: Stage, logical_key: &str) -> TaskInvocation {
+        TaskInvocation {
+            tenant_id: tenant_id.into(),
+            job_id: job_id.into(),
+            stage,
+            attempt: 1,
+            logical_key: logical_key.into(),
+            agent_id: String::new(),
+            agent_version: String::new(),
+            release_id: String::new(),
+            pulso_run_ref: String::new(),
+            lab_grant_ref: String::new(),
+            input: Value::Object(Map::new()),
+            input_artifact_refs: Vec::new(),
+            extract_manifest_ref: None,
+            memory_snapshot_ref: None,
+            registry_mutation_commitment: None,
+            deadline: None,
+            cutoff: None,
+            lang: None,
+            closure_digest: None,
+            budget: None,
+        }
+    }
+
+    /// The `Idempotency-Key` header value (`sha256_hex(tenant|job|stage|attempt|logical_key)`).
+    pub fn idempotency_key(&self) -> Result<String, crate::canon::CanonError> {
+        crate::canon::idempotency_key(&self.tenant_id, &self.job_id, self.stage.as_str(), self.attempt, &self.logical_key)
+    }
+
+    /// Client-side contract checks (nothing is sent when one fails).
+    pub fn validate(&self) -> Result<(), String> {
+        let nonempty = [
+            ("tenant_id", &self.tenant_id, 128),
+            ("job_id", &self.job_id, 128),
+            ("agent_id", &self.agent_id, 128),
+            ("release_id", &self.release_id, 128),
+            ("pulso_run_ref", &self.pulso_run_ref, 256),
+            ("lab_grant_ref", &self.lab_grant_ref, 256),
+            ("logical_key", &self.logical_key, 256),
+        ];
+        for (n, v, max) in nonempty {
+            if v.is_empty() || v.len() > max {
+                return Err(format!("{n} must be 1..={max} chars"));
+            }
+        }
+        let parts: Vec<&str> = self.agent_version.split('.').collect();
+        if parts.len() != 3 || parts.iter().any(|p| p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit())) {
+            return Err("agent_version must be MAJOR.MINOR.PATCH".into());
+        }
+        if !(1..=1000).contains(&self.attempt) {
+            return Err("attempt must be 1..=1000".into());
+        }
+        if !self.input.is_object() {
+            return Err("input must be a JSON object".into());
+        }
+        if self.input_artifact_refs.len() > 64 {
+            return Err("input_artifact_refs is capped at 64".into());
+        }
+        for (n, v) in [("deadline", &self.deadline), ("cutoff", &self.cutoff)] {
+            if v.as_deref().is_some_and(|s| !crate::canon::is_z_timestamp(s)) {
+                return Err(format!("{n} must be UTC RFC3339 with a literal Z"));
+            }
+        }
+        if self.closure_digest.as_deref().is_some_and(|d| d.len() != 64 || !d.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))) {
+            return Err("closure_digest must be lowercase hex-64".into());
+        }
+        Ok(())
+    }
+
+    /// The exact wire body (optional absent fields are omitted, not null).
+    pub fn to_json(&self) -> Value {
+        let mut m = Map::new();
+        let s = |v: &str| Value::String(v.into());
+        m.insert("schema_version".into(), s("1"));
+        m.insert("tenant_id".into(), s(&self.tenant_id));
+        m.insert("pulso_run_ref".into(), s(&self.pulso_run_ref));
+        m.insert("job_id".into(), s(&self.job_id));
+        m.insert("stage".into(), s(self.stage.as_str()));
+        m.insert("attempt".into(), Value::from(self.attempt));
+        m.insert("agent_id".into(), s(&self.agent_id));
+        m.insert("agent_version".into(), s(&self.agent_version));
+        m.insert("release_id".into(), s(&self.release_id));
+        m.insert("lab_grant_ref".into(), s(&self.lab_grant_ref));
+        m.insert("logical_key".into(), s(&self.logical_key));
+        m.insert("input".into(), self.input.clone());
+        m.insert("input_artifact_refs".into(), Value::Array(self.input_artifact_refs.iter().map(|r| s(r)).collect()));
+        put(&mut m, "extract_manifest_ref", self.extract_manifest_ref.as_deref());
+        put(&mut m, "memory_snapshot_ref", self.memory_snapshot_ref.as_deref());
+        put(&mut m, "deadline", self.deadline.as_deref());
+        put(&mut m, "cutoff", self.cutoff.as_deref());
+        put(&mut m, "lang", self.lang.as_deref());
+        put(&mut m, "closure_digest", self.closure_digest.as_deref());
+        if let Some(c) = &self.registry_mutation_commitment {
+            m.insert("registry_mutation_commitment".into(), c.clone());
+        }
+        if let Some(b) = &self.budget {
+            m.insert("budget".into(), b.clone());
+        }
+        Value::Object(m)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// GET /version
+// ---------------------------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Version {
+    pub agent_core_sha: String,
+    pub contracts_version: String,
+    pub bridge_instance_id: String,
+    pub pulso_sha: String,
+    pub image_digest: Option<String>,
+    pub runtime_profile: String,
+    pub doubles: Vec<String>,
+    pub raw: Value,
+}
+
+impl Version {
+    pub fn from_json(body: &Value) -> Result<Version, DecodeError> {
+        const W: &str = "CoreVersion";
+        let m = obj(W, body)?;
+        Ok(Version {
+            agent_core_sha: req_str(W, m, "agent_core_sha")?,
+            contracts_version: req_str(W, m, "contracts_version")?,
+            bridge_instance_id: req_str(W, m, "bridge_instance_id")?,
+            pulso_sha: req_str(W, m, "pulso_sha")?,
+            image_digest: nullable_str(W, m, "image_digest")?,
+            runtime_profile: req_str(W, m, "runtime_profile")?,
+            doubles: opt_arr(m, "doubles").iter().filter_map(|d| d.as_str().map(str::to_string)).collect(),
+            raw: body.clone(),
+        })
+    }
+
+    /// The bridge must report exactly our pin (agent-core sha + contracts version).
+    pub fn check_pin(&self) -> Result<(), String> {
+        if self.agent_core_sha != crate::pins::AGENT_CORE_SHA {
+            return Err(format!("agent_core_sha {} != pin {}", self.agent_core_sha, crate::pins::AGENT_CORE_SHA));
+        }
+        if self.contracts_version != crate::pins::CONTRACTS_VERSION {
+            return Err(format!("contracts_version {} != pin {}", self.contracts_version, crate::pins::CONTRACTS_VERSION));
+        }
+        Ok(())
+    }
+}

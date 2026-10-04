@@ -99,6 +99,7 @@ fn release_unavailable_is_a_terminal_conflict() {
     let g = GoldenCore::play(&[("invoke_scout", "invoke_release_unavailable")]);
     let mut i = scout();
     i.logical_key = "golden-scout-2".into();
+    i.release_id = "rel-does-not-exist".into();
     let e = client(&g.addr).invoke(&i).unwrap_err();
     g.finish();
     match e {

@@ -64,6 +64,7 @@ impl CallError {
 pub struct CoreClient {
     cfg: ClientConfig,
     key: SigningKey,
+    attempts: u32,
 }
 
 fn key_ok(k: &str) -> bool {
@@ -90,7 +91,17 @@ impl CoreClient {
             // SAFETY-free volatile-ish wipe: black_box defeats dead-store elimination.
             *b = std::hint::black_box(0);
         }
-        CoreClient { cfg, key }
+        CoreClient { cfg, key, attempts: 3 }
+    }
+
+    /// Total attempts the typed operations make for retryable failures (default 3, minimum 1).
+    pub fn with_attempts(mut self, attempts: u32) -> Self {
+        self.attempts = attempts.max(1);
+        self
+    }
+
+    pub(crate) fn attempts(&self) -> u32 {
+        self.attempts
     }
 
     /// One HTTP attempt: fresh `jti` and token each call, same `idempotency_key` if the caller repeats it.
