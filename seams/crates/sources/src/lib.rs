@@ -1,6 +1,7 @@
 //! R1M source adapters: a read-only `SourceAdapter` port with `product-sqlite`, `product-postgres` and `dataset-pg`
 //! implementations, a per-source watermark store and the monitor tick. Every adapter builds its SQL from the allow-list in
 //! `policy` and never returns denylisted tables or columns.
+pub mod config;
 pub mod policy;
 pub mod sqlite;
 pub mod store;
@@ -16,6 +17,7 @@ pub enum SourceError {
     BadSourceId(String),
     SchemaDrift(String),
     Conflict(String),
+    BadConfig(String),
     Io(String),
 }
 impl fmt::Display for SourceError {
