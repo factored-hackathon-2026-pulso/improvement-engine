@@ -93,13 +93,17 @@ pub fn engine_run_report(sink: &dyn RunEventSink, exists: &dyn Fn(&str) -> bool,
     Ok(run)
 }
 
-/// The data the console contract suite reads unconditionally (decision `dec-1`, proposal `prop-1`), under a run that says
+/// The data the console contract suite reads unconditionally (run `run-active`, decision `dec-1`, proposal `prop-1`), under a run that says
 /// plainly it is not an engine run.
 pub fn contract_seed(sink: &dyn RunEventSink) -> Result<String, String> {
-    let run = "run-contract-seed";
+    let run = "run-active";
     let ev = |kind: &str, ek: &str, eid: &str, data: Value| sink.emit(run, NewEvent::new(kind, ek, eid, data));
     ev("run_started", "run", run, json!({"title": "Contract seed (not an engine run)", "state": "completed", "origin": "manual"}))?;
     ev("doubles_declared", "run", run, json!({"doubles": [{"id": "contract_seed:fixture", "what": "static data so the console contract suite finds decision dec-1 and proposal prop-1; produced by no engine", "until": "the engine writes decisions and proposals"}]}))?;
+    for (id, status, dep) in [("scout", "complete", vec![]), ("hypothesis", "running", vec!["scout"])] {
+        let node = json!({"node_id": id, "label": format!("{id} [contract_seed]"), "stage": id, "status": status, "depends_on": dep, "reason_code": null, "node_kind": "material_step", "trace_id": null});
+        ev("node_status_changed", "node", id, json!({"node": node}))?;
+    }
     ev("diff_set", "proposal", "prop-1", json!({"proposal_id": "prop-1", "lines": [
         {"op": "ctx", "text": "retry_policy:"}, {"op": "del", "text": "  max_retries: 2"}, {"op": "add", "text": "  max_retries: 3"},
     ]}))?;

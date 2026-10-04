@@ -42,7 +42,7 @@ fn main() {
             Err(e) => fail(&format!("{path}: {e}")),
         }
     }
-    if seed && store.head("run-contract-seed").is_none() {
+    if seed && store.head("run-active").is_none() {
         contract_seed(&*store).unwrap_or_else(|e| fail(&e));
     }
     let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
