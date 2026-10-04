@@ -44,3 +44,7 @@ simulator's `--stop-file`.
 
 Proven live: `db/sql` DDL and grants (+ idempotent re-apply), role least privilege, `load_parquet.py`, simulator Postgres sink (backfill, follow, overwrite, dense sequence), migrations 0001-0054, `pg` crate conformance/race/engine tests, `PgStore` (control-api), `PostgresProduct` adapter on the real schema, `PgStore` watermark with CAS, kill-before-commit resume, follow.
 Unproven: `DatasetPg` against loader-populated `raw` data on the real DDL (only the hand-made schema in `pg_live.rs`); a true process kill (kill is simulated by a store that errors instead of committing, with fresh connections afterwards); multi-process watermark contention; control-api server binary over Postgres end to end (store layer only); loader with real (non-synthetic) Parquet volume.
+
+## Teardown
+
+`podman rm -f -v` removed the container and its anonymous volume; `podman ps -a` on `pulso-dev` afterwards lists only the two pre-existing `pulso-local-*` Created containers. Secret files deleted.
