@@ -853,7 +853,7 @@ fn reference_key(reference: &ArtifactReference) -> String {
     )
 }
 
-fn receipt_id(
+pub(crate) fn receipt_id(
     scope: &MemoryScope,
     access: &WikiAccess,
     snapshot_ref: &ArtifactReference,
