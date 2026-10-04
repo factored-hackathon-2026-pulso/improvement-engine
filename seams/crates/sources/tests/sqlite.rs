@@ -94,3 +94,14 @@ fn schema_check_reports_drift_and_denied_tables_present_without_reading_them() {
     assert!(r.missing.contains(&("event_log".into(), "event_time".into())));
     assert!(b.read_events(&Watermark::Sequence(0), 5).is_err(), "reads fail closed on drift");
 }
+
+#[test]
+fn engine_guard_denies_event_payload_and_unread_event_columns() {
+    let (a, _) = open("payload");
+    for sql in ["SELECT payload FROM event_log", "SELECT * FROM event_log", "SELECT tenant_id FROM event_log", "SELECT ingested_at FROM event_log"] {
+        assert!(a.guarded_probe(sql).is_err(), "{sql}");
+    }
+    assert!(a.guarded_probe("SELECT sequence, event_type FROM event_log").is_ok());
+    assert!(a.guarded_probe("ATTACH DATABASE ':memory:' AS x").is_err());
+    assert!(a.guarded_probe("PRAGMA query_only = OFF").is_err());
+}
