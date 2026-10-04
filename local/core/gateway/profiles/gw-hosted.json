@@ -1,0 +1,9 @@
+{
+  "name": "gw-hosted",
+  "description": "Gateway profile for a hosted third-party model: synthetic and generated data only, key by env reference.",
+  "data_classes": ["synthetic", "generated_sample"],
+  "network": {"name": "pulso-gw-hosted", "internal": false},
+  "api_key_env": "PULSO_HOSTED_LLM_KEY",
+  "upstream": {"kind": "hosted", "base_url": "https://llm.example-provider.com/v1"},
+  "fallbacks": []
+}
