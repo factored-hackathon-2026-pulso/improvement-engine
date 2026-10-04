@@ -46,7 +46,7 @@ def test_first_red_every_evidence_ref_resolves_in_lab(lab):
         assert L.resolve_ref(lab, r["evidence_ref"]) is not None
     assert L.resolve_ref(lab, "ev_00000000deadbeef") is None
     claim = {"evidence_ref": "ev_00000000deadbeef", "rate": 0.5, "count": 20}
-    assert L.verify_claim(lab, claim)["ok"] is False
+    assert L.verify_claim(lab, claim, SALT)["ok"] is False
 
 
 def test_lab_holds_only_k_anonymous_aggregates(lab):
@@ -91,7 +91,7 @@ def test_verifier_recompute_equals_scout_bit_for_bit(tmp_path, seed):
     db = L.build_lab(tmp_path / f"lab{seed}.sqlite", cases(seed, n_a=40 + seed, n_b=25 + 2 * seed), SALT)
     for r in L.lab_query(db, "recurrence_rate", "w1")["rows"]:
         figure = L.scout_figure(db, r["evidence_ref"])
-        verdict = L.verify_claim(db, figure)
+        verdict = L.verify_claim(db, figure, SALT)
         assert verdict["ok"] is True
         assert verdict["recomputed"].hex() == figure["rate"].hex() if hasattr(figure["rate"], "hex") else True
         assert verdict["recomputed"] == figure["rate"]
@@ -105,7 +105,7 @@ def test_tampered_numerator_fails(lab):
     con.execute("update lab_rows set numerator = numerator + 3 where evidence_ref = ?", (ref,))
     con.commit()
     con.close()
-    v = L.verify_claim(lab, figure)
+    v = L.verify_claim(lab, figure, SALT)
     assert v["ok"] is False and "digest" in " ".join(v["reasons"])
 
 
@@ -113,11 +113,40 @@ def test_tampered_claim_rate_fails(lab):
     ref = L.lab_query(lab, "recurrence_rate", "w1")["rows"][0]["evidence_ref"]
     figure = dict(L.scout_figure(lab, ref))
     figure["rate"] = round(figure["rate"] + 0.07, 2)
-    assert L.verify_claim(lab, figure)["ok"] is False
+    assert L.verify_claim(lab, figure, SALT)["ok"] is False
 
 
 def test_below_k_group_is_not_stored(lab):
     con = sqlite3.connect(lab)
     n = con.execute("select count(*) from lab_rows").fetchone()[0]
     assert n == 2
-    assert con.execute("select value from lab_meta where key='suppressed_groups'").fetchone()[0] == "1"
+    assert con.execute("select count(*) from lab_meta where key like '%suppress%'").fetchone()[0] == 0
+
+
+def test_forged_numerator_with_recomputed_digest_fails(lab):
+    ref = L.lab_query(lab, "recurrence_rate", "w1")["rows"][0]["evidence_ref"]
+    figure = L.scout_figure(lab, ref)
+    con = sqlite3.connect(lab)
+    m, w, g, c = con.execute("select metric_id, window_id, g_group, count from lab_rows where evidence_ref=?", (ref,)).fetchone()
+    import hashlib
+    con.execute("update lab_rows set numerator = 1, digest = ? where evidence_ref = ?",
+                (hashlib.sha256(f"{m}|{w}|{g}|1|{c}".encode()).hexdigest(), ref))
+    con.commit()
+    con.close()
+    assert L.verify_claim(lab, figure, SALT)["ok"] is False
+
+
+def test_swapped_evidence_ref_fails(lab):
+    refs = [r["evidence_ref"] for r in L.lab_query(lab, "recurrence_rate", "w1")["rows"]]
+    con = sqlite3.connect(lab)
+    con.execute("update lab_rows set evidence_ref='tmp' where evidence_ref=?", (refs[0],))
+    con.execute("update lab_rows set evidence_ref=? where evidence_ref=?", (refs[0], refs[1]))
+    con.execute("update lab_rows set evidence_ref=? where evidence_ref='tmp'", (refs[1],))
+    con.commit()
+    con.close()
+    assert L.verify_claim(lab, {"evidence_ref": refs[0], "rate": 0.5, "count": 1}, SALT)["ok"] is False
+
+
+def test_short_salt_rejected(tmp_path):
+    with pytest.raises(ValueError):
+        L.build_lab(tmp_path / "x.sqlite", cases(0), b"short")
