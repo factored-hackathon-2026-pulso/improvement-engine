@@ -21,7 +21,7 @@ fn minimal_postgres_config_has_safe_defaults() {
     assert_eq!(c.storage, Storage::Postgres);
     assert_eq!(c.data_mode, DataMode::Dataset);
     assert_eq!(c.adapter, "stub");
-    assert_eq!(c.listen_addr.to_string(), "127.0.0.1:4020");
+    assert_eq!(c.listen_addr.to_string(), "127.0.0.1:8080");
     assert_eq!(c.poll_interval, Duration::from_secs(30));
     assert_eq!(c.batch_cap, 100);
     assert_eq!(c.grace, Duration::from_secs(50));
@@ -131,4 +131,22 @@ fn no_rendering_of_the_config_leaks_a_secret() {
         assert!(!dbg.contains(secret), "{secret} leaked in {dbg}");
     }
     assert_eq!(c.database_url.as_ref().unwrap().expose(), DSN);
+}
+
+#[test]
+fn base_path_is_normalised_and_validated() {
+    let b = [("PULSO_DATABASE_URL", DSN), ("PULSO_DATA_MODE", "dataset")];
+    let with = |v: &'static str| {
+        let mut p = b.to_vec();
+        p.push(("PULSO_BASE_PATH", v));
+        p
+    };
+    assert_eq!(load(&b).unwrap().base_path, "");
+    assert_eq!(load(&with("/pulso")).unwrap().base_path, "/pulso");
+    assert_eq!(load(&with("/pulso/")).unwrap().base_path, "/pulso");
+    assert_eq!(load(&with("/")).unwrap().base_path, "");
+    assert_eq!(load(&with("/a/b-c_d")).unwrap().base_path, "/a/b-c_d");
+    for bad in ["pulso", "/pul so", "/../x", "/a//b", "/a?b", "/%2e"] {
+        assert!(err(&with(bad)).contains("PULSO_BASE_PATH"), "{bad}");
+    }
 }

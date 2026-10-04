@@ -62,6 +62,8 @@ pub struct RunConfig {
     pub storage_prefix: Option<String>,
     pub store_dir: Option<PathBuf>,
     pub console_dir: Option<PathBuf>,
+    /// Path prefix the console and API are served under behind a reverse proxy ("" or "/pulso").
+    pub base_path: String,
     pub grace: Duration,
     pub tenant: String,
     pub worker_id: String,
@@ -175,6 +177,7 @@ impl RunConfig {
             storage_prefix,
             store_dir: var("PULSO_STORE_DIR").map(PathBuf::from),
             console_dir: var("PULSO_CONSOLE_DIR").map(PathBuf::from),
+            base_path: String::new(),
             grace,
             tenant: var("PULSO_TENANT").unwrap_or_else(|| "tenant-local".into()),
             worker_id: var("PULSO_WORKER_ID").unwrap_or_else(|| format!("pulso-{}", std::process::id())),

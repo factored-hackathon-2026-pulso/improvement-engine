@@ -6,3 +6,4 @@ pub mod sink;
 pub mod config;
 pub mod health;
 pub mod run;
+pub mod healthcheck;
