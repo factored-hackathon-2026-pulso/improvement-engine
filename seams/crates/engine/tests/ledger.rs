@@ -112,3 +112,28 @@ fn the_ledger_persists_once_replays_identically_and_refuses_a_different_entry() 
     assert!(l.record(&invalid).is_err(), "an invalid entry is never stored");
     assert_eq!(l.entries().unwrap().len(), 2);
 }
+
+#[test]
+fn viable_needs_at_least_one_gate_row_and_a_bk0_supported_kind_and_op() {
+    let mut e = viable();
+    e.gates.clear();
+    assert!(e.validate().is_err(), "a pass verdict with no gate rows proves nothing");
+    for (k, o) in [(Some("flow"), Some("replace")), (Some("release_settings"), Some("replace")), (Some("prompt"), Some("add")), (None, Some("replace")), (Some("prompt"), None)] {
+        let mut e = viable();
+        e.kind = k.map(Into::into);
+        e.op = o.map(Into::into);
+        assert!(e.validate().unwrap_err().contains("BK0"), "{k:?}/{o:?} is not a supported change family");
+    }
+    let mut e = viable();
+    e.kind = Some("eval_suite".into());
+    e.op = Some("add".into());
+    assert_eq!(e.validate(), Ok(()));
+}
+
+#[test]
+fn a_not_viable_entry_with_an_unlabelled_or_unsimulated_override_is_refused_by_record() {
+    let s = tmp("ovr");
+    let mut e = LedgerEntry::new(0, "run-1", "prop-0", "sig-1", Verdict::NotViable, "gate_failed");
+    e.overrides = vec![json!({"label": "human_override", "simulated": "true"})];
+    assert!(Ledger::new(&s).record(&e).is_err(), "simulated must be the boolean true");
+}
