@@ -43,9 +43,30 @@ impl Gateway {
             Some("local-model") => Label::LocalModel,
             Some(o) => return Err(format!("PULSO_GATEWAY_KIND {o:?} is not gateway|local-model")),
         };
+        let addr = need("PULSO_GATEWAY_ADDR")?;
+        if !private_host(&addr) && get("PULSO_GATEWAY_ALLOW_REMOTE_PLAINTEXT").as_deref() != Some("yes") {
+            return Err(format!("PULSO_GATEWAY_ADDR {addr:?} is not a loopback or private host and this client has no TLS (set PULSO_GATEWAY_ALLOW_REMOTE_PLAINTEXT=yes only behind a TLS-terminating tunnel)"));
+        }
         Ok(Gateway {
-            config: Some(GatewayConfig { addr: need("PULSO_GATEWAY_ADDR")?, model: need("PULSO_GATEWAY_MODEL")?, key: get("PULSO_GATEWAY_KEY").filter(|k| !k.is_empty()), label, timeout: Duration::from_secs(60) }),
+            config: Some(GatewayConfig { addr, model: need("PULSO_GATEWAY_MODEL")?, key: get("PULSO_GATEWAY_KEY").filter(|k| !k.is_empty()), label, timeout: Duration::from_secs(60) }),
         })
+    }
+}
+
+/// `host:port` whose host is `localhost`, a loopback IP or an RFC1918 / unique-local IP literal. Names are not resolved.
+fn private_host(addr: &str) -> bool {
+    let Some((host, port)) = addr.rsplit_once(':') else { return false };
+    if port.parse::<u16>().is_err() {
+        return false;
+    }
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    if host == "localhost" {
+        return true;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(a)) => a.is_loopback() || a.is_private(),
+        Ok(std::net::IpAddr::V6(a)) => a.is_loopback() || (a.segments()[0] & 0xfe00) == 0xfc00,
+        Err(_) => false,
     }
 }
 

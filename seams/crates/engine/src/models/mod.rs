@@ -203,11 +203,17 @@ impl ModelPort for Recording {
     }
 }
 
+/// Cap on the serialized treated payload (and the system prompt) of one call.
+pub const MAX_PAYLOAD_BYTES: usize = 256 * 1024;
+
 /// Policy shared by every port that talks to a third party (hosted or not): E0/original data is never sent, and the
 /// payload must pass the treated-payload scan. Both refusals happen before anything is read or sent.
 pub(crate) fn guard(req: &ModelRequest) -> Result<(), ModelError> {
     if !req.data_class.may_reach_hosted_model() {
         return Err(ModelError::Refused(format!("data_class {} never reaches a hosted model", req.data_class.as_str())));
+    }
+    if req.payload.to_string().len() > MAX_PAYLOAD_BYTES || req.system.len() > MAX_PAYLOAD_BYTES {
+        return Err(ModelError::Refused(format!("payload too large (cap {MAX_PAYLOAD_BYTES} bytes)")));
     }
     let scan = tps::scan_payload(&req.payload, tps::DEFAULT_K, &req.registry);
     if !scan.ok {
