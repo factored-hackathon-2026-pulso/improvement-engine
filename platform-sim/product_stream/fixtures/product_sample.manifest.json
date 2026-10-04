@@ -1,0 +1,52 @@
+{
+  "data_origin": "synthetic product-sim",
+  "horizon_events": 600,
+  "manifest_version": 1,
+  "planted": {
+    "baseline": 0.05,
+    "cell": {
+      "channel": "web_chat",
+      "language": "pt"
+    },
+    "effect": "reassignment_rate_rise",
+    "elevated": 0.32,
+    "metric": "manual case.assigned (previous_staff_id set) per case opened",
+    "onset_sequence": 180,
+    "present_in": [
+      "discovery",
+      "holdout"
+    ]
+  },
+  "realised": {
+    "by_window": {
+      "discovery": {
+        "cases": 36,
+        "reassigns": 1,
+        "reopens": 3
+      },
+      "holdout": {
+        "cases": 22,
+        "reassigns": 1,
+        "reopens": 3
+      }
+    },
+    "cases": 58,
+    "last_sequence": 600,
+    "reassigns": 2,
+    "reopens": 6
+  },
+  "scenario": "escalation_rise",
+  "seed": 7,
+  "start": "2026-09-01T08:00:00Z",
+  "tenant_id": "ten-product-sim",
+  "windows": {
+    "discovery": [
+      0,
+      360
+    ],
+    "holdout": [
+      360,
+      600
+    ]
+  }
+}
