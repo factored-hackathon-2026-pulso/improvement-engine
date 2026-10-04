@@ -10,6 +10,7 @@ static N: AtomicU32 = AtomicU32::new(0);
 
 pub fn temp_path(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("sources-test-{}-{}-{tag}", std::process::id(), N.fetch_add(1, Ordering::SeqCst)));
+    let _ = std::fs::remove_dir_all(&d); // stale dir from a recycled pid
     std::fs::create_dir_all(&d).unwrap();
     d
 }
