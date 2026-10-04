@@ -128,14 +128,14 @@ fn positive_control_effect_that_persists_is_admitted() {
 // p-value (replication at alpha/K) can reject; or it is significant but too small, so only the effect/direction gate can.
 #[test]
 fn replication_p_value_alone_rejects_a_holdout_that_is_not_significant() {
-    let r = planted(1500, 0.11);
-    assert!(r.signals.is_empty(), "holdout diff ~0.03 is not significant at alpha/K: {r:?}");
+    let r = planted(1500, 0.12);
+    assert!(r.signals.is_empty(), "holdout diff ~0.04 is not significant at alpha/K: {r:?}");
     assert!(r.discards.iter().any(|d| d.reason == "not_replicated" && d.cell == "aa/c1"), "{:?}", r.discards);
 }
 
 #[test]
 fn replication_direction_effect_alone_rejects_a_significant_but_collapsed_holdout() {
-    let r = planted(20_000, 0.095);
+    let r = planted(20_000, 0.10);
     assert!(r.signals.is_empty(), "holdout effect shrank below half the minimum: {r:?}");
     assert!(r.discards.iter().any(|d| d.reason == "not_replicated" && d.cell == "aa/c1"), "{:?}", r.discards);
 }
