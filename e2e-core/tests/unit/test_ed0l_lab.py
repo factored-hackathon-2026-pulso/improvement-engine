@@ -232,3 +232,11 @@ def test_published_rows_after_complementary_suppression_still_recompute_and_dete
         row = L.lab_query(db, L.METRIC, w)["rows"]
         assert row and all(L.verify_claim(db, {"evidence_ref": r["evidence_ref"], "rate": r["rate"],
                                                "count": r["count"]}, SALT)["ok"] for r in row)
+
+
+def test_empty_and_singleton_part_lists_do_not_crash_and_still_protect(tmp_path):
+    spec = {("alpha", "w1"): (6, 2), ("alpha", "w_all"): (40, 9), ("beta", "w1"): (30, 9), ("beta", "w_all"): (30, 9)}
+    db = L.build_lab(tmp_path / "l.sqlite", _cases_cells(spec), SALT, window_parts={"w1": [], "w_all": ["w1"]})
+    pub = _published(db)
+    assert (_gh("alpha"), "w1") not in pub
+    assert (_gh("alpha"), "w_all") not in pub  # singleton relation: total minus nothing is the hidden part's sibling

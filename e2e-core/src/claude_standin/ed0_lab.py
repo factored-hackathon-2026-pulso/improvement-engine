@@ -43,13 +43,13 @@ def _relations(agg, window_parts, group_parts):
     rels = []
     for total, parts in (window_parts or {}).items():
         for g in sorted({g for g, _w in agg}):
-            cells = [(g, total)] + [(g, p) for p in parts]
-            if all(c in agg for c in cells):
+            cells = [c for c in [(g, total)] + [(g, p) for p in parts] if c in agg]  # an absent cell is a known zero
+            if len(cells) >= 2:
                 rels.append(cells)
     for total, parts in (group_parts or {}).items():
         for w in sorted({w for _g, w in agg}):
-            cells = [(total, w)] + [(p, w) for p in parts]
-            if all(c in agg for c in cells):
+            cells = [c for c in [(total, w)] + [(p, w) for p in parts] if c in agg]
+            if len(cells) >= 2:
                 rels.append(cells)
     return rels
 
