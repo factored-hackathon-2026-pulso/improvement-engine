@@ -87,6 +87,28 @@ CATALOG: dict[str, StageSpec] = {s.stage: s for s in (
 )}
 STAGES = tuple(CATALOG)
 
+# M3: per-stage cap on agent steps for role-played (and local-model) runs. The asset `max_steps: 16` is unchanged
+# (a registry change moves release digests); the responder finalises early. The writer is a projection: no model.
+STEP_CAPS: dict[str, int] = {"scout": 5, "verifier": 5, "builder_design": 7}
+
+# Closed subset of JSON Schema the Core `agent` node and the gateway understand (agent_core.domain.schema).
+_SCHEMA_KEYWORDS = frozenset({"type", "enum", "properties", "required", "additionalProperties", "items"})
+_SCHEMA_ANNOTATIONS = frozenset({"description", "title", "default", "examples", "$schema", "$id"})
+
+
+def core_schema_problems(schema: dict[str, Any], path: str = "") -> list[str]:
+    """Paths and keywords of `schema` outside the Core subset (nested `properties` and `items` included)."""
+    where = path or "/"
+    out = [f"{where}: unsupported keyword {k!r}" for k in schema
+           if k not in _SCHEMA_KEYWORDS and k not in _SCHEMA_ANNOTATIONS]
+    props = schema.get("properties")
+    for name, child in (props.items() if isinstance(props, dict) else ()):
+        if isinstance(child, dict):
+            out += core_schema_problems(child, f"{path}/{name}")
+    if isinstance(schema.get("items"), dict):
+        out += core_schema_problems(schema["items"], f"{path}/items")
+    return out
+
 
 def tool_key(tool_id: str) -> str:
     """`pulso/lab_query@1.0.0` -> `pulso/lab_query@1`."""
