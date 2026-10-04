@@ -1,7 +1,7 @@
 # platform_live simulator (PL-L2)
 
 Deterministic, SQLite-backed double of the real support platform (Product artifact, commit
-a492bfa). Pulso-side counterpart of `core_mock`, for exporter and engine tests.
+a492bfa, unreachable since 2026-10-04; the simulator still models the 1.1.0 vocabulary, see contract 1.2.0). Pulso-side counterpart of `core_mock`, for exporter and engine tests.
 
     from platform_live import PlatformLiveSim
     sim = PlatformLiveSim(seed=7, path="platform.db")   # ":memory:" by default

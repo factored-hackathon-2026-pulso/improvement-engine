@@ -4,7 +4,7 @@ What the product team, the data team or the agent-core team must supply. Nothing
 
 | ID | Owner | Gap | Needed by |
 |---|---|---|---|
-| G1 | Product team | Postgres-backed support-platform: today SQLite default, Postgres untested, no migrations, slice 12 vs our contract 1.1.0 (a492bfa). Until then the SQLite adapter (snapshot into `product.*` or read-only file) is the only real path. Also a contract refresh to the current slice. | R3 |
+| G1 | Product team | Postgres-backed support-platform: today SQLite default, Postgres untested, no migrations, slice 12 vs our contract 1.1.0 (a492bfa, unreachable since 2026-10-04; head `eeb73a8`, contract 1.2.0 refreshed 2026-10-04, closest old match `7d2ae3a` is an inference). Until then the SQLite adapter (snapshot into `product.*` or read-only file) is the only real path. Also a contract refresh to the current slice. | R3 |
 | G2 | Product team | EXT-2: release and observation events (publish, rollback, window metrics), and event types for escalations and calls (`case.escalated`, `call.*`) in the catalog. Until then release/observation stay `simulated` and escalations/calls have no allow-listed columns. | R3 |
 | G3 | Data + Product | Enum reconciliation for `channel` and `priority` across E0, bank CSV and platform. | R1 mapping |
 | G4 | Data team | Customer-id mapping: E0 pseudonym `PSN-` to bank `CLI-` to platform customer ids (the `pseudonym_map` is never loaded; mapping must be supplied as a keyed, non-reversible join table or by the canonical layer). | R1 augmented |
