@@ -129,7 +129,7 @@ def generate(manifest: Path) -> str:
     L += ["## 10. Capacity re-baseline", ""]
     L += [f"- baseline {cap.get('baseline_lane_hours_per_session')} lane-hours per session from {len(cap.get('sessions') or [])} sessions", ""] \
         if cap else [n_cap, ""]
-    L += ["## 11. Open risks (open review findings and failing items)", ""]
+    L += ["## 11. Open risks (open and accepted review findings, failing items)", ""]
     rv = base / m.get("reviews_dir", "docs/reviews/claude")
     opens = []
     for path in sorted(rv.glob("*.review.json")) if rv.is_dir() else []:
@@ -137,8 +137,16 @@ def generate(manifest: Path) -> str:
         for f in (doc or {}).get("findings", []):
             if f.get("status") == "open":
                 opens.append(f"- {f.get('id')} ({','.join(doc.get('wps', []))}): {f.get('summary')}")
-    L += opens + [f"- gate item {r['item']} fails: {r['detail']}" for r in results if not r["ok"]]
-    if not opens and ok:
+    L += opens
+    accepted = []
+    for path in sorted(rv.glob("*.review.json")) if rv.is_dir() else []:
+        doc, _ = gate._json(path)
+        for f in (doc or {}).get("findings", []):
+            if f.get("status") == "accepted":
+                accepted.append(f"- accepted {f.get('id')} ({','.join(doc.get('wps', []))}), owner {f.get('owner', 'unassigned')}, "
+                                f"tier {f.get('tier', 'unassigned')}: {f.get('summary')} (reason: {f.get('reason')})")
+    L += accepted + [f"- gate item {r['item']} fails: {r['detail']}" for r in results if not r["ok"]]
+    if not opens and not accepted and ok:
         L.append("- none recorded")
     return "\n".join(L).rstrip() + "\n"
 
