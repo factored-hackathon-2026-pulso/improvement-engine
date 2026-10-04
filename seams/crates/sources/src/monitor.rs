@@ -6,7 +6,7 @@
 //!
 //! Honesty: the sensor step is the claude-standin runner (its numbers do not come from the package); the signals in the run
 //! record are computed here from the event batch. Release and observation are `simulated`; there is no model.
-use crate::config::Config;
+use crate::config::{Config, SensorKind};
 use crate::store::{WatermarkRecord, WatermarkStore};
 use crate::{Batch, DataMode, PlatformEvent, SourceAdapter, SourceError, Watermark};
 use engine::adapters::{StepEnv, thread_handlers};
@@ -80,7 +80,10 @@ pub fn tick(config: &Config, adapter: &dyn SourceAdapter, store: &dyn WatermarkS
     let (run_id, snap) = (format!("mon-{hex}"), format!("pkg-{hex}"));
     let work = &config.work_dir;
     write_package(work, &snap, config, adapter, &from, &to, &admitted)?;
-    let sensor = run_sensor(config, &run_id, &snap, adapter.data_class(), &admitted)?;
+    let sensor = match config.sensor {
+        SensorKind::StandIn => run_sensor(config, &run_id, &snap, adapter.data_class(), &admitted)?,
+        SensorKind::RustEvents => run_rust_events(config, &run_id, &snap, adapter.data_class(), &admitted)?,
+    };
 
     let signals = signals(&admitted, days, cases_total, config);
     let label = match config.data_mode {
@@ -105,7 +108,7 @@ pub fn tick(config: &Config, adapter: &dyn SourceAdapter, store: &dyn WatermarkS
         "quarantined": {"denied": denied, "unknown": unknown},
         "observed_until": last_event_time,
         "history": {"days": days, "cases": cases_total},
-        "evidence": {"sensor": "claude-standin", "signals": "computed-local", "release": "simulated", "observation": "simulated", "model": "none"},
+        "evidence": {"sensor": sensor["semantics"], "signals": "computed-local", "release": "simulated", "observation": "simulated", "model": "none"},
         "sensor": sensor,
         "signals": signals,
     });
@@ -160,10 +163,59 @@ fn write_package(work: &Path, snap: &str, config: &Config, adapter: &dyn SourceA
         lines.push('\n');
     }
     std::fs::write(tmp.join("events.ndjson"), lines).map_err(io)?;
-    let manifest = json!({"contract": "platform-events-package/0", "contract_version_source": "platform_live 1.1.0", "source_id": config.source_id.as_str(), "data_mode": config.data_mode.as_str(), "adapter": adapter.adapter(), "data_class": adapter.data_class(), "watermark_from": from.encode(), "watermark_to": to.encode(), "events": events.len()});
+    let dims = config.sensor == SensorKind::RustEvents;
+    if dims {
+        std::fs::write(tmp.join("cases.ndjson"), case_dimension(adapter, events)?).map_err(io)?;
+    }
+    let mut manifest = json!({"contract": "platform-events-package/0", "contract_version_source": "platform_live 1.1.0", "source_id": config.source_id.as_str(), "data_mode": config.data_mode.as_str(), "adapter": adapter.adapter(), "data_class": adapter.data_class(), "watermark_from": from.encode(), "watermark_to": to.encode(), "events": events.len()});
+    if dims {
+        manifest["dimensions"] = json!(["cases.ndjson"]);
+    }
     std::fs::write(tmp.join("manifest.json"), manifest.to_string()).map_err(io)?;
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::rename(&tmp, &dir).map_err(io)
+}
+
+/// Allow-listed `cases` columns (`channel`, `language`, `priority`, `previous_case_id`) for the cases of this batch; opaque case
+/// ids only, never `customer_id`, never text. The sensor needs the cell of each case; events alone do not carry it.
+fn case_dimension(adapter: &dyn SourceAdapter, events: &[&PlatformEvent]) -> Result<String, SourceError> {
+    let wanted: std::collections::BTreeSet<&str> = events.iter().filter_map(|e| e.case_id.as_deref()).collect();
+    let mut rows = adapter.read_dimension("cases", crate::policy::HARD_CAP)?;
+    rows.retain(|r| r.get("id").and_then(Option::as_deref).is_some_and(|id| wanted.contains(id)));
+    rows.sort_by(|a, b| a.get("id").cmp(&b.get("id")));
+    let col = |r: &crate::Row, k: &str| r.get(k).cloned().flatten();
+    let mut out = String::new();
+    for r in &rows {
+        out.push_str(&json!({"case_id": col(r, "id"), "channel": col(r, "channel"), "language": col(r, "language"), "priority": col(r, "priority"), "previous_case_id": col(r, "previous_case_id")}).to_string());
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// R1G: the real Rust sensor over the cumulative event packages of this source (same `engine-steps/0` sensors input and
+/// output as the stand-in; the superset report `sensor-events/1` rides along under `report`).
+fn run_rust_events(config: &Config, run_id: &str, snap: &str, data_class: &str, events: &[&PlatformEvent]) -> Result<Value, SourceError> {
+    let date = |f: Option<&&PlatformEvent>| f.and_then(|e| e.event_time.get(..10)).unwrap_or("1970-01-01").to_owned();
+    let doc = json!({
+        "contract_version": "engine-steps/0", "step": "sensors", "run_id": run_id, "data_class": data_class,
+        "source_snapshot_ref": format!("snapshot:{snap}@1"), "discovery_config_ref": "discovery_config:monitor@1",
+        "window": {"start": date(events.first()), "end": date(events.last())}, "metric_spec_refs": ["metric_spec:platform-events@1"],
+    });
+    let p = steps::events_sensor::Params {
+        min_support: config.min_support,
+        k_anon: config.k_anon,
+        min_cell_cases: config.min_cell_cases,
+        min_history_days: config.min_history_days,
+        min_history_cases: config.min_history_cases,
+        ..steps::events_sensor::Params::default()
+    };
+    let (out, report) = steps::events_sensor::run_package(&doc.to_string(), &config.work_dir.join("packages"), &p).map_err(|e| SourceError::Sensor(e.to_string()))?;
+    let (output, report): (Value, Value) = (serde_json::from_str(&out).map_err(io)?, serde_json::from_str(&report).map_err(io)?);
+    Ok(json!({
+        "status": "ok", "semantics": "rust-events",
+        "signals": output["signals"].as_array().map_or(0, Vec::len), "discards": output["discards"].as_array().map_or(0, Vec::len),
+        "output": output, "report": report, "not_done": report["not_done"],
+    }))
 }
 
 fn run_sensor(config: &Config, run_id: &str, snap: &str, data_class: &str, events: &[&PlatformEvent]) -> Result<Value, SourceError> {

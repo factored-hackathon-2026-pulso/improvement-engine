@@ -59,7 +59,10 @@ fn cfg(work: &Path, extra: &[(&str, &str)]) -> Config {
         ("batch_cap", "5000"),
         ("min_history_days", "0"),
     ];
-    pairs.extend_from_slice(extra);
+    for (k, v) in extra {
+        pairs.retain(|(e, _)| e != k);
+        pairs.push((k, v));
+    }
     Config::from_pairs(&pairs).unwrap()
 }
 
@@ -152,4 +155,51 @@ fn stand_in_remains_selectable_and_unchanged() {
     assert_eq!(recs[0]["evidence"]["sensor"], "claude-standin");
     assert_eq!(recs[0]["sensor"]["semantics"], "claude-standin");
     assert!(!work.join("packages").join(recs[0]["package"].as_str().unwrap()).join("cases.ndjson").exists());
+}
+
+/// Real R1S generator output (Python, not committed: 20000 events is ~5 MB). Set `R1G_PRODUCT_SIM_DIR` to a directory holding
+/// `<scenario>-7.sqlite` for the four scenarios and `null-s1..null-s20.sqlite`; the test skips (and says so) when unset.
+fn real_sim(file: &str) -> Option<(PathBuf, Vec<Value>)> {
+    let dir = PathBuf::from(std::env::var("R1G_PRODUCT_SIM_DIR").ok()?);
+    let src = dir.join(file);
+    if !src.is_file() {
+        return None;
+    }
+    let work = temp_path("real");
+    let db = work.join("product.db");
+    std::fs::copy(&src, &db).unwrap();
+    let w = work.join("work");
+    let recs = run_all(&db, &cfg(&w, &[("batch_cap", "10000"), ("min_history_days", "0")]), &w);
+    Some((w, recs))
+}
+
+#[test]
+fn real_generator_scenarios_through_the_tick() {
+    if std::env::var("R1G_PRODUCT_SIM_DIR").is_err() {
+        eprintln!("SKIP real_generator_scenarios_through_the_tick: R1G_PRODUCT_SIM_DIR not set");
+        return;
+    }
+    let cells = |recs: &[Value]| -> Vec<String> { recs.last().unwrap()["sensor"]["output"]["signals"].as_array().unwrap().iter().map(|s| format!("{}:{}", s["metric_id"], s["population"])).collect() };
+    for (sc, expect) in [("escalation_rise", "reassignment_rate"), ("recurrence_rise", "recurrence_rate")] {
+        let (_, recs) = real_sim(&format!("{sc}-7.sqlite")).unwrap();
+        let got = cells(&recs);
+        eprintln!("R1G real {sc}: {got:?}");
+        assert!(got.iter().any(|g| g.contains(expect) && g.contains("pt/web_chat")), "{sc}: {got:?}");
+    }
+    let (_, recs) = real_sim("volume_drift-7.sqlite").unwrap();
+    let last = recs.last().unwrap();
+    eprintln!("R1G real volume_drift: signals {:?} drift {}", cells(&recs), last["sensor"]["report"]["drift"]);
+    assert!(cells(&recs).is_empty(), "drift is not an opportunity");
+    assert!(!last["sensor"]["report"]["drift"].as_array().unwrap().is_empty());
+    let mut admitted_runs = 0;
+    for i in 1..=20 {
+        let (_, recs) = real_sim(&format!("null-s{i}.sqlite")).unwrap();
+        let g = cells(&recs);
+        if !g.is_empty() {
+            eprintln!("R1G real null seed {i} admitted {g:?}");
+            admitted_runs += 1;
+        }
+    }
+    eprintln!("R1G real null: admitted runs {admitted_runs}/20");
+    assert!(admitted_runs <= 1, "admitted FPR {admitted_runs}/20 > 5%");
 }

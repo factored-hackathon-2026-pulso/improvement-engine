@@ -17,6 +17,7 @@ fn cfg(work: &Path, id: &str, cap: &str) -> Config {
         ("source_id", id),
         ("work_dir", work.to_str().unwrap()),
         ("runner_exe", RUNNER),
+        ("sensor", "stand-in"),
         ("batch_cap", cap),
     ])
     .unwrap()
