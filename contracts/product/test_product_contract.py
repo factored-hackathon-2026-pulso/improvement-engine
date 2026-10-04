@@ -8,7 +8,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator
+
+# Needs jsonschema (run with `uv run --with jsonschema ...`); skip with a clear reason instead of breaking collection.
+pytest.importorskip("jsonschema", reason="contracts/product tests need jsonschema (see README)")
+from jsonschema import Draft202012Validator  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
