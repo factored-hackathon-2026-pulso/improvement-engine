@@ -13,6 +13,8 @@ Set-StrictMode -Version Latest
 $repo = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $packages = @($TouchedPackages | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 
+$bad = @($packages | Where-Object { $_ -notmatch '^[A-Za-z0-9][A-Za-z0-9._/-]*$' -or $_ -match '\.\.' })
+if ($bad.Count) { [Console]::Error.WriteLine("Invalid touched package path(s): $($bad -join ', ')"); exit 1 }
 if (-not $CiCommand) { $CiCommand = "& '$repo\scripts\verify-local-ci.ps1'" }
 if (-not $PytestCommand -and $packages.Count) {
     $PytestCommand = ($packages | ForEach-Object { "python -m pytest -q '$repo\$_'; if (`$LASTEXITCODE) { exit `$LASTEXITCODE }" }) -join '; '

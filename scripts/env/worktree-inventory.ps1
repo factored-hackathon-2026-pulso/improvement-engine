@@ -15,6 +15,7 @@ $merged = if ($MergedBranchesFile) { @(Get-Content $MergedBranchesFile | Where-O
           else { @(git branch --merged $Base --format '%(refname:short)' | ForEach-Object { $_.Trim() }) }
 
 $worktrees = @()
+$first = $true
 foreach ($block in ($listText -split "(\r?\n){2,}")) {
     if ($block -notmatch '(?m)^worktree (.+)$') { continue }
     $path = $Matches[1].Trim()
@@ -22,12 +23,13 @@ foreach ($block in ($listText -split "(\r?\n){2,}")) {
     $owner = if ($branch -like 'claude/*' -or $path -match '-claude-') { 'claude' }
              elseif ($branch -like 'codex/*' -or $path -match '-codex-') { 'codex' }
              else { 'unknown' }
-    $worktrees += [pscustomobject]@{ path = $path; branch = $branch; owner = $owner; merged = ($merged -contains $branch) }
+    $worktrees += [pscustomobject]@{ path = $path; branch = $branch; owner = $owner; merged = ($merged -contains $branch); primary = $first }
+    $first = $false
 }
 
 $count = $worktrees.Count
 $unmerged = @($worktrees | Where-Object { -not $_.merged } | ForEach-Object { $_.branch })
-$plan = @($worktrees | Where-Object { $_.merged -and $_.owner -eq 'claude' -and $_.branch -notin @('main', 'master') } |
+$plan = @($worktrees | Where-Object { $_.merged -and -not $_.primary -and $_.owner -eq 'claude' -and $_.branch -notin @('main', 'master') } |
     ForEach-Object { [pscustomobject]@{ branch = $_.branch; path = $_.path; action = "git worktree remove `"$($_.path)`" (NOT executed)" } })
 $result = [pscustomobject]@{ registered = $count; cap = $Cap; over_cap = ($count -gt $Cap); dry_run = $true
     worktrees = $worktrees; unmerged = $unmerged; retirement_plan = $plan }

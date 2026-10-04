@@ -10,8 +10,9 @@ foreach ($item in ($Assignment | ForEach-Object { $_ -split ',' } | Where-Object
     if ($i -lt 1) { $errors += "Malformed assignment '$item' (expected lane=dir)."; continue }
     $lane = $item.Substring(0, $i)
     $dir = $item.Substring($i + 1)
-    $norm = ($dir -replace '/', [string][char]92).TrimEnd([char]92).ToLowerInvariant()
-    if ($norm -notmatch '^d:.+') { $errors += "Lane '$lane': target dir '$dir' is not on D:."; continue }
+    if ($dir -notmatch '^[Dd]:[/\\]') { $errors += "Lane '$lane': target dir '$dir' is not an absolute path on D:."; continue }
+    $norm = [IO.Path]::GetFullPath($dir).TrimEnd([char]92).ToLowerInvariant()
+    if ($norm -notmatch '^d:\\.+') { $errors += "Lane '$lane': target dir '$dir' is not on D:."; continue }
     if ($seen.ContainsKey($norm)) { $errors += "Lanes '$($seen[$norm])' and '$lane' share target dir '$dir'." }
     else { $seen[$norm] = $lane }
 }
