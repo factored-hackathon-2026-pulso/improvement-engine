@@ -92,8 +92,18 @@ class PostgresSink:
 
     def ensure_schema(self) -> None:
         with self._con.cursor() as cur:
+            missing = []
+            for t in PRODUCT_COLUMNS:  # provisioned targets (db/sql) are left alone: the writer role has no CREATE
+                cur.execute("SELECT to_regclass(%s)", (f"product.{t}",))
+                if not cur.fetchone()[0]:
+                    missing.append(t)
+            if not missing:
+                self._con.commit()
+                return
             cur.execute("CREATE SCHEMA IF NOT EXISTS product")
             for t, cols in PRODUCT_COLUMNS.items():
+                if t not in missing:
+                    continue
                 defs = [f"{c} {PRODUCT_TYPES[t][c]}" for c in cols]
                 defs += ["_batch_id text", "_source_file text", "_ingested_at timestamptz NOT NULL DEFAULT now()"]
                 cur.execute(f"CREATE TABLE IF NOT EXISTS product.{t} ({', '.join(defs)})")
