@@ -2,6 +2,7 @@
 //! debug-console consumes (JSON routes plus SSE with `Last-Event-ID` resume and 410 snapshot recovery).
 //! Read-only by default; loopback only; never depends on `crates/core`.
 pub mod app;
+pub mod automation;
 pub mod event;
 pub mod ingest;
 pub mod project;

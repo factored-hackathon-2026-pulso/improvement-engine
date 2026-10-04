@@ -140,7 +140,7 @@ fn put_config_needs_admin_validates_audits_and_recomputes() {
     assert_eq!(item(&b, "cobro_indebido")["stage"], 1);
     assert!(b["banner"].is_null());
     let ev = s.events_after("automation-audit", 0, 10);
-    assert!(ev.iter().any(|e| e["kind"] == "automation.config_changed" && e["data"]["after"]["repeat_q_min_cases"] == 50 && e["data"]["before"]["repeat_q_min_cases"] == 20), "{ev:?}");
+    assert!(ev.iter().any(|e| e["kind"] == "automation_config_changed" && e["data"]["after"]["repeat_q_min_cases"] == 50 && e["data"]["before"]["repeat_q_min_cases"] == 20), "{ev:?}");
 }
 
 #[test]
@@ -166,6 +166,6 @@ fn approve_is_simulated_needs_csrf_and_publish_needs_approval_first() {
     assert_eq!((r.status, body(&r)["state"].as_str()), (200, Some("staged_simulated")));
     assert_eq!(get(&app, &format!("{A}/case-types/cobro_indebido")).1["proposal"]["state"], "staged_simulated");
     let ev = s.events_after("automation-audit", 0, 20);
-    assert!(ev.iter().any(|e| e["kind"] == "automation.proposal_approved_simulated"));
-    assert!(ev.iter().any(|e| e["kind"] == "automation.publish_staging_simulated"));
+    assert!(ev.iter().any(|e| e["kind"] == "automation_proposal_approved_simulated"));
+    assert!(ev.iter().any(|e| e["kind"] == "automation_publish_staging_simulated"));
 }

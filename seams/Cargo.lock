@@ -237,6 +237,7 @@ dependencies = [
 name = "debug-api"
 version = "0.0.0"
 dependencies = [
+ "maturity",
  "serde_json",
  "sha2 0.10.9",
  "tiny_http",
