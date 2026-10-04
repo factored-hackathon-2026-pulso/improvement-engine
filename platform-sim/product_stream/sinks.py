@@ -92,8 +92,18 @@ class PostgresSink:
 
     def ensure_schema(self) -> None:
         with self._con.cursor() as cur:
+            missing = []
+            for t in PRODUCT_COLUMNS:  # provisioned targets (db/sql) are left alone: the writer role has no CREATE
+                cur.execute("SELECT to_regclass(%s)", (f"product.{t}",))
+                if not cur.fetchone()[0]:
+                    missing.append(t)
+            if not missing:
+                self._con.commit()
+                return
             cur.execute("CREATE SCHEMA IF NOT EXISTS product")
             for t, cols in PRODUCT_COLUMNS.items():
+                if t not in missing:
+                    continue
                 defs = [f"{c} {PRODUCT_TYPES[t][c]}" for c in cols]
                 defs += ["_batch_id text", "_source_file text", "_ingested_at timestamptz NOT NULL DEFAULT now()"]
                 cur.execute(f"CREATE TABLE IF NOT EXISTS product.{t} ({', '.join(defs)})")
@@ -112,7 +122,8 @@ class PostgresSink:
             for t, rows in rows_by_table.items():
                 if not rows:
                     continue
-                if t == "customer_case_slots":
+                if t == "customer_case_slots":  # mutable current state: the last row per customer wins
+                    rows = list({r["customer_id"]: r for r in rows}.values())
                     cur.executemany("DELETE FROM product.customer_case_slots WHERE customer_id = %s",
                                     [(r["customer_id"],) for r in rows])
                 cols = [c for c in PRODUCT_COLUMNS[t] if all(c in r for r in rows)]

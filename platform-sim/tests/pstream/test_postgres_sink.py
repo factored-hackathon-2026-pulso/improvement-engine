@@ -120,3 +120,34 @@ def test_overwrite_refuses_when_foreign_rows_survive_reset(monkeypatch, capsys):
     assert rc == 2
     assert not any("INSERT" in sql for sql, _ in conn.log)
     assert "s3cr3t" not in capsys.readouterr().err
+
+
+def test_ensure_schema_issues_no_ddl_when_tables_exist(monkeypatch):
+    """Found live: the loader role has no CREATE on the database/schema, and CREATE ... IF NOT EXISTS still checks
+    that privilege, so provisioned (db/sql) targets must be left alone."""
+
+    class ExistsCur(FakeCur):
+        def fetchone(self):
+            return ("product.event_log",)  # to_regclass() found it
+
+    class ExistsConn(FakeConn):
+        def cursor(self):
+            return ExistsCur(self.log)
+
+    conn = ExistsConn()
+    s, _ = sink(monkeypatch, conn)
+    s.ensure_schema()
+    assert not any(sql.lstrip().upper().startswith("CREATE") for sql, _ in conn.log)
+
+
+def test_customer_case_slots_keeps_last_row_per_customer_within_a_batch(monkeypatch):
+    """Found live: DELETE-all-then-INSERT-all left duplicate slot rows when one batch touched a customer twice
+    (the SQLite sink, deleting per row, ends with one)."""
+    conn = FakeConn()
+    s, _ = sink(monkeypatch, conn)
+    s.write_batch({"customer_case_slots": [{"customer_id": "c1", "open_case_id": "a"},
+                                           {"customer_id": "c2", "open_case_id": "x"},
+                                           {"customer_id": "c1", "open_case_id": "b"}]})
+    ins = next(p for sql, p in conn.log if sql.startswith("INSERT INTO product.customer_case_slots"))
+    got = {r[0]: r[1] for r in ins}
+    assert len(ins) == 2 and got == {"c1": "b", "c2": "x"}
