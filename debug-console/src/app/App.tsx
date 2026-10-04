@@ -34,6 +34,7 @@ function Shell() {
   const [provider, setProvider] = useState('unknown');
   const [session, setSession] = useState<SessionState>('loading');
   const [debugApi, setDebugApi] = useState<DebugApi | null>(null);
+  const [dataProvider, setDataProvider] = useState<string>('http');
   useEffect(() => {
     // public/config.json is the only source of the client provider (read at runtime, not baked into the bundle).
     let live = true;
@@ -44,6 +45,7 @@ function Shell() {
       const port = await bootDebugApi({ provider: c.dataProvider, baseUrl: c.apiBase, onSessionExpired: reportSessionExpired });
       if (!live) return;
       setDebugApi(port);
+      setDataProvider(c.dataProvider);
       if (c.dataProvider === 'http') {
         // Legacy client path (other screens still use it): unchanged behaviour.
         api.session()
@@ -76,6 +78,9 @@ function Shell() {
         </div>
       )}
       <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a> · <a href="#/sources">{t('sources.nav')}</a></nav>
+      {dataProvider !== 'http' && (run || path === '/sources' || path === '/memory') && (
+        <div className="banner bad" role="note" data-testid="provider-partial">{t('decl.partial', { provider: dataProvider })}</div>
+      )}
       <main>
         {run?.[1]
           ? <RunView

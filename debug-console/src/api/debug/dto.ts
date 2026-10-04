@@ -83,7 +83,9 @@ export const Session = z.object({
 });
 export const Mode = z.object({ target: str, runtime_profile: str, doubles: z.array(str) });
 
-export const CommandAck = z.object({ command_ref: z.object({ kind: str, id: str }), status_url: str, state: str.default('requested') });
+export const CommandAck = z.object({ command_ref: z.object({ kind: str, id: str }), status_url: str,
+  // An ack only ever means "requested": confirmation is a separate fact observed later (external-commands.confirmed_at).
+  state: z.unknown().transform((): 'requested' => 'requested') });
 
 export const Conflict = z.object({ expected_revision: z.number().int(), current_revision: z.number().int(), diff_ref: z.unknown().nullable().optional() });
 export interface Recovery { snapshot_ref: string; after_sequence: number }

@@ -12,9 +12,9 @@ const until = async (cond: () => boolean, ms = 3000) => {
   while (!cond()) { if (Date.now() - t0 > ms) throw new Error('timeout waiting for condition'); await new Promise((r) => setTimeout(r, 5)); }
 };
 const handlers = (over: Partial<StreamHandlers> = {}) => {
-  const got: number[] = []; const fatal: string[] = []; const resets: number[] = []; let drops = 0; let opens = 0;
-  const h: StreamHandlers = { onEvent: (e) => got.push(e.sequence), onReset: (r) => resets.push(r.floor), onOpen: () => { opens += 1; }, onDrop: () => { drops += 1; }, onFatal: (r) => fatal.push(r), ...over };
-  return { h, got, fatal, resets, drops: () => drops, opens: () => opens };
+  const got: number[] = []; const refs: string[] = []; const fatal: string[] = []; const resets: number[] = []; let drops = 0; let opens = 0;
+  const h: StreamHandlers = { onEvent: (e) => { got.push(e.sequence); refs.push(e.run_ref); }, onReset: (r) => resets.push(r.floor), onOpen: () => { opens += 1; }, onDrop: () => { drops += 1; }, onFatal: (r) => fatal.push(r), ...over };
+  return { h, got, refs, fatal, resets, drops: () => drops, opens: () => opens };
 };
 const enc = new TextEncoder();
 const problem = (status: number, body: object) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -26,9 +26,13 @@ describe('stream: hostile or surprising inputs', () => {
     const last = (await hz.api.events(runId, 0)).items.at(-1)?.sequence ?? 0;
     const s = handlers(); const stop = hz.api.openStream(runId, s.h, { afterSequence: last });
     await until(() => s.opens() > 0);
-    hz.backend.emitRaw(runId, { ...hz.backend.emit(runId), run_ref: 'other-run', sequence: last + 1 });
+    const [real] = hz.backend.emitHidden(runId, 1);
+    hz.backend.emitRaw(runId, { ...real!, run_ref: 'other-run' }); // foreign frame arrives FIRST with the expected next sequence
+    hz.backend.emitRaw(runId, real!);
     await new Promise((r) => setTimeout(r, 40));
     expect(s.got).toEqual([last + 1]); // exactly the real one, once
+    expect(s.refs).toEqual([runId]);
+    expect(s.fatal).toEqual([]);
     stop(); await hz.close();
   });
 

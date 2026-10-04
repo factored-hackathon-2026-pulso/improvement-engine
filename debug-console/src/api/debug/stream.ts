@@ -15,6 +15,9 @@ export interface StreamDeps {
   onUnauthorized: () => void;
 }
 
+/** Upper bound of one SSE frame (and of the unterminated tail): a hostile or broken server cannot grow the buffer without bound. */
+const MAX_FRAME_CHARS = 1024 * 1024;
+
 /** A snapshot ref must stay inside this run: a cursor/ref of another run is never followed (no cross-run leak). */
 const refBelongsToRun = (ref: string, runId: string): boolean => !ref.includes('/') || ref.includes(`/runs/${runId}/`) || ref.endsWith(`/runs/${runId}`);
 
@@ -33,7 +36,7 @@ export function runStream(deps: StreamDeps, h: StreamHandlers, opts: StreamOptio
     let attempt = 0;
     let opened = false;
     let gone = 0;
-    const apply = (e: RunEvent) => { last = e.sequence; h.onEvent(e); };
+    const apply = (e: RunEvent) => { if (ctl.signal.aborted) return; last = e.sequence; h.onEvent(e); };
     const deliver = async (ev: RunEvent) => {
       if (ev.run_ref !== runId || ev.sequence <= last) return; // other run / duplicate
       if (ev.sequence > last + 1) {
@@ -69,7 +72,9 @@ export function runStream(deps: StreamDeps, h: StreamHandlers, opts: StreamOptio
             h.onActivity?.();
             const r = parseSseFrames(buf + dec.decode(value, { stream: true }));
             buf = r.rest;
+            if (buf.length > MAX_FRAME_CHARS) throw new DebugApiError(0, 'frame_too_large', 'frame_too_large', '', true); // unterminated frame: drop and resume from `last`
             for (const f of r.frames) {
+              if (f.data.length > MAX_FRAME_CHARS) continue;
               let json: unknown;
               try { json = JSON.parse(f.data); } catch { continue; }
               const parsed = RunEvent.safeParse(scrubAndReport(json, 'sse'));
