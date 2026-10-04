@@ -289,6 +289,10 @@ name = "engine"
 version = "0.0.0"
 dependencies = [
  "abi",
+ "authority",
+ "core-client",
+ "eval",
+ "serde_json",
  "steps",
 ]
 

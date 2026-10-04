@@ -13,6 +13,7 @@ pub mod conformance;
 pub mod demo;
 pub mod executor;
 pub mod live;
+pub mod live_core;
 mod lib_codec;
 pub mod store;
 pub mod synth;

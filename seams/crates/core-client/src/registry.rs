@@ -275,6 +275,15 @@ impl<'a, A: Authorizer> RegistryFlow<'a, A> {
         }
     }
 
+    /// Rebuilds the flow for the publish half when the approval happened in an earlier call (a separate job handler, a
+    /// restarted process) and the job recorded it. It trusts nothing: if the proposal is not approved, Core refuses the
+    /// publish (`409 illegal_transition`).
+    pub fn resumed_after_approval(client: &'a RegistryClient, authorizer: &'a A, bot: Jws, agent_id: &str, proposal_id: &str, candidate_hash: &str, base_release_id: Option<String>) -> Self {
+        let mut f = Self::new(client, authorizer, bot, agent_id, proposal_id, candidate_hash, base_release_id);
+        f.approved = true;
+        f
+    }
+
     fn target(&self) -> Result<ProposalTarget, RegistryError> {
         let rev = self.client.proposal(&self.proposal_id, &self.bot)?.rev;
         Ok(ProposalTarget { proposal_id: self.proposal_id.clone(), candidate_hash: self.candidate_hash.clone(), expected_revision: rev })

@@ -317,6 +317,27 @@ fn nothing_debug_printed_carries_a_token_or_key_material() {
     }
 }
 
+/// The engine publishes in a later call than the approval (separate job handlers, possibly after a restart): the flow can be
+/// rebuilt from an approval the job recorded. A FRESH flow still refuses to publish; Core stays the judge (`illegal_transition`
+/// when the proposal was never approved).
+#[test]
+fn a_flow_resumed_from_a_recorded_approval_publishes_and_a_fresh_flow_does_not() {
+    let f = FakeRegistry::start("evaluated", false);
+    let (c, a) = (client(&f), auth());
+    let mut fresh = RegistryFlow::new(&c, &a, bot(), "atencion", "prop-1", CAND, Some(BASE.into()));
+    assert!(matches!(fresh.publish("pub-0"), Err(RegistryError::Flow(_))));
+    RegistryFlow::new(&c, &a, bot(), "atencion", "prop-1", CAND, Some(BASE.into())).approve().unwrap();
+    let mut resumed = RegistryFlow::resumed_after_approval(&c, &a, bot(), "atencion", "prop-1", CAND, Some(BASE.into()));
+    let p = resumed.publish("pub-1").unwrap();
+    assert_eq!(p.release_id, "rel-new");
+    assert_eq!(resumed.alias_read("staging").unwrap().release_id, "rel-new");
+    // never approved: the resumed flow sends, and Core refuses
+    let g = FakeRegistry::start("evaluated", false);
+    let c2 = client(&g);
+    let mut lying = RegistryFlow::resumed_after_approval(&c2, &a, bot(), "atencion", "prop-1", CAND, Some(BASE.into()));
+    assert_eq!(lying.publish("pub-2"), Err(RegistryError::Http { status: 409, code: Some("illegal_transition".into()) }));
+}
+
 /// LIVE (not run by default, no containers are started by this suite): the real image's Core `/v1/registry`.
 /// Needs a running stack from `e2e-core/run.ps1` (Podman, owned by the operator), a frozen AND natively evaluated
 /// proposal (the K3 writer flow + evaluate stage), and the local human issuer's SIM key (the stack's
