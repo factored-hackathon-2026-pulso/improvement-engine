@@ -18,7 +18,7 @@
     "journal CL-0042",
     "git d5c89e7, 5774854"
   ],
-  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
+  "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept. Loop-2 note added 2026-10-04 by the closer agent (not an independent reviewer): M3-R2.",
   "findings": [
     {
       "id": "M3-R1",
@@ -27,6 +27,14 @@
       "status": "fixed",
       "fix_ref": "5774854",
       "red_ref": "d5c89e7"
+    },
+    {
+      "id": "M3-R2",
+      "loop": 2,
+      "summary": "stage corpus used a non-hex evidence id (ev_synth0001) that the hardened TPS rejects, so 6 stage-hardening tests failed after the TPS registry change",
+      "status": "fixed",
+      "fix_ref": "4ed3f18",
+      "note": "found by the closer re-running core-bridge tests/llm; fixture-only change, scanner and C-12 untouched"
     }
   ],
   "verdict": "closed"

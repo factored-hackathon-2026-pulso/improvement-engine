@@ -16,7 +16,8 @@
   "provenance": "reconstructed",
   "sources": [
     "journal CL-0045",
-    "git a35883a, c46f04c, ea28b95"
+    "git a35883a, c46f04c, ea28b95",
+    "git ab17678, a35883a, c46f04c, ea28b95"
   ],
   "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
   "findings": [
@@ -45,9 +46,41 @@
       "id": "E0-R4",
       "loop": 1,
       "summary": "first-Windows-build receipt of the sensor exe is not in the repo; E0 path only via env var",
-      "status": "open",
-      "note": "GT0 gap analysis item 8; not evidenced by a review."
+      "status": "fixed",
+      "note": "post-hoc receipt docs/reports/gates/gt0/e0-sensor-receipt.json: exe sha256/size/mtime, source consistency (no Rust change vs origin/main), tests run against it (174 passed with exe, 171 passed/4 skipped without)",
+      "fix_ref": "ab17678"
+    },
+    {
+      "id": "E0-R5",
+      "loop": 2,
+      "summary": "the original first-build log of the sensor exe was not retained and cargo was not run in this task; the receipt is post-hoc and circumstantial (mtime ordering), not a build attestation",
+      "status": "accepted",
+      "reason": "Rebuilding needs cargo (not available here). The receipt states this limit explicitly and pins the binary by sha256.",
+      "owner": "Team CL, lane L-E2E (ED0)",
+      "tier": "T0 (wp_table ED0)",
+      "tracking": "rebuild and re-receipt when cargo is available"
+    },
+    {
+      "id": "E0-R6",
+      "loop": 2,
+      "summary": "E0 path is supplied only by env var or CLI at runtime",
+      "status": "accepted",
+      "reason": "Intended: no E0 path or data is committed (DC0 data-class rule).",
+      "owner": "Team CL, lane L-E2E",
+      "tier": "T0 (wp_table ED0)",
+      "tracking": "none, by design"
     }
   ],
-  "verdict": "open"
+  "verdict": "closed",
+  "closure_verification": {
+    "by": "closer agent of Team Claude (verification by commit inspection and test re-run; NOT an independent reviewer)",
+    "date": "2026-10-04",
+    "head_at_verification": "4ed3f18 (claude/w1d-close)",
+    "evidence": [
+      "docs/reports/gates/gt0/e0-sensor-receipt.json",
+      "git show a35883a c46f04c ea28b95",
+      "e2e-core tests/unit with ED0_RUNNER_EXE: 174 passed, 1 skipped"
+    ],
+    "independence": "Loop-2 reviews are cited in journal CL-0046 as independent but their reviewer identifiers were not recorded; this log does not claim more than the journal states."
+  }
 }

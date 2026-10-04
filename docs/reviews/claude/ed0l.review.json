@@ -17,7 +17,8 @@
   "sources": [
     "journal CL-0043",
     "journal CL-0045",
-    "git e081c98, c46f04c"
+    "git e081c98, c46f04c",
+    "git 38e1adf, 2e8a676"
   ],
   "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
   "findings": [
@@ -40,9 +41,41 @@
       "id": "EDL-R3",
       "loop": 1,
       "summary": "complementary suppression not verified end to end in E0 mode",
-      "status": "open",
-      "note": "Open risk from CL-0043; c46f04c claims it, the GT0 gap analysis asks to verify. Worktree w1a-tps."
+      "status": "fixed",
+      "note": "complementary suppression for declared window/group overlaps (hide the smallest published cell until no relation has a single hidden cell); 2e8a676 fixes a crash on empty or singleton part lists",
+      "fix_ref": "38e1adf, 2e8a676",
+      "red_ref": "38e1adf (tests in the same commit, e2e-core/tests/unit/test_ed0l_lab.py)"
+    },
+    {
+      "id": "EDL-R4",
+      "loop": 2,
+      "summary": "complementary suppression only covers overlaps the caller declares (window_parts/group_parts); an undeclared overlap between published cells is not detected",
+      "status": "accepted",
+      "reason": "Residual disclosure risk: the lab cannot discover relations it is not told about. The E0 window feeds fixed signature groups and non-overlapping windows. Not re-verified on real E0 by the closer (no E0 data in this task).",
+      "owner": "Team CL, lane L-E2E (ED0L)",
+      "tier": "T0 (wp_table ED0L)",
+      "tracking": "journal CL-0046 privacy bullet"
+    },
+    {
+      "id": "EDL-R5",
+      "loop": 2,
+      "summary": "E0 mode: small numerator/complement cells and exception text (c46f04c) verified only at unit level with synthetic fixtures by the closer",
+      "status": "accepted",
+      "reason": "Real-E0 re-run is outside this task (no E0 data, no E0 handling). Live window 2 on real treated E0 aggregates ran under the same code per THREAD01 and the journal.",
+      "owner": "Team CL, lane L-E2E",
+      "tier": "T0 (wp_table ED0L)",
+      "tracking": "none beyond this log"
     }
   ],
-  "verdict": "open"
+  "verdict": "closed",
+  "closure_verification": {
+    "by": "closer agent of Team Claude (verification by commit inspection and test re-run; NOT an independent reviewer)",
+    "date": "2026-10-04",
+    "head_at_verification": "4ed3f18 (claude/w1d-close)",
+    "evidence": [
+      "git show --stat 38e1adf 2e8a676 (ed0_lab.py + test_ed0l_lab.py)",
+      "e2e-core tests/unit: 174 passed, 1 skipped at 4ed3f18"
+    ],
+    "independence": "Loop-2 reviews are cited in journal CL-0046 as independent but their reviewer identifiers were not recorded; this log does not claim more than the journal states."
+  }
 }

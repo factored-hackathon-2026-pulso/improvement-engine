@@ -9,6 +9,7 @@ One `<name>.review.json` per reviewed WP group, format `review-log/v1`:
 - `verdict`: `closed` only when no finding is open.
 
 Closure: `python scripts/gov/crv0_closure.py` exits 0 only when every log is valid and closed and every required WP (CRV0
-dependencies plus the E0 data path) is covered by a closed log. Today it exits 1 on purpose: the open findings (TPS opaque ids,
-ED0L complementary suppression, M2a runtime wiring, E0 sensor build receipt) are real and are not closed by this backfill.
-The backfilled logs cover loop 1 only; loops 2 and 3 have not happened.
+dependencies plus the E0 data path) is covered by a closed log. `closed` does not mean risk-free: residual risks stay in the
+log as `accepted` findings with `reason`, `owner`, `tier` and `tracking` (hex-encoded ids in TPS, undeclared overlaps in ED0L,
+unrun real-PG16 and gateway smoke, post-hoc sensor receipt). `closure_verification` records who verified the closure and how;
+the closer is not an independent reviewer, and loop-2 reviewer identities were not recorded.

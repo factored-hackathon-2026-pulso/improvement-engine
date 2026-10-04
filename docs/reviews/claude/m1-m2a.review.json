@@ -18,7 +18,9 @@
   "sources": [
     "journal CL-0043",
     "journal CL-0044",
-    "git ea577e9"
+    "git ea577e9",
+    "journal CL-0046",
+    "git 18e8689, 61ba263, 68f77eb, e14119d, 2fba233"
   ],
   "note": "Reconstructed after the fact on 2026-10-04 from the shared journal and commit history. Findings are only those the journal or the cited fix commits record; per-review reviewer identifiers and raw reports were not kept.",
   "findings": [
@@ -47,9 +49,50 @@
       "id": "M2-R4",
       "loop": 1,
       "summary": "SpendGuard is not wired into the runtime (main.py builds only SpendMeteringGateway); ceiling not shown through the runtime",
-      "status": "open",
-      "note": "Open risk in CL-0043; worktree w1a-spend."
+      "status": "fixed",
+      "note": "SpendGuard wired in production (env ceiling PULSO_LLM_SPEND_CEILING, kill file, store-backed spent) in llm/config.py and main.py",
+      "fix_ref": "61ba263, e14119d",
+      "red_ref": "18e8689, 68f77eb"
+    },
+    {
+      "id": "M2-R5",
+      "loop": 2,
+      "summary": "ledger CHECK constraint did not admit the guard outcomes kill_switch / ceiling_exceeded (migration l3_003 added); kill env spellings did not fail closed; absurd ceilings accepted",
+      "status": "fixed",
+      "fix_ref": "e14119d",
+      "red_ref": "68f77eb",
+      "note": "real-PG16 tests in 2fba233"
+    },
+    {
+      "id": "M2-R6",
+      "loop": 2,
+      "summary": "real Postgres 16 evidence for the spend guard (l3_003, meter_job_total, ceiling and kill end to end) was not re-run by the closer",
+      "status": "accepted",
+      "reason": "No Postgres or Podman in this task; the 10 PG tests skip without PULSO_TEST_PG_ADMIN. The author session reports a real PG16 run (tests/llm + tests/l3a 193 passed, journal CL-0046). The closer re-ran core-bridge tests/llm without PG: all pass.",
+      "owner": "Team CL, lane L-MODEL (M2a)",
+      "tier": "T0 (wp_table M2a)",
+      "tracking": "re-run with PULSO_TEST_PG_ADMIN when a PG16 is available"
+    },
+    {
+      "id": "M1-R1",
+      "loop": 2,
+      "summary": "gateway healthcheck path and the live gateway smoke are unverified (CL-0043 open risk; the live smoke is skipped)",
+      "status": "accepted",
+      "reason": "Needs a Podman stack, not available here; the gateway config generator, internal overlay and stand-in marker are unit-tested.",
+      "owner": "Team CL, lane L-MODEL (M1)",
+      "tier": "T0 (wp_table M1)",
+      "tracking": "journal CL-0043"
     }
   ],
-  "verdict": "open"
+  "verdict": "closed",
+  "closure_verification": {
+    "by": "closer agent of Team Claude (verification by commit inspection and test re-run; NOT an independent reviewer)",
+    "date": "2026-10-04",
+    "head_at_verification": "4ed3f18 (claude/w1d-close)",
+    "evidence": [
+      "git show --stat 18e8689 61ba263 68f77eb e14119d 2fba233",
+      "core-bridge tests/llm (uv deps + opentelemetry-sdk, psycopg_pool): all pass at 4ed3f18, PG tests skipped (PULSO_TEST_PG_ADMIN unset)"
+    ],
+    "independence": "Loop-2 reviews are cited in journal CL-0046 as independent but their reviewer identifiers were not recorded; this log does not claim more than the journal states."
+  }
 }
