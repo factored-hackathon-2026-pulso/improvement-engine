@@ -179,3 +179,52 @@ fn wiki_read_is_tenant_scoped_and_confines_paths() {
     }
     assert_eq!(rig.call("POST", &format!("{BROKER}/wiki/read"), Some(&json!({"paths": ["x"]})), Some(&rig.lab_token("t1", "lab")), &[]).0, 403);
 }
+
+fn read_result(rig: &Rig, sid: &str, key: &str, metric: &str, window: &str) -> Value {
+    let (st, q) = query(rig, sid, key, metric, window);
+    assert_eq!(st, 202, "{q}");
+    let (st, s) = rig.lab("GET", &format!("/lab/queries/q-{key}"), None, "t1", None);
+    assert_eq!(st, 200, "{s}");
+    let (st, res) = rig.lab("GET", &format!("/lab/results/{}", s["result_ref"].as_str().unwrap()), None, "t1", None);
+    assert_eq!(st, 200, "{res}");
+    res
+}
+
+#[test]
+fn a_tampered_lab_with_huge_counts_never_panics_the_broker() {
+    // 2e17 * 100 overflows i64: a panic here would poison the write lock and take every later write down with it.
+    let rig = rig_with_lab("huge", &[("recurrence_rate", "w1", "g_a", 200_000_000_000_000_000, 200_000_000_000_000_000), ("recurrence_rate", "w1", "g_b", 1, 12)]);
+    let (_, sid) = rig.open_session("t1", REF, 60);
+    let res = read_result(&rig, &sid, "huge", "recurrence_rate", "w1");
+    assert_eq!(res["rows"][0][4], json!(1.0), "{res}");
+    assert_eq!(rig.issue_grant("t1", REF, "lab", 60).0, 201, "the write lock is not poisoned");
+}
+
+#[test]
+fn rows_below_the_labs_min_cell_are_withheld_because_the_rate_would_expose_the_numerator() {
+    // ED0L `min_cell`: a numerator (or complement) below it makes the rate a disclosure. 1 of 40 is 0.03: one case.
+    let rows = [("recurrence_rate", "w1", "g_small", 1, 40), ("recurrence_rate", "w1", "g_comp", 39, 40), ("recurrence_rate", "w1", "g_ok", 20, 40)];
+    let path = make_lab("mincell", 10, &rows);
+    rusqlite::Connection::open(&path).unwrap().execute("insert into lab_meta values ('min_cell', '3')", []).unwrap();
+    let rig = Rig::with(|c| {
+        c.labs.insert("t1".into(), path);
+    });
+    rig.bind_ref(REF, "t1");
+    let (_, sid) = rig.open_session("t1", REF, 60);
+    let res = read_result(&rig, &sid, "mc", "recurrence_rate", "w1");
+    let groups: Vec<&str> = res["rows"].as_array().unwrap().iter().map(|r| r[2].as_str().unwrap()).collect();
+    assert_eq!(groups, ["g_ok"], "{res}");
+}
+
+#[test]
+fn the_brokers_own_min_cell_floor_applies_even_when_the_lab_file_is_silent() {
+    let path = make_lab("mincfg", 10, &[("recurrence_rate", "w1", "g_small", 1, 40), ("recurrence_rate", "w1", "g_ok", 20, 40)]);
+    let rig = Rig::with(|c| {
+        c.labs.insert("t1".into(), path);
+        c.min_cell = 3;
+    });
+    rig.bind_ref(REF, "t1");
+    let (_, sid) = rig.open_session("t1", REF, 60);
+    let res = read_result(&rig, &sid, "mc2", "recurrence_rate", "w1");
+    assert_eq!(res["rows"].as_array().unwrap().len(), 1, "{res}");
+}

@@ -42,6 +42,7 @@ fn path_ok(p: &str) -> bool {
 
 /// Rate of `num / cnt` rounded half-even to 2 decimals with exact integer arithmetic (the Python lab's `rate_of`).
 pub fn rate(num: i64, cnt: i64) -> f64 {
+    let (num, cnt) = (num as i128, cnt as i128); // a tampered lab may hold counts whose x100 overflows i64
     let (q, rem) = (num * 100 / cnt, num * 100 % cnt);
     let q = if rem * 2 > cnt || (rem * 2 == cnt && q % 2 == 1) { q + 1 } else { q };
     q as f64 / 100.0
@@ -90,7 +91,7 @@ impl App {
         let now = (self.now)();
         let grant_ref = fresh("grant:");
         let doc = json!({"grant_ref": grant_ref, "binding_ref": binding, "scope": scope, "issued_at_epoch": now, "expires_at_epoch": now + ttl as f64, "revoked": false});
-        let _w = self.write_lock.lock().unwrap();
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.store.put_doc("grant", tenant, &grant_ref, doc);
         json_resp(201, json!({"grant_ref": grant_ref, "tenant_id": tenant, "binding_ref": binding, "scope": scope, "expires_at": z_timestamp((now + ttl as f64) as i64)}))
     }
@@ -102,7 +103,7 @@ impl App {
             Err(e) => return e,
         };
         let tenant = claims["tenant_id"].as_str().unwrap_or_default();
-        let _w = self.write_lock.lock().unwrap();
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(mut g) = self.store.get_doc("grant", tenant, grant_ref) else { return code(404, "grant_not_found") };
         g["revoked"] = json!(true);
         self.store.put_doc("grant", tenant, grant_ref, g);
@@ -111,12 +112,22 @@ impl App {
 
     fn lab_db(&self, tenant: &str) -> Result<rusqlite::Connection, Resp> {
         let path = self.cfg.labs.get(tenant).ok_or_else(|| code(404, "lab_unavailable"))?;
-        rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|_| code(503, "lab_unavailable"))
+        let con = rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX).map_err(|_| code(503, "lab_unavailable"))?;
+        con.pragma_update(None, "query_only", true).map_err(|_| code(503, "lab_unavailable"))?;
+        Ok(con)
+    }
+
+    fn meta(con: &rusqlite::Connection, key: &str) -> i64 {
+        con.query_row("select value from lab_meta where key = ?", [key], |r| r.get::<_, String>(0)).ok().and_then(|v| v.parse().ok()).unwrap_or(0)
     }
 
     fn lab_k(&self, con: &rusqlite::Connection) -> i64 {
-        let meta: i64 = con.query_row("select value from lab_meta where key = 'k'", [], |r| r.get::<_, String>(0)).ok().and_then(|v| v.parse().ok()).unwrap_or(0);
-        meta.max(self.cfg.min_k).max(1)
+        Self::meta(con, "k").max(self.cfg.min_k).max(1)
+    }
+
+    /// The numerator/complement floor: the larger of the lab's own `min_cell` and the broker's.
+    fn lab_min_cell(&self, con: &rusqlite::Connection) -> i64 {
+        Self::meta(con, "min_cell").max(self.cfg.min_cell).max(0)
     }
 
     // ---- POST /lab/sessions ----------------------------------------------------------------------------------------
@@ -138,7 +149,7 @@ impl App {
         let k = self.lab_k(&con);
         let rows: i64 = con.query_row("select count(*) from lab_rows", [], |r| r.get(0)).unwrap_or(0);
         let sid = fresh("sess-");
-        let _w = self.write_lock.lock().unwrap();
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.store.put_doc("lab_session", tenant, &sid, json!({"grant_ref": grant, "binding_ref": binding, "closed": false}));
         json_resp(200, json!({"session_ref": sid, "revision": 1, "manifest_digest": sha256_hex(format!("lab|k={k}|rows={rows}").as_bytes()),
                               "limits": {"max_rows": MAX_ROWS, "k": k}, "table_catalog": []}))
@@ -162,7 +173,7 @@ impl App {
             Err(e) => return e,
         };
         if close {
-            let _w = self.write_lock.lock().unwrap();
+            let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             s["closed"] = json!(true);
             self.store.put_doc("lab_session", tenant, sid, s.clone());
         }
@@ -195,7 +206,7 @@ impl App {
         let params = json!({"metric_id": metric, "window_id": window});
         let qref = format!("q-{key}");
         let reply = |status| json_resp(status, json!({"query_ref": qref, "status_url": format!("/lab/queries/{qref}")}));
-        let _w = self.write_lock.lock().unwrap();
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(prior) = self.store.get_doc("lab_query", tenant, key) {
             return if prior["params"] == params { reply(202) } else { code(409, "query_key_conflict") };
         }
@@ -204,6 +215,7 @@ impl App {
             Err(e) => return e,
         };
         let k = self.lab_k(&con);
+        let min_cell = self.lab_min_cell(&con);
         let started = std::time::Instant::now();
         let fetched: Result<Vec<(String, String, String, String, i64, i64)>, rusqlite::Error> = con.prepare(LAB_SQL).and_then(|mut st| {
             st.query_map([metric, window], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)))?.collect()
@@ -211,7 +223,7 @@ impl App {
         let Ok(all) = fetched else { return code(503, "lab_unavailable") };
         let (mut rows, mut withheld, mut digest_src) = (Vec::new(), 0usize, String::new());
         for (ev, m, w, g, num, cnt) in all {
-            if cnt < k || num < 0 || num > cnt {
+            if cnt < k || num < 0 || num > cnt || num < min_cell || cnt - num < min_cell {
                 withheld += 1;
                 continue;
             }

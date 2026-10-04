@@ -45,12 +45,14 @@ pub struct Config {
     pub labs: HashMap<String, std::path::PathBuf>,
     /// Floor of the k-anonymity threshold: rows with fewer cases are never served, whatever the lab file says.
     pub min_k: i64,
+    /// Floor of the numerator/complement size: a row whose numerator or complement is below it is withheld (the rate would expose it).
+    pub min_cell: i64,
 }
 
 impl Config {
     /// Everything optional off: no upload pin, no admin channel.
     pub fn new(ring: Arc<KeyRing>) -> Config {
-        Config { ring, upload_pin: None, admin: false, labs: HashMap::new(), min_k: 10 }
+        Config { ring, upload_pin: None, admin: false, labs: HashMap::new(), min_k: 10, min_cell: 0 }
     }
 }
 
@@ -135,7 +137,7 @@ impl App {
     }
 
     pub(crate) fn fault(&self, route: &str) -> Option<String> {
-        self.admin.lock().unwrap().faults.get_mut(route).and_then(VecDeque::pop_front)
+        self.admin.lock().unwrap_or_else(std::sync::PoisonError::into_inner).faults.get_mut(route).and_then(VecDeque::pop_front)
     }
 
     pub(crate) fn parse(r: &Req) -> Option<Map<String, Value>> {
@@ -166,7 +168,7 @@ impl App {
             return code(422, "idempotency_key_mismatch");
         }
         let mode = self.fault("bind");
-        let _w = self.write_lock.lock().unwrap();
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let prior = self.store.binding(&tenant, &command_key);
         if prior.as_ref().is_some_and(|p| p.request_digest != request_digest) {
             return code(409, "digest_mismatch");
@@ -199,7 +201,7 @@ impl App {
         let owner = body.get("binding_ref").and_then(Value::as_str).and_then(|b| self.store.binding_ref_tenant(b));
         let reason = if owner.as_deref() != Some(tenant) {
             Some("binding_unknown") // unknown or another tenant's binding: never allowed
-        } else if self.admin.lock().unwrap().deny_operations.contains(operation) {
+        } else if self.admin.lock().unwrap_or_else(std::sync::PoisonError::into_inner).deny_operations.contains(operation) {
             Some("revoked")
         } else {
             None
@@ -262,7 +264,7 @@ impl App {
         }
         let rf = json!({"id": format!("artifact:{digest}"), "digest": digest, "media_type": up["media_type"]});
         let envelope = json!({"schema_version": "1", "artifact": rf, "encoding": up["encoding"], "content": up["content"], "byte_length": byte_length});
-        let _w = self.write_lock.lock().unwrap();
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let outcome = self.store.put_artifact(&tenant, envelope);
         if outcome == PutOutcome::Conflict {
             return error(409, "digest_conflict");
@@ -300,7 +302,7 @@ impl App {
     // ---- POST /_e2e/config (driver/test channel, off by default) -------------------------------------------------
     fn admin_config(&self, r: &Req) -> Resp {
         let Some(cfg) = Self::parse(r) else { return code(422, "schema_invalid") };
-        let mut a = self.admin.lock().unwrap();
+        let mut a = self.admin.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(ops) = cfg.get("deny_operations").and_then(Value::as_array) {
             a.deny_operations = ops.iter().filter_map(|v| v.as_str().map(str::to_string)).collect();
         }

@@ -145,3 +145,45 @@ fn a_token_minted_before_this_process_booted_is_refused() {
     let fresh = rig.token("cb", "control-api", "binding", "t1", json!({"purpose": "core_task_binding"}));
     assert_eq!(rig.call("POST", "/internal/v1/core-task-bindings", Some(&body), Some(&fresh), &[("Idempotency-Key", "c")]).0, 200);
 }
+
+fn restamp(mut b: serde_json::Value) -> serde_json::Value {
+    b.as_object_mut().unwrap().remove("batch_digest");
+    b["batch_digest"] = json!(core_client::canon::sha256_hex(core_client::canon::jcs(&b).unwrap().as_bytes()));
+    b
+}
+
+#[test]
+fn event_identities_of_different_sources_never_collide_through_the_join_separator() {
+    // ledger identity = (source, kind, level, native id): "|" inside a source id must not forge another source's key.
+    let rig = Rig::new();
+    let schema = rig.upload_schema();
+    let mut e1 = domain(1, "case.viewed", &schema);
+    e1["native_event_id"] = json!("b|platform_event|-|n");
+    e1["source_event_digest"] = json!("1".repeat(64));
+    let mut b1 = batch(B { revision: None, from: None, to: None, cursor: "c1".into(), events: vec![e1] });
+    b1["source_id"] = json!("a");
+    let (st, r) = rig.post_batch(&restamp(b1));
+    assert_eq!((st, r["accepted_event_count"].as_i64()), (202, Some(1)), "{r}");
+    let mut e2 = domain(2, "case.viewed", &schema);
+    e2["native_event_id"] = json!("n");
+    e2["source_event_digest"] = json!("2".repeat(64));
+    let mut b2 = batch(B { revision: None, from: None, to: None, cursor: "c2".into(), events: vec![e2] });
+    b2["source_id"] = json!("a|platform_event|-|b");
+    let (st, r) = rig.post_batch(&restamp(b2));
+    assert_eq!((st, r["accepted_event_count"].as_i64()), (202, Some(1)), "{r}");
+}
+
+#[test]
+fn the_embedded_catalog_is_the_platform_contract_file_at_version_1_1_0() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../platform-contract/event-catalog.json");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    assert_eq!(v["catalog_version"], "1.1.0");
+    for e in v["event_types"].as_array().unwrap() {
+        let want = match e["status"].as_str().unwrap() {
+            "admitted" => control_api::ingest::Class::Admitted,
+            "denied" => control_api::ingest::Class::Denied,
+            _ => control_api::ingest::Class::Planned,
+        };
+        assert_eq!(control_api::ingest::classify(e["event_type"].as_str().unwrap()), want, "{e}");
+    }
+}

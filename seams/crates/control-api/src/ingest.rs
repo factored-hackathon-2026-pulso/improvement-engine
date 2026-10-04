@@ -159,6 +159,11 @@ fn validate_batch(v: Value) -> Option<Map<String, Value>> {
     Some(m)
 }
 
+/// Storage key of several free-text parts: a JSON array, so no part can forge another by containing the separator.
+fn jkey(parts: &[&str]) -> String {
+    serde_json::to_string(parts).expect("strings serialise")
+}
+
 fn cursor_ok(c: &str) -> bool {
     (1..=128).contains(&c.len()) && c.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'-'))
 }
@@ -341,8 +346,8 @@ impl App {
 
         let source = b["source_id"].as_str().unwrap_or_default().to_string();
         let partition = b["partition"].as_str().unwrap_or_default().to_string();
-        let ckey = format!("{source}|{partition}");
-        let _w = self.write_lock.lock().unwrap();
+        let ckey = jkey(&[&source, &partition]);
+        let _w = self.write_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(prior) = self.store.get_doc("ingest_receipt", &tenant, &digest) {
             return json_resp(200, prior["replay"].clone()); // committed earlier: never re-apply
         }
@@ -350,7 +355,7 @@ impl App {
         if fast && b["expected_cursor_revision"] != cur["revision"] {
             return error(409, "stale_cursor_revision"); // before any write
         }
-        let ledger_id = |ev: &Value| format!("{source}|{}|{}|{}", ev["kind"].as_str().unwrap_or_default(), ev["level"].as_str().unwrap_or("-"), ev["native_event_id"].as_str().unwrap_or_default());
+        let ledger_id = |ev: &Value| jkey(&[&source, ev["kind"].as_str().unwrap_or_default(), ev["level"].as_str().unwrap_or("-"), ev["native_event_id"].as_str().unwrap_or_default()]);
         for ev in &events {
             // all-or-nothing: a digest conflict anywhere refuses the whole batch
             if let Some(prev) = self.store.get_doc("ingest_ledger", &tenant, &ledger_id(ev))
@@ -407,7 +412,7 @@ impl App {
             receipt["quarantined_event_count"] = json!(events.len());
             let record = json!({"classification": "batch", "event_type": null, "reason": "sequence_gap", "gaps": pairs_json(&uncovered),
                                 "source_id": source, "batch_digest": digest, "event_count": events.len()});
-            self.store.put_doc("ingest_quarantine", &tenant, &format!("{source}|batch:{digest}"), record);
+            self.store.put_doc("ingest_quarantine", &tenant, &jkey(&[&source, "batch", &digest]), record);
             return self.commit_receipt(&tenant, &digest, receipt, 202);
         }
 
@@ -445,7 +450,7 @@ impl App {
             let record = json!({"classification": class.name(), "event_type": event_type, "reason": "event_type_not_admitted", "source_id": source,
                                 "native_event_id": ev["native_event_id"], "source_event_digest": ev["source_event_digest"],
                                 "source_sequence": ev["source_sequence"], "batch_digest": digest});
-            self.store.put_doc("ingest_quarantine", &tenant, &format!("{source}|{}|{digest}", ev["native_event_id"].as_str().unwrap_or_default()), record);
+            self.store.put_doc("ingest_quarantine", &tenant, &jkey(&[&source, ev["native_event_id"].as_str().unwrap_or_default(), &digest]), record);
         }
         let mut advanced = false;
         if fast {
@@ -495,7 +500,7 @@ impl App {
             return error(404, "not_found");
         }
         let tenant = claims["tenant_id"].as_str().unwrap_or_default();
-        let cur = self.store.get_doc("ingest_cursor", tenant, &format!("{source}|{partition}")).unwrap_or_else(|| json!({"cursor": null, "revision": 0, "last_batch_digest": null, "open_gaps": []}));
+        let cur = self.store.get_doc("ingest_cursor", tenant, &jkey(&[source, partition])).unwrap_or_else(|| json!({"cursor": null, "revision": 0, "last_batch_digest": null, "open_gaps": []}));
         json_resp(200, json!({"contract_version": "pulso-observations-2", "source_id": source, "partition": partition, "cursor": cur["cursor"],
                               "cursor_revision": cur["revision"], "last_batch_digest": cur["last_batch_digest"], "coverage": "partial", "cut_ref": null,
                               "updated_at": null, "open_gaps": cur["open_gaps"]}))

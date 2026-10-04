@@ -113,7 +113,7 @@ impl Verifier {
         if s("tenant_id").is_none_or(str::is_empty) {
             return Err(Denied { reason: "tenant_required", status: 403 });
         }
-        let mut seen = self.seen.lock().unwrap();
+        let mut seen = self.seen.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         // A token past `exp` is rejected before this point, so its entry is dead weight: evict to bound memory.
         seen.retain(|_, e| *e > now);
         if seen.insert((s("iss").unwrap().to_string(), jti.to_string()), exp).is_some() {
@@ -157,7 +157,7 @@ mod tests {
         }
         let tok = sign(&sk, &JwtParams { kid: "k", worker_id: "w", purpose: "p", tenant_id: Some("t1"), job_id: None, iat: 5000, ttl_s: 60, jti: "late" });
         v.verify(&tok, 5010.0, &want).unwrap();
-        assert_eq!(v.seen.lock().unwrap().len(), 1);
+        assert_eq!(v.seen.lock().unwrap_or_else(std::sync::PoisonError::into_inner).len(), 1);
     }
 
     #[test]

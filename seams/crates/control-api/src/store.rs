@@ -54,30 +54,30 @@ pub struct MemStore(Mutex<Inner>);
 
 impl Store for MemStore {
     fn binding(&self, tenant: &str, key: &str) -> Option<BindingRec> {
-        self.0.lock().unwrap().bindings.get(&(tenant.into(), key.into())).cloned()
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).bindings.get(&(tenant.into(), key.into())).cloned()
     }
     fn job_owner(&self, tenant: &str, job: &str) -> Option<String> {
-        self.0.lock().unwrap().jobs.get(&(tenant.into(), job.into())).cloned()
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).jobs.get(&(tenant.into(), job.into())).cloned()
     }
     fn put_binding(&self, tenant: &str, key: &str, rec: BindingRec) {
-        let mut g = self.0.lock().unwrap();
+        let mut g = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         g.jobs.insert((tenant.into(), rec.job_id.clone()), key.into());
         *g.effects.entry((tenant.into(), rec.job_id.clone())).or_default() += 1;
         g.refs.insert(rec.task_binding_ref.clone(), tenant.into());
         g.bindings.insert((tenant.into(), key.into()), rec);
     }
     fn binding_ref_tenant(&self, r: &str) -> Option<String> {
-        self.0.lock().unwrap().refs.get(r).cloned()
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).refs.get(r).cloned()
     }
     fn preauthorize_binding_ref(&self, r: &str, tenant: &str) {
-        self.0.lock().unwrap().refs.insert(r.into(), tenant.into());
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).refs.insert(r.into(), tenant.into());
     }
     fn binding_effects(&self, tenant: &str, job: &str) -> u32 {
-        self.0.lock().unwrap().effects.get(&(tenant.into(), job.into())).copied().unwrap_or(0)
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).effects.get(&(tenant.into(), job.into())).copied().unwrap_or(0)
     }
     fn put_artifact(&self, tenant: &str, envelope: Value) -> PutOutcome {
         let id = envelope["artifact"]["id"].as_str().unwrap_or_default().to_string();
-        let mut g = self.0.lock().unwrap();
+        let mut g = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         match g.artifacts.get(&(tenant.to_string(), id.clone())) {
             Some(prior) if prior["artifact"] == envelope["artifact"] => PutOutcome::Exists,
             Some(_) => PutOutcome::Conflict,
@@ -88,16 +88,16 @@ impl Store for MemStore {
         }
     }
     fn get_artifact(&self, tenant: &str, id: &str) -> Option<Value> {
-        self.0.lock().unwrap().artifacts.get(&(tenant.into(), id.into())).cloned()
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).artifacts.get(&(tenant.into(), id.into())).cloned()
     }
     fn put_doc(&self, ns: &str, tenant: &str, id: &str, doc: Value) {
-        self.0.lock().unwrap().docs.insert((ns.into(), tenant.into(), id.into()), doc);
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).docs.insert((ns.into(), tenant.into(), id.into()), doc);
     }
     fn get_doc(&self, ns: &str, tenant: &str, id: &str) -> Option<Value> {
-        self.0.lock().unwrap().docs.get(&(ns.into(), tenant.into(), id.into())).cloned()
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).docs.get(&(ns.into(), tenant.into(), id.into())).cloned()
     }
     fn list_docs(&self, ns: &str, tenant: &str) -> Vec<(String, Value)> {
-        let g = self.0.lock().unwrap();
+        let g = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         g.docs.iter().filter(|((n, t, _), _)| n == ns && t == tenant).map(|((_, _, id), v)| (id.clone(), v.clone())).collect()
     }
 }
