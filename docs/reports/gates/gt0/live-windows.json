@@ -1,0 +1,55 @@
+{
+ "schema": "live-window-log/v1",
+ "provenance": "reconstructed from subagent hand-back reports and THREAD01.md; raw window logs are git-ignored",
+ "windows": [
+  {
+   "id": "w1",
+   "kind": "roleplay-synthetic",
+   "date": "2026-10-04",
+   "data_origin": "generated_sample",
+   "calls": 6,
+   "responder_calls": {
+    "scout": 2,
+    "verifier": 2,
+    "builder": 2
+   },
+   "responders": 6,
+   "subagents_spawned": 7,
+   "minutes": 4.14,
+   "scanner_rejections": 0,
+   "shim_response_rejections": 1,
+   "shim_rejection_notes": "scout step 1 omitted quality_claims; re-asked once, valid",
+   "responder_timeouts": 2,
+   "responder_timeout_notes": "both on the builder's last call; the late answer served the retry",
+   "steps_not_exercised": [
+    7
+   ]
+  },
+  {
+   "id": "w2",
+   "kind": "roleplay-e0",
+   "date": "2026-10-04",
+   "data_origin": "local E0 (treated aggregates only; no E0-derived numbers recorded)",
+   "calls": 5,
+   "responder_calls": {
+    "scout": 2,
+    "verifier": 2,
+    "builder": 1
+   },
+   "responders": 5,
+   "minutes": 2.46,
+   "scanner_rejections": 0,
+   "shim_response_rejections": 0,
+   "responder_timeouts": 0,
+   "steps_not_exercised": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "not_exercised_reason": "the finding ended unlinked (SMAP no_exact_supported_flow_mapping)"
+  }
+ ]
+}
