@@ -24,6 +24,12 @@ class TargetDirs(unittest.TestCase):
         r = ps("check-target-dirs.ps1", "-Assignment", r"a=D:\t\a,b=D:\t\b")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_dotdot_alias_and_relative_fail(self):
+        r = ps("check-target-dirs.ps1", "-Assignment", r"a=D:\t\x,b=D:\t\y\..\x")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(ps("check-target-dirs.ps1", "-Assignment", r"a=D:rel").returncode, 1)
+        self.assertEqual(ps("check-target-dirs.ps1", "-Assignment", r"a=D:\..\..\Windows,b=C:\x").returncode, 1)
+
     def test_c_drive_fails(self):
         r = ps("check-target-dirs.ps1", "-Assignment", r"a=C:\t\a")
         self.assertEqual(r.returncode, 1)
@@ -78,6 +84,10 @@ class Inventory(unittest.TestCase):
         plan = data["retirement_plan"]
         self.assertTrue(data["dry_run"])
         self.assertEqual([p["branch"] for p in plan], ["claude/old"])  # never codex, never main
+
+    def test_primary_worktree_never_in_plan(self):
+        r = self.run_inv([(r"D:/w/a-claude-main", "claude/first")] + self.ENTRIES[1:], ["claude/first"])
+        self.assertEqual(json.loads(r.stdout)["retirement_plan"], [])
 
     def test_above_cap_exits_1(self):
         r = self.run_inv(self.ENTRIES, [], "-Cap", "3")

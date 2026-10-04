@@ -42,6 +42,11 @@ class Gate(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertEqual(d["legs"]["ratchet"]["status"], "missing")
 
+    def test_package_injection_rejected(self):
+        r, d = run(packages="x'; exit 0 #", CiCommand=OK, RatchetCommand=OK)
+        self.assertEqual(r.returncode, 1)
+        self.assertTrue(d is None or d["verdict"] == "fail")
+
     def test_failing_leg_exits_1(self):
         r, d = run(CiCommand=BAD, PytestCommand=OK, RatchetCommand=OK)
         self.assertEqual(r.returncode, 1)
