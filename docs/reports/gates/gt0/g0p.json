@@ -1,7 +1,7 @@
 {
   "schema": "pre-pr-gate/v1",
-  "generated_utc": "2026-10-04T07:32:43.9571928Z",
-  "head_sha": "e6bf74627202c2111be34cf0628d9135ce713e6d",
+  "generated_utc": "2026-10-04T07:35:13.0848925Z",
+  "head_sha": "69dea546675456621dc9bbb4ba629a7cec04041a",
   "base_ref": "origin/main",
   "rust_files_changed": [],
   "notes": "No Rust files changed on this branch vs origin/main (see rust_files_changed, recomputed from git). cargo is unavailable on this machine, so the ci leg is the non-cargo subset of verify-local-ci.ps1 (Python contract tests, contract fixture validation, OWNERS map test); fmt, clippy and cargo tests were NOT run. The ratchet leg is the replay-mode e2e-core thread tests. Pester not run.",

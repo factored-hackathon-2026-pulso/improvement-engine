@@ -13,9 +13,9 @@ Verdict: FAIL
 
 | item | result | detail |
 |---|---|---|
-| g0p | PASS | pre-pr-gate pass at cd24162f2b55 |
-| trn0 | FAIL | missing: trn0.json |
-| crv0 | FAIL | OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP TPS; MISSING closed log for required WP M2a; MISSING closed log for required WP M0RP; MISSING closed log for required WP ED0L; MISSING closed log for required WP E0-DATA-PATH |
+| g0p | PASS | pre-pr-gate pass at 69dea5466754 |
+| trn0 | PASS | 1 train PR(s), each with a passing W0 receipt; deviations: PR 96 carries 174 known lane-hours, over the 35 cap; authority: user ruling: few, large PRs (journal CL-0042, CL-0045: one consolidated open PR #96); lanes were merged into claude/w0-train before this receipt, so the order is observed from git, not enforced |
+| crv0 | PASS | 12 review logs closed |
 | honesty | PASS | tests 1-8, G1 and S1 clean on the GT0 report |
 | scanner_ids | PASS | scanner ids tps-1 |
 | doubles | PASS | doubles[] lists the plan parts; DEMO-0, host=python, quality_claims forbidden |
@@ -98,27 +98,30 @@ Verdict: FAIL
 ## 8. Frozen contracts
 
 - C-12 (frozen): sha256:4128f5d8fcf0b602ef8e2237bedf0c576f7b452a3609a079fa2fe153e002dc86; files: roleplay-llm/roleplay_llm/protocol.py, roleplay-llm/roleplay_llm/scanner.py, roleplay-llm/roleplay_llm/shim.py
-- C-2 (frozen): sha256:9f3f922374ee76e457133ee1b693608c0d0d508200fa52ad21451f9c0a45b510; files: contracts/engine-run/engine_run.py, contracts/engine-run/report.schema.json
+- C-2 (frozen): sha256:3be5bd92cc1e812ded1be9f6858f64904215dd5f31d45e6a1169fe5031664009; files: contracts/engine-run/engine_run.py, contracts/engine-run/report.schema.json, e2e-core/src/claude_standin/thread01.py
 
 ## 9. Receipts
 
-- G0p: verdict pass, head cd24162f2b558d41e6508f0a5c460859b4696141, base 35525f8, Rust files changed 0; note: No Rust files changed on this branch (see rust_files_changed). cargo is unavailable on this machine, so the ci leg is the non-cargo subset of verify-local-ci.ps1 (Python contract tests, contract fixture validation, OWNERS map test); fmt, clippy and cargo tests were NOT run. The ratchet leg is the replay-mode e2e-core thread tests. Pester not run.
+- G0p: verdict pass, head 69dea546675456621dc9bbb4ba629a7cec04041a, base origin/main, Rust files changed 0; note: No Rust files changed on this branch vs origin/main (see rust_files_changed, recomputed from git). cargo is unavailable on this machine, so the ci leg is the non-cargo subset of verify-local-ci.ps1 (Python contract tests, contract fixture validation, OWNERS map test); fmt, clippy and cargo tests were NOT run. The ratchet leg is the replay-mode e2e-core thread tests. Pester not run.
   - leg ci: pass (`uv run --python 3.12 --with pytest --with pyyaml --with jsonschema python -m unittest discover -s tests -p test_*_contract.py; if ($LASTEXITCODE) { exit $LASTEXITCODE }; uv run --python 3.12 --with pyyaml --with jsonschema python contracts/validate_fixtures.py; if ($LASTEXITCODE) { exit $LASTEXITCODE }; uv run --python 3.12 --with pytest --with pyyaml python -m pytest docs/agents/tests -q -p no:cacheprovider`)
   - leg pytest: pass (`uv run --python 3.12 --with pytest --with pyyaml --with cryptography --with jsonschema --with fastapi --with httpx --with uvicorn --with pydantic python -m pytest -q -p no:cacheprovider contracts/engine-run/tests scripts/gov/tests scripts/dc/tests`)
   - leg ratchet: pass (`uv run --python 3.12 --with pytest --with pyyaml --with cryptography --with jsonschema --with fastapi --with httpx --with uvicorn --with pydantic python -m pytest -q -p no:cacheprovider e2e-core/tests/unit/test_e2e_thread_01.py e2e-core/tests/unit/test_e2e_thread_01_live_replay.py`)
-- TRN0: MISSING: trn0.json
-- CRV0 closure: NOT closed: OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP TPS; MISSING closed log for required WP M2a; MISSING closed log for required WP M0RP; MISSING closed log for required WP ED0L; MISSING closed log for required WP E0-DATA-PATH
+- TRN0: verdict pass, PR 96: lanes g1,p2py,cmppy_gsipy,m3,ed0,m1_m2a,ed0l,smap,q1r,int0,docs,world,q1r_live,e0_feeder,tps_registry,spend_wiring,spend_pg,gt0_gate,demo0,review, 174 lane-hours, W0 receipt w0-pr-96.json
+- CRV0 closure: closed: 12 review logs closed
 
 ## 10. Capacity re-baseline
 
 MISSING: capacity.json
 
-## 11. Open risks (open review findings and failing items)
+## 11. Open risks (open and accepted review findings, failing items)
 
-- E0-R4 (E0-DATA-PATH): first-Windows-build receipt of the sensor exe is not in the repo; E0 path only via env var
-- EDL-R3 (ED0L): complementary suppression not verified end to end in E0 mode
-- M2-R4 (M2a,M1): SpendGuard is not wired into the runtime (main.py builds only SpendMeteringGateway); ceiling not shown through the runtime
-- TPS-R10 (TPS,M0RP,RPP): opaque ids in inputs/args (a name or national id shaped like an allowed token) pass the allow-list; needs a registry of expected ids
-- gate item trn0 fails: missing: trn0.json
-- gate item crv0 fails: OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP TPS; MISSING closed log for required WP M2a; MISSING closed log for required WP M0RP; MISSING closed log for required WP ED0L; MISSING closed log for required WP E0-DATA-PATH
+- accepted GSI-R2 (CMPpy,GSIpy,P2py), owner unassigned, tier unassigned: gate has no observable that moves for a prompt-only change (fails honestly: no_structural_improvement) (reason: Recorded in CL-0044 as the honest gate result; publication only under a labelled simulated-human override and quality_claims forbidden.)
+- accepted DC0-R5 (DC0), owner unassigned, tier unassigned: gateway profile never run in a container (reason: Labelled gateway=stand-in in doubles[]; the container run is blocked by machine load and is a GT0 open risk, not a DC0 defect.)
+- accepted E0-R5 (E0-DATA-PATH), owner Team CL, lane L-E2E (ED0), tier T0 (wp_table ED0): the original first-build log of the sensor exe was not retained and cargo was not run in this task; the receipt is post-hoc and circumstantial (mtime ordering), not a build attestation (reason: Rebuilding needs cargo (not available here). The receipt states this limit explicitly and pins the binary by sha256.)
+- accepted E0-R6 (E0-DATA-PATH), owner Team CL, lane L-E2E, tier T0 (wp_table ED0): E0 path is supplied only by env var or CLI at runtime (reason: Intended: no E0 path or data is committed (DC0 data-class rule).)
+- accepted EDL-R4 (ED0L), owner Team CL, lane L-E2E (ED0L), tier T0 (wp_table ED0L): complementary suppression only covers overlaps the caller declares (window_parts/group_parts); an undeclared overlap between published cells is not detected (reason: Residual disclosure risk: the lab cannot discover relations it is not told about. The E0 window feeds fixed signature groups and non-overlapping windows. Not re-verified on real E0 by the closer (no E0 data in this task).)
+- accepted EDL-R5 (ED0L), owner Team CL, lane L-E2E, tier T0 (wp_table ED0L): E0 mode: small numerator/complement cells and exception text (c46f04c) verified only at unit level with synthetic fixtures by the closer (reason: Real-E0 re-run is outside this task (no E0 data, no E0 handling). Live window 2 on real treated E0 aggregates ran under the same code per THREAD01 and the journal.)
+- accepted M2-R6 (M2a,M1), owner Team CL, lane L-MODEL (M2a), tier T0 (wp_table M2a): real Postgres 16 evidence for the spend guard (l3_003, meter_job_total, ceiling and kill end to end) was not re-run by the closer (reason: No Postgres or Podman in this task; the 10 PG tests skip without PULSO_TEST_PG_ADMIN. The author session reports a real PG16 run (tests/llm + tests/l3a 193 passed, journal CL-0046). The closer re-ran core-bridge tests/llm without PG: all pass.)
+- accepted M1-R1 (M2a,M1), owner Team CL, lane L-MODEL (M1), tier T0 (wp_table M1): gateway healthcheck path and the live gateway smoke are unverified (CL-0043 open risk; the live smoke is skipped) (reason: Needs a Podman stack, not available here; the gateway config generator, internal overlay and stand-in marker are unit-tested.)
+- accepted TPS-R12 (TPS,M0RP,RPP), owner Team CL, lane L-MODEL (TPS), tier T0 (wp_table TPS): hex-encoded text inside hex-shaped ids (ev_, g_, uuid, binding/job/artifact) cannot be rejected by shape alone (reason: Residual privacy risk of a shape check: closing it needs HMAC-issued ids held in the Registry. Mitigated meanwhile because only treated k-anonymous aggregates and synthetic data are sent (ASK-1) and DC0 keeps E0 off the hosted path.)
 - gate item capacity fails: missing: capacity.json

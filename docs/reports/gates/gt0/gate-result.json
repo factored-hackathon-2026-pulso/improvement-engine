@@ -5,17 +5,17 @@
   {
    "item": "g0p",
    "ok": true,
-   "detail": "pre-pr-gate pass at cd24162f2b55"
+   "detail": "pre-pr-gate pass at 69dea5466754"
   },
   {
    "item": "trn0",
-   "ok": false,
-   "detail": "missing: trn0.json"
+   "ok": true,
+   "detail": "1 train PR(s), each with a passing W0 receipt; deviations: PR 96 carries 174 known lane-hours, over the 35 cap; authority: user ruling: few, large PRs (journal CL-0042, CL-0045: one consolidated open PR #96); lanes were merged into claude/w0-train before this receipt, so the order is observed from git, not enforced"
   },
   {
    "item": "crv0",
-   "ok": false,
-   "detail": "OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP E0-DATA-PATH; MISSING closed log for required WP ED0L; MISSING closed log for required WP M0RP; MISSING closed log for required WP M2a; MISSING closed log for required WP TPS"
+   "ok": true,
+   "detail": "12 review logs closed"
   },
   {
    "item": "honesty",
