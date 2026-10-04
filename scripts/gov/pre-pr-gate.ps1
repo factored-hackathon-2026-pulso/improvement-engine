@@ -6,7 +6,9 @@ param(
     [string[]] $TouchedPackages = @(),
     [string] $CiCommand,
     [string] $PytestCommand,
-    [string] $RatchetCommand
+    [string] $RatchetCommand,
+    [string] $BaseRef,
+    [string] $Note
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -21,11 +23,21 @@ if (-not $PytestCommand -and $packages.Count) {
 }
 
 function Invoke-Leg([string] $Command) {
-    if (-not $Command) { return [pscustomobject]@{ status = 'missing'; exit_code = $null } }
+    if (-not $Command) { return [pscustomobject]@{ status = 'missing'; exit_code = $null; command = $null } }
     $global:LASTEXITCODE = 0
     & pwsh -NoProfile -Command $Command | Out-Host
     $code = $LASTEXITCODE
-    [pscustomobject]@{ status = $(if ($code -eq 0) { 'pass' } else { 'fail' }); exit_code = $code }
+    [pscustomobject]@{ status = $(if ($code -eq 0) { 'pass' } else { 'fail' }); exit_code = $code; command = $Command }
+}
+
+# Scope facts for the receipt: head sha and, with -BaseRef, the Rust-relevant files changed since that ref.
+$headSha = (& git -C $repo rev-parse HEAD).Trim()
+$rustChanged = @()
+if ($BaseRef) {
+    if ($BaseRef -notmatch '^[A-Za-z0-9][A-Za-z0-9._/~^-]*$') { [Console]::Error.WriteLine("Invalid -BaseRef"); exit 1 }
+    & git -C $repo rev-parse --verify -q "$BaseRef^{commit}" | Out-Null
+    if ($LASTEXITCODE) { [Console]::Error.WriteLine("Unresolvable -BaseRef $BaseRef"); exit 1 }
+    $rustChanged = @(& git -C $repo diff --name-only "$BaseRef" HEAD | Where-Object { $_ -match '\.rs$|(^|/)Cargo\.(toml|lock)$|(^|/)rust-toolchain' })
 }
 
 $legs = [ordered]@{
@@ -37,6 +49,10 @@ $ok = -not ($legs.Values | Where-Object { $_.status -ne 'pass' })
 $receipt = [ordered]@{
     schema = 'pre-pr-gate/v1'
     generated_utc = (Get-Date).ToUniversalTime().ToString('o')
+    head_sha = $headSha
+    base_ref = $BaseRef
+    rust_files_changed = @($rustChanged)
+    notes = $Note
     packages_touched = $packages
     legs = $legs
     verdict = $(if ($ok) { 'pass' } else { 'fail' })
