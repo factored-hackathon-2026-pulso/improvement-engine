@@ -8,6 +8,7 @@ pub const SCOPE: &str = "demo1_thin";
 pub enum MemError {
     NotImplemented,
     UnknownNote(String),
+    ClaimKeyMismatch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +32,8 @@ pub struct Note {
     pub statement: String,
     pub evidence: Vec<String>,
     pub status: Status,
+    pub contradicts: Option<String>,
+    pub contradicted_by: Option<String>,
 }
 
 #[derive(Default)]
@@ -73,7 +76,7 @@ impl Memory {
         let id = format!("note-{:04}", self.seq);
         self.notes.insert(
             id.clone(),
-            Note { id: id.clone(), claim_key: n.claim_key, statement: n.statement, evidence: n.evidence, status: Status::Active },
+            Note { id: id.clone(), claim_key: n.claim_key, statement: n.statement, evidence: n.evidence, status: Status::Active, contradicts: None, contradicted_by: None },
         );
         Ok(id)
     }
@@ -95,6 +98,9 @@ impl Memory {
         n.status = Status::Confirmed;
         Ok(())
     }
+    pub fn contradict(&mut self, _prior: &str, _n: NewNote) -> Result<String, MemError> {
+        Err(MemError::NotImplemented)
+    }
     pub fn note(&self, id: &str) -> Option<&Note> {
         self.notes.get(id)
     }
@@ -103,7 +109,7 @@ impl Memory {
         Some(serde_json::json!({
             "id": n.id, "claim_key": n.claim_key, "statement": n.statement,
             "evidence_refs": n.evidence, "status": n.status.as_str(),
-            "scope": SCOPE, "durable": false,
+            "contradicts": n.contradicts, "contradicted_by": n.contradicted_by, "scope": SCOPE, "durable": false,
         }))
     }
 }

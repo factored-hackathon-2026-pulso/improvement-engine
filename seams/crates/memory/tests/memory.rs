@@ -48,3 +48,21 @@ fn confirm_marks_note_confirmed_and_appends_evidence() {
     assert!(m.wiki_read("k.latency").unwrap().contains("[confirmed]"));
     assert!(matches!(m.confirm("note-9999", vec![]), Err(MemError::UnknownNote(_))));
 }
+
+#[test]
+fn contradict_supersedes_prior_claim_and_links_both_ways() {
+    let mut m = Memory::new(store());
+    let prior = m.add_note(nn("k.latency", "p95 latency is stable", &["ev-1"])).unwrap();
+    let new = m.contradict(&prior, nn("k.latency", "p95 latency regressed", &["ev-2"])).unwrap();
+    assert_eq!(m.note(&prior).unwrap().status, Status::Contradicted);
+    assert_eq!(m.note(&prior).unwrap().contradicted_by.as_deref(), Some(new.as_str()));
+    assert_eq!(m.note(&new).unwrap().contradicts.as_deref(), Some(prior.as_str()));
+    assert_eq!(m.note(&new).unwrap().status, Status::Active);
+    let page = m.wiki_read("k.latency").unwrap();
+    assert!(page.contains("[contradicted]") && page.contains("regressed"));
+    assert_eq!(m.artifact(&new).unwrap()["contradicts"], prior.as_str());
+    assert!(matches!(m.contradict("note-9999", nn("k.latency", "x", &["ev-1"])), Err(MemError::UnknownNote(_))));
+    // different claim key is not a contradiction of the prior claim
+    let other = m.add_note(nn("k.a", "a", &["ev-1"])).unwrap();
+    assert!(matches!(m.contradict(&other, nn("k.b", "b", &["ev-1"])), Err(MemError::ClaimKeyMismatch)));
+}
