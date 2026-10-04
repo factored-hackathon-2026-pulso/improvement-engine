@@ -43,6 +43,17 @@ class Helpers(unittest.TestCase):
         self.assertEqual(col.ratchet_receipt("cmd", 1, "1 failed, 6 passed")["exit_code"], 1)
         self.assertEqual(col.ratchet_receipt("cmd", 0, "7 skipped in 1s")["passed"], 0)
 
+    def test_uv_command_carries_the_full_dependency_set(self):
+        cmd = col.uv_command(["python", "-m", "pytest", "x"])
+        self.assertEqual(cmd[:5], ["uv", "run", "--offline", "--python", "3.12"])
+        for dep in ("cryptography", "pyyaml", "httpx", "fastapi", "jsonschema", "pydantic", "anyio", "rfc8785", "pytest"):
+            self.assertIn(dep, cmd)
+        self.assertEqual(cmd[-4:], ["python", "-m", "pytest", "x"])
+
+    def test_python_path_covers_src_tests_and_agent_core(self):
+        self.assertEqual(col.PY_PATH.split(";")[:2], ["src", "tests"])
+        self.assertIn("agent-core", col.PY_PATH)
+
 
 if __name__ == "__main__":
     unittest.main()
