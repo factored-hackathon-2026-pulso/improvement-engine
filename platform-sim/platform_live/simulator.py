@@ -52,6 +52,9 @@ class PlatformLiveSim:
         self._releases: dict[str, tuple[datetime, _fx.EffectSpec]] = {}
         self._ids: dict[str, int] = {}
         self._next_seq = 1
+        # Sim-side ground truth (NOT platform data, never in the DB or the event log): the platform emits no case
+        # type and no draft disposition, so 'case-type maturity' labels live here for evaluation of the sensors.
+        self.copilot_labels: dict[str, dict] = {}
         for stmt in render_ddl("sqlite"):
             self.conn.execute(stmt)
         self._seed_people(n_customers)
@@ -256,6 +259,85 @@ class PlatformLiveSim:
             self._touch(case_id, status="in_progress")
             self._emit("case.status_changed", "case", case_id, case_id, "analyst", who,
                        {"from": "assigned", "to": "in_progress"})
+        self.conn.commit()
+
+    # ---- contract 1.2.0 vocabulary (additive; generate() does not use it) ----------------------------
+    ASSISTANT_AGENT = "recepcion@1.0.0"
+    COPILOT_AGENT = "copiloto-asesor@1.0.0"
+
+    def open_case_with_assistant(self, customer_id: str, text: str | None = None, priority: str = "none") -> str:
+        """A case that opens in the assistant's hands (status with_assistant, nobody holds it, no queue)."""
+        locale = self._q("SELECT locale FROM customers WHERE id=?", (customer_id,)).fetchone()[0]
+        if self._q("SELECT open_case_id FROM customer_case_slots WHERE customer_id=?",
+                   (customer_id,)).fetchone()[0] is not None:
+            raise SlotOccupied(customer_id)
+        lang = "pt" if locale.startswith("pt") else "es"
+        cid, now = self._id("CASE"), self._iso_now()
+        self._q("INSERT INTO cases (id, customer_id, channel, language, priority, status, opened_at, sla_due_at, "
+                "unread_sequences) VALUES (?,?,?,?,?,?,?,?,?)",
+                (cid, customer_id, self.rng.choice(["chat_app", "chat_web"]), lang, priority, "with_assistant", now,
+                 _iso(self.now + timedelta(seconds=SLA_SECONDS.get(priority, 900))), "[]"))
+        self._q("UPDATE customer_case_slots SET open_case_id=?, version=version+1 WHERE customer_id=?",
+                (cid, customer_id))
+        self._emit("case.opened", "case", cid, cid, "customer", customer_id, {"priority": priority})
+        self._add_turn(cid, "message", "everyone", "customer", customer_id, text or "hola, necesito ayuda")
+        sid = self._id("AST")
+        self._ast = getattr(self, "_ast", {})
+        self._ast[cid] = sid
+        self._emit("case.assistant_started", "case", cid, cid, "system", None,
+                   {"assistant_session_id": sid, "agent": self.ASSISTANT_AGENT})
+        self._emit("assistant.session_started", "assistant", sid, cid, "system", None,
+                   {"customer_id": customer_id, "agent": self.ASSISTANT_AGENT})
+        self.conn.commit()
+        return cid
+
+    def assistant_answer(self, case_id: str, text: str = "respuesta del asistente") -> None:
+        sid = self._ast[case_id]
+        self._add_turn(case_id, "message", "everyone", "assistant", self.ASSISTANT_AGENT, text)
+        self._emit("assistant.turn_answered", "assistant", sid, case_id, "assistant", self.ASSISTANT_AGENT,
+                   {"agent": self.ASSISTANT_AGENT, "run_id": f"run-{sid}", "awaiting": "customer",
+                    "status": "ok", "outcome": None, "trace_id": f"tr-{self._next_seq}", "messages": 1})
+        self.conn.commit()
+
+    def assistant_resolve(self, case_id: str) -> None:
+        sid = self._ast[case_id]
+        self._emit("assistant.ended", "assistant", sid, case_id, "assistant", self.ASSISTANT_AGENT,
+                   {"result": "resolved", "handoff_ref": None, "code": None})
+        self.close_case(case_id, "resolved")
+
+    def assistant_escalate(self, case_id: str) -> None:
+        """The agent hands over: the case goes to the language queue and is placed like a new arrival."""
+        sid, c = self._ast[case_id], self._case(case_id)
+        ref = f"handoff-{sid}"
+        self._emit("assistant.ended", "assistant", sid, case_id, "assistant", self.ASSISTANT_AGENT,
+                   {"result": "escalated", "handoff_ref": ref, "code": None})
+        now = self._iso_now()
+        self._touch(case_id, status="queued", queued_at=now, queue_label=c["language"])
+        self._emit("case.assistant_released", "case", case_id, case_id, "system", None,
+                   {"reason": "escalated", "handoff_ref": ref, "sla_due_at": c["sla_due_at"]})
+        if not self._try_assign(case_id, "assistant_handoff"):
+            self._emit("case.queued", "case", case_id, case_id, "system", None, {"queue_label": c["language"]})
+        self.conn.commit()
+
+    def copilot_ask(self, case_id: str, analyst_id: str, case_type: str | None = None,
+                    draft_outcome: str | None = None) -> str:
+        """An analyst asks the copilot. Events carry ids and sizes only; `case_type` and `draft_outcome`
+        (sent_as_is | minor_edits | discarded) are sim-side labels in `copilot_labels`."""
+        qid = self._id("QST")
+        self._emit("copilot.query_asked", "copilot", qid, case_id, "analyst", analyst_id,
+                   {"question_id": qid, "question_length": self.rng.randint(20, 200)})
+        self._emit("copilot.answered", "copilot", qid, case_id, "system", None,
+                   {"question_id": qid, "agent": self.COPILOT_AGENT, "run_id": f"run-{qid}",
+                    "trace_id": f"tr-{self._next_seq}", "status": "ok", "messages": 1})
+        self.copilot_labels[qid] = {"case_id": case_id, "case_type": case_type, "draft_outcome": draft_outcome}
+        self.conn.commit()
+        return qid
+
+    def rate_case(self, case_id: str, score: int) -> None:
+        c = self._case(case_id)
+        self._touch(case_id, rating_score=score, rated_at=self._iso_now())
+        self._emit("case.rated", "case", case_id, case_id, "customer", c["customer_id"],
+                   {"score": score, "analyst_id": c["closed_by_id"]})
         self.conn.commit()
 
     def mark_read(self, case_id: str) -> None:
