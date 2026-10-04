@@ -29,9 +29,6 @@ fn runs(work: &Path) -> Vec<PathBuf> {
     v.sort();
     v
 }
-fn record(p: &Path) -> Value {
-    serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
-}
 fn processed(o: TickOutcome) -> (String, usize, Value) {
     match o {
         TickOutcome::Processed { run_id, events, record, .. } => (run_id, events, record),

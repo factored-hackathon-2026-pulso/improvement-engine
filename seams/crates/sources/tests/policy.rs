@@ -69,3 +69,21 @@ fn limit_is_hard_capped() {
     assert_eq!(check_limit(0), Err(SourceError::BadLimit(0)));
     assert_eq!(check_limit(HARD_CAP + 1), Err(SourceError::BadLimit(HARD_CAP + 1)));
 }
+
+#[test]
+fn event_type_lists_mirror_the_contract_catalog() {
+    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../platform-contract/event-catalog.json");
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+    let by = |status: &str| -> Vec<String> {
+        let mut x: Vec<String> = v["event_types"].as_array().unwrap().iter().filter(|e| e["status"] == status).map(|e| e["event_type"].as_str().unwrap().to_owned()).collect();
+        x.sort();
+        x
+    };
+    let sorted = |l: &[&str]| {
+        let mut x: Vec<String> = l.iter().map(|s| (*s).to_owned()).collect();
+        x.sort();
+        x
+    };
+    assert_eq!(by("admitted"), sorted(sources::monitor::ADMITTED_EVENT_TYPES));
+    assert_eq!(by("denied"), sorted(sources::monitor::DENIED_EVENT_TYPES));
+}
