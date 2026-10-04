@@ -184,3 +184,23 @@ impl Store for PgStore {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn database_url_and_store_debug_never_show_the_password() {
+        let url = DatabaseUrl::new("postgres://u:hunter2-secret@127.0.0.1:5432/db");
+        assert!(!format!("{url:?}").contains("hunter2"));
+        assert_eq!(format!("{url:?}"), "DatabaseUrl(<redacted>)");
+    }
+
+    #[test]
+    fn connect_errors_never_echo_the_url() {
+        for bad in ["postgres://u:hunter2-secret@127.0.0.1:1/db?connect_timeout=1", "not a url hunter2-secret", "postgres://u:hunter2-secret@[bad/db"] {
+            let e = PgStore::connect(bad).err().expect("must fail");
+            assert!(!e.contains("hunter2"), "{e}");
+        }
+    }
+}
