@@ -13,3 +13,4 @@ data/
 output/
 .scratch/
 *.tfstate*
+/.nexus-outbox/
