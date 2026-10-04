@@ -44,6 +44,7 @@ from . import compile_step as cmp
 from . import ed0_lab as lab
 from . import gate_step as gate
 from . import smap
+from . import steps_host as sh
 
 ROOT = Path(__file__).resolve().parents[3]
 WORLD_FILE = ROOT / "agent-core-assets" / "worlds" / "seeded-base.world.yaml"
@@ -139,8 +140,14 @@ class ThreadConfig:
     # {table, case_col, group_col}; nothing is inferred. The ending is honest `unlinked` (no catalogue entry).
     original_path: str | None = None
     original_map: dict | None = None
+    # E3b: "python" (default) runs the Python reference steps; "rust" runs steps 2 (sensor), the verifier recompute (3),
+    # the validation (4), compile (5) and gate (6) through the Rust step stand-ins (steps_cli) behind the step schema.
+    steps_mode: str = "python"
+    steps_exe: str | None = None  # steps_cli binary (env STEPS_CLI_EXE on the command line)
 
     def __post_init__(self):
+        if self.steps_mode not in ("python", "rust"):
+            raise ValueError("steps_mode must be python or rust")
         if self.e0_path and self.original_path:
             raise ValueError("e0_path and original_path are mutually exclusive data classes")
 
@@ -181,6 +188,19 @@ def step_01(ctx: Ctx) -> dict:
             "detail": {"trigger": "manual_command", "package": "synthetic E0-shaped (workdir, untracked)"}}
 
 
+def _rust(ctx: Ctx) -> "sh.StepsHost | None":
+    """The Rust steps host when `--steps rust`, else None (the Python reference steps run)."""
+    if ctx.cfg.steps_mode != "rust":
+        return None
+    return sh.StepsHost(ctx.cfg.steps_exe, runner_exe=ctx.cfg.exe)
+
+
+def _rust_rec(label: str) -> dict:
+    """Common labels of a step that ran through the Rust stand-in: real-narrow, host=python (via _finish), semantics."""
+    return {"status": "real-narrow", "receipt": {"provider": "claude-standin"}, "semantics": "claude-standin",
+            "steps_label": label}
+
+
 # ---- step 2 ----------------------------------------------------------------------------------------------------
 def step_02(ctx: Ctx) -> dict:
     if ctx.cfg.original_path:  # the Rust sensor reads the E0 parquet shape; no honest original-CSV mapping exists
@@ -189,6 +209,13 @@ def step_02(ctx: Ctx) -> dict:
     if not (ctx.cfg.exe and os.path.exists(ctx.cfg.exe)):
         return {"status": "blocked(sensor-exe)", "data_class": "generated_sample", "detail": {}}
     kw = {"arranque": ctx.cfg.e0_arranque, "min_support": ctx.cfg.e0_min_support} if ctx.cfg.e0_path else {}
+    host = _rust(ctx)
+    if host:
+        det, label = host.detect(ctx.out["package"], kw.get("arranque", 30), kw.get("min_support", 5))
+        ctx.out["detection"] = det
+        return {**_rust_rec(label), "data_class": "generated_sample",
+                "detail": {k: det[k] for k in ("producer", "admitted_family", "winner_support", "denominator",
+                                               "discards", "holdout_status")}}
     det = ed0.detect(ctx.cfg.exe, ctx.out["package"], str(ctx.cfg.workdir / "sensor_out"), **kw)
     ctx.out["detection"] = det
     return {"status": "real-narrow", "data_class": "generated_sample", "receipt": {"provider": "local"},
@@ -397,7 +424,12 @@ def step_03(ctx: Ctx) -> list[dict]:
                                 {"family_id": FAMILY_ID, "binding_id": "binding-verifier-0001", "hypotheses": hyps},
                                 db, caps["verifier"])
     # the verifier's verdict is only accepted if the independent ED0L recompute agrees (never from model prose)
-    recompute = {h["hypothesis_id"]: lab.verify_claim(db, h, ctx.out["salt"]) for h in hyps}
+    host = _rust(ctx)
+    if host:  # the verifier recompute runs through the Rust recompute step (ED0L keeps the row integrity checks)
+        recompute = host.recompute_claims(db, hyps, ctx.out["salt"], ctx.cfg.workdir / "steps")
+        ctx.out["recompute_outputs"] = [r["step_output"] for r in recompute.values() if "step_output" in r]
+    else:
+        recompute = {h["hypothesis_id"]: lab.verify_claim(db, h, ctx.out["salt"]) for h in hyps}
     supported = [a["evidence_ref"] for a in v_out["assessments"] if a["verdict"] == "supported"
                  and recompute[a["hypothesis_id"]]["ok"]]
     ctx.out["verified_refs"] = supported
@@ -405,7 +437,15 @@ def step_03(ctx: Ctx) -> list[dict]:
     ver = _role("verifier", llm.responders.get("verifier"), id="verifier", detail={"calls": v_calls, "recompute_ok": bool(supported) and all(
         r["ok"] for r in recompute.values()), "supported_refs": supported})
     ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls}
-    return [{**scout, "id": "scout"}, ver]
+    recs = [{**scout, "id": "scout"}, ver]
+    if host:
+        labels = sorted({r["label"] for r in recompute.values() if r.get("label")})
+        if not labels:
+            raise RuntimeError("rust recompute produced no result for any claim")
+        recs.append({**_rust_rec(labels[0]), "id": "recompute", "data_class": "generated_sample",
+                     "detail": {"claims": len(hyps), "matched": sum(1 for r in recompute.values() if r["ok"]),
+                                "recomputed": {k: r["recomputed"] for k, r in recompute.items()}}})
+    return recs
 
 
 def _enc(ref: str) -> str:
@@ -434,6 +474,15 @@ def step_04(ctx: Ctx) -> dict:
     verified = ctx.out["verified_refs"]
     if not verified:
         raise RuntimeError("no verified hypothesis: the builder does not run on unverified evidence")
+    validation = None
+    host = _rust(ctx)
+    if host:  # the validation step (Rust `intent`) must corroborate every recompute before the builder runs
+        rows = host.validate_recompute(ctx.out["recompute_outputs"], ctx.cfg.workdir / "steps", "pulso-scout",
+                                       "pulso-verifier")
+        if not rows or any(v != "corroborated" for _s, v, _l in rows):
+            raise RuntimeError(f"validation did not corroborate the recompute: {[v for _s, v, _l in rows]}")
+        validation = {**_rust_rec(rows[0][2]), "id": "validation", "data_class": "generated_sample",
+                      "detail": {"verdicts": {s_: v for s_, v, _l in rows}}}
     categories = {label: lab._fetch(db, ref)[4] for label, ref in refs.items()}  # label -> support (lab numerator)
     finding = {"finding_ref": "finding_1", "category": by_ref[verified[0]], "evidence_refs": sorted(verified)}
     ctx.out.update(world=world, catalogue=catalogue, finding=finding, categories=categories, mapper=smap.winning_category)
@@ -454,9 +503,10 @@ def step_04(ctx: Ctx) -> dict:
     res = smap.classify({"design_intent": di_out, "evidence_refs": out["evidence_refs"]}, finding, catalogue, world)
     ctx.out["design"] = res
     ctx.out["replay"] = {"misses": llm.misses, "calls": llm.calls}
-    return _role("builder_design", llm.responders.get("builder_design"), id="opportunity", detail={
+    opp = _role("builder_design", llm.responders.get("builder_design"), id="opportunity", detail={
         "calls": calls, "smap": res, "category": finding["category"],
         "do_nothing_considered": any(a.get("kind") == "do_nothing" for a in out.get("alternatives", []))})
+    return [opp, validation] if validation else opp
 
 
 SUITE_SEALED_AT = "2026-10-04T12:00:00Z"  # the suite (world slot) is sealed before any candidate exists
@@ -479,15 +529,20 @@ def step_05(ctx: Ctx) -> dict:
                            "affected_routes": [world["replaceable_prompt"]["used_by"]["flow"]],
                            "rollback_ref": cmp.bundle_ref(world)}}
     hook = ctx.cfg.hooks.dry_run
-    out = cmp.compile_change_spec(doc, world, dry_run=hook)
+    host = None if hook else _rust(ctx)  # a Core dry-run digest hook keeps the Python compile (Rust has no hook)
+    if host:
+        out, label = host.compile(doc)
+    else:
+        out = cmp.compile_change_spec(doc, world, dry_run=hook)
     if out["status"] != "compiled":
         raise RuntimeError(f"compile denied: {out.get('denied_reason')}")
     ctx.out["compiled"] = out
     ctx.out["candidate_created_at"] = CANDIDATE_CREATED_AT
-    return {"status": "real-narrow" if hook else "stand-in", "data_class": "synthetic",
-            "receipt": {"provider": "core-dry-run" if hook else "claude-standin"},
-            "detail": {"compiler_label": out["compiler_label"], "draft_plan": out["draft_plan"],
-                       "diff": [{"target": o["target_ref"], "to": o["new_ref"]} for o in out["draft_plan"]["operations"]]}}
+    rec = {"status": "real-narrow" if hook else "stand-in", "data_class": "synthetic",
+           "receipt": {"provider": "core-dry-run" if hook else "claude-standin"},
+           "detail": {"compiler_label": out["compiler_label"], "draft_plan": out["draft_plan"],
+                      "diff": [{"target": o["target_ref"], "to": o["new_ref"]} for o in out["draft_plan"]["operations"]]}}
+    return {**rec, **_rust_rec(label)} if host else rec
 
 
 def _run(case: str, status: str = "completed") -> dict:
@@ -514,13 +569,21 @@ def step_06(ctx: Ctx) -> dict:
     doc = {"contract_version": "engine-steps/0", "step": "gate", "run_id": "run-thread01-0001", "data_class": "synthetic",
            "base_arm_report_ref": "arm_report:base@1", "candidate_arm_report_ref": "arm_report:cand@1",
            "suite_ref": f"eval_suite:{slot['name']}@{cmp._major(slot['version'])}", "judge_actor": JUDGE, "author_actors": ["claude-wrld0"]}
-    out = gate.gate_verdict(doc, reports, world, evaluators=ctx.cfg.gate_evaluators)
+    host = None if ctx.cfg.gate_evaluators else _rust(ctx)  # custom G1 evaluators are Python callables: no Rust path
+    if host:
+        out, label = host.gate(doc, reports, {k: world["authors"][k] for k in ("world", "suite")})
+    else:
+        out = gate.gate_verdict(doc, reports, world, evaluators=ctx.cfg.gate_evaluators)
     ctx.out.update(gate_verdict=out["verdict"], gate=out, arms=arms)
-    return {"status": "real-narrow" if core_arms else "stand-in", "data_class": "synthetic", "actor": JUDGE,
-            "receipt": {"provider": "core-arms" if core_arms else "claude-standin"},
-            "detail": {"verdict": out["verdict"], "gates": out["gates"], "judge_actor": out["judge_actor"],
-                       "quality_claims": out["quality_claims"], "arms": arms_from, "verdict_judge": "stand-in",
-                       **({"blocked": ctx.cfg.hooks.blocked[6]} if ctx.cfg.hooks.blocked.get(6) and not core_arms else {})}}
+    rec = {"status": "real-narrow" if core_arms else "stand-in", "data_class": "synthetic", "actor": JUDGE,
+           "receipt": {"provider": "core-arms" if core_arms else "claude-standin"},
+           "detail": {"verdict": out["verdict"], "gates": out["gates"], "judge_actor": out["judge_actor"],
+                      "quality_claims": out["quality_claims"], "arms": arms_from, "verdict_judge": "stand-in",
+                      **({"blocked": ctx.cfg.hooks.blocked[6]} if ctx.cfg.hooks.blocked.get(6) and not core_arms else {})}}
+    if host:
+        rec = {**rec, **_rust_rec(label), "receipt": {"provider": "core-arms" if core_arms else "claude-standin"}}
+        rec["detail"] = {**rec["detail"], "verdict_judge": "rust-claude-standin"}
+    return rec
 
 
 MAX_REVISION_ROUNDS = 1
@@ -736,7 +799,7 @@ def _er():
 def build_report(ctx: Ctx, steps: list[dict]) -> dict:
     """The final engine-run report (C-2): per-step labels, per-port provenance, authors, engine-generated doubles[]."""
     keep = ("id", "n", "status", "data_class", "target", "sha", "contract_revision", "host", "receipt", "actor",
-            "model", "stage_output")
+            "model", "stage_output", "semantics", "steps_label")
     rep_steps = [{k: s[k] for k in keep if k in s} for s in steps]
     by = {(s["n"], s["id"]): s for s in steps}
     st = lambda n: next((s["status"] for s in steps if s["n"] == n), "red")  # noqa: E731
@@ -795,7 +858,7 @@ def run_thread(cfg: ThreadConfig) -> dict:
     if llm and cfg.mode == "live":
         live = {**llm.stats, "wall_minutes": round((time.monotonic() - t0) / 60, 4)}
         llm.close()
-    return {"steps": steps, "live": live, "mode": cfg.mode, "host": HOST, "replay": ctx.out["replay"],
+    return {"steps": steps, "live": live, "mode": cfg.mode, "host": HOST, "steps_mode": cfg.steps_mode, "replay": ctx.out["replay"],
             "report": ctx.out.get("report", {}), "m3": ctx.out.get("m3", {}), "mapper": ctx.out.get("mapper"),
             "categories": ctx.out.get("categories"), "gate_verdict": ctx.out.get("gate_verdict"), "ctx": ctx.out}
 
@@ -825,6 +888,9 @@ def main(argv=None) -> int:
     ap.add_argument("--source", choices=("generated", "original"), default="generated",
                     help="original: the local original bank CSV dataset named by ED0_ORIGINAL_PATH (needs --original-map)")
     ap.add_argument("--original-map", help="table,case_col,group_col of the original CSV (nothing is inferred)")
+    ap.add_argument("--steps", choices=("python", "rust"), default="python",
+                    help="rust: steps 2-6 run through the Rust step stand-ins (needs STEPS_CLI_EXE or --steps-exe)")
+    ap.add_argument("--steps-exe", default=os.environ.get("STEPS_CLI_EXE"))
     ap.add_argument("--hold-s", type=float, default=HOLD_S)
     ap.add_argument("--exe", default=os.environ.get("ED0_RUNNER_EXE", "D:/cargo-targets/claude-ed0/debug/improvement-engine.exe"))
     a = ap.parse_args(argv)
@@ -838,7 +904,8 @@ def main(argv=None) -> int:
         wd = Path(a.workdir) if a.workdir else Path(tmp)
         res = run_thread(ThreadConfig(workdir=wd, exe=a.exe, queue_dir=Path(qdir), mode=mode, live_hold_s=a.hold_s,
                                     e0_path=feed.e0_path() if a.e0 else None,
-                                    original_path=original.original_path() if omap else None, original_map=omap))
+                                    original_path=original.original_path() if omap else None, original_map=omap,
+                                    steps_mode=a.steps, steps_exe=a.steps_exe))
     if a.summary:
         Path(a.summary).write_text(json.dumps(live_summary(res), indent=1, sort_keys=True), encoding="utf-8")
     if res.get("live"):
