@@ -123,11 +123,29 @@ impl Store for PgStore {
     }
 
     fn put_artifact(&self, tenant: &str, envelope: Value) -> PutOutcome {
-        todo!()
+        let id = envelope["artifact"]["id"].as_str().unwrap_or_default().to_string();
+        if id.is_empty() {
+            return PutOutcome::Conflict; // an artifact without an id cannot be addressed
+        }
+        let rf = envelope["artifact"].clone();
+        self.with(|c| {
+            let mut tx = c.transaction()?;
+            let n = tx.execute(
+                "INSERT INTO pulso_ca_artifacts (tenant_id, artifact_id, artifact_ref, envelope) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                &[&tenant, &id, &rf, &envelope],
+            )?;
+            if n == 1 {
+                tx.commit()?;
+                return Ok(PutOutcome::Created);
+            }
+            let prior: Value = tx.query_one("SELECT artifact_ref FROM pulso_ca_artifacts WHERE tenant_id = $1 AND artifact_id = $2", &[&tenant, &id])?.get(0);
+            tx.rollback()?;
+            Ok(if prior == rf { PutOutcome::Exists } else { PutOutcome::Conflict })
+        })
     }
 
     fn get_artifact(&self, tenant: &str, id: &str) -> Option<Value> {
-        todo!()
+        self.with(|c| Ok(c.query_opt("SELECT envelope FROM pulso_ca_artifacts WHERE tenant_id = $1 AND artifact_id = $2", &[&tenant, &id])?.map(|r| r.get(0))))
     }
 
     fn put_doc(&self, ns: &str, tenant: &str, id: &str, doc: Value) {
