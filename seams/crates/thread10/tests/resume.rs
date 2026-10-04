@@ -68,10 +68,11 @@ fn kill_9_mid_pipeline_resumes_too() {
     same_outcome(&clean, &resumed);
 }
 
-/// Kill INSIDE the publish effect: the effect ran (ledger line written) but its commit did not. The resumed attempt
-/// re-invokes it with the SAME idempotency key and gets the same release: one commit, one successor, one distinct key.
+/// Kill INSIDE the publish effect: the effect ran (ledger line) but its commit did not. The engine records the effect
+/// intent before running it, so the resumed attempt must NOT blindly re-run it: it stops with NeedsReconciliation(8).
+/// No second publish effect, no publish event, no successor (a human reconciles; this slice does not).
 #[test]
-fn kill_9_inside_the_publish_effect_before_its_commit_reuses_the_idempotency_key() {
+fn kill_9_inside_the_publish_effect_before_its_commit_needs_reconciliation_and_never_republishes() {
     let work = tmp("mid-commit");
     let marker = work.with_extension("marker");
     let ledger = work.with_extension("ledger");
@@ -88,13 +89,13 @@ fn kill_9_inside_the_publish_effect_before_its_commit_reuses_the_idempotency_key
     child.kill().unwrap();
     assert!(!child.wait().unwrap().success(), "killed, not a clean exit");
     assert_eq!(std::fs::read_to_string(&ledger).unwrap().lines().count(), 1, "the effect ran once before the kill");
-    let resumed = report(&cmd(&work, "1060").arg("--ledger").arg(&ledger).output().unwrap());
-    let lines: Vec<String> = std::fs::read_to_string(&ledger).unwrap().lines().map(String::from).collect();
-    assert_eq!(lines.len(), 2, "at-least-once: the effect is re-invoked after the kill: {lines:?}");
-    assert_eq!(lines[0], lines[1], "same idempotency key and same release id");
-    assert_eq!(resumed["run"]["attempt"], 2);
-    assert_eq!(resumed["successor"]["runs"], 1);
-    assert_eq!(resumed["events"].as_array().unwrap().iter().filter(|e| e.as_str().unwrap().starts_with("thread:publish")).count(), 1);
+    let out = cmd(&work, "1060").arg("--ledger").arg(&ledger).output().unwrap();
+    assert_eq!(out.status.code(), Some(1), "the resumed job stops, it does not re-publish");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("NeedsReconciliation(8)"), "{}", String::from_utf8_lossy(&out.stderr));
+    let resumed: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(std::fs::read_to_string(&ledger).unwrap().lines().count(), 1, "the effect was not run a second time");
+    assert!(resumed["events"].as_array().unwrap().iter().all(|e| !e.as_str().unwrap().starts_with("thread:publish")), "no publish commit");
+    assert_eq!(resumed["successor"], Value::Null, "no successor without a committed publish");
 }
 
 #[test]

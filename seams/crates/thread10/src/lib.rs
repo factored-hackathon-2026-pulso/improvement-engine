@@ -30,11 +30,15 @@ pub struct Opts {
     pub now: u64,
     /// After handler N commits, create the file and block (the process is then killed by the test).
     pub kill_marker: Option<(PathBuf, usize)>,
+    /// Append one line per Core-double publish invocation (observable side effect).
+    pub ledger: Option<PathBuf>,
+    /// Inside the publish effect (after the ledger line, before the commit): create the file and block.
+    pub kill_in_publish: Option<PathBuf>,
 }
 
 impl Opts {
     pub fn new(work: PathBuf, runner: PathBuf) -> Opts {
-        Opts { work, runner, human_override: false, denied_kind: false, claimed_rate: None, sha: "0".repeat(40), now: 1000, kill_marker: None }
+        Opts { work, runner, human_override: false, denied_kind: false, claimed_rate: None, sha: "0".repeat(40), now: 1000, kill_marker: None, ledger: None, kill_in_publish: None }
     }
 }
 
@@ -89,7 +93,7 @@ pub fn run(o: &Opts) -> Result<Run, String> {
         spec = spec.replacen(r#""op":"replace""#, r#""op":"add""#, 1);
     }
     let store = FileStore::open(o.work.join("store"))?;
-    let port: Rc<dyn CorePort> = Rc::new(double::DoublePort);
+    let port: Rc<dyn CorePort> = Rc::new(double::DoublePort { ledger: o.ledger.clone(), kill_in_publish: o.kill_in_publish.clone() });
     let over = o.human_override.then(|| Override { by: "human".into(), actor: double::ACTOR.into(), reason: "exercise approve/publish of a failed structural gate; no quality claim".into() });
     let cfg = LiveConfig { human_actor: double::ACTOR.into(), human_override: over, decision_ttl_seconds: 600 };
     let hs: Vec<Box<dyn JobHandler>> = live_handlers(thread_handlers(env, Some(dry_run_hook(port.clone()))), port, cfg);

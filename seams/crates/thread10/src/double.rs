@@ -10,8 +10,14 @@ use serde_json::json;
 pub const BASE_RELEASE: &str = "rel-base-double";
 pub const ACTOR: &str = "local-supervisor";
 
+/// `ledger`: every `publish` invocation appends `key release_id` (the observable side effect of the double).
+/// `kill_in_publish`: after the effect (ledger line) create the file and block, so the test kills the process
+/// between the effect and its commit.
 #[derive(Default)]
-pub struct DoublePort;
+pub struct DoublePort {
+    pub ledger: Option<std::path::PathBuf>,
+    pub kill_in_publish: Option<std::path::PathBuf>,
+}
 
 fn hash_of(ops: &[String]) -> String {
     sha256_hex(ops.join("\n").as_bytes())
@@ -47,8 +53,19 @@ impl CorePort for DoublePort {
     fn approve(&self, _f: &FrozenInfo) -> Result<String, String> {
         Ok(ACTOR.into())
     }
-    fn publish(&self, f: &FrozenInfo, _key: &str) -> Result<PublishInfo, String> {
+    fn publish(&self, f: &FrozenInfo, key: &str) -> Result<PublishInfo, String> {
         let id = format!("rel-{}", &f.candidate_hash[..16]);
+        if let Some(l) = &self.ledger {
+            use std::io::Write;
+            let mut fh = std::fs::OpenOptions::new().create(true).append(true).open(l).map_err(|e| e.to_string())?;
+            writeln!(fh, "{key} {id}").map_err(|e| e.to_string())?;
+        }
+        if let Some(m) = &self.kill_in_publish {
+            std::fs::write(m, "x").map_err(|e| e.to_string())?;
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
         Ok(PublishInfo { release_id: id.clone(), staging_release_id: id })
     }
 }
