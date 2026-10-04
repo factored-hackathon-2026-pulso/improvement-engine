@@ -161,7 +161,9 @@ failed gate without a labelled override -> steps 8-9 `blocked(gate)`, 10 not_exe
 second delivery -> exactly one successor `successor:<release id>`.
 
 Resume: `kill -9` of the `thread10` process after handler 2, 7 (before the effectful publish) and 8 (right after it), then a
-second process with a later lease clock: identical committed event sequence, attempt 2, one publish event, one successor.
+second process with a later lease clock: identical committed event sequence, attempt 2, one publish event, one successor. The successor platform is in-process per process, so "one successor" is per run, not across the kill (the correlation runs after the job commits).
+
+A `kill -9` INSIDE the publish effect (after the effect, before its commit) is not resumed: the executor stops with `NeedsReconciliation(8)`, the effect ledger keeps one line, no publish event, no successor (a reconciler is out of scope).
 
 Post-run note: a MEM1 `demo1_thin` note (durable=false, dies with the process) whose evidence refs are the committed events.
 
