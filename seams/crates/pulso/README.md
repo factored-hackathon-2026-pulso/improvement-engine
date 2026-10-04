@@ -34,13 +34,28 @@ Stop: SIGTERM/SIGINT (unix), console control events (Windows), or stdin EOF (opt
 return; a task that ignores it is cut and the process exits 3. Exit codes: 0 clean, 1 a task died / startup failure,
 2 refused configuration, 3 cut at the deadline.
 
-### Registering work (R1M, R1E)
+### The wired tasks (W7)
 
-`run::build_tasks` is the only place tasks are wired. Implement `run::tasks::Tick` (the monitor, called once per poll
-interval with `TickCtx{data_mode, adapter, batch_cap}`) and replace `StubTick` there. Implement `run::tasks::JobRunner`
-and set `runner: Some(..)` on the worker; with no runner the worker claims nothing. Any other long-running piece
-implements `run::supervisor::Task` (`run(&mut self, &StopToken)`; it must return promptly after the stop) and is added
-with `Supervisor::add`. Monitor and worker are wrapped in `Gated` so they never run before the schema is ready.
+`run::build_tasks` is the only place tasks are wired. With `PULSO_SOURCE_ADAPTER=stub` (default) the monitor does nothing and the worker has no
+runner (health checks). With a real adapter:
+
+- monitor = `run::source::SourceTick`: the real `sources::monitor::tick_with` over `product-sqlite | product-postgres | dataset-pg`
+  (`dataset-raw`/`dataset-augmented` = `dataset-pg` over schema `raw`/`augmented`), packages and run records under `PULSO_WORK_DIR`, watermark in
+  `<work>/watermarks` (or Postgres via `PULSO_PG_WATERMARK_DSN`). The run is handed to the queue as one job keyed `monitor:<run_id>`
+  (`JobRepository::admit_keyed`, idempotent) BEFORE the watermark moves; a kill in between replays the same run id and finds the same job.
+- worker = `run::engine_job::EngineRunner`: for every signal the sensor admitted, `thread10::pipeline::run_signals` (one proposal, one ledger
+  verdict, one `proposal_verdict` event), with the run, profile nodes, doubles and panels written to the debug-api store in process. The models are
+  `PULSO_MODEL_PORT=scripted` (default, `scripted-observing-v1`, labelled) | `roleplay` (`PULSO_ROLEPLAY_QUEUE`) | `gateway` (`PULSO_MODEL_GATEWAY=enabled`
+  + the gateway env; a refusal is a `not_evaluable` verdict, never a scripted fallback); the Core is the offline double unless `PULSO_CORE_PORT=live`
+  (then `engine::real_core` env is required at start, and the job calls `begin_effect` first so a crash is never an automatic retry).
+- Extra variables: `PULSO_WORK_DIR` (required for a real adapter), `PULSO_SOURCE_SQLITE` (required for `product-sqlite`), `PULSO_SOURCE_ID`
+  (default `<data_mode>:local`), `PULSO_SOURCE_SCHEMA`, `PULSO_READ_BATCH` (events per read, default 1000, max 10000),
+  `PULSO_SOURCE_PROVENANCE=simulated|real` (an operator label; `simulated` replaces the monitor's "real platform signals"), `STEPS_RUNNER_EXE`.
+  DSNs (secrets, env only): `PULSO_PG_PRODUCT_DSN`, `PULSO_PG_DATASET_DSN`, `PULSO_PG_WATERMARK_DSN`.
+
+Other long-running pieces implement `run::supervisor::Task` (`run(&mut self, &StopToken)`; it must return promptly after the stop) and are added with
+`Supervisor::add`. Monitor and worker are wrapped in `Gated` so they never run before the schema is ready. End-to-end evidence:
+`docs/reports/demo-platform/README.md`, `tests/e2e_platform.rs`.
 
 ### Container
 
@@ -56,7 +71,7 @@ HEALTHCHECK CMD ["/pulso", "healthcheck"]     # GET 127.0.0.1:<PULSO_LISTEN_ADDR
 
 ## Known gaps (adversarial review, CL)
 
-- `JobRepository` has no `complete` transition: a job whose runner returned `Ok` stays `leased` and is claimable again when the lease lapses (fence bumped). `commit_output` keeps outputs first-writer-wins, but an external effect performed before the commit runs twice. Demonstrated by the ignored test `a_job_whose_runner_returned_ok_is_never_run_again` (`cargo test -p pulso --test run_tasks -- --ignored`). Fix: `complete(tenant, job, worker, fence)` -> status `complete` (already allowed by migration 0050) excluded from `claim_next`; wire it in `JobWorker` on `Ok`. Until then a runner must read `output()` first or use `begin_effect`.
+- (closed, W7) `JobRepository::complete(tenant, job, worker, fence, now)` is the terminal transition (status `complete`, admitted by migration 0050); the worker calls it when the runner returns `Ok`, so a finished job is never claimed again. A runner that fails or is killed still leaves the lease to expire and the job is retried (at-least-once, fenced). Test: `a_job_whose_runner_returned_ok_is_never_run_again`.
 - No read/idle timeout on the HTTP front (a slow client holds one of 256 request threads; at the cap `/readyz` also answers 503). Put a proxy with timeouts in front.
 - `PULSO_STORAGE_PREFIX` is validated and logged but not consumed by any component yet.
 - The listener stops accepting at SIGTERM (same stop token), so `/readyz` cannot answer `shutting_down` during an LB drain; default `PULSO_SHUTDOWN_GRACE_SECS=25` stays below the ECS default stopTimeout of 30 s (keep it below the task's stopTimeout).

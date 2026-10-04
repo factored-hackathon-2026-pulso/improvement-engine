@@ -23,6 +23,10 @@ pub const SCENARIOS: &[(&str, Scenario)] = &[
     ("crash_before_commit_then_reclaim_is_attempt_plus_one", crash_then_reclaim),
     ("touch_lease_extends_only_for_current_holder", touch_lease),
     ("same_worker_old_fence_cannot_commit_touch_or_begin_effect", same_worker_old_fence),
+    ("completed_job_is_never_claimed_again", completed_never_claimed),
+    ("only_the_current_unexpired_holder_can_complete", only_holder_completes),
+    ("complete_job_takes_no_holder_operation", complete_takes_no_holder_operation),
+    ("keyed_admission_is_idempotent_per_tenant", keyed_admission),
 ];
 
 pub fn run_suite(make: Make) -> Vec<String> {
@@ -215,4 +219,68 @@ fn same_worker_old_fence(make: Make) -> Result<(), String> {
     eq("old fence effect", r.begin_effect(A, &a, "w1", 1, 131), Err(RepoError::StaleFence))?;
     eq("out/0 untouched", st(r.output(A, &a, 0))?, None)?;
     st(r.commit_output(A, &a, 0, "w1", 2, 131, "P new"))
+}
+
+fn completed_never_claimed(make: Make) -> Result<(), String> {
+    let r = make();
+    let a = st(r.admit(A))?;
+    let c = claim(&*r, A, "w1", 100)?.ok_or("no claim")?;
+    st(r.commit_output(A, &a, 0, "w1", c.fence_token, 101, "P done"))?;
+    st(r.complete(A, &a, "w1", c.fence_token, 102))?;
+    for now in [103, 130, 100_000] {
+        eq(&format!("claim at {now}"), claim(&*r, A, "w2", now)?, None)?;
+    }
+    eq("output kept", st(r.output(A, &a, 0))?, Some("P done".to_string()))
+}
+
+fn only_holder_completes(make: Make) -> Result<(), String> {
+    let r = make();
+    let a = st(r.admit(A))?;
+    let c1 = claim(&*r, A, "w1", 100)?.ok_or("no claim")?;
+    eq("wrong worker", r.complete(A, &a, "w2", c1.fence_token, 101), Err(RepoError::StaleFence))?;
+    eq("wrong fence", r.complete(A, &a, "w1", c1.fence_token + 1, 101), Err(RepoError::StaleFence))?;
+    eq("other tenant", r.complete("tenant-b", &a, "w1", c1.fence_token, 101), Err(RepoError::StaleFence))?;
+    eq("expired", r.complete(A, &a, "w1", c1.fence_token, 130), Err(RepoError::StaleFence))?;
+    // the refusals changed nothing: the job is reclaimable after expiry
+    let c2 = claim(&*r, A, "w2", 130)?.ok_or("refused completes made the job unclaimable")?;
+    eq("superseded", r.complete(A, &a, "w1", c1.fence_token, 131), Err(RepoError::StaleFence))?;
+    st(r.complete(A, &a, "w2", c2.fence_token, 131))?;
+    eq("twice", r.complete(A, &a, "w2", c2.fence_token, 132), Err(RepoError::StaleFence))
+}
+
+fn complete_takes_no_holder_operation(make: Make) -> Result<(), String> {
+    let r = make();
+    let a = st(r.admit(A))?;
+    let c = claim(&*r, A, "w1", 100)?.ok_or("no claim")?;
+    st(r.complete(A, &a, "w1", c.fence_token, 101))?;
+    eq("commit", r.commit_output(A, &a, 0, "w1", c.fence_token, 102, "P late"), Err(RepoError::StaleFence))?;
+    eq("touch", r.touch_lease(A, &a, "w1", c.fence_token, 102, 30), Err(RepoError::StaleFence))?;
+    eq("effect", r.begin_effect(A, &a, "w1", c.fence_token, 102), Err(RepoError::StaleFence))?;
+    eq("no output", st(r.output(A, &a, 0))?, None)
+}
+
+fn keyed_admission(make: Make) -> Result<(), String> {
+    let r = make();
+    let k = "monitor:mon-0123456789abcdef";
+    let a = st(r.admit_keyed(A, k))?;
+    eq("same key", st(r.admit_keyed(A, k))?, a.clone())?;
+    let b = st(r.admit_keyed(A, "monitor:mon-fedcba9876543210"))?;
+    if a == b {
+        return Err("two keys share a job".into());
+    }
+    let foreign = st(r.admit_keyed("tenant-b", k))?;
+    if foreign == a {
+        return Err("a key of another tenant returned this tenant's job".into());
+    }
+    eq("key readable", st(r.job_key(A, &a))?, Some(k.to_string()))?;
+    eq("foreign tenant cannot read", st(r.job_key("tenant-b", &a))?, None)?;
+    eq("claim 1", claim(&*r, A, "w1", 100)?.map(|c| c.job), Some(a))?;
+    eq("claim 2", claim(&*r, A, "w1", 100)?.map(|c| c.job), Some(b))?;
+    eq("no duplicate queued", claim(&*r, A, "w1", 100)?, None)?;
+    for bad in ["", "a\nb", &"k".repeat(257)] {
+        if !matches!(r.admit_keyed(A, bad), Err(RepoError::InvalidId(_))) {
+            return Err(format!("key {bad:?} accepted"));
+        }
+    }
+    Ok(())
 }

@@ -126,3 +126,21 @@ def test_requires_a_mode_and_a_target():
         main(["--sqlite", "x.db"])
     with pytest.raises(SystemExit):
         main(["--backfill", "5"])
+
+
+def test_mean_gap_stretches_the_simulated_clock(tmp_path):
+    """--mean-gap-s sets the mean seconds between case arrivals: a long gap spreads the same number of events over days
+    (the sensor's cold-start gate needs >= 14 days of event_time)."""
+    span = {}
+    for gap in (None, 900):
+        db = tmp_path / f"g{gap}.sqlite"
+        extra = [] if gap is None else ["--mean-gap-s", str(gap)]
+        assert main(["--sqlite", str(db), "--backfill", "4000", "--seed", "3", *extra], sleep=lambda s: None) == 0
+        con = sqlite3.connect(db)
+        lo, hi = con.execute("select min(event_time), max(event_time) from event_log").fetchone()
+        con.close()
+        from datetime import datetime
+        f = lambda t: datetime.fromisoformat(t.replace("Z", "+00:00"))
+        span[gap] = (f(hi) - f(lo)).total_seconds()
+    assert span[900] > 10 * span[None], span
+    assert main(["--sqlite", str(tmp_path / "bad.sqlite"), "--backfill", "10", "--mean-gap-s", "0"], sleep=lambda s: None) == 2

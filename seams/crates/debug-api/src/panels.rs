@@ -117,9 +117,26 @@ fn investigation(committed: &Value, report: Option<&Value>, at: &str) -> Option<
         "ev-limit-scripted-scout", "limits",
         scout_text, "job_spec", "stand_in", &claim.cloned().unwrap_or(Value::Null),
     ));
+    // A signal that came from a real sensor run (the monitor tick over a platform event package) carries its provenance in the
+    // report's `source`; the thread's own sensors step is then still a fixed-output stand-in and says so.
+    let source = report.and_then(|r| r.get("source")).filter(|x| x.is_object());
+    if let Some(src) = source {
+        let g = |k: &str| s(src, k).unwrap_or("unknown");
+        let (num, den) = (src["numerator"].as_u64().map_or_else(|| "?".to_string(), |n| n.to_string()), src["denominator"].as_u64().map_or_else(|| "?".to_string(), |n| n.to_string()));
+        main_refs.push(ev.add(
+            "ev-source-signal", "supports",
+            format!("Signal {} of cell {} ({num}/{den}) was admitted by the {} sensor over event package {} ({} events read via {} from {}, data origin {})", g("metric_id"), g("cell"), g("sensor"), g("package"), src["events_read"].as_u64().unwrap_or(0), g("adapter"), g("source_id"), g("data_origin")),
+            "sensor_package", "computed", src,
+        ));
+    }
     if let Some(sensed) = out.get("sensors") {
         let n = |k: &str| sensed[k].as_array().map_or(0, Vec::len);
-        main_refs.push(ev.add("ev-limit-sensor", "limits", format!("The sensor stand-in produced {} signal(s) and {} discard(s) from a fixed-output runner; it reads no data", n("signals"), n("discards")), "engine_step", "stand_in", sensed));
+        let text = if source.is_some() {
+            format!("The thread's sensors step is a fixed-output stand-in ({} signal(s), {} discard(s)); the signal under test came from the real sensor run above and entered the thread only through the lab row", n("signals"), n("discards"))
+        } else {
+            format!("The sensor stand-in produced {} signal(s) and {} discard(s) from a fixed-output runner; it reads no data", n("signals"), n("discards"))
+        };
+        main_refs.push(ev.add("ev-limit-sensor", "limits", text, "engine_step", "stand_in", sensed));
     }
 
     let who = if scripted { "Scripted scout" } else { "Scout" };

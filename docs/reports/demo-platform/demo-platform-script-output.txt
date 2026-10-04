@@ -1,0 +1,38 @@
+[1/5] building pulso (cargo build -j 1 -p pulso; a no-op when up to date)
+[3/5] starting the simulator: escalation_rise, backfill 18000 events then follow at 200/s (data: C:\Users\alexg\AppData\Local\Temp\demo-platform-20261004173926)
+[4/5] starting pulso run (platform mode, product-sqlite, loopback only) on 127.0.0.1:4021
+
+  Console: http://127.0.0.1:4021/
+  Runs:    http://127.0.0.1:4021/#/runs
+
+[5/5] waiting up to 150 s for the first admitted signal (the sensor needs 14 days of history and a replicated effect)
+  runs: 0, with an admitted signal: 0
+  runs: 7, with an admitted signal: 0
+  runs: 8, with an admitted signal: 1
+
+NOT REAL (doubles[], listed first; everything below is only as real as this list allows):
+- port.core:offline-double(thread10::DoublePort): offline-double(thread10::DoublePort), price_source n/a
+- port.llm_gateway:not-exercised(no model in the offline Rust thread): not-exercised(no model in the offline Rust thread), price_source n/a
+- port.registry:in-process-double: in-process-double, price_source n/a
+- port.human_issuer:simulated-local-issuer: simulated-local-issuer, price_source n/a
+- port.platform:platform-sim: platform-sim, price_source n/a
+- release:simulated: simulated
+- observation:simulated: simulated
+- data.source:simulated-operator-declared: simulated-operator-declared, data_class treated
+- scout:stand-in: stand-in, provider scripted, data_class treated
+- recompute:real-narrow: real-narrow, provider claude-standin, data_class treated
+- opportunity:stand-in: stand-in, provider scripted, data_class treated
+- validation:real-narrow: real-narrow, provider claude-standin, data_class treated
+- compile:stand-in: stand-in, provider claude-standin, data_class treated
+- gate:stand-in: stand-in, provider claude-standin, data_class treated
+- revision:not_exercised: not_exercised, provider claude-standin, data_class treated
+- approval:blocked(gate): blocked(gate), provider simulated-issuer, data_class treated
+- publish:blocked(gate): blocked(gate), provider claude-standin, data_class treated
+- observation:not_exercised: not_exercised, provider platform-sim, data_class treated
+- port.llm_gateway:scripted(no model ran: fixed answers): scripted(no model ran: fixed answers), price_source n/a
+
+RUN LABEL: platform run mon-42f6228654152d81: simulated platform-shaped signals (the source is declared simulated by the operator; this is not the actual platform); release and observation simulated; 1 signal(s) admitted by sensor rust-events (real Rust sensor over the event package); models scripted (scripted-observing-v1: fixed rules, no model ran); Core offline-double; human simulated; release and observation simulated; no quality claim
+FINDINGS (8 monitor run(s); one proposal and one ledger verdict per admitted signal; the verdict comes from the gate on the offline Core double, never from a quality claim):
+- mon-42f6228654152d81: reassignment_rate.pt.web_chat -> not_viable (gate_failed): the structural gate did not pass
+
+  First run with a proposal: http://127.0.0.1:4021/#/run/mon-42f6228654152d81

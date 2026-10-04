@@ -27,6 +27,22 @@ pub enum DataMode {
     Platform,
 }
 
+/// Which `ModelPort` answers scout, verifier and builder. `Scripted` is the honest default (labelled `scripted`, never real).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelPortKind {
+    Scripted,
+    Roleplay,
+    Gateway,
+}
+
+/// What the operator says the source data is. `pulso` cannot verify it; the label only travels with the run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    Unspecified,
+    Simulated,
+    Real,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Storage {
     Postgres,
@@ -71,9 +87,34 @@ pub struct RunConfig {
     pub tenant: String,
     pub worker_id: String,
     pub exit_on_stdin_eof: bool,
+    /// Where the monitor writes packages, run records and watermarks (`PULSO_WORK_DIR`); required for any adapter but `stub`.
+    pub work_dir: Option<PathBuf>,
+    /// `<data_mode>:<name>` (`PULSO_SOURCE_ID`, default `<data_mode>:local`).
+    pub source_id: String,
+    pub source_sqlite: Option<PathBuf>,
+    pub source_schema: Option<String>,
+    /// Events per source read (`PULSO_READ_BATCH`, 1..=10000, default 1000).
+    pub read_batch: usize,
+    pub provenance: Provenance,
+    pub model_port: ModelPortKind,
+    pub roleplay_queue: Option<PathBuf>,
+    /// `PULSO_CORE_PORT=live`: the real Core port (`engine::real_core`); anything else is the labelled offline double.
+    pub core_live: bool,
 }
 
 impl RunConfig {
+    /// What a real (non-stub) source needs on top of a well-formed configuration. `pulso run` refuses to start (exit 2) without it;
+    /// it is separate from parsing so a deployment can still describe an adapter it does not start here.
+    pub fn check_source(&self) -> Result<(), ConfigError> {
+        if self.adapter != "stub" && self.work_dir.is_none() {
+            return Err(ConfigError::Missing("PULSO_WORK_DIR (packages, run records and watermarks of the monitor)"));
+        }
+        if self.adapter == "product-sqlite" && self.source_sqlite.is_none() {
+            return Err(ConfigError::Missing("PULSO_SOURCE_SQLITE (the product SQLite file, opened read-only)"));
+        }
+        Ok(())
+    }
+
     pub fn from_env() -> Result<Self, ConfigError> {
         Self::from_lookup(&|k| std::env::var(k).ok())
     }
@@ -108,8 +149,8 @@ impl RunConfig {
 
         let adapter = var("PULSO_SOURCE_ADAPTER").unwrap_or_else(|| "stub".into());
         let (allowed, other): (&[&str], &[&str]) = match data_mode {
-            DataMode::Dataset => (&["stub", "dataset-raw", "dataset-augmented"], &["product-sqlite", "product-postgres"]),
-            DataMode::Platform => (&["stub", "product-sqlite", "product-postgres"], &["dataset-raw", "dataset-augmented"]),
+            DataMode::Dataset => (&["stub", "dataset-pg", "dataset-raw", "dataset-augmented"], &["product-sqlite", "product-postgres"]),
+            DataMode::Platform => (&["stub", "product-sqlite", "product-postgres"], &["dataset-pg", "dataset-raw", "dataset-augmented"]),
         };
         if other.contains(&adapter.as_str()) {
             let mode = if data_mode == DataMode::Dataset { "dataset" } else { "platform" };
@@ -172,7 +213,51 @@ impl RunConfig {
             Some(b) => normalize_base_path(&b).map_err(|r| invalid("PULSO_BASE_PATH", &r))?,
         };
 
+        let work_dir = var("PULSO_WORK_DIR").map(PathBuf::from);
+        let source_sqlite = var("PULSO_SOURCE_SQLITE").map(PathBuf::from);
+        let mode_name = if data_mode == DataMode::Dataset { "dataset" } else { "platform" };
+        let source_id = var("PULSO_SOURCE_ID").unwrap_or_else(|| format!("{mode_name}:local"));
+        if let Some(rest) = source_id.strip_prefix(&format!("{mode_name}:")) {
+            let ok = !rest.is_empty() && source_id.len() <= 96 && rest.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'_' | b'-' | b':'));
+            if !ok {
+                return Err(invalid("PULSO_SOURCE_ID", "lowercase [a-z0-9._:-] after the data mode prefix, at most 96 characters"));
+            }
+        } else {
+            return Err(invalid("PULSO_SOURCE_ID", &format!("must start with {mode_name}: for PULSO_DATA_MODE={mode_name}")));
+        }
+        let read_batch = num("PULSO_READ_BATCH", 1000, 1, 10_000)? as usize;
+        let provenance = match var("PULSO_SOURCE_PROVENANCE").as_deref() {
+            None => Provenance::Unspecified,
+            Some("simulated") => Provenance::Simulated,
+            Some("real") => Provenance::Real,
+            Some(_) => return Err(invalid("PULSO_SOURCE_PROVENANCE", "must be simulated or real")),
+        };
+        let model_port = match var("PULSO_MODEL_PORT").as_deref() {
+            None | Some("scripted") => ModelPortKind::Scripted,
+            Some("roleplay") => ModelPortKind::Roleplay,
+            Some("gateway") => ModelPortKind::Gateway,
+            Some(_) => return Err(invalid("PULSO_MODEL_PORT", "must be scripted, roleplay or gateway")),
+        };
+        let roleplay_queue = var("PULSO_ROLEPLAY_QUEUE").map(PathBuf::from);
+        if model_port == ModelPortKind::Roleplay && roleplay_queue.is_none() {
+            return Err(ConfigError::Missing("PULSO_ROLEPLAY_QUEUE (PULSO_MODEL_PORT=roleplay replays that queue)"));
+        }
+        let core_live = match var("PULSO_CORE_PORT").as_deref() {
+            None | Some("offline") | Some("double") => false,
+            Some("live") => true,
+            Some(_) => return Err(invalid("PULSO_CORE_PORT", "must be offline (alias double) or live")),
+        };
+
         Ok(RunConfig {
+            work_dir,
+            source_id,
+            source_sqlite,
+            source_schema: var("PULSO_SOURCE_SCHEMA"),
+            read_batch,
+            provenance,
+            model_port,
+            roleplay_queue,
+            core_live,
             storage,
             database_url: url.map(Secret),
             data_mode,

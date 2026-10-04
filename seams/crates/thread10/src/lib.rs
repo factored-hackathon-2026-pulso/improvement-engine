@@ -20,7 +20,7 @@ use engine::executor::{ExecOptions, execute, read_lease};
 use engine::live::{CorePort, LiveConfig, dry_run_hook, live_handlers};
 use engine::ledger::bk0_check;
 use engine::models::tps::DEFAULT_K;
-use engine::models::{ModelError, ModelPort, Recording, Scripted};
+use engine::models::{DataClass, ModelError, ModelPort, Recording, Scripted};
 use engine::synth::LabRow;
 use engine::{FileStore, JobStore, event_log, synth};
 use serde_json::Value;
@@ -37,12 +37,36 @@ pub struct SignalSeed {
     pub evidence_ref: String,
     pub numerator: u64,
     pub count: u64,
+    /// The metric id the model sees for this signal (`None` = the synthetic lab metric). A signal from a real sensor run carries
+    /// its cell metric id here (`reassignment_rate.pt.web_chat`); it is registered for the treated-payload scan.
+    pub metric_id: Option<String>,
+    /// What the model-facing payload is made of (`Synthetic` for the lab row; `Treated` for aggregates of a platform source).
+    pub data_class: DataClass,
 }
 
 impl SignalSeed {
     /// The lab signal of the default thread: 120/400 = 0.30.
     pub fn lab_default() -> SignalSeed {
-        SignalSeed { signal_id: "sig-0001".into(), evidence_ref: "ev-0001".into(), numerator: 120, count: 400 }
+        SignalSeed::new("sig-0001", "ev-0001", 120, 400)
+    }
+
+    pub fn new(signal_id: &str, evidence_ref: &str, numerator: u64, count: u64) -> SignalSeed {
+        SignalSeed { signal_id: signal_id.into(), evidence_ref: evidence_ref.into(), numerator, count, metric_id: None, data_class: DataClass::Synthetic }
+    }
+
+    pub fn with_metric(mut self, metric_id: &str) -> SignalSeed {
+        self.metric_id = Some(metric_id.into());
+        self
+    }
+
+    pub fn with_data_class(mut self, data_class: DataClass) -> SignalSeed {
+        self.data_class = data_class;
+        self
+    }
+
+    /// The metric id of the model-facing rows.
+    pub fn metric(&self) -> &str {
+        self.metric_id.as_deref().unwrap_or("synthetic_metric")
     }
 
     /// Rate at two decimals, round half even, as the recompute step computes it.

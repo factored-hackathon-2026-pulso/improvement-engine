@@ -152,12 +152,14 @@ impl JobHandler for StepHandler {
 
         match self.step {
             Step::Recompute => {
+                // A sensed signal is known by its `signal_id` and, for the rust-events sensor, by its cell `metric_id`
+                // (`reassignment_rate.pt.web_chat`): both are accepted (additive; the `signal_id` rule is unchanged).
                 let sensed: Vec<&str> = prior("sensors")
                     .and_then(|s| s.get("signals"))
                     .and_then(Json::as_arr)
                     .unwrap_or(&[])
                     .iter()
-                    .filter_map(|s| s.get("signal_id").and_then(Json::as_str))
+                    .flat_map(|s| ["signal_id", "metric_id"].into_iter().filter_map(|k| s.get(k).and_then(Json::as_str)))
                     .collect();
                 for id in spec.get("signal_ids").and_then(Json::as_arr).unwrap_or(&[]) {
                     if !id.as_str().is_some_and(|i| sensed.contains(&i)) {

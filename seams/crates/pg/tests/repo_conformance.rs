@@ -24,6 +24,9 @@ impl JobRepository for Racy {
     fn begin_effect(&self, t: &str, j: &str, w: &str, f: u64, n: u64) -> Result<(), RepoError> { self.0.begin_effect(t, j, w, f, n) }
     fn commit_output(&self, t: &str, j: &str, s: u32, w: &str, f: u64, n: u64, r: &str) -> Result<(), RepoError> { self.0.commit_output(t, j, s, w, f, n, r) }
     fn output(&self, t: &str, j: &str, s: u32) -> Result<Option<String>, RepoError> { self.0.output(t, j, s) }
+    fn complete(&self, t: &str, j: &str, w: &str, f: u64, n: u64) -> Result<(), RepoError> { self.0.complete(t, j, w, f, n) }
+    fn admit_keyed(&self, t: &str, k: &str) -> Result<String, RepoError> { self.0.admit_keyed(t, k) }
+    fn job_key(&self, t: &str, j: &str) -> Result<Option<String>, RepoError> { self.0.job_key(t, j) }
 }
 
 #[test]

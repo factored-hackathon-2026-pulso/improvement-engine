@@ -37,11 +37,17 @@ pub struct PipelineOpts {
     pub store: Option<Rc<dyn JobStore>>,
     pub sha: String,
     pub now: u64,
+    /// Called after each committed handler of each signal's thread with `(signal index, handler index, committed {spec,out} payload)`.
+    /// A read-only hook (a console projection); it never alters the run.
+    pub on_payload: Option<PayloadHook>,
 }
+
+/// `(signal index, handler index, committed payload)`.
+pub type PayloadHook = Rc<dyn Fn(usize, usize, &Value)>;
 
 impl PipelineOpts {
     pub fn new(work: PathBuf, runner: PathBuf, run_id: &str, signals: Vec<SignalSeed>) -> PipelineOpts {
-        PipelineOpts { work, runner, run_id: run_id.into(), signals, human_override: false, model: None, core: None, sink: None, store: None, sha: "0".repeat(40), now: 1000 }
+        PipelineOpts { work, runner, run_id: run_id.into(), signals, human_override: false, model: None, core: None, sink: None, store: None, sha: "0".repeat(40), now: 1000, on_payload: None }
     }
 }
 
@@ -82,6 +88,9 @@ pub fn run_signals(o: &PipelineOpts) -> Result<PipelineRun, String> {
         t.model = o.model.clone();
         t.core = o.core.clone();
         t.seed = seed.clone();
+        if let Some(hook) = o.on_payload.clone() {
+            t.on_payload = Some(Rc::new(move |handler, payload| hook(i, handler, payload)));
+        }
         t.job = JOB.into();
         let r = run(&t)?;
         let ordinal = u32::try_from(i).map_err(|_| "too many signals".to_string())?;

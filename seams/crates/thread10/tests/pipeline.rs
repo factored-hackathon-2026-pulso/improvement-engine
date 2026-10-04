@@ -19,7 +19,7 @@ fn tmp(name: &str) -> std::path::PathBuf {
 }
 
 fn seed(id: &str, num: u64, count: u64) -> SignalSeed {
-    SignalSeed { signal_id: id.into(), evidence_ref: format!("ev-{id}"), numerator: num, count }
+    SignalSeed::new(id, &format!("ev-{id}"), num, count)
 }
 
 fn four() -> Vec<SignalSeed> {

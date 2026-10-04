@@ -86,6 +86,13 @@ fn io<E: std::fmt::Display>(e: E) -> SourceError {
 }
 
 pub fn tick(config: &Config, adapter: &dyn SourceAdapter, store: &dyn WatermarkStore) -> Result<TickOutcome, SourceError> {
+    tick_with(config, adapter, store, &|_, _| Ok(()))
+}
+
+/// `tick` with a hand-over hook: `on_ready(run_id, record)` runs once the run record is on disk and BEFORE the watermark moves.
+/// This is where a caller enqueues downstream work (an engine job keyed by `run_id`): a failing hook leaves the watermark, so the
+/// batch is read again and the hook called again with the same `run_id` (idempotent hand-over, never a lost batch).
+pub fn tick_with(config: &Config, adapter: &dyn SourceAdapter, store: &dyn WatermarkStore, on_ready: &dyn Fn(&str, &Value) -> Result<(), SourceError>) -> Result<TickOutcome, SourceError> {
     let id = adapter.source_id();
     if id != &config.source_id || adapter.adapter() != config.adapter.as_str() || id.mode() != config.data_mode {
         return Err(SourceError::Mismatch(format!("config names {} via {}, adapter is {} via {}", config.source_id.as_str(), config.adapter.as_str(), id.as_str(), adapter.adapter())));
@@ -155,6 +162,7 @@ pub fn tick(config: &Config, adapter: &dyn SourceAdapter, store: &dyn WatermarkS
     let runs = work.join("runs");
     std::fs::create_dir_all(&runs).map_err(io)?;
     atomic_write(&runs.join(format!("{run_id}.json")), &record.to_string())?;
+    on_ready(&run_id, &record)?;
 
     let new = WatermarkRecord {
         watermark: to.clone(),

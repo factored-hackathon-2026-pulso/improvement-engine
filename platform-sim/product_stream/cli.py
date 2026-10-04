@@ -33,6 +33,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--horizon-events", type=int, default=None,
                    help="planned total events (windows and onset derive from it); default N for backfill-only")
     p.add_argument("--customers", type=int, default=400, help="synthetic customer pool size")
+    p.add_argument("--mean-gap-s", type=float, default=60.0,
+                   help="mean simulated seconds between case arrivals (a long gap spreads the events over days)")
     p.add_argument("--start", default="2026-09-01T08:00:00Z", help="simulated clock start (UTC ISO)")
     p.add_argument("--manifest", metavar="FILE", help="write the planted-signal manifest here")
     p.add_argument("--stop-file", metavar="FILE", help="exit cleanly when this file exists")
@@ -53,6 +55,9 @@ def main(argv=None, sleep=time.sleep, stdin=None, connect=None) -> int:
     a = _parser().parse_args(argv)
     if a.backfill is None and not a.follow:
         _parser().error("give --backfill N and/or --follow")
+    if not a.mean_gap_s > 0:
+        print("error: --mean-gap-s must be > 0", file=sys.stderr)
+        return 2
     run_id = f"{a.scenario}-{a.seed}"
     try:
         sink = SqliteSink(a.sqlite) if a.sqlite else PostgresSink(a.dsn_env, connect=connect, run_id=run_id)
@@ -76,7 +81,7 @@ def main(argv=None, sleep=time.sleep, stdin=None, connect=None) -> int:
                 print("error: rows not written by this simulator remain in event_log; refusing to mix with them",
                       file=sys.stderr)
                 return 2
-        gen = ProductStream(seed=a.seed, scenario=a.scenario, horizon_events=horizon, start=a.start, n_customers=a.customers,
+        gen = ProductStream(seed=a.seed, scenario=a.scenario, horizon_events=horizon, start=a.start, n_customers=a.customers, mean_gap_s=a.mean_gap_s,
                             **({"onset_sequence": a.onset_sequence} if a.onset_sequence is not None else {}))
         if a.backfill:
             left = a.backfill
