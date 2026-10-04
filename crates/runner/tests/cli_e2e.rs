@@ -522,6 +522,75 @@ fn source_validate_e0_returns_an_aggregate_without_running_the_pipeline() {
 }
 
 #[test]
+fn source_validate_reports_invalid_e0_relationship_as_invalid_not_unsupported() {
+    let temp = TempDir::new().expect("temp directory");
+    let input = temp.path().join("invalid-e0-source-validation");
+    e0_fixture(&input, "ok", "ok");
+    write_empty_operational_tables(&input);
+    let at = 1_750_000_000_000_000_i64;
+    write_parquet(
+        &input.join("datos/identity_check.parquet"),
+        Schema::new(vec![
+            Field::new("check_id", DataType::LargeUtf8, false),
+            Field::new("case_id", DataType::LargeUtf8, false),
+            Field::new("actor_role", DataType::LargeUtf8, false),
+            Field::new("result", DataType::LargeUtf8, false),
+            Field::new(
+                "started_at",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                false,
+            ),
+            Field::new(
+                "ended_at",
+                DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                false,
+            ),
+        ]),
+        vec![
+            large_strings(vec!["private-check-id"]),
+            large_strings(vec!["private-unknown-case-id"]),
+            large_strings(vec!["customer"]),
+            large_strings(vec!["passed"]),
+            Arc::new(TimestampMicrosecondArray::from(vec![at + 1]).with_timezone("UTC")),
+            Arc::new(TimestampMicrosecondArray::from(vec![at + 2]).with_timezone("UTC")),
+        ],
+    );
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_improvement-engine"))
+        .args([
+            "source",
+            "validate",
+            "--kind",
+            "enriched_history",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--contract-version", "0.5.1"])
+        .output()
+        .expect("validate invalid E0 through the public executable");
+
+    assert_eq!(completed.status.code(), Some(2));
+    let stdout = String::from_utf8(completed.stdout).expect("UTF-8 summary");
+    let summary: serde_json::Value = serde_json::from_str(&stdout).expect("JSON summary");
+    assert_eq!(summary["validation_status"], "invalid_source");
+    assert_eq!(summary["validation_scope"], "operational");
+    assert_eq!(
+        summary["findings"],
+        serde_json::json!(["relationship_invalid"])
+    );
+    let stderr = String::from_utf8(completed.stderr).expect("UTF-8 error");
+    assert!(stderr.contains("source validation failed: invalid_source"));
+    for forbidden in [
+        input.to_string_lossy().as_ref(),
+        "private-check-id",
+        "private-unknown-case-id",
+    ] {
+        assert!(!stdout.contains(forbidden), "summary exposed {forbidden}");
+        assert!(!stderr.contains(forbidden), "error exposed {forbidden}");
+    }
+}
+
+#[test]
 fn source_validate_original_fails_closed_without_reading_malformed_input() {
     let temp = TempDir::new().expect("temp directory");
     let input = temp.path().join("original-source-validation");

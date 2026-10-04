@@ -1,5 +1,5 @@
 use improvement_engine_core::replay_clock::ReplayProtocol;
-use improvement_engine_core::replay_protocol::ReplayProtocolMachine;
+use improvement_engine_core::replay_protocol::{ReplayProtocolError, ReplayProtocolMachine};
 
 #[test]
 fn frozen_replay_keeps_one_revision_across_all_cohorts() {
@@ -33,6 +33,26 @@ fn prequential_update_waits_for_seal_and_activates_at_next_cohort() {
     assert_eq!(first.revision(), 7);
 
     let next = replay.begin_cohort("cohort-2", 11, &["case-b"]).unwrap();
+    assert_eq!(next.revision(), 8);
+    assert_eq!(replay.active_revision(), 8);
+}
+
+#[test]
+fn empty_cohort_does_not_activate_a_pending_prequential_update() {
+    let mut replay = ReplayProtocolMachine::new(ReplayProtocol::Prequential, 7);
+    let first = replay.begin_cohort("cohort-1", 10, &["case-a"]).unwrap();
+    replay
+        .seal_cohort(&first, "sha256:evaluator-receipt-1")
+        .unwrap();
+    replay.propose_update(&first, "update-1", 8).unwrap();
+
+    assert_eq!(
+        replay.begin_cohort("empty", 11, &[]),
+        Err(ReplayProtocolError::EmptyCohort)
+    );
+    assert_eq!(replay.active_revision(), 7);
+
+    let next = replay.begin_cohort("cohort-2", 12, &["case-b"]).unwrap();
     assert_eq!(next.revision(), 8);
     assert_eq!(replay.active_revision(), 8);
 }

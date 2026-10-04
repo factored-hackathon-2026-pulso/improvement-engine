@@ -88,6 +88,26 @@ impl Summary {
             findings: Vec::new(),
         }
     }
+
+    fn invalid(source_kind: &'static str, finding: &'static str) -> Self {
+        Self {
+            schema_version: 1,
+            source_kind,
+            validation_status: "invalid_source",
+            validation_scope: "operational",
+            contract_version: None,
+            manifest_digest: None,
+            snapshot_digest: None,
+            operational_table_count: None,
+            findings: vec![finding],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ValidationFailure {
+    Unsupported(&'static str),
+    Invalid(&'static str),
 }
 
 pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
@@ -108,17 +128,23 @@ pub fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), String> {
 
     let summary = match validate_source(&options) {
         Ok(summary) => summary,
-        Err(finding) => Summary::unsupported(options.kind.label(), finding),
+        Err(ValidationFailure::Unsupported(finding)) => {
+            Summary::unsupported(options.kind.label(), finding)
+        }
+        Err(ValidationFailure::Invalid(finding)) => Summary::invalid(options.kind.label(), finding),
     };
     write_summary(&summary)?;
     if summary.validation_status == "valid" {
         Ok(())
     } else {
-        Err("source validation failed: unsupported_source".to_owned())
+        Err(format!(
+            "source validation failed: {}",
+            summary.validation_status
+        ))
     }
 }
 
-fn validate_source(options: &Options) -> Result<Summary, &'static str> {
+fn validate_source(options: &Options) -> Result<Summary, ValidationFailure> {
     match options.kind {
         SourceKindArg::EnrichedHistory => {
             let config = PreparationConfig::new(
@@ -126,19 +152,19 @@ fn validate_source(options: &Options) -> Result<Summary, &'static str> {
                 VALIDATION_CUTOFF,
                 VALIDATION_ARRANQUE_CASES,
             )
-            .map_err(|_| "source_preparation_failed")?;
+            .map_err(|_| ValidationFailure::Invalid("source_preparation_failed"))?;
             let validated = validate_e0_operational_package(&options.input)
-                .map_err(|error| validation_finding(&error))?;
+                .map_err(|error| ValidationFailure::Invalid(validation_finding(&error)))?;
             if validated.contract_version() != options.contract_version {
-                return Err("contract_version_mismatch");
+                return Err(ValidationFailure::Invalid("contract_version_mismatch"));
             }
             // The source adapter reads only the operational discovery scope.
             // `validate_e0_operational_package` also validates the remaining
             // operational tables; neither path opens labels or timeline data.
             let prepared = prepare_e0_package(&options.input, &config)
-                .map_err(|_| "source_preparation_failed")?;
+                .map_err(|_| ValidationFailure::Invalid("source_preparation_failed"))?;
             if prepared.source_kind() != SourceKind::E0 {
-                return Err("source_kind_mismatch");
+                return Err(ValidationFailure::Invalid("source_kind_mismatch"));
             }
             Ok(Summary::valid(
                 options.kind.label(),
@@ -147,7 +173,9 @@ fn validate_source(options: &Options) -> Result<Summary, &'static str> {
                 &prepared,
             ))
         }
-        SourceKindArg::OriginalBank => Err("source_mapping_unverified"),
+        SourceKindArg::OriginalBank => {
+            Err(ValidationFailure::Unsupported("source_mapping_unverified"))
+        }
     }
 }
 
@@ -179,7 +207,7 @@ fn write_summary(summary: &Summary) -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "improvement-engine source validate --kind <enriched_history|original_bank> --input <path> --contract-version <version>\nValidation status is scoped: E0 valid means operational tables only; unsupported sources have scope not_validated."
+        "improvement-engine source validate --kind <enriched_history|original_bank> --input <path> --contract-version <version>\nValidation status is scoped: E0 valid/invalid means operational tables only; unsupported sources have scope not_validated."
     );
 }
 

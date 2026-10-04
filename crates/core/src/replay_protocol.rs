@@ -32,6 +32,7 @@ impl CohortLease {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReplayProtocolError {
     EmptyCohortId,
+    EmptyCohort,
     EmptyCaseId,
     DuplicateCaseId(String),
     CohortNotSealed(String),
@@ -107,6 +108,9 @@ impl ReplayProtocolMachine {
     ) -> Result<CohortLease, ReplayProtocolError> {
         if cohort_id.trim().is_empty() {
             return Err(ReplayProtocolError::EmptyCohortId);
+        }
+        if case_ids.is_empty() {
+            return Err(ReplayProtocolError::EmptyCohort);
         }
         let mut normalized_ids = case_ids
             .iter()
