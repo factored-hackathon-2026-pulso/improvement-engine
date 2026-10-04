@@ -51,3 +51,20 @@ STILL NOT met, so K3 acceptance ("Prompt+EvalSuite published to staging on the r
 is NOT met: (1) the live registry run was not executed (no Podman here); (2) sealing the draft artifact goes
 through the e2e fixtures server `/_e2e/config`, not a bridge contract route (BRG1 gap candidate); (3) the live test
 is `#[ignore]` and was not run against the real image in this branch.
+
+## W4a live acceptance (2026-10-04, pulso-dev, image localhost/pulso-core-runtime:c814c2b-920f5e3)
+
+Env for every live test: `. seams\scripts\live-env.ps1 -Namespace <ns>` after `e2e-coreun.ps1 ... -Keep` (values never printed;
+teardown with `local\core\stop.ps1` + `reset.ps1 -Confirm`). Evidence: `docs/reports/w4a-live/`.
+
+- K3 (`core-client/tests/live_k3.rs`): version probe, dry-run, freeze, identical replay = same run, NATIVE evaluation driven from Rust
+  (`core_client::evaluate`: binding, admission, evaluate-only stage), approve with the simulated-human JWS, publish to staging,
+  readback = commitment (`release_id_preview`). Pass in ~2.3 s. Stand-ins: platform double for sealing/bindings (BRG1 candidate,
+  `docs/reports/w4a-live/brg1-seal-and-bind-request.md`), human = `LocalSimAuthorizer`.
+- V1 (`eval/tests/live_capture.rs` writes `eval/tests/fixtures/v1/*.json`; `eval/tests/v1_capture.rs` computes the count): 5 of 6
+  (pass, failed_infra, fail, candidate_changed real; evaluation_result_lost fault-injected). quota_exceeded not captured
+  (`fixtures/v1_attempts/quota_exceeded.json`). A failed gate is NOT an HTTP 409 on this profile: no verdict + proposal back in draft.
+- E2 (`engine/src/live.rs`, `live_core.rs`, `engine/tests/live_handlers.rs` offline, `live_thread.rs` ignored): arms via `run_arm`
+  (keys from job/step/fence/attempt) feed the V2 gate, native_eval, authority (blocked(gate) unless labelled simulated override),
+  publish effectful.
+- Findings: drafts are validated against the STAGING alias (base = staging, not prod, after a publish); one publish window per stack.

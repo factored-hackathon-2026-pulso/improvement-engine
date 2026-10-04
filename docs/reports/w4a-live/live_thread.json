@@ -1,0 +1,92 @@
+{
+  "image": "localhost/pulso-core-runtime:c814c2b-920f5e3",
+  "job_blocked_without_override": {
+    "events": [
+      "thread:sensors:signals=1,discards=1:semantics=claude-standin",
+      "thread:recompute:matches=1/1:semantics=claude-standin",
+      "thread:validation:verdict=corroborated:semantics=claude-standin",
+      "thread:compile:status=compiled:semantics=claude-standin",
+      "thread:arms:runs=6,completed=6:semantics=core-arms-real,oracle=suite-expect,gate_reports=live",
+      "thread:gate:verdict=fail:semantics=claude-standin",
+      "thread:native_eval:verdict=pass:semantics=core-real"
+    ],
+    "result": "blocked(gate)",
+    "seconds": 3.09
+  },
+  "job_with_simulated_human_override": {
+    "arm_runs": [
+      {
+        "case": "resuelto",
+        "execution_id": "arm-0d0a4171d5085352490b49332ec41155",
+        "key": "arm-d1ca82379fca262c9170adb067f04495fe49c6226773cfd9",
+        "side": "base",
+        "status": "completed"
+      },
+      {
+        "case": "escalado_por_monto",
+        "execution_id": "arm-e3de42fde3ba51a8e560012b41f64ebc",
+        "key": "arm-43dfdeacea221255a69ae8d4a34cbaace205fbb068e8969b",
+        "side": "base",
+        "status": "completed"
+      },
+      {
+        "case": "sin_candidatas",
+        "execution_id": "arm-8e2f05b0a1d9def18a641fc3d18f971c",
+        "key": "arm-a350dcbf437754b9ffaaeb79f3a2b5621dd486b0c088eea0",
+        "side": "base",
+        "status": "completed"
+      },
+      {
+        "case": "resuelto",
+        "execution_id": "arm-ded0290971a2b92a37873ac144fdd7f9",
+        "key": "arm-1ffd5a92da9bc716f51639c61f4b93c0e6603cf13ac2350b",
+        "side": "cand",
+        "status": "completed"
+      },
+      {
+        "case": "escalado_por_monto",
+        "execution_id": "arm-869bf4741c5c04ed4b7c3efa54f46a36",
+        "key": "arm-b730bf678a01dcf2ec441d1d628550c805490e7759e9f49e",
+        "side": "cand",
+        "status": "completed"
+      },
+      {
+        "case": "sin_candidatas",
+        "execution_id": "arm-dd3963f8fd54a37b5dac70b246848e10",
+        "key": "arm-fe213579c019c47837e80c927cb09d8749dc2cbef419466e",
+        "side": "cand",
+        "status": "completed"
+      }
+    ],
+    "events": [
+      "thread:sensors:signals=1,discards=1:semantics=claude-standin",
+      "thread:recompute:matches=1/1:semantics=claude-standin",
+      "thread:validation:verdict=corroborated:semantics=claude-standin",
+      "thread:compile:status=compiled:semantics=claude-standin",
+      "thread:arms:runs=6,completed=6:semantics=core-arms-real,oracle=suite-expect,gate_reports=live",
+      "thread:gate:verdict=fail:semantics=claude-standin",
+      "thread:native_eval:verdict=pass:semantics=core-real",
+      "thread:authority:state=approved,gate=fail,override=human_override,simulated=true,quality_claims=forbidden:semantics=claude-standin(simulated-human)",
+      "thread:publish:release=rel-253b52903d377aae,alias=staging,readback=equal,override=human_override,simulated_human=true:semantics=core-real+claude-standin(simulated-human)"
+    ],
+    "gate_verdict": "fail",
+    "override": {
+      "actor": "local-supervisor",
+      "by": "human",
+      "label": "human_override",
+      "of_gate_verdict": "fail",
+      "reason": "exercise the Core approve/publish mechanics although the structural gate did not pass; no quality claim",
+      "simulated": true
+    },
+    "release_id": "rel-253b52903d377aae",
+    "seconds": 3.05
+  },
+  "labels": {
+    "human": "claude-standin (simulated=true)",
+    "judge": "claude-standin",
+    "oracle": "suite expect blocks",
+    "platform": "e2e fixtures double (BRG1 gap candidate)",
+    "quality_claims": "forbidden"
+  },
+  "namespace": "claude-w4a-3"
+}
