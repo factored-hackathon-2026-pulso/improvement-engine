@@ -15,9 +15,20 @@ const TABLE: &[(&str, StepFn)] = &[
     ("sensor", steps::sensor::run),
     ("recompute", steps::recompute::run),
     ("intent", steps::intent::run),
-    // --- CMP: add ("compile", steps::compile::run) here when compile::run exists ---
-    // --- GSI: add ("gate", steps::gate::run) here when gate::run exists ---
+    // --- CMP ---
+    ("compile", compile_step),
+    // --- GSI ---
+    ("gate", gate_step),
 ];
+
+// compile/gate have their own error types; the CLI maps them to StepError (exit 1).
+fn compile_step(input: &str) -> Result<String, StepError> {
+    steps::compile::run(input).map_err(|e| StepError::Invalid(format!("compile: {}", e.0)))
+}
+
+fn gate_step(input: &str) -> Result<String, StepError> {
+    steps::gate::run(input).map_err(|e| StepError::Invalid(e.to_string()))
+}
 
 fn main() {
     let name = std::env::args().nth(1).unwrap_or_default();
