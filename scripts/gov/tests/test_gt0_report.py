@@ -70,6 +70,19 @@ class Report(unittest.TestCase):
         self.assertIn("TPS-9", text)
         self.assertIn("opaque ids pass", text)
 
+    def test_accepted_residual_risks_are_listed_with_owner_and_tier(self):
+        def mut(d, m):
+            p = d / "reviews" / "x.review.json"
+            r = json.loads(p.read_text())
+            r["findings"] = [{"id": "TPS-12", "loop": 2, "summary": "hex ids", "status": "accepted", "reason": "shape check limit",
+                              "owner": "Team CL", "tier": "T0"}]
+            p.write_text(json.dumps(r))
+        text = self.gen(mut)
+        self.assertIn("TPS-12", text)
+        self.assertIn("accepted", text)
+        self.assertIn("Team CL", text)
+        self.assertIn("T0", text)
+
     def test_frozen_digests_are_read_from_the_pin_file(self):
         text = self.gen()
         pin = json.loads((GOV.parents[1] / "contracts" / "engine-run" / "FREEZE.json").read_text())
