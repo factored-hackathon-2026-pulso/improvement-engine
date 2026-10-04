@@ -91,6 +91,8 @@ export const AUTOMATION_ES = {
   'auto.propVerdict': 'Veredicto del libro mayor: {verdict}',
   'auto.propGrade': 'Grado del vínculo: {grade}',
   'auto.propRelated': 'Agentes relacionados: {agents}',
+  'auto.propOrigin': 'Origen: {origin} (propuesta del motor, no escrita por una persona)',
+  'auto.propAlt': 'Alternativa evaluable hoy: {target} ({artifact}); el copiloto de asesores aún no tiene evaluación verificada',
   'auto.propId': 'Propuesta {id}',
   'auto.propState': 'Estado',
   'auto.propState.proposed': 'Propuesta',

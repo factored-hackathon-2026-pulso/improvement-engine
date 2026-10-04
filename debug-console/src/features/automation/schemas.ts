@@ -27,7 +27,8 @@ export const ThresholdRow = z.object({ key: str, metric: str, min: z.number(), u
 export const Proposal = z.object({
   proposal_id: str, simulated: z.boolean(), state: str,
   target: z.object({ agent_id: str, alias: str, artifact: str, candidate_artifact: str.optional(), eval_suite: str.optional() }),
-  related_agents: z.array(str).optional(), candidate_hash: str, ledger_verdict: str, link_grade: str, run_id: str, change: str.optional(),
+  related_agents: z.array(str).optional(), origin: str.optional(), evaluability: str.optional(),
+  alternative_target: z.object({ agent_id: str, alias: str, artifact: str, evaluability: str.optional() }).optional(), candidate_hash: str, ledger_verdict: str, link_grade: str, run_id: str, change: str.optional(),
 });
 export const CaseTypeDetail = CaseType.extend({
   history: z.array(z.object({ stage: str, since: str.nullable() })),

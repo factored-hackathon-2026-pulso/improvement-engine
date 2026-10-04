@@ -61,3 +61,4 @@
 .auto .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @media (max-width: 720px) { .auto-main { padding: 16px; } .auto-card table, .auto-card tbody, .auto-card tr, .auto-card td, .auto-card th { display: block; } .auto-card thead { display: none; } }
 @media (prefers-reduced-motion: reduce) { .auto * { transition: none !important; animation: none !important; } }
+.auto-stagebar { white-space: nowrap; }

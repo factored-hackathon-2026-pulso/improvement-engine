@@ -163,6 +163,8 @@ function ProposalView({ id, api, onBack }: { id: string; api: AutomationApi; onB
             <div><dt>{t('auto.propArtifact', { from: p.target.artifact, to: p.target.candidate_artifact ?? p.target.artifact })}</dt></div>
             {p.target.eval_suite && <div><dt>{t('auto.propEval', { suite: p.target.eval_suite })}</dt></div>}
             {p.related_agents && <div><dt>{t('auto.propRelated', { agents: p.related_agents.join(', ') })}</dt></div>}
+            {p.origin && <div><dt>{t('auto.propOrigin', { origin: p.origin })}</dt></div>}
+            {p.alternative_target && <div><dt>{t('auto.propAlt', { target: `${p.alternative_target.agent_id}@${p.alternative_target.alias}`, artifact: p.alternative_target.artifact })}</dt></div>}
             <div><dt>{t('auto.propHash', { hash: p.candidate_hash })}</dt></div>
             <div><dt>{t('auto.propVerdict', { verdict: p.ledger_verdict })}</dt></div>
             <div><dt>{t('auto.propGrade', { grade: p.link_grade })}</dt></div>
