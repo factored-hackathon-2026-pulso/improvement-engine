@@ -13,6 +13,9 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+#[path = "replay_campaign_store.rs"]
+pub mod store;
+
 #[derive(Clone, Eq, PartialEq)]
 pub struct CohortLease {
     cohort_id: String,
@@ -250,6 +253,7 @@ pub enum ReplayCampaignError {
     CampaignComplete,
     CheckpointBindingMismatch,
     WorkBindingMismatch,
+    InvalidUpdateIdDigest,
     CheckpointCursorInvalid,
     NoPendingCohort,
     StaleCohort,
@@ -268,6 +272,7 @@ impl fmt::Debug for ReplayCampaignError {
             Error::CampaignComplete => formatter.write_str("CampaignComplete"),
             Error::CheckpointBindingMismatch => formatter.write_str("CheckpointBindingMismatch"),
             Error::WorkBindingMismatch => formatter.write_str("WorkBindingMismatch"),
+            Error::InvalidUpdateIdDigest => formatter.write_str("InvalidUpdateIdDigest"),
             Error::CheckpointCursorInvalid => formatter.write_str("CheckpointCursorInvalid"),
             Error::NoPendingCohort => formatter.write_str("NoPendingCohort"),
             Error::StaleCohort => formatter.write_str("StaleCohort"),
@@ -514,6 +519,26 @@ impl ReplayCampaign {
             .ok_or(ReplayCampaignError::NoPendingCohort)?;
         self.protocol
             .propose_update(&sealed.lease, update_id, next_revision)
+            .map_err(ReplayCampaignError::Protocol)
+    }
+
+    /// Rebuild an update identity from the digest-only persisted journal.
+    /// Public update IDs are always treated as raw caller data and hashed;
+    /// they cannot opt into this private identity path with string syntax.
+    pub(crate) fn propose_persisted_revision(
+        &mut self,
+        update_id_digest: &str,
+        next_revision: u64,
+    ) -> Result<(), ReplayCampaignError> {
+        if !canonical_sha256(update_id_digest) {
+            return Err(ReplayCampaignError::InvalidUpdateIdDigest);
+        }
+        let sealed = self
+            .last_sealed
+            .as_ref()
+            .ok_or(ReplayCampaignError::NoPendingCohort)?;
+        self.protocol
+            .propose_update_by_digest(&sealed.lease, update_id_digest, next_revision)
             .map_err(ReplayCampaignError::Protocol)
     }
 
@@ -768,11 +793,37 @@ impl ReplayProtocolMachine {
         if update_id.trim().is_empty() {
             return Err(ReplayProtocolError::EmptyUpdateId);
         }
-        if let Some(existing) = self.updates.get(update_id) {
+        let update_key = normalized_update_key(update_id);
+        self.propose_update_with_key(lease, update_key, next_revision)
+    }
+
+    fn propose_update_by_digest(
+        &mut self,
+        lease: &CohortLease,
+        update_id_digest: &str,
+        next_revision: u64,
+    ) -> Result<(), ReplayProtocolError> {
+        if !canonical_sha256(update_id_digest) {
+            return Err(ReplayProtocolError::EmptyUpdateId);
+        }
+        self.propose_update_with_key(
+            lease,
+            format!("raw-update-v1:{}", &update_id_digest[7..]),
+            next_revision,
+        )
+    }
+
+    fn propose_update_with_key(
+        &mut self,
+        lease: &CohortLease,
+        update_key: String,
+        next_revision: u64,
+    ) -> Result<(), ReplayProtocolError> {
+        if let Some(existing) = self.updates.get(&update_key) {
             if existing.cohort_id == lease.cohort_id && existing.next_revision == next_revision {
                 return Ok(());
             }
-            return Err(ReplayProtocolError::ConflictingUpdate(update_id.to_owned()));
+            return Err(ReplayProtocolError::ConflictingUpdate(update_key));
         }
         self.active_lease
             .as_ref()
@@ -804,14 +855,14 @@ impl ReplayProtocolMachine {
             ));
         }
         self.updates.insert(
-            update_id.to_owned(),
+            update_key.clone(),
             ReplayUpdate {
                 cohort_id: lease.cohort_id.clone(),
                 next_revision,
                 activated_at: None,
             },
         );
-        self.pending_update_id = Some(update_id.to_owned());
+        self.pending_update_id = Some(update_key);
         Ok(())
     }
 
@@ -842,4 +893,12 @@ impl ReplayProtocolMachine {
             seen_case_ids: checkpoint.seen_case_ids,
         }
     }
+}
+
+fn normalized_update_key(update_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"pulso-replay-update-id-v1\0");
+    hasher.update((update_id.len() as u64).to_be_bytes());
+    hasher.update(update_id.as_bytes());
+    format!("raw-update-v1:{:x}", hasher.finalize())
 }
