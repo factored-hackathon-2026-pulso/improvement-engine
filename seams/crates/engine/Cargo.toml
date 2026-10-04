@@ -12,3 +12,8 @@ core-client = { path = "../core-client" }
 eval = { path = "../eval" }
 authority = { path = "../authority" }
 serde_json = "1"
+
+[dev-dependencies]
+# the FakeCore / GoldenCore bridge stubs of core-client/tests/common are reused by tests/real_core.rs
+base64 = "0.22"
+ed25519-dalek = "2"

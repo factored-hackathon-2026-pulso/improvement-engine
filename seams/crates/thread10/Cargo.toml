@@ -11,6 +11,7 @@ authority = { path = "../authority" }
 base64 = "0.22"
 control-api = { path = "../control-api" }
 core-client = { path = "../core-client" }
+debug-api = { path = "../debug-api" }
 ed25519-dalek = "2"
 engine = { path = "../engine" }
 memory = { path = "../memory" }
