@@ -38,7 +38,7 @@ without a declared timezone. This is a final-snapshot descriptive analysis.
 | M3 `complaint_unresolved_share_of_unresolved` | unresolved contacts with reason `complaint` / all contacts with a known unresolved flag | channel, plus overall | Same first-call unresolved definition as M1. |
 | M4 `pqr_open_rate` | PQRs in `open`, `in process`, or `escalated` / all valid PQRs | normalized PQR category, plus overall | `resolved`, `closed`, and `rejected` are not open. The source status snapshot is not event-time history. |
 | M5 `pqr_sla_breach_rate` | `sla_breached=true` / PQRs with a parseable SLA-breach flag | normalized PQR category, plus overall | The dictionary supplies a non-null breach flag but no SLA deadline/eligibility field; denominator means rows with an observed flag, not independently verified SLA eligibility. |
-| M6 `survey_low_score_rate` | CSAT `main_score <= 2` / CSAT surveys with integer score in 1–5 | linked interaction `reason_category × survey send_channel`, plus overall linked | NPS and CES rows are excluded. A survey is linkable only by `interaction_id` to a deduplicated contact. `channel` means survey `send_channel` (not the contact's channel): Email→email, IVR→phone, App→mobile_app, Web→web; SMS and other unsupported send channels→other. Coverage is linked eligible CSAT / all eligible CSAT; unlinked rows do not enter cell rates. |
+| M6 `survey_low_score_rate` | CSAT `main_score <= 2` / CSAT surveys with integer score in 1–5 | linked interaction `reason_category × survey send_channel`, plus overall linked | NPS and CES rows are excluded. A survey is linkable only by `interaction_id` to a deduplicated contact; if both sides have customer keys, they must match, otherwise the row is treated as unlinked. A split uses the available linked customer key, with identical customer keys remaining in one half. `channel` means survey `send_channel` (not the contact's channel): Email→email, IVR→phone, App→mobile_app, Web→web; SMS and other unsupported send channels→other. Coverage is linked eligible CSAT / all eligible CSAT; unlinked rows do not enter cell rates. |
 | E1 `copilot_repeat_rate` | eligible cases whose leading `query_signature` equals the discovery-half modal signature / query-bearing cases, measured independently in each half | one overall cell | Leading query is the earliest operational query by event timestamp then stable source ordinal. Modal ties resolve by lexical opaque signature only in memory. Compare discovery and replication proportions with the registered two-proportion test; effect is replication rate minus discovery rate. No signature is emitted. A repeat finding is not customer intent or a causal mechanism. |
 
 ### Normalized dimensions
@@ -166,6 +166,14 @@ channel and is distinct from the linked contact channel. M6 therefore groups
 by the explicitly normalized survey send channel plus the linked contact
 reason. The first draft ambiguously said only “channel”; no results were
 computed before this field-level definition was fixed.
+
+### Preregistration clarification (v1.4, still before any result artifact)
+
+M6 linkage remains interaction-ID based, with a consistency check: if both the
+survey and linked contact contain customer keys, a mismatch makes that CSAT
+row unlinked rather than silently splitting one interaction across customers.
+If only one side has a customer key, that available key assigns the linked
+record to the deterministic half. No mismatch key or identifier is emitted.
 
 ### Preregistration clarification (v1.3, still before any result artifact)
 
