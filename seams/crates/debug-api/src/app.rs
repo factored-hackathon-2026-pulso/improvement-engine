@@ -287,6 +287,14 @@ impl App {
                 ok(&self.env(rf, head, "ok", g))
             }
             "alternatives" => page(state["alternatives"].clone()),
+            // The decision this run committed (simulated or blocked), with the card that says on what it was taken. No decision, no route.
+            "decision" => {
+                let d = &state["decision"];
+                let Some(id) = d["decision_id"].as_str() else { return problem("not_found", 404, json!({})) };
+                ok(&self.env(json!({"kind": "decision", "id": id}), head, "ok", json!({
+                    "decision_id": id, "available_commands": d["available_commands"], "needs_step_up": d["needs_step_up"], "domain_revision": d["domain_revision"], "card": d["card"],
+                })))
+            }
             "model-calls" | "queries" | "evals" | "external-commands" => page(json!([])),
             _ => problem("not_found", 404, json!({})),
         }

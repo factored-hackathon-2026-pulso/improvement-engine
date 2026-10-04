@@ -111,7 +111,15 @@ pub fn engine_run_report(sink: &dyn RunEventSink, exists: &dyn Fn(&str) -> bool,
         prev = Some(id);
     }
 
-    ev("gates_set", "run", &run, gates_data(report))?;
+    // What the thread committed (when the report carries it) fills the panels through the very projection the live stream uses.
+    let panel_events = report.get("committed").filter(|c| c.is_object()).map(|c| crate::panels::project(c, Some(report), &crate::store::now_iso())).unwrap_or_default();
+    let has_gates = panel_events.iter().any(|e| e.kind == "gates_set");
+    for e in panel_events {
+        sink.emit(&run, e)?;
+    }
+    if !has_gates {
+        ev("gates_set", "run", &run, gates_data(report))?;
+    }
     ev("run_state_changed", "run", &run, json!({"state": "completed"}))?;
     Ok(run)
 }
