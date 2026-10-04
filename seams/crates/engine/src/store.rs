@@ -1,6 +1,11 @@
-//! Job store port plus a file-backed in-process implementation (std only).
+//! Job store port plus a file-backed implementation (std only).
+//! CAS is serialised across threads and processes by an exclusive lock file (create_new);
+//! records are written to a unique temp file, fsynced, then renamed over the key file.
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 pub trait JobStore {
     /// (version, value); version 0 never exists.
@@ -13,6 +18,17 @@ pub struct FileStore {
     dir: PathBuf,
 }
 
+static SEQ: AtomicU64 = AtomicU64::new(0);
+
+fn check_key(key: &str) -> Result<(), String> {
+    let ok = !key.is_empty()
+        && key.len() <= 128
+        && !key.starts_with('/')
+        && key.split('/').all(|seg| !seg.is_empty() && seg != "." && seg != "..")
+        && key.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-'));
+    if ok { Ok(()) } else { Err(format!("invalid store key {key:?}")) }
+}
+
 impl FileStore {
     pub fn open(dir: impl Into<PathBuf>) -> Result<Self, String> {
         let dir = dir.into();
@@ -20,12 +36,46 @@ impl FileStore {
         Ok(Self { dir })
     }
     fn path(&self, key: &str) -> PathBuf {
-        self.dir.join(format!("kv_{}", key.replace('/', "_")))
+        // '/' -> '~' is injective because '~' is not an allowed key character.
+        self.dir.join(format!("kv_{}", key.replace('/', "~")))
+    }
+    fn lock(&self) -> Result<Lock, String> {
+        let p = self.dir.join("cas.lock");
+        let start = Instant::now();
+        loop {
+            match fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+                Ok(_) => return Ok(Lock(p)),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    // a lock older than 10s belongs to a killed process: break it
+                    let stale = fs::metadata(&p)
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .and_then(|t| t.elapsed().ok())
+                        .is_some_and(|d| d > Duration::from_secs(10));
+                    if stale {
+                        let _ = fs::remove_file(&p);
+                    } else if start.elapsed() > Duration::from_secs(30) {
+                        return Err("cas lock timeout".into());
+                    } else {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                }
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+    }
+}
+
+struct Lock(PathBuf);
+impl Drop for Lock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
     }
 }
 
 impl JobStore for FileStore {
     fn get(&self, key: &str) -> Result<Option<(u64, String)>, String> {
+        check_key(key)?;
         match fs::read_to_string(self.path(key)) {
             Ok(s) => {
                 let (v, rest) = s.split_once('\n').ok_or("corrupt record")?;
@@ -36,13 +86,21 @@ impl JobStore for FileStore {
         }
     }
     fn cas(&self, key: &str, expected: u64, value: &str) -> Result<u64, String> {
+        check_key(key)?;
+        let _lock = self.lock()?;
         let current = self.get(key)?.map(|(v, _)| v).unwrap_or(0);
         if current != expected {
             return Err(format!("cas conflict on {key}: have {current}, expected {expected}"));
         }
-        let tmp = self.dir.join("tmp_write");
-        fs::write(&tmp, format!("{}\n{}", current + 1, value)).map_err(|e| e.to_string())?;
-        fs::rename(&tmp, self.path(key)).map_err(|e| e.to_string())?;
+        let tmp = self.dir.join(format!("tmp_{}_{}", std::process::id(), SEQ.fetch_add(1, Ordering::SeqCst)));
+        let mut f = fs::File::create(&tmp).map_err(|e| e.to_string())?;
+        f.write_all(format!("{}\n{}", current + 1, value).as_bytes()).map_err(|e| e.to_string())?;
+        f.sync_all().map_err(|e| e.to_string())?;
+        drop(f);
+        fs::rename(&tmp, self.path(key)).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            e.to_string()
+        })?;
         Ok(current + 1)
     }
 }

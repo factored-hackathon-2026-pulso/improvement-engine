@@ -2,6 +2,9 @@
 //! Each handler's input is persisted with compare-and-set before it runs, and each output
 //! (payload + events) is committed as one CAS record. The event log is derived from the
 //! committed records, so a kill between any two handlers resumes with an identical log.
+//! Known limits: EffectState is typed but not enforced here (a non-NoEffect output is committed like any other;
+//! no skip-on-resume yet); the stale-fence check is read-then-commit, not atomic with the out/N CAS;
+//! lease expiry/reclaim (C-7 now>=expires) is not modelled; FileStore locking is a lock file, not OS-level.
 use abi::*;
 
 pub mod demo;
@@ -70,13 +73,16 @@ pub fn run_once(
 ) -> Result<String, RunError> {
     // claim: bump fence/attempt with CAS
     let (ver, attempt) = match store.get("fence").map_err(se)? {
-        Some((v, s)) => (v, s.parse::<u64>().unwrap_or(0)),
+        Some((v, s)) => (v, s.parse::<u64>().map_err(|_| se("corrupt fence".into()))?),
         None => (0, 0),
     };
     let attempt = attempt + 1;
     let token = store.cas("fence", ver, &attempt.to_string()).map_err(se)?;
     let fence = Fence { worker_id: opts.worker_id.clone(), fence_token: token, attempt };
 
+    if initial.contains(char::is_control) {
+        return Err(RunError::Handler(HandlerError::Invalid("initial payload contains a newline".into())));
+    }
     let mut payload = initial.to_string();
     for (i, h) in handlers.iter().enumerate() {
         if let Some((_, rec)) = store.get(&format!("out/{i}")).map_err(se)? {
@@ -84,12 +90,26 @@ pub fn run_once(
             continue;
         }
         // persist the input with CAS; an earlier attempt's persisted input wins
-        let input_payload = match store.cas(&format!("in/{i}"), 0, &payload) {
-            Ok(_) => payload.clone(),
-            Err(_) => store.get(&format!("in/{i}")).map_err(se)?.map(|(_, v)| v).unwrap_or(payload.clone()),
+        let ik = format!("in/{i}");
+        let input_payload = match store.get(&ik).map_err(se)? {
+            Some((_, v)) => v, // an earlier attempt's persisted input wins
+            None => {
+                store.cas(&ik, 0, &payload).map_err(se)?;
+                payload.clone()
+            }
         };
         let input = InputEnvelope { job_id: opts.job_id.clone(), step_index: i, payload: input_payload };
         let out = h.run(&fence, &input).map_err(RunError::Handler)?;
+        for t in std::iter::once(&out.payload).chain(out.events.iter()) {
+            if t.contains(char::is_control) {
+                return Err(RunError::Handler(HandlerError::Invalid("payload or event contains a newline".into())));
+            }
+        }
+        // stale-fence check: a newer claim bumped the fence while this handler ran
+        match store.get("fence").map_err(se)? {
+            Some((v, _)) if v == token => {}
+            _ => return Err(RunError::Handler(HandlerError::StaleFence)),
+        }
         store.cas(&format!("out/{i}"), 0, &encode(&out)).map_err(se)?;
         payload = out.payload;
         if let Some(f) = &opts.after_commit {
