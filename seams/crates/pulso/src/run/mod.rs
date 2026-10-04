@@ -2,6 +2,7 @@
 pub mod db;
 pub mod http;
 pub mod log;
+pub mod source;
 pub mod signals;
 pub mod supervisor;
 pub mod tasks;
