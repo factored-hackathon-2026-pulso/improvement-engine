@@ -81,6 +81,9 @@ describe('AutomationView (Automatizacion replica)', () => {
     expect(p.textContent).toContain('p/copiloto@1.1.0');
     expect(p.textContent).toContain('recepcion');
     expect(p.textContent).toContain('mechanism_proxy');
+    expect(p.textContent).toContain('auto_detect');
+    expect(p.textContent).toContain('disputas@staging');
+    expect(p.textContent).toContain('p/resumen_radicado@1.0.0');
     expect(within(p).getByRole('link', { name: /ejecución/i }).getAttribute('href')).toBe('#/run/run-cobro-001');
     const publish = within(p).getByRole('button', { name: /Publicar en staging/ }) as HTMLButtonElement;
     expect(publish.disabled).toBe(true);
