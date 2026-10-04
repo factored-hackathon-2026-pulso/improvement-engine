@@ -1,0 +1,83 @@
+{
+  "coverage_version": "spec22-family-inventory/1",
+  "purpose": "Evidence inventory only. This file does not claim that every Spec-22 golden variant exists or has been wire-validated.",
+  "families": [
+    {
+      "name": "source_snapshot",
+      "contract_status": "published",
+      "contract_refs": ["contracts/source-snapshot.schema.json"],
+      "fixture_refs": ["contracts/fixtures/sources-v1/valid-source-snapshot.json", "contracts/fixtures/sources-v1/validation/source-snapshot.json"],
+      "coverage_note": "Versioned snapshot schema and executable valid/validation fixtures exist. Spec-22 valid/invalid goldens still need to be assembled."
+    },
+    {
+      "name": "platform_observation",
+      "contract_status": "published",
+      "contract_refs": ["platform-contract/schemas/source_observation.schema.json"],
+      "fixture_refs": ["platform-contract/examples/source_events/valid/domain_event.valid.json", "platform-contract/examples/source_events/valid/exporter_finding_late_sequence.valid.json"],
+      "coverage_note": "Versioned platform observation schema and source-event examples exist; they are not yet the full Spec-22 complete/gap/late golden set."
+    },
+    {
+      "name": "signal",
+      "contract_status": "missing",
+      "contract_refs": [],
+      "fixture_refs": [],
+      "coverage_note": "The generic artifact envelope does not define a signal payload wire contract; the internal Rust type is not a published family schema."
+    },
+    {
+      "name": "workflow_bridge",
+      "contract_status": "missing",
+      "contract_refs": [],
+      "fixture_refs": [],
+      "coverage_note": "The internal WorkflowBridge is not a published wire contract; bridge dry-run goldens are Agent Core invocation receipts, not this Pulso payload."
+    },
+    {
+      "name": "change_spec",
+      "contract_status": "published",
+      "contract_refs": ["contracts/engine-steps/pack/parts/c8_schemas/ChangeSpec.schema.json"],
+      "fixture_refs": ["contracts/engine-steps/pack/parts/c8_schemas/valid-ChangeSpec.json", "contracts/engine-steps/pack/parts/c8_schemas/invalid-ChangeSpec.json"],
+      "coverage_note": "Published C-8 schema and valid/invalid goldens exist; the Spec-22 stale-state case is not yet represented."
+    },
+    {
+      "name": "tree",
+      "contract_status": "missing",
+      "contract_refs": [],
+      "fixture_refs": [],
+      "coverage_note": "Agent Core ReleaseDetail embeds entities/flows, but there is no published standalone tree wire contract or cycle golden."
+    },
+    {
+      "name": "scenario",
+      "contract_status": "published",
+      "contract_refs": ["contracts/engine-steps/pack/parts/c8_schemas/ScenarioCase.schema.json"],
+      "fixture_refs": ["contracts/engine-steps/pack/parts/c8_schemas/valid-ScenarioCase.json", "contracts/engine-steps/pack/parts/c8_schemas/invalid-ScenarioCase.json"],
+      "coverage_note": "Published C-8 schema and valid/invalid goldens exist; Spec-22 normal/ambiguous/unsafe/unknown variants remain incomplete."
+    },
+    {
+      "name": "evaluation",
+      "contract_status": "published",
+      "contract_refs": ["core-bridge/wire/agent_core@c814c2b/derived/EvalReport.schema.json", "contracts/engine-steps/pack/parts/c10_gate_result/gate_result.schema.json"],
+      "fixture_refs": ["contracts/engine-steps/pack/parts/c10_gate_result/valid-pass.json", "contracts/engine-steps/pack/parts/c10_gate_result/invalid-pass-with-failed-gate.json"],
+      "coverage_note": "Versioned Agent Core EvalReport and C-10 gate schemas/goldens exist; fail and insufficient-power Spec-22 variants remain incomplete."
+    },
+    {
+      "name": "release_ack",
+      "contract_status": "missing",
+      "contract_refs": [],
+      "fixture_refs": [],
+      "coverage_note": "No published release acknowledgement contract/goldens were found; task receipts and release detail are distinct contracts."
+    },
+    {
+      "name": "memory_wiki",
+      "contract_status": "missing",
+      "contract_refs": [],
+      "fixture_refs": [],
+      "coverage_note": "The generic artifact envelope and internal U33 types do not publish the memory_wiki payload wire shape or contradiction/revocation goldens."
+    },
+    {
+      "name": "read_model",
+      "contract_status": "partial",
+      "contract_refs": [],
+      "fixture_refs": [],
+      "coverage_note": "Internal Rust request/response types and consumer tests exist, but there is no published payload JSON Schema; this is partial evidence, not a published wire contract."
+    }
+  ]
+}
