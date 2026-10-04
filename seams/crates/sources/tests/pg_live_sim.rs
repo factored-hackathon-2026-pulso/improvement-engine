@@ -1,7 +1,8 @@
 //! Live end-to-end against a database populated by the product simulator (platform-sim `product_stream --postgres`)
 //! on the REAL `db/sql` schema: simulator -> `product` schema -> product-postgres adapter (read-only role) -> package ->
 //! watermark in Postgres (`pulso_app`). Skipped unless PULSO_E2E_RO_DSN and PULSO_E2E_APP_DSN (keyword DSNs, never
-//! printed) are set; PULSO_REQUIRE_POSTGRES=1 turns a missing one into a failure.
+//! printed) are set; PULSO_REQUIRE_SIM_E2E=1 turns a missing one into a failure (it needs a simulator-populated database, so
+//! PULSO_REQUIRE_POSTGRES alone does not).
 //! Run with `--test-threads=1`: both tests read the same event_log.
 mod common;
 use postgres::{Config, NoTls};
@@ -17,7 +18,7 @@ fn dsns() -> Option<(String, String)> {
     match (std::env::var("PULSO_E2E_RO_DSN"), std::env::var("PULSO_E2E_APP_DSN")) {
         (Ok(a), Ok(b)) => Some((a, b)),
         _ => {
-            assert!(std::env::var("PULSO_REQUIRE_POSTGRES").is_err(), "PULSO_E2E_*_DSN not set");
+            assert!(std::env::var("PULSO_REQUIRE_SIM_E2E").is_err(), "PULSO_E2E_*_DSN not set");
             eprintln!("SKIP: PULSO_E2E_RO_DSN / PULSO_E2E_APP_DSN not set (simulator end-to-end)");
             None
         }
