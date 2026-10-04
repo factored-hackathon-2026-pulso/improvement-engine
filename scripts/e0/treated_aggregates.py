@@ -11,7 +11,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-TOPIC_TO_TYPE = {"cobro_duplicado": "cobro_indebido", "disputar_cargo": "cargo_no_reconocido", "problema_app": "problema_app"}
+TOPIC_TO_TYPE = {"cobro_duplicado": "cobro_indebido", "disputar_cargo": "cobro_indebido", "problema_app": "problema_app"}  # assumption: E0 disputes are charge disputes
 ALLOWED_KEYS = ["type_id", "copilot_questions", "repeat_q_cases", "tool_applicable", "tool_used"]
 
 
