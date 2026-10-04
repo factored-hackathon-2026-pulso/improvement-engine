@@ -122,7 +122,8 @@ class PostgresSink:
             for t, rows in rows_by_table.items():
                 if not rows:
                     continue
-                if t == "customer_case_slots":
+                if t == "customer_case_slots":  # mutable current state: the last row per customer wins
+                    rows = list({r["customer_id"]: r for r in rows}.values())
                     cur.executemany("DELETE FROM product.customer_case_slots WHERE customer_id = %s",
                                     [(r["customer_id"],) for r in rows])
                 cols = [c for c in PRODUCT_COLUMNS[t] if all(c in r for r in rows)]
