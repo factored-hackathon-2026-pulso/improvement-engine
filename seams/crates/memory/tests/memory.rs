@@ -66,3 +66,31 @@ fn contradict_supersedes_prior_claim_and_links_both_ways() {
     let other = m.add_note(nn("k.a", "a", &["ev-1"])).unwrap();
     assert!(matches!(m.contradict(&other, nn("k.b", "b", &["ev-1"])), Err(MemError::ClaimKeyMismatch)));
 }
+
+#[test]
+fn refs_that_do_not_resolve_are_rejected_without_mutation() {
+    let mut m = Memory::new(store());
+    assert_eq!(m.add_note(nn("k", "s", &["ev-404"])), Err(MemError::UnresolvedEvidence("ev-404".into())));
+    assert_eq!(m.add_note(nn("k", "s", &[])), Err(MemError::NoEvidence));
+    assert!(m.wiki_read("k").is_none());
+    let id = m.add_note(nn("k", "s", &["ev-1"])).unwrap();
+    assert_eq!(m.confirm(&id, vec!["ev-404".into()]), Err(MemError::UnresolvedEvidence("ev-404".into())));
+    assert_eq!(m.note(&id).unwrap().status, Status::Active);
+    assert_eq!(m.note(&id).unwrap().evidence, vec!["ev-1"]);
+    assert_eq!(m.contradict(&id, nn("k", "t", &["ev-404"])), Err(MemError::UnresolvedEvidence("ev-404".into())));
+    assert_eq!(m.note(&id).unwrap().status, Status::Active);
+    assert_eq!(m.wiki_read("k").unwrap().matches("- note-").count(), 1);
+}
+
+#[test]
+fn artifact_pins_each_resolved_ref_to_a_sha256_digest() {
+    let mut m = Memory::new(store());
+    let id = m.add_note(nn("k", "s", &["ev-1"])).unwrap();
+    let d = m.artifact(&id).unwrap()["evidence_digests"]["ev-1"].as_str().unwrap().to_string();
+    assert_eq!(d.len(), 64);
+    assert_eq!(d, sha_hex("digest-only observation A"));
+}
+fn sha_hex(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(s.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}

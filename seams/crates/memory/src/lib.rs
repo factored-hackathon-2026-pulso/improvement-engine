@@ -9,6 +9,8 @@ pub enum MemError {
     NotImplemented,
     UnknownNote(String),
     ClaimKeyMismatch,
+    UnresolvedEvidence(String),
+    NoEvidence,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
