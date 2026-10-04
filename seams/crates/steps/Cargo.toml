@@ -1,0 +1,8 @@
+[package]
+name = "steps"
+description = "Claude-owned step stand-ins (sensor wrapper, recompute, intent validation, compile, gate); labelled claude-standin, never depends on crates/core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
