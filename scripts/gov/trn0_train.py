@@ -4,7 +4,7 @@ a W0 (pre-pr-gate/v1) receipt per train PR, and an exchange/ bundle when a PR re
 Manifest (train/v1): {"schema","base","train_branch","pr_cap_hours","receipts_dir","lanes":[{"id","branch","deps":[ids],"lane_hours"}]}
 Lanes are listed in merge order. The receipt of train PR n is <receipts_dir>/pr-<n>.json.
 
-Usage: python trn0_train.py check|merge|bundle --manifest M.json --repo PATH [--exchange DIR]
+Usage: python trn0_train.py check|merge|bundle|receipt --manifest M.json --repo PATH [--exchange DIR]
 `merge` writes only to the local train branch; it never pushes.
 """
 from __future__ import annotations
@@ -130,18 +130,48 @@ def check_all(repo, m: dict) -> list:
     return problems
 
 
+def make_receipt(repo, m: dict, out: Path) -> dict:
+    """Write a train-receipt/v1: the check verdict plus, per train PR, its lanes, lane-hours and a copy of its W0 receipt."""
+    import datetime
+    import shutil
+    lanes, cap = m["lanes"], m.get("pr_cap_hours", DEFAULT_CAP)
+    problems = check_all(repo, m)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    prs = []
+    for n, g in enumerate(plan(lanes, cap), 1):
+        src = Path(m["receipts_dir"]) / f"pr-{n}.json"
+        ref = None
+        if src.is_file():
+            ref = f"w0-pr-{n}.json"
+            shutil.copyfile(src, out.parent / ref)
+        prs.append({"n": n, "lanes": [l["id"] for l in g], "lane_hours": sum(l["lane_hours"] for l in g), "w0_receipt": ref})
+    head = _git(repo, "rev-parse", "HEAD", check=False).stdout.strip()
+    doc = {"schema": "train-receipt/v1", "generated_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+           "base": m.get("base", "main"), "train_branch": m.get("train_branch"), "head_sha": head,
+           "pr_cap_hours": cap, "prs": prs, "problems": problems, "verdict": "fail" if problems else "pass"}
+    out.write_text(json.dumps(doc, indent=2) + "
+", encoding="utf-8", newline="
+")
+    return doc
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["check", "merge", "bundle"])
+    ap.add_argument("cmd", choices=["check", "merge", "bundle", "receipt"])
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--repo", required=True)
     ap.add_argument("--exchange", default="exchange")
+    ap.add_argument("--out", help="receipt: where to write train-receipt/v1")
     a = ap.parse_args(argv)
     m = json.loads(Path(a.manifest).read_text(encoding="utf-8"))
     if a.cmd == "check":
         problems = check_all(a.repo, m)
         print("\n".join(problems) or "train check: clean")
         return 1 if problems else 0
+    if a.cmd == "receipt":
+        doc = make_receipt(a.repo, m, Path(a.out))
+        print(f"train receipt {doc['verdict']}: {a.out}")
+        return 0 if doc["verdict"] == "pass" else 1
     if a.cmd == "merge":
         problems = check_order(m["lanes"]) + check_restack(a.repo, m["lanes"], m.get("base", "main"))
         if problems:
