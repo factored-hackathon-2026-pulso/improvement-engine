@@ -1,0 +1,56 @@
+{
+ "schema": "gt0-gate-result/v1",
+ "verdict": "fail",
+ "items": [
+  {
+   "item": "g0p",
+   "ok": true,
+   "detail": "pre-pr-gate pass at cd24162f2b55"
+  },
+  {
+   "item": "trn0",
+   "ok": false,
+   "detail": "missing: trn0.json"
+  },
+  {
+   "item": "crv0",
+   "ok": false,
+   "detail": "OPEN e0-data-path.review.json [E0-DATA-PATH]: 1 open finding(s), verdict open; OPEN ed0l.review.json [ED0L]: 1 open finding(s), verdict open; OPEN m1-m2a.review.json [M2a,M1]: 1 open finding(s), verdict open; OPEN tps-m0rp-rpp.review.json [TPS,M0RP,RPP]: 1 open finding(s), verdict open; MISSING closed log for required WP TPS; MISSING closed log for required WP M2a; MISSING closed log for required WP M0RP; MISSING closed log for required WP ED0L; MISSING closed log for required WP E0-DATA-PATH"
+  },
+  {
+   "item": "honesty",
+   "ok": true,
+   "detail": "tests 1-8, G1 and S1 clean on the GT0 report"
+  },
+  {
+   "item": "scanner_ids",
+   "ok": true,
+   "detail": "scanner ids tps-1"
+  },
+  {
+   "item": "doubles",
+   "ok": true,
+   "detail": "doubles[] lists the plan parts; DEMO-0, host=python, quality_claims forbidden"
+  },
+  {
+   "item": "freeze",
+   "ok": true,
+   "detail": "C-2 and C-12 match FREEZE.json"
+  },
+  {
+   "item": "replay",
+   "ok": true,
+   "detail": "run replay-3d9e9776af748ae0: 5 calls, 0 misses"
+  },
+  {
+   "item": "live_window",
+   "ok": false,
+   "detail": "missing: live-windows.json"
+  },
+  {
+   "item": "capacity",
+   "ok": false,
+   "detail": "missing: capacity.json"
+  }
+ ]
+}
