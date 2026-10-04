@@ -72,13 +72,19 @@ class CoreHooks:
     run_arms(ctx) -> {"base": runs, "candidate": runs} | None
                                                     step 6: ArmReport runs of the real Core arms (None keeps the
                                                     stand-in runs); the verdict stays the stand-in GSIpy one
+    approve(ctx) -> {"approver", "decision", "candidate_hash", "tamper_refused", "replay_refused"}
+                                                    step 8: Core verified a human-issuer JWS bound to the frozen draft
     publish(ctx) -> {"release_id", "alias"}         step 9: publish to local staging on the real Core
     alias_read(ctx, alias) -> {"release_id", "alias"}  step 9: read the alias back from the real Core
+    doubles: ports (dicts port/provenance) the hooks' stack still serves with labelled doubles (control-api, bank)
     """
     dry_run: Callable | None = None
     run_arms: Callable | None = None
+    approve: Callable | None = None
     publish: Callable | None = None
     alias_read: Callable | None = None
+    doubles: list = field(default_factory=list)
+    blocked: dict = field(default_factory=dict)  # step number -> dependency that blocks the real hook (reported, never hidden)
 
 
 @dataclass
@@ -368,10 +374,11 @@ def step_06(ctx: Ctx) -> dict:
            "suite_ref": "eval_suite:disputas-suite@1", "judge_actor": JUDGE, "author_actors": ["claude-wrld0"]}
     out = gate.gate_verdict(doc, reports, world, evaluators=ctx.cfg.gate_evaluators)
     ctx.out.update(gate_verdict=out["verdict"], gate=out, arms=arms)
-    return {"status": "stand-in", "data_class": "synthetic", "actor": JUDGE,
-            "receipt": {"provider": "claude-standin"},
+    return {"status": "real-narrow" if core_arms else "stand-in", "data_class": "synthetic", "actor": JUDGE,
+            "receipt": {"provider": "core-arms" if core_arms else "claude-standin"},
             "detail": {"verdict": out["verdict"], "gates": out["gates"], "judge_actor": out["judge_actor"],
-                       "quality_claims": out["quality_claims"], "arms": arms_from}}
+                       "quality_claims": out["quality_claims"], "arms": arms_from, "verdict_judge": "stand-in",
+                       **({"blocked": ctx.cfg.hooks.blocked[6]} if ctx.cfg.hooks.blocked.get(6) and not core_arms else {})}}
 
 
 MAX_REVISION_ROUNDS = 1
@@ -406,6 +413,8 @@ def step_08(ctx: Ctx) -> dict:
         sys.path.insert(0, src)
     from codex_standin import jwtsvc as J
     digest = ctx.out["compiled"]["draft_plan"]["digest"]
+    if ctx.cfg.hooks.approve:
+        return _step_08_core(ctx, digest)
     key = J.private_from_seed(J.b64u(b"thread01-issuer-seed-32-bytes!!!!"[:32]))
     ring = J.KeyRing({"sim-issuer-1": ("sim-human-issuer", "pulso-core", J.public_of(key))})
     now = 1_800_000_000
@@ -430,7 +439,27 @@ def step_08(ctx: Ctx) -> dict:
     return {"status": "simulated", "data_class": "synthetic", "receipt": {"provider": "simulated-issuer"},
             "detail": {"bound_to_digest": digest, "tampered_rejected": tampered, "payload_tamper_rejected": payload_rej,
                        "expired_rejected": expired_rej, "verified_by": "local-stand-in-verifier",
-                       "issuer": "simulated"}}
+                       "issuer": "simulated", **_blocked(ctx, 8)}}
+
+
+def _blocked(ctx: Ctx, n: int) -> dict:
+    b = ctx.cfg.hooks.blocked.get(n)
+    return {"blocked": b} if b else {}
+
+
+def _step_08_core(ctx: Ctx, digest: str) -> dict:
+    """The real local human issuer signed the JWS; the REAL Core verified it (approve accepted, tampered hash and replay
+    refused). The hook must prove all three and the approval must be about THIS thread's draft digest."""
+    res = ctx.cfg.hooks.approve(ctx)
+    if res.get("candidate_hash") != digest.split(":", 1)[1] or res.get("decision") != "approved":
+        raise RuntimeError("core approval is not about the compiled draft digest")
+    if res.get("tamper_refused") is not True or res.get("replay_refused") is not True:
+        raise RuntimeError("core approval did not prove tamper and replay refusal")
+    ctx.out["approval"] = {"jti": "core-verified", "digest": digest}
+    return {"status": "real-narrow", "data_class": "synthetic", "receipt": {"provider": "local-human-issuer"},
+            "detail": {"bound_to_digest": digest, "tampered_rejected": True, "replay_rejected": True,
+                       "verified_by": "core", "issuer": "local-human-issuer", "approver": res.get("approver"),
+                       "decision": res["decision"]}}
 
 
 class RegistryDouble:
@@ -459,11 +488,14 @@ def step_09(ctx: Ctx) -> dict:
     if read is None:
         raise RuntimeError("publish hook supplied without an alias_read hook")
     alias = read(ctx, published["alias"])
+    if alias.get("release_id") != published["release_id"] or alias.get("alias") != published["alias"]:
+        raise RuntimeError("alias read does not show the published release")
     both = bool(h.publish and h.alias_read)
     ctx.out["alias_read"] = alias
     return {"status": "real-narrow" if both else "stand-in", "data_class": "synthetic",
             "receipt": {"provider": "core-local-staging" if both else "claude-standin"},
-            "detail": {"published": published, "alias_read": alias, "registry": "core" if both else "in-process-double"}}
+            "detail": {"published": published, "alias_read": alias, "registry": "core" if both else "in-process-double",
+                       **({} if both else _blocked(ctx, 9))}}
 
 
 EFFECT_AUTHOR = "claude-p2py-effects"
@@ -528,8 +560,10 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
     ports = [{"port": "llm_gateway", "provenance": "roleplay-shim:replay", "price_source": "placeholder-rate-card"},
              {"port": "registry", "provenance": "core-local-staging" if (h.publish and h.alias_read) else "in-process-double",
               "price_source": "n/a"},
-             {"port": "human_issuer", "provenance": "simulated-local-issuer", "price_source": "n/a"},
-             {"port": "platform", "provenance": "platform-sim", "price_source": "n/a"}]
+             {"port": "human_issuer", "provenance": "local-human-issuer-double" if h.approve else "simulated-local-issuer",
+              "price_source": "n/a"},
+             {"port": "platform", "provenance": "platform-sim", "price_source": "n/a"},
+             *[{"price_source": "n/a", **d} for d in h.doubles]]
     report = {"contract_revision": CONTRACT_REVISION, "target": "local", "sha": ctx.sha, "host": HOST, "label": "DEMO-0",
               "quality_claims": "forbidden", "mode": ctx.cfg.mode, "steps": rep_steps, "ports": ports,
               "authors": {"world": world["authors"].get("world"), "suite": world["authors"].get("suite"),
