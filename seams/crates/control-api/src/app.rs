@@ -66,7 +66,7 @@ pub struct App {
     pub(crate) cfg: Config,
     pub(crate) control: Verifier,
     pub(crate) broker: Verifier,
-    pub(crate) store: Box<dyn Store>,
+    pub(crate) store: Arc<dyn Store>,
     admin: Mutex<Admin>,
     pub(crate) write_lock: Mutex<()>,
     pub(crate) now: Box<dyn Fn() -> f64 + Send + Sync>,
@@ -84,9 +84,10 @@ impl App {
 
     pub fn with_clock(cfg: Config, store: Box<dyn Store>, now: Box<dyn Fn() -> f64 + Send + Sync>) -> App {
         let boot = now();
+        let store: Arc<dyn Store> = Arc::from(store);
         App {
-            control: Verifier::new(cfg.ring.clone()).with_boot_floor(boot),
-            broker: Verifier::new(cfg.ring.clone()).with_boot_floor(boot),
+            control: Verifier::new(cfg.ring.clone()).with_boot_floor(boot).with_store(store.clone(), "control"),
+            broker: Verifier::new(cfg.ring.clone()).with_boot_floor(boot).with_store(store.clone(), "broker"),
             cfg,
             store,
             admin: Mutex::new(Admin::default()),

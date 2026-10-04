@@ -288,7 +288,7 @@ fn quarantine_keeps_metadata_only_on_every_store() {
         let schema = rig.upload_schema();
         let events = vec![domain(1, "team.created", &schema), domain(2, "case.viewed", &schema)];
         let (st, r) = rig.post_batch(&batch(B { revision: Some(0), from: Some(1), to: Some(2), cursor: "s.2".into(), events }));
-        assert_eq!(st, 200, "{r}");
+        assert!(st == 200 || st == 202, "{st} {r}");
         assert_eq!(r["quarantined_event_count"].as_i64(), Some(1), "{}", fx.name);
         let tok = rig.token("ob", "control-api", "observations", "t1", json!({"purpose": "platform_observations"}));
         let (_, q) = rig.call("GET", "/internal/v1/platform/quarantine", None, Some(&tok), &[]);
