@@ -4,6 +4,7 @@
 //! Every output carries its semantics label (`claude-standin`); none of these claims Codex semantics.
 
 pub mod compile;
+pub mod events_sensor;
 pub mod gate;
 pub mod intent;
 pub mod recompute;
