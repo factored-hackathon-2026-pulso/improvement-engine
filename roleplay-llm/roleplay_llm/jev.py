@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from .scanner import DEFAULT_K, Registry, scan_payload
-from .shim import HOLD_S, PROTOCOL, PROVENANCE, _canon, _diff, _error, normalise_inputs
+from .shim import HOLD_S, PROTOCOL, PROVENANCE, _canon, _diff, _error, _Ordinals, _norm
 
 ROLE = "jev"
 PATHS = ("/v1/jev", "/v1/systemone")
@@ -41,14 +41,36 @@ _CONTENT_KEYS = {"answers", "usage"}
 _RESPONDER_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
+def _strings(x: Any, ords: _Ordinals) -> Any:
+    """uuid/binding ids to ordinals in every string; no key is masked (questions carry no volatile fields)."""
+    if isinstance(x, dict):
+        return {k: _strings(v, ords) for k, v in sorted(x.items())}
+    if isinstance(x, list):
+        return [_strings(v, ords) for v in x]
+    return ords.sub(x) if isinstance(x, str) else x
+
+
+def normalise_request(request: dict[str, Any]) -> dict[str, Any]:
+    """Volatile fields are masked only inside state.input; model and questions keep every key and value."""
+    ords = _Ordinals()
+    state = request["state"]
+    return {"state": {"locale": state["locale"], "input": _norm(state["input"], ords)},
+            "model": request["model"], "questions": _strings(request["questions"], ords)}
+
+
 def jev_replay_key(request: dict[str, Any]) -> str:
-    """Hash of the whole request with run/session ids and uuid-like ids replaced by first-seen ordinals."""
-    return hashlib.sha256(_canon(normalise_inputs(request)).encode()).hexdigest()[:32]
+    """Hash of the normalised request: ids in state.input replaced by first-seen ordinals."""
+    return hashlib.sha256(_canon(normalise_request(request)).encode()).hexdigest()[:32]
 
 
 def _stage(request: dict[str, Any]) -> str:
-    return hashlib.sha256(_canon(normalise_inputs(
-        {"model": request["model"], "questions": request["questions"]})).encode()).hexdigest()[:16]
+    n = normalise_request(request)
+    return hashlib.sha256(_canon({"model": n["model"], "questions": n["questions"]}).encode()).hexdigest()[:16]
+
+
+def _levels(q: dict[str, Any]) -> int:
+    c = q.get("criteria")
+    return len(c) if isinstance(c, (list, dict)) else 100
 
 
 def _is_num(x: Any) -> bool:
@@ -110,14 +132,16 @@ class JevShim:
         v += [f"state.{k}: key not allowed" for k in sorted(set(state) - _STATE_KEYS)]
         if not isinstance(state.get("locale"), str) or not _LOCALE.fullmatch(state["locale"]):
             v.append("state.locale: not a locale code")
+        if not isinstance(state.get("input"), dict):
+            v.append("state.input: must be an object")
         if not _MODEL.fullmatch(req["model"]):
             v.append("model: not an identifier")
         for qid, q in req["questions"].items():
             if not _QID.fullmatch(str(qid)):
                 v.append(f"questions.<id>: not an identifier: {str(qid)[:32]!r}")
-            elif not isinstance(q, dict) or q.get("type") not in _QTYPES:
+            elif not isinstance(q, dict) or not isinstance(q.get("type"), str) or q["type"] not in _QTYPES:
                 v.append(f"questions.{qid}.type: must be one of {sorted(_QTYPES)}")
-        scan = scan_payload({"goal": "jev", "step": 0, "observations": [], "inputs": state.get("input", {}),
+        scan = scan_payload({"goal": "jev", "step": 0, "observations": [], "inputs": state["input"] if isinstance(state.get("input"), dict) else {},
                              "output_schema": req["questions"]}, k=self.k, registry=self.registry)
         return v + list(scan.violations)
 
@@ -144,8 +168,8 @@ class JevShim:
         if path.exists():
             return
         doc = {"protocol": PROTOCOL, "key": key, "provenance": PROVENANCE, "scanner_id": "tps-1",
-               "surface": "jev", "stage": _stage(req), "request": normalise_inputs(req),
-               "inputs": normalise_inputs(req["state"]["input"]), "respond_to": f"responses/{key}.json",
+               "surface": "jev", "stage": _stage(req), "request": normalise_request(req),
+               "inputs": normalise_request(req)["state"]["input"], "respond_to": f"responses/{key}.json",
                "answer_shape": {"answers": {"<question id>": {
                    "choice": {"type": "choice", "choice": "<option>", "probabilities": {"<option>": 0.5}},
                    "noul": {"type": "noul", "noul": 0.5}, "score": {"type": "score", "probabilities": {"0": 0.5}}}},
@@ -174,7 +198,7 @@ class JevShim:
         try:
             doc = json.loads(path.read_text(encoding="utf-8"))
             problem = self._validate(doc, key, req["questions"])
-        except (ValueError, OSError):
+        except (ValueError, OSError, TypeError, KeyError):
             problem = "response is not valid JSON"
         if problem:
             path.replace(path.with_name(f"{key}.rejected.json"))
@@ -228,15 +252,16 @@ class JevShim:
         if q["type"] == "choice":
             options = q.get("criteria")
             options = set(options) if isinstance(options, dict) else set()
-            if set(ans) != {"type", "choice", "probabilities"} or ans["choice"] not in options \
+            if set(ans) != {"type", "choice", "probabilities"} or not isinstance(ans["choice"], str) or ans["choice"] not in options \
                     or not set(probs) <= options:
                 return f"{qid}: choice or probabilities outside the requested options"
-        elif set(ans) != {"type", "probabilities"} or not all(re.fullmatch(r"\d{1,2}", k) for k in probs):
+        elif set(ans) != {"type", "probabilities"} or not all(
+                re.fullmatch(r"\d{1,2}", k) and int(k) < _levels(q) for k in probs):
             return f"{qid}: bad score answer"
         return None
 
     def _miss(self, req: dict[str, Any], key: str) -> tuple[int, dict[str, Any]]:
-        norm, stage = normalise_inputs(req), _stage(req)
+        norm, stage = normalise_request(req), _stage(req)
         diff = ["no recorded request for this stage"]
         for path in sorted((self.queue / "requests").glob("*.json")):
             try:
@@ -253,6 +278,8 @@ class JevShim:
 def serve_jev(shim: JevShim, *, host: str = "127.0.0.1", port: int = 8641,
               api_key: str = "dummy") -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
+        timeout = 30  # a client that stalls mid-body must not pin a thread forever
+
         def _send(self, status: int, body: dict[str, Any]) -> None:
             data = json.dumps(body).encode()
             self.send_response(status)
