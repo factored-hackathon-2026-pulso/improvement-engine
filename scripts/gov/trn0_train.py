@@ -149,9 +149,7 @@ def make_receipt(repo, m: dict, out: Path) -> dict:
     doc = {"schema": "train-receipt/v1", "generated_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
            "base": m.get("base", "main"), "train_branch": m.get("train_branch"), "head_sha": head,
            "pr_cap_hours": cap, "prs": prs, "problems": problems, "verdict": "fail" if problems else "pass"}
-    out.write_text(json.dumps(doc, indent=2) + "
-", encoding="utf-8", newline="
-")
+    out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
     return doc
 
 
