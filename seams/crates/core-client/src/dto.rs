@@ -6,6 +6,8 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub use crate::arms::{ArmMode, ArmReport, ArmRequest, ArmStatus, ExecutionProfile};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodeError(pub String);
 

@@ -4,7 +4,8 @@
 //! profile, Idempotency-Key, body) and is answered with the golden status and body. Anything else is recorded as a
 //! failure and answered 418, so a client that encodes anything differently from the Python bridge golden fails.
 //!
-//! Matching rules: `null`-valued keys equal absent keys (the DTOs treat them alike); a golden string of the form
+//! Matching rules: `null`-valued keys equal absent keys and a top-level `schema_version: "1"` equals absent (the
+//! DTOs treat them alike, `default: "1"`); a golden string of the form
 //! `<name>` is a placeholder for a volatile value: it matches any string, the same name must always bind the same
 //! value and different names different values (so `request_digest#2` vs `#3` really differ); `deadline*` must be
 //! Z-RFC3339 and `request_digest*` lowercase hex-64.
@@ -128,6 +129,10 @@ fn matches(golden: &Value, actual: &Value, b: &mut Bindings, at: &str) -> Result
             let (g, a) = (strip_nulls(&Value::Object(g.clone())), strip_nulls(&Value::Object(a.clone())));
             let (g, a) = (g.as_object().unwrap(), a.as_object().unwrap());
             for k in g.keys().chain(a.keys()).collect::<HashSet<_>>() {
+                // `schema_version` defaults to "1" in the DTOs: a golden that omits it equals a request that sends "1".
+                if k == "schema_version" && at == "body" && g.get(k).is_none() && a.get(k) == Some(&Value::String("1".into())) {
+                    continue;
+                }
                 match (g.get(k), a.get(k)) {
                     (Some(gv), Some(av)) => matches(gv, av, b, &format!("{at}.{k}"))?,
                     (Some(_), None) => return Err(format!("{at}.{k}: missing in the request")),
@@ -180,6 +185,7 @@ struct GState {
 }
 
 fn fail(st: &mut GState, why: String) -> (u16, Value) {
+    eprintln!("GoldenCore deviation: {why}");
     st.failures.push(why);
     (418, serde_json::json!({"code":"pulso:internal_error","retryable":false,"schema_version":"1","details":{}}))
 }

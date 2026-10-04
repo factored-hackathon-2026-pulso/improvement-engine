@@ -1,7 +1,7 @@
 //! Typed operations over the K1 transport: one method per `/internal/v1` operation (11 routes).
 use crate::canon::CanonError;
 use crate::client::{CallError, CoreClient, Response};
-use crate::dto::{DecodeError, TaskInvocation, TaskReceipt, Version};
+use crate::dto::{ArmReport, ArmRequest, DecodeError, TaskInvocation, TaskReceipt, Version};
 use crate::errors::Disposition;
 use crate::routes;
 use serde_json::Value;
@@ -105,5 +105,43 @@ impl CoreClient {
     pub fn read_task(&self, tenant: &str, job_id: Option<&str>, task_id: &str) -> Result<TaskReceipt, OpError> {
         let r = self.op(&routes::READ_TASK, tenant, job_id, &[task_id], None, None, self.attempts())?;
         Ok(TaskReceipt::from_response(r.status, &r.body)?)
+    }
+
+    /// `POST /evaluation/arms/run`. The key rides in the `Idempotency-Key` header and in the body (equal). A replay
+    /// returns the stored report; another body under the same key is `pulso:idempotency_conflict`. An in-run failure
+    /// (`failed_infra`, `candidate_failed`, ...) is a decoded report, not an error.
+    pub fn run_arm(&self, tenant: &str, job_id: Option<&str>, req: &ArmRequest) -> Result<ArmReport, OpError> {
+        req.validate().map_err(OpError::Invalid)?;
+        let expected = crate::canon::arm_execution_id(tenant, &req.idempotency_key)?;
+        let body = req.to_json();
+        let r = self.op(&routes::RUN_ARM, tenant, job_id, &[], Some(&body), Some(&req.idempotency_key), self.attempts())?;
+        let rep = ArmReport::from_json(&r.body)?;
+        if !rep.execution_id_well_formed() {
+            return Err(OpError::Contract(format!("execution_id {:?} is not arm-<32 hex>", rep.execution_id)));
+        }
+        if !rep.execution_id.starts_with('<') && rep.execution_id != expected {
+            return Err(OpError::Contract(format!("execution_id {} is not the id of this key ({expected})", rep.execution_id)));
+        }
+        Ok(rep)
+    }
+
+    /// `POST /evaluation/arms/{arm_id}/run` (same body and key rules as `run_arm`).
+    pub fn run_arm_by_id(&self, tenant: &str, job_id: Option<&str>, arm_id: &str, req: &ArmRequest) -> Result<ArmReport, OpError> {
+        req.validate().map_err(OpError::Invalid)?;
+        let body = req.to_json();
+        let r = self.op(&routes::RUN_ARM_BY_ID, tenant, job_id, &[arm_id], Some(&body), Some(&req.idempotency_key), self.attempts())?;
+        Ok(ArmReport::from_json(&r.body)?)
+    }
+
+    /// `GET /evaluation/arms/{arm_id}`.
+    pub fn read_arm(&self, tenant: &str, job_id: Option<&str>, arm_id: &str) -> Result<ArmReport, OpError> {
+        let r = self.op(&routes::READ_ARM, tenant, job_id, &[arm_id], None, None, self.attempts())?;
+        Ok(ArmReport::from_json(&r.body)?)
+    }
+
+    /// `GET /evaluation/arms/by-key/{key}`.
+    pub fn read_arm_by_key(&self, tenant: &str, job_id: Option<&str>, key: &str) -> Result<ArmReport, OpError> {
+        let r = self.op(&routes::READ_ARM_BY_KEY, tenant, job_id, &[key], None, None, self.attempts())?;
+        Ok(ArmReport::from_json(&r.body)?)
     }
 }
