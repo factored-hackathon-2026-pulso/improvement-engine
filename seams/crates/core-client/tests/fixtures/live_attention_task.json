@@ -1,0 +1,342 @@
+{
+ "agent_id": "atencion-tarea",
+ "generated_by": "gen/gen_live_world_fixture.py",
+ "variants": {
+  "accept": {
+   "changes": [
+    {
+     "content": {
+      "id": "p/resumen_radicado",
+      "locales": {
+       "es": "Redacta un mensaje breve para el cliente que confirme que su disputa fue radicada. No repitas cifras.",
+       "pt": "Redija uma mensagem breve para o cliente confirmando que sua contesta\u00e7\u00e3o foi registrada. N\u00e3o repita n\u00fameros."
+      },
+      "model_profile": "perfil-generacion@1",
+      "version": "2.0.0"
+     },
+     "docs": {
+      "changelog": "k3-live",
+      "description": "live K3 change",
+      "rationale": "world asset re-versioned"
+     },
+     "kind": "prompt"
+    },
+    {
+     "content": {
+      "agent_id": "atencion-tarea",
+      "id": "disputas-tarea-suite",
+      "repetitions": 1,
+      "scenarios": [
+       {
+        "expect": {
+         "escalated": false,
+         "outcome": "completed"
+        },
+        "id": "resuelto",
+        "principal": {
+         "attrs": {
+          "country": "CO"
+         },
+         "id": "cust-001"
+        },
+        "seed": {
+         "tools": {
+          "buscar_transacciones": [
+           {
+            "result": [
+             {
+              "amount": "120.50",
+              "currency": "USD",
+              "transaction_id": "tx-1"
+             },
+             {
+              "amount": "30.00",
+              "currency": "USD",
+              "transaction_id": "tx-2"
+             }
+            ]
+           }
+          ],
+          "convertir_moneda": [
+           {
+            "result": 120
+           }
+          ],
+          "seleccionar": [
+           {
+            "result": {
+             "amount": "120.50",
+             "currency": "USD",
+             "transaction_id": "tx-1"
+            }
+           }
+          ]
+         }
+        },
+        "steps": [
+         {
+          "op": "start"
+         }
+        ]
+       },
+       {
+        "expect": {
+         "escalated": true,
+         "outcome": "escalated"
+        },
+        "id": "escalado_por_monto",
+        "principal": {
+         "attrs": {
+          "country": "CO"
+         },
+         "id": "cust-002"
+        },
+        "seed": {
+         "tools": {
+          "buscar_transacciones": [
+           {
+            "result": [
+             {
+              "amount": "600.00",
+              "currency": "USD",
+              "transaction_id": "tx-9"
+             }
+            ]
+           }
+          ],
+          "convertir_moneda": [
+           {
+            "result": 600
+           }
+          ],
+          "seleccionar": [
+           {
+            "result": {
+             "amount": "600.00",
+             "currency": "USD",
+             "transaction_id": "tx-9"
+            }
+           }
+          ]
+         }
+        },
+        "steps": [
+         {
+          "op": "start"
+         }
+        ]
+       },
+       {
+        "expect": {
+         "escalated": true,
+         "outcome": "escalated"
+        },
+        "id": "sin_candidatas",
+        "principal": {
+         "attrs": {
+          "country": "CO"
+         },
+         "id": "cust-003"
+        },
+        "seed": {
+         "tools": {
+          "buscar_transacciones": [
+           {
+            "result": []
+           }
+          ]
+         }
+        },
+        "steps": [
+         {
+          "op": "start"
+         }
+        ]
+       }
+      ],
+      "version": "2.0.0"
+     },
+     "docs": {
+      "changelog": "k3-live",
+      "description": "live K3 change",
+      "rationale": "world asset re-versioned"
+     },
+     "kind": "eval_suite"
+    }
+   ],
+   "put_draft_digest": "8980460ae6da741034c88d274d66eac257c2c12a9c6f779b3e435dc13163aab5",
+   "suite_digest": "4fa1a624b84091db097ac53884c79371a0f4d544b3fa6d459a262474eeeed667",
+   "suite_id": "disputas-tarea-suite",
+   "suite_version": "2.0.0",
+   "version": "2.0.0"
+  },
+  "fail_suite": {
+   "changes": [
+    {
+     "content": {
+      "id": "p/resumen_radicado",
+      "locales": {
+       "es": "Redacta un mensaje breve para el cliente que confirme que su disputa fue radicada. No repitas cifras.",
+       "pt": "Redija uma mensagem breve para o cliente confirmando que sua contesta\u00e7\u00e3o foi registrada. N\u00e3o repita n\u00fameros."
+      },
+      "model_profile": "perfil-generacion@1",
+      "version": "3.0.0"
+     },
+     "docs": {
+      "changelog": "k3-live",
+      "description": "live K3 change",
+      "rationale": "world asset re-versioned"
+     },
+     "kind": "prompt"
+    },
+    {
+     "content": {
+      "agent_id": "atencion-tarea",
+      "id": "disputas-tarea-suite",
+      "repetitions": 1,
+      "scenarios": [
+       {
+        "expect": {
+         "escalated": true,
+         "outcome": "escalated"
+        },
+        "id": "resuelto",
+        "principal": {
+         "attrs": {
+          "country": "CO"
+         },
+         "id": "cust-001"
+        },
+        "seed": {
+         "tools": {
+          "buscar_transacciones": [
+           {
+            "result": [
+             {
+              "amount": "120.50",
+              "currency": "USD",
+              "transaction_id": "tx-1"
+             },
+             {
+              "amount": "30.00",
+              "currency": "USD",
+              "transaction_id": "tx-2"
+             }
+            ]
+           }
+          ],
+          "convertir_moneda": [
+           {
+            "result": 120
+           }
+          ],
+          "seleccionar": [
+           {
+            "result": {
+             "amount": "120.50",
+             "currency": "USD",
+             "transaction_id": "tx-1"
+            }
+           }
+          ]
+         }
+        },
+        "steps": [
+         {
+          "op": "start"
+         }
+        ]
+       },
+       {
+        "expect": {
+         "escalated": true,
+         "outcome": "escalated"
+        },
+        "id": "escalado_por_monto",
+        "principal": {
+         "attrs": {
+          "country": "CO"
+         },
+         "id": "cust-002"
+        },
+        "seed": {
+         "tools": {
+          "buscar_transacciones": [
+           {
+            "result": [
+             {
+              "amount": "600.00",
+              "currency": "USD",
+              "transaction_id": "tx-9"
+             }
+            ]
+           }
+          ],
+          "convertir_moneda": [
+           {
+            "result": 600
+           }
+          ],
+          "seleccionar": [
+           {
+            "result": {
+             "amount": "600.00",
+             "currency": "USD",
+             "transaction_id": "tx-9"
+            }
+           }
+          ]
+         }
+        },
+        "steps": [
+         {
+          "op": "start"
+         }
+        ]
+       },
+       {
+        "expect": {
+         "escalated": true,
+         "outcome": "escalated"
+        },
+        "id": "sin_candidatas",
+        "principal": {
+         "attrs": {
+          "country": "CO"
+         },
+         "id": "cust-003"
+        },
+        "seed": {
+         "tools": {
+          "buscar_transacciones": [
+           {
+            "result": []
+           }
+          ]
+         }
+        },
+        "steps": [
+         {
+          "op": "start"
+         }
+        ]
+       }
+      ],
+      "version": "3.0.0"
+     },
+     "docs": {
+      "changelog": "k3-live",
+      "description": "live K3 change",
+      "rationale": "world asset re-versioned"
+     },
+     "kind": "eval_suite"
+    }
+   ],
+   "put_draft_digest": "7262dfa03bf94a8dcc0bd57d209cc0d1b8b02853aa99bc015c378254b436117f",
+   "suite_digest": "d5716ed0b5f751e49eec11c58feec2f8fa83bf2718fad72fcd1ee158b374f210",
+   "suite_id": "disputas-tarea-suite",
+   "suite_version": "3.0.0",
+   "version": "3.0.0"
+  }
+ }
+}
