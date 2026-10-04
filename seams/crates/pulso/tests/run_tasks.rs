@@ -261,7 +261,6 @@ impl JobRunner for SideEffect {
 /// status 'complete' (already admitted by migration 0050's CHECK) and excluding it from `claim_next`, called by the
 /// worker on `Ok`. Ignored so the suite stays green; run with `--ignored` to see it fail.
 #[test]
-#[ignore = "KNOWN GAP: JobRepository has no completed transition; see doc comment"]
 fn a_job_whose_runner_returned_ok_is_never_run_again() {
     let repo = Arc::new(MemRepo::new());
     repo.admit("t1").unwrap();
