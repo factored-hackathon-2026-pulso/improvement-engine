@@ -188,6 +188,69 @@ class TrainReceipt(unittest.TestCase):
             self.assertEqual(trn.make_receipt(repo, m, out)["verdict"], "fail")
 
 
+class Consolidated(unittest.TestCase):
+    """An already-merged train (one consolidated PR, lanes merged earlier): the order is observed from git, not asserted."""
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        d = self._t.name
+        self.repo = Path(d, "repo"); self.repo.mkdir()
+        git(self.repo, "init", "-q", "-b", "main"); commit(self.repo, "base.txt")
+        git(self.repo, "checkout", "-qb", "train")
+        for n in ("a", "b"):
+            git(self.repo, "checkout", "-qb", f"l{n}", "train"); commit(self.repo, f"{n}.txt")
+            git(self.repo, "checkout", "-q", "train"); git(self.repo, "merge", "--no-ff", "-q", "-m", f"merge l{n}", f"l{n}")
+        self.rec = Path(d, "w0"); self.rec.mkdir()
+        Path(self.rec, "pr-96.json").write_text(json.dumps(Receipts().good()), encoding="utf-8")
+        self.out = Path(d, "out", "trn0.json")
+        self.m = {"mode": "consolidated", "pr": 96, "base": "main", "train_branch": "train", "pr_cap_hours": 35,
+                  "cap_deviation": {"authority": "user ruling: few large PRs (journal CL-0042)"},
+                  "receipts_dir": str(self.rec),
+                  "lanes": [{"id": "a", "branch": "la", "deps": [], "lane_hours": 30},
+                            {"id": "b", "branch": "lb", "deps": ["a"], "lane_hours": None}]}
+
+    def tearDown(self):
+        self._t.cleanup()
+
+    def test_observed_merge_order_pr_number_unknown_hours_and_disclosed_cap_deviation(self):
+        self.m["lanes"][1]["lane_hours"] = 20
+        doc = trn.make_receipt(self.repo, self.m, self.out)
+        self.assertEqual(doc["verdict"], "pass", doc["problems"])
+        self.assertEqual([x["lane"] for x in doc["merge_order"]], ["a", "b"])
+        self.assertEqual(doc["prs"][0]["n"], 96)
+        self.assertEqual(doc["prs"][0]["lane_hours"], 50)
+        self.assertTrue((self.out.parent / doc["prs"][0]["w0_receipt"]).is_file())
+        self.assertTrue(any("35" in d and "ruling" in d for d in doc["deviations"]))
+
+    def test_null_lane_hours_are_recorded_as_unknown_not_invented(self):
+        doc = trn.make_receipt(self.repo, self.m, self.out)
+        self.assertEqual(doc["verdict"], "pass", doc["problems"])
+        self.assertEqual(doc["prs"][0]["lane_hours"], 30)
+        self.assertEqual(doc["prs"][0]["lane_hours_unknown"], ["b"])
+
+    def test_over_cap_without_a_recorded_authority_fails(self):
+        self.m["lanes"][1]["lane_hours"] = 20
+        del self.m["cap_deviation"]
+        self.assertEqual(trn.make_receipt(self.repo, self.m, self.out)["verdict"], "fail")
+
+    def test_lane_not_contained_in_the_train_fails(self):
+        git(self.repo, "checkout", "-qb", "lc", "main"); commit(self.repo, "c.txt"); git(self.repo, "checkout", "-q", "train")
+        self.m["lanes"].append({"id": "c", "branch": "lc", "deps": [], "lane_hours": 1})
+        doc = trn.make_receipt(self.repo, self.m, self.out)
+        self.assertEqual(doc["verdict"], "fail")
+        self.assertTrue(any("not merged" in p for p in doc["problems"]))
+
+    def test_dependency_merged_after_its_dependant_fails(self):
+        self.m["lanes"][0]["deps"] = ["b"]
+        doc = trn.make_receipt(self.repo, self.m, self.out)
+        self.assertEqual(doc["verdict"], "fail")
+        self.assertTrue(any("before its dependency" in p for p in doc["problems"]))
+
+    def test_missing_w0_receipt_fails(self):
+        Path(self.rec, "pr-96.json").unlink()
+        self.assertEqual(trn.make_receipt(self.repo, self.m, self.out)["verdict"], "fail")
+
+
 class Cli(unittest.TestCase):
     def test_check_exits_1_on_out_of_order_manifest_and_0_when_clean(self):
         with tempfile.TemporaryDirectory() as d:
