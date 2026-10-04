@@ -52,4 +52,3 @@ This entry records focused tests only. Full local CI must be rerun on the
 consolidated tree before publishing these changes. No GitHub Actions result,
 PostgreSQL execution, live Agent Core behavior, or business-impact claim is
 asserted here.
-
