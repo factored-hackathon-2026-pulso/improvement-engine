@@ -93,7 +93,7 @@ def test_prepare_core_context_exports_contracts_version(tmp_path: Path) -> None:
     import shutil
     import subprocess
 
-    checkout = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-789d6c8"))
+    checkout = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-c814c2b"))
     pwsh = shutil.which("pwsh")
     if pwsh is None or not (checkout / ".git").exists():
         pytest.skip("pwsh or the pinned checkout is not available")
@@ -114,7 +114,7 @@ def test_concurrent_prepares_for_the_same_sha_do_not_collide() -> None:
     import shutil
     import subprocess
 
-    checkout = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-789d6c8"))
+    checkout = Path(os.environ.get("PULSO_CORE_CHECKOUT", r"D:\.codex\factored\references\agent-core-c814c2b"))
     pwsh = shutil.which("pwsh")
     if pwsh is None or not (checkout / ".git").exists():
         pytest.skip("pwsh or the pinned checkout is not available")
