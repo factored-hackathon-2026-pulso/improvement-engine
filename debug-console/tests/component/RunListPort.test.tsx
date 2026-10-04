@@ -72,4 +72,20 @@ describe('provider selection is configuration (public/config.json dataProvider)'
     stubConfig({ apiBase: 'javascript:alert(1)' });
     expect((await loadConfig()).apiBase).toBe('');
   });
+  it('a screen still on the legacy client is declared as NOT served by the stand-in/fixture provider', async () => {
+    stubConfig({ provider: 'fixture', dataProvider: 'stand-in', sseHeartbeatMs: 5000 });
+    window.location.hash = '#/sources';
+    const { App } = await import('../../src/app/App');
+    render(<App />);
+    expect((await screen.findByTestId('provider-partial')).textContent).toContain('cliente heredado');
+    window.location.hash = '';
+  });
+  it('the run list (on the port) carries no partial notice', async () => {
+    stubConfig({ provider: 'fixture', dataProvider: 'stand-in', sseHeartbeatMs: 5000 });
+    window.location.hash = '';
+    const { App } = await import('../../src/app/App');
+    render(<App />);
+    await screen.findAllByRole('link', { name: /run/i });
+    expect(screen.queryByTestId('provider-partial')).toBeNull();
+  });
 });
