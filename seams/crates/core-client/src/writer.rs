@@ -298,7 +298,7 @@ impl CoreClient {
         inv.registry_mutation_commitment = Some(commitment.to_json());
         let receipt = self.invoke(&inv)?;
         if !receipt.is_success() {
-            return Err(OpError::CommitmentMismatch(format!("writer stage did not complete: state {:?}, outcome {:?}", receipt.state, receipt.outcome)));
+            return Err(OpError::CommitmentMismatch(format!("writer stage did not complete: state {:?}, outcome {:?}, reason {:?}, code {:?}", receipt.state, receipt.outcome, receipt.reason, receipt.code)));
         }
         let fact = receipt.fact("pulso_writer_receipts").ok_or_else(|| OpError::CommitmentMismatch("no pulso_writer_receipts fact".into()))?;
         let wr = WriterReceipts::from_fact(fact)?;

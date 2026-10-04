@@ -145,6 +145,28 @@ fn a_golden_placeholder_hash_is_a_mismatch_for_a_strict_client() {
     assert_mismatch(|v| v["candidate_hash"] = json!("<candidate_hash#1>"), "placeholder");
 }
 
+#[test]
+fn a_stage_that_did_not_complete_names_its_reason_so_a_live_failure_is_diagnosable() {
+    let f = FakeCore::start();
+    let p = plan();
+    let req = DryRunRequest::new("t1", &p.agent_id, Some(BASE), p.changes.clone());
+    f.script(200, json!({"schema_version":"1","valid":true,"violations":[],"candidate_hash":format!("sha256:{DRY_HASH}"),
+        "release_id_preview":"rel-prev","request_digest":canon::request_digest(&req.to_json()).unwrap(),"proposal_created":false,"content_hashes":{}}));
+    let key = canon::idempotency_key("t1", "job-k3", "writer", 1, "k3-writer-1").unwrap();
+    let binding = canon::task_binding_ref("t1", &key).unwrap();
+    let mut body = common::golden::golden_response("writer_evaluation", "writer_create_put_freeze");
+    body["task_binding_ref"] = json!(binding);
+    body["receipt"]["task_binding_ref"] = json!(binding);
+    body["state"] = json!("manual_reconcile");
+    body["outcome"] = json!("escalated");
+    body["reason"] = json!("auth_insufficient_for_put_draft");
+    f.script(200, body);
+    match freeze(&f, &Sealer::default()) {
+        Err(OpError::CommitmentMismatch(m)) => assert!(m.contains("auth_insufficient_for_put_draft"), "{m}"),
+        other => panic!("{other:?}"),
+    }
+}
+
 // ---- guards before anything is sent -----------------------------------------------------------------------------
 
 #[test]
