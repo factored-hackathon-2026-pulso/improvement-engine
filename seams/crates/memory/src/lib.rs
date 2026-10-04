@@ -76,6 +76,9 @@ impl Memory {
         );
         Ok(id)
     }
+    pub fn wiki_read(&self, _claim_key: &str) -> Option<String> {
+        None
+    }
     pub fn note(&self, id: &str) -> Option<&Note> {
         self.notes.get(id)
     }

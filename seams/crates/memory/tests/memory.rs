@@ -22,3 +22,17 @@ fn note_artifact_carries_evidence_refs_and_honest_labels() {
     assert_eq!(a["durable"], false);
     assert_eq!(m.note(&id).unwrap().statement, "p95 latency is stable");
 }
+
+#[test]
+fn wiki_read_renders_notes_for_a_claim_with_status_and_refs() {
+    let mut m = Memory::new(store());
+    m.add_note(nn("k.latency", "p95 latency is stable", &["ev-1"])).unwrap();
+    m.add_note(nn("k.other", "unrelated", &["ev-2"])).unwrap();
+    let page = m.wiki_read("k.latency").expect("page");
+    assert!(page.contains("# k.latency"));
+    assert!(page.contains("p95 latency is stable"));
+    assert!(page.contains("[active]"));
+    assert!(page.contains("ev-1"));
+    assert!(!page.contains("unrelated"));
+    assert!(m.wiki_read("k.missing").is_none());
+}
