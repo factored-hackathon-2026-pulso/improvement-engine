@@ -54,7 +54,7 @@ fn dataset_adapters_are_dataset_only_and_dataset_pg_is_the_named_one() {
 fn the_source_id_prefix_must_match_the_data_mode() {
     let e = err(&[("PULSO_DATA_MODE", "platform"), ("PULSO_SOURCE_ID", "dataset:e0")]);
     assert!(e.contains("config_invalid") && e.contains("PULSO_SOURCE_ID"), "{e}");
-    assert!(load(&[("PULSO_DATA_MODE", "dataset"), ("PULSO_SOURCE_ID", "dataset:e0-raw")]).is_ok());
+    assert!(load(&[("PULSO_DATA_MODE", "dataset"), ("PULSO_SOURCE_ID", "dataset:sample-raw")]).is_ok());
 }
 
 #[test]
