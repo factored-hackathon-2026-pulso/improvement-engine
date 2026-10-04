@@ -49,6 +49,8 @@ fn the_change_hypothesis_is_not_supported_when_the_improvement_gate_failed_and_s
     let h = &inv["hypotheses"].as_array().unwrap()[1];
     assert_eq!(h["hypothesis_id"], "change");
     assert_eq!(h["verdict"], "not_supported");
+    let st = h["statement"].as_str().unwrap();
+    assert!(st.contains("replace prompt:resumen_radicado@1 -> prompt:resumen_radicado@2") && st.contains("add eval_suite:disputas-tarea-suite@2"), "the statement names what the change produces, not only what it targets: {st}");
     let gate = inv["evidence"].as_array().unwrap().iter().find(|e| e["evidence_ref"]["id"] == "ev-gate-improvement").unwrap();
     assert_eq!(gate["relation"], "contradicts");
     let s = gate["summary"].as_str().unwrap();
