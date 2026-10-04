@@ -155,6 +155,38 @@ fn e0_cli_persists_every_qualifying_proposal_seed_with_truthful_provenance() {
         String::from_utf8_lossy(&completed.stderr)
     );
     let result = persisted_result(&output);
+    let builder_input = result
+        .get("e0_builder_input_preparation")
+        .expect("runner should persist the builder-input readiness boundary");
+    assert_eq!(
+        builder_input["schema_version"],
+        "e0_builder_input_preparation_v1"
+    );
+    assert_eq!(builder_input["status"], "dependency_blocked");
+    assert_eq!(
+        builder_input["artifact_kind"],
+        "builder_input_preparation_status_not_proposal"
+    );
+    assert_eq!(builder_input["source_run_id"], result["run_id"]);
+    assert_eq!(
+        builder_input["source_snapshot_ref"],
+        result["proposal_assembly"]["source_snapshot_ref"]
+    );
+    assert_eq!(
+        builder_input["observed_cutoff_rfc3339"],
+        result["observed_cutoff_rfc3339"]
+    );
+    assert_eq!(builder_input["candidate_count"], 2);
+    assert_eq!(
+        builder_input["readiness"]["u20_plan"],
+        "unavailable_in_local_simulation"
+    );
+    assert_eq!(
+        builder_input["readiness"]["e0_safety_oracle"],
+        "unavailable_in_local_simulation"
+    );
+    assert_eq!(builder_input["provider_invoked"], false);
+    assert_eq!(builder_input["executable"], false);
     // This fixture has no recurring-query candidate, so no route-bound
     // investigation plan may be fabricated from unrelated metric candidates.
     assert!(result.get("e0_investigation_proposal_plan").is_none());
@@ -229,18 +261,17 @@ fn e0_cli_persists_every_qualifying_proposal_seed_with_truthful_provenance() {
         proposal_event["observed_cutoff_rfc3339"],
         result["observed_cutoff_rfc3339"]
     );
-    let previous_sequence = timeline
+    let builder_input_events = timeline
         .iter()
-        .filter(|event| event["stage"] != "proposal_assembly")
-        .filter_map(|event| event["sequence"].as_u64())
-        .max()
-        .unwrap_or(0);
+        .filter(|event| event["stage"] == "e0_builder_input_preparation")
+        .collect::<Vec<_>>();
+    assert_eq!(builder_input_events.len(), 1);
+    assert_eq!(builder_input_events[0]["status"], "dependency_blocked");
     assert_eq!(
-        proposal_event["sequence"].as_u64(),
-        previous_sequence.checked_add(1),
-        "proposal activity follows the prior persisted timeline/holdout event"
+        builder_input_events[0]["sequence"],
+        proposal_event["sequence"].as_u64().unwrap() + 1
     );
-    assert_eq!(timeline.last(), Some(proposal_event));
+    assert_eq!(timeline.last(), Some(builder_input_events[0]));
     assert!(
         timeline
             .iter()
@@ -276,7 +307,7 @@ fn e0_cli_persists_every_qualifying_proposal_seed_with_truthful_provenance() {
         .collect::<Vec<_>>();
     assert_eq!(ndjson_proposal_events.len(), 1);
     assert_eq!(ndjson_proposal_events[0], proposal_event);
-    assert_eq!(ndjson_events.last(), Some(proposal_event));
+    assert_eq!(ndjson_events.last(), Some(builder_input_events[0]));
     assert!(!proposal_event.to_string().contains("private-case-"));
     assert!(!proposal_event.to_string().contains("private-call-"));
     assert!(!proposal_event.to_string().contains("pulso_local"));
@@ -312,6 +343,7 @@ fn original_bank_cli_never_persists_an_e0_proposal_assembly() {
     assert!(result.get("proposal_assembly").is_none());
     assert!(result.get("e0_mechanism_resolution").is_none());
     assert!(result.get("e0_investigation_proposal_plan").is_none());
+    assert!(result.get("e0_builder_input_preparation").is_none());
     assert!(result.get("local_simulation_portfolio").is_none());
     assert!(!result.to_string().contains("candidates_ready"));
     assert!(!result.to_string().contains("private-interaction-"));
@@ -346,5 +378,10 @@ fn original_bank_cli_never_persists_an_e0_proposal_assembly() {
         !persisted_events(&output)
             .iter()
             .any(|event| event["stage"] == "e0_mechanism_resolution")
+    );
+    assert!(
+        !persisted_events(&output)
+            .iter()
+            .any(|event| event["stage"] == "e0_builder_input_preparation")
     );
 }

@@ -1169,7 +1169,29 @@ fn binary_emits_no_opportunity_when_discovery_has_no_positive_support() {
     assert!(result["candidates"].as_array().unwrap().is_empty());
     assert!(result["proposal"].is_null());
     assert!(result["evaluation"].is_null());
+    assert_eq!(
+        result["e0_builder_input_preparation"]["status"],
+        "not_applicable"
+    );
+    assert_eq!(
+        result["e0_builder_input_preparation"]["reason"],
+        "no_qualifying_candidate"
+    );
+    assert_eq!(result["e0_builder_input_preparation"]["candidate_count"], 0);
     assert!(result["e0_recurrence_holdout"].is_null());
+    assert_eq!(
+        result["e0_candidate_explanation"]["projection_kind"],
+        "assembled_in_memory_result_projection"
+    );
+    assert_eq!(
+        result["e0_candidate_explanation"]["assembly_status"],
+        "insufficient_evidence"
+    );
+    assert_eq!(result["e0_candidate_explanation"]["candidate_count"], 0);
+    assert_eq!(
+        result["e0_candidate_explanation"]["non_candidate_reason"],
+        "no_qualifying_candidate"
+    );
     assert!(result.get("e0_mechanism_resolution").is_none());
     assert!(result.get("e0_investigation_proposal_plan").is_none());
     assert!(
@@ -1185,6 +1207,14 @@ fn binary_emits_no_opportunity_when_discovery_has_no_positive_support() {
             .unwrap()
             .iter()
             .all(|event| event["stage"] != "e0_investigation_proposal_plan")
+    );
+    assert!(
+        result["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["stage"] == "e0_builder_input_preparation"
+                && event["status"] == "not_applicable")
     );
     assert!(timeline.contains("no_opportunity"));
     assert!(!timeline.contains("improvement_draft"));
@@ -1248,10 +1278,67 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
         result["signal"]["metric_id"],
         "e0_recurring_copilot_query_cases"
     );
+    let explanation = result
+        .get("e0_candidate_explanation")
+        .expect("persisted E0 receipts should include a candidate explanation");
+    assert_eq!(explanation["schema_version"], "e0_candidate_explanation_v1");
+    assert_eq!(explanation["source"]["run_id"], result["run_id"]);
+    assert_eq!(
+        explanation["source"]["snapshot_ref"],
+        result["proposal_assembly"]["source_snapshot_ref"]
+    );
+    assert_eq!(
+        explanation["source"]["observed_cutoff_rfc3339"],
+        result["observed_cutoff_rfc3339"]
+    );
+    assert_eq!(explanation["evidence_claim"], "descriptive_only");
+    assert_eq!(explanation["candidate_count"], 1);
+    let recurring_explanation = explanation["candidates"]
+        .as_array()
+        .expect("candidate explanations")
+        .iter()
+        .find(|candidate| candidate["metric_id"] == "e0_recurring_copilot_query_cases")
+        .expect("recurring-query candidate explanation");
+    assert_eq!(recurring_explanation["evidence"]["numerator"], 20);
+    assert_eq!(recurring_explanation["evidence"]["denominator"], 21);
+    assert_eq!(recurring_explanation["route"]["status"], "unlinked");
+    assert_eq!(
+        recurring_explanation["route"]["reason"],
+        "no_exact_supported_flow_mapping"
+    );
+    assert_eq!(recurring_explanation["holdout"]["status"], "replicated");
+    assert_eq!(
+        recurring_explanation["holdout"]["interpretation"],
+        "descriptive_only"
+    );
+    assert_eq!(
+        explanation["dependency_blockers"],
+        serde_json::json!([
+            "e0_safety_oracle:unavailable_in_local_simulation",
+            "no_exact_supported_flow_mapping",
+            "u20_plan:unavailable_in_local_simulation"
+        ])
+    );
+    assert_eq!(explanation["provider_invoked"], false);
+    assert_eq!(explanation["core_proposal_created"], false);
+    assert_eq!(explanation["core_evaluation_status"], "not_evaluated");
+    assert_eq!(explanation["business_lift"], serde_json::Value::Null);
+    assert_eq!(explanation["executable"], false);
+    assert!(!explanation.to_string().contains("normalized-query-pattern"));
+    assert!(!explanation.to_string().contains("private-query-"));
+    assert!(!explanation.to_string().contains("pulso_local"));
     assert_eq!(result["signal"]["numerator"], 20);
     assert_eq!(result["signal"]["denominator"], 21);
     assert_eq!(result["signal"]["minimum_support"], 20);
     assert_eq!(result["e0_recurrence_holdout"]["status"], "replicated");
+    assert_eq!(
+        result["e0_recurrence_holdout"]["candidate_ref"],
+        result["signal"]["pattern_ref"]
+    );
+    assert_eq!(
+        result["e0_recurrence_holdout"]["discovery_source_commitment"],
+        result["manifest_digest"]
+    );
     assert_eq!(
         result["e0_recurrence_holdout"]["reproduction_case_count"],
         21
@@ -1392,6 +1479,31 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
         proposal_event["sequence"].as_u64(),
         holdout_event["sequence"].as_u64().map(|value| value + 1)
     );
+    let builder_input = result
+        .get("e0_builder_input_preparation")
+        .expect("persisted E0 builder readiness boundary");
+    assert_eq!(builder_input["status"], "dependency_blocked");
+    assert_eq!(builder_input["evidence_binding"], "bound");
+    assert_eq!(
+        builder_input["candidate_count"],
+        result["proposal_assembly"]["candidates"]
+            .as_array()
+            .unwrap()
+            .len()
+    );
+    assert_eq!(
+        builder_input["readiness"]["u20_plan"],
+        "unavailable_in_local_simulation"
+    );
+    let builder_event = result_timeline
+        .iter()
+        .find(|event| event["stage"] == "e0_builder_input_preparation")
+        .expect("persisted E0 builder-input event");
+    assert_eq!(builder_event["status"], "dependency_blocked");
+    assert_eq!(
+        builder_event["sequence"].as_u64(),
+        proposal_event["sequence"].as_u64().map(|value| value + 1)
+    );
     let mechanism_events = result_timeline
         .iter()
         .filter(|event| event["stage"] == "e0_mechanism_resolution")
@@ -1405,7 +1517,7 @@ fn binary_detects_recurring_copilot_query_from_arranque_without_using_replay() {
     );
     assert_eq!(
         mechanism_event["sequence"].as_u64(),
-        proposal_event["sequence"].as_u64().map(|value| value + 1)
+        builder_event["sequence"].as_u64().map(|value| value + 1)
     );
     let investigation_plan_event = result_timeline
         .last()

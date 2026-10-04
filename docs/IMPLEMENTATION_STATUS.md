@@ -168,6 +168,14 @@ repairing the malformed/duplicated source privacy fixture. See journal 0055.
   local CI and actual-source smoke are pending. The resolver receipt is opaque,
   resolver-minted, and bound to the exact evidence packet, so callers cannot
   reconstruct it from public route fields. See journal 0065.
+  A typed runner preparation status now follows E0 proposal assembly. It binds
+  candidate metric/signal/summary commitments to the exact run, source
+  snapshot, tenant and cutoff; this evidence-binding status is separate from
+  builder readiness. It remains `dependency_blocked` until genuine U20 plan
+  and U20-E E0 safety inputs are composed, calls no provider, and is not a
+  proposal or Core artifact. No-candidate output is `not_applicable`; the
+  OriginalBank profile receives no E0 preparation event. See
+  `docs/data/e0-builder-input-preparation.md` and journal 0066.
   The CLI additionally supports opt-in `--progress-jsonl` diagnostics on
   stderr: flushed phase-start/completion/skip/failure records with monotonic
   elapsed milliseconds and no source values, identifiers, paths, proposal
@@ -507,3 +515,39 @@ integration tests remain ignored because a usable isolated Podman/Postgres
 backend is unavailable in this process. The next runner slice persists
 candidate-bound evidence status separately from builder readiness and records
 U20/E0 safety blockers without inventing authority or a proposal.
+
+## Current-main Codex consolidation (2026-10-04)
+
+The validated base is the exact tree of merged GitHub main after PR #85 (which
+includes PR #83); PR #85 changed only the isolated `debug-console/` subtree.
+current consolidation selectively ports E0 builder-preparation persistence
+and a P1 platform-signal explanation read model. Runner NDJSON persistence now
+parses events line by line and verifies the complete ordered event timeline
+against `result.json`.
+
+This does not invoke an LLM/provider or Agent Core, create/evaluate a native
+proposal, or establish lift. The actual E0 sample run previously recorded for
+this slice remains descriptive-only. The E0 candidate explanation is an
+assembled in-memory projection, not an independent durable-receipt verifier;
+it validates candidate/signal and holdout/pattern lineage, aggregate status
+invariants, and exposes explicit provider/Core/evaluation/lift/executable
+states without PII or model text.
+
+Final source rerun on the consolidated Rust tree before PR #85:
+`output/e0-current-main-explained-2026-10-04/run_4640_1791074275102278600`.
+It completed 200 discovery cases, with 154/200 recurring-query cases and
+1,433/1,539 selected holdout matches marked descriptive-only; one candidate
+remains unlinked and blocked by unavailable U20/U20-E inputs. PR #85 merged
+after this run and changed only the separate `debug-console/` subtree; the
+full local preflight was rerun on the exact post-PR-#85 tree. No provider or
+native Core proposal/evaluation was invoked; business lift is null and output
+is non-executable.
+
+Final `scripts/verify-local-ci.ps1` passed on this branch based on main
+`a4ccb0a84e3048b3b0b01c80bc803eba0be4615b` (tree
+`1e9bdf8fa0e6bac9bf193fd1ff7eb602ff1fdd53`): Rust formatting,
+workspace Clippy (`-D warnings`), Rust workspace unit/integration/doc tests,
+Python contracts (10 passed, one Podman-dependent skip), fixture validation,
+and Pester (20/20 + 5/5). Podman/Postgres-backed and destructive database tests
+were not run because a local backend was unavailable. No hosted Actions result
+is claimed.

@@ -26,6 +26,10 @@ use improvement_engine_source_adapters::{
     prepare_original_bank, prepare_original_bank_with_progress,
 };
 
+mod e0_builder_input_preparation;
+use e0_builder_input_preparation::E0BuilderInputPreparation;
+mod e0_candidate_explanation;
+
 fn main() {
     if let Err(error) = run(env::args_os().skip(1)) {
         eprintln!("error: {error}");
@@ -453,7 +457,7 @@ fn persist_result(
     })?;
     let write_result = (|| {
         let mut result_json = serde_json::to_value(result).map_err(|error| error.to_string())?;
-        let (proposal_event, mechanism_event, investigation_plan_event) =
+        let (proposal_event, builder_input_event, mechanism_event, investigation_plan_event) =
             if result.source_kind == LocalSourceKind::E0 {
                 result_json["excluded_replay_case_count"] = serde_json::Value::Null;
                 let proposal_assembly = assemble_e0_proposals(result).map_err(|_| {
@@ -478,10 +482,19 @@ fn persist_result(
                 };
                 result_json["proposal_assembly"] = serde_json::to_value(&proposal_assembly)
                     .map_err(|_| "E0 proposal assembly serialization failed".to_owned())?;
+                let builder_sequence = increment_event_sequence(event.sequence)?;
+                let (builder_input, builder_event) = E0BuilderInputPreparation::from_run(
+                    result,
+                    &proposal_assembly,
+                    builder_sequence,
+                )
+                .map_err(|_| "E0 builder-input preparation rejected run provenance".to_owned())?;
+                result_json["e0_builder_input_preparation"] = serde_json::to_value(&builder_input)
+                    .map_err(|_| "E0 builder-input preparation serialization failed".to_owned())?;
                 let mechanism = resolve_local_e0_mechanism(result, &proposal_assembly)?;
                 let mechanism_event = mechanism
                     .as_ref()
-                    .map(|mechanism| make_mechanism_resolution_event(mechanism, &event))
+                    .map(|mechanism| make_mechanism_resolution_event(mechanism, &builder_event))
                     .transpose()?;
                 if let Some(mechanism) = &mechanism {
                     result_json["e0_mechanism_resolution"] = mechanism.payload.clone();
@@ -495,9 +508,14 @@ fn persist_result(
                         make_investigation_plan_event(&mechanism.investigation_plan, event)
                     })
                     .transpose()?;
-                (Some(event), mechanism_event, investigation_plan_event)
+                (
+                    Some(event),
+                    Some(builder_event),
+                    mechanism_event,
+                    investigation_plan_event,
+                )
             } else {
-                (None, None, None)
+                (None, None, None, None)
             };
         result_json["e0_recurrence_holdout"] = match holdout {
             Some(evaluation) => serde_json::to_value(evaluation),
@@ -516,6 +534,12 @@ fn persist_result(
                 .ok_or_else(|| "local result events are not an array".to_owned())?
                 .push(serde_json::to_value(event).map_err(|error| error.to_string())?);
         }
+        if let Some(event) = &builder_input_event {
+            result_json["events"]
+                .as_array_mut()
+                .ok_or_else(|| "local result events are not an array".to_owned())?
+                .push(serde_json::to_value(event).map_err(|error| error.to_string())?);
+        }
         if let Some(event) = &mechanism_event {
             result_json["events"]
                 .as_array_mut()
@@ -527,6 +551,12 @@ fn persist_result(
                 .as_array_mut()
                 .ok_or_else(|| "local result events are not an array".to_owned())?
                 .push(serde_json::to_value(event).map_err(|error| error.to_string())?);
+        }
+        if result.source_kind == LocalSourceKind::E0 {
+            result_json["e0_candidate_explanation"] =
+                e0_candidate_explanation::project_assembled_e0_result(&result_json).map_err(
+                    |error| format!("E0 result projection rejected assembled result: {error:?}"),
+                )?;
         }
         let result_bytes =
             serde_json::to_vec_pretty(&result_json).map_err(|error| error.to_string())?;
@@ -541,6 +571,10 @@ fn persist_result(
             ndjson.push(b'\n');
         }
         if let Some(event) = &proposal_event {
+            serde_json::to_writer(&mut ndjson, event).map_err(|error| error.to_string())?;
+            ndjson.push(b'\n');
+        }
+        if let Some(event) = &builder_input_event {
             serde_json::to_writer(&mut ndjson, event).map_err(|error| error.to_string())?;
             ndjson.push(b'\n');
         }
@@ -1012,7 +1046,7 @@ mod tests {
                 tenant_id: "pulso_local".into(),
                 id: "0199b21c-7eab-7000-8000-000000000001".into(),
                 revision: 1,
-                digest: "sha256:test".into(),
+                digest: format!("sha256:{}", "a".repeat(64)),
             },
             observed_cutoff_rfc3339: "2025-07-01T00:00:00Z".into(),
             execution_mode: "local_simulation".into(),
@@ -1043,6 +1077,20 @@ mod tests {
         assert!(run_dir.join("events.ndjson").is_file());
         let persisted_result: serde_json::Value =
             serde_json::from_slice(&fs::read(run_dir.join("result.json")).unwrap()).unwrap();
+        assert_eq!(
+            persisted_result["e0_candidate_explanation"]["assembly_status"],
+            "unsupported"
+        );
+        assert_eq!(
+            persisted_result["e0_candidate_explanation"]["non_candidate_reason"],
+            "proposal_assembly_unsupported"
+        );
+        assert!(
+            persisted_result["e0_candidate_explanation"]["candidates"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         assert!(persisted_result.get("local_simulation_portfolio").is_none());
         assert_eq!(persisted_result["events"][0]["stage"], "proposal_assembly");
         assert_eq!(persisted_result["events"][0]["status"], "unsupported");
@@ -1051,8 +1099,21 @@ mod tests {
             "candidate_count=0; disposition_count=0"
         );
         let ndjson = fs::read_to_string(run_dir.join("events.ndjson")).unwrap();
-        let ndjson_event: serde_json::Value = serde_json::from_str(ndjson.trim()).unwrap();
-        assert_eq!(ndjson_event, persisted_result["events"][0]);
+        let ndjson_events = ndjson
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ndjson_events,
+            persisted_result["events"].as_array().unwrap().clone()
+        );
+        assert_eq!(
+            ndjson_events
+                .iter()
+                .map(|event| event["stage"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["proposal_assembly", "e0_builder_input_preparation"]
+        );
         assert!(persist_result(&output, &result, None, None).is_err());
         fs::remove_dir_all(output).unwrap();
     }
