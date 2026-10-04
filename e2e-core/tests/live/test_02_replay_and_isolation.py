@@ -53,12 +53,12 @@ def test_auth_negatives_never_reach_a_run(stack: Any, pipeline: Any) -> None:
     assert wrong.status_code == 403 and wrong.json()["details"]["reason"] == "purpose_denied"
     notenant = br.call("POST", "/core-tasks/invoke", "invoke", None, json=body, headers={"Idempotency-Key": key})
     assert notenant.status_code == 403 and notenant.json()["details"]["reason"] == "tenant_required"
-    tok = br.token("core_task_invoke", TENANT)
+    tok = br.token("core_task_invoke", TENANT, job_id=body["job_id"])
     hdr = {"Authorization": "Bearer " + tok, "Idempotency-Key": key}
     assert httpx.post(br.base + "/core-tasks/invoke", json=body, headers=hdr).status_code == 200
     replay = httpx.post(br.base + "/core-tasks/invoke", json=body, headers=hdr)  # same jti: receiver-owned replay
     assert replay.status_code == 401 and replay.json()["details"]["reason"] == "jti_replayed"
-    forged = br.token("core_task_invoke", TENANT)[:-4] + "AAAA"
+    forged = br.token("core_task_invoke", TENANT, job_id=body["job_id"])[:-4] + "AAAA"
     assert httpx.post(br.base + "/core-tasks/invoke", json=body,
                       headers={"Authorization": "Bearer " + forged, "Idempotency-Key": key}).status_code == 401
     # a body tenant that differs from the signed claim is refused before any state is touched
@@ -82,7 +82,7 @@ def test_another_tenant_cannot_read_arms_admissions_or_tasks_of_this_tenant(stac
     other_before = len([b for b in stack.engine.state()["bindings"] if b["tenant"] == OTHER])
     authz_before = len([r for r in stack.engine.state()["requests"] if r["tenant"] == OTHER and r["route"] == "authz"])
     reqs_before = len([r for r in stack.engine.state()["requests"] if r["tenant"] == OTHER and r["route"] != "authz"])
-    other = {**pipeline.admission_body, "evaluation_context_ref": pipeline.ctx_ref + "-x"}
+    other = {**pipeline.admission_body, "evaluation_attempt": 9}
     r = br.admit(OTHER, "job-x", other)
     assert r.status_code == 403
     assert stack.runtime_db.one("select count(*) from pulso_bridge.eval_admissions") == rows

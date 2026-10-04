@@ -69,7 +69,7 @@ def _stage_core(stage: Any, facts: dict[str, Any]) -> dict[str, Any]:
 def run_live(scout: dict[str, Any], verify: dict[str, Any], attempts: list[dict[str, Any]], alts: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any], list[str], dict[str, Any]]:
     import httpx
     from codex_standin.bridge import Bridge
-    from codex_standin.dto import admission, idempotency_key
+    from codex_standin.dto import admission, evaluation_context_ref, idempotency_key
     from codex_standin.engine import ASSETS, Db, Engine, candidate_changes, ref_of, suite_digest  # noqa: F401
     from codex_standin.stack import SECRETS
     from helpers import OPS, arm_body, drafts_digest, run_arm, smoke_scenarios, writer_commitment  # e2e-core/tests/live/helpers.py
@@ -125,11 +125,12 @@ def run_live(scout: dict[str, Any], verify: dict[str, Any], attempts: list[dict[
         wf = e.facts(w.out["core_run_id"]) if w.out.get("core_run_id") else {}
         wr = wf.get("pulso_writer_receipts", {}).get("value", {})
         proposal_id, chash = wr.get("proposal_id"), wr.get("candidate_hash")
-        ctx, job = f"ctx-{n}-{i}", f"job-evalonly-{n}-{i}"
+        job = f"job-evalonly-{n}-{i}"
         key = idempotency_key(TENANT, job, "writer", 1, "evalonly")
         bref = hashlib.sha256(f"{TENANT}|{key}".encode()).hexdigest()
         e.configure(preauthorized_bindings=[{"tenant": TENANT, "binding_ref": bref}])
-        adm = admission(ref=ctx, binding_ref=bref, proposal_id=proposal_id, candidate_hash=chash, suite_id="pulso-smoke", suite_version=version,
+        ctx = evaluation_context_ref(TENANT, job, bref, proposal_id, chash, 1)  # server-derived (ADR 0011 item 4)
+        adm = admission(binding_ref=bref, proposal_id=proposal_id, candidate_hash=chash, suite_id="pulso-smoke", suite_version=version,
                         suite_digest=suite_digest(changes), budget_ref="bud-e2e")
         a_resp = bridge.admit(TENANT, job, adm)
         eo = e.stage("writer", job, "evalonly", "pulso-writer", {"draft_plan_ref": f"plan-{n}-{i}", "proposal_id": proposal_id, "base_release_id": base,

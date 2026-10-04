@@ -89,18 +89,18 @@ def test_writer_commits_create_put_freeze_with_derived_keys_and_exactly_one_prop
 def test_evaluation_admission_is_created_and_a_replay_is_the_same_admission(stack: Any, pipeline: Any) -> None:
     assert pipeline.admit.status_code == 201, pipeline.admit.text
     assert pipeline.admit.json()["state"] == "admitted"
+    # server-derived ref == the contract formula the engine uses for its writer commitment (ADR 0011 item 4)
+    assert pipeline.admit.json()["evaluation_context_ref"] == pipeline.ctx_ref
     again = pipeline.admit_replay  # same body, requested before the evaluate-only invocation consumed the admission
     assert again.status_code == 200 and again.json()["state"] == "admitted"
     assert stack.runtime_db.one("select count(*) from pulso_bridge.eval_admissions where evaluation_context_ref=%s",
                                 pipeline.ctx_ref) == 1
     assert stack.runtime_db.one("select state from pulso_bridge.eval_admissions where evaluation_context_ref=%s",
                                 pipeline.ctx_ref) == "consumed"  # the evaluate-only invocation used it exactly once
-    stale = {**pipeline.admission_body, "evaluation_context_ref": pipeline.ctx_ref + "-b",
-             "candidate_hash": "0" * 64}
+    stale = {**pipeline.admission_body, "candidate_hash": "0" * 64}
     r = stack.bridge.admit(TENANT, pipeline.eval_job, stale)
     assert r.status_code == 409 and r.json()["code"] == "pulso:candidate_changed"
-    unknown_budget = {**pipeline.admission_body, "evaluation_context_ref": pipeline.ctx_ref + "-c",
-                      "budget_ref": "bud-nope"}
+    unknown_budget = {**pipeline.admission_body, "evaluation_attempt": 2, "budget_ref": "bud-nope"}
     assert stack.bridge.admit(TENANT, pipeline.eval_job, unknown_budget).status_code == 403
 
 
