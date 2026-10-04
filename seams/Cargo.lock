@@ -1016,6 +1016,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread10"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "authority",
+ "base64",
+ "control-api",
+ "core-client",
+ "ed25519-dalek",
+ "engine",
+ "memory",
+ "serde_json",
+]
+
+[[package]]
 name = "tiny_http"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
