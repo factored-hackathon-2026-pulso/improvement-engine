@@ -145,6 +145,10 @@ impl LiveCore {
 }
 
 impl CorePort for LiveCore {
+    fn is_real(&self) -> bool {
+        true
+    }
+
     fn dry_run(&self, ops: &[String]) -> Result<String, String> {
         let d = self.cfg.world.draft(&LiveWorld::version_of(ops)?)?;
         let base = self.staging()?;

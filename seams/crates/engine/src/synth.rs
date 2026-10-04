@@ -9,8 +9,35 @@ const GATE_IN: &str = r#"{"gate_in":{"contract_version":"engine-steps/0","step":
 
 /// Builds `<work>/snapshots/sample-1`, `<work>/lab/sample-1.json`, `<work>/recompute/` and returns the step env plus
 /// the initial job payload. The lab holds 120/400 = 0.30; `claimed_rate` (default 0.3) is what the scout claims.
+/// The lab row of one signal: what the verifier recompute reads (aggregate only).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabRow {
+    pub evidence_ref: String,
+    pub numerator: u64,
+    pub count: u64,
+}
+
+impl LabRow {
+    /// The lab value of the default thread: 120/400 = 0.30.
+    pub fn default_row() -> LabRow {
+        LabRow { evidence_ref: "ev-0001".into(), numerator: 120, count: 400 }
+    }
+}
+
 pub fn build(work: &Path, runner_exe: &Path, claimed_rate: Option<f64>) -> Result<(StepEnv, String), String> {
+    build_row(work, runner_exe, &LabRow::default_row(), claimed_rate)
+}
+
+/// As `build`, with the lab row of the signal under test. The stand-in sensor names its only signal `sig-0001`, so the
+/// row is always filed under that thread-local id; the caller maps it to its own signal id.
+pub fn build_row(work: &Path, runner_exe: &Path, row: &LabRow, claimed_rate: Option<f64>) -> Result<(StepEnv, String), String> {
     let io = |e: std::io::Error| e.to_string();
+    if row.evidence_ref.is_empty() || !row.evidence_ref.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+        return Err(format!("lab evidence_ref {:?} is not an opaque id", row.evidence_ref));
+    }
+    if row.count == 0 || row.numerator > row.count {
+        return Err("lab row needs 0 <= numerator <= count and count >= 1".into());
+    }
     let (snap, lab, rec) = (work.join("snapshots"), work.join("lab"), work.join("recompute"));
     std::fs::create_dir_all(snap.join("sample-1")).map_err(io)?;
     std::fs::create_dir_all(&lab).map_err(io)?;
@@ -18,7 +45,7 @@ pub fn build(work: &Path, runner_exe: &Path, claimed_rate: Option<f64>) -> Resul
     std::fs::write(snap.join("sample-1").join("README.txt"), "synthetic package placeholder\n").map_err(io)?;
     std::fs::write(
         lab.join("sample-1.json"),
-        r#"{"rows":[{"signal_id":"sig-0001","evidence_ref":"ev-0001","numerator":120,"count":400}]}"#,
+        format!(r#"{{"rows":[{{"signal_id":"sig-0001","evidence_ref":"{}","numerator":{},"count":{}}}]}}"#, row.evidence_ref, row.numerator, row.count),
     )
     .map_err(io)?;
     let head = |step: &str| format!(r#""contract_version":"engine-steps/0","step":"{step}","run_id":"run-thread01-0001","data_class":"synthetic""#);
