@@ -31,3 +31,12 @@ Each test creates and drops its own database (`mig0_<pid>_<n>`) on that server.
 
 Known limits: the time source is the caller's injected clock, not the database clock; `PgRepo` opens a
 connection per call (fine for tests, a pool is the production follow-up).
+
+Reviewed limits (CL-review of PGJS):
+- Clock: lease times come from each worker's injected clock. The fence (not the clock) is what stops a stale commit
+  (proved at database level by `tests/pg_race.rs`); a fast-clock worker can still steal a live lease (liveness, not
+  safety) and a slow-clock holder can commit up to its recorded expiry. Use one time source across workers in production.
+- Frozen C-7 `claim_next_job(&mut self, ..)` / `DurableJobRepository` / `ClaimedJob` differ from this port
+  (`JobRepository`, `&self`, `Claimed`, `RepoError`): an adapter is needed; the deviation must be raised with Codex.
+- Not covered: `due_at`/`lane`/`priority` are ignored by claim (oldest id first); `pulso_job_kv` job refs are not
+  linked to `pulso_jobs` rows; `begin_effect` leaves `status = leased` (Codex uses a dedicated status).

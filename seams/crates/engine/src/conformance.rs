@@ -147,6 +147,13 @@ fn commit_guard(b: &dyn Backend) -> Result<(), String> {
         return Err("duplicate out/0 accepted".into());
     }
     eq("first wins", s.get("out/0")?.map(|(_, v)| v), Some("P new".to_string()))?;
+    // the same worker name reclaimed its own job (fence 2): only the fence can refuse its old attempt
+    let same = b.fresh("guard-same-worker");
+    same.cas("lease", 0, "w1|2|2|200")?;
+    if same.commit_guarded("out/0", "P stale", &g("w1", 1, 100)).is_ok() {
+        return Err("same worker, older fence: stale commit accepted".into());
+    }
+    eq("nothing written by the old fence", same.get("out/0")?, None)?;
     let none = b.fresh("guard-no-lease");
     if none.commit_guarded("out/0", "P x", &g("w1", 1, 1)).is_ok() {
         return Err("commit without any lease accepted".into());
