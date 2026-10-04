@@ -76,8 +76,17 @@ impl Memory {
         );
         Ok(id)
     }
-    pub fn wiki_read(&self, _claim_key: &str) -> Option<String> {
-        None
+    /// Read-only wiki view of one claim: notes in creation order with status and evidence refs.
+    pub fn wiki_read(&self, claim_key: &str) -> Option<String> {
+        let mut out = format!("# {claim_key}
+");
+        let mut any = false;
+        for n in self.notes.values().filter(|n| n.claim_key == claim_key) {
+            any = true;
+            out.push_str(&format!("- {} [{}] {} (evidence: {})
+", n.id, n.status.as_str(), n.statement, n.evidence.join(", ")));
+        }
+        any.then_some(out)
     }
     pub fn note(&self, id: &str) -> Option<&Note> {
         self.notes.get(id)
