@@ -1,6 +1,7 @@
 //! FakeCore: an HTTP/1.1 stub of the bridge `/internal/v1` over a std `TcpListener`.
 //! It verifies the service JWT like the Python verifier and models receiver-side idempotency.
 #![allow(dead_code)]
+pub mod golden;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
@@ -45,7 +46,7 @@ pub fn envelope(code: &str, retryable: bool) -> Value {
     json!({"schema_version":"1","code":code,"retryable":retryable,"trace_id":"t-1","details":{}})
 }
 
-fn verify(token: &str, purpose_expected: &str) -> Result<Value, &'static str> {
+pub fn verify(token: &str, purpose_expected: &str) -> Result<Value, &'static str> {
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
         return Err("malformed");

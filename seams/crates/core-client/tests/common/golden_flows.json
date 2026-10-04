@@ -1,0 +1,1960 @@
+{
+ "flows": {
+  "arms": {
+   "arm_budget_unknown": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/evaluation/arms/run",
+    "purpose": "evaluation_arm_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "arm": "baseline",
+     "binding_ref": "bind-arm",
+     "budget_ref": "bud-missing-xyz",
+     "campaign_ref": "camp-1",
+     "case_ref": "case-1",
+     "idempotency_key": "golden-arm-nobud",
+     "mode": "native",
+     "repetition": 0,
+     "scenario_manifest_ref": "art-golden",
+     "seed": 7,
+     "seed_manifest_ref": null,
+     "target": {
+      "kind": "published_release",
+      "release_id": "rel-demo"
+     }
+    },
+    "response_body": {
+     "arm": "baseline",
+     "case_ref": "case-1",
+     "cost_known": false,
+     "effect_receipts": [],
+     "event_refs": [],
+     "execution_id": "<trace_id#3>",
+     "final_state_ref": null,
+     "initial_state_digest": null,
+     "oracle_ref": null,
+     "reason": "budget_unknown",
+     "repetition": 0,
+     "seed": 7,
+     "status": "failed_infra",
+     "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+     "trace_id": "<trace_id#3>",
+     "usage": null
+    },
+    "schema": "ArmReport",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "arm_mixed_world": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/evaluation/arms/run",
+    "purpose": "evaluation_arm_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "arm": "baseline",
+     "binding_ref": "bind-arm",
+     "budget_ref": "bud-1",
+     "campaign_ref": "camp-1",
+     "case_ref": "case-1",
+     "idempotency_key": "golden-arm-mixed",
+     "mode": "native",
+     "repetition": 0,
+     "scenario_manifest_ref": "art-golden",
+     "seed": 7,
+     "seed_manifest_ref": "seed-1",
+     "target": {
+      "kind": "published_release",
+      "release_id": "rel-demo"
+     }
+    },
+    "response_body": {
+     "code": "pulso:mixed_world_rejected",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 409,
+    "tenant_id": "t1"
+   },
+   "arm_oracle_field_rejected": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/evaluation/arms/run",
+    "purpose": "evaluation_arm_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "arm": "baseline",
+     "binding_ref": "bind-arm",
+     "budget_ref": "bud-1",
+     "campaign_ref": "camp-1",
+     "case_ref": "case-1",
+     "idempotency_key": "golden-arm-gold",
+     "mode": "native",
+     "oracle_gold": {
+      "answer": 1
+     },
+     "repetition": 0,
+     "scenario_manifest_ref": "art-golden",
+     "seed": 7,
+     "seed_manifest_ref": null,
+     "target": {
+      "kind": "published_release",
+      "release_id": "rel-demo"
+     }
+    },
+    "response_body": {
+     "code": "pulso:invalid_request",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 422,
+    "tenant_id": "t1"
+   },
+   "arm_read_by_id": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/evaluation/arms/<trace_id#1>",
+    "purpose": "evaluation_arm_read",
+    "request_body": null,
+    "response_body": {
+     "arm": "baseline",
+     "case_ref": "case-1",
+     "closed_early": false,
+     "closed_early_runs": [],
+     "cost_known": true,
+     "effect_receipts": [],
+     "event_refs": [
+      "audit:<uuid#1>"
+     ],
+     "execution_id": "<trace_id#1>",
+     "final_state_ref": null,
+     "initial_state_digest": null,
+     "oracle_ref": null,
+     "reason": null,
+     "repetition": 0,
+     "seed": 7,
+     "status": "completed",
+     "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+     "trace_id": "<trace_id#1>",
+     "usage": {
+      "cost_usd": "0.002",
+      "jobs": 1,
+      "tokens_in": 40,
+      "tokens_out": 12
+     }
+    },
+    "schema": "ArmReport",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "arm_read_by_key": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/evaluation/arms/by-key/golden-arm-1",
+    "purpose": "evaluation_arm_read",
+    "request_body": null,
+    "response_body": {
+     "arm": "baseline",
+     "case_ref": "case-1",
+     "closed_early": false,
+     "closed_early_runs": [],
+     "cost_known": true,
+     "effect_receipts": [],
+     "event_refs": [
+      "audit:<uuid#1>"
+     ],
+     "execution_id": "<trace_id#1>",
+     "final_state_ref": null,
+     "initial_state_digest": null,
+     "oracle_ref": null,
+     "reason": null,
+     "repetition": 0,
+     "seed": 7,
+     "status": "completed",
+     "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+     "trace_id": "<trace_id#1>",
+     "usage": {
+      "cost_usd": "0.002",
+      "jobs": 1,
+      "tokens_in": 40,
+      "tokens_out": 12
+     }
+    },
+    "schema": "ArmReport",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "arm_read_foreign_tenant": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/evaluation/arms/<trace_id#1>",
+    "purpose": "evaluation_arm_read",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:not_found",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 404,
+    "tenant_id": "t2"
+   },
+   "arm_read_unknown": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/evaluation/arms/by-key/never-seen",
+    "purpose": "evaluation_arm_read",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:not_found",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 404,
+    "tenant_id": "t1"
+   },
+   "arm_run_conflict": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/evaluation/arms/run",
+    "purpose": "evaluation_arm_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "arm": "baseline",
+     "binding_ref": "bind-arm",
+     "budget_ref": "bud-1",
+     "campaign_ref": "camp-1",
+     "case_ref": "case-1",
+     "idempotency_key": "golden-arm-1",
+     "mode": "native",
+     "repetition": 0,
+     "scenario_manifest_ref": "art-golden",
+     "seed": 8,
+     "seed_manifest_ref": null,
+     "target": {
+      "kind": "published_release",
+      "release_id": "rel-demo"
+     }
+    },
+    "response_body": {
+     "code": "pulso:idempotency_conflict",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 409,
+    "tenant_id": "t1"
+   },
+   "arm_run_native": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/evaluation/arms/run",
+    "purpose": "evaluation_arm_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "arm": "baseline",
+     "binding_ref": "bind-arm",
+     "budget_ref": "bud-1",
+     "campaign_ref": "camp-1",
+     "case_ref": "case-1",
+     "idempotency_key": "golden-arm-1",
+     "mode": "native",
+     "repetition": 0,
+     "scenario_manifest_ref": "art-golden",
+     "seed": 7,
+     "seed_manifest_ref": null,
+     "target": {
+      "kind": "published_release",
+      "release_id": "rel-demo"
+     }
+    },
+    "response_body": {
+     "arm": "baseline",
+     "case_ref": "case-1",
+     "closed_early": false,
+     "closed_early_runs": [],
+     "cost_known": true,
+     "effect_receipts": [],
+     "event_refs": [
+      "audit:<uuid#1>"
+     ],
+     "execution_id": "<trace_id#1>",
+     "final_state_ref": null,
+     "initial_state_digest": null,
+     "oracle_ref": null,
+     "reason": null,
+     "repetition": 0,
+     "seed": 7,
+     "status": "completed",
+     "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+     "trace_id": "<trace_id#1>",
+     "usage": {
+      "cost_usd": "0.002",
+      "jobs": 1,
+      "tokens_in": 40,
+      "tokens_out": 12
+     }
+    },
+    "schema": "ArmReport",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "arm_run_replay": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/evaluation/arms/run",
+    "purpose": "evaluation_arm_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "arm": "baseline",
+     "binding_ref": "bind-arm",
+     "budget_ref": "bud-1",
+     "campaign_ref": "camp-1",
+     "case_ref": "case-1",
+     "idempotency_key": "golden-arm-1",
+     "mode": "native",
+     "repetition": 0,
+     "scenario_manifest_ref": "art-golden",
+     "seed": 7,
+     "seed_manifest_ref": null,
+     "target": {
+      "kind": "published_release",
+      "release_id": "rel-demo"
+     }
+    },
+    "response_body": {
+     "arm": "baseline",
+     "case_ref": "case-1",
+     "closed_early": false,
+     "closed_early_runs": [],
+     "cost_known": true,
+     "effect_receipts": [],
+     "event_refs": [
+      "audit:<uuid#1>"
+     ],
+     "execution_id": "<trace_id#1>",
+     "final_state_ref": null,
+     "initial_state_digest": null,
+     "oracle_ref": null,
+     "reason": null,
+     "repetition": 0,
+     "seed": 7,
+     "status": "completed",
+     "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+     "trace_id": "<trace_id#1>",
+     "usage": {
+      "cost_usd": "0.002",
+      "jobs": 1,
+      "tokens_in": 40,
+      "tokens_out": 12
+     }
+    },
+    "schema": "ArmReport",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "arm_sandbox_required": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/evaluation/arms/run",
+    "purpose": "evaluation_arm_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "arm": "baseline",
+     "binding_ref": "bind-arm",
+     "budget_ref": "bud-1",
+     "campaign_ref": "camp-1",
+     "case_ref": "case-1",
+     "idempotency_key": "golden-arm-nosb",
+     "mode": "task_builder",
+     "repetition": 0,
+     "scenario_manifest_ref": "art-golden",
+     "seed": 7,
+     "seed_manifest_ref": null,
+     "target": {
+      "kind": "published_release",
+      "release_id": "rel-demo"
+     }
+    },
+    "response_body": {
+     "code": "pulso:sandbox_required",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 409,
+    "tenant_id": "t1"
+   }
+  },
+  "auth_and_envelope": {
+   "bad_signature": {
+    "idempotency_key": null,
+    "job_id": null,
+    "method": "GET",
+    "path": "/version",
+    "purpose": null,
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:auth_invalid",
+     "details": {
+      "reason": "bad_signature"
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 401,
+    "tenant_id": null
+   },
+   "expired_token": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/version",
+    "purpose": "version_probe",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:auth_invalid",
+     "details": {
+      "reason": "expired"
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 401,
+    "tenant_id": "t1"
+   },
+   "jti_first_use": {
+    "idempotency_key": null,
+    "job_id": null,
+    "method": "GET",
+    "path": "/version",
+    "purpose": null,
+    "request_body": null,
+    "response_body": {
+     "agent_core_sha": "c814c2bad9f154d10c092326558815dca9562be7",
+     "bridge_instance_id": "bridge-1",
+     "contracts_version": "1.3.0",
+     "doubles": [
+      "calibration: calibrations directory absent (live decision path blocked)",
+      "classifier: classifier assets directory absent",
+      "eval-budgets: static file resolver (control-api budget contract not defined)",
+      "grant-active: always false (no grant lookup; subject/OBO flows unsupported)",
+      "transcript: null transcript (task-only runtime: conversational runs are rejected)",
+      "llm-model-policy: unpinned (registry ModelProfile price is trusted; set PULSO_LLM_STAGE_POLICY_JSON to pin per-stage alias/model/price)"
+     ],
+     "image_digest": "unknown",
+     "keys_reload_error": null,
+     "pulso_sha": "integ",
+     "runtime_profile": "agent_core_real",
+     "schema_version": "1"
+    },
+    "schema": "CoreVersion",
+    "status": 200,
+    "tenant_id": null
+   },
+   "jti_replay": {
+    "idempotency_key": null,
+    "job_id": null,
+    "method": "GET",
+    "path": "/version",
+    "purpose": null,
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:auth_invalid",
+     "details": {
+      "reason": "jti_replayed"
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 401,
+    "tenant_id": null
+   },
+   "malformed_token": {
+    "idempotency_key": null,
+    "job_id": null,
+    "method": "GET",
+    "path": "/core-tasks/run-1",
+    "purpose": null,
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:auth_invalid",
+     "details": {
+      "reason": "malformed"
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 401,
+    "tenant_id": null
+   },
+   "missing_token": {
+    "idempotency_key": null,
+    "job_id": null,
+    "method": "GET",
+    "path": "/version",
+    "purpose": null,
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:auth_invalid",
+     "details": {
+      "reason": "missing_token"
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 401,
+    "tenant_id": null
+   },
+   "tenant_not_deployed": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/core-tasks/run-1",
+    "purpose": "core_task_read",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:tenant_mismatch",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 403,
+    "tenant_id": "t-not-deployed"
+   },
+   "unknown_path": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/no-such-route",
+    "purpose": "version_probe",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:not_found",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 404,
+    "tenant_id": "t1"
+   },
+   "version_ok": {
+    "idempotency_key": null,
+    "job_id": null,
+    "method": "GET",
+    "path": "/version",
+    "purpose": "version_probe",
+    "request_body": null,
+    "response_body": {
+     "agent_core_sha": "c814c2bad9f154d10c092326558815dca9562be7",
+     "bridge_instance_id": "bridge-1",
+     "contracts_version": "1.3.0",
+     "doubles": [
+      "calibration: calibrations directory absent (live decision path blocked)",
+      "classifier: classifier assets directory absent",
+      "eval-budgets: static file resolver (control-api budget contract not defined)",
+      "grant-active: always false (no grant lookup; subject/OBO flows unsupported)",
+      "transcript: null transcript (task-only runtime: conversational runs are rejected)",
+      "llm-model-policy: unpinned (registry ModelProfile price is trusted; set PULSO_LLM_STAGE_POLICY_JSON to pin per-stage alias/model/price)"
+     ],
+     "image_digest": "unknown",
+     "keys_reload_error": null,
+     "pulso_sha": "integ",
+     "runtime_profile": "agent_core_real",
+     "schema_version": "1"
+    },
+    "schema": "CoreVersion",
+    "status": 200,
+    "tenant_id": null
+   },
+   "wrong_purpose": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/core-tasks/run-1",
+    "purpose": "version_probe",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:auth_denied",
+     "details": {
+      "reason": "purpose_denied"
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 403,
+    "tenant_id": "t1"
+   }
+  },
+  "authoring": {
+   "alias_bad_name": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/core-state/aliases/atencion/canary",
+    "purpose": "alias_read",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:invalid_request",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 422,
+    "tenant_id": "t1"
+   },
+   "alias_read": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/core-state/aliases/atencion/prod",
+    "purpose": "alias_read",
+    "request_body": null,
+    "response_body": {
+     "agent_id": "atencion",
+     "alias": "prod",
+     "observed_at": "<observed_at>",
+     "release_id": "rel-demo",
+     "runtime_profile": "agent_core_real",
+     "schema_version": "1",
+     "source": "core_store",
+     "status": "active"
+    },
+    "schema": "AliasState",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "alias_unknown_agent": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "GET",
+    "path": "/core-state/aliases/no-such-agent/prod",
+    "purpose": "alias_read",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:alias_unknown",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 404,
+    "tenant_id": "t1"
+   },
+   "dry_run_base_release_unknown": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-authoring/dry-run",
+    "purpose": "authoring_dry_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "base_release_id": "rel-nope",
+     "changes": [],
+     "schema_version": "1",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:base_release_unknown",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 404,
+    "tenant_id": "t1"
+   },
+   "dry_run_tenant_mismatch": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-authoring/dry-run",
+    "purpose": "authoring_dry_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "base_release_id": null,
+     "changes": [],
+     "schema_version": "1",
+     "tenant_id": "t2"
+    },
+    "response_body": {
+     "code": "pulso:tenant_mismatch",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 403,
+    "tenant_id": "t1"
+   },
+   "dry_run_unknown_field": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-authoring/dry-run",
+    "purpose": "authoring_dry_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "base_release_id": null,
+     "changes": [],
+     "schema_version": "1",
+     "surprise": 1,
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:invalid_request",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 422,
+    "tenant_id": "t1"
+   },
+   "dry_run_valid": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-authoring/dry-run",
+    "purpose": "authoring_dry_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "base_release_id": "rel-demo",
+     "changes": [],
+     "schema_version": "1",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "auto_bumped": [],
+     "candidate_hash": "<candidate_hash#1>",
+     "content_hashes": {
+      "agent:atencion@1.0.0": "9cba0662d6769eaff17fabe924294bc821414a412babb1e9c2e9bdad497a5294",
+      "decision_model:match-cargo@2.0.0": "e3f2936729678f764e5e24cf26fb65b02e9d8c4043f68592dd6a003b73e6e75d",
+      "decision_model:understand-turno@1.0.0": "011cdc30f5e4a0763f7b0920faeb187689d4d56bc7daa8a575474ced1729ec0b",
+      "flow:disputa-cargo@1.0.0": "6b5b579464f54370d2eed81b5c1a460c6a3ab270c0c8244fe17ed0a80d953b11",
+      "injection_ruleset:injection-rules@1.0.0": "172c1c4c0a20480fff9d2221e1df155bd5765b3a87e2d5591d42ba5ef82e361f",
+      "language_detection:lang-es-pt@1.0.0": "819529d6716a28ce54252f7975958b38790c7d05b4fe972516020d0a4e674d6c",
+      "model_profile:perfil-generacion@1.0.0": "d685c8c3161a94542e3337a8c5950a3d90bdc9ea180b8a09805311219d7a4129",
+      "policy:escalamiento-disputa-monto@1.0.0": "e67997e2d2a2356ad1d1e4fd6733a7c33b4754a8a54054c43e15fe897f37b6bf",
+      "prompt:p/resumen_radicado@1.0.0": "26389427d9931d33d38fb69d86959b0c95e162664fd964f8f898b38cda50d639",
+      "template:t/abstencion@1.0.0": "cc0289873212eaaa029239618c0e10a037f8656892c8a677364f79338f763705",
+      "template:t/aclarar@1.0.0": "56206672b53310b8c4cb1c30bd33bcee1d6abfbfd89cbe470d2fd658fd248179",
+      "template:t/aclarar_cargo@1.0.0": "543147ce52f54cea888536f6296a1b957ee0c9ccbddc5ca43c9555c07430b968",
+      "template:t/acuse@1.0.0": "9061fefb66a06575d9941f7b2dcd83efa5765ed1c5954e07b1d86e74a05d0fce",
+      "template:t/idioma_no_soportado@1.0.0": "63a73d2237109534ada31082b64486dda7c498b5a7d5fb19659594ccfc6f3ef5",
+      "template:t/mensaje_largo@1.0.0": "93427eb0c1696c0e9fad0a9eb60ed950c2928d2813c7e6e4a939f3fd22d1020f",
+      "template:t/no_confirmado@1.0.0": "19eb7f8d529389961ff1ed14ec66283cd303128435d41dfe78623b2071abf754",
+      "template:t/oferta@1.0.0": "cdcd2ac3f37ecbb0fd3cf052764980d36276cdd602f9b216b31e3b77e43e8eab",
+      "template:t/pedir_cargo@1.0.0": "d916ce88da49e354d7f9cc89247da6bc7167a2fabfab9b1b6399a0baaa944def",
+      "template:t/pqr_radicado@1.0.0": "b9a7fed3a2be46a9fb33e8890216e1876f1d5923bfb3ad571c93c0841f498dff",
+      "template:t/resumen_pqr@1.0.0": "9895ee51f07535ed517dd468d6168387cb5248139b4587be6c8595f91d7baf5c",
+      "template:t/traspaso@1.0.0": "aa993133401ef31c971efdd2a0c3a74881663df95299dabd83bb700c4c04a481",
+      "tool:buscar_transacciones@1.0.0": "a7e05d1d46c07c8add95eba12f6fc200e973dad31b659dd7c800b35948903deb",
+      "tool:convertir_moneda@1.0.0": "3b0addb9f12b20cd58beda0958a04ebb397ad62f8a0f82f5e6760f7f9953a86b",
+      "tool:obtener_pqr@1.0.0": "72446b11c64d7eccc6f6e22244f7a0aa983be10a844d12eeac534d37e326d27b",
+      "tool:radicar_pqr@1.0.0": "e0f54302e353c787b15a1e738147ede6b7c5eeeab1c06fd39a94694c220d810f",
+      "tool:seleccionar@1.0.0": "087dc355351dd0b082f72996af259de5748a16c13f0d4a3d95e5b270c0faba36"
+     },
+     "new_versions": [],
+     "proposal_created": false,
+     "release_hash": "e26df0070f6be82f9813caf03864442ee870b1626806eb096705e0351b6bfe6a",
+     "release_id_preview": "rel-d5a4da2840e74f4b",
+     "request_digest": "<request_digest#1>",
+     "runtime_profile": "agent_core_real",
+     "schema_version": "1",
+     "valid": true,
+     "violations": []
+    },
+    "schema": "CoreAuthoringDryRun",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "dry_run_violations": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-authoring/dry-run",
+    "purpose": "authoring_dry_run",
+    "request_body": {
+     "agent_id": "atencion",
+     "base_release_id": null,
+     "changes": [
+      {
+       "content": {},
+       "docs": {},
+       "kind": "no-such-kind"
+      }
+     ],
+     "schema_version": "1",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "auto_bumped": [],
+     "candidate_hash": null,
+     "content_hashes": {},
+     "new_versions": [],
+     "proposal_created": false,
+     "release_hash": null,
+     "release_id_preview": null,
+     "request_digest": "<request_digest#2>",
+     "runtime_profile": "agent_core_real",
+     "schema_version": "1",
+     "valid": false,
+     "violations": [
+      {
+       "flow": null,
+       "message": "the change is not a valid EntityDraft (kind, content with text `id` and `version`, docs)",
+       "node_id": null,
+       "path": "changes/0",
+       "rule": "REG-SCHEMA"
+      }
+     ]
+    },
+    "schema": "CoreAuthoringDryRun",
+    "status": 200,
+    "tenant_id": "t1"
+   }
+  },
+  "credentials": {
+   "issue_core_task": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-credentials/issue",
+    "purpose": "credential_issue",
+    "request_body": {
+     "purpose": "core_task",
+     "role": "constructor",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "exp": "<exp>",
+     "jws": "<jws>",
+     "kid": "id1"
+    },
+    "schema": "CoreCredentialIssue",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "issue_invalid_request": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-credentials/issue",
+    "purpose": "credential_issue",
+    "request_body": {
+     "role": "constructor",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:invalid_request",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 422,
+    "tenant_id": "t1"
+   },
+   "issue_not_issuable": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-credentials/issue",
+    "purpose": "credential_issue",
+    "request_body": {
+     "purpose": "registry_write",
+     "role": "approver",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:credential_not_issuable",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 403,
+    "tenant_id": "t1"
+   },
+   "issue_registry_write": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-credentials/issue",
+    "purpose": "credential_issue",
+    "request_body": {
+     "purpose": "registry_write",
+     "role": "constructor",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "exp": "<exp>",
+     "jws": "<jws>",
+     "kid": "st1"
+    },
+    "schema": "CoreCredentialIssue",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "issue_tenant_mismatch": {
+    "idempotency_key": null,
+    "job_id": "job-golden",
+    "method": "POST",
+    "path": "/core-credentials/issue",
+    "purpose": "credential_issue",
+    "request_body": {
+     "purpose": "registry_write",
+     "role": "constructor",
+     "tenant_id": "t2"
+    },
+    "response_body": {
+     "code": "pulso:tenant_mismatch",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 403,
+    "tenant_id": "t1"
+   }
+  },
+  "invoke_scout": {
+   "invoke_digest_conflict": {
+    "idempotency_key": "dbe68ddd4321eac7f2d87367e6782484a65f7a1477172556517de1df4846753f",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "wiki/other.md"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-scout-1",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "scout",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:digest_conflict",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 409,
+    "tenant_id": "t1"
+   },
+   "invoke_input_too_large": {
+    "idempotency_key": "d48e7f121b1801eb77325be82cb8a323b81e85765e05134c43bd3519c1700708",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "<string len=262200 sha256=3bd52e08>"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-big",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "scout",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:input_too_large",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 413,
+    "tenant_id": "t1"
+   },
+   "invoke_release_unavailable": {
+    "idempotency_key": "7ed14e70037825a62f5ba38385f2d4c746e3f1905a2c7e30ad474d6e7b21f1fd",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "wiki/briefing.md"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-scout-2",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "rel-does-not-exist",
+     "schema_version": "1",
+     "stage": "scout",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:release_pin_unavailable",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 409,
+    "tenant_id": "t1"
+   },
+   "invoke_scout_ok": {
+    "idempotency_key": "dbe68ddd4321eac7f2d87367e6782484a65f7a1477172556517de1df4846753f",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "wiki/briefing.md"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-scout-1",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "scout",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "core_run_id": "<core_run_id#1>",
+     "outcome": "completed",
+     "reason": "completed",
+     "receipt": {
+      "audit_refs": [],
+      "budget": {
+       "known": true
+      },
+      "core_run_id": "<core_run_id#1>",
+      "idempotency_key_digest": "<idempotency_key_digest#1>",
+      "input_commitment": "<input_commitment#1>",
+      "outcome": "completed",
+      "output_digest": "<output_digest#1>",
+      "output_refs": [],
+      "release_id": "<release:scout>",
+      "request_digest": "<request_digest#1>",
+      "schema_version": "1",
+      "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd",
+      "trace_id": "<trace_id#1>"
+     },
+     "result": {
+      "core_run_id": "<core_run_id#1>",
+      "facts": {
+       "pulso_hypotheses": {
+        "digest": "<output_digest#2>",
+        "source_kind": "agent",
+        "value": {
+         "hypotheses": [
+          {
+           "counterevidence_refs": [],
+           "evidence_refs": [
+            {
+             "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+             "id": "res-1",
+             "media_type": "application/json"
+            }
+           ],
+           "id": "h1",
+           "mechanism": "onboarding gap",
+           "missing_evidence": [
+            "cohort split"
+           ],
+           "next_queries": [],
+           "statement": "retention dips on day 7"
+          }
+         ],
+         "schema_version": "1"
+        }
+       }
+      },
+      "outcome": "completed",
+      "output_digest": "<output_digest#1>",
+      "schema_version": "1",
+      "status": "closed"
+     },
+     "schema_version": "1",
+     "state": "terminal_ok",
+     "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd"
+    },
+    "schema": "CoreTaskReceipt",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "invoke_scout_replay": {
+    "idempotency_key": "dbe68ddd4321eac7f2d87367e6782484a65f7a1477172556517de1df4846753f",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "wiki/briefing.md"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-scout-1",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "scout",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "core_run_id": "<core_run_id#1>",
+     "outcome": "completed",
+     "reason": "completed",
+     "receipt": {
+      "audit_refs": [],
+      "budget": {
+       "known": true
+      },
+      "core_run_id": "<core_run_id#1>",
+      "idempotency_key_digest": "<idempotency_key_digest#1>",
+      "input_commitment": "<input_commitment#1>",
+      "outcome": "completed",
+      "output_digest": "<output_digest#1>",
+      "output_refs": [],
+      "release_id": "<release:scout>",
+      "request_digest": "<request_digest#1>",
+      "schema_version": "1",
+      "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd",
+      "trace_id": "<trace_id#1>"
+     },
+     "result": {
+      "core_run_id": "<core_run_id#1>",
+      "facts": {
+       "pulso_hypotheses": {
+        "digest": "<output_digest#2>",
+        "source_kind": "agent",
+        "value": {
+         "hypotheses": [
+          {
+           "counterevidence_refs": [],
+           "evidence_refs": [
+            {
+             "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+             "id": "res-1",
+             "media_type": "application/json"
+            }
+           ],
+           "id": "h1",
+           "mechanism": "onboarding gap",
+           "missing_evidence": [
+            "cohort split"
+           ],
+           "next_queries": [],
+           "statement": "retention dips on day 7"
+          }
+         ],
+         "schema_version": "1"
+        }
+       }
+      },
+      "outcome": "completed",
+      "output_digest": "<output_digest#1>",
+      "schema_version": "1",
+      "status": "closed"
+     },
+     "schema_version": "1",
+     "state": "terminal_ok",
+     "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd"
+    },
+    "schema": "CoreTaskReceipt",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "invoke_stage_agent_mismatch": {
+    "idempotency_key": "f3397c7f1f99ada0941823381df264cfa396bf07ade46bcf88cb6a317107373d",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-writer",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "wiki/briefing.md"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-invoke_stage_agent_mismatch",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "scout",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:stage_agent_mismatch",
+     "details": {
+      "agent_id": "pulso-writer",
+      "stage": "scout"
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 422,
+    "tenant_id": "t1"
+   },
+   "invoke_unknown_field": {
+    "idempotency_key": "250e6960650f5cb52cb5e1fdb70f8d3f8a36d23f32f1d6691fc1080e6d9d2904",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "wiki/briefing.md"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-invoke_unknown_field",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "scout",
+     "surprise": 1,
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:invalid_request",
+     "details": {
+      "fields": [
+       "surprise"
+      ]
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 422,
+    "tenant_id": "t1"
+   },
+   "invoke_unknown_input_slot": {
+    "idempotency_key": "2a9c6fd0fb7de9db270a196385fdb944cf2e9c977267b5b1040f25a801222c96",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "a",
+      "zzz": 1
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-invoke_unknown_input_slot",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "scout",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:unknown_input_slot",
+     "details": {
+      "slots": [
+       "zzz"
+      ]
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 400,
+    "tenant_id": "t1"
+   },
+   "invoke_unknown_stage": {
+    "idempotency_key": "723c9304ffec4b2b7bc2455eb8dd63cf0a132054355983b638fe76819f0530ce",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "wiki/briefing.md"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-invoke_unknown_stage",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "nope",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:stage_unknown",
+     "details": {
+      "stage": "nope"
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 400,
+    "tenant_id": "t1"
+   },
+   "invoke_wrong_idempotency_key": {
+    "idempotency_key": "not-the-formula",
+    "job_id": "job-golden-scout",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-scout",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "extract_manifest_ref": "ex-1",
+     "input": {
+      "briefing_ref": "wiki/briefing.md"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-scout",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-scout-1",
+     "memory_snapshot_ref": "mem-1",
+     "pulso_run_ref": "pr-job-golden-scout",
+     "release_id": "<release:scout>",
+     "schema_version": "1",
+     "stage": "scout",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "code": "pulso:invalid_request",
+     "details": {
+      "fields": [
+       "Idempotency-Key"
+      ]
+     },
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 422,
+    "tenant_id": "t1"
+   },
+   "read_task_foreign_tenant": {
+    "idempotency_key": null,
+    "job_id": "job-golden-scout",
+    "method": "GET",
+    "path": "/core-tasks/<core_run_id#1>",
+    "purpose": "core_task_read",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:not_found",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 404,
+    "tenant_id": "t2"
+   },
+   "read_task_ok": {
+    "idempotency_key": null,
+    "job_id": "job-golden-scout",
+    "method": "GET",
+    "path": "/core-tasks/<core_run_id#1>",
+    "purpose": "core_task_read",
+    "request_body": null,
+    "response_body": {
+     "core_run_id": "<core_run_id#1>",
+     "outcome": "completed",
+     "reason": "completed",
+     "receipt": {
+      "audit_refs": [],
+      "budget": {
+       "known": true
+      },
+      "core_run_id": "<core_run_id#1>",
+      "idempotency_key_digest": "<idempotency_key_digest#1>",
+      "input_commitment": "<input_commitment#1>",
+      "outcome": "completed",
+      "output_digest": "<output_digest#1>",
+      "output_refs": [],
+      "release_id": "<release:scout>",
+      "request_digest": "<request_digest#1>",
+      "schema_version": "1",
+      "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd",
+      "trace_id": "<trace_id#1>"
+     },
+     "result": {
+      "core_run_id": "<core_run_id#1>",
+      "facts": {
+       "pulso_hypotheses": {
+        "digest": "<output_digest#2>",
+        "source_kind": "agent",
+        "value": {
+         "hypotheses": [
+          {
+           "counterevidence_refs": [],
+           "evidence_refs": [
+            {
+             "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+             "id": "res-1",
+             "media_type": "application/json"
+            }
+           ],
+           "id": "h1",
+           "mechanism": "onboarding gap",
+           "missing_evidence": [
+            "cohort split"
+           ],
+           "next_queries": [],
+           "statement": "retention dips on day 7"
+          }
+         ],
+         "schema_version": "1"
+        }
+       }
+      },
+      "outcome": "completed",
+      "output_digest": "<output_digest#1>",
+      "schema_version": "1",
+      "status": "closed"
+     },
+     "schema_version": "1",
+     "state": "terminal_ok",
+     "task_binding_ref": "0fa2a7a4c8a8b2021db9cbba93f986292136c6ae602e1aa64c3ebd38cb49b6bd"
+    },
+    "schema": "CoreTaskReceipt",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "read_task_unknown": {
+    "idempotency_key": null,
+    "job_id": "job-golden-scout",
+    "method": "GET",
+    "path": "/core-tasks/run-does-not-exist",
+    "purpose": "core_task_read",
+    "request_body": null,
+    "response_body": {
+     "code": "pulso:not_found",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 404,
+    "tenant_id": "t1"
+   }
+  },
+  "writer_evaluation": {
+   "admission_bad_context_ref": {
+    "idempotency_key": null,
+    "job_id": "job-golden-eval",
+    "method": "POST",
+    "path": "/evaluation/admissions",
+    "purpose": "evaluation_admit",
+    "request_body": {
+     "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+     "budget_ref": "bud-1",
+     "candidate_hash": "<candidate_hash#1>",
+     "deadline": "<deadline>",
+     "evaluation_attempt": 1,
+     "evaluation_context_ref": "<evaluation_context_ref#2>",
+     "proposal_id": "<proposal_id#1>",
+     "request_digest": "<request_digest#2>",
+     "schema_version": "1",
+     "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+     "suite_id": "disputas-suite",
+     "suite_version": "1.0.0"
+    },
+    "response_body": {
+     "code": "pulso:evaluation_context_invalid",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 422,
+    "tenant_id": "t1"
+   },
+   "admission_conflict": {
+    "idempotency_key": null,
+    "job_id": "job-golden-eval",
+    "method": "POST",
+    "path": "/evaluation/admissions",
+    "purpose": "evaluation_admit",
+    "request_body": {
+     "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+     "budget_ref": "bud-1",
+     "candidate_hash": "<candidate_hash#1>",
+     "deadline": "<deadline>",
+     "evaluation_attempt": 1,
+     "proposal_id": "<proposal_id#1>",
+     "request_digest": "<request_digest#3>",
+     "schema_version": "1",
+     "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+     "suite_id": "disputas-suite",
+     "suite_version": "1.0.0"
+    },
+    "response_body": {
+     "code": "pulso:idempotency_conflict",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 409,
+    "tenant_id": "t1"
+   },
+   "admission_created": {
+    "idempotency_key": null,
+    "job_id": "job-golden-eval",
+    "method": "POST",
+    "path": "/evaluation/admissions",
+    "purpose": "evaluation_admit",
+    "request_body": {
+     "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+     "budget_ref": "bud-1",
+     "candidate_hash": "<candidate_hash#1>",
+     "deadline": "<deadline>",
+     "evaluation_attempt": 1,
+     "proposal_id": "<proposal_id#1>",
+     "request_digest": "<request_digest#2>",
+     "schema_version": "1",
+     "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+     "suite_id": "disputas-suite",
+     "suite_version": "1.0.0"
+    },
+    "response_body": {
+     "evaluation_context_ref": "<evaluation_context_ref#1>",
+     "schema_version": "1",
+     "state": "admitted"
+    },
+    "schema": "EvaluationAdmission",
+    "status": 201,
+    "tenant_id": "t1"
+   },
+   "admission_explicit_ref_equal": {
+    "idempotency_key": null,
+    "job_id": "job-golden-eval",
+    "method": "POST",
+    "path": "/evaluation/admissions",
+    "purpose": "evaluation_admit",
+    "request_body": {
+     "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+     "budget_ref": "bud-1",
+     "candidate_hash": "<candidate_hash#1>",
+     "deadline": "<deadline>",
+     "evaluation_attempt": 1,
+     "evaluation_context_ref": "<evaluation_context_ref#1>",
+     "proposal_id": "<proposal_id#1>",
+     "request_digest": "<request_digest#2>",
+     "schema_version": "1",
+     "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+     "suite_id": "disputas-suite",
+     "suite_version": "1.0.0"
+    },
+    "response_body": {
+     "evaluation_context_ref": "<evaluation_context_ref#1>",
+     "schema_version": "1",
+     "state": "admitted"
+    },
+    "schema": "EvaluationAdmission",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "admission_replay": {
+    "idempotency_key": null,
+    "job_id": "job-golden-eval",
+    "method": "POST",
+    "path": "/evaluation/admissions",
+    "purpose": "evaluation_admit",
+    "request_body": {
+     "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+     "budget_ref": "bud-1",
+     "candidate_hash": "<candidate_hash#1>",
+     "deadline": "<deadline>",
+     "evaluation_attempt": 1,
+     "proposal_id": "<proposal_id#1>",
+     "request_digest": "<request_digest#2>",
+     "schema_version": "1",
+     "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+     "suite_id": "disputas-suite",
+     "suite_version": "1.0.0"
+    },
+    "response_body": {
+     "evaluation_context_ref": "<evaluation_context_ref#1>",
+     "schema_version": "1",
+     "state": "admitted"
+    },
+    "schema": "EvaluationAdmission",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "admission_stale_candidate": {
+    "idempotency_key": null,
+    "job_id": "job-golden-eval",
+    "method": "POST",
+    "path": "/evaluation/admissions",
+    "purpose": "evaluation_admit",
+    "request_body": {
+     "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+     "budget_ref": "bud-1",
+     "candidate_hash": "<candidate_hash#2>",
+     "deadline": "<deadline>",
+     "evaluation_attempt": 1,
+     "proposal_id": "<proposal_id#1>",
+     "request_digest": "<request_digest#2>",
+     "schema_version": "1",
+     "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+     "suite_id": "disputas-suite",
+     "suite_version": "1.0.0"
+    },
+    "response_body": {
+     "code": "pulso:candidate_changed",
+     "details": {},
+     "retryable": false,
+     "schema_version": "1",
+     "trace_id": "<trace_id#2>"
+    },
+    "schema": "ErrorEnvelope",
+    "status": 409,
+    "tenant_id": "t1"
+   },
+   "invoke_evaluate_only": {
+    "idempotency_key": "4285298ce01525d43718b94923c66fbfa31c4b21f46fc838fc942336dcdfdba8",
+    "job_id": "job-golden-eval",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-writer",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "input": {
+      "base_release_id": "rel-demo",
+      "draft_plan_ref": "plan-golden",
+      "evaluate_enabled": true,
+      "evaluation_suite_id": "disputas-suite",
+      "evaluation_suite_version": "1.0.0",
+      "proposal_id": "<proposal_id#1>"
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-eval",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-eval-1",
+     "pulso_run_ref": "pr-job-golden-eval",
+     "registry_mutation_commitment": {
+      "base_release_id": "rel-demo",
+      "evaluate_enabled": true,
+      "evaluation_context_ref": "<evaluation_context_ref#1>",
+      "mode": "evaluate_only",
+      "operations": [],
+      "proposal_id": "<proposal_id#1>"
+     },
+     "release_id": "<release:writer>",
+     "schema_version": "1",
+     "stage": "writer",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "core_run_id": "<core_run_id#2>",
+     "outcome": "completed",
+     "reason": "completed",
+     "receipt": {
+      "audit_refs": [],
+      "budget": {
+       "known": false
+      },
+      "core_run_id": "<core_run_id#2>",
+      "idempotency_key_digest": "<idempotency_key_digest#2>",
+      "input_commitment": "<input_commitment#2>",
+      "outcome": "completed",
+      "output_digest": "<output_digest#3>",
+      "output_refs": [],
+      "release_id": "<release:writer>",
+      "request_digest": "<request_digest#4>",
+      "schema_version": "1",
+      "task_binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+      "trace_id": "<trace_id#3>"
+     },
+     "result": {
+      "core_run_id": "<core_run_id#2>",
+      "facts": {
+       "pulso_writer_receipts": {
+        "digest": "<output_digest#4>",
+        "source_kind": "compute",
+        "value": {
+         "candidate_hash": "<candidate_hash#1>",
+         "native_evaluation": {
+          "eval_run_ref": "<eval_run_ref#1>",
+          "report_digest": "<report_digest#1>",
+          "verdict": "pass"
+         },
+         "proposal_id": "<proposal_id#1>",
+         "rev": 1,
+         "schema_version": "1",
+         "state": "confirmed",
+         "write_receipts": [
+          {
+           "key_digest": "<key_digest#4>",
+           "op": "evaluate",
+           "request_hash": "<request_hash#4>",
+           "rev_after": 1,
+           "verified": true
+          }
+         ]
+        }
+       }
+      },
+      "outcome": "completed",
+      "output_digest": "<output_digest#3>",
+      "schema_version": "1",
+      "status": "closed"
+     },
+     "schema_version": "1",
+     "state": "terminal_ok",
+     "task_binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33"
+    },
+    "schema": "CoreTaskReceipt",
+    "status": 200,
+    "tenant_id": "t1"
+   },
+   "writer_create_put_freeze": {
+    "idempotency_key": "c4a773496c3885bb3b549f8b51f8a68c5187789dd89afabecb51ede0ed0e619b",
+    "job_id": "job-golden-writer",
+    "method": "POST",
+    "path": "/core-tasks/invoke",
+    "purpose": "core_task_invoke",
+    "request_body": {
+     "agent_id": "pulso-writer",
+     "agent_version": "1.0.0",
+     "attempt": 1,
+     "input": {
+      "base_release_id": "rel-demo",
+      "draft_plan_ref": "plan-golden",
+      "evaluate_enabled": false,
+      "proposal_id": null
+     },
+     "input_artifact_refs": [],
+     "job_id": "job-golden-writer",
+     "lab_grant_ref": "grant-contract",
+     "logical_key": "golden-writer-1",
+     "pulso_run_ref": "pr-job-golden-writer",
+     "registry_mutation_commitment": {
+      "base_release_id": "rel-demo",
+      "create_agent_id": "atencion",
+      "create_origin": "builder_chat",
+      "create_title": "pulso-key:golden",
+      "mode": "write",
+      "operations": [
+       "create_proposal",
+       "put_draft",
+       "freeze"
+      ],
+      "put_draft_digest": "7e288b22b945d33f5c0832a1a146554736f1c559782a005221bbbd34027bbba9"
+     },
+     "release_id": "<release:writer>",
+     "schema_version": "1",
+     "stage": "writer",
+     "tenant_id": "t1"
+    },
+    "response_body": {
+     "core_run_id": "<core_run_id#1>",
+     "outcome": "completed",
+     "reason": "completed",
+     "receipt": {
+      "audit_refs": [],
+      "budget": {
+       "known": false
+      },
+      "core_run_id": "<core_run_id#1>",
+      "idempotency_key_digest": "<idempotency_key_digest#1>",
+      "input_commitment": "<input_commitment#1>",
+      "outcome": "completed",
+      "output_digest": "<output_digest#1>",
+      "output_refs": [],
+      "release_id": "<release:writer>",
+      "request_digest": "<request_digest#1>",
+      "schema_version": "1",
+      "task_binding_ref": "57e8804803b066e3a211e2b4bd0020822b1e45d8149af0446357c645b22d775d",
+      "trace_id": "<trace_id#1>"
+     },
+     "result": {
+      "core_run_id": "<core_run_id#1>",
+      "facts": {
+       "pulso_writer_receipts": {
+        "digest": "<output_digest#2>",
+        "source_kind": "compute",
+        "value": {
+         "candidate_hash": "<candidate_hash#1>",
+         "native_evaluation": null,
+         "proposal_id": "<proposal_id#1>",
+         "rev": 0,
+         "schema_version": "1",
+         "state": "confirmed",
+         "write_receipts": [
+          {
+           "key_digest": "<key_digest#1>",
+           "op": "create_proposal",
+           "request_hash": "<request_hash#1>",
+           "rev_after": 0,
+           "verified": true
+          },
+          {
+           "key_digest": "<key_digest#2>",
+           "op": "put_draft",
+           "request_hash": "<request_hash#2>",
+           "rev_after": 1,
+           "verified": true
+          },
+          {
+           "key_digest": "<key_digest#3>",
+           "op": "freeze",
+           "request_hash": "<request_hash#3>",
+           "rev_after": 1,
+           "verified": true
+          }
+         ]
+        }
+       }
+      },
+      "outcome": "completed",
+      "output_digest": "<output_digest#1>",
+      "schema_version": "1",
+      "status": "closed"
+     },
+     "schema_version": "1",
+     "state": "terminal_ok",
+     "task_binding_ref": "57e8804803b066e3a211e2b4bd0020822b1e45d8149af0446357c645b22d775d"
+    },
+    "schema": "CoreTaskReceipt",
+    "status": 200,
+    "tenant_id": "t1"
+   }
+  }
+ },
+ "generated_by": "gen/gen_fakecore.py",
+ "source_sha256": "1b7975f10500b3f32b0f8492f6fe6128d5b0ebbaf77cf400dbfc3bd839b30ab1"
+}
