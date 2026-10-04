@@ -233,7 +233,14 @@ fn decision(committed: &Value, report: Option<&Value>) -> Option<Value> {
             let over = a.get("override").filter(|o| o.is_object()).cloned();
             reasons.push(match &over {
                 Some(o) => format!("Gate verdict was {}; a SIMULATED human override ({}) was applied: {}", s(gate, "verdict").unwrap_or("unknown"), s(o, "label").unwrap_or("human_override"), s(o, "reason").unwrap_or("no reason given")),
-                None => "Both gates passed; the SIMULATED human approved without override".to_string(),
+                None => {
+                    let st = |n: &str| gate_of(gate, n).and_then(|g| s(g, "status")).unwrap_or("unknown");
+                    if st("safety") == "pass" && st("improvement") == "pass" {
+                        "Both gates passed; the SIMULATED human approved without override".to_string()
+                    } else {
+                        format!("The SIMULATED human approved without a recorded override; the committed gates say safety {} and improvement {}", st("safety"), st("improvement"))
+                    }
+                }
             });
             (s(a, "decision_id").unwrap_or("dec-unknown").to_string(), s(a, "state").unwrap_or("unknown").to_string(), s(a, "actor").map(String::from), over)
         }
