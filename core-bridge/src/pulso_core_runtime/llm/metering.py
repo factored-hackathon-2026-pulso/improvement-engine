@@ -8,6 +8,7 @@ gateway has no idempotency, so a timed-out call may still have billed."""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 from decimal import ROUND_CEILING, Decimal
@@ -81,16 +82,18 @@ class SpendMeteringGateway:
         if prices is not None:
             max_tokens = pinned.max_tokens if pinned is not None else int(profile.max_tokens)
             reserve = estimate_reservation(prices[0], prices[1], max_tokens, inputs_model_view)
-        if self._guard is not None:
-            try:
-                self._guard.check(scope[:2], reserve)
-            except (CeilingExceeded, KillSwitchEngaged) as exc:
-                outcome = "kill_switch" if isinstance(exc, KillSwitchEngaged) else "ceiling_exceeded"
-                self._store.ledger_record(*scope, outcome=outcome, reserved_usd=reserve, **entry)
-                raise GatewayError(GatewayErrorKind.refused) from exc
-        if not self._store.meter_reserve(*scope, amount=format(reserve, "f"), cap_usd=cap):
-            self._store.ledger_record(*scope, outcome="budget_exhausted", reserved_usd=reserve, **entry)
-            raise GatewayError(GatewayErrorKind.refused)
+        lock = getattr(self._guard, "lock", None)
+        with lock if lock is not None else contextlib.nullcontext():
+            if self._guard is not None:
+                try:
+                    self._guard.check(scope[:2], reserve)
+                except (CeilingExceeded, KillSwitchEngaged) as exc:
+                    outcome = "kill_switch" if isinstance(exc, KillSwitchEngaged) else "ceiling_exceeded"
+                    self._store.ledger_record(*scope, outcome=outcome, reserved_usd=reserve, **entry)
+                    raise GatewayError(GatewayErrorKind.refused) from exc
+            if not self._store.meter_reserve(*scope, amount=format(reserve, "f"), cap_usd=cap):
+                self._store.ledger_record(*scope, outcome="budget_exhausted", reserved_usd=reserve, **entry)
+                raise GatewayError(GatewayErrorKind.refused)
         entry["reserved_usd"] = reserve
         try:
             result = self._inner.generate(prompt, inputs_model_view, locale, schema)

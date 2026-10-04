@@ -61,8 +61,8 @@ def test_overlay_is_static_valid_and_internal_only() -> None:
 
     doc = yaml.safe_load((GATEWAY / "compose.gateway-real.yaml").read_text("utf-8"))
     svc = doc["services"]
-    assert set(svc) == {"llm-gateway", "roleplay-llm"}
-    for s in svc.values():
+    assert set(svc) == {"llm-gateway", "roleplay-llm", "core-runtime"}
+    for s in (svc["llm-gateway"], svc["roleplay-llm"]):
         assert s["networks"] == ["pulso-gw-e0"]
         assert "ports" not in s
     assert gg.GATEWAY_SHA in svc["llm-gateway"]["build"]["context"]
@@ -99,3 +99,12 @@ def test_live_smoke_alias_answers() -> None:
             assert r.status == 200
     except urllib.error.HTTPError as e:  # pragma: no cover
         pytest.fail(f"alias returned {e.code}")
+
+
+def test_core_runtime_can_reach_gateway_on_internal_network() -> None:
+    import yaml
+
+    core = yaml.safe_load(gg.overlay_yaml())["services"]["core-runtime"]
+    assert "pulso-gw-e0" in core["networks"] and "core-net" in core["networks"]
+    assert core["environment"]["AGENTCORE_LLM_GATEWAY_URL"] == "http://llm-gateway:8080"
+    assert core["environment"]["AGENTCORE_LLM_GATEWAY_TOKEN"] == "${GATEWAY_TOKEN_PULSO_CORE:?set}"

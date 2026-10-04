@@ -102,3 +102,56 @@ def test_metering_refuses_on_ceiling_and_kill_and_logs_ledger() -> None:
         with pytest.raises(GatewayError):
             gw.generate("p", {}, "es")
         assert st.rows[-1]["outcome"] == outcome and Inner.called == 0
+
+
+def test_kill_switch_fails_closed_when_file_unreadable(tmp_path, monkeypatch) -> None:
+    import os
+
+    f = tmp_path / "kill"
+    real = os.stat
+
+    def boom(p, *a, **k):
+        if str(p) == str(f):
+            raise PermissionError("denied")
+        return real(p, *a, **k)
+
+    monkeypatch.setattr(os, "stat", boom)
+    with pytest.raises(KillSwitchEngaged):
+        KillSwitch(env={}, file=f).check()
+
+
+def test_guard_fails_closed_on_non_finite_spend_or_reserve() -> None:
+    with pytest.raises(CeilingExceeded):
+        SpendGuard(ceiling_usd=D("1"), spent=lambda s: D("NaN")).check(("t", "j"), D("0"))
+    with pytest.raises(CeilingExceeded):
+        SpendGuard(ceiling_usd=D("1"), spent=lambda s: D("0")).check(("t", "j"), D("-5"))
+
+
+def test_check_and_reserve_are_serialised_per_guard() -> None:
+    import threading
+    import time
+
+    pytest.importorskip("agent_core")
+    spent = [D(0)]
+    guard = SpendGuard(ceiling_usd=D("0.5"), spent=lambda s: spent[0])
+    gw, st, Inner = _metering_with_guard(guard)
+
+    def slow_reserve(*a, **k):
+        time.sleep(0.05)
+        spent[0] += D("1")
+        return True
+
+    st.meter_reserve = slow_reserve
+    res = []
+
+    def run():
+        try:
+            gw.generate("p", {}, "es")
+            res.append("ok")
+        except Exception:  # noqa: BLE001
+            res.append("refused")
+
+    ts = [threading.Thread(target=run) for _ in range(4)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert res.count("ok") == 1

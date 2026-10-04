@@ -6,6 +6,7 @@ wrapper maps the exceptions here to a `refused` gateway error and a ledger row."
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
@@ -33,7 +34,15 @@ class KillSwitch:
         env = os.environ if self.env is None else self.env
         if env.get(KILL_ENV, "").strip().lower() in _TRUE:
             return True
-        return self.file is not None and Path(self.file).exists()
+        if self.file is None:
+            return False
+        try:
+            os.stat(self.file)
+        except FileNotFoundError:
+            return False
+        except (OSError, ValueError):
+            return True  # unreadable marker: fail closed
+        return True
 
     def check(self) -> None:
         if self.engaged():
@@ -46,11 +55,15 @@ class SpendGuard:
         if ceiling_usd is not None and (not ceiling_usd.is_finite() or ceiling_usd < 0):
             raise ValueError("ceiling_usd must be a finite non-negative decimal")
         self._ceiling, self._spent, self._kill = ceiling_usd, spent, kill
+        self.lock = threading.RLock()  # callers hold it across check -> reserve so concurrent calls cannot both pass
 
     def check(self, scope: tuple, reserve: Decimal) -> None:
         if self._kill is not None:
             self._kill.check()
-        if self._ceiling is not None and self._spent(scope) + reserve > self._ceiling:
+        if self._ceiling is None:
+            return
+        spent = self._spent(scope)
+        if not (spent.is_finite() and reserve.is_finite() and reserve >= 0) or spent + reserve > self._ceiling:
             raise CeilingExceeded("run spend ceiling would be exceeded")
 
 

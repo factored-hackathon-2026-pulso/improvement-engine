@@ -15,6 +15,11 @@ services:
       test: ["CMD", "/llm-gateway", "-healthcheck"]
       interval: 5s
       retries: 12
+  core-runtime:
+    networks: [core-net, pulso-gw-e0]
+    environment:
+      AGENTCORE_LLM_GATEWAY_URL: http://llm-gateway:8080
+      AGENTCORE_LLM_GATEWAY_TOKEN: ${GATEWAY_TOKEN_PULSO_CORE:?set}
   roleplay-llm:
     image: ${PULSO_ROLEPLAY_LLM_IMAGE:-localhost/pulso-roleplay-llm:unset}
     command: ["python", "-m", "roleplay_llm", "--queue", "/queue", "--host", "0.0.0.0", "--port", "8640"]
