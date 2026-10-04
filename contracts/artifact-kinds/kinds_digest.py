@@ -1,6 +1,6 @@
 """Digest of the artifact-kind matrix: sha256 over the canonical JSON of matrix.json.
 
-Usage: python digest.py [--write]   (--write refreshes DIGEST.json)
+Usage: python kinds_digest.py [--write]   (--write refreshes DIGEST.json)
 Canonical form: json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True), UTF-8.
 The schema file is covered separately so a schema change also moves the published digest.
 """

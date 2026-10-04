@@ -9,7 +9,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parents[1]
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
-import digest  # noqa: E402
+import kinds_digest as digest  # noqa: E402  (unique module name: contracts/engine-steps also has a digest.py)
 
 VERBS = ["propose", "validate", "evaluate", "publish"]
 VERDICTS = {"supported", "denied", "not_exercised", "blocked"}
@@ -26,8 +26,16 @@ KINDS = {k["kind"]: k for k in M["kinds"]}
 
 
 class CoverageTest(unittest.TestCase):
+    @staticmethod
+    def _jsonschema():
+        try:
+            import jsonschema
+        except ImportError:
+            raise unittest.SkipTest("jsonschema not installed (run with `uv run --with jsonschema`)")
+        return jsonschema
+
     def test_schema_valid(self):
-        import jsonschema
+        jsonschema = self._jsonschema()
         jsonschema.Draft202012Validator(load("matrix.schema.json")).validate(M)
 
     def test_every_kind_has_a_verb_row_per_verb(self):
@@ -115,7 +123,7 @@ class EvidenceTest(unittest.TestCase):
 class DigestTest(unittest.TestCase):
     def test_digest_json_is_fresh(self):
         pub = load("DIGEST.json")
-        self.assertEqual(pub, digest.compute(), "stale DIGEST.json: python digest.py --write")
+        self.assertEqual(pub, digest.compute(), "stale DIGEST.json: python kinds_digest.py --write")
 
     def test_digest_is_over_the_canonical_matrix(self):
         self.assertEqual(load("DIGEST.json")["digest"], digest.matrix_digest(M))

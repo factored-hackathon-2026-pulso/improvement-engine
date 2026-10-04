@@ -10,7 +10,7 @@ supported and denied change families and the denied kinds with who denies them
 (`bridge` = core-bridge guardrail, `engine` = our compile step).
 
 Files: `matrix.schema.json` (JSON Schema 2020-12), `DIGEST.json` (sha256 of the
-canonical matrix, the published frozen artifact; `python digest.py --write`
+canonical matrix, the published frozen artifact; `python kinds_digest.py --write`
 refreshes it), `tests/test_matrix.py`.
 Run: `python -m pytest contracts/artifact-kinds/tests` (needs `jsonschema`; the
 drift test reads the pinned checkout `AGENT_CORE_REF`, default
