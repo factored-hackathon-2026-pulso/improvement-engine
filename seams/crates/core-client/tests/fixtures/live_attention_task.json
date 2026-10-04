@@ -164,6 +164,7 @@
      "kind": "eval_suite"
     }
    ],
+   "draft_plan_digest": "a8b1dce62c5c32d16b9b8d23c228e65422b583892393a6d697c0b3cc20129098",
    "put_draft_digest": "8980460ae6da741034c88d274d66eac257c2c12a9c6f779b3e435dc13163aab5",
    "suite_digest": "4fa1a624b84091db097ac53884c79371a0f4d544b3fa6d459a262474eeeed667",
    "suite_id": "disputas-tarea-suite",
@@ -332,6 +333,7 @@
      "kind": "eval_suite"
     }
    ],
+   "draft_plan_digest": "f22f28600ec10080123d960461e4f9baeba33e41fc2f265ccbcb2f0ebeb95b9c",
    "put_draft_digest": "17a148fe7c5f42d1d6199e248ec5e6c8a2e0459770059f72a3f6f7999c032429",
    "suite_digest": "7ce9ad71f0e009d16c314c1d1132171217affd613702e7184460ec67eb0f7a2f",
    "suite_id": "disputas-tarea-suite",
@@ -500,6 +502,7 @@
      "kind": "eval_suite"
     }
    ],
+   "draft_plan_digest": "c520bfe4d899cf2f5b4b83cd690876f429e586d8a081a7b5c3b5afb415ea93e2",
    "put_draft_digest": "7262dfa03bf94a8dcc0bd57d209cc0d1b8b02853aa99bc015c378254b436117f",
    "suite_digest": "d5716ed0b5f751e49eec11c58feec2f8fa83bf2718fad72fcd1ee158b374f210",
    "suite_id": "disputas-tarea-suite",

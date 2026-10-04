@@ -1,6 +1,6 @@
 use core_client::dto::ArmReport;
 const D0: &str = "abababababababababababababababababababababababababababababababab";
-use eval::gate::{GateInput, GateStatus, Verdict, wire_gate};
+use eval::gate::{GateInput, GateStatus, Verdict, gate_env, wire_gate};
 use serde_json::json;
 
 fn rep(case: &str, status: &str, oracle: bool) -> ArmReport {
@@ -67,4 +67,19 @@ fn suite_ref_is_bound_to_the_sealed_suite_digest() {
     assert!(v1.suite_ref.contains(&d1) && v2.suite_ref.contains(&d2) && v1.suite_ref != v2.suite_ref);
     i.suite_digest = "not-a-digest";
     assert!(wire_gate(&i).is_err());
+}
+
+#[test]
+fn gate_env_is_exactly_what_the_gate_step_consumes_so_a_handler_can_feed_it_into_a_job_payload() {
+    let (b, c) = ([rep("case-1", "completed", true)], [rep("case-1", "failed_infra", true)]);
+    let i = input(&b, &c, "claude-standin", "codex-suite");
+    let env = gate_env(&i).unwrap();
+    assert_eq!(env["gate_in"]["run_id"], "run-v2-0001");
+    assert_eq!(env["gate_in"]["suite_ref"], format!("eval_suite:{D0}@1"));
+    assert_eq!(env["reports"]["arm_report:base-run-v2-0001@1"]["runs"][0]["case_ref"], "case-1");
+    assert_eq!(env["reports"]["arm_report:cand-run-v2-0001@1"]["runs"][0]["status"], "failed_infra");
+    // feeding it to the step directly gives the verdict wire_gate reports
+    let out: serde_json::Value = serde_json::from_str(&steps::gate::run(&env.to_string()).unwrap()).unwrap();
+    assert_eq!(out["verdict"], match wire_gate(&i).unwrap().verdict { Verdict::Pass => "pass", Verdict::Fail => "fail", Verdict::NotEvaluable => "not_evaluable" });
+    assert!(gate_env(&GateInput { suite_digest: "short", ..input(&b, &c, "claude-standin", "codex-suite") }).is_err());
 }

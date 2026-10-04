@@ -72,13 +72,15 @@ fn status(s: &str) -> Result<GateStatus, String> {
     }
 }
 
-pub fn wire_gate(i: &GateInput) -> Result<GateVerdict, String> {
+/// The exact input document of the gate step (`steps::gate::run`): `gate_in`, the arm `reports` and `world_authors`.
+/// Exposed so a job handler can put the live arm reports into the payload of the gate step.
+pub fn gate_env(i: &GateInput) -> Result<Value, String> {
     if i.suite_digest.len() != 64 || !i.suite_digest.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
         return Err("suite_digest must be the 64-hex sealed suite digest".into());
     }
     let suite_ref = format!("eval_suite:{}@1", i.suite_digest);
     let (b, c) = (format!("arm_report:base-{}@1", i.run_id), format!("arm_report:cand-{}@1", i.run_id));
-    let env = json!({
+    Ok(json!({
         "gate_in": {
             "contract_version": "engine-steps/0", "step": "gate", "run_id": i.run_id, "data_class": "synthetic",
             "base_arm_report_ref": b, "candidate_arm_report_ref": c, "suite_ref": &suite_ref,
@@ -86,7 +88,12 @@ pub fn wire_gate(i: &GateInput) -> Result<GateVerdict, String> {
         },
         "reports": { b: runs(i.base), c: runs(i.candidate) },
         "world_authors": { "world": i.world_author, "suite": i.suite_author },
-    });
+    }))
+}
+
+pub fn wire_gate(i: &GateInput) -> Result<GateVerdict, String> {
+    let env = gate_env(i)?;
+    let suite_ref = format!("eval_suite:{}@1", i.suite_digest);
     let out = steps::gate::run(&env.to_string()).map_err(|e| e.to_string())?;
     let o: Value = serde_json::from_str(&out).map_err(|e| e.to_string())?;
     let verdict = match o["verdict"].as_str() {

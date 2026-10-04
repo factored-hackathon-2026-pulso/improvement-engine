@@ -34,6 +34,14 @@ def digest(v) -> str:
     return hashlib.sha256(rfc8785.dumps(v)).hexdigest()
 
 
+def drafts_digest(changes) -> str:
+    """The `draft_plan_digest` an arm's `frozen_candidate` target carries: digest_json of the sorted EntityDraft dumps
+    (e2e-core/.../core_hooks.py::_drafts_digest)."""
+    from agent_core.registry.models import EntityDraft
+    drafts = sorted((EntityDraft.model_validate(c) for c in changes), key=lambda d: (d.kind, str(d.content.get("id", ""))))
+    return digest([d.model_dump(mode="json") for d in drafts])
+
+
 def no_floats(v):
     if isinstance(v, float):
         raise SystemExit("non-integer number in a draft: Core and the draft digest canonicalise it differently")
@@ -53,6 +61,7 @@ def variant(version: str, mutate=None):
     no_floats(changes)
     return {"version": version, "changes": changes, "suite_id": suite["id"], "suite_version": version,
             "suite_digest": str(content_hash(EvalSuite.model_validate(suite))),
+            "draft_plan_digest": drafts_digest(changes),
             "put_draft_digest": digest({"proposal_id": None, "expected_rev": None, "changes": changes})}
 
 
