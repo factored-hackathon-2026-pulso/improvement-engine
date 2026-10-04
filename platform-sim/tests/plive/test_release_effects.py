@@ -100,3 +100,29 @@ def test_observation_labels_memory_and_successor_not_exercised():
     sim = PlatformLiveSim(seed=1)
     assert sim.observation_labels() == {"release_event": "simulated", "effect": "simulated",
                                         "memory": "not_exercised", "successor": "not_exercised"}
+
+
+def test_schedule_after_partial_fast_forward_does_not_crash_or_lose_jobs():
+    sim = PlatformLiveSim(seed=1)
+    seen = []
+    sim.schedule(100, lambda: seen.append("a"))
+    sim.schedule(100000, lambda: seen.append("late"))
+    sim.fast_forward(seconds=200)
+    sim.schedule(10, lambda: seen.append("b"))
+    sim.schedule(10, lambda: seen.append("c"))  # same due time, ids must not collide
+    sim.fast_forward(days=2)
+    assert seen == ["a", "b", "c", "late"]
+
+
+def test_job_scheduled_inside_job_runs_within_window():
+    sim = PlatformLiveSim(seed=1)
+    seen = []
+    sim.schedule(10, lambda: sim.schedule(10, lambda: seen.append("child")))
+    sim.fast_forward(seconds=100)
+    assert seen == ["child"]
+
+
+def test_publish_rejects_non_release_event_type():
+    sim = PlatformLiveSim(seed=1)
+    with pytest.raises(ValueError):
+        sim.publish_release("a", "prod", "rel-9", event_type="case.created")
