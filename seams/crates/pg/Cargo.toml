@@ -8,3 +8,4 @@ publish.workspace = true
 [dependencies]
 postgres = "0.19"
 sha2 = "0.10"
+engine = { path = "../engine" }
