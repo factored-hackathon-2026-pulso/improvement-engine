@@ -239,7 +239,7 @@ fn close_gap(gaps: &mut Vec<(i64, i64)>, seq: i64) {
 }
 
 impl App {
-    fn ingest_claims(&self, r: &Req, scope: &str, purpose: Option<&'static str>) -> Result<Value, Resp> {
+    pub(crate) fn ingest_claims(&self, r: &Req, scope: &str, purpose: Option<&'static str>) -> Result<Value, Resp> {
         let claims = self.authn(&self.control, r, &Expect { aud: "control-api", scope: Some(scope), purpose }).map_err(|d| error(d.status, d.reason))?;
         if let Some((sub, t)) = &self.cfg.upload_pin
             && (claims["sub"].as_str() != Some(sub) || claims["tenant_id"].as_str() != Some(t))

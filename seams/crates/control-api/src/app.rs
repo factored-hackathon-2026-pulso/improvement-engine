@@ -47,12 +47,14 @@ pub struct Config {
     pub min_k: i64,
     /// Floor of the numerator/complement size: a row whose numerator or complement is below it is withheld (the rate would expose it).
     pub min_cell: i64,
+    /// Where a correlated `release.published` schedules its successor run; `None` = a durable queue in the `Store`.
+    pub successors: Option<Arc<dyn crate::correlation::SuccessorSink>>,
 }
 
 impl Config {
     /// Everything optional off: no upload pin, no admin channel.
     pub fn new(ring: Arc<KeyRing>) -> Config {
-        Config { ring, upload_pin: None, admin: false, labs: HashMap::new(), min_k: 10, min_cell: 0 }
+        Config { ring, upload_pin: None, admin: false, labs: HashMap::new(), min_k: 10, min_cell: 0, successors: None }
     }
 }
 
@@ -120,6 +122,7 @@ impl App {
             ("POST", _, Some("/wiki/read")) => self.wiki_read(r),
             ("GET", "/healthz", _) => json_resp(200, json!({"status": "ok", "service": "control-api"})),
             ("POST", "/internal/v1/platform/observations", _) => self.observations(r),
+            ("POST", "/internal/v1/platform/releases", _) => self.release_event(r),
             ("GET", "/internal/v1/platform/quarantine", _) => self.quarantine_list(r),
             ("GET", p, _) if p.starts_with("/internal/v1/platform/exporters/") => self.cursor_get(r),
             ("POST", "/_e2e/config", _) if self.cfg.admin => self.admin_config(r),
@@ -352,6 +355,11 @@ impl App {
             if let (Some(b), Some(t)) = (item["binding_ref"].as_str(), item["tenant"].as_str()) {
                 self.store.preauthorize_binding_ref(b, t);
             }
+        }
+        for item in cfg.get("published_releases").and_then(Value::as_array).into_iter().flatten() {
+            let f = |k: &str| item[k].as_str().map(str::to_string);
+            let (Some(tenant), Some(release_id), Some(agent_id), Some(alias), Some(candidate_hash)) = (f("tenant"), f("release_id"), f("agent_id"), f("alias"), f("candidate_hash")) else { return code(422, "schema_invalid") };
+            crate::correlation::record_published(&*self.store, &tenant, &crate::correlation::PublishedRelease { release_id, agent_id, alias, candidate_hash });
         }
         json_resp(200, json!({"ok": true}))
     }

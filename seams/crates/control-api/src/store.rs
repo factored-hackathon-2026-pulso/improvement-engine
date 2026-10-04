@@ -42,6 +42,15 @@ pub trait Store: Send + Sync {
     /// Namespaced, tenant-scoped JSON documents (ingest ledger/cursors/receipts/quarantine, grants, lab queries, run events).
     /// The app serialises writers, so a get-modify-put needs no atomicity from the store.
     fn put_doc(&self, ns: &str, tenant: &str, id: &str, doc: Value);
+    /// Insert-if-absent: `true` for the single writer that created the document, `false` (nothing written) when it exists.
+    /// The default is get-then-put (the app serialises writers); stores shared by several processes override it atomically.
+    fn put_doc_new(&self, ns: &str, tenant: &str, id: &str, doc: Value) -> bool {
+        if self.get_doc(ns, tenant, id).is_some() {
+            return false;
+        }
+        self.put_doc(ns, tenant, id, doc);
+        true
+    }
     fn get_doc(&self, ns: &str, tenant: &str, id: &str) -> Option<Value>;
     /// All documents of `(ns, tenant)`, ordered by id.
     fn list_docs(&self, ns: &str, tenant: &str) -> Vec<(String, Value)>;
@@ -113,6 +122,16 @@ impl Store for MemStore {
     }
     fn put_doc(&self, ns: &str, tenant: &str, id: &str, doc: Value) {
         self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).docs.insert((ns.into(), tenant.into(), id.into()), doc);
+    }
+    fn put_doc_new(&self, ns: &str, tenant: &str, id: &str, doc: Value) -> bool {
+        let mut g = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        match g.docs.entry((ns.into(), tenant.into(), id.into())) {
+            std::collections::btree_map::Entry::Occupied(_) => false,
+            std::collections::btree_map::Entry::Vacant(v) => {
+                v.insert(doc);
+                true
+            }
+        }
     }
     fn get_doc(&self, ns: &str, tenant: &str, id: &str) -> Option<Value> {
         self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).docs.get(&(ns.into(), tenant.into(), id.into())).cloned()

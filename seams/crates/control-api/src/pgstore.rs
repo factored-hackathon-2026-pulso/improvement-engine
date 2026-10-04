@@ -165,6 +165,13 @@ impl Store for PgStore {
         });
     }
 
+    fn put_doc_new(&self, ns: &str, tenant: &str, id: &str, doc: Value) -> bool {
+        self.with(|c| {
+            let n = c.execute("INSERT INTO pulso_ca_docs (ns, tenant_id, doc_id, doc) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING", &[&ns, &tenant, &id, &doc])?;
+            Ok(n == 1)
+        })
+    }
+
     fn get_doc(&self, ns: &str, tenant: &str, id: &str) -> Option<Value> {
         self.with(|c| Ok(c.query_opt("SELECT doc FROM pulso_ca_docs WHERE ns = $1 AND tenant_id = $2 AND doc_id = $3", &[&ns, &tenant, &id])?.map(|r| r.get(0))))
     }

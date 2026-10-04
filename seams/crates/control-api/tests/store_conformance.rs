@@ -100,6 +100,9 @@ impl Store for Shared {
     fn put_doc(&self, n: &str, t: &str, i: &str, d: Value) {
         self.0.put_doc(n, t, i, d)
     }
+    fn put_doc_new(&self, n: &str, t: &str, i: &str, d: Value) -> bool {
+        self.0.put_doc_new(n, t, i, d)
+    }
     fn get_doc(&self, n: &str, t: &str, i: &str) -> Option<Value> {
         self.0.get_doc(n, t, i)
     }
@@ -396,5 +399,24 @@ fn concurrent_identical_binding_posts_from_separate_processes_all_confirm_once()
         });
         assert!(results.iter().all(|(st, _)| *st == 200), "{}: {results:?}", fx.name);
         assert_eq!(fx.open().binding_effects("t1", "job-r"), 1, "{}", fx.name);
+    });
+}
+
+#[test]
+fn put_doc_new_has_one_winner_under_8_threads() {
+    each(|fx| {
+        let store = fx.open();
+        let wins: usize = (0..8)
+            .map(|i| {
+                let s = store.clone();
+                std::thread::spawn(move || s.put_doc_new("successor_run", "t1", "successor:rel-1", json!({"by": i})))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|h| usize::from(h.join().unwrap()))
+            .sum();
+        assert_eq!(wins, 1, "{}", fx.name);
+        assert!(!store.put_doc_new("successor_run", "t1", "successor:rel-1", json!({})), "{}", fx.name);
+        assert!(store.put_doc_new("successor_run", "t2", "successor:rel-1", json!({})), "tenant-scoped key: {}", fx.name);
     });
 }
