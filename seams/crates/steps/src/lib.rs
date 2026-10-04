@@ -1,8 +1,10 @@
 //! Step stand-ins behind the FRZ0 step schema (contracts/engine-steps).
+//! `cells` (L1): deterministic cell-table sensor.
 //! One module per lane so the STP1, CMP and GSI work packages never touch the same file:
 //! `sensor`, `recompute`, `intent` (STP1), `compile` (CMP), `gate` (GSI).
 //! Every output carries its semantics label (`claude-standin`); none of these claims Codex semantics.
 
+pub mod cells;
 pub mod compile;
 pub mod gate;
 pub mod intent;
