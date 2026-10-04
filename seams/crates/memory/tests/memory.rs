@@ -94,3 +94,24 @@ fn sha_hex(s: &str) -> String {
     use sha2::{Digest, Sha256};
     Sha256::digest(s.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
 }
+
+#[test]
+fn notes_with_secrets_or_pii_are_rejected_on_every_path() {
+    let mut m = Memory::new(store());
+    let cases = [
+        ("contact ana@example.com about it", "email"),
+        ("key sk-abcdefghijklmnop1234", "secret"),
+        ("aws AKIAABCDEFGHIJKLMNOP", "secret"),
+        ("password=hunter2", "secret"),
+        ("Authorization: Bearer abc.def.ghi", "secret"),
+        ("call 5551234567 now", "digits"),
+    ];
+    for (text, _) in cases {
+        assert!(matches!(m.add_note(nn("k", text, &["ev-1"])), Err(MemError::SensitiveContent(_))), "{text}");
+    }
+    assert!(matches!(m.add_note(nn("k.ana@example.com", "ok", &["ev-1"])), Err(MemError::SensitiveContent(_))));
+    let id = m.add_note(nn("k", "clean statement, 42 samples", &["ev-1"])).unwrap();
+    assert!(matches!(m.contradict(&id, nn("k", "token=abcd1234", &["ev-2"])), Err(MemError::SensitiveContent(_))));
+    assert_eq!(m.note(&id).unwrap().status, Status::Active);
+    assert!(m.wiki_read("k").unwrap().matches("- note-").count() == 1);
+}

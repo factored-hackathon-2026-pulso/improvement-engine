@@ -11,6 +11,7 @@ pub enum MemError {
     ClaimKeyMismatch,
     UnresolvedEvidence(String),
     NoEvidence,
+    SensitiveContent(&'static str),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
