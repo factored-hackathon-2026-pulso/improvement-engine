@@ -106,6 +106,15 @@ impl EngineRunner {
         if self.core_live { "live (real Core over the bridge; the human issuer and the sealer stay stand-ins)" } else { "offline-double" }
     }
 
+    /// The monitor labels a platform source "real platform signals". When the operator declared the source simulated, that label would
+    /// be false: it is replaced here, in the title, the profile and the doubles.
+    fn label(&self, rec: &Value) -> String {
+        match (self.data_mode, self.provenance) {
+            (DataMode::Platform, Provenance::Simulated) => "simulated platform-shaped signals (the source is declared simulated by the operator; this is not the actual platform); release and observation simulated".into(),
+            _ => rec["label"].as_str().unwrap_or("unlabelled").to_string(),
+        }
+    }
+
     fn emit(&self, run: &str, ev: NewEvent) -> Result<(), String> {
         self.store.emit(run, ev).map(|_| ())
     }
@@ -195,6 +204,9 @@ impl EngineRunner {
         });
         let class = rec["data_class"].as_str().unwrap_or("treated").to_string();
         for st in report["steps"].as_array_mut().into_iter().flatten() {
+            if st["data_class"] == "generated_sample" {
+                st["data_class"] = json!(class); // the thread labels its own synthetic lab; this run's aggregates are of the record's class
+            }
             match st["id"].as_str() {
                 Some("trigger") => {
                     st["status"] = json!("real");
@@ -215,7 +227,8 @@ impl EngineRunner {
     /// `run_started`, the run profile and its nodes (source, sensor, models, ports): what mode, adapter, source id, sensor, models and
     /// ports this run used, readable in the console graph and in the event log.
     fn announce(&self, run_id: &str, rec: &Value, mode: &str, sensor: &str, signals: usize, discards: u64) -> Result<(), String> {
-        let label = rec["label"].as_str().unwrap_or("unlabelled");
+        let label = self.label(rec);
+        let label = label.as_str();
         let source_note = match (self.data_mode, self.provenance) {
             (DataMode::Platform, Provenance::Simulated) => "source declared SIMULATED by the operator (platform-shaped, not the real platform)",
             (DataMode::Platform, Provenance::Real) => "source declared real by the operator (pulso cannot verify it)",
