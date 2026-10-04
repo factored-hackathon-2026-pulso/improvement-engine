@@ -1,0 +1,8 @@
+[package]
+name = "core-client"
+description = "Claude-owned client seam to Codex core; std-only, never depends on crates/core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
