@@ -160,3 +160,25 @@ fn the_stub_adapter_gives_the_stub_tick_and_a_real_adapter_missing_its_dsn_is_re
     assert!(e.contains("PULSO_PG_DATASET_DSN"), "{e}");
     assert!(!e.contains("postgres://"));
 }
+
+/// Review W7: the watermark is a file, the queue of `PULSO_STORAGE=memory` is not. A kill AFTER the watermark commit but
+/// before the worker finished loses the in-memory job, and the committed watermark means the batch is never read again.
+/// The monitor must therefore re-admit (keyed, idempotent) every run record already on disk when it starts.
+#[test]
+fn a_restart_with_an_empty_queue_re_admits_the_run_records_already_on_disk() {
+    let dir = temp("sweep");
+    let (work, db) = (dir.join("work"), fixture(&dir));
+    let c = cfg(&work, &db, &[]);
+    let first_repo = Arc::new(MemRepo::new());
+    assert_eq!(tick_of(&c, first_repo.clone()).tick(&ctx(&c)).unwrap().processed, 7);
+    let before = queued(&first_repo);
+    assert_eq!(before.len(), 1);
+    // kill: the process dies with its queue; the watermark (7) and the run record survive on disk
+    let second_repo = Arc::new(MemRepo::new());
+    let mut t = tick_of(&c, second_repo.clone());
+    assert_eq!(t.tick(&ctx(&c)).unwrap().processed, 0, "the watermark is committed: nothing new to read");
+    assert_eq!(queued(&second_repo), before, "the unfinished run is queued again under the same key");
+    // idempotent: a later tick adds nothing
+    t.tick(&ctx(&c)).unwrap();
+    assert_eq!(queued(&second_repo).len(), 0, "swept once per process, and keyed anyway");
+}

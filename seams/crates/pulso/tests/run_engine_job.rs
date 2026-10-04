@@ -269,3 +269,17 @@ fn the_steps_of_a_treated_run_do_not_claim_a_generated_sample_data_class() {
     assert!(!doubles.contains("generated_sample"), "{doubles}");
     assert!(doubles.contains("treated"), "{doubles}");
 }
+
+/// Review W7: a platform source whose provenance nobody declared (the default) cannot be titled "real platform signals".
+#[test]
+fn an_undeclared_platform_source_is_not_titled_real_platform_signals() {
+    let work = temp("undeclared");
+    write_record(&work, &record(vec![signal(0, "pt.web_chat", 54, 321)], "platform", "rust-events"));
+    let f = fixture(&work, &[]);
+    run_job(&f).unwrap();
+    let title = f.store.state(RUN).unwrap()["run"]["title"].as_str().unwrap().to_lowercase();
+    assert!(!title.contains("real platform"), "{title}");
+    assert!(title.contains("did not declare"), "{title}");
+    let profile = &of_kind(&events(&f.store, RUN), "run_profile_set")[0]["data"];
+    assert!(!profile["label"].as_str().unwrap().to_lowercase().contains("real platform"), "{profile}");
+}
