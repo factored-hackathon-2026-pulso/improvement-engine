@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import ed0_detect as ed0
+from . import ed0_feed as feed
 from . import compile_step as cmp
 from . import ed0_lab as lab
 from . import gate_step as gate
@@ -126,6 +127,11 @@ class ThreadConfig:
     # Explicit human OVERRIDE of a gate that did not pass: {"by": "human", "actor": <who>, "reason": <why>}. Without it
     # steps 8 and 9 are blocked(gate) after a failed gate; with it they run and the report labels the override.
     human_override: dict | None = None
+    # E0 window: a local E0 package read at runtime (never copied); the lab is fed by the pyarrow feeder with an
+    # ephemeral salt, and the ending is honest `unlinked` when no catalogue entry matches exactly.
+    e0_path: str | None = None
+    e0_arranque: int = 200
+    e0_min_support: int = 20
 
 
 @dataclass
@@ -145,6 +151,10 @@ def _sha() -> str:
 
 # ---- step 1 ----------------------------------------------------------------------------------------------------
 def step_01(ctx: Ctx) -> dict:
+    if ctx.cfg.e0_path:
+        ctx.out["package"] = str(ctx.cfg.e0_path)
+        return {"status": "stand-in", "data_class": "generated_sample", "receipt": {"provider": "local"},
+                "detail": {"trigger": "manual_command", "package": "local E0 sample (read at runtime, not copied)"}}
     pkg = ctx.cfg.workdir / "e0_package"
     ed0.write_synthetic_e0(str(pkg), CATEGORY_LABELS)
     ctx.out["package"] = str(pkg)
@@ -156,7 +166,8 @@ def step_01(ctx: Ctx) -> dict:
 def step_02(ctx: Ctx) -> dict:
     if not (ctx.cfg.exe and os.path.exists(ctx.cfg.exe)):
         return {"status": "blocked(sensor-exe)", "data_class": "generated_sample", "detail": {}}
-    det = ed0.detect(ctx.cfg.exe, ctx.out["package"], str(ctx.cfg.workdir / "sensor_out"))
+    kw = {"arranque": ctx.cfg.e0_arranque, "min_support": ctx.cfg.e0_min_support} if ctx.cfg.e0_path else {}
+    det = ed0.detect(ctx.cfg.exe, ctx.out["package"], str(ctx.cfg.workdir / "sensor_out"), **kw)
     ctx.out["detection"] = det
     return {"status": "real-narrow", "data_class": "generated_sample", "receipt": {"provider": "local"},
             "detail": {k: det[k] for k in ("producer", "admitted_family", "winner_support", "denominator",
@@ -191,6 +202,10 @@ def scripted_responder(stage: str, inputs: dict) -> dict:
             for h in inputs["inputs"]["hypotheses"]]}}
     if stage == "builder_design":
         cands = inputs["inputs"]["candidates"]
+        if not cands:
+            return {"kind": "final", "output": {"design_intent": {"verdict": "unlinked"},
+                                                "evidence_refs": inputs["inputs"]["evidence_refs"],
+                                                "alternatives": [{"kind": "do_nothing"}]}}
         return {"kind": "final", "output": {"design_intent": {"verdict": "linked", "target_ref": cands[0]["target_ref"]},
                                             "evidence_refs": inputs["inputs"]["evidence_refs"],
                                             "alternatives": [{"kind": "do_nothing"}]}}
@@ -327,7 +342,12 @@ def _m3() -> dict:
 def _llm(ctx: Ctx) -> LLMDouble:
     if "llm" not in ctx.out:
         ctx.out["llm"] = LLMDouble(ctx.cfg)
-        ctx.out["lab_db"] = lab.build_lab(ctx.cfg.workdir / "lab.sqlite", _lab_cases(), LAB_SALT)
+        if ctx.cfg.e0_path:
+            ctx.out["salt"] = feed.lab_salt()  # ephemeral (or env), never stored
+            cases = feed.feed(ctx.cfg.e0_path, ctx.out["salt"])
+        else:
+            ctx.out["salt"], cases = LAB_SALT, _lab_cases()
+        ctx.out["lab_db"] = lab.build_lab(ctx.cfg.workdir / "lab.sqlite", cases, ctx.out["salt"])
         ctx.out["m3"] = _m3()
     return ctx.out["llm"]
 
@@ -348,7 +368,7 @@ def step_03(ctx: Ctx) -> list[dict]:
                                 {"family_id": FAMILY_ID, "binding_id": "binding-verifier-0001", "hypotheses": hyps},
                                 db, caps["verifier"])
     # the verifier's verdict is only accepted if the independent ED0L recompute agrees (never from model prose)
-    recompute = {h["hypothesis_id"]: lab.verify_claim(db, h, LAB_SALT) for h in hyps}
+    recompute = {h["hypothesis_id"]: lab.verify_claim(db, h, ctx.out["salt"]) for h in hyps}
     supported = [a["evidence_ref"] for a in v_out["assessments"] if a["verdict"] == "supported"
                  and recompute[a["hypothesis_id"]]["ok"]]
     ctx.out["verified_refs"] = supported
@@ -376,7 +396,11 @@ def step_04(ctx: Ctx) -> dict:
     llm, db, caps = _llm(ctx), ctx.out["lab_db"], ctx.out["m3"]["caps"]
     world = cmp.load_world(WORLD_FILE)
     catalogue = smap.catalogue_from_world(world)
-    refs = _label_refs()
+    if ctx.cfg.e0_path:  # categories are the lab's hashed groups: no raw label exists outside the feeder's memory
+        groups = lab.lab_groups(db)
+        refs = {g: v["evidence_ref"] for g, v in groups.items()}
+    else:
+        refs = _label_refs()
     by_ref = {v: k for k, v in refs.items()}
     verified = ctx.out["verified_refs"]
     if not verified:
@@ -384,7 +408,7 @@ def step_04(ctx: Ctx) -> dict:
     categories = {label: lab._fetch(db, ref)[4] for label, ref in refs.items()}  # label -> support (lab numerator)
     finding = {"finding_ref": "finding_1", "category": by_ref[verified[0]], "evidence_refs": sorted(verified)}
     ctx.out.update(world=world, catalogue=catalogue, finding=finding, categories=categories, mapper=smap.winning_category)
-    if ctx.out["detection"]["winner_support"] != categories[smap.winning_category(categories)]:
+    if not ctx.cfg.e0_path and ctx.out["detection"]["winner_support"] != categories[smap.winning_category(categories)]:
         raise RuntimeError("lab categories disagree with the sensor's winner support")
     di = smap.design_input(finding, catalogue)
     inputs = {"binding_id": "binding-builder-0001", "finding_ref": di["finding_ref"], "category": di["category"],
@@ -686,7 +710,9 @@ def build_report(ctx: Ctx, steps: list[dict]) -> dict:
               **({"overrides": [ctx.out["override"]]} if ctx.out.get("override") else {}), "steps": rep_steps, "ports": ports,
               "authors": {"world": world["authors"].get("world"), "suite": world["authors"].get("suite"),
                           "effect": ctx.out.get("effect_author") or EFFECT_AUTHOR, "judge": JUDGE,
-                          "suite_sealed_at": SUITE_SEALED_AT, "candidate_created_at": ctx.out.get("candidate_created_at")}}
+                          "suite_sealed_at": SUITE_SEALED_AT, "candidate_created_at": ctx.out.get("candidate_created_at") or CANDIDATE_CREATED_AT}}
+    # G1 H5 requires a candidate timestamp; in an `unlinked` run no candidate exists, so the reserved ordering slot is
+    # reported (the suite is sealed before any candidate could exist). Contract gap noted in THREAD01.md.
     observed = {"model": by.get((3, "scout"), {}).get("status", "red"),
                 "jev": "not_exercised(blocked: agent-core PR 28 not on main)",
                 "issuer": st(8), "product": "simulated" if st(9) == "stand-in" else st(9), "host": HOST,
@@ -703,7 +729,11 @@ def run_thread(cfg: ThreadConfig) -> dict:
     t0 = time.monotonic()
     for n, sid, fn in STEPS:
         try:
-            res = fn(ctx)
+            if n >= 5 and (ctx.out.get("design") or {}).get("verdict") == "unlinked":
+                res = {"status": "not_exercised", "data_class": "generated_sample",
+                       "detail": {"reason": f"route unlinked: {smap.UNLINKED_REASON}"}}
+            else:
+                res = fn(ctx)
             recs = res if isinstance(res, list) else [res]
             steps += [_finish(n, sid, r, ctx) for r in recs]
         except Exception as e:  # noqa: BLE001 - a step that cannot run is RED, never silently skipped
@@ -742,13 +772,15 @@ def main(argv=None) -> int:
     ap.add_argument("--live", help="queue dir answered by an external responder lane (shim over real HTTP)")
     ap.add_argument("--workdir", help="persistent workdir (live); untracked")
     ap.add_argument("--summary", help="write the aggregate-only window summary JSON here")
+    ap.add_argument("--e0", action="store_true", help="read the local E0 package named by ED0_E0_PATH at runtime (needs pyarrow)")
     ap.add_argument("--hold-s", type=float, default=HOLD_S)
     ap.add_argument("--exe", default=os.environ.get("ED0_RUNNER_EXE", "D:/cargo-targets/claude-ed0/debug/improvement-engine.exe"))
     a = ap.parse_args(argv)
     qdir, mode = (a.record, "record") if a.record else (a.live, "live") if a.live else (a.replay, "replay")
     with tempfile.TemporaryDirectory() as tmp:
         wd = Path(a.workdir) if a.workdir else Path(tmp)
-        res = run_thread(ThreadConfig(workdir=wd, exe=a.exe, queue_dir=Path(qdir), mode=mode, live_hold_s=a.hold_s))
+        res = run_thread(ThreadConfig(workdir=wd, exe=a.exe, queue_dir=Path(qdir), mode=mode, live_hold_s=a.hold_s,
+                                    e0_path=feed.e0_path() if a.e0 else None))
     if a.summary:
         Path(a.summary).write_text(json.dumps(live_summary(res), indent=1, sort_keys=True), encoding="utf-8")
     if res.get("live"):

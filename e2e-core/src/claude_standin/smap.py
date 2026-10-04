@@ -9,6 +9,7 @@ from . import compile_step as C
 # Declared category vocabulary of the catalogue (synthetic labels; categories are data, not code paths).
 _ADDRESSES = {"prompt": ["closing_reply_unclear", "followup_wording"], "eval_suite": ["coverage_gap_dispute"]}
 _OPS = {"prompt": "replace", "eval_suite": "add"}
+UNLINKED_REASON = "no_exact_supported_flow_mapping"
 COUNT_KEYS = ("valid", "unlinked", "not_evaluable", "invalid")
 
 
@@ -43,7 +44,7 @@ def e0_mapping(finding: dict, catalogue: dict) -> dict:
     declares, so the ending is `unlinked`; support, rank and the winning category are never consulted."""
     target = select_target(finding, catalogue)
     if target is None:
-        return {"verdict": "unlinked", "reason": "no_exact_supported_flow_mapping", "target": None}
+        return {"verdict": "unlinked", "reason": UNLINKED_REASON, "target": None}
     return {"verdict": "linked", "reason": None, "target": target}
 
 
