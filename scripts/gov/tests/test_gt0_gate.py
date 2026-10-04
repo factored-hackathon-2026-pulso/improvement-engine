@@ -56,7 +56,8 @@ def build(d, mutate=None):
                      "legs": {k: {"status": "pass", "exit_code": 0, "command": "c"} for k in ("ci", "pytest", "ratchet")}},
         "report.json": report(),
         "live.json": {"schema": "live-window-log/v1", "windows": [
-            {"id": "w1", "kind": "roleplay-synthetic", "calls": 6, "minutes": 4.1, "scanner_rejections": 0, "responders": 2}]},
+            {"id": "w1", "kind": "roleplay-synthetic", "calls": 6, "minutes": 4.14, "scanner_rejections": 0, "responders": 2}],
+            "provenance": "reconstructed from subagent hand-back reports and THREAD01.md; raw window logs are git-ignored"},
         "capacity.json": {"schema": "capacity/v1", "sessions": [{"n": i, "lane_hours": 5.0} for i in range(1, 13)],
                           "baseline_lane_hours_per_session": 5.0},
     }
@@ -224,6 +225,27 @@ class Gate(unittest.TestCase):
 
     def test_live_log_needs_a_roleplay_window(self):
         self.assertIn("live_window", failed(self.run_gate(self.edit("live.json", lambda r: r.update(windows=[])))))
+
+    def test_live_log_minutes_must_match_thread01(self):
+        self.assertIn("live_window", failed(self.run_gate(self.edit("live.json", lambda r: r["windows"][0].update(minutes=9.99)))))
+
+    def test_live_log_calls_must_match_thread01(self):
+        self.assertIn("live_window", failed(self.run_gate(self.edit("live.json", lambda r: r["windows"][0].update(calls=7)))))
+
+    def test_live_log_needs_provenance(self):
+        self.assertIn("live_window", failed(self.run_gate(self.edit("live.json", lambda r: r.pop("provenance")))))
+
+    def test_live_check_fails_without_thread01(self):
+        res = gate.check_live(self.d / "none.json", self.d / "no-thread01.md")
+        self.assertFalse(res["ok"])
+        build(self.d)
+        res = gate.check_live(self.d / "live.json", self.d / "no-thread01.md")
+        self.assertFalse(res["ok"])
+        self.assertIn("THREAD01", res["detail"])
+
+    def test_recorded_live_windows_file_is_consistent_with_thread01(self):
+        res = gate.check_live(ROOT / "docs" / "reports" / "gates" / "gt0" / "live-windows.json", ROOT / "e2e-core" / "THREAD01.md")
+        self.assertTrue(res["ok"], res)
 
     def test_capacity_needs_twelve_sessions(self):
         self.assertIn("capacity", failed(self.run_gate(self.edit("capacity.json", lambda c: c.update(sessions=c["sessions"][:5])))))

@@ -223,7 +223,8 @@ def check_replay(path, report_path, repo=ROOT):
     return _res("replay", not p, "; ".join(p) or f"run {doc['run_id']}: {doc['calls']} calls, 0 misses")
 
 
-def check_live(path):
+def check_live(path, thread01=None):
+    """The live-window log must be well formed AND agree with the facts THREAD01.md records (calls and minutes per window)."""
     doc, prob = _json(path)
     if prob:
         return _res("live_window", False, prob)
@@ -233,10 +234,24 @@ def check_live(path):
         p.append("live log must be live-window-log/v1")
     if not any(str(w.get("kind", "")).startswith("roleplay") for w in ws):
         p.append("no live roleplay window recorded")
+    if not str(doc.get("provenance") or "").strip():
+        p.append("live log states no provenance")
     for w in ws:
         if not isinstance(w.get("scanner_rejections"), int) or not isinstance(w.get("calls"), int):
             p.append(f"window {w.get('id')}: needs integer calls and scanner_rejections")
-    return _res("live_window", not p, "; ".join(p) or f"{len(ws)} live window(s) logged")
+    t = Path(thread01) if thread01 else None
+    if t is None or not t.is_file():
+        p.append("THREAD01.md not found: the log cannot be checked against the recorded facts")
+    else:
+        text = t.read_text(encoding="utf-8")
+        for w in ws:
+            if not isinstance(w.get("calls"), int) or not isinstance(w.get("minutes"), (int, float)):
+                p.append(f"window {w.get('id')}: needs numeric minutes")
+            elif f"{w['calls']} (scout" not in text:
+                p.append(f"window {w.get('id')}: {w['calls']} calls not recorded in THREAD01.md")
+            elif f"{w['minutes']:.2f}" not in text:
+                p.append(f"window {w.get('id')}: {w['minutes']} minutes not recorded in THREAD01.md")
+    return _res("live_window", not p, "; ".join(p) or f"{len(ws)} live window(s) logged, consistent with THREAD01.md")
 
 
 def check_capacity(path):
@@ -271,7 +286,8 @@ def evaluate(manifest: Path, repo: Path = ROOT) -> list:
             out[-3] = _res("honesty", False, p2)
     else:
         out += [check_honesty(report, replay), check_scanner_ids(report), check_doubles(report)]
-    out += [check_freeze(repo), check_replay(missing("replay"), art.get("report"), repo), check_live(missing("live_log")),
+    out += [check_freeze(repo), check_replay(missing("replay"), art.get("report"), repo),
+            check_live(missing("live_log"), repo / "e2e-core" / "THREAD01.md"),
             check_capacity(missing("capacity"))]
     return out
 
