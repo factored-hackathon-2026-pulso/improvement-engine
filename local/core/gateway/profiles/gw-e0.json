@@ -1,0 +1,9 @@
+{
+  "name": "gw-e0",
+  "description": "Gateway profile for E0 and treated data: local upstream only, no credential, internal network.",
+  "data_classes": ["E0", "treated", "synthetic"],
+  "network": {"name": "pulso-gw-e0", "internal": true},
+  "api_key_env": null,
+  "upstream": {"kind": "local", "base_url": "http://llm-local:8080"},
+  "fallbacks": []
+}

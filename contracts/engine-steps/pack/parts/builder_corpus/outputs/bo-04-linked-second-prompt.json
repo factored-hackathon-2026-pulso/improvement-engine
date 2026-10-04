@@ -1,0 +1,17 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "output_id": "bo-04-linked-second-prompt",
+  "data_class": "synthetic",
+  "finding_ref": "sig-0001",
+  "evidence_refs": [
+    "ev-0001"
+  ],
+  "design_intent": {
+    "verdict": "linked",
+    "target_ref": "prompt:status-lookup@1",
+    "mechanism": "synthetic mechanism text for bo-04-linked-second-prompt",
+    "affected_routes": [
+      "transaction_status_lookup"
+    ]
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "engine-steps/recompute.in",
+  "title": "recompute step input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "step",
+    "run_id",
+    "data_class",
+    "lab_ref",
+    "signal_ids",
+    "scout_claims"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "engine-steps/0"
+    },
+    "step": {
+      "const": "recompute"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "data_class": {
+      "enum": [
+        "synthetic",
+        "treated",
+        "e0",
+        "original"
+      ]
+    },
+    "lab_ref": {
+      "type": "string",
+      "pattern": "^[a-z_]+:[A-Za-z0-9._-]+@[0-9]+$"
+    },
+    "signal_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+      }
+    },
+    "scout_claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "signal_id",
+          "claimed_rate"
+        ],
+        "properties": {
+          "signal_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+          },
+          "claimed_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    }
+  }
+}

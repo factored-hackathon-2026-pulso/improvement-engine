@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "engine-steps/sensors.out",
+  "title": "sensors step output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "step",
+    "run_id",
+    "data_class",
+    "signals",
+    "discards"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "engine-steps/0"
+    },
+    "step": {
+      "const": "sensors"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "data_class": {
+      "enum": [
+        "synthetic",
+        "treated",
+        "e0",
+        "original"
+      ]
+    },
+    "signals": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "signal_id",
+          "metric_id",
+          "population",
+          "numerator",
+          "denominator",
+          "holdout_checked",
+          "evidence_ref"
+        ],
+        "properties": {
+          "signal_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+          },
+          "metric_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+          },
+          "population": {
+            "type": "string",
+            "minLength": 1
+          },
+          "numerator": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "denominator": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "holdout_checked": {
+            "type": "boolean"
+          },
+          "evidence_ref": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+          }
+        }
+      }
+    },
+    "discards": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric_id",
+          "reason"
+        ],
+        "properties": {
+          "metric_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+          },
+          "reason": {
+            "enum": [
+              "below_k",
+              "failed_holdout",
+              "low_coverage",
+              "duplicate",
+              "other"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

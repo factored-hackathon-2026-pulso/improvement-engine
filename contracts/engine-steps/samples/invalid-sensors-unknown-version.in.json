@@ -1,0 +1,15 @@
+{
+  "contract_version": "engine-steps/9",
+  "step": "sensors",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "source_snapshot_ref": "source_snapshot:sample-1@1",
+  "discovery_config_ref": "discovery_config:sample-1@1",
+  "window": {
+    "start": "2026-04-18",
+    "end": "2026-06-17"
+  },
+  "metric_spec_refs": [
+    "metric_spec:sample-1@1"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "contract_version": "engine-steps/0",
+  "step": "gate",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "base_arm_report_ref": "arm_report:sample-1@1",
+  "candidate_arm_report_ref": "arm_report:sample-2@1",
+  "suite_ref": "eval_suite:sample-1@1",
+  "judge_actor": "actor-judge",
+  "author_actors": [
+    "actor-builder"
+  ]
+}

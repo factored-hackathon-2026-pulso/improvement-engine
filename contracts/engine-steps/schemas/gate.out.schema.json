@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "engine-steps/gate.out",
+  "title": "gate step output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "step",
+    "run_id",
+    "data_class",
+    "verdict",
+    "gates",
+    "judge_actor",
+    "quality_claims"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "engine-steps/0"
+    },
+    "step": {
+      "const": "gate"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "data_class": {
+      "enum": [
+        "synthetic",
+        "treated",
+        "e0",
+        "original"
+      ]
+    },
+    "verdict": {
+      "enum": [
+        "pass",
+        "fail",
+        "not_evaluable"
+      ]
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gate",
+          "status"
+        ],
+        "properties": {
+          "gate": {
+            "enum": [
+              "safety",
+              "improvement"
+            ]
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "not_evaluable"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "judge_actor": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "quality_claims": {
+      "enum": [
+        "forbidden",
+        "allowed"
+      ]
+    }
+  }
+}

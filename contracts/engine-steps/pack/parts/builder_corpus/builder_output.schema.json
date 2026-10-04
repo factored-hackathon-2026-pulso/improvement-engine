@@ -1,0 +1,75 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "output_id",
+    "data_class",
+    "finding_ref",
+    "evidence_refs",
+    "design_intent"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "engine-steps-pack/0"
+    },
+    "output_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "data_class": {
+      "const": "synthetic"
+    },
+    "finding_ref": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+      }
+    },
+    "design_intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "mechanism"
+      ],
+      "properties": {
+        "verdict": {
+          "enum": [
+            "linked",
+            "unlinked",
+            "not_evaluable",
+            "do_nothing"
+          ]
+        },
+        "target_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mechanism": {
+          "type": "string",
+          "minLength": 1
+        },
+        "affected_routes": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "BuilderOutput",
+  "title": "Builder output (synthetic corpus v0)"
+}

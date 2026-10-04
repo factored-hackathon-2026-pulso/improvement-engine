@@ -1,0 +1,89 @@
+{
+  "contract_version": "engine-steps/0",
+  "status": "draft",
+  "ports": [
+    {
+      "name": "SourceSnapshotPort",
+      "direction": "driven",
+      "steps": [
+        "sensors"
+      ],
+      "owner_lane": "X-SRC",
+      "description": "read sealed snapshot partitions"
+    },
+    {
+      "name": "SensorPort",
+      "direction": "driving",
+      "steps": [
+        "sensors"
+      ],
+      "owner_lane": "X-SENS",
+      "description": "run metric specs, emit signals and discards"
+    },
+    {
+      "name": "LabQueryPort",
+      "direction": "driven",
+      "steps": [
+        "recompute"
+      ],
+      "owner_lane": "X-SENS",
+      "description": "treated k-anonymous aggregate lab"
+    },
+    {
+      "name": "RecomputePort",
+      "direction": "driving",
+      "steps": [
+        "recompute"
+      ],
+      "owner_lane": "L-E2E",
+      "description": "deterministic recompute of scout figures"
+    },
+    {
+      "name": "ModelPort",
+      "direction": "driven",
+      "steps": [
+        "validation",
+        "compile"
+      ],
+      "owner_lane": "L-MODEL",
+      "description": "LLM calls via the gateway; treated payloads only"
+    },
+    {
+      "name": "VerifierPort",
+      "direction": "driving",
+      "steps": [
+        "validation"
+      ],
+      "owner_lane": "X-GATE",
+      "description": "independent verifier checks"
+    },
+    {
+      "name": "CompilerPort",
+      "direction": "driving",
+      "steps": [
+        "compile"
+      ],
+      "owner_lane": "X-COMPILE",
+      "description": "ChangeSpec to DraftPlan"
+    },
+    {
+      "name": "CoreClientPort",
+      "direction": "driven",
+      "steps": [
+        "compile",
+        "gate"
+      ],
+      "owner_lane": "L-CLIENT",
+      "description": "dry-run, write and arm runs on Agent Core"
+    },
+    {
+      "name": "GatePort",
+      "direction": "driving",
+      "steps": [
+        "gate"
+      ],
+      "owner_lane": "X-GATE",
+      "description": "two-gate verdict from arm reports"
+    }
+  ]
+}

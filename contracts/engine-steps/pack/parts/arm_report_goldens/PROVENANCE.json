@@ -1,0 +1,5 @@
+{
+  "source": "bridge-contract/examples/flows/arms.json",
+  "copied_at_main": "853b029",
+  "note": "byte copy; ArmReport schema lives in bridge-contract/schemas/ArmReport.schema.json"
+}

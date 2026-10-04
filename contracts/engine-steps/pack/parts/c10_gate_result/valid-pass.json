@@ -1,0 +1,20 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "run_id": "run-demo-0001",
+  "base_ref": "bundle:sample-1@1",
+  "candidate_ref": "bundle:sample-2@1",
+  "suite_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "verdict": "pass",
+  "gates": [
+    {
+      "gate": "safety",
+      "status": "pass"
+    },
+    {
+      "gate": "improvement",
+      "status": "pass"
+    }
+  ],
+  "judge_actor": "actor-judge",
+  "quality_claims": "forbidden"
+}

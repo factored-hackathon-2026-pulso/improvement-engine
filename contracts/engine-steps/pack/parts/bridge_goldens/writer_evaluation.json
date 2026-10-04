@@ -1,0 +1,524 @@
+{
+  "contract_revision": "pulso-two-teams-1",
+  "description": "Frozen candidate -> evaluation admission -> evaluate-only invocation (native report).",
+  "flow": "writer_evaluation",
+  "steps": [
+    {
+      "case": "writer_create_put_freeze",
+      "description": "Writer with a sealed commitment: create_proposal, put_draft, freeze.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-writer",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-writer",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "input": {
+            "base_release_id": "rel-demo",
+            "draft_plan_ref": "plan-golden",
+            "evaluate_enabled": false,
+            "proposal_id": null
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-writer",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-writer-1",
+          "pulso_run_ref": "pr-job-golden-writer",
+          "registry_mutation_commitment": {
+            "base_release_id": "rel-demo",
+            "create_agent_id": "atencion",
+            "create_origin": "builder_chat",
+            "create_title": "pulso-key:golden",
+            "mode": "write",
+            "operations": [
+              "create_proposal",
+              "put_draft",
+              "freeze"
+            ],
+            "put_draft_digest": "7e288b22b945d33f5c0832a1a146554736f1c559782a005221bbbd34027bbba9"
+          },
+          "release_id": "<release:writer>",
+          "schema_version": "1",
+          "stage": "writer",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "c4a773496c3885bb3b549f8b51f8a68c5187789dd89afabecb51ede0ed0e619b",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "core_run_id": "<core_run_id#1>",
+          "outcome": "completed",
+          "reason": "completed",
+          "receipt": {
+            "audit_refs": [],
+            "budget": {
+              "known": false
+            },
+            "core_run_id": "<core_run_id#1>",
+            "idempotency_key_digest": "<idempotency_key_digest#1>",
+            "input_commitment": "<input_commitment#1>",
+            "outcome": "completed",
+            "output_digest": "<output_digest#1>",
+            "output_refs": [],
+            "release_id": "<release:writer>",
+            "request_digest": "<request_digest#1>",
+            "schema_version": "1",
+            "task_binding_ref": "57e8804803b066e3a211e2b4bd0020822b1e45d8149af0446357c645b22d775d",
+            "trace_id": "<trace_id#1>"
+          },
+          "result": {
+            "core_run_id": "<core_run_id#1>",
+            "facts": {
+              "pulso_writer_receipts": {
+                "digest": "<output_digest#2>",
+                "source_kind": "compute",
+                "value": {
+                  "candidate_hash": "<candidate_hash#1>",
+                  "native_evaluation": null,
+                  "proposal_id": "<proposal_id#1>",
+                  "rev": 0,
+                  "schema_version": "1",
+                  "state": "confirmed",
+                  "write_receipts": [
+                    {
+                      "key_digest": "<key_digest#1>",
+                      "op": "create_proposal",
+                      "request_hash": "<request_hash#1>",
+                      "rev_after": 0,
+                      "verified": true
+                    },
+                    {
+                      "key_digest": "<key_digest#2>",
+                      "op": "put_draft",
+                      "request_hash": "<request_hash#2>",
+                      "rev_after": 1,
+                      "verified": true
+                    },
+                    {
+                      "key_digest": "<key_digest#3>",
+                      "op": "freeze",
+                      "request_hash": "<request_hash#3>",
+                      "rev_after": 1,
+                      "verified": true
+                    }
+                  ]
+                }
+              }
+            },
+            "outcome": "completed",
+            "output_digest": "<output_digest#1>",
+            "schema_version": "1",
+            "status": "closed"
+          },
+          "schema_version": "1",
+          "state": "terminal_ok",
+          "task_binding_ref": "57e8804803b066e3a211e2b4bd0020822b1e45d8149af0446357c645b22d775d"
+        },
+        "content_type": "application/json",
+        "schema": "CoreTaskReceipt",
+        "status": 200
+      }
+    },
+    {
+      "case": "admission_created",
+      "description": "First admission: 201 state=admitted.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-eval",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_admit",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+          "budget_ref": "bud-1",
+          "candidate_hash": "<candidate_hash#1>",
+          "deadline": "<deadline>",
+          "evaluation_attempt": 1,
+          "proposal_id": "<proposal_id#1>",
+          "request_digest": "<request_digest#2>",
+          "schema_version": "1",
+          "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+          "suite_id": "disputas-suite",
+          "suite_version": "1.0.0"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/admissions"
+      },
+      "response": {
+        "body": {
+          "evaluation_context_ref": "<evaluation_context_ref#1>",
+          "schema_version": "1",
+          "state": "admitted"
+        },
+        "content_type": "application/json",
+        "schema": "EvaluationAdmission",
+        "status": 201
+      }
+    },
+    {
+      "case": "admission_replay",
+      "description": "Identical replay: 200, same body.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-eval",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_admit",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+          "budget_ref": "bud-1",
+          "candidate_hash": "<candidate_hash#1>",
+          "deadline": "<deadline>",
+          "evaluation_attempt": 1,
+          "proposal_id": "<proposal_id#1>",
+          "request_digest": "<request_digest#2>",
+          "schema_version": "1",
+          "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+          "suite_id": "disputas-suite",
+          "suite_version": "1.0.0"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/admissions"
+      },
+      "response": {
+        "body": {
+          "evaluation_context_ref": "<evaluation_context_ref#1>",
+          "schema_version": "1",
+          "state": "admitted"
+        },
+        "content_type": "application/json",
+        "schema": "EvaluationAdmission",
+        "status": 200
+      }
+    },
+    {
+      "case": "admission_conflict",
+      "description": "Same derived context ref, different request digest: 409 pulso:idempotency_conflict.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-eval",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_admit",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+          "budget_ref": "bud-1",
+          "candidate_hash": "<candidate_hash#1>",
+          "deadline": "<deadline>",
+          "evaluation_attempt": 1,
+          "proposal_id": "<proposal_id#1>",
+          "request_digest": "<request_digest#3>",
+          "schema_version": "1",
+          "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+          "suite_id": "disputas-suite",
+          "suite_version": "1.0.0"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/admissions"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:idempotency_conflict",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 409
+      }
+    },
+    {
+      "case": "admission_explicit_ref_equal",
+      "description": "A deprecated explicit ref equal to the derived one is accepted (replay).",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-eval",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_admit",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+          "budget_ref": "bud-1",
+          "candidate_hash": "<candidate_hash#1>",
+          "deadline": "<deadline>",
+          "evaluation_attempt": 1,
+          "evaluation_context_ref": "<evaluation_context_ref#1>",
+          "proposal_id": "<proposal_id#1>",
+          "request_digest": "<request_digest#2>",
+          "schema_version": "1",
+          "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+          "suite_id": "disputas-suite",
+          "suite_version": "1.0.0"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/admissions"
+      },
+      "response": {
+        "body": {
+          "evaluation_context_ref": "<evaluation_context_ref#1>",
+          "schema_version": "1",
+          "state": "admitted"
+        },
+        "content_type": "application/json",
+        "schema": "EvaluationAdmission",
+        "status": 200
+      }
+    },
+    {
+      "case": "admission_stale_candidate",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-eval",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_admit",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+          "budget_ref": "bud-1",
+          "candidate_hash": "<candidate_hash#2>",
+          "deadline": "<deadline>",
+          "evaluation_attempt": 1,
+          "proposal_id": "<proposal_id#1>",
+          "request_digest": "<request_digest#2>",
+          "schema_version": "1",
+          "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+          "suite_id": "disputas-suite",
+          "suite_version": "1.0.0"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/admissions"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:candidate_changed",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 409
+      }
+    },
+    {
+      "case": "admission_bad_context_ref",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-eval",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_admit",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+          "budget_ref": "bud-1",
+          "candidate_hash": "<candidate_hash#1>",
+          "deadline": "<deadline>",
+          "evaluation_attempt": 1,
+          "evaluation_context_ref": "<evaluation_context_ref#2>",
+          "proposal_id": "<proposal_id#1>",
+          "request_digest": "<request_digest#2>",
+          "schema_version": "1",
+          "suite_digest": "13a1031b0f08ebe5285f74fd07c4dc1ed94e85d47c08bbd576d373050b62b5a7",
+          "suite_id": "disputas-suite",
+          "suite_version": "1.0.0"
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/admissions"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:evaluation_context_invalid",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 422
+      }
+    },
+    {
+      "case": "invoke_evaluate_only",
+      "description": "Evaluate-only writer under the admission: native evaluation report digest in the fact.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden-eval",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "core_task_invoke",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "pulso-writer",
+          "agent_version": "1.0.0",
+          "attempt": 1,
+          "input": {
+            "base_release_id": "rel-demo",
+            "draft_plan_ref": "plan-golden",
+            "evaluate_enabled": true,
+            "evaluation_suite_id": "disputas-suite",
+            "evaluation_suite_version": "1.0.0",
+            "proposal_id": "<proposal_id#1>"
+          },
+          "input_artifact_refs": [],
+          "job_id": "job-golden-eval",
+          "lab_grant_ref": "grant-contract",
+          "logical_key": "golden-eval-1",
+          "pulso_run_ref": "pr-job-golden-eval",
+          "registry_mutation_commitment": {
+            "base_release_id": "rel-demo",
+            "evaluate_enabled": true,
+            "evaluation_context_ref": "<evaluation_context_ref#1>",
+            "mode": "evaluate_only",
+            "operations": [],
+            "proposal_id": "<proposal_id#1>"
+          },
+          "release_id": "<release:writer>",
+          "schema_version": "1",
+          "stage": "writer",
+          "tenant_id": "t1"
+        },
+        "headers": {
+          "Idempotency-Key": "4285298ce01525d43718b94923c66fbfa31c4b21f46fc838fc942336dcdfdba8",
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/core-tasks/invoke"
+      },
+      "response": {
+        "body": {
+          "core_run_id": "<core_run_id#2>",
+          "outcome": "completed",
+          "reason": "completed",
+          "receipt": {
+            "audit_refs": [],
+            "budget": {
+              "known": false
+            },
+            "core_run_id": "<core_run_id#2>",
+            "idempotency_key_digest": "<idempotency_key_digest#2>",
+            "input_commitment": "<input_commitment#2>",
+            "outcome": "completed",
+            "output_digest": "<output_digest#3>",
+            "output_refs": [],
+            "release_id": "<release:writer>",
+            "request_digest": "<request_digest#4>",
+            "schema_version": "1",
+            "task_binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33",
+            "trace_id": "<trace_id#3>"
+          },
+          "result": {
+            "core_run_id": "<core_run_id#2>",
+            "facts": {
+              "pulso_writer_receipts": {
+                "digest": "<output_digest#4>",
+                "source_kind": "compute",
+                "value": {
+                  "candidate_hash": "<candidate_hash#1>",
+                  "native_evaluation": {
+                    "eval_run_ref": "<eval_run_ref#1>",
+                    "report_digest": "<report_digest#1>",
+                    "verdict": "pass"
+                  },
+                  "proposal_id": "<proposal_id#1>",
+                  "rev": 1,
+                  "schema_version": "1",
+                  "state": "confirmed",
+                  "write_receipts": [
+                    {
+                      "key_digest": "<key_digest#4>",
+                      "op": "evaluate",
+                      "request_hash": "<request_hash#4>",
+                      "rev_after": 1,
+                      "verified": true
+                    }
+                  ]
+                }
+              }
+            },
+            "outcome": "completed",
+            "output_digest": "<output_digest#3>",
+            "schema_version": "1",
+            "status": "closed"
+          },
+          "schema_version": "1",
+          "state": "terminal_ok",
+          "task_binding_ref": "f5f19be72642cfcff1ff9ca604402acb7769f67306f25ab257e981945c61ee33"
+        },
+        "content_type": "application/json",
+        "schema": "CoreTaskReceipt",
+        "status": 200
+      }
+    }
+  ]
+}

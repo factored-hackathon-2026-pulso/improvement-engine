@@ -26,7 +26,7 @@ from pulso_core_runtime.adapters import (
 from pulso_core_runtime.credentials.issuer import CredentialIssuer, load_signer
 from pulso_core_runtime.invoke.binding import BindingService
 from pulso_core_runtime.invoke.context import ConfirmingRegistry, InvocationRegistry
-from pulso_core_runtime.invoke.core_client import AsgiCoreClient
+from pulso_core_runtime.invoke.core_client import AsgiCoreClient, timeout_from_env
 from pulso_core_runtime.invoke.pin import RegistryReleaseChecker
 from pulso_core_runtime.invoke.projection import CatalogProjector, FactProjector
 from pulso_core_runtime.invoke.routes import Handler, make_handlers
@@ -88,7 +88,7 @@ def build_l3(env: Mapping[str, str], *, dsn: str, registry: Any, app_getter: Cal
         bridge_instance_id=env.get("PULSO_BRIDGE_INSTANCE", "bridge-1"),
         stage_slots={name: frozenset(spec.input_slots) for name, spec in CATALOG.items()})
     service = InvokeService(
-        store=store, core=AsgiCoreClient(app_getter), releases=RegistryReleaseChecker(registry), signer=identity,
+        store=store, core=AsgiCoreClient(app_getter, timeout_s=timeout_from_env(env)), releases=RegistryReleaseChecker(registry), signer=identity,
         runs=runs, registry=inv_registry, settings=cfg, projector=projector,
         reconciler=reconciler or Reconciler(
             store=store, runs=runs, projector=projector, writes=writes, bindings=ReceiptBindingLookup(store),

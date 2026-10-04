@@ -1,0 +1,16 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "case_id": "case-0001",
+  "agent_id": "atencion",
+  "route": "pqr_status_lookup",
+  "seed": 7,
+  "turns": [
+    {
+      "role": "customer",
+      "text": "Where is my complaint?"
+    }
+  ],
+  "initial_state_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "oracle_ref": null,
+  "data_class": "synthetic"
+}

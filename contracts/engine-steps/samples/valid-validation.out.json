@@ -1,0 +1,18 @@
+{
+  "contract_version": "engine-steps/0",
+  "step": "validation",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "signal_id": "sig-0001",
+  "verdict": "corroborated",
+  "check_results": [
+    {
+      "check": "denominator",
+      "status": "pass"
+    }
+  ],
+  "verifier_actor": "actor-verifier",
+  "evidence_refs": [
+    "ev-0001"
+  ]
+}

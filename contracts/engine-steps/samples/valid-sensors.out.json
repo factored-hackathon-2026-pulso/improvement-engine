@@ -1,0 +1,23 @@
+{
+  "contract_version": "engine-steps/0",
+  "step": "sensors",
+  "run_id": "run-demo-0001",
+  "data_class": "synthetic",
+  "signals": [
+    {
+      "signal_id": "sig-0001",
+      "metric_id": "contact_unresolved",
+      "population": "phone/complaint",
+      "numerator": 120,
+      "denominator": 400,
+      "holdout_checked": true,
+      "evidence_ref": "ev-0001"
+    }
+  ],
+  "discards": [
+    {
+      "metric_id": "txn_rejects",
+      "reason": "below_k"
+    }
+  ]
+}

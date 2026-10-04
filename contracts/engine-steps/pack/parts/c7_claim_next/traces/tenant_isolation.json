@@ -1,0 +1,38 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "name": "tenant_isolation",
+  "kind": "specification_trace",
+  "recorded": false,
+  "derived_from_test": "crates/core/tests/durable_jobs.rs::tenant_cannot_read_or_transition_another_tenants_job",
+  "note": "Derived by reading the in-memory reducer tests (cargo is not run by the pack author); a PG-recorded variant replaces `recorded` with true when DJC runs.",
+  "steps": [
+    {
+      "op": "admit",
+      "tenant": "tenant-a",
+      "trigger": "t-1",
+      "expect": {
+        "admitted": true,
+        "job": "job-a"
+      }
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-b",
+      "worker": "w1",
+      "now": 100,
+      "lease": 30,
+      "expect": null
+    },
+    {
+      "op": "claim_next_job",
+      "tenant": "tenant-a",
+      "worker": "w1",
+      "now": 100,
+      "lease": 30,
+      "expect": {
+        "job": "job-a",
+        "fence_token": 1
+      }
+    }
+  ]
+}

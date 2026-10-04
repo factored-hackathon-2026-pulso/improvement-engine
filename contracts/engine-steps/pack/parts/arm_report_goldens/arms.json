@@ -1,0 +1,594 @@
+{
+  "contract_revision": "pulso-two-teams-1",
+  "description": "Arm run, replay, readback by id/key, closed refusals, in-run failure.",
+  "flow": "arms",
+  "steps": [
+    {
+      "case": "arm_run_native",
+      "description": "Native arm on the published release; execution_id = arm-sha256(tenant|key)[:32].",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "arm": "baseline",
+          "binding_ref": "bind-arm",
+          "budget_ref": "bud-1",
+          "campaign_ref": "camp-1",
+          "case_ref": "case-1",
+          "idempotency_key": "golden-arm-1",
+          "mode": "native",
+          "repetition": 0,
+          "scenario_manifest_ref": "art-golden",
+          "seed": 7,
+          "seed_manifest_ref": null,
+          "target": {
+            "kind": "published_release",
+            "release_id": "rel-demo"
+          }
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/arms/run"
+      },
+      "response": {
+        "body": {
+          "arm": "baseline",
+          "case_ref": "case-1",
+          "closed_early": false,
+          "closed_early_runs": [],
+          "cost_known": true,
+          "effect_receipts": [],
+          "event_refs": [
+            "audit:<uuid#1>"
+          ],
+          "execution_id": "<trace_id#1>",
+          "final_state_ref": null,
+          "initial_state_digest": null,
+          "oracle_ref": null,
+          "reason": null,
+          "repetition": 0,
+          "seed": 7,
+          "status": "completed",
+          "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+          "trace_id": "<trace_id#1>",
+          "usage": {
+            "cost_usd": "0.002",
+            "jobs": 1,
+            "tokens_in": 40,
+            "tokens_out": 12
+          }
+        },
+        "content_type": "application/json",
+        "schema": "ArmReport",
+        "status": 200
+      }
+    },
+    {
+      "case": "arm_run_replay",
+      "description": "Same key + digest: the stored report is returned.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "arm": "baseline",
+          "binding_ref": "bind-arm",
+          "budget_ref": "bud-1",
+          "campaign_ref": "camp-1",
+          "case_ref": "case-1",
+          "idempotency_key": "golden-arm-1",
+          "mode": "native",
+          "repetition": 0,
+          "scenario_manifest_ref": "art-golden",
+          "seed": 7,
+          "seed_manifest_ref": null,
+          "target": {
+            "kind": "published_release",
+            "release_id": "rel-demo"
+          }
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/arms/run"
+      },
+      "response": {
+        "body": {
+          "arm": "baseline",
+          "case_ref": "case-1",
+          "closed_early": false,
+          "closed_early_runs": [],
+          "cost_known": true,
+          "effect_receipts": [],
+          "event_refs": [
+            "audit:<uuid#1>"
+          ],
+          "execution_id": "<trace_id#1>",
+          "final_state_ref": null,
+          "initial_state_digest": null,
+          "oracle_ref": null,
+          "reason": null,
+          "repetition": 0,
+          "seed": 7,
+          "status": "completed",
+          "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+          "trace_id": "<trace_id#1>",
+          "usage": {
+            "cost_usd": "0.002",
+            "jobs": 1,
+            "tokens_in": 40,
+            "tokens_out": 12
+          }
+        },
+        "content_type": "application/json",
+        "schema": "ArmReport",
+        "status": 200
+      }
+    },
+    {
+      "case": "arm_run_conflict",
+      "description": "Same key, different body.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "arm": "baseline",
+          "binding_ref": "bind-arm",
+          "budget_ref": "bud-1",
+          "campaign_ref": "camp-1",
+          "case_ref": "case-1",
+          "idempotency_key": "golden-arm-1",
+          "mode": "native",
+          "repetition": 0,
+          "scenario_manifest_ref": "art-golden",
+          "seed": 8,
+          "seed_manifest_ref": null,
+          "target": {
+            "kind": "published_release",
+            "release_id": "rel-demo"
+          }
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/arms/run"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:idempotency_conflict",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 409
+      }
+    },
+    {
+      "case": "arm_read_by_id",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_read",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/evaluation/arms/<trace_id#1>"
+      },
+      "response": {
+        "body": {
+          "arm": "baseline",
+          "case_ref": "case-1",
+          "closed_early": false,
+          "closed_early_runs": [],
+          "cost_known": true,
+          "effect_receipts": [],
+          "event_refs": [
+            "audit:<uuid#1>"
+          ],
+          "execution_id": "<trace_id#1>",
+          "final_state_ref": null,
+          "initial_state_digest": null,
+          "oracle_ref": null,
+          "reason": null,
+          "repetition": 0,
+          "seed": 7,
+          "status": "completed",
+          "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+          "trace_id": "<trace_id#1>",
+          "usage": {
+            "cost_usd": "0.002",
+            "jobs": 1,
+            "tokens_in": 40,
+            "tokens_out": 12
+          }
+        },
+        "content_type": "application/json",
+        "schema": "ArmReport",
+        "status": 200
+      }
+    },
+    {
+      "case": "arm_read_by_key",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_read",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/evaluation/arms/by-key/golden-arm-1"
+      },
+      "response": {
+        "body": {
+          "arm": "baseline",
+          "case_ref": "case-1",
+          "closed_early": false,
+          "closed_early_runs": [],
+          "cost_known": true,
+          "effect_receipts": [],
+          "event_refs": [
+            "audit:<uuid#1>"
+          ],
+          "execution_id": "<trace_id#1>",
+          "final_state_ref": null,
+          "initial_state_digest": null,
+          "oracle_ref": null,
+          "reason": null,
+          "repetition": 0,
+          "seed": 7,
+          "status": "completed",
+          "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+          "trace_id": "<trace_id#1>",
+          "usage": {
+            "cost_usd": "0.002",
+            "jobs": 1,
+            "tokens_in": 40,
+            "tokens_out": 12
+          }
+        },
+        "content_type": "application/json",
+        "schema": "ArmReport",
+        "status": 200
+      }
+    },
+    {
+      "case": "arm_read_unknown",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_read",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/evaluation/arms/by-key/never-seen"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:not_found",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 404
+      }
+    },
+    {
+      "case": "arm_read_foreign_tenant",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_read",
+          "tenant_id": "t2",
+          "typ": "JWT"
+        },
+        "body": null,
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "GET",
+        "path": "/evaluation/arms/<trace_id#1>"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:not_found",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 404
+      }
+    },
+    {
+      "case": "arm_mixed_world",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "arm": "baseline",
+          "binding_ref": "bind-arm",
+          "budget_ref": "bud-1",
+          "campaign_ref": "camp-1",
+          "case_ref": "case-1",
+          "idempotency_key": "golden-arm-mixed",
+          "mode": "native",
+          "repetition": 0,
+          "scenario_manifest_ref": "art-golden",
+          "seed": 7,
+          "seed_manifest_ref": "seed-1",
+          "target": {
+            "kind": "published_release",
+            "release_id": "rel-demo"
+          }
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/arms/run"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:mixed_world_rejected",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 409
+      }
+    },
+    {
+      "case": "arm_sandbox_required",
+      "description": "",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "arm": "baseline",
+          "binding_ref": "bind-arm",
+          "budget_ref": "bud-1",
+          "campaign_ref": "camp-1",
+          "case_ref": "case-1",
+          "idempotency_key": "golden-arm-nosb",
+          "mode": "task_builder",
+          "repetition": 0,
+          "scenario_manifest_ref": "art-golden",
+          "seed": 7,
+          "seed_manifest_ref": null,
+          "target": {
+            "kind": "published_release",
+            "release_id": "rel-demo"
+          }
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/arms/run"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:sandbox_required",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 409
+      }
+    },
+    {
+      "case": "arm_oracle_field_rejected",
+      "description": "Gold/oracle fields can never ride along: the DTO is closed.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "arm": "baseline",
+          "binding_ref": "bind-arm",
+          "budget_ref": "bud-1",
+          "campaign_ref": "camp-1",
+          "case_ref": "case-1",
+          "idempotency_key": "golden-arm-gold",
+          "mode": "native",
+          "oracle_gold": {
+            "answer": 1
+          },
+          "repetition": 0,
+          "scenario_manifest_ref": "art-golden",
+          "seed": 7,
+          "seed_manifest_ref": null,
+          "target": {
+            "kind": "published_release",
+            "release_id": "rel-demo"
+          }
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/arms/run"
+      },
+      "response": {
+        "body": {
+          "code": "pulso:invalid_request",
+          "details": {},
+          "retryable": false,
+          "schema_version": "1",
+          "trace_id": "<trace_id#2>"
+        },
+        "content_type": "application/json",
+        "schema": "ErrorEnvelope",
+        "status": 422
+      }
+    },
+    {
+      "case": "arm_budget_unknown",
+      "description": "Failure inside the run is REPORTED (200, status=failed_infra), not raised.",
+      "request": {
+        "auth": {
+          "alg": "EdDSA",
+          "aud": "core-bridge",
+          "iss": "control-api",
+          "job_id": "job-golden",
+          "note": "token omitted: mint a fresh one per attempt (fresh jti)",
+          "purpose": "evaluation_arm_run",
+          "tenant_id": "t1",
+          "typ": "JWT"
+        },
+        "body": {
+          "agent_id": "atencion",
+          "arm": "baseline",
+          "binding_ref": "bind-arm",
+          "budget_ref": "bud-missing-xyz",
+          "campaign_ref": "camp-1",
+          "case_ref": "case-1",
+          "idempotency_key": "golden-arm-nobud",
+          "mode": "native",
+          "repetition": 0,
+          "scenario_manifest_ref": "art-golden",
+          "seed": 7,
+          "seed_manifest_ref": null,
+          "target": {
+            "kind": "published_release",
+            "release_id": "rel-demo"
+          }
+        },
+        "headers": {
+          "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+        },
+        "method": "POST",
+        "path": "/evaluation/arms/run"
+      },
+      "response": {
+        "body": {
+          "arm": "baseline",
+          "case_ref": "case-1",
+          "cost_known": false,
+          "effect_receipts": [],
+          "event_refs": [],
+          "execution_id": "<trace_id#3>",
+          "final_state_ref": null,
+          "initial_state_digest": null,
+          "oracle_ref": null,
+          "reason": "budget_unknown",
+          "repetition": 0,
+          "seed": 7,
+          "status": "failed_infra",
+          "target_commitment": "99a37b63b74a1173e45135e3d89270244c03ed4234ac904197a77c1fcc249c38",
+          "trace_id": "<trace_id#3>",
+          "usage": null
+        },
+        "content_type": "application/json",
+        "schema": "ArmReport",
+        "status": 200
+      }
+    }
+  ]
+}

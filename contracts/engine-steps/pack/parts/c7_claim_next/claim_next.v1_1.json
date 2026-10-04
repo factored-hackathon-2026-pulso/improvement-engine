@@ -1,0 +1,25 @@
+{
+  "contract_version": "engine-steps-pack/0",
+  "contract": "C-7",
+  "version": "v1.1",
+  "trait": "DurableJobRepository",
+  "base_version": "v1 (existing trait, frozen at CF0)",
+  "rust_signature": "fn claim_next_job(&mut self, tenant_id: &str, worker_id: &str, now_unix_seconds: u64, lease_seconds: u64) -> Result<Option<ClaimedJob>, DurableJobError>;",
+  "returns": {
+    "ClaimedJob": {
+      "job_id": "String",
+      "lease": "JobLease{worker_id,fence_token,expires_at_unix_seconds}"
+    }
+  },
+  "semantics": [
+    "tenant-scoped: never claims or reveals another tenant's job",
+    "candidate = oldest admitted job (admission order) in status Queued, or Leased with an expired lease",
+    "skips jobs with effect_state != NoEffect (UnknownPendingReconciliation needs reconciliation)",
+    "skips Paused, CancelledBeforeEffect, CompletedNoEffect and AppliedAcknowledged jobs",
+    "selection and lease are one conditional update (no read-then-write); two workers never claim the same job",
+    "a claim increments fence_token and attempt_count by one and bumps control_version once",
+    "no candidate: Ok(None), no state change",
+    "lease_seconds == 0 is InvalidLeaseDuration; invalid worker_id or tenant_id is rejected before any read"
+  ],
+  "implemented_by": "DJC (Codex, X-CONF); this file only publishes the signature"
+}
