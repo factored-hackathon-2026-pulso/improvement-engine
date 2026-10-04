@@ -53,10 +53,9 @@ fn jcs_into(v: &Value, out: &mut String) -> Result<(), CanonError> {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
+            const SAFE: i64 = 9_007_199_254_740_991; // rfc8785 refuses |n| > 2^53-1
+            if let Some(i) = n.as_i64().filter(|i| (-SAFE..=SAFE).contains(i)) {
                 out.push_str(&i.to_string());
-            } else if let Some(u) = n.as_u64() {
-                out.push_str(&u.to_string());
             } else {
                 return Err(CanonError::NonIntegerNumber);
             }
@@ -202,7 +201,16 @@ pub fn is_z_timestamp(s: &str) -> bool {
     if !(digits(11..13) && b[13] == b':' && digits(14..16) && b[16] == b':' && digits(17..19)) {
         return false;
     }
-    if !((1..=12).contains(&num(5..7)) && (1..=31).contains(&num(8..10)) && num(11..13) < 24 && num(14..16) < 60 && num(17..19) < 61) {
+    let (y, mo, d) = (num(0..4), num(5..7), num(8..10));
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let dim = match mo {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => 28 + u32::from(leap),
+        _ => 0,
+    };
+    // Python `datetime.fromisoformat` (the bridge): real calendar dates, year >= 1, seconds 0..=59.
+    if !(y >= 1 && (1..=dim).contains(&d) && num(11..13) < 24 && num(14..16) < 60 && num(17..19) < 60) {
         return false;
     }
     match b.len() {

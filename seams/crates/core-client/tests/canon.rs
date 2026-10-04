@@ -74,3 +74,23 @@ fn z_timestamps_are_utc_rfc3339_with_a_literal_z() {
         assert!(!canon::is_z_timestamp(bad), "{bad}");
     }
 }
+
+#[test]
+fn integers_outside_the_json_safe_range_are_refused_like_rfc8785_python() {
+    // rfc8785.dumps raises for |n| > 2^53-1; a digest the bridge cannot reproduce must never be computed.
+    assert!(canon::jcs(&json!({"n": 9_007_199_254_740_991_i64})).is_ok());
+    assert!(canon::jcs(&json!({"n": -9_007_199_254_740_991_i64})).is_ok());
+    for n in [json!(9_007_199_254_740_992_i64), json!(-9_007_199_254_740_992_i64), json!(u64::MAX)] {
+        assert!(matches!(canon::jcs(&json!({"n": n})), Err(CanonError::NonIntegerNumber)), "{n}");
+    }
+}
+
+#[test]
+fn z_timestamp_validation_matches_python_fromisoformat() {
+    for bad in ["2026-02-30T00:00:00Z", "2026-04-31T00:00:00Z", "2026-10-04T00:00:60Z", "2026-00-10T00:00:00Z", "2026-10-00T00:00:00Z", "2025-02-29T00:00:00Z"] {
+        assert!(!canon::is_z_timestamp(bad), "{bad}");
+    }
+    for ok in ["2024-02-29T23:59:59Z", "2026-12-31T23:59:59.5Z"] {
+        assert!(canon::is_z_timestamp(ok), "{ok}");
+    }
+}
