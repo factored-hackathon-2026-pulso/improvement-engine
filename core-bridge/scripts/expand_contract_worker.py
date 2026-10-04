@@ -55,7 +55,7 @@ def main() -> None:
         out["releases"] = [r.release_id for r in service(dsn).import_seed(_admin(), seed)]
     elif action == "exercise":
         svc = service(dsn)
-        base = svc.get_alias("atencion", "prod").release_id  # the seeded release id moves with every pin (Interrupt.locked in 894fa65)
+        base = svc.get_alias("atencion", "prod").release_id  # the seeded release id moves with every pin (Interrupt.locked at 894fa65)
         detail = svc.get_release(base).model_dump(mode="json")
         p = svc.create_proposal(_admin(), "atencion", Origin.manual, "expand-contract smoke")
         out.update(release_id=detail["release_id"], status=detail["status"], entities=len(detail["entities"]),

@@ -31,7 +31,7 @@ param(
     [string]$Job = 'all',
     [string]$PostgresAdmin = $env:PULSO_TEST_PG_ADMIN,
     [string]$PostgresTestUrl,
-    [string]$Checkout = 'D:\.codex\factored\references\agent-core-894fa65',
+    [string]$Checkout = 'D:\.codex\factored\references\agent-core-c814c2b',
     [switch]$AllowSkipReal,
     [switch]$Mypy
 )
@@ -39,7 +39,7 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bridge = (Resolve-Path (Join-Path $here '..')).Path
 $repo = (Resolve-Path (Join-Path $bridge '..')).Path
-$pin = '894fa65575d83420523f33ec1c6919b8965f7ebe'
+$pin = 'c814c2bad9f154d10c092326558815dca9562be7'
 $pinFile = Join-Path $repo 'contracts\agent_core\pin.json'
 if (Test-Path $pinFile) { $pin = (Get-Content $pinFile -Raw | ConvertFrom-Json).sha }
 # Own venv: gen-wire.ps1 runs `uv sync --locked` on the shared pulso-wire-venv, which prunes anything outside the Core lock.

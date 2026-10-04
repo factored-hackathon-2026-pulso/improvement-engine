@@ -5,12 +5,12 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Checkout = 'D:\.codex\factored\references\agent-core-894fa65',
+    [string]$Checkout = 'D:\.codex\factored\references\agent-core-c814c2b',
     [string]$Connection = 'pulso-dev',
     [string]$Podman = 'C:\Users\alexg\AppData\Local\Programs\Podman\podman.exe'
 )
 $ErrorActionPreference = 'Stop'
-$PinSha = '894fa65575d83420523f33ec1c6919b8965f7ebe'
+$PinSha = 'c814c2bad9f154d10c092326558815dca9562be7'
 $head = (git -C $Checkout rev-parse HEAD).Trim()
 if ($head -ne $PinSha) { Write-Error "pulso:image_build_failed checkout HEAD $head != pin $PinSha"; exit 2 }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path

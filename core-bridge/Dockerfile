@@ -6,7 +6,7 @@
 
 # ---- builder: wheelhouse from the pin + our package ----
 FROM docker.io/library/python:3.12-slim AS builder
-ARG CORE_SHA=894fa65575d83420523f33ec1c6919b8965f7ebe
+ARG CORE_SHA=c814c2bad9f154d10c092326558815dca9562be7
 ARG UV_VERSION=0.7.22
 ENV UV_LINK_MODE=copy PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN pip install --no-cache-dir "uv==${UV_VERSION}"
@@ -22,7 +22,7 @@ RUN test "$(cat contracts/VERSION)" = "1.3.0" \
 
 # ---- runtime: slim, non-root, read-only rootfs friendly ----
 FROM docker.io/library/python:3.12-slim AS runtime
-ARG CORE_SHA=894fa65575d83420523f33ec1c6919b8965f7ebe
+ARG CORE_SHA=c814c2bad9f154d10c092326558815dca9562be7
 ARG PULSO_SHA=unknown
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PULSO_SHA=${PULSO_SHA} PULSO_CORE_SHA=${CORE_SHA} \
     PULSO_CALIBRATIONS_DIR=/opt/pulso/assets/calibrations PULSO_CLASSIFIER_DIR=/opt/pulso/assets/classifiers

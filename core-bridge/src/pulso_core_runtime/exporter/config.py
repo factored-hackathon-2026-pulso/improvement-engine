@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-PIN_SHA = "894fa65575d83420523f33ec1c6919b8965f7ebe"
+PIN_SHA = "c814c2bad9f154d10c092326558815dca9562be7"
 PIN_CONTRACT_VERSION = "1.3.0"
 CONTRACT = "pulso-observations-2"
 OBSERVATIONS_PATH = "/internal/v1/platform/observations"

@@ -25,7 +25,7 @@ from typing import Any
 
 import yaml
 
-PIN_SHA = "894fa65575d83420523f33ec1c6919b8965f7ebe"
+PIN_SHA = "c814c2bad9f154d10c092326558815dca9562be7"
 PIN_CONTRACT_VERSION = "1.3.0"
 EVOLUTION_WORLD = "pulso-evolution"
 ENTITY_FOLDERS = (
@@ -346,7 +346,7 @@ def checkout_path() -> Path:
     if env:
         return Path(env)
     for parent in Path(__file__).resolve().parents:
-        cand = parent / "references" / "agent-core-894fa65"
+        cand = parent / "references" / "agent-core-c814c2b"
         if cand.is_dir():
             return cand
     raise FileNotFoundError("agent-core checkout not found; set AGENT_CORE_CHECKOUT")

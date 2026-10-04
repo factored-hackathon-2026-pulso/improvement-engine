@@ -13,7 +13,7 @@ double.
 | Conformance suite | `conformance/` | hand-written, schema-driven |
 | Mock-vs-contract divergence report | `divergences/mock-vs-contract.json` | `divergence.py` |
 
-`contract_revision = pulso-two-teams-1`. Our pin: agent-core `894fa65575d83420523f33ec1c6919b8965f7ebe`, contracts
+`contract_revision = pulso-two-teams-1`. Our pin: agent-core `c814c2bad9f154d10c092326558815dca9562be7`, contracts
 `1.3.0` (the constants of `pulso_core_runtime`; `GET /version` must report exactly these). Adding replies or journal
 entries does not bump the wire; a DTO, code, limit or auth change does (see "Change policy").
 

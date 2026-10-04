@@ -34,7 +34,7 @@ def die(msg: str) -> None:
     raise SystemExit(2)
 
 
-FALLBACK_PIN = {"sha": "894fa65575d83420523f33ec1c6919b8965f7ebe", "contract_version": "1.3.0"}
+FALLBACK_PIN = {"sha": "c814c2bad9f154d10c092326558815dca9562be7", "contract_version": "1.3.0"}
 SUPPORTED_CONTRACT = "1.3.0"
 
 

@@ -2,7 +2,7 @@
 
 Doubles and contract tests for the two wires Pulso does not own at runtime. Everything here is a **double**: it must be
 reported in `doubles[]` of any evidence and must never be claimed as the real Core, control-api or lab-broker.
-Contract revision: `pulso-two-teams-1`. Agent Core pin `894fa65575d83420523f33ec1c6919b8965f7ebe` (contracts 1.3.0).
+Contract revision: `pulso-two-teams-1`. Agent Core pin `c814c2bad9f154d10c092326558815dca9562be7` (contracts 1.3.0).
 
 | Piece | Path | What it is |
 |---|---|---|
@@ -11,7 +11,7 @@ Contract revision: `pulso-two-teams-1`. Agent Core pin `894fa65575d83420523f33ec
 | Bridge mock (CAP-53) | `bridge_mock/` | the `/internal/v1` routes of `pulso-core-runtime` (invoke, read, aliases, dry-run, version, credentials) with `runtime_profile=contract_mock`; bodies validated against `bridge_mock/schemas/*.json`. |
 | Ingest fixture | `ingest_fixture/` | server semantics of `pulso-observations-2` for the exporter: unknown fields rejected, server-side JCS digest, `Idempotency-Key == batch_digest`, `fast_poll` CAS on `expected_cursor_revision`, rescan never advances a checkpoint, dedup identity, 1 MiB artifacts. Not Codex's control-api. |
 | Platform simulator | `platform_live/` | simulator of the 11-table support-platform model with fault injection (late events, gaps, unknown types, `teams` evolution); payload shapes are simulator assumptions. See [`platform_live/README.md`](platform_live/README.md). |
-| Fixtures | `fixtures/agent_core_wire/894fa65/*.json` | wire cases recorded against a2 (LF line endings, CRLF-proof digest). |
+| Fixtures | `fixtures/agent_core_wire/c814c2b/*.json` | wire cases recorded against a2 (LF line endings, CRLF-proof digest). |
 | Tests | `tests/parity`, `tests/bridge_contract` | `registry-wire-contract` (about 100 YAML cases, 102 reported) and 60 bridge contract tests against a real HTTP process. |
 
 Fault injection exists only under `/_sim/*` and is off by default. Evaluation in the registry mock is

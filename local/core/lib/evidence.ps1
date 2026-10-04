@@ -1,5 +1,5 @@
 # Evidence stamping (plan 17.3.8): target is derived from observation, never typed.
-$script:PinSha = '894fa65575d83420523f33ec1c6919b8965f7ebe'
+$script:PinSha = 'c814c2bad9f154d10c092326558815dca9562be7'
 
 function New-EvidenceStamp {
     param([string]$Target, [string]$RuntimeProfile, [string]$Namespace, [string]$Machine, [string]$Connection, [string[]]$Doubles = @())
