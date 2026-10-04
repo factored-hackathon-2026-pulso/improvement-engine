@@ -4,7 +4,7 @@
 files exactly as `e2e-core/.../core_hooks.py::changes_from_ops` does (base content with a new version), plus the
 Core's own `content_hash` of each suite entity (the evaluation admission needs it; Rust does not recompute it).
 
-Variants: `accept` (2.0.0, the base suite unchanged) and `fail_suite` (3.0.0, scenario `resuelto` expects an escalation
+Variants: `accept` (2.0.0, the base suite unchanged), `accept_alt` (4.0.0, same, evaluate-only captures) and `fail_suite` (3.0.0, scenario `resuelto` expects an escalation
 that the agent's rules never produce, so the native evaluation fails honestly). Integers and strings only.
 
 Usage (repo root, pinned venv with agent_core + rfc8785 + pyyaml):
@@ -64,7 +64,7 @@ def contradict(suite):
 
 def main() -> None:
     out = {"generated_by": "gen/gen_live_world_fixture.py", "agent_id": "atencion-tarea",
-           "variants": {"accept": variant("2.0.0"), "fail_suite": variant("3.0.0", contradict)}}
+           "variants": {"accept": variant("2.0.0"), "fail_suite": variant("3.0.0", contradict), "accept_alt": variant("4.0.0")}}
     OUT.write_bytes((json.dumps(out, indent=1, ensure_ascii=True, sort_keys=True) + "\n").encode("ascii"))
     print(f"wrote {OUT}")
 

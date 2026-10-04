@@ -126,13 +126,28 @@ fn a_stage_that_wrote_anything_but_the_evaluation_is_a_commitment_mismatch() {
 }
 
 #[test]
-fn a_completed_stage_without_a_native_evaluation_is_a_commitment_mismatch() {
+fn a_completed_stage_without_any_evaluate_write_is_a_commitment_mismatch() {
+    let f = FakeCore::start();
+    let binding = canon::task_binding_ref("t1", &key()).unwrap();
+    script_admission(&f, &ctx_ref(&binding));
+    script_invoke(&f, &[], Value::Null, "terminal_ok", "completed");
+    let r = client(&f.addr).evaluate_frozen(&Pre::default(), &frozen(), &suite(), &run());
+    assert!(matches!(r, Err(OpError::CommitmentMismatch(_))), "{r:?}");
+}
+
+/// Observed on the real image (pin c814c2b): a failed gate (409 gate_failed inside Core's registry tool) does not
+/// surface as an HTTP error of the bridge: the stage completes, the verified `evaluate` write is there, and
+/// `native_evaluation` is null (the proposal went back to draft). The driver reports it; classifying it as a gate
+/// failure needs the proposal state (`eval::outcomes::classify_evaluation`).
+#[test]
+fn a_verified_evaluate_write_without_a_native_verdict_is_reported_as_no_verdict() {
     let f = FakeCore::start();
     let binding = canon::task_binding_ref("t1", &key()).unwrap();
     script_admission(&f, &ctx_ref(&binding));
     script_invoke(&f, &["evaluate"], Value::Null, "terminal_ok", "completed");
-    let r = client(&f.addr).evaluate_frozen(&Pre::default(), &frozen(), &suite(), &run());
-    assert!(matches!(r, Err(OpError::CommitmentMismatch(_))), "{r:?}");
+    let ev = client(&f.addr).evaluate_frozen(&Pre::default(), &frozen(), &suite(), &run()).expect("a completed stage is a result");
+    assert_eq!(ev.verdict(), None);
+    assert!(ev.receipt.is_success());
 }
 
 #[test]

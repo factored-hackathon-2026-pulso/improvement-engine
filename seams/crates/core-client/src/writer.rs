@@ -46,11 +46,19 @@ pub struct DraftPlan {
     pub agent_id: String,
     pub title: String,
     pub changes: Vec<Change>,
+    /// Origin of the proposal (`create_origin` of the commitment). The registry's quotas (proposals per day, evaluations
+    /// per proposal) apply to `auto_detect` only.
+    pub origin: String,
 }
 
 impl DraftPlan {
     pub fn new(agent_id: &str, title: &str, changes: Vec<Change>) -> DraftPlan {
-        DraftPlan { agent_id: agent_id.into(), title: title.into(), changes }
+        DraftPlan { agent_id: agent_id.into(), title: title.into(), changes, origin: CREATE_ORIGIN.into() }
+    }
+
+    pub fn with_origin(mut self, origin: &str) -> DraftPlan {
+        self.origin = origin.into();
+        self
     }
 
     /// Integers and strings only: Core and the draft digest canonicalise non-integer numbers differently, which made
@@ -58,6 +66,9 @@ impl DraftPlan {
     pub fn validate(&self) -> Result<(), String> {
         if self.title.is_empty() {
             return Err("title is empty".into());
+        }
+        if self.origin.is_empty() || self.origin.len() > 32 {
+            return Err("origin must be 1..=32 chars".into());
         }
         if self.changes.is_empty() {
             return Err("a draft plan needs at least one change".into());
@@ -103,7 +114,7 @@ impl WriteCommitment {
         Ok(WriteCommitment {
             base_release_id: base_release_id.map(str::to_string),
             create_agent_id: plan.agent_id.clone(),
-            create_origin: CREATE_ORIGIN.into(),
+            create_origin: plan.origin.clone(),
             create_title: plan.title.clone(),
             put_draft_digest: plan.put_draft_digest()?,
             operations: WRITE_OPS.to_vec(),

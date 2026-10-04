@@ -167,6 +167,15 @@ fn a_stage_that_did_not_complete_names_its_reason_so_a_live_failure_is_diagnosab
     }
 }
 
+#[test]
+fn the_create_origin_of_the_commitment_is_the_plans_origin_builder_chat_by_default() {
+    assert_eq!(WriteCommitment::for_plan(&plan(), Some(BASE)).unwrap().to_json()["create_origin"], "builder_chat");
+    let auto = plan().with_origin("auto_detect");
+    assert_eq!(WriteCommitment::for_plan(&auto, Some(BASE)).unwrap().to_json()["create_origin"], "auto_detect");
+    assert!(auto.validate().is_ok());
+    assert!(plan().with_origin("").validate().is_err(), "an empty origin is refused before anything is sent");
+}
+
 // ---- guards before anything is sent -----------------------------------------------------------------------------
 
 #[test]

@@ -44,7 +44,8 @@ pub struct EvaluationRun {
 }
 
 /// The stage run of one native evaluation. A run that did not complete is a result (`native` is `None`), never an error:
-/// the caller classifies `receipt` (gate failed, quota, candidate changed, ...).
+/// the caller classifies `receipt`. A COMPLETED stage with `native == None` is what the real Core shows for a failed
+/// gate (verified `evaluate` write, no verdict, proposal back in draft): read the proposal to tell it apart.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Evaluation {
     pub binding_ref: String,
@@ -95,13 +96,13 @@ impl CoreClient {
             EvaluateOnlyCommitment { base_release_id: frozen.base_release_id.clone(), proposal_id: frozen.proposal_id.clone(), evaluation_context_ref: ctx.clone() }.to_json(),
         );
         let receipt = self.invoke(&inv)?;
-        let native = if receipt.is_success() { Some(verify_stage(&receipt, &frozen.proposal_id)?) } else { None };
+        let native = if receipt.is_success() { verify_stage(&receipt, &frozen.proposal_id)? } else { None };
         Ok(Evaluation { binding_ref, evaluation_context_ref: ctx, receipt, native })
     }
 }
 
 /// A completed evaluate-only stage must have written exactly one verified `evaluate` and report a native evaluation.
-fn verify_stage(receipt: &TaskReceipt, proposal_id: &str) -> Result<Value, OpError> {
+fn verify_stage(receipt: &TaskReceipt, proposal_id: &str) -> Result<Option<Value>, OpError> {
     let bad = |why: String| Err(OpError::CommitmentMismatch(why));
     let fact = receipt.fact("pulso_writer_receipts").ok_or_else(|| OpError::CommitmentMismatch("no pulso_writer_receipts fact".into()))?;
     let wr = crate::writer::WriterReceipts::from_fact(fact)?;
@@ -116,7 +117,9 @@ fn verify_stage(receipt: &TaskReceipt, proposal_id: &str) -> Result<Value, OpErr
         return bad(format!("the stage evaluated {:?}, not {proposal_id:?}", wr.proposal_id));
     }
     match wr.native_evaluation {
-        Some(n) if n.get("verdict").and_then(Value::as_str).is_some() => Ok(n),
-        _ => bad("the completed stage reports no native evaluation verdict".into()),
+        Some(n) if n.get("verdict").and_then(Value::as_str).is_some() => Ok(Some(n)),
+        Some(_) => bad("the native evaluation carries no verdict".into()),
+        // A failed gate: the evaluate write is verified but Core reports no verdict (see the test and `Evaluation`).
+        None => Ok(None),
     }
 }

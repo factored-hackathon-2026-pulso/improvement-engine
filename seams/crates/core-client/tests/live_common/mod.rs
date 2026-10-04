@@ -79,7 +79,7 @@ pub struct Variant {
 }
 
 pub fn variant(name: &str) -> Variant {
-    let fx: Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/live_attention_task.json")).unwrap()).unwrap();
+    let fx: Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../core-client/tests/fixtures/live_attention_task.json")).unwrap()).unwrap();
     let v = &fx["variants"][name];
     let changes = v["changes"].as_array().expect(name).iter().map(|c| Change::new(c["kind"].as_str().unwrap(), c["content"].clone(), c["docs"].clone())).collect();
     Variant { plan_changes: changes, suite: SuiteRef { id: v["suite_id"].as_str().unwrap().into(), version: v["suite_version"].as_str().unwrap().into(), digest: v["suite_digest"].as_str().unwrap().into() } }
