@@ -1,7 +1,7 @@
 """Prove a regression suite "fails today, passes with the fix" on the LOCAL agent-core stack (REG1 / plan W1-1).
 
     python scripts/regression/prove_fails_on_base.py --bundle <suite>.bundle.json --candidate patch1.json [--candidate patch2.json]
-        [--base http://127.0.0.1:8001] [--state-dir .dev-stack] [--out story.json] [--no-live]
+        [--base http://127.0.0.1:8001] [--state-dir .dev-stack] [--out story.json] [--no-live] [--candidate-always]
 
 For one bundle (scripts/regression/build_suite.py) it attaches the suite to a draft of the BASE (no change) and to a draft of
 each CANDIDATE (compiled patch `changes`, attempt 1, attempt 2 ...; evaluation stops at the first attempt that passes), freezes
@@ -155,6 +155,14 @@ def decide(bundle: dict, base: dict, attempts: list[dict]) -> dict:
     if base_fail_g:
         return {"outcome": "guard_regressed", "reason": f"guards failing on the BASE (unstable guard): {base_fail_g}"}
     if not base_fail_f:
+        if attempts:  # --candidate-always: the candidate was evaluated although the suite does not discriminate
+            cand_bad = failed(attempts[-1]["per_case"], f_ids + g_ids)
+            if cand_bad:
+                return {"outcome": "guard_regressed",
+                        "reason": f"the candidate fails cases that the base passes: {cand_bad} (suite is also non-discriminating)"}
+            return {"outcome": "non_discriminating",
+                    "reason": "the base already passes every finding case (not a regression suite); the candidate was evaluated "
+                              "(--candidate-always) and passes every case, so it shows no regression on this suite"}
         return {"outcome": "non_discriminating",
                 "reason": "the base already passes every finding case; this suite does not capture the problem and is not a regression suite"}
     if not attempts:
@@ -461,6 +469,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--gateway", default="http://127.0.0.1:8092", help="LOCAL llm-gateway used by generated probes")
     ap.add_argument("--env-file", type=Path, default=REPO.parents[1] / "agent-core.env",
                     help="holds GATEWAY_TOKEN_AGENT_CORE (read into this process, never printed)")
+    ap.add_argument("--candidate-always", action="store_true",
+                    help="evaluate the candidate(s) even when the base passes every case (needs agent-core PR 50: evaluate binds "
+                         "the gateway to the candidate closure); a non-discriminating suite stays non_discriminating, never announced")
     ap.add_argument("--probe-model", default=MODEL_POLICY["generation"])
     a = ap.parse_args(argv)
     bundle = json.loads(a.bundle.read_text(encoding="utf-8"))
@@ -487,7 +498,8 @@ def main(argv: list[str] | None = None) -> int:
         if binding["state"] == "native_not_candidate_bound":
             ignore = frozenset(p["case_id"] for p in bundle["probes"] if p["kind"] == "generated_contains")
     attempts = []
-    if base_run["failed_cases"] and not base_run["guards_failed"]:  # a candidate is only worth evaluating if the base fails
+    # a candidate is only worth evaluating if the base fails, unless --candidate-always (candidate still needs a regression check)
+    if (base_run["failed_cases"] or a.candidate_always) and not base_run["guards_failed"]:
         for n, path in enumerate(a.candidate, 1):
             att = evaluate_one(f"candidate-{n}", api, bundle, agent_entity, load_candidate(path), base_artifacts, attach, n, generate,
                                ignore)

@@ -203,6 +203,22 @@ class Decide(unittest.TestCase):
         self.assertFalse(s["suite_is_regression_suite"])
         self.assertFalse(s["announce"])
 
+    def test_candidate_always_clean_stays_non_discriminating(self):
+        s = pf.verdict_story(self.b, run(self.b), [run(self.b, attempt=1)])
+        self.assertIn("--candidate-always", s["reason"])
+        self.assertFalse(s["announce"] or s["suite_is_regression_suite"])
+
+    def test_candidate_always_catches_candidate_regression(self):
+        s = pf.verdict_story(self.b, run(self.b), [run(self.b, {self.f[0]}, 1)])
+        self.assertEqual(s["outcome"], "guard_regressed")
+        self.assertFalse(s["announce"])
+
+    def test_candidate_flag_wired(self):
+        import inspect
+        src = inspect.getsource(pf.main)
+        self.assertIn("--candidate-always", src)
+        self.assertIn("a.candidate_always", src)
+
     def test_proven(self):
         s = pf.verdict_story(self.b, run(self.b, {self.f[0]}), [run(self.b, attempt=1)])
         self.assertEqual(s["outcome"], "regression_suite_proven")
