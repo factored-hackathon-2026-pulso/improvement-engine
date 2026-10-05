@@ -56,6 +56,16 @@ pub struct Finding {
     pub r2: Option<String>,
     pub depends_on: Option<String>,
     pub source: Source,
+    /// `corroborated` (strict) or `candidate_exploratory` (weaker statistical evidence; the regression proof is the quality gate).
+    pub status: String,
+    pub exploratory_note: Option<String>,
+    pub priority: Option<f64>,
+}
+
+impl Finding {
+    pub fn is_exploratory(&self) -> bool {
+        self.status == "candidate_exploratory"
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,6 +108,14 @@ impl Finding {
     /// Every `corroborated` signal of a `steps_cli cells` report becomes a finding; the others are listed as skipped with the
     /// sensor's own status and reason (the reasoning roles never see a candidate, refuted or uncertain signal).
     pub fn from_report(report: &Value, source: Source) -> Result<(Vec<Finding>, Vec<Skipped>), String> {
+        Self::from_report_with(report, source, 0)
+    }
+
+    /// As `from_report`, plus up to `max_exploratory` `candidate_exploratory` signals (in report order = priority order) that have a
+    /// holdout stage. They are labelled (`status`, `exploratory_note`) and are never `corroborated`; the rest are listed as skipped
+    /// (`exploratory_cap` / `exploratory_without_holdout`).
+    pub fn from_report_with(report: &Value, source: Source, max_exploratory: usize) -> Result<(Vec<Finding>, Vec<Skipped>), String> {
+        let mut taken_expl = 0usize;
         let signals = report["signals"].as_array().ok_or("the cells report has no signals list")?;
         let (mut found, mut skipped) = (vec![], vec![]);
         for (i, s) in signals.iter().enumerate() {
@@ -108,7 +126,17 @@ impl Finding {
                 skipped.push(Skipped { index: i, metric, status: "level_risk".to_string(), reason: s["reason"].as_str().unwrap_or("").to_string() });
                 continue;
             }
-            if status != "corroborated" {
+            let exploratory = status == "candidate_exploratory";
+            if exploratory {
+                let capped = taken_expl >= max_exploratory;
+                let no_holdout = stage(&s["holdout"]).is_none() || stage(&s["discovery"]).is_none();
+                if capped || no_holdout {
+                    let reason = if capped { "exploratory_cap" } else { "exploratory_without_holdout" };
+                    skipped.push(Skipped { index: i, metric, status, reason: reason.to_string() });
+                    continue;
+                }
+                taken_expl += 1;
+            } else if status != "corroborated" {
                 skipped.push(Skipped { index: i, metric, status, reason: s["reason"].as_str().unwrap_or("").to_string() });
                 continue;
             }
@@ -127,6 +155,9 @@ impl Finding {
                 r2: s["r2"]["status"].as_str().map(str::to_string),
                 depends_on: s["depends_on"].as_str().map(str::to_string),
                 source,
+                status: if exploratory { "candidate_exploratory".into() } else { "corroborated".into() },
+                exploratory_note: s["exploratory_note"].as_str().map(str::to_string),
+                priority: s["priority"].as_f64(),
             });
         }
         Ok((found, skipped))
@@ -136,7 +167,7 @@ impl Finding {
     pub fn to_signal_json(&self) -> Value {
         let st = |s: &Stage| json!({"numerator": s.numerator, "denominator": s.denominator, "rate": s.rate, "baseline_rate": s.baseline_rate, "diff": s.diff});
         let dims: serde_json::Map<String, Value> = self.dims.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
-        json!({"finding_id": self.id, "metric": self.metric, "dims": dims, "status": "corroborated", "direction": self.direction, "claim": "association",
+        json!({"finding_id": self.id, "metric": self.metric, "dims": dims, "status": self.status, "exploratory_note": self.exploratory_note, "direction": self.direction, "claim": "association",
                "discovery": st(&self.discovery), "holdout": st(&self.holdout), "r2": {"status": self.r2}, "p_adj": self.p_adj})
     }
 
@@ -164,13 +195,20 @@ impl Finding {
     /// space made the whole finding unreachable (`model_refused`, BLD1).
     pub fn inputs(&self) -> Value {
         let dims: serde_json::Map<String, Value> = self.dims.iter().map(|(k, v)| (k.clone(), json!(opaque_slug(v)))).collect();
-        json!({
+        let mut v = json!({
             "finding_id": self.id, "metric_id": self.metric_token(), "dims": dims, "direction": self.direction, "claim_kind": "association",
             "source": self.source.as_str(),
             "baseline_rate_discovery": round2(self.discovery.baseline_rate), "baseline_rate_holdout": round2(self.holdout.baseline_rate),
             "replication": "holdout_replicated", "r2_status": self.r2.clone().unwrap_or_else(|| "not_evaluated".into()),
             "depends_on": self.depends_on.as_ref().map_or_else(|| "none".to_string(), |d| d.to_ascii_lowercase()),
-        })
+        });
+        if self.is_exploratory() {
+            // The Verifier must see that this is NOT a corroborated finding: the holdout is a label, not a gate.
+            v["status"] = json!("candidate_exploratory");
+            v["replication"] = json!("exploratory_label_not_gate");
+            v["exploratory_note"] = json!("exploratory: weaker statistical evidence; the regression proof is the quality gate");
+        }
+        v
     }
 }
 
