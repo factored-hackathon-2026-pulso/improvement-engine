@@ -225,3 +225,40 @@ class Peer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveEngineCalls(unittest.TestCase):
+    """`model_calls_live_sample.json` holds REAL `pulso.model_call/1` records written by the Rust engine on a local stack (ENGO):
+    the ids the engine derived must equal this module's derivation, and engine_trace must turn them into spans with content."""
+
+    SAMPLE = json.loads((FIX / "model_calls_live_sample.json").read_text(encoding="utf-8"))["items"]
+
+    def test_rust_ids_equal_the_python_derivation(self):
+        self.assertGreaterEqual(len(self.SAMPLE), 3)
+        for c in self.SAMPLE:
+            self.assertEqual(c["schema"], "pulso.model_call/1")
+            tid = ti.story_trace_id(c["evidence_ref"], c["run_id"])
+            self.assertEqual(c["trace_id"], tid)
+            self.assertEqual(c["span_id"], ti.generation_span_id(tid, c["role"], c["n"]))
+            self.assertEqual(c["parent_span_id"], ti.stage_span_id(tid, c["stage"], c["attempt"]))
+            self.assertEqual(c["cost_source"], "price_table")
+            self.assertEqual(round(c["cost_usd"], 12), round(et.rb.price_usd(c["model_id"], c["tokens_in"], c["tokens_out"]), 12))
+
+    def test_engine_trace_builds_generation_spans_with_the_recorded_content(self):
+        first = self.SAMPLE[0]
+        rec = {"finding_id": "f1", "evidence_ref": first["evidence_ref"], "status": "proposed", "reason": "compiled", "stage": "compile", "delivery": None,
+               "models": [c["model_id"] for c in self.SAMPLE[:3]], "proposal_kind": "new_agent"}
+        t0 = et._dt(first["started_at"])
+        story = {"run_id": first["run_id"], "loop": {"findings": [rec]}, "model_calls": self.SAMPLE,
+                 "window": [first["started_at"], (t0.replace(microsecond=0) + __import__("datetime").timedelta(seconds=90)).isoformat()]}
+        rs, _ = et.StoryConverter(True).convert(story, 0)
+        spans = {s["spanId"]: s for sc in rs["scopeSpans"] for s in sc["spans"]}
+        for c in self.SAMPLE:
+            sp = spans[ti.generation_span_id(c["trace_id"], c["role"], c["n"])]
+            self.assertEqual(sp["traceId"], c["trace_id"])
+            self.assertEqual(sp["parentSpanId"], c["parent_span_id"])
+            a = attrs(sp)
+            self.assertEqual(a["gen_ai.usage.input_tokens"]["intValue"], str(c["tokens_in"]))
+            self.assertEqual(a["pulso.cost.source"]["stringValue"], "price_table")
+            self.assertIn("langfuse.observation.input", a)
+            self.assertIn(c["response"][:40], a["langfuse.observation.output"]["stringValue"])
