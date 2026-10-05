@@ -177,6 +177,16 @@ impl<'a> Writer<'a> {
         })
     }
 
+    /// E8: `POST /v1/registry/proposals/{pid}/reopen`, the only request that bypasses `guard::allowed`, and only through
+    /// `guard::scratch_close_allowed`. Callers: `eval::close_scratch` after it read the proposal back as the engine's own scratch.
+    pub(crate) fn call_scratch_close(&self, pid: &str) -> Option<u16> {
+        let path = format!("/v1/registry/proposals/{pid}/reopen");
+        if !guard::scratch_close_allowed("POST", &path) {
+            return None;
+        }
+        self.transport.send(&Request { method: "POST", path, bearer: &self.cfg.registry_token, idempotency_key: None, body: None }).ok().map(|r| r.status)
+    }
+
     pub(crate) fn ok_call(&self, method: &str, path: String, bearer: &Jws, idem: Option<&str>, body: Option<Value>) -> Result<Value, Fail> {
         let r = self.call(method, path, bearer, idem, body)?;
         if (200..300).contains(&r.status) { Ok(r.body) } else { Err(reject(&r)) }

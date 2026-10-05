@@ -58,6 +58,13 @@ pub fn allowed(method: &str, path: &str) -> bool {
     }
 }
 
+/// E8: the ONE extra operation, `POST /v1/registry/proposals/{id}/reopen`, used only by `eval::close_scratch` on the engine's own
+/// evaluation scratch (never through `allowed`, which keeps refusing `reopen` like every other decision verb).
+pub fn scratch_close_allowed(method: &str, path: &str) -> bool {
+    let Some(rest) = path.strip_prefix("/v1/registry/proposals/") else { return false };
+    method == "POST" && matches!(rest.split('/').collect::<Vec<_>>().as_slice(), [id, "reopen"] if ok_seg(id))
+}
+
 /// A path segment: ids, kinds and versions only (no traversal, no encoded separators).
 pub fn ok_seg(s: &str) -> bool {
     !s.is_empty() && s != "." && s != ".." && s.len() <= 120 && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'@'))

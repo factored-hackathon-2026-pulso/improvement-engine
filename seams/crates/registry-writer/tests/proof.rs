@@ -71,6 +71,10 @@ struct Core {
     old_core: Cell<bool>,
     /// The bearer acts as admin (an explicit stand-in credential).
     admin: Cell<bool>,
+    /// E8: what the registry says of each proposal: (state, origin, title). `evaluated` is the only approvable state.
+    meta: RefCell<BTreeMap<String, (String, String, String)>>,
+    /// E8: the state the registry reads back whatever the truth is (a human acted in between).
+    read_as: RefCell<Option<String>>,
 }
 
 fn reply(status: u16, body: Value) -> Result<Reply, TransportError> {
@@ -79,13 +83,21 @@ fn reply(status: u16, body: Value) -> Result<Reply, TransportError> {
 
 impl Core {
     fn new(native: impl Fn(&[Value]) -> Vec<(String, bool)> + 'static) -> Core {
-        Core { log: Default::default(), drafts: Default::default(), n: Cell::new(0), evals: Cell::new(0), inject: Default::default(), native: Box::new(native), missing: Default::default(), old_core: Cell::new(false), admin: Cell::new(false) }
+        Core { log: Default::default(), drafts: Default::default(), n: Cell::new(0), evals: Cell::new(0), inject: Default::default(), native: Box::new(native), missing: Default::default(), old_core: Cell::new(false), admin: Cell::new(false), meta: Default::default(), read_as: Default::default() }
     }
     fn inject(&self, suffix: &str, r: Reply) {
         self.inject.borrow_mut().push((suffix.into(), r));
     }
     fn count(&self, method: &str, suffix: &str) -> usize {
         self.log.borrow().iter().filter(|l| l.method == method && l.path.ends_with(suffix)).count()
+    }
+    fn set_state(&self, id: &str, state: &str) {
+        if let Some(m) = self.meta.borrow_mut().get_mut(id) {
+            m.0 = state.into();
+        }
+    }
+    fn states(&self) -> Vec<(String, String, String)> {
+        self.meta.borrow().values().cloned().collect()
     }
     fn report(&self, changes: &[Value]) -> Value {
         let cases = (self.native)(changes);
@@ -130,6 +142,8 @@ impl Transport for Core {
                 self.n.set(self.n.get() + 1);
                 let id = format!("prp_{}", self.n.get());
                 self.drafts.borrow_mut().insert(id.clone(), vec![]);
+                let b = req.body.as_ref().unwrap();
+                self.meta.borrow_mut().insert(id.clone(), ("draft".into(), b["origin"].as_str().unwrap().into(), b["title"].as_str().unwrap().into()));
                 reply(201, json!({"proposal_id": id, "rev": 0, "state": "draft", "origin": req.body.as_ref().unwrap()["origin"]}))
             }
             ("PUT", _) if p.ends_with("/draft") => {
@@ -148,7 +162,9 @@ impl Transport for Core {
             ("GET", _) if p.starts_with("/v1/registry/proposals/prp_") => {
                 let id = p.rsplit('/').next().unwrap();
                 let n = self.drafts.borrow().get(id).map_or(0, Vec::len);
-                reply(200, json!({"proposal": {"proposal_id": id, "rev": 1, "state": "draft"}, "changes": (0..n).map(|_| json!({})).collect::<Vec<_>>()}))
+                let (state, origin, title) = self.meta.borrow().get(id).cloned().unwrap_or(("draft".into(), "manual".into(), String::new()));
+                let state = self.read_as.borrow().clone().unwrap_or(state);
+                reply(200, json!({"proposal": {"proposal_id": id, "rev": 1, "state": state, "origin": origin, "title": title}, "changes": (0..n).map(|_| json!({})).collect::<Vec<_>>()}))
             }
             ("POST", _) if p.ends_with("/validate") => {
                 let id = p.split('/').nth(4).unwrap();
@@ -158,7 +174,14 @@ impl Transport for Core {
                 }
                 reply(200, json!({"violations": [], "candidate_hash": "h"}))
             }
-            ("POST", _) if p.ends_with("/freeze") => reply(200, json!({"candidate_hash": "h"})),
+            ("POST", _) if p.ends_with("/freeze") => {
+                self.set_state(p.split('/').nth(4).unwrap(), "candidate");
+                reply(200, json!({"candidate_hash": "h"}))
+            }
+            ("POST", _) if p.ends_with("/reopen") => {
+                self.set_state(p.split('/').nth(4).unwrap(), "draft");
+                reply(200, json!({"state": "draft"}))
+            }
             ("POST", _) if p.ends_with("/evaluate") => {
                 self.evals.set(self.evals.get() + 1);
                 let id = p.split('/').nth(4).unwrap().to_string();
@@ -169,6 +192,7 @@ impl Transport for Core {
                 }
                 let changes: Vec<Value> = drafted.iter().filter(|c| c["kind"] != "eval_suite").cloned().collect();
                 let rep = self.report(&changes);
+                self.set_state(&id, if rep["verdict"] == "pass" { "evaluated" } else { "draft" }); // agent-core: pass -> evaluated, fail -> draft
                 if rep["verdict"] == "pass" { reply(200, rep) } else { reply(409, json!({"code": "gate_failed", "payload": rep})) }
             }
             _ => panic!("unexpected request {} {}", req.method, req.path),
@@ -281,8 +305,8 @@ fn a_proven_proposal_is_announced_with_the_verdict_story_and_the_dossier_text() 
     assert_eq!(puts[0].body.as_ref().unwrap()["changes"][0]["content"]["thresholds"]["resolution_rate"]["noise_margin"], "0");
     assert!(puts[0].body.as_ref().unwrap()["changes"][0]["content"]["thresholds"].get("note").is_none());
     for l in log.iter() {
-        assert!(allowed(&l.method, &l.path), "{} {}", l.method, l.path);
-        assert!(!["approve", "publish", "promote", "reject", "reopen", "revoke"].iter().any(|w| l.path.contains(w)), "{}", l.path);
+        assert!(allowed(&l.method, &l.path) || registry_writer::guard::scratch_close_allowed(&l.method, &l.path), "{} {}", l.method, l.path);
+        assert!(!["approve", "publish", "promote", "reject", "revoke"].iter().any(|w| l.path.contains(w)), "{}", l.path);
     }
 }
 
@@ -799,7 +823,7 @@ mod w13 {
         assert!(p.dossier["es"]["sections"]["unchanged"].as_str().unwrap().contains("Recepción no cambia"));
         assert!(p.dossier["es"]["sections"]["result"].as_str().unwrap().contains("por ausencia"));
         for l in core.log.borrow().iter() {
-            assert!(allowed(&l.method, &l.path), "{} {}", l.method, l.path);
+            assert!(allowed(&l.method, &l.path) || registry_writer::guard::scratch_close_allowed(&l.method, &l.path), "{} {}", l.method, l.path);
         }
     }
 
@@ -913,4 +937,92 @@ mod w13 {
         assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:suite_refused"));
         assert!(core.log.borrow().is_empty());
     }
+}
+
+// ---------------------------------------------------------------------------------------------------- E8: proof scratch leaves nothing approvable
+const MARK: &str = "[proof-scratch]";
+
+#[test]
+fn a_proof_run_leaves_no_open_approver_visible_scratch_proposal() {
+    let core = Core::new(native(false));
+    let comp = compiled(candidate("estado_pqr_attempt1"));
+    let p = run(&core, &comp, vec![], &scripts(), &MemoryProofStore::default());
+    assert!(p.announce);
+    let st = core.states();
+    assert_eq!(st.len(), 2, "base + candidate scratch");
+    // the candidate passed, so without a close it would sit in `evaluated`: the one state an approver can approve and publish
+    for (state, origin, title) in &st {
+        assert_eq!((state.as_str(), origin.as_str()), ("draft", "manual"), "{title}");
+        assert!(title.starts_with("[improvement-engine] [proof-scratch] evaluation "), "{title}");
+    }
+    assert_eq!(core.count("POST", "/reopen"), 2, "both scratches passed natively (the base fails by probe), so both sat in `evaluated`");
+}
+
+#[test]
+fn the_scratch_is_marked_unmistakably_in_its_title_and_every_change() {
+    let core = Core::new(native(false));
+    let comp = compiled(candidate("estado_pqr_attempt1"));
+    run(&core, &comp, vec![], &scripts(), &MemoryProofStore::default());
+    let log = core.log.borrow();
+    for l in log.iter().filter(|l| l.method == "PUT") {
+        for c in l.body.as_ref().unwrap()["changes"].as_array().unwrap() {
+            assert!(c["docs"]["description"].as_str().unwrap().starts_with("kind: proof_scratch;"), "{}", c["docs"]["description"]);
+        }
+    }
+    for l in log.iter().filter(|l| l.method == "POST" && l.path == "/v1/registry/proposals") {
+        assert!(l.body.as_ref().unwrap()["title"].as_str().unwrap().contains(MARK));
+    }
+}
+
+#[test]
+fn the_close_only_touches_the_runs_own_scratch_and_never_a_deliverable() {
+    let core = Core::new(native(false));
+    let comp = compiled(candidate("estado_pqr_attempt1"));
+    let p = run(&core, &comp, vec![], &scripts(), &MemoryProofStore::default());
+    let log = core.log.borrow();
+    let reopened: Vec<&str> = log.iter().filter(|l| l.path.ends_with("/reopen")).map(|l| l.path.split('/').nth(4).unwrap()).collect();
+    assert!(!reopened.is_empty() && reopened.iter().all(|id| p.eval_proposals.iter().any(|e| e == id)), "{reopened:?}");
+    for l in log.iter() {
+        assert!(!["approve", "publish", "promote", "reject", "revoke"].iter().any(|w| l.path.contains(w)), "{}", l.path);
+    }
+    // a real deliverable (announced, auto_detect) is unaffected: its submission carries no scratch mark
+    let sub = announce_submission(&finding(), &comp, &p);
+    assert!(sub.changes.iter().all(|c| !c["docs"]["description"].as_str().unwrap_or("").contains("proof_scratch")));
+}
+
+#[test]
+fn a_rerun_is_idempotent_and_leaves_no_open_scratch() {
+    let core = Core::new(native(false));
+    let comp = compiled(candidate("estado_pqr_attempt1"));
+    run(&core, &comp, vec![], &scripts(), &MemoryProofStore::default());
+    run(&core, &comp, vec![], &scripts(), &MemoryProofStore::default()); // no replay store: a fresh run, same keys
+    assert!(core.states().iter().all(|(s, _, _)| s == "draft"), "{:?}", core.states());
+    let log = core.log.borrow();
+    let idems: Vec<&str> = log.iter().filter(|l| l.method == "POST" && l.path == "/v1/registry/proposals").map(|l| l.idem.as_deref().unwrap()).collect();
+    assert_eq!(idems.len(), 4);
+    assert_eq!(idems[0], idems[2], "stable per-try Idempotency-Key");
+    assert_eq!(core.count("POST", "/reopen"), 4, "one close per evaluated scratch, per run");
+    // agent-core replays a KEYED reopen as a no-op and a rerun reuses the keyed scratch: the close must carry no key (seen live)
+    assert!(log.iter().filter(|l| l.path.ends_with("/reopen")).all(|l| l.idem.is_none()));
+}
+
+#[test]
+fn a_scratch_a_human_already_approved_is_never_reopened() {
+    let core = Core::new(native(false));
+    *core.read_as.borrow_mut() = Some("approved".into());
+    let comp = compiled(candidate("estado_pqr_attempt1"));
+    let p = run(&core, &comp, vec![], &scripts(), &MemoryProofStore::default());
+    assert!(p.announce, "the proof does not depend on the close");
+    assert_eq!(core.count("POST", "/reopen"), 0, "the engine never undoes a human decision");
+}
+
+#[test]
+fn a_failed_close_does_not_fail_the_proof_and_is_reported() {
+    let core = Core::new(native(false));
+    core.inject("/reopen", Reply { status: 503, body: json!({"code": "unavailable"}) });
+    let comp = compiled(candidate("estado_pqr_attempt1"));
+    let p = run(&core, &comp, vec![], &scripts(), &MemoryProofStore::default());
+    assert!(p.announce);
+    assert_eq!(core.states().iter().filter(|(s, _, _)| s == "evaluated").count(), 1, "left open: the story says so");
+    assert!(p.story["scratch_open"].as_array().is_some_and(|a| a.len() == 1), "{}", p.story["scratch_open"]);
 }
