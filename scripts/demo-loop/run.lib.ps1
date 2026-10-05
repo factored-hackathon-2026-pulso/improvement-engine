@@ -255,7 +255,7 @@ function Format-LoopReport {
     $tiers = ''
     if ($s.builder_tiers) { $tiers = (@($s.builder_tiers.PSObject.Properties | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join ' ') }
     $l.Add("scout/default model: $($Loop.models), verifier: xiaomi/mimo-v2.6-pro, builder tier(s) of compiled proposals: $tiers   baseline: $($Loop.baseline.label) ($($Loop.baseline.live) live artifacts)   evaluate-before-announce: $($Loop.evaluate_before_announce)")
-    $l.Add("corroborated $($s.corroborated), reasoned $($s.reasoned), proposed $($s.proposed), delivered $($s.delivered), announced $($s.announced), not announced $($s.not_announced), unlinked $($s.unlinked), blocked $($s.blocked), cost `$$($s.cost_usd)")
+    $l.Add("corroborated $($s.corroborated), reasoned $($s.reasoned), proposed $($s.proposed), delivered $($s.delivered), announced $($s.announced), not announced $($s.not_announced), unlinked $($s.unlinked), human-owned $($s.human_owned), blocked $($s.blocked), cost `$$($s.cost_usd)")
     $l.Add('')
     foreach ($r in @($Loop.findings)) {
         $idx = -1
@@ -267,6 +267,12 @@ function Format-LoopReport {
         $l.Add("  cell    : $cell")
         $l.Add("  effect  : $(Format-Effect $sig)")
         $l.Add("  status  : $($r.status) / $($r.reason)")
+        if ($r.human_owned) { $l.Add("  human   : for a person ($($r.human_owned.owner)): $($r.human_owned.note.es)") }
+        if ($r.candidates) {
+            $cl = foreach ($c in @($r.candidates)) { $mark = $(if ($c.tried) { "*" } else { "" }); "$($c.rank)=$($c.target_ref)$mark" }
+            $l.Add("  candidates: $(@($cl) -join "  ")   (* tried, at most 2; a mapping is a hypothesis of where to intervene, not a cause)")
+        }
+        foreach ($a in @($r.attempts)) { if ($a -and $a.target_ref) { $l.Add("  tried   : #$($a.rank) $($a.target_ref) -> $($a.outcome); proof $($a.proof); status $($a.status)/$($a.reason)") } }
         $oc = Get-FindingOutcome $r
         $id = ''
         if ($r.delivery -and $r.delivery.proposal_id) { $id = "  proposal $($r.delivery.proposal_id)" }
