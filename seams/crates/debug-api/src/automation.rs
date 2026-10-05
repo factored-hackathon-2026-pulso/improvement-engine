@@ -6,8 +6,9 @@ use crate::app::{App, Req, Resp, bearer_ok, ok, problem, resp};
 use crate::event::{NewEvent, RunEventSink};
 use maturity::{Disposition, InputSource, JsonSource, Maturity, Metric, Stage, Thresholds};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub const AUTOMATION_PREFIX: &str = "/internal/v1/automation";
 const AUDIT_RUN: &str = "automation-audit";
@@ -19,6 +20,65 @@ pub struct Automation {
     as_of: String,
     proposals: Value,
     state: Mutex<State>,
+    admitter: Option<Arc<dyn TriggerAdmitter>>,
+    triggers: Mutex<Triggers>,
+}
+
+/// Where an accepted trigger becomes an engine job. Same contract as `pg::repo::JobRepository::admit_keyed` (idempotent on
+/// `key` per tenant: the same key returns the same job id and queues nothing), so the runner wires its repository in one line.
+/// debug-api does not depend on the job store; the embedding binary injects it.
+pub trait TriggerAdmitter: Send + Sync {
+    fn admit_keyed(&self, tenant: &str, key: &str) -> Result<String, String>;
+}
+
+/// In-process admitter (keyed, idempotent): the default for the standalone binary and for tests.
+#[derive(Default)]
+pub struct MemoryAdmitter {
+    inner: Mutex<(Vec<(String, String)>, bool)>,
+}
+
+impl MemoryAdmitter {
+    pub fn len(&self) -> usize {
+        self.inner.lock().unwrap_or_else(|p| p.into_inner()).0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    pub fn keys(&self) -> Vec<String> {
+        self.inner.lock().unwrap_or_else(|p| p.into_inner()).0.iter().map(|(k, _)| k.split_once('/').map_or(k.clone(), |x| x.1.to_string())).collect()
+    }
+    /// The next `admit_keyed` fails once (a store outage).
+    pub fn fail_next(&self) {
+        self.inner.lock().unwrap_or_else(|p| p.into_inner()).1 = true;
+    }
+}
+
+impl TriggerAdmitter for MemoryAdmitter {
+    fn admit_keyed(&self, tenant: &str, key: &str) -> Result<String, String> {
+        let mut g = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        if std::mem::take(&mut g.1) {
+            return Err("job store unavailable".into());
+        }
+        let scoped = format!("{tenant}/{key}");
+        if let Some((_, id)) = g.0.iter().find(|(k, _)| *k == scoped) {
+            return Ok(id.clone());
+        }
+        let id = format!("job-{}", g.0.len());
+        g.0.push((scoped, id.clone()));
+        Ok(id)
+    }
+}
+
+#[derive(Default)]
+struct Triggers {
+    order: Vec<String>,
+    by_key: HashMap<String, TriggerRec>,
+}
+
+struct TriggerRec {
+    digest: String,
+    response: Value,
+    view: Value,
 }
 
 struct State {
@@ -39,7 +99,27 @@ impl Automation {
             as_of,
             proposals: proposals.cloned().unwrap_or_else(|| json!({})),
             state: Mutex::new(State { thresholds: Thresholds::default(), revision: 0, proposal_state: HashMap::new() }),
+            admitter: None,
+            triggers: Mutex::new(Triggers::default()),
         })
+    }
+
+    /// Enables `POST /triggers`: accepted triggers are admitted as keyed jobs through `admitter`.
+    pub fn with_admitter(mut self, admitter: Arc<dyn TriggerAdmitter>) -> Automation {
+        self.admitter = Some(admitter);
+        self
+    }
+
+    fn trigger_list(&self) -> Value {
+        let t = self.triggers.lock().unwrap_or_else(|p| p.into_inner());
+        let items: Vec<Value> = t.order.iter().filter_map(|k| t.by_key.get(k).map(|r| r.view.clone())).collect();
+        json!({"count": items.len(), "triggers": items})
+    }
+
+    fn trigger_summary(&self) -> Value {
+        let t = self.triggers.lock().unwrap_or_else(|p| p.into_inner());
+        let latest: Vec<Value> = t.order.iter().rev().take(5).filter_map(|k| t.by_key.get(k).map(|r| r.view.clone())).collect();
+        json!({"count": t.order.len(), "latest": latest})
     }
 
     fn sources(&self) -> Vec<&dyn InputSource> {
@@ -145,7 +225,7 @@ impl Automation {
             let ps = self.proposal_view(id, &st);
             json!({"type_id": id, "label": c["label"], "proposal_id": ps["proposal_id"], "simulated": c["simulated"], "numerator": c["metrics"]["draft_accept_100"]["numerator"], "denominator": c["metrics"]["draft_accept_100"]["denominator"]})
         });
-        json!({"as_of": self.as_of, "data_origin": self.origin(), "doubles": self.doubles(), "thresholds": maturity::thresholds_to_json(&st.thresholds), "revision": st.revision, "banner": banner, "assumptions": self.assumptions(), "case_types": items})
+        json!({"as_of": self.as_of, "data_origin": self.origin(), "doubles": self.doubles(), "thresholds": maturity::thresholds_to_json(&st.thresholds), "revision": st.revision, "banner": banner, "assumptions": self.assumptions(), "triggers": self.trigger_summary(), "case_types": items})
     }
 
     fn detail(&self, id: &str) -> Option<Value> {
@@ -221,6 +301,8 @@ impl App {
             }
         }
         match (m, parts.as_slice()) {
+            ("GET", ["triggers"]) => ok(&auto.trigger_list()),
+            ("POST", ["triggers"]) => self.post_trigger(auto, r),
             ("GET", ["case-types"]) => ok(&auto.list()),
             ("GET", ["case-types", id]) => auto.detail(id).map_or_else(|| problem("not_found", 404, json!({})), |d| ok(&d)),
             ("POST", ["case-types", id, "proposal", action @ ("approve" | "publish-staging")]) => self.proposal_action(auto, id, action, r),
@@ -266,5 +348,106 @@ impl App {
         st.proposal_state.insert(id.to_string(), next);
         self.audit(kind, id, json!({"simulated": true, "proposal_id": p["proposal_id"], "target": p["target"], "candidate_hash": p["candidate_hash"], "step_up": "simulated"}));
         resp(200, &json!({"state": next, "simulated": true, "proposal_id": p["proposal_id"]}), vec![])
+    }
+}
+
+const TRIGGER_SCHEMA: &str = "pulso.trigger.v1";
+const TRIGGER_JOB_PREFIX: &str = "trigger:";
+/// (kind, event type) pairs the poller produces; anything else is `unknown_kind`.
+const TRIGGER_KINDS: [(&str, &str); 6] = [("explicit", "run.now"), ("scheduled", "schedule.tick"), ("outcome", "run.closed"), ("outcome", "release.published"), ("outcome", "release.promoted"), ("outcome", "release.revoked")];
+const SUBJECT_IDS: [&str; 9] = ["run_id", "agent", "release", "outcome", "closed_by", "release_id", "proposal_id", "candidate_hash", "origin"];
+const SUBJECT_NUMS: [&str; 2] = ["interval_secs", "slot"];
+
+/// An identifier, never prose: short, no whitespace, no markup.
+fn opaque_id(v: &Value) -> Option<&str> {
+    v.as_str().filter(|s| !s.is_empty() && s.len() <= 200 && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '@' | '/')))
+}
+
+fn trigger_key_ok(k: &str) -> bool {
+    k.strip_prefix("sha256:").is_some_and(|h| h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+fn invalid(field: &str) -> Resp {
+    problem("validation_error", 422, json!({"field_errors": [{"field": field, "code": "invalid"}]}))
+}
+
+impl App {
+    /// `pulso.trigger.v1` intake: bearer (route), CSRF, `Idempotency-Key` = `trigger_key`. A new key admits one keyed engine job
+    /// (`trigger:<key>`) and writes one audit event; a replay returns the stored response and does neither. Only identifiers
+    /// and numbers of the whitelisted subject fields are kept: free text (`reason`) and any other field are dropped and counted.
+    fn post_trigger(&self, auto: &Automation, r: &Req) -> Resp {
+        if r.headers.get("x-csrf-token") != Some(&self.csrf) {
+            return problem("csrf_failed", 403, json!({}));
+        }
+        let header = r.headers.get("idempotency-key").map(String::as_str).unwrap_or_default();
+        if header.is_empty() {
+            return invalid("Idempotency-Key");
+        }
+        let Ok(b) = serde_json::from_slice::<Value>(&r.body) else { return problem("validation_error", 422, json!({})) };
+        if b["schema"] != TRIGGER_SCHEMA {
+            return invalid("schema");
+        }
+        let Some(key) = b["trigger_key"].as_str().filter(|k| trigger_key_ok(k)) else { return invalid("trigger_key") };
+        if key != header {
+            return invalid("Idempotency-Key");
+        }
+        for f in ["tenant", "mission", "source", "config_digest"] {
+            if opaque_id(&b[f]).is_none() {
+                return invalid(f);
+            }
+        }
+        let ev = &b["event"];
+        if !ev.is_object() || opaque_id(&ev["ref"]).is_none() || !ev.get("subject").is_none_or(Value::is_object) {
+            return invalid("event");
+        }
+        let Some(kind) = b["kind"].as_str() else { return invalid("kind") };
+        let ty = ev["type"].as_str().unwrap_or_default();
+        if !TRIGGER_KINDS.contains(&(kind, ty)) {
+            return problem("unknown_kind", 422, json!({}));
+        }
+        if b["tenant"] != self.cfg.tenant.as_str() {
+            return problem("tenant_mismatch", 403, json!({}));
+        }
+        let Some(admitter) = auto.admitter.as_ref() else { return problem("admission_unavailable", 503, json!({})) };
+
+        let digest: String = Sha256::digest(b.to_string().as_bytes()).iter().map(|x| format!("{x:02x}")).collect();
+        let mut trg = auto.triggers.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(rec) = trg.by_key.get(key) {
+            if rec.digest != digest {
+                return problem("idempotency_conflict", 409, json!({}));
+            }
+            return resp(202, &rec.response, vec![("Idempotency-Replayed".into(), "true".into())]);
+        }
+
+        let (mut subject, mut dropped) = (serde_json::Map::new(), 0u64);
+        for (k, v) in ev.get("subject").and_then(Value::as_object).into_iter().flatten() {
+            let kept = if SUBJECT_IDS.contains(&k.as_str()) {
+                opaque_id(v).map(|s| json!(s))
+            } else if SUBJECT_NUMS.contains(&k.as_str()) {
+                v.as_u64().map(|n| json!(n))
+            } else {
+                None
+            };
+            match kept {
+                Some(x) => {
+                    subject.insert(k.clone(), x);
+                }
+                None => dropped += 1,
+            }
+        }
+        let job_key = format!("{TRIGGER_JOB_PREFIX}{key}");
+        let Ok(job_id) = admitter.admit_keyed(&self.cfg.tenant, &job_key) else { return problem("admission_failed", 503, json!({"retryable": true})) };
+
+        let ts = |v: &Value| opaque_id(v).map_or(Value::Null, |s| json!(s));
+        let view = json!({"trigger_key": key, "kind": kind, "event_type": ty, "ref": ev["ref"], "tenant": b["tenant"], "mission": b["mission"], "source": b["source"],
+            "config_digest": b["config_digest"], "subject": Value::Object(subject), "event_at": ts(&ev["at"]), "requested_at": ts(&b["requested_at"]),
+            "job_id": job_id, "job_key": job_key, "state": "admitted", "received_at": crate::store::now_iso()});
+        let mut audit = view.clone();
+        audit["dropped_fields"] = json!(dropped);
+        self.audit("automation_trigger_received", key, audit);
+        let response = json!({"state": "admitted", "trigger_key": key, "kind": kind, "event_type": ty, "job_id": job_id, "job_key": job_key});
+        trg.order.push(key.to_string());
+        trg.by_key.insert(key.to_string(), TriggerRec { digest, response: response.clone(), view });
+        resp(202, &response, vec![])
     }
 }
