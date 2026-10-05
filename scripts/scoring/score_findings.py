@@ -274,7 +274,7 @@ def _validate_signal_stage(stage, label):
 
 
 def _validate_signal_summary(signals):
-    if set(signals) != SUMMARY_FIELDS:
+    if not SUMMARY_FIELDS <= set(signals) or set(signals) - SUMMARY_FIELDS - {"level_tests"}:
         raise ScoringError("signal summary must contain exactly the producer summary fields")
     if signals["semantics"] != "claude-standin":
         raise ScoringError("signal semantics is unsupported")
@@ -451,7 +451,7 @@ def _validate_signal_summary(signals):
                     raise ScoringError("candidate without holdout has an invalid shape")
             elif "holdout" not in signal:
                 raise ScoringError("signal status requires holdout evidence")
-            if signal_keys - (base_keys | {"discovery", "holdout", "p_adj", "r2", "depends_on"}):
+            if signal_keys - (base_keys | {"discovery", "holdout", "p_adj", "r2", "depends_on", "priority", "exploratory_note"}):
                 raise ScoringError("signal status has an invalid producer shape")
         for stage_name in ("discovery", "holdout"):
             if stage_name in signal:
