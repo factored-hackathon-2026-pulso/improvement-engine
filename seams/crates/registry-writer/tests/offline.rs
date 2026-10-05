@@ -617,3 +617,25 @@ fn the_http_transport_adds_the_story_traceparent_as_a_header_only_and_refuses_a_
     assert!(matches!(r, Err(TransportError::NotSent(ref m)) if m.contains("refused")), "{r:?}");
     assert_eq!(srv.join().unwrap(), "", "nothing reached the server");
 }
+
+/// E8: `reopen` stays refused by the general allow-list; the scratch close is one exact POST on one safe proposal id.
+#[test]
+fn reopen_is_refused_in_general_and_the_scratch_close_is_one_exact_post() {
+    use registry_writer::guard::scratch_close_allowed;
+    assert!(!allowed("POST", "/v1/registry/proposals/prp_1/reopen"));
+    assert!(scratch_close_allowed("POST", "/v1/registry/proposals/prp_1/reopen"));
+    for (m, p) in [
+        ("GET", "/v1/registry/proposals/prp_1/reopen"),
+        ("PUT", "/v1/registry/proposals/prp_1/reopen"),
+        ("POST", "/v1/registry/proposals/prp_1/approve"),
+        ("POST", "/v1/registry/proposals/prp_1/reject"),
+        ("POST", "/v1/registry/proposals/../reopen"),
+        ("POST", "/v1/registry/proposals//reopen"),
+        ("POST", "/v1/registry/proposals/prp_1/reopen/x"),
+        ("POST", "/v1/registry/proposals/prp_1/reopen?x=1"),
+        ("POST", "/v1/registry/proposals/prp%2F1/reopen"),
+        ("POST", "/v1/registry/aliases/consultas/prod"),
+    ] {
+        assert!(!scratch_close_allowed(m, p), "{m} {p}");
+    }
+}

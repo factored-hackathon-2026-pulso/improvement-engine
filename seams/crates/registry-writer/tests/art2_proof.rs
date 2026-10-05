@@ -40,6 +40,7 @@ impl Transport for Core {
             }
             ("POST", _) if p.ends_with("/validate") => ok(json!({"violations": [], "candidate_hash": "h"})),
             ("POST", _) if p.ends_with("/freeze") => ok(json!({"candidate_hash": "h"})),
+            ("GET", _) if p.starts_with("/v1/registry/proposals/prp_") => ok(json!({"proposal": {"state": "draft", "origin": "manual", "title": "[improvement-engine] [proof-scratch] evaluation x"}})),
             ("POST", _) if p.ends_with("/evaluate") => {
                 let id = p.split('/').nth(4).unwrap().to_string();
                 let d = self.drafts.borrow()[&id].clone();

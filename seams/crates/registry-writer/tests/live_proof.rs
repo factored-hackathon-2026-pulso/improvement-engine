@@ -98,6 +98,21 @@ fn go(name: &str, announce_expected: bool) {
     println!("dossier announce={} reason={} judge_family={} calibration={}", proof.dossier["announce"], proof.dossier["announce_reason"], proof.dossier["honesty"]["judge_family"], proof.dossier["honesty"]["calibration"]);
     println!("dossier ES result: {}", proof.dossier["es"]["sections"]["result"]);
     assert_eq!(proof.announce, announce_expected, "{}", proof.story["reason"]);
+    // E8: the engine's own scratch is closed (a draft, marked) and nothing an approver could approve is left behind
+    {
+        let t = HttpTransport::new(&addr, Duration::from_secs(30));
+        let (tok, ..) = token_and_addr();
+        let mut states: std::collections::BTreeMap<String, usize> = Default::default();
+        for pid in &proof.eval_proposals {
+            let r = registry_writer::Transport::send(&t, &registry_writer::Request { method: "GET", path: format!("/v1/registry/proposals/{pid}"), bearer: &tok, idempotency_key: None, body: None }).unwrap();
+            let st = r.body["proposal"]["state"].as_str().unwrap_or("?").to_string();
+            assert!(r.body["proposal"]["title"].as_str().unwrap_or("").contains("[proof-scratch]"), "{}", r.body["proposal"]["title"]);
+            *states.entry(st).or_default() += 1;
+        }
+        println!("E8 scratch states (counts only): {states:?}; scratch_open={}", proof.story["scratch_open"]);
+        assert!(states.keys().all(|k| k == "draft"), "{states:?}");
+        assert_eq!(proof.story["scratch_open"], json!([]));
+    }
     if announce_expected {
         assert_eq!(proof.verdict, "regression_suite_proven");
         let o = w.deliver(&announce_submission(&f, &compiled, &proof));
