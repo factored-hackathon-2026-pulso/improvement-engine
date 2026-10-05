@@ -388,7 +388,7 @@ fn parse_complaint_hashes(content: &str) -> Result<HashSet<Vec<u8>>, &'static st
             return Err("invalid complaint digest entry");
         }
         let mut digest = Vec::with_capacity(32);
-        for pair in bytes.chunks_exact(2) {
+        for pair in bytes.as_chunks::<2>().0 {
             let high = hex_value(pair[0]).ok_or("invalid complaint digest entry")?;
             let low = hex_value(pair[1]).ok_or("invalid complaint digest entry")?;
             digest.push((high << 4) | low);
@@ -551,12 +551,12 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        CliMode, E0Case, E0Query, EXPECTED_ELIGIBLE_CASES, aggregate_v2, deduplicate_cases,
-        checked_field_index, is_at_or_before_cutoff, modal_signature, parse_args,
+        CliMode, E0Case, E0Query, EXPECTED_ELIGIBLE_CASES, aggregate_v2, checked_field_index,
+        deduplicate_cases, is_at_or_before_cutoff, modal_signature, parse_args,
         parse_complaint_hashes, prefer_query, read_batches_v2, read_cases_v2,
         require_expected_case_count, split_for, validate_identifier,
     };
-    use arrow_array::{ArrayRef, StringArray, TimestampMicrosecondArray, RecordBatch};
+    use arrow_array::{ArrayRef, RecordBatch, StringArray, TimestampMicrosecondArray};
     use arrow_schema::{DataType, Field, Schema, TimeUnit};
     use parquet::arrow::ArrowWriter;
     use std::collections::{HashMap, HashSet};
@@ -751,7 +751,7 @@ mod tests {
             ordinal: 1,
             signature: "private".into(),
         };
-        let collapsed = aggregate_v2(&duplicate, &[query.clone()], &bank_ids, 1)
+        let collapsed = aggregate_v2(&duplicate, std::slice::from_ref(&query), &bank_ids, 1)
             .expect("exact duplicates collapse");
         assert_eq!(collapsed["eligible_cases"], 2);
         let conflict = E0Case {
@@ -929,3 +929,4 @@ mod tests {
         fs::remove_dir_all(directory).expect("remove synthetic test directory");
     }
 }
+
