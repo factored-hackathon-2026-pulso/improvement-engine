@@ -210,3 +210,30 @@ fn every_call_keeps_its_usage_even_when_the_gateway_rejected_the_answer() {
     let u = rec.calls()[0].usage.clone().expect("the provider charged for the rejected answer too");
     assert_eq!((u.tokens_in, u.tokens_out, u.cost_usd.as_str()), (300, 50, "0.000250"));
 }
+
+#[test]
+fn every_gateway_call_of_a_finding_carries_the_story_traceparent_and_baggage_and_nothing_changes_in_the_path() {
+    use core_client::trace::{self, TraceCtx};
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let f = fake(200, generated(json!({"verdict": "agree"}), "xiaomi/mimo-v2.6-flash"));
+    let port = on(&f.addr, &[]);
+    // outside a story scope: no trace headers at all
+    port.call(&req()).unwrap();
+    {
+        let _s = trace::enter(TraceCtx { finding_key: "ev_3f9a1c07d2b84e51".into(), run_id: "value-loop-trg-20261005-0001".into(), release: "rel 1".into(), agent: "pulso-scout".into(), locale: "es".into(), case_type: "prompt".into() });
+        trace::set_stage("scout", 1);
+        port.call(&req()).unwrap();
+        trace::set_stage("scout", 2);
+        port.call(&req()).unwrap();
+    }
+    let seen = f.seen.lock().unwrap();
+    assert!(!seen[0].1.contains_key("traceparent") && !seen[0].1.contains_key("baggage"));
+    assert_eq!(seen[1].1["traceparent"], "00-7e1ffba44834058839ef1a914c474128-69dba9a106f229ee-01", "the stage span of the python vectors");
+    assert_eq!(seen[1].1["baggage"], "session=value-loop-trg-20261005-0001,release=rel%201,agent=pulso-scout,locale=es,case-type=prompt,stage=scout");
+    assert_ne!(seen[1].1["traceparent"], seen[2].1["traceparent"], "a retry is another attempt of the stage");
+    assert!(seen[2].1["traceparent"].starts_with("00-7e1ffba44834058839ef1a914c474128-"));
+    for s in &seen[..] {
+        assert!(s.0.starts_with("POST /v1/generate HTTP/1.1"), "{}", s.0);
+        assert_eq!(s.1["authorization"], "Bearer k-test-secret");
+    }
+}

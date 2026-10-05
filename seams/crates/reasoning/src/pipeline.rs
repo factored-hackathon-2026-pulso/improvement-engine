@@ -75,13 +75,15 @@ enum Asked<T> {
 
 /// One role call with up to `MAX_RETRIES` retries. A retry is the SAME request plus the previous problem as `feedback`. Returns how
 /// many calls were made.
-fn ask<T>(port: &Recording, req: &ModelRequest, stage: &'static str, check: &dyn Fn(&Value) -> Result<T, Reject>) -> (Asked<T>, usize) {
+fn ask<T>(port: &Recording, req: &ModelRequest, stage: &'static str, base_attempt: usize, check: &dyn Fn(&Value) -> Result<T, Reject>) -> (Asked<T>, usize) {
     let mut last: Option<Reject> = None;
     for attempt in 0..=MAX_RETRIES {
         let mut r = req.clone();
         if let Some((_, _, why)) = &last {
             r.payload["feedback"] = json!(format!("Attempt {attempt} was rejected: {}. Answer again with ONE JSON object that follows output_schema exactly.", feedback_text(why)));
         }
+        // the story span of this attempt: gateway calls made from here carry `traceparent` with the stage span as parent
+        engine::trace::set_stage(stage, u32::try_from(base_attempt + attempt + 1).unwrap_or(u32::MAX));
         match port.call(&r) {
             Err(ModelError::Invalid(w)) => last = Some((stage, "model_invalid".into(), packaging_hint(&w))),
             Err(e) => return (Asked::Stopped(e), attempt + 1),
@@ -237,7 +239,7 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
     let dc = if f.source == Source::Synthetic { DataClass::Synthetic } else { DataClass::Treated };
 
     // 1. Scout (bounded retries with the parse problem fed back)
-    let (got, n) = ask(&rs, &roles::scout_request(f, &row, dc), "scout", &|a| roles::parse_scout(&row, a).map_err(|e| ("scout", "model_invalid".to_string(), e)));
+    let (got, n) = ask(&rs, &roles::scout_request(f, &row, dc), "scout", 0, &|a| roles::parse_scout(&row, a).map_err(|e| ("scout", "model_invalid".to_string(), e)));
     attempts.borrow_mut()["scout"] = json!(n);
     let opp: Opportunity = match got {
         Asked::Done(o) => o,
@@ -255,7 +257,7 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
     }
 
     // 3. independent Verifier
-    let (got, n) = ask(&rv, &roles::verifier_request(f, &opp, dc), "verifier", &|a| roles::parse_verifier(a).map_err(|e| ("verifier", "model_invalid".to_string(), e)));
+    let (got, n) = ask(&rv, &roles::verifier_request(f, &opp, dc), "verifier", 0, &|a| roles::parse_verifier(a).map_err(|e| ("verifier", "model_invalid".to_string(), e)));
     attempts.borrow_mut()["verifier"] = json!(n);
     let mv = match got {
         Asked::Done(v) => v,
@@ -280,12 +282,12 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
         let p = roles::parse_builder(a).map_err(|e| ("builder", "model_invalid".to_string(), e))?;
         compile(catalog, f, &row, &opp, &p).map_err(|d| ("compile", format!("compile_denied:{}", d.code), d.why))
     };
-    let (got, n) = ask(&rb, &req, "builder", &check);
+    let (got, n) = ask(&rb, &req, "builder", 0, &check);
     attempts.borrow_mut()["builder"] = json!(n);
     *tier_used.borrow_mut() = Some((tier_of(&ports.builder.model_id()).into(), ports.builder.model_id(), false));
     let got = match (got, &rbe) {
         (Asked::Rejected(_), Some(esc)) => {
-            let (g2, n2) = ask(esc, &req, "builder", &check);
+            let (g2, n2) = ask(esc, &req, "builder", n, &check);
             attempts.borrow_mut()["builder_escalation"] = json!(n2);
             let em = ports.builder_escalation.as_ref().map(|p| p.model_id()).unwrap_or_default();
             *tier_used.borrow_mut() = Some((tier_of(&em).into(), em, true));

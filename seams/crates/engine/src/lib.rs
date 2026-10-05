@@ -19,6 +19,8 @@ pub mod real_core;
 pub mod models;
 mod lib_codec;
 pub mod store;
+/// Story correlation (`traceparent`, `baggage`) shared with the callers of the gateway and agent-core.
+pub use core_client::trace;
 pub mod synth;
 pub use store::{CommitGuard, FileStore, JobStore};
 

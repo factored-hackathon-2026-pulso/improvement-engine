@@ -123,7 +123,9 @@ fn pct(v: &str) -> String {
 /// W3C baggage: `session` (the run id), `release`, `agent`, `locale`, `case-type`, `stage`; empty values are left out.
 pub fn baggage(c: &Current) -> String {
     let stage = c.stage.clone().unwrap_or_default();
-    let items = [("session", &c.ctx.run_id), ("release", &c.ctx.release), ("agent", &c.ctx.agent), ("locale", &c.ctx.locale), ("case-type", &c.ctx.case_type), ("stage", &stage)];
+    // no explicit agent: the callee is the engine's role for the stage (`pulso-scout`, `pulso-builder`, ...)
+    let agent = if c.ctx.agent.is_empty() && !stage.is_empty() { format!("pulso-{stage}") } else { c.ctx.agent.clone() };
+    let items = [("session", &c.ctx.run_id), ("release", &c.ctx.release), ("agent", &agent), ("locale", &c.ctx.locale), ("case-type", &c.ctx.case_type), ("stage", &stage)];
     let mut out = String::new();
     for (k, v) in items {
         if v.is_empty() {

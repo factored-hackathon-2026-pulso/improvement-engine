@@ -128,6 +128,11 @@ impl ValueLoop {
     /// Runs the loop once over the configured cells package. `Err` only for infrastructure that makes the whole job unrunnable
     /// (unreadable cells, sensor failure, ports): the job is then retried. A finding that is blocked or denied is an outcome.
     pub fn run(&self, persist: &dyn Persist) -> Result<Value, String> {
+        self.run_as(persist, "value-loop-local")
+    }
+
+    /// As `run`; `run_id` is the debug-api run id of this job (`value-loop-<job>`): the session and the trace key of every story.
+    pub fn run_as(&self, persist: &dyn Persist, run_id: &str) -> Result<Value, String> {
         let ndjson = std::fs::read_to_string(&self.cells).map_err(|e| format!("cells package: {e}"))?;
         let report: Value = serde_json::from_str(&steps::cells::run(&ndjson).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         let (mut findings, skipped) = Finding::from_report(&report, self.source)?;
@@ -152,6 +157,14 @@ impl ValueLoop {
             if ports.is_none() {
                 ports = Some((self.ports)()?);
             }
+            // one story per finding: every gateway and agent-core call below carries its `traceparent` and `baggage`
+            let _story = engine::trace::enter(engine::trace::TraceCtx {
+                finding_key: f.evidence_ref(),
+                run_id: run_id.to_string(),
+                release: std::env::var("PULSO_RELEASE").unwrap_or_default(),
+                case_type: f.metric.clone(),
+                ..Default::default()
+            });
             let r = reason(&refreshed.catalog, f, ports.as_ref().expect("just built"), &opts);
             let mut rec = json!({
                 "finding_id": f.id, "evidence_ref": f.evidence_ref(), "metric": f.metric, "status": r.status, "reason": r.reason, "stage": r.stage, "mapping_row": r.mapping_row,
@@ -162,6 +175,7 @@ impl ValueLoop {
                 rec["target_ref"] = json!(c.target_ref);
                 rec["proposal_kind"] = json!(c.kind);
                 if r.status == "proposed" {
+                    engine::trace::set_stage("deliver", 1);
                     let o = w.deliver(&Submission::new(f, c));
                     rec["delivery"] = o.to_json();
                 }

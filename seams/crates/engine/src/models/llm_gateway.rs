@@ -152,7 +152,9 @@ impl LlmGateway {
         {
             body["schema"] = schema.clone();
         }
-        let headers = [("Authorization", format!("Bearer {}", c.key)), ("Content-Type", "application/json".to_string())];
+        let mut headers = vec![("Authorization", format!("Bearer {}", c.key)), ("Content-Type", "application/json".to_string())];
+        // story correlation: traceparent (parent = the stage span of the caller) and baggage; headers only, the path never changes
+        headers.extend(core_client::trace::headers());
         let t0 = Instant::now();
         let r = request(&c.addr, "POST", "/v1/generate", &headers, Some(body.to_string().as_bytes()), Duration::from_secs(c.timeout_s + 10)).map_err(|e| match e {
             HttpError::Connect(m) => ModelError::Unavailable(format!("gateway_unreachable: {m}")),

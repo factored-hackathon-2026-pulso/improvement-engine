@@ -320,6 +320,11 @@ impl EngineRunner {
     }
 }
 
+/// The debug-api run id of the value loop of a job (also the session and the trace key of its stories).
+pub fn loop_run_id(job: &str) -> String {
+    format!("value-loop-{job}").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).take(64).collect()
+}
+
 fn repo_err(e: RepoError) -> String {
     format!("{e:?}")
 }
@@ -366,7 +371,7 @@ impl JobRunner for EngineRunner {
         };
         match &self.value_loop {
             Some(v) => {
-                let out = v.run(&JobPersist { job, ctx })?;
+                let out = v.run_as(&JobPersist { job, ctx }, &loop_run_id(&job.job))?;
                 self.record_loop(&job.job, &out)?;
                 // aggregates, reason codes and ids only: the readable outcome of the job next to the other run records
                 let dir = self.work.join("value-loop");
@@ -386,7 +391,7 @@ impl JobRunner for EngineRunner {
 impl EngineRunner {
     /// The value-loop outcome in the console store: one run, one node per finding (reason codes only).
     fn record_loop(&self, job: &str, out: &Value) -> Result<(), String> {
-        let id: String = format!("value-loop-{job}").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).take(64).collect();
+        let id = loop_run_id(job);
         if self.store.state(&id).is_some() {
             return Ok(());
         }
