@@ -515,6 +515,7 @@ fn honesty(l: Lang, runtime: Runtime, rubric: Option<(u32, u32)>, judge: &Option
         "synthetic" => l.t(" Datos: sintéticos (conteos inventados).", " Dados: sintéticos (contagens inventadas)."),
         "bank_treated" | "bank" => l.t(" Datos: agregados tratados del banco.", " Dados: agregados tratados do banco."),
         "e0_treated" | "e0" => l.t(" Datos: agregados tratados de E0.", " Dados: agregados tratados de E0."),
+        "platform_treated" | "platform" => l.t(" Datos: agregados tratados de eventos de la plataforma.", " Dados: agregados tratados de eventos da plataforma."),
         _ => String::new(),
     };
     let base = l.t(

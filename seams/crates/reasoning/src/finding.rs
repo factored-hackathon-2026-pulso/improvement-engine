@@ -11,6 +11,8 @@ pub enum Source {
     BankTreated,
     /// Treated aggregates derived from E0.
     E0Treated,
+    /// Treated aggregates of platform events (`scripts/aggregate/platform_event_cells.py`): the real feed, never the synthetic history.
+    PlatformTreated,
 }
 
 impl Source {
@@ -19,6 +21,7 @@ impl Source {
             Source::Synthetic => "synthetic",
             Source::BankTreated => "bank_treated",
             Source::E0Treated => "e0_treated",
+            Source::PlatformTreated => "platform_treated",
         }
     }
     pub fn parse(s: &str) -> Option<Source> {
@@ -26,6 +29,7 @@ impl Source {
             "synthetic" => Some(Source::Synthetic),
             "bank_treated" | "bank" => Some(Source::BankTreated),
             "e0_treated" | "e0" => Some(Source::E0Treated),
+            "platform_treated" | "platform" => Some(Source::PlatformTreated),
             _ => None,
         }
     }

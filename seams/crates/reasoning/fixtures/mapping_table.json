@@ -42,6 +42,21 @@
       "covered_by": ["copiloto-asesor"],
       "why": "The same recent-charges lookup repeated inside a dispute case is the advisor copilot's tool-choice step.",
       "evidence": "ANATOMY P1 and Example 1"
+    },
+    "copilot_draft_quality": {
+      "covered_by": ["copiloto-asesor"],
+      "why": "The advisor copilot already drafts replies for analysts; whether the drafts are used, edited, discarded or ignored is the analysts own verdict on its prompt, by case type and by release.",
+      "evidence": "PLATFORM_SIGNALS 2026-10-05 section 4(a) and (e); platform docs/platform/api/engine-signals.md (copilot.suggestion_decided)"
+    },
+    "copilot_coverage": {
+      "covered_by": ["copiloto-asesor"],
+      "why": "The copilot returned nothing for these cases (copilot.suggestion_none): a topic it was not given material for, or a tool it does not have. Which of the two is a human decision.",
+      "evidence": "PLATFORM_SIGNALS 2026-10-05 section 4(a); DETECTION_GAP section 3 (platform events)"
+    },
+    "assistant_handoff_charge": {
+      "covered_by": ["disputas"],
+      "why": "Card-charge cases are served by the disputas assistant; a high escalation rate on those case types means customers leave that flow for an analyst.",
+      "evidence": "ANATOMY D1 and section 1.1; PLATFORM_SIGNALS 2026-10-05 section 4(e) (escalation rate by cell)"
     }
   },
   "rows": [
@@ -217,9 +232,131 @@
           "proof_support": "none", "announceable_now": false
         }
       ]
+    },
+    {
+      "id": "copilot_low_acceptance",
+      "topic": "copilot_draft_quality",
+      "match": {"metric": ["P_DRAFT_REJECT"], "dims_present": ["case_type"]},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "draft_acceptance_and_escalation_rate_not_worse",
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["wording"],
+          "justification": "Analysts discard or ignore the copilot drafts far more often for this case type than for the others in the same channel; the copilot prompt is the existing artifact that shapes those drafts.",
+          "evidence": "PLATFORM_SIGNALS section 4(e): draft acceptance by case type is the highest-value advisor signal",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "copilot_release_regression",
+      "topic": "copilot_draft_quality",
+      "match": {"metric": ["P_DRAFT_REJECT"], "dims_present": ["release"]},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "draft_acceptance_by_other_releases_not_worse",
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene", "a_release_is_compared_with_the_other_releases_of_the_same_agent"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["wording"],
+          "justification": "Drafts of one release are rejected more often than those of the other releases of the same agent: a candidate regression of the prompt that release carries.",
+          "evidence": "PLATFORM_SIGNALS section 4(b): release on copilot.suggestion_decided removes the staging/prod mixing of a timestamp cut",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "copilot_heavy_edits",
+      "topic": "copilot_draft_quality",
+      "match": {"metric": ["P_DRAFT_HEAVY_EDIT"], "dims_present": ["case_type"]},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "draft_acceptance_rate_not_worse",
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["wording"],
+          "justification": "When analysts do send the draft they rewrite most of it for this case type (aggregate edit-distance bucket, no text): the draft wording or structure misses what the analysts need.",
+          "evidence": "PLATFORM_SIGNALS section 4(e): edit distance by case type; texts never leave the platform",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "copilot_suggestion_none",
+      "topic": "copilot_coverage",
+      "match": {"metric": ["P_SUGG_NONE"], "dims_present": ["case_type"]},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "suggestion_failed_rate_and_draft_acceptance_not_worse",
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene", "tool_link_or_knowledge_source_is_a_human_decision"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["uncovered_topic"],
+          "justification": "The copilot has nothing to say for this case type and channel: a knowledge gap in its prompt is the hypothesis the engine can test; a missing tool link is a human decision (tools are not an engine target).",
+          "evidence": "PLATFORM_SIGNALS section 2 (copilot.suggestion_none) and DETECTION_GAP section 3",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "copilot_tool_mix",
+      "topic": "copilot_draft_quality",
+      "match": {"metric": ["P_TOOL_USE"], "dims_present": ["case_type", "tool"]},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "tool_failure_and_fallback_rate_not_worse",
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["repeated_lookup"],
+          "justification": "Analysts reach for the same tool by hand in most of these cases: the copilot tool-choice step may not pick it for them.",
+          "evidence": "ANATOMY P1 and Example 1; PLATFORM_SIGNALS section 2 (copilot.tool_used)",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "assistant_escalation_dispute",
+      "topic": "assistant_handoff_charge",
+      "match": {"metric": ["P_ASSIST_ESCALATION"], "dims": {"case_type": ["unrecognized_charge", "undue_charge"]}},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "dispute_resolution_and_handoff_quality_not_worse",
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_this_template", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "template:t/aclarar_cargo", "kind": "patch", "agent": "disputas",
+          "placeholders": [], "mechanisms": ["wording"],
+          "justification": "More charge cases than elsewhere in the same channel leave the assistant for an analyst; the dispute clarify step answers one short static sentence when no charge matches, a place where a customer gives up.",
+          "evidence": "ANATOMY D1; PLATFORM_SIGNALS section 4(e) (assistant escalation by case type)",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
     }
   ],
   "human_owned": [
+    {
+      "id": "case_type_taxonomy",
+      "match": {"metric": ["P_TYPE_REASSIGN"]},
+      "owner": "supervision",
+      "evidence": "PLATFORM_SIGNALS 2026-10-05 section 2: case type is set by staff (case.type_changed); a type that is often corrected is a taxonomy or triage question",
+      "note": {
+        "es": "Para una persona (supervision): los casos de este tipo se reclasifican con frecuencia; si la taxonomia de tipos o el criterio de triaje es ambiguo lo decide quien opera la plataforma, no un parche propuesto por el motor.",
+        "pt": "Para uma pessoa (supervisao): os casos deste tipo sao reclassificados com frequencia; se a taxonomia de tipos ou o criterio de triagem e ambiguo, quem opera a plataforma decide, nao um patch proposto pelo motor."
+      }
+    },
+    {
+      "id": "copilot_failures_platform",
+      "match": {"metric": ["P_SUGG_FAILED"]},
+      "owner": "plataforma",
+      "evidence": "PLATFORM_SIGNALS 2026-10-05 section 2: copilot.suggestion_failed carries a problem code, never a message; failures of the suggestion run are an operational question",
+      "note": {
+        "es": "Para una persona (plataforma): las sugerencias del copiloto fallan con frecuencia en esta celda; un fallo de la ejecucion no se corrige con un parche de texto del motor, lo revisa quien opera la plataforma y el gateway.",
+        "pt": "Para uma pessoa (plataforma): as sugestoes do copiloto falham com frequencia nesta celula; uma falha de execucao nao se corrige com um patch de texto do motor, quem opera a plataforma e o gateway revisa."
+      }
+    },
     {
       "id": "policy_dispute_amount",
       "match": {"dims": {"reason_code": ["policy:escalamiento-disputa-monto"]}},
