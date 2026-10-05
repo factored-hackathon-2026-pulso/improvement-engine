@@ -31,6 +31,14 @@ pub fn request(
     body: Option<&[u8]>,
     timeout: Duration,
 ) -> Result<RawResponse, HttpError> {
+    // Request splitting: no CR, LF, NUL or other control byte may reach the head through a header name or value, the method or the path.
+    let line_safe = |t: &str| !t.bytes().any(|b| (b < 0x20 && b != b'\t') || b == 0x7f);
+    if !line_safe(method) || !line_safe(path) || path.contains(' ') || method.contains(' ') {
+        return Err(HttpError::Connect("refused: control byte or space in the request line".into()));
+    }
+    if let Some((k, _)) = headers.iter().find(|(k, v)| !line_safe(k) || !line_safe(v) || k.is_empty() || k.contains(':') || k.contains(' ')) {
+        return Err(HttpError::Connect(format!("refused: header {k:?} carries a control byte (CR/LF) or is malformed")));
+    }
     let sock = addr
         .to_socket_addrs()
         .map_err(|e| HttpError::Connect(e.to_string()))?
@@ -135,6 +143,22 @@ mod tests {
     fn hostile_chunk_size_is_an_error_not_a_panic() {
         let r = parse(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nffffffffffffffff\r\nabc\r\n0\r\n\r\n");
         assert!(matches!(r, Err(HttpError::Protocol(_)) | Err(HttpError::Io(_))));
+    }
+
+    #[test]
+    fn a_header_or_request_line_with_cr_lf_is_refused_before_anything_is_sent() {
+        // no listener exists at this address: the refusal must come first, as `Connect` (not sent), with the exact reason
+        let t = Duration::from_millis(200);
+        let crlf = "\r\n";
+        for h in [("traceparent", format!("00-aa{crlf}Authorization: Bearer evil")), ("baggage", "a\nb".to_string()), ("X-A\r\nB", "v".to_string()), ("X-A:", "v".to_string())] {
+            match request("127.0.0.1:9", "POST", "/v1/generate", &[h.clone()], None, t) {
+                Err(HttpError::Connect(m)) => assert!(m.starts_with("refused: header"), "{h:?} {m}"),
+                o => panic!("{h:?} {o:?}"),
+            }
+        }
+        for (m, p) in [("POST", format!("/v1/runs HTTP/1.1{crlf}X: y")), ("GET", "/a b".to_string()), ("POST\r\n", "/a".to_string())] {
+            assert!(matches!(request("127.0.0.1:9", m, &p, &[], None, t), Err(HttpError::Connect(x)) if x.starts_with("refused: control byte")), "{m:?} {p:?}");
+        }
     }
 
     #[test]

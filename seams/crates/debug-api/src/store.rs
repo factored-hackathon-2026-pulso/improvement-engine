@@ -13,11 +13,21 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_EVENT_BYTES: usize = 256 * 1024;
+/// Bounds of the model-call log of one run.
+const MAX_CALL_BYTES: usize = 256 * 1024;
+const MAX_CALLS_PER_RUN: usize = 2000;
+const CALLS_SUFFIX: &str = ".calls.ndjson";
+
+fn call_key(c: &Value) -> Option<(String, String, u64)> {
+    Some((c["evidence_ref"].as_str()?.to_string(), c["role"].as_str()?.to_string(), c["n"].as_u64()?))
+}
 
 struct Log {
     floor: i64,
     events: Vec<Value>,
     state: Value,
+    /// `pulso.model_call/1` records of the run (kept apart from the event stream: they carry prompt and response content).
+    calls: Vec<Value>,
 }
 
 impl Log {
@@ -107,7 +117,7 @@ impl Store {
                 continue;
             }
             let text = fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-            let mut log = Log { floor: 0, events: Vec::new(), state: project::empty_state(run) };
+            let mut log = Log { floor: 0, events: Vec::new(), state: project::empty_state(run), calls: Vec::new() };
             for (i, line) in text.lines().enumerate().filter(|(_, l)| !l.trim().is_empty()) {
                 let v: Value = serde_json::from_str(line).map_err(|e| format!("{}:{}: {e}", path.display(), i + 1))?;
                 if let Some(f) = v["purge"]["floor"].as_i64() {
@@ -122,6 +132,17 @@ impl Store {
             }
             let first = log.events.first().and_then(|e| e["occurred_at"].as_str()).unwrap_or_default().to_string();
             loaded.push((first, run.to_string(), log));
+        }
+        for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            let Some(run) = path.file_name().and_then(|s| s.to_str()).and_then(|n| n.strip_suffix(CALLS_SUFFIX)).map(str::to_string) else { continue };
+            let Some((_, _, log)) = loaded.iter_mut().find(|(_, r, _)| *r == run) else { continue };
+            for (i, line) in fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?.lines().enumerate().filter(|(_, l)| !l.trim().is_empty()) {
+                let v: Value = serde_json::from_str(line).map_err(|e| format!("{}:{}: {e}", path.display(), i + 1))?;
+                if call_key(&v).is_some() && !log.calls.iter().any(|c| call_key(c) == call_key(&v)) {
+                    log.calls.push(v);
+                }
+            }
         }
         loaded.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
         let mut inner = Inner::default();
@@ -140,6 +161,41 @@ impl Store {
         let Some(dir) = &self.dir else { return Ok(()) };
         let mut f = OpenOptions::new().create(true).append(true).open(dir.join(format!("{run}.jsonl"))).map_err(|e| format!("open log: {e}"))?;
         f.write_all(format!("{line}\n").as_bytes()).and_then(|()| f.sync_data()).map_err(|e| format!("write log: {e}"))
+    }
+
+    /// Records `pulso.model_call/1` calls of an existing run: validated (schema, `evidence_ref`, `role`, `n`), bounded (256 KiB per call, 2000 per
+    /// run) and deduplicated by `(evidence_ref, role, n)`. Returns how many were new. Memory, plus `<run>.calls.ndjson` in a directory store.
+    pub fn record_model_calls(&self, run: &str, calls: &[Value]) -> Result<usize, String> {
+        let mut g = self.lock();
+        let log = g.logs.get_mut(run).ok_or("unknown run")?;
+        let mut fresh: Vec<&Value> = Vec::new();
+        for c in calls {
+            if c["schema"] != "pulso.model_call/1" || call_key(c).is_none() {
+                return Err("not a pulso.model_call/1 record with evidence_ref, role and n".into());
+            }
+            if c.to_string().len() > MAX_CALL_BYTES {
+                return Err("model call too large".into());
+            }
+            if !log.calls.iter().any(|x| call_key(x) == call_key(c)) && !fresh.iter().any(|x| call_key(x) == call_key(c)) {
+                fresh.push(c);
+            }
+        }
+        if log.calls.len() + fresh.len() > MAX_CALLS_PER_RUN {
+            return Err("too many model calls for one run".into());
+        }
+        if let Some(dir) = &self.dir.as_ref().filter(|_| !fresh.is_empty()) {
+            let mut f = OpenOptions::new().create(true).append(true).open(dir.join(format!("{run}{CALLS_SUFFIX}"))).map_err(|e| format!("open calls log: {e}"))?;
+            let text: String = fresh.iter().map(|c| format!("{c}\n")).collect();
+            f.write_all(text.as_bytes()).and_then(|()| f.sync_data()).map_err(|e| format!("write calls log: {e}"))?;
+        }
+        let n = fresh.len();
+        log.calls.extend(fresh.into_iter().cloned());
+        Ok(n)
+    }
+
+    /// The model calls recorded for a run, in recording order.
+    pub fn model_calls(&self, run: &str) -> Vec<Value> {
+        self.lock().logs.get(run).map(|l| l.calls.clone()).unwrap_or_default()
     }
 
     pub fn runs(&self) -> Vec<String> {
@@ -194,7 +250,7 @@ impl RunEventSink for Store {
         let mut g = self.lock();
         if !g.logs.contains_key(run_id) {
             g.order.push(run_id.to_string());
-            g.logs.insert(run_id.to_string(), Log { floor: 0, events: Vec::new(), state: project::empty_state(run_id) });
+            g.logs.insert(run_id.to_string(), Log { floor: 0, events: Vec::new(), state: project::empty_state(run_id), calls: Vec::new() });
         }
         let log = g.logs.get_mut(run_id).expect("inserted");
         let wire = wire_event(run_id, log.head() + 1, ev);

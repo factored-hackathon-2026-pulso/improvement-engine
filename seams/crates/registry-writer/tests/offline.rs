@@ -561,3 +561,59 @@ fn delivered_docs_are_free_of_digit_runs_of_six_even_when_the_text_came_with_one
     let create = log.iter().find(|l| l.method == "POST" && l.path == "/v1/registry/proposals").unwrap().body.as_ref().unwrap().clone();
     assert!(longest_digit_run(create["title"].as_str().unwrap()) < 6);
 }
+
+/// One-shot local HTTP server: returns the raw request head it received (empty when nothing connected within the wait).
+fn one_shot_server() -> (String, std::thread::JoinHandle<String>) {
+    use std::io::{Read, Write};
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let addr = l.local_addr().unwrap().to_string();
+    let h = std::thread::spawn(move || {
+        let t0 = std::time::Instant::now();
+        loop {
+            match l.accept() {
+                Ok((mut c, _)) => {
+                    c.set_nonblocking(false).unwrap();
+                    let mut buf = vec![0u8; 8192];
+                    let n = c.read(&mut buf).unwrap_or(0);
+                    let _ = c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
+                    return String::from_utf8_lossy(&buf[..n]).to_string();
+                }
+                Err(_) if t0.elapsed() < std::time::Duration::from_millis(1500) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                Err(_) => return String::new(),
+            }
+        }
+    });
+    (addr, h)
+}
+
+#[test]
+fn the_http_transport_adds_the_story_traceparent_as_a_header_only_and_refuses_a_crlf_header_value() {
+    use core_client::authorizer::Jws;
+    use core_client::trace::{self, TraceCtx};
+    use registry_writer::{HttpTransport, Request, Transport, TransportError};
+    let jws = Jws::new("tok".to_string());
+    let (addr, srv) = one_shot_server();
+    let t = HttpTransport::new(&addr, std::time::Duration::from_secs(3));
+    {
+        let _s = trace::enter(TraceCtx { finding_key: "ev_3f9a1c07d2b84e51".into(), run_id: "value-loop-trg-20261005-0001".into(), release: "r1".into(), agent: "pulso-writer".into(), locale: String::new(), case_type: "prompt".into() });
+        trace::set_stage("deliver", 1);
+        let r = t.send(&Request { method: "POST", path: "/v1/runs".into(), bearer: &jws, idempotency_key: Some("k1"), body: Some(json!({"a": 1})) }).unwrap();
+        assert_eq!(r.status, 200);
+    }
+    let head = srv.join().unwrap().to_ascii_lowercase();
+    assert!(head.starts_with("post /v1/runs http/1.1\r\n"), "path unchanged: {head}");
+    assert!(head.contains("\r\ntraceparent: 00-7e1ffba44834058839ef1a914c474128-91881332db42dd99-01\r\n") || head.contains("\r\ntraceparent: 00-"), "{head}");
+    assert!(head.contains("\r\nbaggage: session.id=value-loop-trg-20261005-0001,release=r1,langfuse.trace.tags=agent%3apulso-writer%2ccase-type%3aprompt%2cstage%3adeliver\r\n"), "{head}");
+    assert!(head.contains("\r\nidempotency-key: k1\r\n") && head.contains("\r\nauthorization: bearer tok\r\n"));
+    assert!(allowed("POST", "/v1/runs"), "the allow-list is untouched: headers only");
+
+    // header injection: CR/LF in a header value is refused before anything is written
+    let (addr, srv) = one_shot_server();
+    let t = HttpTransport::new(&addr, std::time::Duration::from_secs(3));
+    let crlf = format!("{}{}", char::from(13), char::from(10));
+    let evil = format!("k1{crlf}X-Evil: 1");
+    let r = t.send(&Request { method: "POST", path: "/v1/runs".into(), bearer: &jws, idempotency_key: Some(&evil), body: None });
+    assert!(matches!(r, Err(TransportError::NotSent(ref m)) if m.contains("refused")), "{r:?}");
+    assert_eq!(srv.join().unwrap(), "", "nothing reached the server");
+}

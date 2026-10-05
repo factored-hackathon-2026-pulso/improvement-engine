@@ -49,6 +49,7 @@ impl Transport for HttpTransport {
         if let Some(k) = req.idempotency_key {
             headers.push(("Idempotency-Key", k.to_string()));
         }
+        headers.extend(core_client::trace::headers());
         let bytes = req.body.as_ref().map(|b| serde_json::to_vec(b).expect("json"));
         match http::request(&self.addr, req.method, &req.path, &headers, bytes.as_deref(), self.timeout) {
             Ok(r) => Ok(Reply { status: r.status, body: serde_json::from_slice(&r.body).unwrap_or(Value::Null) }),

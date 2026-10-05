@@ -155,6 +155,11 @@ def up(args) -> None:
     pm("rm", "-f", GW, check=False)
     names = [k for k in ("GATEWAY_CONSUMERS", "LLM_ENDPOINTS", "GATEWAY_TOKEN_AGENT_CORE", "OPENROUTER_API_KEY",
                          "JEV_API_KEY") if k in gw_env]
+    # tracing is configured from the caller's environment only (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_SERVICE_NAME, LLM_GATEWAY_TRACE_CONTENT...): never from a file
+    for k in os.environ:
+        if k.startswith(("OTEL_", "LLM_GATEWAY_TRACE_")):
+            gw_env[k] = os.environ[k]
+            names.append(k)
     pm("run", "-d", "--pids-limit=0", "--name", GW, "-p", f"127.0.0.1:{GW_PORT}:8080", *[a for k in names for a in ("-e", k)],
        GW_IMAGE, env=gw_env)
     wait(lambda: http_ok(f"http://127.0.0.1:{GW_PORT}/healthz"), "llm-gateway")

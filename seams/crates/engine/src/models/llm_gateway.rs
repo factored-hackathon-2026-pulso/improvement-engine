@@ -69,6 +69,8 @@ struct Config {
 pub struct LlmGateway {
     config: Option<Config>,
     usage: RefCell<Option<Usage>>,
+    /// Raw answer text of the most recent call (`last_response`).
+    raw: RefCell<Option<String>>,
 }
 
 /// One gateway round trip: the answer text/object and what it cost.
@@ -80,7 +82,7 @@ pub struct Sent {
 
 impl LlmGateway {
     pub fn disabled() -> LlmGateway {
-        LlmGateway { config: None, usage: RefCell::new(None) }
+        LlmGateway { config: None, usage: RefCell::new(None), raw: RefCell::new(None) }
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -122,6 +124,7 @@ impl LlmGateway {
                 structured,
             }),
             usage: RefCell::new(None),
+            raw: RefCell::new(None),
         })
     }
 }
@@ -138,6 +141,7 @@ impl LlmGateway {
             return Err(ModelError::Refused("llm_gateway_disabled: set PULSO_LLM_GATEWAY=enabled with PULSO_LLM_GATEWAY_ADDR and PULSO_LLM_GATEWAY_KEY".into()));
         };
         *self.usage.borrow_mut() = None;
+        *self.raw.borrow_mut() = None;
         guard(req)?;
         let wire_mode = if mode == Structured::Native { "native" } else { "prompted" };
         let mut body = json!({
@@ -152,7 +156,9 @@ impl LlmGateway {
         {
             body["schema"] = schema.clone();
         }
-        let headers = [("Authorization", format!("Bearer {}", c.key)), ("Content-Type", "application/json".to_string())];
+        let mut headers = vec![("Authorization", format!("Bearer {}", c.key)), ("Content-Type", "application/json".to_string())];
+        // story correlation: traceparent (parent = the stage span of the caller) and baggage; headers only, the path never changes
+        headers.extend(core_client::trace::headers());
         let t0 = Instant::now();
         let r = request(&c.addr, "POST", "/v1/generate", &headers, Some(body.to_string().as_bytes()), Duration::from_secs(c.timeout_s + 10)).map_err(|e| match e {
             HttpError::Connect(m) => ModelError::Unavailable(format!("gateway_unreachable: {m}")),
@@ -176,6 +182,10 @@ impl LlmGateway {
             s => return Err(ModelError::Unavailable(format!("gateway_http_{s}: {kind}"))),
         }
         let output = doc.get("output").cloned().ok_or_else(|| ModelError::Invalid("gateway answered without output".into()))?;
+        *self.raw.borrow_mut() = Some(match &output {
+            Value::String(t) => t.clone(),
+            o => o.to_string(),
+        });
         let model = doc["model"].as_str().filter(|m| !m.is_empty()).unwrap_or(&c.model).to_string();
         Ok(Sent { output, model, usage: usage.unwrap_or(Usage { latency_ms, ..Usage::default() }) })
     }
@@ -190,6 +200,9 @@ impl ModelPort for LlmGateway {
     }
     fn last_usage(&self) -> Option<Usage> {
         self.usage.borrow().clone()
+    }
+    fn last_response(&self) -> Option<String> {
+        self.raw.borrow().clone()
     }
     fn call(&self, req: &ModelRequest) -> Result<ModelAnswer, ModelError> {
         let mode = self.config.as_ref().map_or(Structured::Prompted, |c| c.structured);

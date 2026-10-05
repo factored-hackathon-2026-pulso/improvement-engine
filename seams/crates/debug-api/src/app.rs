@@ -300,7 +300,12 @@ impl App {
                     "decision_id": id, "available_commands": d["available_commands"], "needs_step_up": d["needs_step_up"], "domain_revision": d["domain_revision"], "card": d["card"],
                 })))
             }
-            "model-calls" | "queries" | "evals" | "external-commands" => page(json!([])),
+            // what the engine recorded for this run (`pulso.model_call/1`: prompt and response content, tokens, USD, ids); `?evidence_ref=` narrows to one finding
+            "model-calls" => {
+                let only = query_param(&r.query, "evidence_ref");
+                page(Value::Array(self.store.model_calls(id).into_iter().filter(|c| only.is_none_or(|e| c["evidence_ref"] == e)).collect()))
+            }
+            "queries" | "evals" | "external-commands" => page(json!([])),
             _ => problem("not_found", 404, json!({})),
         }
     }

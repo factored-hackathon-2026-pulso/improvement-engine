@@ -21,7 +21,7 @@ use crate::run::source::JOB_KEY_PREFIX;
 pub const TRIGGER_KEY_PREFIX: &str = "trigger:";
 use crate::run::outcome::{OutcomeStep, find_trigger};
 use crate::run::tasks::{JobCtx, JobRunner};
-use crate::run::value_loop::{Persist, ValueLoop};
+use crate::run::value_loop::{Persist, ValueLoop, recorded_calls};
 use debug_api::ingest::double_item;
 use debug_api::panels::project;
 use debug_api::store::now_iso;
@@ -329,6 +329,11 @@ impl EngineRunner {
     }
 }
 
+/// The debug-api run id of the value loop of a job (also the session and the trace key of its stories).
+pub fn loop_run_id(job: &str) -> String {
+    format!("value-loop-{job}").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).take(64).collect()
+}
+
 fn repo_err(e: RepoError) -> String {
     format!("{e:?}")
 }
@@ -391,8 +396,12 @@ impl JobRunner for EngineRunner {
         };
         match &self.value_loop {
             Some(v) => {
-                let out = v.run(&JobPersist { job, ctx })?;
+                let persist = JobPersist { job, ctx };
+                let out = v.run_as(&persist, &loop_run_id(&job.job))?;
                 self.record_loop(&job.job, &out)?;
+                // the model calls (content, tokens, USD, ids) go to the console store's `/runs/{id}/model-calls` and next to the outcome file
+                let calls = recorded_calls(&persist, out["findings"].as_array().map_or(0, Vec::len));
+                self.record_calls(&job.job, &calls)?;
                 // aggregates, reason codes and ids only: the readable outcome of the job next to the other run records
                 let dir = self.work.join("value-loop");
                 let _ = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(dir.join(format!("{}.json", job.job)), serde_json::to_vec_pretty(&out).unwrap_or_default()));
@@ -428,9 +437,21 @@ impl EngineRunner {
         self.emit(&id, NewEvent::new("run_state_changed", "run", &id, json!({"state": "completed"})))
     }
 
+    /// `pulso.model_call/1` records of the value loop of `job`: into the debug-api store (idempotent) and `<work>/value-loop/<job>.calls.ndjson`.
+    pub(crate) fn record_calls(&self, job: &str, calls: &[Value]) -> Result<(), String> {
+        if calls.is_empty() {
+            return Ok(());
+        }
+        self.store.record_model_calls(&loop_run_id(job), calls)?;
+        let dir = self.work.join("value-loop");
+        let text: String = calls.iter().map(|c| format!("{c}\n")).collect();
+        let _ = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(dir.join(format!("{job}.calls.ndjson")), text));
+        Ok(())
+    }
+
     /// The value-loop outcome in the console store: one run, one node per finding (reason codes only).
     fn record_loop(&self, job: &str, out: &Value) -> Result<(), String> {
-        let id: String = format!("value-loop-{job}").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).take(64).collect();
+        let id = loop_run_id(job);
         if self.store.state(&id).is_some() {
             return Ok(());
         }

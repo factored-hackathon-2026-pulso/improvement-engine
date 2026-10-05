@@ -404,3 +404,37 @@ fn tier_labels_come_from_the_model_id() {
     use reasoning::pipeline::tier_of;
     assert_eq!((tier_of("xiaomi/mimo-v2.6-flash"), tier_of("xiaomi/mimo-v2.6-pro"), tier_of("deepseek/deepseek-v4.1-flash"), tier_of("z-ai/glm-5.3-flash"), tier_of("scripted-v1")), ("flash", "pro", "flash", "flash", "other"));
 }
+
+#[test]
+fn every_model_call_runs_inside_its_stage_and_attempt_of_the_story_so_the_gateway_gets_the_stage_span() {
+    use engine::trace::{self, TraceCtx};
+    let f = tecnico_finding();
+    let seen: Rc<std::cell::RefCell<Vec<(String, u32)>>> = Rc::new(std::cell::RefCell::new(vec![]));
+    let note = |seen: &Rc<std::cell::RefCell<Vec<(String, u32)>>>| {
+        let c = trace::current().expect("a story scope");
+        seen.borrow_mut().push((c.stage.unwrap(), c.attempt));
+    };
+    let (s1, s2, s3) = (seen.clone(), seen.clone(), seen.clone());
+    let (scout, verifier, builder) = (scout_ok(&f, "new_agent:consultas", "uncovered_topic"), verifier_ok("supported"), tecnico_builder("soporte-tecnico"));
+    let first_builder_try = Cell::new(true);
+    let ports = ports(
+        FnPort::scripted("scripted-scout", move |r| {
+            note(&s1);
+            scout(r)
+        }),
+        FnPort::scripted("scripted-verifier", move |r| {
+            note(&s2);
+            verifier(r)
+        }),
+        FnPort::scripted("scripted-builder", move |r| {
+            note(&s3);
+            // the first builder answer is unusable: the retry is attempt 2 of the same stage
+            if first_builder_try.replace(false) { Ok(json!({"nonsense": true})) } else { builder(r) }
+        }),
+    );
+    let _story = trace::enter(TraceCtx { finding_key: f.evidence_ref(), run_id: "value-loop-j1".into(), ..Default::default() });
+    let r = reason(&cat(), &f, &ports, &opts());
+    assert_eq!(r.status, "proposed", "{:?}", r.detail);
+    let got: Vec<(String, u32)> = seen.borrow().clone();
+    assert_eq!(got, vec![("scout".to_string(), 1), ("verifier".to_string(), 1), ("builder".to_string(), 1), ("builder".to_string(), 2)]);
+}

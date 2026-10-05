@@ -291,3 +291,21 @@ fn the_cursor_one_past_the_head_is_already_a_different_history() {
     assert_eq!(get(&app, &format!("{D}/runs/run-a/events?after_sequence={head}")).0, 200);
     assert_eq!(get(&app, &format!("{D}/runs/run-a/events?after_sequence={}", head + 1)).0, 410);
 }
+
+#[test]
+fn model_calls_route_serves_the_recorded_calls_of_the_run_and_filters_by_finding() {
+    let (s, app) = seeded();
+    s.record_model_calls("run-a", &[
+        json!({"schema": "pulso.model_call/1", "evidence_ref": "ev_1", "role": "scout", "n": 1, "model_id": "xiaomi/mimo-v2.6-flash", "tokens_in": 100, "tokens_out": 20, "cost_usd": 1.96e-5, "request": {"messages": [{"role": "user", "content": "q"}]}, "response": "a"}),
+        json!({"schema": "pulso.model_call/1", "evidence_ref": "ev_2", "role": "scout", "n": 1, "model_id": "xiaomi/mimo-v2.6-flash"}),
+    ]).unwrap();
+    let (st, b) = get(&app, &format!("{D}/runs/run-a/model-calls"));
+    assert_eq!(st, 200);
+    assert_envelope(&b);
+    assert_eq!(b["items"].as_array().unwrap().len(), 2);
+    assert_eq!((b["items"][0]["tokens_in"].as_u64(), b["items"][0]["response"].as_str()), (Some(100), Some("a")));
+    let (_, f) = get(&app, &format!("{D}/runs/run-a/model-calls?evidence_ref=ev_2"));
+    assert_eq!(f["items"].as_array().unwrap().len(), 1);
+    assert_eq!(f["items"][0]["evidence_ref"], "ev_2");
+    assert_eq!(get(&app, &format!("{D}/runs/nope/model-calls")).0, 404);
+}

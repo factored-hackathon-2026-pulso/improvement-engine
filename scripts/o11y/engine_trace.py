@@ -236,8 +236,18 @@ class StoryConverter:
             spans.append(self._span(tid, sid, root_id, f"stage.{s}", b0, b1, a, error=err, msg=msg))
             # generation spans of this stage
             t2 = b0
+            extra = set()
             for n, c in enumerate(by_role.get(s, []), 1):
-                spans.append(self._generation(tid, sid, c, n, common, t2, b1, recorded))
+                # a retried stage: the engine sends the stage span of ITS attempt as the parent (traceparent_for(.., stage, attempt)),
+                # so a call recorded with attempt k > 1 hangs under a `stage.<s>` span with that attempt's id
+                att = int(c.get("attempt") or 1)
+                parent = sid
+                if att > 1:
+                    parent = stage_span_id(tid, s, att)
+                    if att not in extra:
+                        extra.add(att)
+                        spans.append(self._span(tid, parent, root_id, f"stage.{s}", b0, b1, {**a, "pulso.attempt": att, "pulso.stage.outcome": "ok"}))
+                spans.append(self._generation(tid, parent, c, n, common, t2, b1, recorded))
                 t2 = t2 + timedelta(milliseconds=c.get("duration_ms", 0))
 
         gens = [c for cs in by_role.values() for c in cs]
