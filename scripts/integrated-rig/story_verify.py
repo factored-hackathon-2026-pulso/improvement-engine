@@ -114,7 +114,8 @@ def verify_core(proposal: dict, pid: str, engine_id: str = "pulso-engine") -> li
         check(f"{pid}: agent-core state", p.get("state") == "draft", f"state={p.get('state')}"),
         check(f"{pid}: agent-core created_by", p.get("created_by") == engine_id, f"created_by={p.get('created_by')}"),
         check(f"{pid}: dossier on the changes", cs["with_description"] > 0, f"{cs['with_description']}/{cs['count']} changes carry docs.description"),
-        check(f"{pid}: eval_suite change", cs["has_eval_suite"], "kinds=" + ",".join(f"{k}:{v}" for k, v in sorted(cs["kinds"].items()))),
+        # informational: the eval_suite is attached by script AFTER this check (EV1 / R6), so its absence is expected at this point
+        check(f"{pid}: draft change kinds", True, ("eval_suite present, " if cs["has_eval_suite"] else "no eval_suite yet, ") + ",".join(f"{k}:{v}" for k, v in sorted(cs["kinds"].items()))),
     ]
 
 
@@ -138,19 +139,32 @@ def render_checks(checks: list) -> list:
 # ---- commands -------------------------------------------------------------------------------------------------------------------------
 
 def cmd_cases(a) -> int:
-    tok = login(a.platform, "lucia.herrera")
-    if not tok:
-        say("cases: supervisor login failed")
-        return 1
+    """G1: the evidence ids. Preferred: the platform's evidence sampler (GET /internal/evidence/cases, service token, k-anonymity floor on
+    the cell); fallback: the seeded open cases of the supervisor view. Either way they are example cases, labelled."""
     ids: list[str] = []
-    for lang in ("es", "pt"):
-        status, body = call("GET", f"{a.platform}/api/v1/supervision/open-cases?language={lang}", tok)
-        if status == 200 and body:
-            ids += [r["case"]["id"] for r in body.get("cases", []) if CASE_ID.match(r.get("case", {}).get("id", ""))]
-    ids = sorted(set(ids))
+    source = "none"
+    svc = None
+    if a.secrets and Path(a.secrets).exists():
+        svc = json.loads(Path(a.secrets).read_text(encoding="utf-8")).get("service_token")
+        _secrets.append(svc or "")
+    if svc:
+        status, body = call("GET", f"{a.platform}/api/v1/internal/evidence/cases?limit=8", svc)
+        if status == 200 and body and not body.get("suppressed"):
+            ids = [x for x in body.get("caseIds", []) if CASE_ID.match(x)]
+            source = f"platform evidence route (matched {body.get('matched')})"
+        else:
+            say(f"cases: evidence route answered HTTP {status}" + (" (cell suppressed by k-anonymity)" if body and body.get("suppressed") else ""))
+    if not ids:
+        tok = login(a.platform, "lucia.herrera")
+        for lang in ("es", "pt") if tok else ():
+            status, body = call("GET", f"{a.platform}/api/v1/supervision/open-cases?language={lang}", tok)
+            if status == 200 and body:
+                ids += [r["case"]["id"] for r in body.get("cases", []) if CASE_ID.match(r.get("case", {}).get("id", ""))]
+        ids = sorted(set(ids))[:8]
+        source = "seeded open cases (supervisor view)"
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(a.out).write_text(json.dumps({"label": "seeded platform cases, shown as example cases (not the evidence of the finding)", "ids": ids}), encoding="utf-8")
-    say(f"cases: {len(ids)} seeded open case ids written ({Path(a.out).name})")
+    Path(a.out).write_text(json.dumps({"label": "seeded platform cases, example cases (not the cases the finding came from)", "source": source, "ids": ids}), encoding="utf-8")
+    say(f"cases: {len(ids)} case ids from {source}")
     return 0 if ids else 1
 
 
@@ -207,6 +221,7 @@ def main(argv=None) -> int:
     c = sub.add_parser("cases")
     c.add_argument("--platform", required=True)
     c.add_argument("--out", required=True)
+    c.add_argument("--secrets", help="rig secrets.json (service token for the evidence route)")
     v = sub.add_parser("verify")
     v.add_argument("--platform", required=True)
     v.add_argument("--core", required=True)

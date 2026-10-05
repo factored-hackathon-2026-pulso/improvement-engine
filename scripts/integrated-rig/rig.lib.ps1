@@ -170,3 +170,16 @@ function Get-RigRealityRows {
         @{ Item = 'Approve, publish, promote, outcome'; Class = 'relaxed'; Note = 'NOT run in stage 1 (never approve or publish here)' }
     )
 }
+
+# ---- cells summary (same as demo-loop/run.ps1) --------------------------------------------------------------------------------------------------
+function Get-CellsInfo {
+    param([string]$Path)
+    $n = 0; $by = @{}
+    foreach ($line in [IO.File]::ReadLines($Path)) {
+        if (-not $line.Trim()) { continue }
+        $n++
+        if ($line -match '"metric":"([A-Z0-9]+)"') { $by[$Matches[1]] = 1 + [int]$by[$Matches[1]] }
+    }
+    $h = [Security.Cryptography.SHA256]::Create(); $fs = [IO.File]::OpenRead($Path); try { $sha = (($h.ComputeHash($fs) | ForEach-Object { $_.ToString('x2') }) -join '').Substring(0, 12) } finally { $fs.Dispose(); $h.Dispose() }
+    [pscustomobject]@{ Rows = $n; ByMetric = (($by.Keys | Sort-Object | ForEach-Object { "$_=$($by[$_])" }) -join ' '); Sha = $sha }
+}

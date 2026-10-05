@@ -361,13 +361,15 @@ function New-AnnouncePayload {
         if (Test-PersonalShape $t) { throw "${name}: personal-data shape (email or 9+ digit run)" }
         $t
     }
+    $links = @($EvidenceLinks)
+    if ($links.Count -eq 0) { $links = @(Get-OpaqueLink -EvidenceRef ([string]$Record.evidence_ref) -Index 0) }
     [ordered]@{
         proposalId = $propId
         title = (& $field 'title' $es.title 120)
         problem = (& $field 'problem' $es.sections.problem 600)
         evidence = (& $field 'evidence' $es.sections.evidence 600)
         expectedEffect = (& $field 'expectedEffect' $es.sections.expected_effect 400)
-        evidenceLinks = $(if (@($EvidenceLinks).Count -gt 0) { @($EvidenceLinks) } else { @(Get-OpaqueLink -EvidenceRef ([string]$Record.evidence_ref) -Index 0) })
+        evidenceLinks = @($links)
     }
 }
 
