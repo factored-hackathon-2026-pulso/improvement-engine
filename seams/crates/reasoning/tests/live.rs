@@ -27,7 +27,7 @@ fn attempt(f: &Finding, expect_kind: &str) {
     let mut proposed: Option<reasoning::pipeline::Reasoned> = None;
     for _ in 0..3 {
         let r = reason(&catalog, f, &live_ports(), &Opts::default());
-        outcomes.push(format!("{}:{}:{}", r.status, r.reason, r.stage));
+        outcomes.push(format!("{}:{}:{}:{}", r.status, r.reason, r.stage, r.detail));
         if r.status == "proposed" {
             proposed = Some(r);
             break;
