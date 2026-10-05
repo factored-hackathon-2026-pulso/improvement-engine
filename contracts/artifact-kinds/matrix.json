@@ -284,7 +284,7 @@
           "note": "Not exercised: no policy proposal can be frozen by the engine."
         }
       },
-      "notes": "Codex BKT (compile, authorized-field limits). No authorized-field list exists in the pinned Core; BKT defines it."
+      "notes": "ART2 (2026-10-05): a tighten-only draft of a human-owned policy is proven natively (boundary scenarios) and recorded needs_owner_ack, never announced, live on an own stack; the verdicts lag the code. Codex BKT (compile, authorized-field limits). No authorized-field list exists in the pinned Core; BKT defines it."
     },
     {
       "kind": "template",
@@ -320,7 +320,7 @@
           "note": "Not exercised: no template proposal can be frozen by the engine."
         }
       },
-      "notes": "Codex BKT (compile, authorized-field limits). ART2: reasoning::art2 compiles a read-only tool link (link_tool, offline-tested, NOT yet wired to propose/evaluate: verdicts stay denied until the live proof lands)."
+      "notes": "Codex BKT (compile, authorized-field limits). ART2 (2026-10-05): the engine now compiles, proves (fails-on-base/passes-on-candidate, native) and announces a READ-ONLY tool link live on an own stack (see docs/dev/ARTIFACT_KINDS.md); the verdicts below still describe the BK0 probe rows and lag the code."
     },
     {
       "kind": "tool",

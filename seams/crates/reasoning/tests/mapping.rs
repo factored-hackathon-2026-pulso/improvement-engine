@@ -157,7 +157,7 @@ fn a_human_owned_finding_ends_human_owned_with_a_note_and_calls_no_model() {
     assert_eq!((c.kind.as_str(), c.target_ref.as_str(), c.agent_id.as_str()), ("tighten_policy", "policy:escalamiento-disputa-monto", "disputas"));
     assert_eq!(c.changes[0]["content"]["expr"], json!({">": [{"var": "facts.monto_usd.value"}, 250.0]}));
     assert_eq!(c.changes[0]["content"]["owner"], "riesgo");
-    assert_eq!(c.changes[0]["docs"]["owner_ack"]["required"], true);
+    assert!(c.changes[0]["docs"]["changelog"].as_str().unwrap().contains("owner_ack required") && c.human_items[0].contains("owner_ack required"));
     assert_eq!(c.cascade, vec!["flow:disputa-cargo@1.0.1", "agent:disputas@1.0.1"]);
 }
 

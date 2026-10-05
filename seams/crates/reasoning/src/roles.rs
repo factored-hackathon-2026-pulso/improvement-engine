@@ -265,7 +265,7 @@ pub fn builder_request(f: &Finding, opp: &Opportunity, row: &Row, catalog: &Cata
     } else if target.kind == "link_tool" {
         let tool = target.params["tool"].as_str().unwrap_or("");
         inputs["tool"] = json!(tool);
-        let flow_id = catalog.agent(target.agent).and_then(|a| a["entry_flow"].as_str()).unwrap_or("").split('@').next().unwrap_or("").to_string();
+        let flow_id = catalog.agent(target.agent).map(|a| crate::art2::ref_id(&a["entry_flow"])).unwrap_or_default();
         let flow = catalog.flow(&flow_id).ok_or_else(|| format!("flow {flow_id} is not in the baseline catalogue"))?;
         let menu: String = crate::art2::edge_menu(flow).iter().map(|e| format!("{} | {} -> {}
 ", e["edge_id"].as_str().unwrap_or(""), e["from"].as_str().unwrap_or(""), e["to"].as_str().unwrap_or(""))).collect();

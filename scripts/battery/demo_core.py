@@ -31,6 +31,7 @@ STATE = ds.STATE / "battery"
 PREFIX = os.environ.get("PULSO_STACK_PREFIX", "pulso-ev2")
 PORT = int(os.environ.get("PULSO_STACK_PORT_CORE", "8002"))
 DEMO_DB = "agentcore"
+STATE = STATE if os.environ.get("PULSO_STACK_PREFIX", "pulso-ev2") == "pulso-ev2" else ds.STATE / f"battery-{os.environ['PULSO_STACK_PREFIX']}"
 PG, GW = f"{PREFIX}-postgres", f"{PREFIX}-llm-gateway"
 PG_PORT, GW_PORT = int(os.environ.get("PULSO_STACK_PORT_PG", "55442")), int(os.environ.get("PULSO_STACK_PORT_GW", "8090"))
 AGENTS = "recepcion,disputas,consultas"
@@ -50,6 +51,9 @@ def core_env() -> dict[str, str]:
     u = urlparse(env["AGENTCORE_REGISTRY_DSN"])
     env["AGENTCORE_REGISTRY_DSN"] = urlunparse(u._replace(netloc=u.netloc.rsplit(":", 1)[0] + f":{PG_PORT}",
                                                           path="/" + DEMO_DB))
+    if env.get("AGENTCORE_EVAL_DSN"):  # the evaluation database lives in the SAME own Postgres (stack.py creates agentcore_eval too)
+        e = urlparse(env["AGENTCORE_EVAL_DSN"])
+        env["AGENTCORE_EVAL_DSN"] = urlunparse(e._replace(netloc=e.netloc.rsplit(":", 1)[0] + f":{PG_PORT}"))
     env["AGENTCORE_LLM_GATEWAY_URL"] = f"http://127.0.0.1:{GW_PORT}"
     tok = gw.get("GATEWAY_TOKEN_AGENT_CORE") or env.get("GATEWAY_TOKEN_AGENT_CORE")
     if tok:
@@ -76,6 +80,9 @@ def containers() -> None:
         ds.pm("start", PG, check=False)
     ds.wait(lambda: ds.pm("exec", PG, "pg_isready", "-U", user, check=False).returncode == 0, "postgres")
     ds.time.sleep(3)
+    has_eval = ds.pm("exec", PG, "psql", "-U", user, "-d", DEMO_DB, "-tAc", "SELECT 1 FROM pg_database WHERE datname='agentcore_eval'", check=False).stdout
+    if "1" not in (has_eval or ""):
+        ds.pm("exec", PG, "psql", "-U", user, "-d", DEMO_DB, "-c", "CREATE DATABASE agentcore_eval", check=False)
     if ds.pm("image", "exists", ds.GW_IMAGE, check=False).returncode != 0:
         sys.exit("gateway image missing: run `python scripts/dev-stack/stack.py up` once (builds it)")
     ds.pm("rm", "-f", GW, check=False)
@@ -95,8 +102,9 @@ def up() -> None:
     out = ds.sh(["uv", "run", "python", "-m", "testing.demo_identities", "--public-keys", str(STATE / "identity-keys.json"),
                  "--staff-keys", str(STATE / "staff-keys.json")], env=env, cwd=ac).stdout
     admin = json.loads(out)["admin"]
+    (STATE / "tokens.json").write_text(out, encoding="utf-8")  # local-stack identities for the live tests of this lane (gitignored state dir, never printed)
     imp = ds.sh(["uv", "run", "agentcore", "registry", "--verifier", "testing.registry_demo:demo_verifier", "import",
-                 str(ac / "tests" / "fixtures" / "registry-e2e")], env={**env, "AGENTCORE_CREDENTIAL": admin}, cwd=ac,
+                 os.environ.get("PULSO_REGISTRY_DIR") or str(ac / "tests" / "fixtures" / "registry-e2e")], env={**env, "AGENTCORE_CREDENTIAL": admin}, cwd=ac,
                 check=False)
     txt = (imp.stdout or "") + (imp.stderr or "")
     if imp.returncode != 0 and "ya tiene releases" not in txt:

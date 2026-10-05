@@ -103,7 +103,7 @@ fn a_tighten_only_draft_of_a_human_owned_policy_is_proven_but_needs_the_owner_an
     assert_eq!((p.announce, p.outcome.as_str(), p.verdict.as_str()), (false, "needs_owner_ack", "regression_suite_proven"), "{}", p.story["reason"]);
     assert!(p.suite.is_none());
     assert_eq!(p.story["base"]["failed_cases"].as_array().unwrap().len(), 6);
-    assert!(p.dossier["es"]["sections"].to_string().contains("owner_ack"));
+    assert_eq!((p.dossier["announce"].as_bool(), p.dossier["announce_reason"].as_str()), (Some(false), Some("needs_owner_ack")));
 }
 
 fn stage(n: i64, d: i64) -> Value {

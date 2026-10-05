@@ -15,6 +15,15 @@ pub struct Denied {
 fn deny<T>(code: &'static str, why: impl Into<String>) -> Result<T, Denied> {
     Err(Denied { code, why: why.into() })
 }
+/// Entity id of a reference in either shape: the fixture string `id@major` or the registry object `{id, spec}`.
+pub fn ref_id(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.split('@').next().unwrap_or(s).to_string(),
+        Value::Object(o) => o.get("id").and_then(Value::as_str).unwrap_or("").to_string(),
+        _ => String::new(),
+    }
+}
+
 fn bump(v: &str, minor: bool) -> String {
     let p: Vec<u64> = v.split('.').filter_map(|x| x.parse().ok()).collect();
     match (p.len() == 3, minor) {
@@ -66,9 +75,8 @@ pub fn check_link(tool_def: &Value, svc: &ToolService, agent: &Value) -> Result<
     if inv.is_empty() || !inv.iter().all(|p| SERVED_PRINCIPALS.contains(p)) {
         return deny("principal_not_served", format!("agent invocable_by {inv:?} is not within {SERVED_PRINCIPALS:?}"));
     }
-    let r = format!("{id}@{}", tool_def["version"].as_str().unwrap_or("").split('.').next().unwrap_or(""));
-    if agent["tools_allowed"].as_array().into_iter().flatten().any(|t| t.as_str() == Some(&r)) {
-        return deny("already_linked", format!("{r} is already in tools_allowed"));
+    if agent["tools_allowed"].as_array().into_iter().flatten().any(|t| ref_id(t) == id) {
+        return deny("already_linked", format!("{id} is already in tools_allowed"));
     }
     Ok(())
 }
@@ -109,6 +117,9 @@ pub fn compile_link_tool(flow: &Value, agent: &Value, tool_def: &Value, svc: &To
     let Some(esc) = esc else { return deny("no_error_exit", "the flow has no tool_failure escalate node to wire the error exits to") };
     let (tid, tver) = (tool_def["id"].as_str().unwrap_or(""), tool_def["version"].as_str().unwrap_or(""));
     let major = tver.split('.').next().unwrap_or("1");
+    // new references follow the style of the entity they are written into (fixture `id@major`, registry `{id, spec}`)
+    let object_refs = agent["tools_allowed"].as_array().is_some_and(|a| a.first().is_some_and(Value::is_object)) || nodes.iter().any(|n| n["config"]["tool"].is_object());
+    let mk_ref = |_: ()| if object_refs { json!({"id": tid, "spec": tver}) } else { json!(format!("{tid}@{major}")) };
     let new_id = format!("eng_link_{tid}");
     if nodes.iter().any(|n| n["id"] == new_id.as_str()) {
         return deny("already_linked", "the flow already has the link node");
@@ -122,15 +133,20 @@ pub fn compile_link_tool(flow: &Value, agent: &Value, tool_def: &Value, svc: &To
         }
         new_nodes.push(n);
     }
-    new_nodes.push(json!({"id": new_id, "type": "tool", "config": {"tool": format!("{tid}@{major}"), "args": {}, "save_as": format!("eng_{tid}")},
+    new_nodes.push(json!({"id": new_id, "type": "tool", "config": {"tool": mk_ref(()), "args": {}, "save_as": format!("eng_{tid}")},
                           "next": {"ok": to, "error": esc, "timeout": esc, "denied": esc}}));
     let mut f = flow.clone();
     f["nodes"] = Value::Array(new_nodes);
     f["version"] = json!(bump(flow["version"].as_str().unwrap_or(""), true));
     let mut a = agent.clone();
     let mut allowed = a["tools_allowed"].as_array().cloned().unwrap_or_default();
-    allowed.push(json!(format!("{tid}@{major}")));
+    allowed.push(mk_ref(()));
     a["tools_allowed"] = Value::Array(allowed);
+    // The drafted agent pins its entry flow: an EXACT registry pin (`{id, spec: "1.0.0"}`) must follow the new flow version (REG-PIN
+    // otherwise, seen live); a major pin (`id@1`) still resolves.
+    if ref_id(&a["entry_flow"]) == flow["id"].as_str().unwrap_or("") && a["entry_flow"].is_object() {
+        a["entry_flow"]["spec"] = f["version"].clone();
+    }
     a["version"] = json!(bump(agent["version"].as_str().unwrap_or(""), false));
     let docs = |d: &str| json!({"description": d, "rationale": "link to an existing read-only tool", "changelog": d});
     Ok(vec![
@@ -182,7 +198,7 @@ pub fn not_weaker(old: &Value, new: &Value) -> Result<(), Denied> {
 pub fn true_branch_escalates(flow: &Value, policy_id: &str) -> bool {
     let nodes = flow["nodes"].as_array().cloned().unwrap_or_default();
     let mut seen = false;
-    for n in nodes.iter().filter(|n| n["type"] == "rule" && n["config"]["policy"].as_str().is_some_and(|p| p.split('@').next() == Some(policy_id))) {
+    for n in nodes.iter().filter(|n| n["type"] == "rule" && ref_id(&n["config"]["policy"]) == policy_id) {
         seen = true;
         let t = n["next"]["true"].as_str().unwrap_or("");
         if !nodes.iter().any(|m| m["id"] == t && m["type"] == "escalate") {
@@ -214,10 +230,9 @@ pub fn tighten_policy(policy: &Value, consumer_flow: &Value, new_value: f64) -> 
     p["expr"] = new_expr;
     p["version"] = json!(bump(policy["version"].as_str().unwrap_or(""), false));
     let needs = policy["owner"].as_str() != Some(ENGINE_OWNER);
-    let mut docs = json!({"description": format!("[improvement-engine] tighten-only change of policy {id}: threshold {old} to {new_value}"), "rationale": "stricter policy: escalates for every value the old one escalated, plus more", "changelog": "threshold moved towards more escalation"});
-    if needs {
-        docs["owner_ack"] = json!({"required": true, "owner": policy["owner"], "announce": "never_automatic"});
-    }
+    // agent-core `VersionDocs` takes only description, rationale and changelog: the owner marker travels as text in them (and in `human_items`).
+    let ack = if needs { format!(" [owner_ack required: owner {} must acknowledge; never announced automatically]", policy["owner"].as_str().unwrap_or("?")) } else { String::new() };
+    let docs = json!({"description": format!("[improvement-engine] tighten-only change of policy {id}: threshold {old} to {new_value}.{ack}"), "rationale": format!("stricter policy: escalates for every value the old one escalated, plus more.{ack}"), "changelog": format!("threshold moved towards more escalation.{ack}")});
     Ok(PolicyDraft { changes: vec![json!({"kind": "policy", "content": p, "docs": docs})], needs_owner_ack: needs, old_value: old, new_value })
 }
 
@@ -279,7 +294,7 @@ mod tests {
         let d = tighten_policy(&pol(">", 500.0, "riesgo"), &flow(), 250.0).unwrap();
         assert!(d.needs_owner_ack);
         assert_eq!(d.changes[0]["content"]["version"], "1.0.1");
-        assert_eq!(d.changes[0]["docs"]["owner_ack"]["required"], true);
+        assert!(d.changes[0]["docs"]["description"].as_str().unwrap().contains("owner_ack required: owner riesgo"));
         assert!(!tighten_policy(&pol(">", 500.0, "engine"), &flow(), 250.0).unwrap().needs_owner_ack);
         assert_eq!(tighten_policy(&pol(">", 500.0, "riesgo"), &flow(), 900.0).unwrap_err().code, "policy_loosening_denied");
         let mut f = flow();
@@ -318,5 +333,24 @@ mod tests {
         let h = policy_hypothesis(&pol(">", 500.0, "riesgo"), 500.0, 250.0);
         assert_eq!(h["boundary_guards"], json!([249.0, 250.0, 251.0, 499.0, 500.0, 501.0]));
         assert!(h["draft"].is_null());
+    }
+    #[test]
+    fn registry_object_refs_are_understood_and_written_in_their_style() {
+        let mut f = flow();
+        f["nodes"][1]["config"]["tool"] = json!({"id": "x", "spec": "1.0.0"});
+        f["nodes"][2]["config"]["policy"] = json!({"id": "p", "spec": "1.0.0"});
+        let mut a = agent();
+        a["tools_allowed"] = json!([{"id": "x", "spec": "1.0.0"}]);
+        let ch = compile_link_tool(&f, &a, &tdef("leer", "read", "s"), &svc(), "t.ok").unwrap();
+        assert_eq!(ch[1]["content"]["tools_allowed"][1], json!({"id": "leer", "spec": "1.0.0"}));
+        let n = ch[0]["content"]["nodes"].as_array().unwrap().iter().find(|n| n["id"] == "eng_link_leer").unwrap().clone();
+        assert_eq!(n["config"]["tool"], json!({"id": "leer", "spec": "1.0.0"}));
+        let mut a2 = a.clone();
+        a2["entry_flow"] = json!({"id": "f", "spec": "1.0.0"});
+        let ch2 = compile_link_tool(&f, &a2, &tdef("leer", "read", "s"), &svc(), "t.ok").unwrap();
+        assert_eq!(ch2[1]["content"]["entry_flow"]["spec"], "1.1.0", "an exact entry-flow pin follows the new flow version");
+        assert!(true_branch_escalates(&f, "p"));
+        a["tools_allowed"] = json!([{"id": "leer", "spec": "1.0.0"}]);
+        assert_eq!(compile_link_tool(&f, &a, &tdef("leer", "read", "s"), &svc(), "t.ok").unwrap_err().code, "already_linked");
     }
 }

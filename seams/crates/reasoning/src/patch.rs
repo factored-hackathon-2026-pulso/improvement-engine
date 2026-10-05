@@ -358,7 +358,8 @@ fn compile_link(catalog: &Catalog, target: &Target, p: &Value, mut effect: Value
     let miss = |what: &str| Denied { code: "target_mismatch", why: format!("{what} is not in the baseline catalogue") };
     let tool = target.params["tool"].as_str().ok_or_else(|| miss("params.tool"))?;
     let agent = catalog.agent(target.agent).ok_or_else(|| miss(target.agent))?;
-    let flow_id = agent["entry_flow"].as_str().unwrap_or("").split('@').next().unwrap_or("");
+    let flow_id = crate::art2::ref_id(&agent["entry_flow"]);
+    let flow_id = flow_id.as_str();
     let flow = catalog.flow(flow_id).ok_or_else(|| miss(flow_id))?;
     let tool_def = catalog.tool_def(tool).ok_or_else(|| miss(tool))?;
     let svc = catalog.tool_service.as_ref().ok_or_else(|| Denied { code: "tool_not_in_service", why: "no tool-service listing in the catalogue".into() })?;
@@ -397,7 +398,7 @@ pub fn compile_policy_tighten(catalog: &Catalog, policy: &Value) -> Result<Compi
     let new_value = policy["tighten_to"].as_f64().ok_or(Denied { code: "target_mismatch", why: "no structured tighten_to value".into() })?;
     let d = crate::art2::tighten_policy(pol, flow, new_value).map_err(from_art2)?;
     let fid = flow["id"].as_str().unwrap_or("");
-    let agent = catalog.agent_ids().into_iter().find(|a| catalog.agent(a).is_some_and(|x| x["entry_flow"].as_str().is_some_and(|e| e.split('@').next() == Some(fid)))).unwrap_or_default();
+    let agent = catalog.agent_ids().into_iter().find(|a| catalog.agent(a).is_some_and(|x| crate::art2::ref_id(&x["entry_flow"]) == fid)).unwrap_or_default();
     let bump = |v: &str| bump_patch(v);
     let cascade = vec![format!("flow:{fid}@{}", bump(flow["version"].as_str().unwrap_or(""))), format!("agent:{agent}@{}", bump(catalog.agent(&agent).and_then(|a| a["version"].as_str()).unwrap_or("")))];
     let diff = d.changes.iter().map(|c| json!({"kind": c["kind"], "id": c["content"]["id"], "version": c["content"]["version"], "threshold": {"from": d.old_value, "to": d.new_value}})).collect();

@@ -548,9 +548,13 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
     let judge = judge_family(verdict, labels);
 
     let vd_es = verdict_text(Lang::Es, verdict);
-    let announce = vd_es.announce && finding_ok && has_change;
+    // ART2: a draft of a human-owned artifact waits for its owner and is never announced automatically
+    let owner_ack = proposal["human_items"].as_array().is_some_and(|h| h.iter().any(|x| x.as_str().is_some_and(|t| t.starts_with("owner_ack required"))));
+    let announce = vd_es.announce && finding_ok && has_change && !owner_ack;
     let reason_key = if announce {
         "announce"
+    } else if owner_ack && vd_es.announce {
+        "needs_owner_ack"
     } else if verdict.is_none() {
         "not_evaluated"
     } else if !vd_es.announce {
