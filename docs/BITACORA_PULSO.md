@@ -260,3 +260,8 @@ platform-contract/ (schemas, event catalog, golden, conformance; 19 tests) and p
 - Published a documentation-only follow-up to PR #104 so the technical journal records the observed host state. Current GitHub head is `85f0601ce5395601a297e2f364487c0cd5da42fa`; its workflow run `37304927162` completed with failure in Ubuntu verify, Windows verify, and PostgreSQL artifact migration. Each job-log request returns `BlobNotFound`; root cause remains unknown. Combined status exposes no status entries.
 - Local branch tree matches the published PR tree (`e620e4b80256e939106fda41f2b09f1d1aed7b7c`) apart from the intentionally excluded dirty L-GOV-owned `OWNERS.md`. The code/test tree was locally validated before the documentation-only follow-up.
 - PR is open and GitHub reports it mergeable, but hosted checks are not green; user review is possible, while merge-readiness is not claimed.
+
+## 2026-10-05T11:53:38Z UTC — CODEX — diagnose hosted workflow gate
+
+- Followed the GitHub Code Review provider guidance and fetched check-run annotations for all three failures on head `0f56399`. Each annotation says the job was **not started** because recent account payments have failed or the spending limit needs to be increased. Ubuntu and PostgreSQL also include an unrelated runner-image notice. This identifies an account billing/spending gate, not a test failure; the annotation does not distinguish payment state from configured spend limit.
+- Job logs remain unavailable (`BlobNotFound`), but the check annotations are direct evidence of why no code verification ran. Local gates remain green. Do not spend time changing product code or rerunning CI until the repository/account billing gate is addressed; no billing setting was changed by Codex.
