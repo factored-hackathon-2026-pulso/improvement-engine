@@ -33,13 +33,15 @@ class PureTests(unittest.TestCase):
         self.assertTrue(res["detail title"] and res["detail docs.description"] and res["detail docs.rationale"])
         self.assertFalse(res["detail docs.changelog"])
 
-    def test_human_progress_done_only_on_promotion_of_that_proposal(self):
-        ev = [{"type": "release.published", "proposal_id": "p1", "alias": "staging"}, {"type": "release.promoted", "proposal_id": "p2", "alias": "prod"}]
-        self.assertFalse(sv.human_progress("approved", ev, "p1")["done"])
-        ev.append({"type": "release.promoted", "proposal_id": "p1", "alias": "prod"})
+    def test_human_progress_follows_the_release_id_not_the_proposal_id(self):
+        ev = [{"type": "published", "proposal_id": "p1", "alias": "staging", "release_id": "r1"},
+              {"type": "published", "proposal_id": "p2", "alias": "staging", "release_id": "r2"},
+              {"type": "promoted", "proposal_id": None, "alias": "prod", "release_id": "r2"}]
+        self.assertFalse(sv.human_progress("published", ev, "p1")["done"])  # r2 was promoted, not r1
+        ev.append({"type": "promoted", "proposal_id": None, "alias": "prod", "release_id": "r1"})
         p = sv.human_progress("published", ev, "p1")
         self.assertTrue(p["done"])
-        self.assertIn("release.promoted@prod", p["events"])
+        self.assertEqual(p["release_id"], "r1")
         self.assertFalse(sv.human_progress("draft", None, "p1")["done"])
 
     def test_case_id_shape(self):

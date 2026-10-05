@@ -169,11 +169,14 @@ def cmd_cases(a) -> int:
 
 
 def human_progress(state: str, events: list, proposal_id: str) -> dict:
-    """Pure: what the registry says about a proposal a person is deciding. `events` are registry export events."""
+    """Pure: what the registry says about a proposal a person is deciding. `events` are registry export events.
+    A `published` event carries the proposal id; the later `promoted` event carries only the RELEASE id (proposal_id is null), so a
+    promotion belongs to the proposal when its release id is the one the proposal published."""
     mine = [e for e in events or [] if e.get("proposal_id") == proposal_id]
-    types = sorted({e.get("type", "?") + (f"@{e['alias']}" if e.get("alias") else "") for e in mine})
-    done = any(e.get("type") == "release.promoted" and e.get("alias") in (None, "prod") for e in mine)
-    return {"state": state, "events": types, "done": done}
+    releases = {e.get("release_id") for e in mine if e.get("type") in ("published", "release.published") and e.get("release_id")}
+    promoted = [e for e in events or [] if e.get("type") in ("promoted", "release.promoted") and e.get("release_id") in releases and e.get("alias") in (None, "prod")]
+    types = sorted({e.get("type", "?") for e in mine} | {"promoted@" + str(e.get("alias")) for e in promoted})
+    return {"state": state, "events": types, "done": bool(promoted), "release_id": next(iter(releases), None)}
 
 
 def cmd_wait_human(a) -> int:
