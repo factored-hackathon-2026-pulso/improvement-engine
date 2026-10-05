@@ -724,6 +724,20 @@ fn integer_at(array: &dyn Array, row: usize) -> Result<Option<i64>, &'static str
 }
 
 fn list_strings_at(array: &dyn Array, row: usize) -> Result<Vec<String>, &'static str> {
+    if let Some(values) = array.as_any().downcast_ref::<LargeStringArray>() {
+        if values.is_null(row) {
+            return Err("required query table list is null");
+        }
+        return serde_json::from_str(values.value(row))
+            .map_err(|_| "allowlisted query list has an invalid serialized array");
+    }
+    if let Some(values) = array.as_any().downcast_ref::<StringArray>() {
+        if values.is_null(row) {
+            return Err("required query table list is null");
+        }
+        return serde_json::from_str(values.value(row))
+            .map_err(|_| "allowlisted query list has an invalid serialized array");
+    }
     let values = if let Some(list) = array.as_any().downcast_ref::<ListArray>() {
         if list.is_null(row) {
             return Err("required query table list is null");
@@ -1059,6 +1073,24 @@ pub fn schema_fingerprints(data_root: &Path, e0_data_dir: &Path) -> Result<Value
 mod tests {
     use super::*;
     use serde_json::Value;
+
+    #[test]
+    fn reads_varchar_array_contract_from_large_utf8_json_projection() {
+        let values = LargeStringArray::from(vec![r#"["transactions","complaints"]"#]);
+        assert_eq!(
+            list_strings_at(&values, 0).expect("valid serialized VARCHAR array"),
+            ["transactions", "complaints"]
+        );
+    }
+
+    #[test]
+    fn rejects_non_array_large_utf8_query_table_metadata() {
+        let values = LargeStringArray::from(vec!["transactions"]);
+        assert_eq!(
+            list_strings_at(&values, 0).unwrap_err(),
+            "allowlisted query list has an invalid serialized array"
+        );
+    }
 
     fn fixture() -> Input {
         let complaints = (0..60)
