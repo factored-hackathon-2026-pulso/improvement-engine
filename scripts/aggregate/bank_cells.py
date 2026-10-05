@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Build TREATED cell tables from the local bank dataset (aggregates only).
 
-Reads ONLY call_center_interactions, complaints and satisfaction_surveys (CSV partitions under a local
-data root, never committed) and emits ndjson cells for the Rust `cells` sensor (steps::cells):
+Reads ONLY call_center_interactions, complaints, satisfaction_surveys, digital_events, campaign_sends and
+transactions (CSV partitions under a local data root, never committed), plus two reference files read by a column
+allowlist (customers.csv: customer_id, segment, accepts_marketing; marketing_campaigns.csv: campaign_id,
+campaign_type) and emits ndjson cells for the Rust `cells` sensor (steps::cells):
 
     {"metric":"M1","dims":{"reason_category":"Queja","channel":"Phone"},"half":"discovery",
      "numerator":120,"denominator":600}
@@ -21,6 +23,12 @@ Metrics (all "higher is worse"):
   M5  pqr_sla_breach_rate            sla_breached / PQR; by category
   M6  survey_low_score_rate          low score / surveys; by channel
   M6L survey_low_score_rate_linked   same, surveys linkable to an interaction; by reason_category x channel
+AG2 metrics (exact definitions and limits: docs/data/bank-cells-metrics.md):
+  M7  digital_error_rate             Error events / events, identified customers; by action x channel (descriptive)
+  M8  send_to_nonconsenting_rate     sends to accepts_marketing=false customers / sends; by campaign_type x channel (RISK)
+  M9  tx_decline_rate                Declined / transactions; by channel x customer_segment (expected FLAT: non-finding)
+  M10 handle_time_unresolved_share   unresolved handled HOURS / handled hours; by reason_category x channel
+                                     (re-expression of M1: the sensor flags it depends_on M1)
 Low score: CSAT main_score <= 2. Only CSAT is scored (NPS/CES use other scales; pooling would be an artifact).
 
 Usage: python scripts/aggregate/bank_cells.py --data-root D:/.codex/factored/data --out <local path>
@@ -33,7 +41,14 @@ import sys
 import unicodedata
 from pathlib import Path
 
-ALLOWED_TABLES = ("call_center_interactions", "complaints", "satisfaction_surveys")
+ALLOWED_TABLES = ("call_center_interactions", "complaints", "satisfaction_surveys",
+                  "digital_events", "campaign_sends", "transactions")
+# Reference files (not partitioned): read by name and by column allowlist; PII columns are never indexed.
+REF_COLUMNS = {"customers.csv": ("customer_id", "segment", "accepts_marketing"),
+               "marketing_campaigns.csv": ("campaign_id", "campaign_type")}
+# Actions with no Error events by construction (audit F10): excluded so they do not deflate the comparison baseline.
+STRUCTURAL_ACTIONS = {"", "login", "logout", "view_product"}
+HANDLE_TIME_UNIT_SECONDS = 3600  # M10 is emitted in whole hours: a conservative effective n (seconds would overstate it)
 SPLIT_SALT = "pulso-cells-v1|"
 OPEN_STATUSES = {"Open", "In Process", "Escalated"}
 SCORED_SURVEY_TYPE = "CSAT"  # other types use different scales; pooling them would fabricate differences
@@ -62,6 +77,38 @@ def read_table(root: Path, table: str):
         yield from csv.DictReader(text.splitlines())
 
 
+def _decode(raw: bytes) -> str:
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252")
+
+
+def _project(text: str, cols):
+    rd = csv.reader(text.splitlines())
+    header = next(rd, None)
+    if header is None:
+        return
+    idx = [header.index(c) for c in cols]
+    top = max(idx)
+    for row in rd:
+        if len(row) > top:
+            yield tuple(row[i] for i in idx)
+
+
+def read_cols(root: Path, table: str, cols):
+    """Fast column-subset reader: yields tuples of the requested columns only (a missing column raises)."""
+    for f in sorted((root / table).rglob("*.csv")):
+        yield from _project(_decode(f.read_bytes()), cols)
+
+
+def read_reference(root: Path, name: str):
+    """Reference file restricted to its allowlisted columns (REF_COLUMNS); yields tuples in that order."""
+    path = Path(root) / name
+    if path.exists():
+        yield from _project(_decode(path.read_bytes()), REF_COLUMNS[name])
+
+
 def row_key(r):
     return (r["metric"], sorted(r["dims"].items()), r["half"], r["period"])
 
@@ -87,6 +134,9 @@ def build(root, k=10, tables=ALLOWED_TABLES):
             raise ValueError(f"table {t!r} is outside the allowlist {ALLOWED_TABLES}")
     acc = Acc()
     stats = {"k": k, "split": "customer_hash_A_B_50_50", "rows_read": {}}
+    absent = [t for t in tables if not (root / t).is_dir()]
+    tables = tuple(t for t in tables if t not in absent)
+    stats["tables_absent"] = absent
     reason_of = {}
     stats["partial_month_rows_excluded"] = {}
 
@@ -110,6 +160,14 @@ def build(root, k=10, tables=ALLOWED_TABLES):
                 acc.add("M1", {"reason_category": reason, "channel": chan}, half, period, unresolved)
                 if unresolved:
                     acc.add("M3", {"channel": chan}, half, period, queja)
+                dur = (r.get("duration_seconds") or "").strip()
+                if dur:
+                    try:
+                        secs = int(float(dur))
+                    except ValueError:
+                        secs = -1
+                    if secs >= 0:
+                        acc.add("M10S", {"reason_category": reason, "channel": chan}, half, period, secs * unresolved, secs)
         stats["rows_read"]["call_center_interactions"] = n
         stats["partial_month_rows_excluded"]["call_center_interactions"] = skipped
 
@@ -154,12 +212,103 @@ def build(root, k=10, tables=ALLOWED_TABLES):
         stats["surveys"] = {"total": n, "scored_csat": scored, "linked_scored": linked,
                             "linked_share": round(linked / scored, 4) if scored else 0.0}
 
+    # --- AG2 tables -------------------------------------------------------------------------------------------
+    halves, cache, customers, campaigns = {}, {}, None, None
+
+    def half_of(cid):
+        h = halves.get(cid)
+        if h is None:
+            h = halves[cid] = split_half(cid)
+        return h
+
+    def vocab(v):
+        n = cache.get(v)
+        if n is None:
+            n = cache[v] = norm(v)
+        return n
+
+    def load_customers():
+        return {c: (norm(sg), a.strip()) for c, sg, a in read_reference(root, "customers.csv")}
+
+    if "digital_events" in tables:
+        n = skipped = anon = structural = 0
+        for event_date, cid, etype, chan, action in read_cols(
+                root, "digital_events", ("event_date", "customer_id", "event_type", "channel", "action")):
+            period = event_date[:7]
+            if period in PARTIAL_MONTHS:
+                skipped += 1
+                continue
+            n += 1
+            if not cid:
+                anon += 1  # anonymous events cannot be split A/B and are never used
+                continue
+            action = action.strip()
+            if action in STRUCTURAL_ACTIONS:
+                structural += 1
+                continue
+            acc.add("M7", {"action": vocab(action), "channel": vocab(chan)}, half_of(cid), period,
+                    int(etype.strip() == "Error"))
+        stats["rows_read"]["digital_events"] = n
+        stats["partial_month_rows_excluded"]["digital_events"] = skipped
+        stats["digital_events"] = {"anonymous_excluded": anon, "structural_actions_excluded": structural}
+
+    if "campaign_sends" in tables:
+        customers = load_customers()
+        campaigns = {c: norm(t) for c, t in read_reference(root, "marketing_campaigns.csv")}
+        n = skipped = unk_consent = unk_campaign = 0
+        for send_date, cid, camp, chan in read_cols(
+                root, "campaign_sends", ("send_date", "customer_id", "campaign_id", "send_channel")):
+            period = send_date[:7]
+            if period in PARTIAL_MONTHS:
+                skipped += 1
+                continue
+            n += 1
+            consent = customers.get(cid, ("", ""))[1]
+            if consent not in ("True", "False"):
+                unk_consent += 1
+                continue
+            ctype = campaigns.get(camp)
+            if not ctype:
+                unk_campaign += 1
+                continue
+            acc.add("M8", {"campaign_type": ctype, "channel": vocab(chan)}, half_of(cid), period, int(consent == "False"))
+        stats["rows_read"]["campaign_sends"] = n
+        stats["partial_month_rows_excluded"]["campaign_sends"] = skipped
+        stats["campaign_sends"] = {"consent_unknown_excluded": unk_consent, "campaign_unknown_excluded": unk_campaign}
+
+    if "transactions" in tables:
+        if customers is None:
+            customers = load_customers()
+        n = skipped = unk = 0
+        for tdate, cid, chan, status in read_cols(
+                root, "transactions", ("transaction_date", "customer_id", "channel", "transaction_status")):
+            period = tdate[:7]
+            if period in PARTIAL_MONTHS:
+                skipped += 1
+                continue
+            n += 1
+            seg, status = customers.get(cid, ("", ""))[0], status.strip()
+            if not seg or not status:
+                unk += 1
+                continue
+            acc.add("M9", {"channel": vocab(chan), "customer_segment": seg}, half_of(cid), period, int(status == "Declined"))
+        stats["rows_read"]["transactions"] = n
+        stats["partial_month_rows_excluded"]["transactions"] = skipped
+        stats["transactions"] = {"segment_or_status_unknown_excluded": unk}
+
+    # M10 is accumulated in seconds (M10S) and emitted in whole hours (conservative effective n).
+    cells = {}
+    for (metric, dims, half, period), (num, den) in acc.cells.items():
+        if metric == "M10S":
+            metric, num, den = "M10", num // HANDLE_TIME_UNIT_SECONDS, den // HANDLE_TIME_UNIT_SECONDS
+        cells[(metric, dims, half, period)] = [num, den]
+
     # Complementary suppression: a published margin must not let a reader subtract a suppressed cell.
     #  - M3 denominator = sum of M1 numerators of the channel: hide M3 when an M1 cell of that channel/half/period
     #    with a positive numerator is suppressed.
     #  - M6 = M6R + M6U (+ unknown resolution): hide the partner when M6R or M6U is suppressed.
     hide = set()
-    for (metric, dims, half, period), (num, den) in acc.cells.items():
+    for (metric, dims, half, period), (num, den) in cells.items():
         if k_ok(num, den, k):
             continue
         d = dict(dims)
@@ -169,7 +318,7 @@ def build(root, k=10, tables=ALLOWED_TABLES):
             hide.add(("M6U" if metric == "M6R" else "M6R", dims, half, period))
 
     rows, suppressed = [], {}
-    for (metric, dims, half, period), (num, den) in acc.cells.items():
+    for (metric, dims, half, period), (num, den) in cells.items():
         if k_ok(num, den, k) and (metric, dims, half, period) not in hide:
             rows.append({"metric": metric, "dims": dict(dims), "half": half, "period": period, "numerator": num, "denominator": den})
         else:
