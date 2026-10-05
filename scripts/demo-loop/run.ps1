@@ -44,7 +44,14 @@ try {
 }
 
 $factored = Split-Path -Parent (Split-Path -Parent $root)
-$settings = Get-DemoStackSettings
+# MAP1: a lane runs on its OWN prefix and ports (PULSO_STACK_PREFIX, PULSO_PG_PORT, PULSO_GW_PORT, PULSO_CORE_PORT, PULSO_ENGINE_PORT); defaults unchanged.
+$stackArgs = @{}
+if ($env:PULSO_STACK_PREFIX) { $stackArgs['Prefix'] = $env:PULSO_STACK_PREFIX }
+if ($env:PULSO_PG_PORT) { $stackArgs['PgPort'] = [int]$env:PULSO_PG_PORT }
+if ($env:PULSO_GW_PORT) { $stackArgs['GwPort'] = [int]$env:PULSO_GW_PORT }
+if ($env:PULSO_CORE_PORT) { $stackArgs['CorePort'] = [int]$env:PULSO_CORE_PORT }
+if ($env:PULSO_ENGINE_PORT) { $stackArgs['EnginePort'] = [int]$env:PULSO_ENGINE_PORT }
+$settings = Get-DemoStackSettings @stackArgs
 $demoDir = Join-Path $root '.dev-stack\demo-loop'
 $null = New-Item -ItemType Directory -Force -Path $demoDir
 $statePath = Join-Path $demoDir 'state.json'
