@@ -1,159 +1,135 @@
-# Agent-run outcome aggregation contract v2
+# Agent Core run aggregates (T3)
 
-**Status:** implemented initial contract; synthetic tests only. Claude's
-shared-journal entry CL-0073 reports fields in Agent Core run-export contract
-1.4.0, but the exact cited source revision is absent from available local
-references (both declare contract 1.3.0); the v1.4 wire shape is not
-independently verified here. The checked-in Codex fixture does not exercise
-most reported fields or event types.
-This is a separate Agent Core telemetry stream. It does not alter the bank
-dataset, the six-field `bank_cells.py` schema, or the bank outcome estimator.
-Matching the bank-cell row shape is structural compatibility only; bank and
-agent-run metrics must never be pooled or compared as if they shared a
-population.
+**Status:** v3 implementation for finite agent/locale dimensions, terminal
+outcomes, tool-error runs, and retry runs. Synthetic contract tests pass; the
+checked-in recorded fixture remains incomplete and cannot support a live
+result. This is a separate Agent Core metric namespace (`AG_*`), never pooled
+with or registered as bank metrics M1-M10.
 
-## Source and evidence boundary
+## Source traversal and snapshot rules
 
-Input is a recorded Agent Core run-export envelope with `runs.pages` and
-per-run `events[run_id]` page arrays. Only closed or escalated runs with a known terminal outcome
-are eligible; open runs are excluded. Each eligible run must have one
-`run_closed` event whose outcome agrees with the summary row and whose UTC
-close timestamp is in the same calendar month. Agent Core may persist
-`closed_at` and emit `run_closed.ts` a few milliseconds apart, so exact-instant
-equality is not a valid integrity condition. Registry events are not read.
-Missing, malformed, contradictory, or unknown terminal data fails closed
-instead of becoming a measured zero. The saved envelope must contain the
-actual cursor traversal for the run listing and for every run's event listing.
-Each trace is an ordered `pages` array; every page records
-`requested_after`, `items`, and `next_after`. The first request uses null; each
-subsequent `requested_after` must exactly equal the prior page's `next_after`.
-The traversal is complete only when an empty `items` page is observed, and
-that empty page must be last. The cursor is opaque: its value is never decoded,
-and even the terminal empty page may repeat a non-null cursor. A caller-supplied
-`terminal_page_observed` boolean is not evidence of pagination completeness.
+The input is a saved Agent Core export envelope with a structurally complete
+cursor chain for `runs.pages` and one complete `events[run_id]` cursor chain for
+every selected run. The chain ending at an observed empty page is structural,
+producer-asserted evidence only: this aggregator cannot authenticate that the
+producer traversed every page, that the snapshot is globally consistent, or
+that the envelope is genuine. The cursor is opaque. Missing, malformed, or
+structurally incomplete event pages fail closed, because the denominator for
+tool metrics must be known before a run can count as a non-error.
 
-CL-0073 reports that the Agent Core 1.4.0 export contract includes run-level
-`agent{id,version}` and one `locale` per run; event families include
-`tool_called`, `run_transferred`, `escalated`, `run_closed`, `decision_made`,
-and `turn_completed`. This is collaborator-reported contract evidence, not
-independent verification of the v1.4 wire schema, proof that our recorded
-sample exercises those events, or proof that their cardinality and outcome
-semantics support a metric. The available local v1.3 producer source suggests
-that tool records are per attempt (including retries), `decision_made` may
-recur per run, and `turn_completed` excludes turns without a completion event;
-do not treat those v1.3 observations as v1.4 guarantees until the cited source
-revision is pinned and audited.
-The checked-in `scripts/triggers/fixtures/export_recorded.json` is explicitly
-recorded from local Agent Core using synthetic input; it contains two returned
-`pulso-builder` / `es` completed-run summaries and trimmed `run_closed` events,
-but it does not attest that the run and event pages are terminal. The
-aggregator rejects it as incomplete; its two returned rows cannot establish the
-total population or support any publishable cell or claim about bank/customer
-behavior.
-Input labels are mapped to a fixed evidence enum (`recorded`, `synthetic`, or
-`live_platform`) and raw labels are never copied to output. The `live_platform`
-label records source class only; it does not certify production representativeness.
+Run listing entries can reappear as the last-change cursor advances. They are
+deduplicated by `run_id`, retaining the row with the numerically highest
+`cursor`; conflicting rows at that same highest cursor reject the export. Event
+rows are unique by `(run_id, seq)`. Exact duplicates collapse; conflicting
+duplicates reject the export. IDs remain in process only and are never written
+to the report.
 
-## Frozen terminal metric registry
+The checked-in `export_recorded.json` is a two-run synthetic-input capture
+whose run and event cursors are not terminal. It is expected to be rejected.
+Collaborator contract evidence CL-0075 reports run-level `agent.id`, `locale`,
+and event fields used below for contract 1.4.0. The pinned local generated
+schemas are older; therefore the implementation's synthetic fixtures verify
+the stated semantics, not a live v1.4 wire integration. An actual live export
+with complete pagination is still required to establish runtime compatibility.
 
-Metrics are mutually exclusive buckets over the pinned nine-value Agent Core
-terminal outcome enum. Every valid outcome maps exactly once:
+## Safe dimensions
 
-| Metric | Included terminal outcomes | Interpretation boundary |
+Every row carries bounded `agent`, `locale`, and `topic` dimensions. Outcome
+distribution rows add one bounded `outcome` dimension, giving the requested
+agent × locale × topic × outcome shape. Handoff and tool-rate rows use the
+three base dimensions; shared six-field rows do not require identical dims
+across distinct metrics.
+
+| Dimension | Rule | Meaning |
 | --- | --- | --- |
-| `resolved` | `resolved` | Only the explicit terminal outcome; never infer from `completed` |
-| `escalation_or_transfer` | `escalated`, `transferred` | Handoff category; not necessarily a failure |
-| `abstention_or_clarification_exhausted` | `abstained`, `clarify_exhausted` | Agent did not complete resolution; the grouping is a reporting bucket |
-| `failed` | `failed` | Explicit failed terminal outcome |
-| `other_terminal` | `cancelled`, `completed`, `abandoned` | Mixed/ambiguous remainder; do not call success or failure |
+| `agent` | Required schema-valid ID/version; fixed registry-ID allow-list: `pulso-builder` -> `builder`; valid unknown IDs -> `other` | Safe category only; raw registry ID/version never leaves the process. Missing or schema-invalid references reject the export. |
+| `locale` | Required bounded BCP 47-like tag: lowercase 2–3 letter language plus optional hyphen-separated 2–8 ASCII alphanumeric subtags, max 35 chars. `es`/`es-*` -> `es`; `pt`/`pt-*` -> `pt`; other valid tags -> `other`. | One locale per run; missing, wrong-type, unsafe or malformed values reject the export. |
+| `topic` | Constant protocol-owned `not_observed` | The source contract has no topic field. This sentinel is not source-derived and must never be presented as an observed topic. |
 
-The mapping is versioned and closed. Unknown values reject the export; new
-Agent Core outcomes require a contract revision and tests before inclusion.
+The finite agent allow-list is code-versioned. Adding an ID requires review and
+a test. No text, release, principal, session, turn, tool, or other identifier
+is used as a dimension. The topic sentinel exists only to preserve the requested
+dimension slot while making absence explicit; it does not create topic-level
+measurement.
 
-## Population, split, and row contract
+## Metric registry and denominators
 
-- Grain: one unique `run_id`. Exact duplicates over the output-relevant
-  terminal fields collapse to one run; conflicting outcome or close-instant
-  duplicates reject the export. IDs are held only in process.
-- Outcome time: `closed_at` and the sole `run_closed.ts` are parsed as
-  timezone-aware UTC instants and must fall in the same UTC calendar month;
-  period is the summary time's UTC month (`YYYY-MM`). Naive timestamps are
-  invalid.
-- Population: all eligible closed runs with one recognized terminal outcome in
-  that month and split. The numerator is the count for one frozen metric; the
-  denominator is all eligible runs in the same month and split.
-- Split: deterministic SHA-256 assignment of the private run ID using a
-  protocol-specific domain separator. `discovery` and `holdout` are independent
-  reporting halves only—not treatment/control groups and not causal evidence.
-- Dimensions are intentionally empty in v1. Agent, release, principal, locale,
-  session, run, event, and registry identifiers or attributes are not emitted.
-  Although contract 1.4 exposes agent/version and locale, output needs a
-  reviewed finite agent-label mapping and a separate Agent Core metric registry
-  before these dimensions can be published. Do not emit raw artifact IDs or
-  silently collapse unknown values.
-- Each disclosed cell has exactly `metric`, `dims`, `half`, `period`,
-  `numerator`, and `denominator`. A separate report envelope identifies the
-  `agent-run-outcomes.v2` protocol and evidence class. `cell_table.py` can
-  render these rows as canonical NDJSON and parses bank-producer NDJSON through
-  the same six-field structural reader. Source-specific metric registries stay
-  separate; this does not make the Agent Core rows acceptable to the current
-  T1 estimator.
+The common output row is `{metric,dims,half,period,numerator,denominator}`.
+`half` is a deterministic SHA-256 assignment of the private run ID to
+`discovery` or `holdout`; this is a reporting partition, not an experiment or
+causal comparison. All rows are binary run-level proportions (one run
+contributes at most once to a numerator).
 
-## Disclosure rule
+| Metric IDs | Numerator | Denominator | Period |
+| --- | --- | --- | --- |
+| `AG_RUN_OUTCOME_RATE` | Unique terminal runs matching the row's `dims.outcome` value (`resolved`, `escalation_or_transfer`, `abstention_or_clarification_exhausted`, `failed`, or `other_terminal`) | All unique non-open runs with exactly one matching `run_closed` event in the same safe-dimension group | UTC month of `closed_at` |
+| `AG_RUN_HANDOFF_RATE` | Distinct terminal runs where `run_transferred` is present **or** `run.status == escalated` **or** `run_closed.payload.closed_by` is `escalation|transfer`; the branches form a run-level OR, not an event sum | All distinct non-open terminal runs with exactly one matching `run_closed` event in the same agent/locale/topic group | UTC month of `closed_at` |
+| `AG_TOOL_ERROR_RUN_RATE` | Distinct runs with at least one `tool_called.status` in `{error, timeout, denied}` | Distinct runs with at least one `tool_called` on a complete event page | UTC month of `created_at` |
+| `AG_TOOL_RETRY_RUN_RATE` | Distinct runs with at least one `tool_called.attempt > 1` | Same tool-using-run denominator | UTC month of `created_at` |
+| Latency family (`tool_called.latency_ms`, `decision_made.latency_ms`, `turn_completed.duration_ms`) | **Non-computable:** these values use attempt/decision/turn grains, but the row contract has no defensible latency statistic, distribution, or unit field | — | — |
 
-The privacy floor is fixed at `k=10` in v1 and cannot be lowered by a caller.
-For each month/split, the five metrics partition the eligible population.
-Because disclosing four categories could reveal the fifth, v1 releases either
-the complete five-cell vector or none of it. The vector is publishable only if
-every outcome bucket has at least 10 runs; this also makes each metric's
-complement at least 10. Otherwise the entire vector is suppressed without
-including small counts, run IDs, or row-level examples. Future dimensions or
-more granular metrics require complementary-suppression analysis before they
-can be added.
+The closed outcome values map through the frozen five-bucket partition:
+`resolved`; `escalated|transferred`;
+`abstained|clarify_exhausted`; `failed`; and
+`cancelled|completed|abandoned`. `completed` is not inferred to mean resolved.
+Terminal run rows must agree with exactly one `run_closed` event on outcome and
+UTC month. Open runs do not enter outcome or handoff metrics, but may enter tool metrics
+when a complete event page contains a tool call; tool metrics are therefore
+snapshot observations, not final-run outcomes.
 
-The incomplete recorded fixture therefore fails closed without producing an
-output file. A separate complete synthetic export verifies that a fully read
-but sub-k population produces no cells. Reports expose only `none`, `partial`,
-or `all` as a bounded suppression status, never suppressed period/split keys
-or counts. Neither behavior is a no-outcome or zero-rate finding.
+`run_closed.payload.closed_by` is required and must be one of the pinned
+producer values `flow`, `abandonment`, `escalation`, `revocation`, or `transfer`.
+Missing, empty, or unknown close reasons reject the export.
 
-## Output, persistence, and tests
+Tool error semantics follow CL-0075: `error`, `timeout`, and `denied` are
+counted as an error-bearing run; `uncertain` and `step_up_required` are not.
+Other statuses reject the export. `tool_called.attempt` is optional in the
+pinned source schema and defaults to 1 when absent; retries are detected from
+attempt numbers, not event count; duplicate `(run_id,seq)` records cannot
+inflate the numerator.
+Absence of `tool_called` is never interpreted as success and never enters the
+tool denominator.
 
-The CLI is offline/read-only, writes only to an explicitly supplied destination
-outside the Git checkout, and refuses to overwrite an existing versioned
-output. Serialized output contains aggregate rows and bounded status codes
-only; it excludes source labels, raw IDs, free text, event payloads, and registry
-metadata. Tests use synthetic exports plus the recorded two-run fixture. They
-cover every outcome mapping, UTC/month attribution, deterministic split,
-deduplication/conflicting duplicates, missing or mismatched terminal events,
-cursor-chain validation and an observed empty terminal page, fixed privacy
-floor, partial suppression status,
-privacy-floor boundaries and vector suppression, output schema, ID redaction,
-and deterministic no-overwrite file output.
+Although the export exposes `tool_called.latency_ms`,
+`decision_made.latency_ms`, and `turn_completed.duration_ms`, these are
+measurements over different event grains. The six-field consumer contract only
+represents binary counts and has no defensible unit/summary-statistic field;
+therefore all latency metrics are explicitly **non-computable** here. No
+latency is averaged, summed, or encoded as a made-up binary threshold. Topic is
+also unavailable, not computable from these exports.
 
-The aggregator verifies only the traversal evidence presented in the envelope;
-it cannot authenticate that an arbitrary JSON file was produced by a trusted
-collector or that the collector actually exhausted the source endpoint. Until
-a trusted export collector is integrated and tested, page completeness is a
-producer responsibility and recorded/synthetic input must not be described as
-verified live extraction. The current five terminal buckets with empty
-dimensions are a **partial T3 implementation**: they do not localize results
-by agent, locale, or topic, nor measure handoff, fallback, or tool-error rates.
-CL-0073 reports run-level agent/version and locale fields, but that v1.4
-contract source is not available locally and no
-privacy-reviewed finite category mapping/registry is agreed; the recorded
-fixture lacks complete run pagination and contains only `run_closed` events.
-Event names in a contract are not enough to define event-derived denominators,
-deduplication, retry handling, or absence semantics. Topic is not in this export
-contract and must not be inferred from free text. Keep future Agent Core
-metrics in a separate versioned registry and source population; do not expand
-the bank M1-M10 registry or reuse bank customer splits as a run-source
-assumption. The output is an aggregate JSON envelope (`cells` array), not
-bank-cell NDJSON, and a shared reader/integration path remains unimplemented;
-identical row shape alone is not reader compatibility.
+## Suppression and output
 
-No claim is made that the aggregate measures response quality, customer
-satisfaction, productivity, causal lift, or production behavior. In particular,
-the current export fixture lacks turn/tool/decision events and has one observed
-outcome category; it cannot support latency, tool-success, or agent-comparison
-metrics.
+The privacy floor is fixed at `k=10`. Each published binary cell must have at
+least 10 positive and 10 negative contributing runs. Outcome and handoff are
+suppressed jointly for one period/split/base-dimension group: an internal
+five-outcome × handoff/non-handoff table is checked, and every cell (including
+each binary complement) must meet k before either the outcome marginals or
+overall handoff marginal is released. The cross-tab itself is never emitted.
+This prevents differencing one separately published marginal against the
+other to infer a sub-k intersection. Handoff is an overall terminal-run rate
+by agent/locale/topic; its three source signals are unioned per run before
+counting. Tool metrics are individually gated by
+both sides of their tool-user denominator, and are additionally withheld when
+the complementary no-tool-run population in the same period/split/base-dimension
+group has fewer than k runs. This prevents subtraction of the published tool
+denominator from the all-run population from revealing a rare no-tool group.
+Suppressed keys and counts are not emitted.
+
+The JSON envelope includes protocol, evidence class, bounded availability and
+suppression status, and aggregate `cells`; it includes no source labels, IDs,
+free text, event payloads, or registry data. `--format ndjson` serializes the
+same cells using the exact six-field bank-cell row shape. Both bank producer
+NDJSON and Agent Core NDJSON are parsed by the same structural
+`parse_cell_ndjson` reader, but their `M*` and `AG_*` metric registries remain
+separate; structural compatibility does not register `AG_*` with Rust M1-M10.
+Writes are immutable and must target a location outside the repository.
+
+## Evidence boundary
+
+Synthetic tests cover mappings, safe dimensions, cursor-highest run
+deduplication, `(run_id,seq)` event deduplication, complete-page requirements,
+denominator construction, retry/error classification, deterministic output,
+k=10 and complementary suppression, exact NDJSON row shape, and use of one
+reader for both sources. They do not prove a live 1.4 export run, bank/customer
+behavior, quality, satisfaction, causal lift, or production representativeness.

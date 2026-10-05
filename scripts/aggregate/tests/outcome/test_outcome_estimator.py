@@ -119,7 +119,7 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
                                 "send_channel": "App",
                             })
 
-    def test_documented_and_legacy_cli_entrypoints_emit_the_same_v3_contract(self):
+    def test_documented_and_legacy_cli_entrypoints_emit_the_same_v4_contract(self):
         import json
         import subprocess
         import sys
@@ -143,7 +143,7 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 serialized = output.read_bytes()
                 report = json.loads(serialized)
-                self.assertEqual(report["protocol"], "outcome-discovery-v3", module)
+                self.assertEqual(report["protocol"], "outcome-discovery-v4", module)
                 self.assertIn("M10", {cell["metric"] for cell in report["analysis"]["cells"]})
                 self.assertIn("empirical_candidate_window_rate", report["placebo"])
                 self.assertIn("screen_bound_met", report["placebo"])
@@ -154,7 +154,7 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
                 report_bytes.append(serialized)
             self.assertEqual(report_bytes[0], report_bytes[1])
 
-    def test_legacy_import_is_the_canonical_v3_module(self):
+    def test_legacy_import_is_the_canonical_v4_module(self):
         import scripts.aggregate.outcome_estimator as legacy
         import scripts.aggregate.outcome.outcome_estimator as canonical
 
@@ -172,6 +172,79 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
         report = validate_placebos_and_sensitivity(rows, placebo_draws=20)
         self.assertEqual(report["statistical_power_or_mde"], "not_estimated_from_aggregate_cells")
         self.assertNotIn("mde_80_pp", repr(report))
+
+    def test_m10_handled_hours_never_get_a_binomial_outcome_verdict(self):
+        for treated_post_rate in (0.10, 0.90, 0.50):
+            rows = [
+                dict(row, metric="M10")
+                for row in self.fixture(treated_post_rate=treated_post_rate)
+            ]
+            result = estimate_outcomes(rows, release_period="2025-01")
+            target = result["cells"][0]
+
+            with self.subTest(treated_post_rate=treated_post_rate):
+                self.assertEqual(target["metric"], "M10")
+                self.assertEqual(target["status"], "inconclusive")
+                self.assertEqual(target["reason"], "non_bernoulli_metric_descriptive_only")
+                self.assertIsNone(target["effect_pp"])
+                self.assertIsNone(target["interval_family_adjusted_pp"])
+                self.assertIsNone(target["n_pre"])
+                self.assertIsNone(target["n_post"])
+                self.assertIsNone(target["control"])
+                self.assertIsNone(target["control_dimension"])
+                self.assertEqual(target["control_siblings"], [])
+                self.assertEqual(
+                    target["uncertainty_method"],
+                    "not_computed_non_bernoulli_aggregate",
+                )
+
+    def test_mixed_m1_m10_screen_excludes_m10_from_family_and_shift_denominators(self):
+        from scripts.aggregate.outcome.outcome_estimator import (
+            _injected_shift_screen,
+            validate_placebos_and_sensitivity,
+        )
+
+        rows = []
+        for channel in ("Phone", "Web", "Chat", "Email", "Branch"):
+            for row in self.fixture(treated_post_rate=0.50):
+                rows.append({**row, "dims": {**row["dims"], "channel": channel}})
+        rows.extend(dict(row, metric="M10") for row in list(rows))
+
+        estimate = estimate_outcomes(rows, release_period="2025-01")
+        self.assertEqual(len(estimate["cells"]), 20)
+        self.assertEqual(estimate["multiplicity"]["family_size"], 20)
+        self.assertEqual(estimate["multiplicity"]["screened_metrics"], ["M1"])
+        self.assertEqual(estimate["multiplicity"]["excluded_descriptive_metrics"], ["M10"])
+        self.assertEqual(
+            {row["inference_scope"] for row in estimate["cells"] if row["metric"] == "M1"},
+            {"screened"},
+        )
+        self.assertEqual(
+            {row["inference_scope"] for row in estimate["cells"] if row["metric"] == "M10"},
+            {"descriptive_only"},
+        )
+        self.assertEqual(estimate["multiplicity"]["screened_cells"], 10)
+        self.assertEqual(len(estimate["multiplicity"]["excluded_descriptive_cells"]), 10)
+
+        sensitivity = _injected_shift_screen(rows, boundary="2025-01", window_months=3)
+        self.assertEqual(sensitivity["screened_metrics"], ["M1"])
+        self.assertEqual(sensitivity["excluded_descriptive_metrics"], ["M10"])
+        self.assertEqual(sensitivity["screened_cells"], 10)
+        high_support = next(
+            row for row in sensitivity["by_support_bin"]
+            if row["support_bin"] == ">=2000"
+        )
+        self.assertEqual(high_support["screened_cells"], 10)
+        self.assertEqual(high_support["detection_rate_by_injection"]["10"], 1.0)
+
+        report = validate_placebos_and_sensitivity(rows, placebo_draws=5)
+        self.assertEqual(report["protocol"], "outcome-discovery-v4")
+        self.assertEqual(report["metric_scope"]["screened_metrics"], ["M1"])
+        self.assertEqual(report["metric_scope"]["excluded_descriptive_metrics"], ["M10"])
+        self.assertEqual(len(report["metric_scope"]["excluded_descriptive_cells"]), 10)
+        self.assertEqual(report["placebo"]["screened_metrics"], ["M1"])
+        self.assertEqual(report["placebo"]["cells_per_draw"], 10)
+        self.assertEqual(sum(report["placebo"]["status_counts"].values()), 50)
 
     def test_minimum_support_still_fails_closed(self):
         rows = self.fixture()
@@ -215,7 +288,10 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
 
         def fake_estimate(_rows, release_period):
             status = "improved" if release_period == "2024-01" else "inconclusive"
-            return {"cells": [{"metric": "M1", "dims": {}, "status": status, "reason": None}]}
+            return {"cells": [{
+                "metric": "M1", "dims": {}, "inference_scope": "screened",
+                "status": status, "reason": None,
+            }]}
 
         with (
             patch.object(outcome_estimator, "_release_boundaries", return_value=boundaries),
@@ -241,7 +317,10 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
         def fake_estimate(_rows, release_period):
             is_signal = boundaries.index(release_period) < 11
             status = "improved" if is_signal else "inconclusive"
-            return {"cells": [{"metric": "M1", "dims": {}, "status": status, "reason": None}]}
+            return {"cells": [{
+                "metric": "M1", "dims": {}, "inference_scope": "screened",
+                "status": status, "reason": None,
+            }]}
 
         with (
             patch.object(outcome_estimator, "_release_boundaries", return_value=boundaries),
@@ -401,7 +480,7 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
         from scripts.aggregate.outcome.outcome_estimator import validate_placebos_and_sensitivity
 
         report = validate_placebos_and_sensitivity(self.fixture(), placebo_draws=5)
-        self.assertEqual(report["protocol"], "outcome-discovery-v3")
+        self.assertEqual(report["protocol"], "outcome-discovery-v4")
         screen = report["injected_shift_screen"]
         self.assertEqual(screen["boundary"], "2025-01")
         self.assertEqual(screen["injections_pp"], [2, 5, 10])
@@ -465,7 +544,7 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
 
         report = _injected_shift_screen(self.fixture(), boundary="2025-01", window_months=3)
         high_support = next(row for row in report["by_support_bin"] if row["support_bin"] == ">=2000")
-        self.assertIsNone(high_support["registered_cells"])
+        self.assertIsNone(high_support["screened_cells"])
         self.assertEqual(set(high_support["detection_rate_by_injection"].values()), {None})
         self.assertIsNone(high_support["algorithmic_80pct_shift_threshold_pp"])
 
@@ -499,7 +578,7 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
             report = estimator._injected_shift_screen(rows, boundary="2025-01", window_months=3)
 
         high_support = next(row for row in report["by_support_bin"] if row["support_bin"] == ">=2000")
-        self.assertEqual(high_support["registered_cells"], 12)
+        self.assertEqual(high_support["screened_cells"], 12)
         expected_rate = round(11 / 12, 6)
         self.assertEqual(high_support["detection_rate_by_injection"], {"2": expected_rate, "5": expected_rate, "10": expected_rate})
         self.assertEqual(high_support["algorithmic_80pct_shift_threshold_pp"], 2)

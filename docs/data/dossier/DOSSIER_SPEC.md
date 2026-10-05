@@ -1,8 +1,10 @@
 # Proposal dossier specification
 
-Status: engine-side content contract; synthetic examples only.  This document
-does not claim that the support-platform UI has been inspected or that the
-example proposals were created, evaluated, or released.
+Status: engine-side content contract; synthetic examples only. The support-
+platform UI mapping was inspected only at immutable commit
+`6ce2581aafad7282325badd9a333477f84b6f489`; it has not been verified against
+the current remote default branch. The example proposals were not created,
+evaluated, or released.
 
 ## Purpose
 
@@ -31,11 +33,11 @@ records.
 
 | Evidence | Audited aggregate | Interpretation limit |
 | --- | --- | --- |
-| Queja first-contact unresolved rate | 56.4% (66,000 / 117,021) | `was_resolved=false` at final extract; not proof that the issue was never resolved later |
-| All other reasons, same measure | 16.6% | comparison population, not a causal control |
-| Difference | +39.8 percentage points; interval [39.5, 40.1] pp | stable association in the supplied synthetic hackathon snapshot; not an expected proposal lift |
+| Phone / Queja first-contact unresolved rate | 56.4% (54,418 / 96,521) | `was_resolved=false` in complete-month M1 aggregates; not proof that the issue was never resolved later |
+| Phone / all other reasons, same measure | 16.6% (77,871 / 469,586) | same-channel descriptive comparator, not a causal control |
+| Difference | +39.8 percentage points; naive binomial interval [39.5, 40.1] pp | descriptive association; interval does not account for clustering and is not an expected proposal lift |
 
-This aggregate is reported in the workspace audit `docs/reports-claude/BANK_DATA_AUDIT_2026-10-04.md` (section 0). That audit is not part of this engine repository, so a consumer of this file must treat the figures as a supplied, audited input and must not claim the audit is reproducible from this repository alone. The checked-in OPBENCH-lite catalog reports a *different estimand* (phone/complaint versus pooled complement); do not substitute or combine those values with this all-channel, reason-level comparison.
+These figures were recalculated from the aggregate-only M1 rows produced by `python scripts/aggregate/bank_cells.py --data-root D:\.codex\factored\data --out D:\.codex\factored\outcome-temp\bank-cells-for-opbench.ndjson` (SHA-256 `042cabffbd27c0d462ed51f6479647f4798af06f73f7546c49edd40d6987fe7d`). No customer-level records were used in the dossier. The artifact contains 35 complete months (July 2023–May 2026), excluding partial June 2023 and June 2026. These values are the combined discovery and holdout aggregates for the T1 sensor protocol. They are conceptually the same M1 outcome as OPBENCH V1, but not the same eligible-row population: OPBENCH V1 deduplicates exact `interaction_id` values and does not exclude partial months, whereas the T1 producer streams source rows and excludes those partial months; the two protocols also use different normalization and hash-split rules. OPBENCH V1's checked-in full-snapshot figures and pooled-complement effect therefore must not be substituted for or combined with this T1 same-channel comparison. The aggregate output and source data are local-only, so these values are not independently reproducible from the repository checkout alone. This is a same-channel descriptive comparison, not a matched control or causal estimate. The naive interval assumes independent observations and should be read cautiously because repeated customers/clustering are not represented.
 
 The audit says the snapshot is stationary and does not tell us why Queja contacts
 are unresolved. Consequently, all interventions below are explicitly
@@ -111,17 +113,7 @@ or tool is assumed.
 - `state`: `draft`
 - `changes[0].docs.description` (ES):
 
-  > **Problema observado.** En el snapshot auditado, 66.000 de 117.021 contactos clasificados como Queja quedaron sin resolución en el primer contacto (56,4%); para los demás motivos, la tasa fue 16,6% (+39,8 pp; IC informado [39,5; 40,1] pp). Es una asociación descriptiva, no una causa.
-  >
-  > **Qué cambiaría.** Parche propuesto para el prompt de recepción de quejas: antes de sugerir una acción, resumir el motivo en una frase y pedir confirmación cuando la categoría sea ambigua. No añade permisos ni cambia decisiones financieras.
-  >
-  > **Efecto esperado.** Hipótesis direccional, no estimación: menos respuestas iniciales que no corresponden al motivo. El efecto sobre la resolución real no está medido.
-  >
-  > **Cómo se evaluará.** Comparar prompt base y candidato en escenarios sintéticos/adversariales etiquetados; medir clasificación correcta, respuesta pertinente, escalamiento seguro y cumplimiento de guardrails. Esto no demuestra una reducción de la tasa bancaria.
-  >
-  > **Riesgo.** Añadir una pregunta innecesaria o retrasar un caso urgente. Guardrail: máximo una confirmación y derivación segura ante urgencia o ambigüedad persistente.
-  >
-  > **Qué no cambia.** Identidad, acceso a herramientas, reglas de elegibilidad, compensaciones, aprobaciones y autoridad humana.
+  > Problema observado: En las interacciones Phone del snapshot, 54.418 de 96.521 contactos clasificados como Queja quedaron sin resolución en el primer contacto (56,4%); es una asociación descriptiva, no una causa. Evidencia y comparación: la tasa fue 16,6% (77.871/469.586) para los demás motivos del mismo canal (+39,8 pp; intervalo binomial ingenuo [39,5; 40,1] pp); el intervalo no ajusta por repetición de clientes. Qué cambiaría: Parche propuesto para el prompt de recepción de quejas: resumir el motivo en una frase y pedir confirmación si la categoría es ambigua; no añade permisos ni cambia decisiones financieras. Efecto esperado: Hipótesis direccional, no estimación; el efecto sobre la resolución real no está medido. Cómo se evaluará: Comparar prompt base y candidato en escenarios sintéticos/adversariales; medir clasificación, pertinencia, escalamiento seguro y guardrails. Esto no demuestra reducción de la tasa bancaria. Riesgo: Una pregunta innecesaria podría retrasar un caso urgente; máximo una confirmación y derivación segura ante urgencia o ambigüedad persistente. Qué no cambia: Identidad, acceso a herramientas, elegibilidad, compensaciones, aprobaciones ni autoridad humana.
 
 - `changes[0].docs.rationale` (ES): `La tasa agregada prioriza investigar el primer contacto por Queja. El dataset no explica el mecanismo; confirmar el motivo es una hipótesis de intervención que debe superar evaluación adversarial antes de cualquier aprobación.`
 - `changes[0].docs.changelog` (ES): `Propuesta de cambio únicamente: añade una confirmación breve del motivo antes de responder. Aún no aprobado, publicado ni promovido.`
@@ -131,17 +123,7 @@ or tool is assumed.
 
 - `changes[0].docs.description` (PT-BR):
 
-  > **Problema observado.** No snapshot auditado, 66.000 de 117.021 contatos classificados como Reclamação ficaram sem resolução no primeiro contato (56,4%); para os demais motivos, a taxa foi 16,6% (+39,8 pp; intervalo informado [39,5; 40,1] pp). É uma associação descritiva, não uma causa.
-  >
-  > **O que mudaria.** Patch proposto para o prompt de entrada de reclamações: antes de sugerir uma ação, resumir o motivo em uma frase e pedir confirmação quando a categoria for ambígua. Não adiciona permissões nem altera decisões financeiras.
-  >
-  > **Efeito esperado.** Hipótese direcional, não estimativa: menos respostas iniciais incompatíveis com o motivo. O efeito sobre a resolução real não foi medido.
-  >
-  > **Como será avaliado.** Comparar o prompt-base e o candidato em cenários sintéticos/adversariais rotulados; medir classificação correta, resposta pertinente, escalonamento seguro e cumprimento das guardrails. Isso não demonstra redução da taxa observada no banco.
-  >
-  > **Risco.** Fazer uma pergunta desnecessária ou atrasar um caso urgente. Guardrail: no máximo uma confirmação e encaminhamento seguro diante de urgência ou ambiguidade persistente.
-  >
-  > **O que não muda.** Identidade, acesso a ferramentas, regras de elegibilidade, compensações, aprovações e autoridade humana.
+  > Problema observado: Nas interações Phone do snapshot, 54.418 de 96.521 contatos classificados como Reclamação ficaram sem resolução no primeiro contato (56,4%); é uma associação descritiva, não uma causa. Evidência e comparação: a taxa foi 16,6% (77.871/469.586) para os demais motivos no mesmo canal (+39,8 pp; intervalo binomial ingênuo [39,5; 40,1] pp); o intervalo não ajusta por repetição de clientes. O que mudaria: Patch proposto para o prompt de entrada de reclamações: resumir o motivo em uma frase e pedir confirmação quando a categoria for ambígua; não adiciona permissões nem altera decisões financeiras. Efeito esperado: Hipótese direcional, não estimativa; o efeito sobre a resolução real não foi medido. Como será avaliado: Comparar o prompt-base e o candidato em cenários sintéticos/adversariais; medir classificação, pertinência, escalonamento seguro e guardrails. Isso não demonstra redução da taxa observada no banco. Risco: Uma pergunta desnecessária pode atrasar um caso urgente; no máximo uma confirmação e encaminhamento seguro diante de urgência ou ambiguidade persistente. O que não muda: Identidade, acesso a ferramentas, elegibilidade, compensações, aprovações e autoridade humana.
 
 - `changes[0].docs.rationale` (PT-BR): `A taxa agregada prioriza investigar o primeiro contato de Reclamação. O dataset não explica o mecanismo; confirmar o motivo é uma hipótese de intervenção que precisa passar por avaliação adversarial antes de qualquer aprovação.`
 - `changes[0].docs.changelog` (PT-BR): `Apenas proposta: acrescenta uma confirmação breve do motivo antes da resposta. Ainda não aprovada, publicada nem promovida.`
@@ -162,17 +144,7 @@ unresolved contacts.
 - `state`: `draft`
 - `changes[0].docs.description` (ES):
 
-  > **Problema observado.** La evidencia agregada es la misma del dossier 1: Queja tiene 56,4% sin resolución en el primer contacto (66.000/117.021), frente a 16,6% para los demás motivos (+39,8 pp). La asociación no identifica una causa ni permite unir una PQR concreta con un contacto.
-  >
-  > **Qué cambiaría.** Propuesta sintética: permitir que el agente existente de disputas use `obtener_pqr` únicamente para leer de vuelta una PQR recién creada mediante su clave de idempotencia, como hace el flujo actual; resumir solo el estado devuelto y ofrecer el siguiente paso permitido. El contrato revisado no demuestra una capacidad de búsqueda histórica por cliente.
-  >
-  > **Efecto esperado.** Hipótesis no cuantificada: explicaciones más consistentes del estado y menos respuestas sin respaldo. No se predice una reducción del 39,8 pp.
-  >
-  > **Cómo se evaluará.** Escenarios sintéticos con PQR abierta, cerrada, no encontrada, respuesta inválida y timeout. Comparar exactitud del resumen, abstención ante ausencia/error, privacidad y escalamiento. Ninguna salida de estos tests mide la resolución bancaria.
-  >
-  > **Riesgo.** Exponer información de otra persona o interpretar mal un estado. Guardrail: conservar autorización por contexto, no buscar por identificadores aportados libremente y escalar ante falta de acceso o respuesta ambigua.
-  >
-  > **Qué no cambia.** La herramienta sigue siendo de solo lectura; no modifica PQR, transacciones, dinero, compensaciones ni decisiones.
+  > Problema observado: En Phone, Queja tiene 56,4% sin resolución en el primer contacto (54.418/96.521); esto no identifica una causa ni permite unir una PQR concreta con un contacto. Evidencia y comparación: 16,6% (77.871/469.586) para los demás motivos del mismo canal (+39,8 pp; intervalo binomial ingenuo [39,5; 40,1] pp); no es un control causal y el intervalo no ajusta por repetición de clientes. Qué cambiaría: Propuesta sintética para que el agente existente de disputas use `obtener_pqr` solo para leer de vuelta una PQR recién creada mediante su clave de idempotencia, resumir el estado y ofrecer el siguiente paso permitido; no demuestra búsqueda histórica por cliente. Efecto esperado: Hipótesis no cuantificada: explicaciones más consistentes y menos respuestas sin respaldo; no se predice una reducción de 39,8 pp. Cómo se evaluará: Casos sintéticos de PQR abierta, cerrada, no encontrada, respuesta inválida y timeout; medir exactitud, abstención, privacidad y escalamiento, no resolución bancaria. Riesgo: Exposición de datos ajenos o interpretación errónea; mantener autorización contextual, no buscar por identificadores libres y escalar ante falta de acceso o ambigüedad. Qué no cambia: La herramienta sigue siendo de solo lectura; no modifica PQR, transacciones, dinero, compensaciones ni decisiones.
 
 - `changes[0].docs.rationale` (ES): `El hallazgo señala una población con más contactos no resueltos al primer intento, pero no demuestra que falte consulta de estado. El enlace de herramienta es una hipótesis verificable para la explicación del siguiente paso.`
 - `changes[0].docs.changelog` (ES): `Propuesta de enlace de obtener_pqr al flujo acotado para leer de vuelta una PQR recién creada por su clave de idempotencia; no consulta PQR históricas ni agrega operaciones de escritura.`
@@ -182,17 +154,7 @@ unresolved contacts.
 
 - `changes[0].docs.description` (PT-BR):
 
-  > **Problema observado.** A evidência agregada é a mesma do dossiê 1: Reclamação tem 56,4% sem resolução no primeiro contato (66.000/117.021), contra 16,6% para os demais motivos (+39,8 pp). A associação não identifica uma causa nem permite vincular uma manifestação específica a um contato.
-  >
-  > **O que mudaria.** Proposta sintética: permitir que o agente existente de disputas use `obtener_pqr` somente para ler de volta uma manifestação recém-criada por sua chave de idempotência, como faz o fluxo atual; resumir apenas o status retornado e oferecer o próximo passo permitido. O contrato revisado não comprova capacidade de busca histórica por cliente.
-  >
-  > **Efeito esperado.** Hipótese não quantificada: explicações de status mais consistentes e menos respostas sem respaldo. Não se prevê uma redução de 39,8 pp.
-  >
-  > **Como será avaliado.** Cenários sintéticos com manifestação aberta, fechada, não encontrada, resposta inválida e timeout. Comparar exatidão do resumo, abstenção diante de ausência/erro, privacidade e escalonamento. Esses testes não medem a resolução observada no banco.
-  >
-  > **Risco.** Expor informação de outra pessoa ou interpretar incorretamente um status. Guardrail: manter autorização vinculada ao contexto, não pesquisar por identificadores fornecidos livremente e escalar sem acesso ou diante de resposta ambígua.
-  >
-  > **O que não muda.** A ferramenta continua somente de leitura; não altera manifestações, transações, dinheiro, compensações nem decisões.
+  > Problema observado: Em Phone, Reclamação tem 56,4% sem resolução no primeiro contato (54.418/96.521); isso não identifica uma causa nem permite vincular uma manifestação específica a um contato. Evidência e comparação: 16,6% (77.871/469.586) para os demais motivos no mesmo canal (+39,8 pp; intervalo binomial ingênuo [39,5; 40,1] pp); não é controle causal e o intervalo não ajusta por repetição de clientes. O que mudaria: Proposta sintética para que o agente existente de disputas use `obtener_pqr` somente para ler de volta uma manifestação recém-criada por sua chave de idempotência, resumir o status e oferecer o próximo passo permitido; não comprova busca histórica por cliente. Efeito esperado: Hipótese não quantificada: explicações de status mais consistentes e menos respostas sem respaldo; não se prevê uma redução de 39,8 pp. Como será avaliado: Casos sintéticos de manifestação aberta, fechada, não encontrada, resposta inválida e timeout; medir exatidão, abstenção, privacidade e escalonamento, não a resolução observada no banco. Risco: Expor informação alheia ou interpretar incorretamente um status; manter autorização contextual, não pesquisar por identificadores livres e escalar sem acesso ou diante de ambiguidade. O que não muda: A ferramenta continua somente de leitura; não altera manifestações, transações, dinheiro, compensações nem decisões.
 
 - `changes[0].docs.rationale` (PT-BR): `O achado aponta uma população com mais contatos não resolvidos na primeira tentativa, mas não demonstra falta de consulta de status. O vínculo da ferramenta é uma hipótese verificável para explicar o próximo passo.`
 - `changes[0].docs.changelog` (PT-BR): `Proposta de vínculo de obtener_pqr ao fluxo limitado para leitura de uma manifestação recém-criada por sua chave de idempotência; não consulta manifestações históricas nem adiciona operações de escrita.`
@@ -214,17 +176,7 @@ resolve contacts.
 - `state`: `draft`
 - `changes[0].docs.description` (ES):
 
-  > **Problema observado.** En el agregado auditado, la tasa de Queja sin resolución en el primer contacto fue 56,4% (66.000/117.021), frente a 16,6% para los demás motivos. Esto justifica priorizar una investigación acotada; no demuestra que falte un especialista ni explica las causas.
-  >
-  > **Qué cambiaría.** Propuesta sintética de un agente especialista que resume la solicitud, identifica si hay datos suficientes para el flujo existente y deriva a la ruta actual cuando el caso no coincide con su alcance. No ejecuta acciones de cuenta ni resuelve por sí mismo una disputa.
-  >
-  > **Efecto esperado.** Hipótesis direccional no medida: más consistencia de clasificación y derivación dentro del conjunto de escenarios cubiertos. No se estima lift en resolución ni ahorro.
-  >
-  > **Cómo se evaluará.** Suite sintética/adversarial con casos dentro/fuera de alcance, motivos ambiguos, datos faltantes, inyección de instrucciones y necesidad de humano. Comparar con el agente/ruta base en clasificación, no-respuesta segura, derivación correcta y guardrails. Reportar únicamente los resultados realmente ejecutados.
-  >
-  > **Riesgo.** Enrutamiento incorrecto o confianza excesiva que retrase ayuda humana. Guardrail: alcance explícito, abstención y escalamiento humano ante incertidumbre, urgencia o falta de autoridad.
-  >
-  > **Qué no cambia.** No se reemplaza el punto de entrada ni el proceso humano; no se agregan permisos, políticas, herramientas mutables ni publicación automática.
+  > Problema observado: En Phone, Queja sin resolución en el primer contacto fue 56,4% (54.418/96.521); esto justifica priorizar una investigación acotada, no demuestra que falte un especialista ni explica las causas. Evidencia y comparación: 16,6% (77.871/469.586) para los demás motivos del mismo canal (+39,8 pp; intervalo binomial ingenuo [39,5; 40,1] pp); el intervalo no ajusta por repetición de clientes y no es control causal. Qué cambiaría: Propuesta sintética de un agente especialista que resume la solicitud, verifica si hay datos suficientes para el flujo existente y deriva a la ruta actual fuera de alcance; no ejecuta acciones de cuenta ni resuelve disputas. Efecto esperado: Hipótesis direccional no medida: más consistencia de clasificación y derivación en escenarios cubiertos; no se estima mejora en resolución ni ahorro. Cómo se evaluará: Suite sintética/adversarial con casos dentro/fuera de alcance, ambigüedad, datos faltantes, inyección y necesidad de humano; comparar clasificación, abstención, derivación y guardrails, reportando solo resultados ejecutados. Riesgo: Enrutamiento incorrecto o confianza excesiva que retrase ayuda humana; alcance explícito, abstención y escalamiento ante incertidumbre, urgencia o falta de autoridad. Qué no cambia: Se conservan el punto de entrada y proceso humano; no se agregan permisos, políticas, herramientas mutables ni publicación automática.
 
 - `changes[0].docs.rationale` (ES): `La tasa observada identifica Queja como población prioritaria, pero los datos no incluyen una causa raíz. Un especialista nuevo es una alternativa de diseño, no una conclusión del análisis; debe compararse con el parche de prompt, el uso de herramientas existentes y no hacer cambios.`
 - `changes[0].docs.changelog` (ES): `Propuesta hipotética de nuevo agente especializado y limitado, con abstención/escalamiento; no desplegado.`
@@ -234,17 +186,7 @@ resolve contacts.
 
 - `changes[0].docs.description` (PT-BR):
 
-  > **Problema observado.** No agregado auditado, a taxa de Reclamação sem resolução no primeiro contato foi 56,4% (66.000/117.021), contra 16,6% para os demais motivos. Isso justifica priorizar uma investigação limitada; não demonstra que falte um especialista nem explica as causas.
-  >
-  > **O que mudaria.** Proposta sintética de um agente especialista que resume a solicitação, identifica se há dados suficientes para o fluxo existente e encaminha para a rota atual quando o caso estiver fora do escopo. Ele não executa ações de conta nem resolve uma disputa por conta própria.
-  >
-  > **Efeito esperado.** Hipótese direcional não medida: mais consistência na classificação e no encaminhamento dentro dos cenários cobertos. Não se estima ganho de resolução nem economia.
-  >
-  > **Como será avaliado.** Suíte sintética/adversarial com casos dentro/fora do escopo, motivos ambíguos, dados ausentes, injeção de instruções e necessidade de atendimento humano. Comparar com o agente/rota-base em classificação, abstenção segura, encaminhamento correto e guardrails. Relatar apenas resultados realmente executados.
-  >
-  > **Risco.** Encaminhamento incorreto ou confiança excessiva que atrase o atendimento humano. Guardrail: escopo explícito, abstenção e escalonamento humano diante de incerteza, urgência ou falta de autoridade.
-  >
-  > **O que não muda.** O ponto de entrada e o processo humano são mantidos; não são adicionados permissões, políticas, ferramentas mutáveis nem publicação automática.
+  > Problema observado: Em Phone, Reclamação sem resolução no primeiro contato foi 56,4% (54.418/96.521); isso justifica uma investigação limitada, não demonstra que falte especialista nem explica as causas. Evidência e comparação: 16,6% (77.871/469.586) para os demais motivos no mesmo canal (+39,8 pp; intervalo binomial ingênuo [39,5; 40,1] pp); o intervalo não ajusta por repetição de clientes e não é controle causal. O que mudaria: Proposta sintética de um agente especialista que resume a solicitação, verifica se há dados suficientes para o fluxo existente e encaminha casos fora do escopo; não executa ações de conta nem resolve disputas. Efeito esperado: Hipótese direcional não medida: mais consistência na classificação e encaminhamento dos cenários cobertos; não se estima ganho de resolução nem economia. Como será avaliado: Suíte sintética/adversarial com casos dentro/fora do escopo, ambiguidade, dados ausentes, injeção e necessidade de atendimento humano; comparar classificação, abstenção, encaminhamento e guardrails, relatando apenas resultados executados. Risco: Encaminhamento incorreto ou confiança excessiva que atrase atendimento humano; escopo explícito, abstenção e escalonamento diante de incerteza, urgência ou falta de autoridade. O que não muda: O ponto de entrada e processo humano são mantidos; não se adicionam permissões, políticas, ferramentas mutáveis nem publicação automática.
 
 - `changes[0].docs.rationale` (PT-BR): `A taxa observada identifica Reclamação como população prioritária, mas os dados não incluem causa-raiz. Um novo especialista é uma alternativa de desenho, não uma conclusão da análise; deve ser comparado com patch de prompt, uso de ferramentas existentes e não alterar nada.`
 - `changes[0].docs.changelog` (PT-BR): `Proposta hipotética de novo agente especializado e limitado, com abstenção/escalonamento; ainda não implantado.`
@@ -316,10 +258,17 @@ When owned, the harness acceptance matrix should cover:
 - proposal-detail parsing preserves the pinned `ProposalDetail` sibling
   `changes[]`, `last_eval`, and `review` fields beside the nested proposal
   summary; the checker scans both proposal metadata and artifact content;
+- the acceptance check validates the generic pinned `EntityDraft` envelope
+  (`kind`, nonempty JSON-object `content`, and bounded `docs`) without claiming
+  to validate kind-specific artifact semantics; `ProposalDetail` must include
+  its required `proposal`, `changes`, and `last_eval` fields;
 - each changed artifact has nonempty bodies for all seven labelled sections;
   evidence must contain at least two numeric values, an explicit comparison,
   and a source/snapshot marker. This is a mechanical completeness test, not
   claim verification or kind-specific artifact-schema validation;
+- the six golden descriptions are compact plain text with inline labels,
+  matching the inspected S22 renderer; regression tests prevent Markdown
+  emphasis markers or paragraph layout from being relied on;
 - no fixture PII-token patterns or obvious email, phone, UUID, or long-numeric
   canaries are returned in proposal/change responses. These regex checks are
   regression canaries, not a general PII detector; do not claim they establish
@@ -336,9 +285,10 @@ When owned, the harness acceptance matrix should cover:
   the live quota check as `not_exercised`; recorded-response tests cover local
   checker behavior only, not live enforcement.
 - recorded-response tests exercise missing fields, wrong origin/state, empty
-  changes, the actual proposal-detail envelope, PII inside sibling artifact
-  content, empty dossier sections, evidence without a comparator/source,
-  prohibited lifecycle transitions, and quota boundary.
+  changes, malformed generic entity drafts, the required proposal-detail
+  envelope, PII inside sibling artifact content, render-ready dossier prose,
+  empty sections, evidence without a comparator/source, prohibited lifecycle
+  transitions, and quota boundary.
 
 The quota limit comes from `docs/dev/LOCAL_STACK.md`; the pinned registry
 OpenAPI exposes no read-only quota endpoint, so the live quota check remains
@@ -356,7 +306,9 @@ path.
   business lift.
 - No causal explanation of the Queja result and no inferred customer/PQR
   linkage.
-- No confirmed support-platform UI mapping.
+- UI field mapping is confirmed only for support-platform commit
+  `6ce2581aafad7282325badd9a333477f84b6f489`; it has not been independently
+  verified as the current remote default branch.
 - The read-only acceptance harness now exists with recorded-response tests.
   The proposal-detail GET exists and can verify current `state=draft`; it does
   not provide actor-attributed immutable lifecycle history. The pinned

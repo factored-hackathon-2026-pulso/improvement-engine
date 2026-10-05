@@ -25,10 +25,8 @@ scenarios:
   - {id: negative-pt-consulta-vaga, principal: {id: synthetic-consultas-pt-10, attrs: {country: CO}}, steps: [{op: start}, {op: turn, lang: pt, text: "Preciso saber algo sobre um produto."}], expect: {outcome: escalated, escalated: true}}
   - {id: negative-es-radicado-malformado-a, principal: {id: synthetic-consultas-es-11, attrs: {country: MX}}, steps: [{op: start}, {op: turn, lang: es, text: "¿Puedes revisar mi PQR? El radicado que anoté es la palabra azul."}], expect: {outcome: escalated, escalated: true}}
   - {id: negative-es-radicado-malformado-b, principal: {id: synthetic-consultas-es-12, attrs: {country: CO}}, steps: [{op: start}, {op: turn, lang: es, text: "Quiero consultar mi reclamo; mi supuesto radicado dice solamente mariposa."}], expect: {outcome: escalated, escalated: true}}
-  - {id: happy-es-cambia-a-pt, principal: {id: synthetic-consultas-es-13, attrs: {country: AR}}, steps: [{op: start}, {op: turn, lang: es, text: "Quiero consultar la fecha de pago."}, {op: turn, lang: pt, text: "A partir de agora, por favor responda em português: onde consulto essa data?"}], expect: {}}
   - {id: negative-pt-radicado-malformado-a, principal: {id: synthetic-consultas-pt-11, attrs: {country: MX}}, steps: [{op: start}, {op: turn, lang: pt, text: "Pode consultar minha solicitação? A referência que anotei é apenas a palavra azul."}], expect: {outcome: escalated, escalated: true}}
   - {id: negative-pt-radicado-malformado-b, principal: {id: synthetic-consultas-pt-12, attrs: {country: CO}}, steps: [{op: start}, {op: turn, lang: pt, text: "Quero consultar minha reclamação; a referência anotada diz somente borboleta."}], expect: {outcome: escalated, escalated: true}}
-  - {id: happy-pt-muda-a-es, principal: {id: synthetic-consultas-pt-13, attrs: {country: AR}}, steps: [{op: start}, {op: turn, lang: pt, text: "Onde consulto a próxima data de pagamento?"}, {op: turn, lang: es, text: "Desde ahora, por favor responde en español: ¿dónde puedo consultar esa fecha?"}], expect: {}}
   - id: happy-es-estado-pqr-verificado
     principal: {id: synthetic-consultas-es-14, attrs: {country: CO}}
     steps:

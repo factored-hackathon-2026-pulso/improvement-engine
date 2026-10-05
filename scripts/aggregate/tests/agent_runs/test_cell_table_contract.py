@@ -17,12 +17,19 @@ class SharedCellTableContractTests(unittest.TestCase):
             "numerator": 12,
             "denominator": 30,
         }]
-        agent_report = aggregate_export(_make_export(_balanced_outcomes(per_group=10)))
+        agent_report = aggregate_export(_make_export(_balanced_outcomes(per_group=20)))
         rows = parse_cell_ndjson(
             bank_cells_to_ndjson(bank_rows) + render_cell_ndjson(agent_report["cells"])
         )
         self.assertEqual(len(rows), len(bank_rows) + len(agent_report["cells"]))
         self.assertEqual(set(rows[0]), {"metric", "dims", "half", "period", "numerator", "denominator"})
+        agent_rows = rows[len(bank_rows):]
+        self.assertTrue(agent_rows)
+        self.assertTrue(all(row["metric"].startswith("AG_") for row in agent_rows))
+        self.assertTrue(all(row["dims"]["topic"] == "not_observed" for row in agent_rows))
+        self.assertTrue(all(row["numerator"] >= 10 and row["denominator"] - row["numerator"] >= 10
+                            for row in agent_rows))
+        self.assertFalse(any(row["metric"].startswith("M") for row in agent_rows))
 
     def test_render_is_canonical_and_stable(self):
         cells = [

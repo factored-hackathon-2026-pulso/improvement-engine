@@ -25,6 +25,7 @@ METRIC_DIMS = {
 }
 CONTROL_DIMENSIONS = ("reason_category", "category", "channel")
 T1_SOURCE_TABLES = ("call_center_interactions", "complaints", "satisfaction_surveys")
+DESCRIPTIVE_ONLY_METRICS = {"M10"}
 WINDOW_MONTHS = 3
 MIN_WINDOW_N = 1500
 MATERIALITY = 0.02
@@ -46,6 +47,20 @@ def _shift_period(value: str, offset: int) -> str:
 
 def _cell_key(row: dict) -> tuple:
     return row["metric"], tuple(sorted(row["dims"].items()))
+
+
+def _metric_scope(cell_keys):
+    screened = sorted(key for key in cell_keys if key[0] not in DESCRIPTIVE_ONLY_METRICS)
+    descriptive = sorted(key for key in cell_keys if key[0] in DESCRIPTIVE_ONLY_METRICS)
+    return {
+        "screened_metrics": sorted({key[0] for key in screened}),
+        "screened_cells": _safe_count(len(screened)),
+        "excluded_descriptive_metrics": sorted({key[0] for key in descriptive}),
+        "excluded_descriptive_cells": [
+            {"metric": metric, "dims": dict(dim_items)}
+            for metric, dim_items in descriptive
+        ],
+    }
 
 
 _PQR_CATEGORIES = {
@@ -227,7 +242,11 @@ def estimate_outcomes(
         }
 
     cell_keys = sorted({_cell_key(row) for row in data})
-    family_size = max(1, len(cell_keys) * len(HALVES))
+    metric_scope = _metric_scope(cell_keys)
+    screened_cell_keys = [
+        key for key in cell_keys if key[0] not in DESCRIPTIVE_ONLY_METRICS
+    ]
+    family_size = max(1, len(screened_cell_keys) * len(HALVES))
     z = NormalDist().inv_cdf(1.0 - alpha / (2.0 * family_size))
     unique_dims = {key: dict(key[1]) for key in cell_keys}
     candidate_groups = defaultdict(list)
@@ -260,7 +279,15 @@ def estimate_outcomes(
         metric, dim_items = target_key
         dims = dict(dim_items)
         control_dim, control_keys = controls_for[target_key]
-        if globally_missing:
+        if metric == "M10":
+            # M10 is unresolved handled HOURS (floored from seconds), not a
+            # count of Bernoulli trials. The generic binomial interval and
+            # its improved/worsened/equivalence decisions are not valid here.
+            half_results = {
+                half: {"reason": "non_bernoulli_metric_descriptive_only"}
+                for half in HALVES
+            }
+        elif globally_missing:
             half_results = {h: {"reason": "incomplete_global_month_window"} for h in HALVES}
         elif not control_keys:
             half_results = {h: {"reason": "no_published_sibling_control"} for h in HALVES}
@@ -322,24 +349,41 @@ def estimate_outcomes(
             status = "inconclusive"
             reason = next((item for item in reasons if item), "incomplete_evidence")
             effect = lower = upper = None
-            n_pre = n_post = 0
+            n_pre = n_post = None if metric == "M10" else 0
 
         result = {
             "metric": metric,
             "dims": dims,
+            "inference_scope": (
+                "descriptive_only"
+                if metric in DESCRIPTIVE_ONLY_METRICS
+                else "screened"
+            ),
             "effect_pp": None if effect is None else round(effect * 100.0, 6),
-        "interval_family_adjusted_pp": None
-        if lower is None
-        else [round(lower * 100.0, 6), round(upper * 100.0, 6)],
+            "interval_family_adjusted_pp": None
+            if lower is None
+            else [round(lower * 100.0, 6), round(upper * 100.0, 6)],
             "n_pre": n_pre,
             "n_post": n_post,
-            "control": "same_metric_published_siblings",
-            "control_dimension": control_dim,
-            "control_siblings": [unique_dims[key] for key in control_keys],
+            "control": None if metric in DESCRIPTIVE_ONLY_METRICS else "same_metric_published_siblings",
+            "control_dimension": None if metric in DESCRIPTIVE_ONLY_METRICS else control_dim,
+            "control_siblings": (
+                []
+                if metric in DESCRIPTIVE_ONLY_METRICS
+                else [unique_dims[key] for key in control_keys]
+            ),
             "status": status,
-        "reason": reason,
-        "uncertainty_method": "naive_independent_binomial_not_customer_cluster_adjusted",
-        "interpretation": "descriptive_association_not_causation",
+            "reason": reason,
+            "uncertainty_method": (
+                "not_computed_non_bernoulli_aggregate"
+                if metric == "M10"
+                else "naive_independent_binomial_not_customer_cluster_adjusted"
+            ),
+            "interpretation": (
+                "descriptive_input_not_inferentially_estimated"
+                if metric == "M10"
+                else "descriptive_association_not_causation"
+            ),
         }
         output.append(result)
 
@@ -347,7 +391,12 @@ def estimate_outcomes(
     return {
         "release_period": release_period,
         "window_months": window_months,
-        "multiplicity": {"method": "bonferroni", "family_size": family_size, "alpha": alpha},
+        "multiplicity": {
+            "method": "bonferroni",
+            "family_size": family_size,
+            "alpha": alpha,
+            **metric_scope,
+        },
         "cells": output,
         "summary": dict(sorted(Counter(row["status"] for row in output).items())),
     }
@@ -479,6 +528,10 @@ def _inject_reduction(rows, target_key, *, shift_pp, boundary, window_months):
 def _injected_shift_screen(rows, *, boundary, window_months, injections_pp=(2, 5, 10)):
     data = _validate_rows(rows)
     cell_keys = sorted({_cell_key(row) for row in data})
+    metric_scope = _metric_scope(cell_keys)
+    screened_cell_keys = [
+        key for key in cell_keys if key[0] not in DESCRIPTIVE_ONLY_METRICS
+    ]
     months = {
         _shift_period(boundary, offset)
         for offset in range(-window_months, 0)
@@ -488,19 +541,19 @@ def _injected_shift_screen(rows, *, boundary, window_months, injections_pp=(2, 5
     }
     denominators = defaultdict(int)
     for row in data:
-        if row["period"] in months:
+        if row["period"] in months and row["metric"] not in DESCRIPTIVE_ONLY_METRICS:
             denominators[(_cell_key(row), row["half"])] += row["denominator"]
 
     support_for = {
         key: _support_bin(
             sum(denominators[(key, half)] for half in HALVES) / (len(HALVES) * len(months))
         )
-        for key in cell_keys
+        for key in screened_cell_keys
     }
     support_bins = ("<500", "500-999", "1000-1999", ">=2000")
     cell_counts = Counter(support_for.values())
     detected = {support: Counter() for support in support_bins}
-    for key in cell_keys:
+    for key in screened_cell_keys:
         support = support_for[key]
         for shift_pp in injections_pp:
             shifted = _inject_reduction(
@@ -532,7 +585,7 @@ def _injected_shift_screen(rows, *, boundary, window_months, injections_pp=(2, 5
         )
         by_support_bin.append({
             "support_bin": support,
-            "registered_cells": _safe_count(cell_count),
+            "screened_cells": _safe_count(cell_count),
             "detection_rate_by_injection": rates,
             "algorithmic_80pct_shift_threshold_pp": threshold if threshold is not None else (
                 ">10" if cell_count >= 10 else None
@@ -541,6 +594,7 @@ def _injected_shift_screen(rows, *, boundary, window_months, injections_pp=(2, 5
     return {
         "boundary": boundary,
         "injections_pp": list(injections_pp),
+        **metric_scope,
         "support_measure": "mean_published_denominator_per_hash_half_per_month_across_the_six_window_months",
         "method": "fixed_boundary_shift_both_hash_halves_largest_remainder_and_refit_full_estimator",
         "interpretation": "deterministic_aggregate_shift_response_not_statistical_power_or_causal_effect",
@@ -563,7 +617,9 @@ def validate_placebos_and_sensitivity(rows, *, placebo_draws=1000, seed=20261005
         raise ValueError("at least six complete months are required for validation")
     rng = random.Random(seed)
     sampled = sorted(rng.sample(boundaries, min(placebo_draws, len(boundaries))))
-    cell_count = len({_cell_key(row) for row in data})
+    cell_keys = sorted({_cell_key(row) for row in data})
+    metric_scope = _metric_scope(cell_keys)
+    cell_count = len(cell_keys)
     placebo_counts = Counter()
     # Sampling is without replacement, so each selected boundary is evaluated
     # exactly once. Keep the cache explicit to make that cost bound visible.
@@ -571,8 +627,9 @@ def validate_placebos_and_sensitivity(rows, *, placebo_draws=1000, seed=20261005
     for release in sampled:
         if release not in placebo_cache:
             result = estimate_outcomes(data, release)
-            counts = Counter(row["status"] for row in result["cells"])
-            any_signal = any(row["status"] in ("improved", "worsened") for row in result["cells"])
+            screened = [row for row in result["cells"] if row["inference_scope"] == "screened"]
+            counts = Counter(row["status"] for row in screened)
+            any_signal = any(row["status"] in ("improved", "worsened") for row in screened)
             placebo_cache[release] = counts, any_signal
         counts, any_signal = placebo_cache[release]
         placebo_counts.update(counts)
@@ -588,7 +645,10 @@ def validate_placebos_and_sensitivity(rows, *, placebo_draws=1000, seed=20261005
         "sampling": "unique_release_windows_without_replacement",
         "evaluated_windows": len(sampled),
         "eligible_release_boundaries": len(boundaries),
-        "cells_per_draw": _safe_count(cell_count),
+        "cells_per_draw": metric_scope["screened_cells"],
+        "screened_metrics": metric_scope["screened_metrics"],
+        "excluded_descriptive_metrics": metric_scope["excluded_descriptive_metrics"],
+        "excluded_descriptive_cells": metric_scope["excluded_descriptive_cells"],
         "windows_with_candidate_signal": (
             _safe_count(signal_windows) if placebo_summary_publishable else None
         ),
@@ -618,7 +678,7 @@ def validate_placebos_and_sensitivity(rows, *, placebo_draws=1000, seed=20261005
     ]
     underpowered = all_underpowered if len(all_underpowered) == 0 or len(all_underpowered) >= 10 else None
     return {
-        "protocol": "outcome-discovery-v3",
+        "protocol": "outcome-discovery-v4",
         "interpretation": "exploratory_descriptive_screen_not_causal_or_confirmatory",
         "window_months": window,
         "analysis_boundary": analysis_boundary,
@@ -629,6 +689,7 @@ def validate_placebos_and_sensitivity(rows, *, placebo_draws=1000, seed=20261005
         "temporal_sensitivity": "not interpreted as a calibrated false-positive rate; windows overlap in time",
         "underpowered_cells": underpowered,
         "registered_cells": _safe_count(cell_count),
+        "metric_scope": metric_scope,
         "underpowered_cells_suppressed": underpowered is None,
         "injected_shift_screen": _injected_shift_screen(
             data, boundary=analysis_boundary, window_months=window,

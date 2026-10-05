@@ -175,6 +175,20 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
         self.assertIn("cannot bind a knowledge source", readme)
         self.assertIn("transfer directory", readme)
 
+    def test_readme_reports_live_eval_counts_and_vacuous_passes_honestly(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+        for observed in (
+            "`disputas` | 28 | 26 / 2 / 0",
+            "`consultas` | 28 | 25 / 1 / 2",
+            "`recepcion` | 28 | 28 / 0 / 0",
+            "`copiloto-asesor` | 22 | 20 / 2 / 0",
+            "69 were vacuous",
+            "http 410",
+        ):
+            with self.subTest(observed=observed):
+                self.assertIn(observed, readme)
+        self.assertIn("it is not evidence", readme)
+
     def test_unverified_sensitive_reference_cases_do_not_assume_escalation(self) -> None:
         for suite_id in ("disputas", "consultas"):
             for scenario in read_suite(suite_id)["scenarios"]:
@@ -184,6 +198,30 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
                     continue
                 with self.subTest(suite=suite_id, scenario=scenario["id"]):
                     self.assertEqual(scenario["expect"], {})
+
+    def test_sensitive_reference_event_canaries_are_present_per_locale(self) -> None:
+        for suite_id in ("disputas", "consultas"):
+            suite = read_suite(suite_id)
+            for lang in ("es", "pt"):
+                with self.subTest(suite=suite_id, locale=lang):
+                    cases = [
+                        scenario for scenario in suite["scenarios"]
+                        if scenario["id"].startswith(f"protected-{lang}-")
+                        and "monto-superior-ambos-limites" not in scenario["id"]
+                    ]
+                    self.assertEqual(len(cases), 4)
+                    for scenario in cases:
+                        self.assertTrue(scenario.get("sensitive_values"))
+                        self.assertTrue(all(
+                            marker in " ".join(step.get("text", "") for step in scenario["steps"])
+                            for marker in scenario["sensitive_values"]
+                        ))
+                        self.assertEqual(scenario["expect"], {})
+                        self.assertFalse(scenario.get("assertions"))
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+        self.assertIn("event-serialization canary", readme)
+        self.assertIn("does not test customer-visible response text", readme)
 
     def test_expectations_do_not_claim_unbound_knowledge_transfer_or_advisor_runtime(self) -> None:
         consultas = read_suite("consultas")
@@ -219,29 +257,37 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
                 self.assertEqual(sum(step.get("op") == "turn" for step in scenario["steps"]), 1)
                 self.assertNotIn("resolved", scenario["expect"].values())
 
-        switches = (
-            ("consultas", "happy-es-cambia-a-pt", ["es", "pt"]),
-            ("consultas", "happy-pt-muda-a-es", ["pt", "es"]),
-        )
-        for suite_id, scenario_id, expected_languages in switches:
-            turns = [
-                step["lang"] for step in by_id[suite_id][scenario_id]["steps"]
-                if step.get("op") == "turn"
-            ]
-            self.assertEqual(turns, expected_languages)
+        consultas_readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+        self.assertIn("manual-only language-switch prompts", consultas_readme)
+        self.assertIn("do not send a second turn to a closed run", consultas_readme)
+        for switch_id in ("happy-es-cambia-a-pt", "happy-pt-muda-a-es"):
+            self.assertNotIn(switch_id, by_id["consultas"])
 
         disputas = by_id["disputas"]
         for lang in ("es", "pt"):
             high = disputas[f"protected-{lang}-monto-superior-ambos-limites"]
             low = disputas[f"negative-{lang}-monto-inferior-ambos-limites"]
             self.assertEqual(high["expect"], {"outcome": "escalated", "escalated": True})
+            self.assertEqual(low["expect"].get("actions_verified"), ["radicar_pqr"])
             self.assertIn("tools", low.get("seed", {}))
-            selection_tool = "seleccionar" if lang == "es" else "selecionar"
+            # Tool IDs are locale-independent in the pinned registry/flow.
+            selection_tool = "seleccionar"
             self.assertEqual(
                 set(low["seed"]["tools"]),
-                {"buscar_transacciones", selection_tool, "convertir_moneda"},
+                {
+                    "buscar_transacciones", selection_tool, "convertir_moneda",
+                    "radicar_pqr", "obtener_pqr",
+                },
             )
-            self.assertEqual(low["expect"], {"outcome": "resolved", "escalated": False})
+            self.assertIn(
+                {"op": "confirm", "answer": "yes"}, low["steps"],
+                "a resolved dispute must confirm before the flow can create and verify a PQR",
+            )
+            self.assertEqual(low["expect"], {
+                "outcome": "resolved",
+                "actions_verified": ["radicar_pqr"],
+                "escalated": False,
+            })
             self.assertEqual(len([
                 scenario_id for scenario_id in disputas
                 if scenario_id.startswith((
@@ -293,6 +339,7 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
                     f"negative-{lang}-sem-promessa-reembolso-",
                 ))
             ]
+            self.assertEqual(len(refund_cases), 2, f"{lang}: refund-promise prompts must not be vacuous")
             self.assertTrue(all(
                 any("reembolso" in step.get("text", "").lower()
                     and ("prom" in step.get("text", "").lower()
@@ -302,10 +349,13 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
                     for step in scenario["steps"])
                 for scenario in refund_cases
             ))
+            self.assertTrue(all(scenario["expect"] == {} and not scenario.get("assertions")
+                                for scenario in refund_cases))
 
         readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
-        self.assertIn("do not expose response locale", readme)
-        self.assertIn("rubric-only", readme)
+        self.assertIn("does not expose the response locale", readme)
+        self.assertIn("prompt-only", readme)
+        self.assertNotIn("rubric-only", readme)
 
     def test_validator_rejects_malformed_duplicate_and_pii_bearing_scenarios(self) -> None:
         valid = read_suite("consultas")
@@ -402,6 +452,17 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
         optional_escalation = copy.deepcopy(read_suite("disputas"))
         optional_escalation["scenarios"][0]["expect"].pop("escalated", None)
         validate_suite_document(optional_escalation, expected_id="disputas")
+
+    def test_validator_rejects_language_switch_scenario_in_automated_suite(self) -> None:
+        suite = read_suite("consultas")
+        scenario = copy.deepcopy(suite["scenarios"][0])
+        scenario["id"] = "negative-es-language-switch"
+        scenario["steps"].append({
+            "op": "turn", "lang": "pt", "text": "Responda em português."
+        })
+        suite["scenarios"][0] = scenario
+        with self.assertRaisesRegex(ValueError, "one language per run"):
+            validate_suite_document(suite, expected_id="consultas")
 
     def test_pinned_agent_core_schema_validator_when_dependencies_are_available(self) -> None:
         sys.path.insert(0, str(AGENT_CORE))

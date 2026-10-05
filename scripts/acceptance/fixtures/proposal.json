@@ -1,12 +1,22 @@
 {
   "proposal_id": "prop-synthetic-001",
+  "agent_id": "support_agent",
   "origin": "auto_detect",
   "state": "draft",
+  "base_release_id": null,
+  "title": "Synthetic draft",
+  "created_by": "synthetic",
+  "updated_at": "2026-10-05T00:00:00Z",
   "changes": [
     {
       "kind": "prompt",
+      "content": {
+        "id": "synthetic-prompt",
+        "version": "1.0.0",
+        "prompt": "Pedir una confirmación breve cuando la categoría sea ambigua."
+      },
       "docs": {
-        "description": "Problema observado: queja no resuelta. Evidencia y comparación: en el snapshot dataset auditado, 66,000/117,021 (56.4%) vs 16.6% para los demás motivos. Qué cambiaría: prompt. Efecto esperado: hipótesis, no medido. Cómo se evaluará: baseline y guardrails. Riesgo: demora. Qué no cambia: permisos.",
+        "description": "Problema observado: Queja Phone sin resolución en primer contacto. Evidencia y comparación: en el snapshot agregado Phone, 54.418/96.521 (56,4%) vs 77.871/469.586 (16,6%), diferencia descriptiva +39,8 pp. Qué cambiaría: prompt. Efecto esperado: hipótesis, no medido. Cómo se evaluará: baseline y guardrails. Riesgo: demora. Qué no cambia: permisos.",
         "rationale": "La asociación prioriza investigar; no prueba causa.",
         "changelog": "Borrador propuesto; aún no publicado."
       }

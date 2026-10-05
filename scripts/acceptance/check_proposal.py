@@ -9,6 +9,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlsplit
@@ -55,15 +56,95 @@ class AcceptanceResult:
 
 
 def _proposal_object(value: Any) -> dict[str, Any] | None:
-    if isinstance(value, dict) and isinstance(value.get("proposal"), dict):
+    if isinstance(value, dict) and "proposal" in value:
         # Agent Core ProposalDetail carries artifact changes beside the proposal
         # summary. Preserve those siblings when normalizing to the checker view.
         detail = value
+        if not isinstance(detail.get("proposal"), dict) or not _valid_proposal_summary(detail["proposal"]):
+            return None
+        if not {"proposal", "changes", "last_eval"}.issubset(detail):
+            return None
+        if set(detail) - {"proposal", "changes", "last_eval", "review"}:
+            return None
+        if not isinstance(detail["changes"], list):
+            return None
+        # This checker targets an un-evaluated draft; any recorded EvalRun is
+        # outside this acceptance path and must not be accepted as a valid draft.
+        if detail["last_eval"] is not None:
+            return None
+        if detail.get("review") is not None:
+            return None
         value = dict(detail["proposal"])
         for field in ("changes", "last_eval", "review"):
             if field in detail:
                 value[field] = detail[field]
     return value if isinstance(value, dict) else None
+
+
+def _valid_proposal_summary(proposal: Any) -> bool:
+    """Validate Proposal's pinned required fields and constraints for a draft."""
+    if not isinstance(proposal, dict):
+        return False
+    required = {
+        "proposal_id", "agent_id", "origin", "state", "base_release_id",
+        "title", "created_by", "updated_at",
+    }
+    allowed = required | {"candidate_hash", "rev"}
+    if required - proposal.keys() or proposal.keys() - allowed:
+        return False
+    if any(not isinstance(proposal[key], str) for key in ("proposal_id", "created_by")):
+        return False
+    agent_id = proposal["agent_id"]
+    if not isinstance(agent_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_/-]*", agent_id):
+        return False
+    if not isinstance(proposal["origin"], str) or proposal["origin"] not in {"manual", "builder_chat", "auto_detect", "import"}:
+        return False
+    if not isinstance(proposal["state"], str) or proposal["state"] not in {"draft", "candidate", "evaluated", "approved", "published"}:
+        return False
+    title = proposal["title"]
+    if not isinstance(title, str) or not 1 <= len(title) <= 200:
+        return False
+    base_release_id = proposal.get("base_release_id")
+    if base_release_id is not None and not isinstance(base_release_id, str):
+        return False
+    if "candidate_hash" in proposal and proposal["candidate_hash"] is not None and not isinstance(proposal["candidate_hash"], str):
+        return False
+    if "rev" in proposal and (not isinstance(proposal["rev"], int) or isinstance(proposal["rev"], bool) or proposal["rev"] < 0):
+        return False
+    timestamp = proposal["updated_at"]
+    if not isinstance(timestamp, str):
+        return False
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return "T" in timestamp and parsed.tzinfo is not None
+
+
+def _valid_entity_drafts(changes: Any) -> bool:
+    """Validate generic EntityDraft wire shape, not kind-specific artifact semantics."""
+    if not isinstance(changes, list) or not changes:
+        return False
+    for change in changes:
+        if not isinstance(change, dict) or set(change) != {"kind", "content", "docs"}:
+            return False
+        kind, content, docs = change["kind"], change["content"], change["docs"]
+        if not isinstance(kind, str) or not kind.strip() or len(kind) > 64:
+            return False
+        if not isinstance(content, dict) or not content:
+            return False
+        if not isinstance(docs, dict) or set(docs) != {"description", "rationale", "changelog"}:
+            return False
+        description, rationale, changelog = (
+            docs["description"], docs["rationale"], docs["changelog"]
+        )
+        if not isinstance(description, str) or not description.strip() or len(description) > 4000:
+            return False
+        if not isinstance(rationale, str) or len(rationale) > 4000:
+            return False
+        if not isinstance(changelog, str) or len(changelog) > 8000:
+            return False
+    return True
 
 
 def _dossier_text(changes: Any) -> tuple[str, bool]:
@@ -208,6 +289,8 @@ def check_acceptance(
     changes = proposal.get("changes")
     if not isinstance(changes, list) or not changes:
         failures.append("proposal_changes_empty")
+    elif not _valid_entity_drafts(changes):
+        failures.append("proposal_changes_invalid")
     dossier, docs_present = _dossier_text(changes)
     if not docs_present:
         failures.append("dossier_docs_missing")
@@ -220,14 +303,16 @@ def check_acceptance(
         if not docs_present or not all(
             isinstance(change.get("docs", {}).get("rationale"), str)
             and change["docs"]["rationale"].strip()
-            for change in changes if isinstance(change, dict)
+            for change in changes
+            if isinstance(change, dict) and isinstance(change.get("docs"), dict)
         ):
             failures.append("rationale_missing")
     if not isinstance(proposal.get("changelog"), str) or not proposal["changelog"].strip():
         if not docs_present or not all(
             isinstance(change.get("docs", {}).get("changelog"), str)
             and change["docs"]["changelog"].strip()
-            for change in changes if isinstance(change, dict)
+            for change in changes
+            if isinstance(change, dict) and isinstance(change.get("docs"), dict)
         ):
             failures.append("changelog_missing")
     visible_text = "\n".join(_visible_text(proposal))

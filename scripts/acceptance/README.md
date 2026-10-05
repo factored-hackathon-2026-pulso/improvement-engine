@@ -54,12 +54,21 @@ the focused tests with:
 python -m unittest scripts.acceptance.tests.test_check_proposal -v
 ```
 
-The checker accepts the pinned `ProposalDetail` envelope shape: `proposal`
-metadata and its sibling `changes`, `last_eval`, and `review` fields. It scans
-the complete proposal plus artifact changes for obvious PII canaries. Each
-change must contain all seven dossier headings with nonempty section bodies;
-the evidence section must include at least two numeric values, an explicit
+The checker accepts the pinned `ProposalDetail` envelope shape: `proposal`,
+`changes`, and `last_eval` are required; `review` is optional. For this
+draft-only acceptance path, `last_eval` and `review` must be null. It validates
+the `Proposal` summary's required fields, allowed fields, types, enums, title
+length, agent-id pattern, and timestamp format, but is not a general JSON
+Schema validator. It validates each change against the generic pinned
+`EntityDraft` shape: nonblank bounded
+`kind`, nonempty JSON-object `content`, and the required bounded `docs`
+fields. It does not validate the content against the artifact-kind-specific
+schema or prove that the proposed delta is semantically useful. It scans the
+complete proposal plus artifact changes for obvious PII canaries. Each change
+must contain all seven dossier headings with nonempty section bodies; the
+evidence section must include at least two numeric values, an explicit
 comparison, and a snapshot/source marker. This is a mechanical completeness
-gate, not semantic validation of the claim or artifact-kind schema. Unit tests
-cover the envelope shape, PII inside sibling `changes[].content`, empty
-sections, and evidence without a comparator/baseline.
+gate, not semantic validation of the claim. Unit tests cover the envelope and
+generic change shape, PII inside sibling `changes[].content`, render-ready
+plain-text descriptions, empty sections, and evidence without a
+comparator/baseline.

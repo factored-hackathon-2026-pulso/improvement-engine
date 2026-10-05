@@ -37,6 +37,137 @@ def quota(*, used: int = 1, limit: int = 10, rejected: bool = True) -> dict:
 
 
 class ProposalAcceptanceTests(unittest.TestCase):
+    def test_draft_requires_a_structurally_valid_nonempty_entity_change(self) -> None:
+        for mutate in (
+            lambda change: change.pop("content"),
+            lambda change: change.update(content=[]),
+            lambda change: change.update(content={}),
+            lambda change: change.update(kind="  "),
+            lambda change: change.pop("docs"),
+        ):
+            bad = proposal()
+            bad["changes"][0]["content"] = {"id": "synthetic-prompt", "version": "1.0.0"}
+            mutate(bad["changes"][0])
+            with self.subTest(change=bad["changes"][0]):
+                self.assertIn("proposal_changes_invalid", check_acceptance(bad).failures)
+
+    def test_proposal_detail_requires_its_wire_required_last_eval_field(self) -> None:
+        import copy
+
+        flat = proposal()
+        detail = {
+            "proposal": {key: value for key, value in flat.items() if key != "changes"},
+            "changes": copy.deepcopy(flat["changes"]),
+        }
+        self.assertIn("proposal_response_invalid", check_acceptance(detail).failures)
+
+    def test_proposal_detail_requires_a_well_formed_proposal_summary(self) -> None:
+        import copy
+
+        flat = proposal()
+        detail = {
+            "proposal": {
+                **{key: value for key, value in flat.items() if key != "changes"},
+                "agent_id": "support_agent",
+                "base_release_id": None,
+                "title": "Synthetic draft",
+                "created_by": "synthetic",
+                "updated_at": "2026-10-05T00:00:00Z",
+            },
+            "changes": copy.deepcopy(flat["changes"]),
+            "last_eval": None,
+        }
+        self.assertEqual(check_acceptance(detail).failures, ())
+
+        for mutate in (
+            lambda summary: summary.pop("agent_id"),
+            lambda summary: summary.pop("base_release_id"),
+            lambda summary: summary.update(title=""),
+            lambda summary: summary.update(title="T" * 201),
+            lambda summary: summary.update(base_release_id=3),
+            lambda summary: summary.update(agent_id="Bad Agent"),
+            lambda summary: summary.update(unexpected="field"),
+        ):
+            malformed = copy.deepcopy(detail)
+            mutate(malformed["proposal"])
+            with self.subTest(summary=malformed["proposal"]):
+                self.assertIn("proposal_response_invalid", check_acceptance(malformed).failures)
+
+    def test_proposal_detail_accepts_null_base_release_but_rejects_malformed_last_eval(self) -> None:
+        import copy
+
+        flat = proposal()
+        detail = {
+            "proposal": {key: value for key, value in flat.items() if key != "changes"},
+            "changes": copy.deepcopy(flat["changes"]),
+            "last_eval": None,
+        }
+        self.assertNotIn("proposal_response_invalid", check_acceptance(detail).failures)
+        malformed = copy.deepcopy(detail)
+        malformed["last_eval"] = {}
+        self.assertIn("proposal_response_invalid", check_acceptance(malformed).failures)
+
+    def test_proposal_detail_rejects_non_object_proposal_without_crashing(self) -> None:
+        detail = {"proposal": [], "changes": [], "last_eval": None}
+        result = check_acceptance(detail)
+        self.assertIn("proposal_response_invalid", result.failures)
+
+    def test_golden_dossier_descriptions_match_plain_text_renderer(self) -> None:
+        import re
+
+        document = (Path(__file__).resolve().parents[3] / "docs/data/dossier/DOSSIER_SPEC.md").read_text(
+            encoding="utf-8"
+        )
+        descriptions = re.findall(
+            r"- `changes\[0\]\.docs\.description` \((?:ES|PT-BR)\):\s*\n(.*?)(?=\n- `changes\[0\]\.docs\.rationale`)",
+            document,
+            re.DOTALL,
+        )
+        self.assertEqual(len(descriptions), 6)
+        labels = (
+            ("problema observado",),
+            ("evidencia y comparación", "evidência e comparação"),
+            ("qué cambiaría", "o que mudaria"),
+            ("efecto esperado", "efeito esperado"),
+            ("cómo se evaluará", "como será avaliado"),
+            ("riesgo", "risco"),
+            ("qué no cambia", "o que não muda"),
+        )
+        for block in descriptions:
+            quoted_lines = [line.strip() for line in block.splitlines() if line.strip().startswith(">")]
+            self.assertEqual(len(quoted_lines), 1, "renderer description must be one plain-text line")
+            description = " ".join(
+                line.strip()[1:].strip()
+                for line in block.splitlines()
+                if line.strip().startswith(">")
+            )
+            folded = description.casefold()
+            self.assertNotIn("**", description)
+            missing = [options for options in labels if not any(label in folded for label in options)]
+            self.assertEqual(missing, [], description)
+            offsets = []
+            for options in labels:
+                occurrences = [(folded.find(label), label) for label in options if label in folded]
+                self.assertEqual(len(occurrences), 1, description)
+                offsets.append(occurrences[0][0])
+            self.assertEqual(offsets, sorted(offsets), description)
+
+    def test_dossier_pins_aggregate_provenance_and_distinguishes_full_snapshot(self) -> None:
+        document = (Path(__file__).resolve().parents[3] / "docs/data/dossier/DOSSIER_SPEC.md").read_text(
+            encoding="utf-8"
+        )
+        for required in (
+            "54,418 / 96,521",
+            "77,871 / 469,586",
+            "bank_cells.py",
+            "042cabffbd27c0d462ed51f6479647f4798af06f73f7546c49edd40d6987fe7d",
+            "35 complete months (July 2023–May 2026)",
+            "excluding partial June 2023 and June 2026",
+            "must not be substituted for or combined with this T1 same-channel comparison",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, document)
+
     def test_agent_core_proposal_detail_envelope_keeps_sibling_changes_and_pii_scan(self) -> None:
         import copy
 
@@ -95,7 +226,7 @@ class ProposalAcceptanceTests(unittest.TestCase):
         bad = proposal()
         description = bad["changes"][0]["docs"]["description"]
         bad["changes"][0]["docs"]["description"] = description.replace(
-            "Evidencia y comparación: en el snapshot dataset auditado, 66,000/117,021 (56.4%) vs 16.6% para los demás motivos.",
+            "Evidencia y comparación: en el snapshot agregado Phone, 54.418/96.521 (56,4%) vs 77.871/469.586 (16,6%), diferencia descriptiva +39,8 pp.",
             "Evidencia y comparación: sin cifras.",
         ).replace("Riesgo: demora.", "Riesgo: .")
         result = check_acceptance(bad)

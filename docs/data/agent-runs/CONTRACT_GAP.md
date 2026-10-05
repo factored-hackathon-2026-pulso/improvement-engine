@@ -1,32 +1,61 @@
-# Agent-run export aggregation: contract gap
+# T3 remaining evidence and gaps
 
-**Status:** partial implementation and synthetic contract tests exist in `scripts/aggregate/agent_runs/`; PR #101 assigned this destination to X-DOC. This slice does not yet satisfy the T3 goal of localizing agent problems or measuring event-level handling behavior. The bank-cell producer/schema remains unchanged.
-**Evidence class:** the checked-in export is explicitly recorded from a local Agent Core run with synthetic input. It is not evidence of bank or production behavior.
+**Implementation status:** the synthetic aggregator now implements the
+CL-0075 run/event semantics supported by its contract note: finite
+registry-label mapping, locale coarsening, explicit not-observed topic,
+highest-cursor run selection, `(run_id,seq)` event deduplication, complete
+event-page denominators, distinct-run tool errors, retries, and six-field
+NDJSON output. It also computes a distinct-terminal-run handoff metric as the
+run-level OR of `run_transferred`, `status == escalated`, or
+`run_closed.closed_by in {escalation, transfer}`. The numerator is deduplicated
+by run; its denominator is all distinct terminal runs in the same safe group,
+not the handoff-only cohort or an outcome-conditioned bucket. This closes a
+structural implementation gap; it does not prove live platform integration.
 
-## Evidence inspected
+## Verified locally
 
-- `scripts/triggers/fixtures/export_recorded.json` is labelled `RECORDED from local agent-core ... (synthetic input); events trimmed to run_closed`; its run page cursor is `754` and each event-page cursor is `22`.
-- Its page shape is visible as `runs: {items, next_after}`, `events: {<run_id>: {items, next_after}}`, and `registry: {items, next_after}`. The existing poller README documents `/v1/export/runs`, `/v1/export/runs/{id}/events`, and `/v1/export/registry-events` with cursor behavior. The checked-in fixture is a nonterminal first page; the aggregator rejects it as incomplete.
-- The recorded `runs.items` entries include run sequence/cursor, run ID, release, agent ID/version, principal type, mode, locale, status, outcome, and created/closed timestamps. Both recorded entries are closed with `outcome=completed`.
-- The pinned Agent Core `agent_core/domain/outcomes.py` defines nine outcome values: `resolved`, `abstained`, `cancelled`, `clarify_exhausted`, `completed`, `failed`, `abandoned`, `escalated`, and `transferred`. This enum establishes possible values, but it does not itself define the requested 4–6 aggregate metric registry or how its metrics should treat each outcome.
-- Each recorded event page contains only a `run_closed` event. The fixture does not include the preceding `run_started`, turn-level measurement events, decision/tool events, or a sufficiently varied set of outcomes.
-- The existing bank-cell consumer contract is enforced by `scripts/aggregate/outcome_estimator.py`: each NDJSON row has exactly `metric`, `dims`, `half`, `period`, `numerator`, and `denominator`; `half` is `discovery` or `holdout`; period is `YYYY-MM`; counts are binary; denominator and both non-empty outcome sides obey k>=10. The producer `scripts/aggregate/bank_cells.py` additionally applies complementary suppression before publishing.
-- The pinned Agent Core M11 spec describes event-derived telemetry (including decision/tool latency) and distinguishes sampled OTel traces from the per-run event log used for aggregate metrics. The recorded fixture is insufficient to validate that richer event set or those measurements.
-- Claude's shared-journal response CL-0073 reports that run-export contract 1.4.0 (commit `5e3fef9`) includes run-level `agent{id,version}`, one locale per run, and `tool_called`, `run_transferred`, `escalated`, `decision_made`, and `turn_completed` event families. This is collaborator-provided contract evidence, not independently verified wire-schema evidence: both available local Agent Core references (`86a7674` and `c814c2b`) declare contracts 1.3.0, and neither contains the cited 1.4.0 revision. The exact v1.4 response schema, event projection, filtering/completeness, and paging consistency therefore remain unverified here.
-- Read-only inspection of the available v1.3 producer source yields useful candidate semantics, but these are not silently promoted to v1.4 guarantees: each `tool_called` is an attempt (idempotent retries can emit up to three records); `status` is a closed enum and optional free-text `error` is not a success flag; circuit-open may produce an error record without a downstream call. `decision_made` may recur in one run and its latency is decision-service elapsed time, not one model-call latency. `turn_completed` covers successful completion only, not all started turns. `run_transferred` and `escalated` represent distinct terminal paths. A future metric contract must preserve these grains and names rather than combine them into ambiguous "tool success" or "handoff" rates.
+- Outcome and handoff marginals are released only after joint internal
+  outcome×handoff complementary suppression at `k=10`; the cross-tab is not
+  serialized. Schema-invalid/missing agent or locale rejects the export;
+  valid unknown values are safely coarsened to `other`.
+- A terminal empty cursor page proves structural exhaustion in the supplied
+  envelope only. Completeness and snapshot provenance remain producer-asserted
+  and are not authenticated by the aggregator.
+- `run_closed.closed_by` is required and restricted to the pinned producer
+  enum; locale accepts bounded language-tag forms such as `es-MX` and `pt-BR`
+  while coarsening them to `es`/`pt`; absent `tool_called.attempt` defaults to
+  one. Tests cover malformed and missing values plus the optional attempt.
 
-## Remaining measurement gaps
+- The pinned local Agent Core 1.3 schema for `ToolCalledPayload` enumerates
+  `ok`, `error`, `timeout`, `denied`, `uncertain`, and `step_up_required`;
+  CL-0075 confirms the 1.4 semantics used for metric classification. Count
+  `error|timeout|denied` as error-bearing runs; `uncertain` and
+  `step_up_required` are not errors.
+- The recorded fixture `scripts/triggers/fixtures/export_recorded.json` has
+  only two synthetic-input run rows, no `seq` fields in its trimmed events,
+  and nonterminal run/event cursors. It is rejected rather than silently
+  treated as a full population.
+- The exact six-field NDJSON parser is shared by bank and Agent Core rows.
+  Metric names remain source-specific (`M*` versus `AG_*`).
 
-The checked-in recorded fixture does not support the richer requested telemetry metrics. The v1 implementation therefore publishes only five mutually exclusive terminal-outcome buckets with no dimensions, requires fully exhausted run/event pages, and rejects the recorded fixture. In particular:
+## Still not established
 
-1. The fixture has two returned records and one observed outcome category, but nonterminal cursors mean it is not a complete sample. The aggregator rejects it; those records also cannot support any k=10 outcome cell.
-2. The event rows are intentionally truncated at `run_closed`, so durations, turn counts, tool use, model usage, or other event-derived metrics cannot be computed from this fixture. Run timestamps alone do not establish the required event-level measurement semantics.
-3. The task does not identify the approved Agent Core metric registry, safe agent-label mapping, period attribution rule, or discovery/holdout assignment for agent-run populations. Reusing the bank dataset's customer-hash split would not be justified: Agent Core run exports expose run IDs and session IDs, not the bank customer key, and output must not contain identifiers.
-4. The recorded export contains agent/release/run identifiers. The requested no-ID/no-free-text output requires an explicit finite mapping of safe agent categories and a rule for excluding or coarsening identifier-like values; the existing generic bank-cell schema alone does not provide that policy. Do not publish raw artifact IDs or silently map unknown agent IDs to a real category.
-5. The fixture is recorded, synthetic-input evidence. It cannot substantiate claims about real Agent Core behavior or production metrics.
+1. No complete live export from the 1.4 runtime has been exercised against
+   this adapter. The synthetic fixtures cannot establish the exact endpoint
+   pagination behavior or producer consistency guarantees.
+2. Agent labels are currently a small code-owned allow-list
+   (`pulso-builder` -> `builder`); all other IDs become `other`. Expand only
+   after review of the actual registry population and stable non-sensitive
+   aliases.
+3. There is no topic field or alias in the source. `topic=not_observed` is a
+   protocol-owned constant for explicit absence and must not be presented as
+   topic analysis.
+4. Per-event latency values are present in reported contract fields, but the
+   shared consumer schema cannot represent their distribution without
+   inventing a statistic or threshold; latency is explicitly non-computable.
+5. Tool metrics for open runs are snapshot observations, because a later run
+   update may append events. They are not final outcome metrics.
 
-## Safe conclusion and next prerequisite
-
-Do not emit `bank_cells.ndjson` from this fixture and do not label any derived result as real. The only directly supported statement is that the recorded synthetic page contains two closed, completed run records; its cursors leave the full population unknown. The aggregator fails closed before computing cells. No real or production Agent Core outcome is established.
-
-Extending beyond terminal outcomes requires: (a) the exact 1.4 wire schema/pin and export completeness rules; (b) explicit denominator, attempt/event deduplication, retry and missing/partial-page semantics; (c) privacy-reviewed finite dimensions and complementary suppression; and (d) synthetic tests plus an evidence-class label. A possible attempt-level `tool_called` status distribution must use recorded attempts as its denominator, exclude free-text `error`, and keep `denied`, `uncertain`, and `step_up_required` distinct. Decision latency would be per distinct decision event; completed-turn duration would exclude turns with no completion record. These are design candidates only, not implemented metrics or verified v1.4 behavior. Event counts alone do not satisfy k=10 support: support must be based on distinct contributing runs, including a safe complement rule. The current v1 stream is structurally schema-compatible only and must remain separate from bank outcomes. A `live_platform` source label does not by itself establish real bank/customer representativeness.
+The output must not claim production behavior, customer outcomes, causal lift,
+or performance improvement. Keep agent-run aggregates out of M1-M10 and never
+use a missing tool event as a successful result.

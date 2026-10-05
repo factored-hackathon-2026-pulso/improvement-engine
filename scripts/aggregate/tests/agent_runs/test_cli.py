@@ -16,8 +16,12 @@ class AgentRunCliTests(unittest.TestCase):
             "runs": {"pages": [
                 {"requested_after": None, "items": [{
                     "run_id": "synthetic-run-private",
+                    "cursor": 1,
                     "status": "closed",
                     "outcome": "completed",
+                    "agent": {"id": "unknown-agent", "version": "1.0.0"},
+                    "locale": "es",
+                    "created_at": "2026-01-01T00:00:00Z",
                     "closed_at": "2026-01-01T00:00:00Z",
                 }], "next_after": "opaque-runs-cursor"},
                 {"requested_after": "opaque-runs-cursor", "items": [], "next_after": "opaque-runs-cursor"},
@@ -26,8 +30,9 @@ class AgentRunCliTests(unittest.TestCase):
                 {"requested_after": None, "items": [{
                     "type": "run_closed",
                     "run_id": "synthetic-run-private",
+                    "seq": 21,
                     "ts": "2026-01-01T00:00:00Z",
-                    "payload": {"outcome": "completed"},
+                    "payload": {"outcome": "completed", "closed_by": "flow"},
                 }], "next_after": "opaque-events-cursor"},
                 {"requested_after": "opaque-events-cursor", "items": [], "next_after": "opaque-events-cursor"},
             ]},
@@ -41,7 +46,7 @@ class AgentRunCliTests(unittest.TestCase):
             code = main(["--input", str(source), "--output", str(output)])
             self.assertEqual(code, 0)
             report = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(report["protocol"], "agent-run-outcomes.v2")
+            self.assertEqual(report["protocol"], "agent-run-aggregates.v3")
             self.assertEqual(report["availability"], "below_privacy_floor")
             self.assertEqual(report["cells"], [])
             serialized = output.read_text(encoding="utf-8")
@@ -56,6 +61,18 @@ class AgentRunCliTests(unittest.TestCase):
             with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 main(["--input", str(source), "--output", str(output)])
             self.assertEqual(output.read_bytes(), b"user-owned bytes\n")
+
+    def test_ndjson_mode_serializes_exact_shared_cell_rows(self):
+        from scripts.aggregate.agent_runs.cell_table import parse_cell_ndjson
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "export.json"
+            output = Path(directory) / "agent-run-cells.ndjson"
+            source.write_text(json.dumps(self.synthetic_export()), encoding="utf-8")
+            code = main(["--input", str(source), "--output", str(output), "--format", "ndjson"])
+            self.assertEqual(code, 0)
+            self.assertEqual(output.read_text(encoding="utf-8"), "")  # k=10 suppresses this one-run fixture
+            self.assertEqual(parse_cell_ndjson(output.read_text(encoding="utf-8")), [])
 
     def test_recorded_fixture_with_nonterminal_cursors_fails_closed(self):
         fixture = Path("scripts/triggers/fixtures/export_recorded.json").resolve()

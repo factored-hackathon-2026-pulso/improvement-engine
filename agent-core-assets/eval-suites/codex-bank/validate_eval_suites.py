@@ -116,10 +116,8 @@ def validate_suite_document(document: Any, *, expected_id: str) -> None:
             for turn in turns
         ):
             raise ValueError("scenario turn language/text is malformed")
-        if len(set(turn_languages)) > 1 and scenario_id not in {
-            "happy-es-cambia-a-pt", "happy-pt-muda-a-es"
-        }:
-            raise ValueError("only the explicit bilingual switch cases may change turn language")
+        if len(set(turn_languages)) > 1:
+            raise ValueError("automated scenarios must use one language per run; switch cases are manual-only")
 
         expected = scenario.get("expect")
         if isinstance(expected, dict) and set(expected) - EXPECT_FIELDS:

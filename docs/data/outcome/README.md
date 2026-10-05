@@ -17,7 +17,7 @@ the analysis does not estimate causal impact or business lift.
 consumes the exact six-field NDJSON records produced in memory by
 `scripts/aggregate/bank_cells.py`. The older
 `scripts/aggregate/outcome_estimator.py` module is a compatibility wrapper to
-the same implementation; both module entrypoints emit the v3 report contract.
+the same implementation; both module entrypoints emit the v4 report contract.
 T1's CLI uses its frozen registered scope and reads only
 `call_center_interactions`, `complaints`, and `satisfaction_surveys`; it does
 not scan the remaining bank tables. The active `bank_cells.py` producer also
@@ -25,15 +25,35 @@ emits M10 from call interactions (unresolved handled-time share), so M10 is
 part of the registered source metric vocabulary and uses the same bounded
 `reason_category` × `channel` dimensions. A report is preregistered only when the
 exact protocol revision is committed before that report is generated.
+
+M10 is retained in the report only as a descriptive source metric. Its
+denominator is handled hours floored from duration seconds, not a count of
+independent Bernoulli observations. The estimator therefore does not calculate
+an M10 difference-in-differences effect or interval and always emits
+`status=inconclusive`, `reason=non_bernoulli_metric_descriptive_only`, and
+`uncertainty_method=not_computed_non_bernoulli_aggregate`; its inferential
+effect, interval, pre/post sample sizes, and control identity are null/empty.
+In particular, an M10
+change cannot be classified as `improved`, `worsened`, or
+`no_detectable_change` using the generic binomial variance. The aggregate-shift
+screen also cannot be interpreted as M10 detection sensitivity.
+The report retains all registered cell rows, marks them with `inference_scope`,
+and makes the scope explicit: only non-M10 metrics/cells enter Bonferroni
+multiplicity, placebo status counts, and injected-shift response denominators.
+M10 metric IDs and bounded cell labels are listed separately as
+`excluded_descriptive_metrics` and `excluded_descriptive_cells`; k-suppressed
+cell-count fields remain suppressed.
+
 The estimator rejects
 unknown metric/dimension schemas and maps source labels into the bounded
 OPBENCH reason, channel, and PQR vocabularies before serialization. No source
 label, identifier, raw row, or control count margin is copied into the report.
 Upstream k=10 validation is re-applied after vocabulary mapping and merging.
 
-For each registered cell, the estimator compares its three-month pre/post
-change with published sibling categories, then checks whether the direction
-appears in both customer-hash halves. These halves are replication cohorts,
+For each inferentially screened cell, the estimator compares its three-month
+pre/post change with published sibling categories, then checks whether the
+direction appears in both customer-hash halves. Descriptive-only cells remain
+in the output but do not enter this test family. These halves are replication cohorts,
 not untreated controls. Missing months or sibling cells fail closed. The
 report now names the bounded sibling dimension values selected for each target
 cell, so the candidate comparison set is visible without exposing row-level
@@ -45,10 +65,11 @@ event-level binomial variance and is not adjusted for repeated customers.
 The output names this limitation and labels all findings descriptive, not
 causal or confirmatory.
 
-The original preregistration and its pre-result amendment are recorded in
+The original preregistration and its amendments are recorded in
 [discovery_v1.md](discovery_v1.md). The fixed primary boundary is 2025-01;
 three full months before and after are required, with the boundary month
-excluded. Bonferroni is used across registered cells and halves. The 1,500
+excluded. Bonferroni is used across screened cells and halves; M10 is
+descriptive-only and excluded. The 1,500
 support floor and 2 pp materiality margin are exploratory screening settings,
 not validated release gates.
 
@@ -78,14 +99,19 @@ withheld together (`summary_suppressed=true`); publishing the rate or threshold
 decision alone could reveal a small count. Zero and counts of at least ten are
 publishable, subject to the stated non-independence limitation.
 
-## First post-preregistration run (2026-10-05)
+## Earlier preregistered v3 run (2026-10-05)
 
 The protocol was committed as `df40b514` before this report was generated.
 Two full runs over the registered tables produced byte-identical aggregate
 JSON (SHA-256 `462AFF83F14AE1D20469F995E9E85C17642C4A704DF5F779D3DF72C11EFF81F0`);
-the reports themselves remain outside Git. The producer emitted the current
-T1 metric family, including M10 from `call_center_interactions`, over 35 full
-month labels and 84 registered metric/dimension cells.
+the reports themselves remain outside Git. This recorded artifact predates
+the M10 non-inferential and scope-exclusion rules in active protocol v4. In
+that artifact, five M10 cells were counted among minimum-support failures;
+with current code they instead receive the descriptive-only `inconclusive`
+reason, and are excluded from inferential family sizes and injected-shift
+denominators. Refresh before treating its hash, support-failure count, or
+shift-response rates as current. The producer emitted the T1 metric family
+over 35 full month labels and 84 registered metric/dimension cells.
 
 | Diagnostic | Observed result | Interpretation |
 | --- | --- | --- |
@@ -109,10 +135,12 @@ Run from the engine repository root, writing outside Git:
 ```powershell
 python -m scripts.aggregate.outcome.outcome_estimator `
   --data-root D:\.codex\factored\data `
-  --out D:\.codex\factored\outcome-temp\report.json
+  --out D:\.codex\factored\outcome-temp\report-m10-scope-v4-20261005.json
 ```
 
-This is the canonical command. The legacy command
+This is the exact refresh command for the active v4 protocol; the CLI
+refuses to overwrite an existing output, so choose a fresh path for later
+runs. The legacy command
 `python -m scripts.aggregate.outcome_estimator` is retained for compatibility
 and delegates to the same CLI implementation.
 
