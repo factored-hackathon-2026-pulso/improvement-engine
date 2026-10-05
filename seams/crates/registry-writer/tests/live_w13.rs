@@ -58,7 +58,20 @@ fn tecnico_finding() -> Finding {
 
 fn candidate(name: &str) -> Vec<Value> {
     let v: Value = serde_json::from_str(&std::fs::read_to_string(root().join(format!("scripts/regression/fixtures/candidates/{name}.json"))).unwrap()).unwrap();
-    v["changes"].as_array().unwrap().clone()
+    let mut ch = v["changes"].as_array().unwrap().clone();
+    nonce(&mut ch);
+    ch
+}
+
+/// A re-run on the same stack must not replay the frozen drafts of an earlier run (registry Idempotency-Key replay): the optional
+/// PULSO_LIVE_NONCE is appended to the changelog of the candidate, which changes the candidate digest and so the evaluation keys.
+fn nonce(changes: &mut [Value]) {
+    if let Ok(n) = std::env::var("PULSO_LIVE_NONCE") {
+        for c in changes.iter_mut().filter(|c| c["docs"]["changelog"].is_string()) {
+            let t = format!("{} [run {n}]", c["docs"]["changelog"].as_str().unwrap());
+            c["docs"]["changelog"] = json!(t);
+        }
+    }
 }
 
 fn scripts() -> PythonScripts {
@@ -178,7 +191,9 @@ fn tecnico_compiled(f: &Finding) -> Compiled {
         "intake": {"ask_es": "Cu\u{e9}ntame qu\u{e9} problema tienes con la aplicaci\u{f3}n.", "ask_pt": "Conte qual problema voc\u{ea} tem com o aplicativo.",
                    "notice_es": "Gracias, una persona del equipo te contactar\u{e1}.", "notice_pt": "Obrigado, uma pessoa da equipe vai falar com voc\u{ea}."},
         "alternatives": [{"kind": "do_nothing", "why_not": "x"}, {"kind": "human_owned", "why_not": "y"}], "uncertainty": "Where is known, why is not."});
-    compile(&Catalog::bundled(), f, &row, &o, &proposal).expect("the scripted new-agent proposal compiles")
+    let mut c = compile(&Catalog::bundled(), f, &row, &o, &proposal).expect("the scripted new-agent proposal compiles");
+    nonce(&mut c.changes);
+    c
 }
 
 #[test]
