@@ -205,12 +205,23 @@ fn live_new_agent_is_proven_on_itself_and_announced() {
     let mut cfg = Config::new(Via::RegistryApi, Environment::LocalStack, l.w_token.clone());
     cfg.credential = if l.cred.starts_with("engine") { "engine builder principal" } else { "operator-declared stand-in credential (not the engine builder principal)" };
     let w = Writer::new(cfg, &long, &store);
+    // agent-core only lets an ADMIN put the donor's release interrupts (fraude) into a draft ("cambiar las interrupciones de la release
+    // exige el rol admin"): the engine builder cannot. The EVALUATION drafts (manual origin, never approved) therefore use the local
+    // staff admin stand-in, labelled an assumption; the ANNOUNCED proposal carries no release settings and is delivered by the builder.
+    let admin_tok = {
+        let dir = std::env::var("PULSO_DEV_STACK_DIR").unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(PathBuf::from(dir).join("tokens.json")).unwrap()).unwrap();
+        Jws::new(v["admin"].as_str().expect("admin token").to_string())
+    };
+    let mut acfg = Config::new(Via::RegistryApi, Environment::LocalStack, admin_tok);
+    acfg.credential = "local staff admin credential (stand-in) for the evaluation-only release settings";
+    let wa = Writer::new(acfg, &long, &store);
     let f = tecnico_finding();
     let compiled = tecnico_compiled(&f);
     let inp = ProofInput { finding: &f, compiled: &compiled, attempts: vec![], base_artifact: None, labels: Labels { runtime: Runtime::Real, ..Default::default() }, doubles: json!([]), rubric: Value::Null };
     let proofs = FileProofStore::new(std::env::temp_dir().join(format!("pulso-w13-proofs-agent-{}.json", std::process::id())));
     let t0 = std::time::Instant::now();
-    let proof = prove(&w, &scripts(), &proofs, &EvalOptions::default(), &inp);
+    let proof = prove(if std::env::var("PULSO_LIVE_BUILDER_ONLY").is_ok() { &w } else { &wa }, &scripts(), &proofs, &EvalOptions::default(), &inp);
     report(&proof, t0);
     if let Some(pc) = proof.story["attempts"][0]["per_case"].as_object() {
         for (id, c) in pc.iter().filter(|(_, c)| c["passed"] == false) {
