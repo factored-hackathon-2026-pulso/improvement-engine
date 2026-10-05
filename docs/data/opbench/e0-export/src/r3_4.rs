@@ -152,7 +152,6 @@ pub fn aggregate(input: &Input, k: u64) -> Result<Value, &'static str> {
         {
             return Err("duplicate bank complaint key");
         }
-        complaint_status_bucket(&complaint.status)?;
     }
 
     let mut linked_complaints = HashSet::new();
@@ -180,6 +179,7 @@ pub fn aggregate(input: &Input, k: u64) -> Result<Value, &'static str> {
             unknown_category_or_subcategory_cases += 1;
             continue;
         }
+        complaint_status_bucket(&complaint.status)?;
         let key = (complaint.category.clone(), complaint.subcategory.clone());
         categories.entry(key.clone()).or_default().cases += 1;
         case_categories.insert(case.case_id.as_str(), key);
@@ -1168,6 +1168,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn ignores_status_values_outside_the_exact_linked_analysis_population() {
+        let mut input = fixture();
+        input.complaints.push(BankComplaint {
+            complaint_id: "SYN-UNLINKED-COMPLAINT".into(),
+            category: "Other".into(),
+            subcategory: "Unlinked".into(),
+            status: "outside-registered-domain".into(),
+            sla_breached: None,
+            resolution: None,
+            resolution_days: None,
+        });
+        let output =
+            aggregate(&input, 10).expect("unlinked complaint is outside the analysis population");
+        assert!(!output.to_string().contains("SYN-UNLINKED-COMPLAINT"));
+
+        let mut linked_unknown = fixture();
+        linked_unknown.complaints[0].status = "outside-registered-domain".into();
+        assert_eq!(
+            aggregate(&linked_unknown, 10).unwrap_err(),
+            "unknown bank complaint status"
+        );
     }
 
     fn fixture() -> Input {
