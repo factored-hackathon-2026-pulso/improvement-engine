@@ -1,0 +1,11 @@
+[package]
+name = "reasoning"
+description = "Scout, Verifier and Builder reasoning roles on the engine ModelPort: a cells signal becomes an opportunity, an independent verification and an anchored-patch proposal over real agent-core artifact ids."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+engine = { path = "../engine" }
+steps = { path = "../steps" }
+serde_json = "1"
