@@ -297,7 +297,7 @@
           "placeholders": [], "mechanisms": ["uncovered_topic"],
           "justification": "The copilot has nothing to say for this case type and channel: a knowledge gap in its prompt is the hypothesis the engine can test; a missing tool link is a human decision (tools are not an engine target).",
           "evidence": "PLATFORM_SIGNALS section 2 (copilot.suggestion_none) and DETECTION_GAP section 3",
-          "proof_support": "none", "announceable_now": false
+          "proof_support": "suite:draft_next_step", "announceable_now": false
         }
       ]
     },
