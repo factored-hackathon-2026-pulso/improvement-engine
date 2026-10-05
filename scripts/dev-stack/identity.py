@@ -54,7 +54,10 @@ def main() -> int:
             "principal_keys": principal_keys, "delegation_keys": {cust.delegation_kid: _pub(cust.delegation_key)}},
             indent=2), encoding="utf-8")
         (state / "staff-keys.json").write_text(json.dumps(
-            {"principal_keys": {staff.principal_kid: _pub(staff.principal_key)}}, indent=2), encoding="utf-8")
+            {"principal_keys": {staff.principal_kid: _pub(staff.principal_key),
+                                # the registry HTTP API verifies ONLY these keys: trusting the engine kid lets the engine call
+                                # /v1/registry as its own `builder` principal (create_proposal, put_draft, validate; B2 writer)
+                                ENGINE_KID: _pub(engine)}}, indent=2), encoding="utf-8")
         return 0
     now = clock.now()
     builder = Principal.model_validate({

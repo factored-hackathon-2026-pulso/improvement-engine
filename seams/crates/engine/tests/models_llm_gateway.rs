@@ -99,13 +99,13 @@ fn without_explicit_configuration_it_is_disabled_and_refuses() {
 #[test]
 fn an_answered_call_follows_the_generate_contract_and_is_the_only_real_one() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    let f = fake(200, generated(json!({"verdict": "agree"}), "deepseek/deepseek-v4.1-flash"));
+    let f = fake(200, generated(json!({"verdict": "agree"}), "xiaomi/mimo-v2.6-flash"));
     let rec = Recording::new(Rc::new(on(&f.addr, &[])));
     let a = rec.call(&req()).unwrap();
-    assert_eq!((a.label, a.model_id.as_str()), (Label::Gateway, "deepseek/deepseek-v4.1-flash"));
+    assert_eq!((a.label, a.model_id.as_str()), (Label::Gateway, "xiaomi/mimo-v2.6-flash"));
     assert_eq!(a.content, json!({"verdict": "agree"}));
     let j = rec.calls()[0].to_json();
-    assert_eq!((j["real"].as_bool(), j["provider"].as_str()), (Some(true), Some("gateway:deepseek/deepseek-v4.1-flash")));
+    assert_eq!((j["real"].as_bool(), j["provider"].as_str()), (Some(true), Some("gateway:xiaomi/mimo-v2.6-flash")));
     assert!(rec.doubles().is_empty());
     let seen = f.seen.lock().unwrap();
     let (path, h, body) = &seen[0];
@@ -115,7 +115,7 @@ fn an_answered_call_follows_the_generate_contract_and_is_the_only_real_one() {
     assert_eq!(body["inputs"], req().payload, "inputs is the treated agent input dict, nothing else");
     assert_eq!(body["schema"], req().payload["output_schema"], "the role schema travels as the gateway response schema");
     let p = &body["profile"];
-    assert_eq!((p["endpoint_alias"].as_str(), p["model"].as_str(), p["structured"].as_str()), (Some("openrouter"), Some("deepseek/deepseek-v4.1-flash"), Some("prompted")));
+    assert_eq!((p["endpoint_alias"].as_str(), p["model"].as_str(), p["structured"].as_str()), (Some("openrouter"), Some("xiaomi/mimo-v2.6-flash"), Some("prompted")));
     assert!(p["price"]["input_per_mtok"].is_string() && p["price"]["output_per_mtok"].is_string(), "money is a string");
     assert_eq!(p["temperature"], 0);
     assert_eq!(body["labels"]["agent"], "pulso-scout");

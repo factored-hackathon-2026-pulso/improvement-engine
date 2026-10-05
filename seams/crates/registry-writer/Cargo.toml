@@ -1,0 +1,12 @@
+[package]
+name = "registry-writer"
+description = "B2: delivers a compiled reasoning proposal to the REAL agent-core registry as the builder principal (create_proposal, put_draft, validate) or through the pulso-builder agent run. Never approves, publishes or promotes."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+core-client = { path = "../core-client" }
+reasoning = { path = "../reasoning" }
+steps = { path = "../steps" }
+serde_json = "1"

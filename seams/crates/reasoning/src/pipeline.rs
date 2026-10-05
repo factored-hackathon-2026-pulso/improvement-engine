@@ -39,6 +39,8 @@ pub struct Reasoned {
     pub opportunity: Option<Value>,
     pub verification: Option<Value>,
     pub compiled: Option<Value>,
+    /// The typed compile result (what a writer delivers); `compiled` is its JSON.
+    pub compiled_raw: Option<crate::patch::Compiled>,
     pub rubric: Option<Value>,
     pub calls: Vec<Value>,
     pub doubles: Vec<Value>,
@@ -94,20 +96,39 @@ pub fn combine(det: &[crate::finding::Check], m: &ModelVerdict) -> (&'static str
     (status, notes)
 }
 
+/// `other_family` (different vendor), `same_family_other_tier` (same vendor prefix, other model), else prompt and context only.
+pub fn independence_level(scout: &str, verifier: &str) -> &'static str {
+    if scout == verifier {
+        "separate_prompt_and_context_only"
+    } else if scout.split('/').next() == verifier.split('/').next() {
+        "same_family_other_tier"
+    } else {
+        "other_family"
+    }
+}
+
 pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Reasoned {
     let (rs, rv, rb) = (Rc::new(Recording::new(ports.scout.clone())), Rc::new(Recording::new(ports.verifier.clone())), Rc::new(Recording::new(ports.builder.clone())));
     let mut r = Reasoned {
         finding_id: f.id.clone(), status: "blocked".into(), reason: String::new(), stage: String::new(), detail: String::new(), mapping_row: None, opportunity: None, verification: None,
-        compiled: None, rubric: None, calls: vec![], doubles: vec![], source: f.source.as_str(),
+        compiled: None, compiled_raw: None, rubric: None, calls: vec![], doubles: vec![], source: f.source.as_str(),
         independence: json!({"scout_model": ports.scout.model_id(), "verifier_model": ports.verifier.model_id(), "builder_model": ports.builder.model_id(),
                              "verifier_separate_port": !Rc::ptr_eq(&ports.scout, &ports.verifier),
-                             "level": if ports.scout.model_id() != ports.verifier.model_id() { "other_model" } else { "separate_prompt_and_context_only" }}),
+                             "level": independence_level(&ports.scout.model_id(), &ports.verifier.model_id())}),
     };
     let finish = |mut r: Reasoned| {
         r.calls = [&rs, &rv, &rb].iter().flat_map(|x| x.calls().iter().map(|c| c.to_json()).collect::<Vec<_>>()).collect();
         r.doubles = [&rs, &rv, &rb].iter().flat_map(|x| x.doubles()).collect();
         r
     };
+    if f.direction != "up" {
+        // Every cells metric is higher-is-worse: a cell BELOW its reference is a good result, not an opportunity. No model is called.
+        r.status = "no_change".into();
+        r.reason = "better_than_reference".into();
+        r.stage = "direction".into();
+        r.detail = format!("metric {} is {} against the reference in this cell: nothing to improve", f.metric, f.direction);
+        return finish(r);
+    }
     let Some(row) = map_finding(f) else {
         r.status = "unlinked".into();
         r.reason = "no_mapping".into();
@@ -177,6 +198,7 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
             r.stage = "compile".into();
             r.detail = c.rationale.chars().take(300).collect();
             r.compiled = Some(c.to_json());
+            r.compiled_raw = Some(c);
             finish(r)
         }
     }

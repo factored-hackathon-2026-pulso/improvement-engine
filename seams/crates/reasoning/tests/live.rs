@@ -1,4 +1,4 @@
-//! LIVE tests against the local stack (llm-gateway on 127.0.0.1:8080, model deepseek/deepseek-v4.1-flash). Opt-in: every test is
+//! LIVE tests against the local stack (llm-gateway on 127.0.0.1:8080, model xiaomi/mimo-v2.6-flash). Opt-in: every test is
 //! `#[ignore]`d; run with
 //!
 //! ```text

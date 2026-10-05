@@ -47,7 +47,7 @@ PII_PATTERNS = (
     ("digit_run", re.compile(r"\d{6,}")),
 )
 
-FAMILIES = (("deepseek", "deepseek"), ("anthropic", "anthropic"), ("claude", "anthropic"), ("openai", "openai"),
+FAMILIES = (("deepseek", "deepseek"), ("xiaomi", "xiaomi"), ("mimo", "xiaomi"), ("z-ai", "z-ai"), ("glm", "z-ai"), ("anthropic", "anthropic"), ("claude", "anthropic"), ("openai", "openai"),
             ("gpt", "openai"), ("google", "google"), ("gemini", "google"), ("meta", "meta"),
             ("llama", "meta"), ("mistral", "mistral"), ("qwen", "qwen"), ("cohere", "cohere"), ("xai", "xai"),
             ("grok", "xai"))

@@ -35,7 +35,7 @@ SIMULATED `approve` / `publish-staging`; `pulso monitor` triggers through the so
 is no endpoint that accepts a trigger request. Minimal additive change (owner L-CAPI, not made here):
 `POST /internal/v1/automation/triggers`, bearer + CSRF like `proposal_action`, body `pulso.trigger.v1`,
 idempotent on `Idempotency-Key` (replay returns 409 or the first response), audit event `automation_trigger_received`.
-Until then use `--out FILE` (JSONL, idempotent on key); `--engine-url` already POSTs to that path.
+The endpoint now exists (TR2, served by `pulso run` with its real job store). `--engine-url` POSTs to it with the bearer and the `X-CSRF-Token` read from `GET /api/v1/auth/session` (kept in memory, refreshed once on a 403). `--out FILE` (JSONL, idempotent on key) remains for offline use.
 
 ## agent-core: no change needed
 

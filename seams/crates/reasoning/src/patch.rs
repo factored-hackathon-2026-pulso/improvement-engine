@@ -28,6 +28,8 @@ pub struct Compiled {
     /// `patch | new_agent | no_change`
     pub kind: String,
     pub target_ref: String,
+    /// The agent the registry proposal is opened for: the agent whose behaviour the target changes, or the slug of a new agent.
+    pub agent_id: String,
     /// Agent-core draft changes: `{kind, content, docs}` (empty for `no_change`).
     pub changes: Vec<Value>,
     /// Human-readable diff: one entry per patch (anchor id, exact anchor text, op, replacement) or one per new entity.
@@ -48,7 +50,7 @@ pub struct Compiled {
 
 impl Compiled {
     pub fn to_json(&self) -> Value {
-        json!({"kind": self.kind, "target_ref": self.target_ref, "changes": self.changes, "diff": self.diff, "base_digest": self.base_digest, "cascade": self.cascade,
+        json!({"kind": self.kind, "target_ref": self.target_ref, "agent_id": self.agent_id, "changes": self.changes, "diff": self.diff, "base_digest": self.base_digest, "cascade": self.cascade,
                "edit_chars": self.edit_chars, "edit_budget": self.edit_budget, "human_items": self.human_items, "expected_effect": self.expected_effect,
                "rationale": self.rationale, "uncertainty": self.uncertainty,
                "rollback": {"how": "revert to the base release; staging only, no release_settings change", "base_digest": self.base_digest}})
@@ -98,7 +100,7 @@ pub fn compile(catalog: &Catalog, f: &Finding, row: &Row, opp: &Opportunity, pro
     let direction = proposal["expected_direction"].as_str().unwrap_or("decrease");
     let target = row.target(&opp.target_ref).ok_or_else(|| Denied { code: "target_mismatch", why: "the opportunity target is not in the mapping row".into() })?;
     if kind == "no_change" {
-        return Ok(Compiled { kind: "no_change".into(), target_ref: opp.target_ref.clone(), changes: vec![], diff: vec![], base_digest: String::new(), cascade: vec![], edit_chars: 0, edit_budget: 0,
+        return Ok(Compiled { kind: "no_change".into(), target_ref: opp.target_ref.clone(), agent_id: target.agent.to_string(), changes: vec![], diff: vec![], base_digest: String::new(), cascade: vec![], edit_chars: 0, edit_budget: 0,
                              human_items: vec![], expected_effect: Value::Null, rationale, uncertainty });
     }
     if proposal.get("target_ref").and_then(Value::as_str).is_some_and(|t| t != opp.target_ref) {
@@ -207,6 +209,7 @@ fn compile_patch(catalog: &Catalog, target: &Target, p: &Value, docs: Value, eff
     Ok(Compiled {
         kind: "patch".into(),
         target_ref: target.target_ref.clone(),
+        agent_id: target.agent.to_string(),
         changes: vec![json!({"kind": art.kind, "content": content, "docs": docs})],
         diff,
         base_digest: art.digest(),
@@ -305,6 +308,7 @@ fn compile_new_agent(catalog: &Catalog, target: &Target, p: &Value, docs: Value,
     Ok(Compiled {
         kind: "new_agent".into(),
         target_ref: target.target_ref.clone(),
+        agent_id: slug.to_string(),
         changes,
         diff,
         base_digest: format!("donor:{}", catalog.donor),
