@@ -2,7 +2,7 @@
 .SYNOPSIS
   One command that runs the Pulso value loop on a LOCAL stack and prints a readable result.
   scripts/demo-loop/run.ps1 [-Up] [-Cells] [-Loop] [-Probes] [-Show] [-Announce] [-Down] [-All] [-Synthetic]
-                            [-MaxFindings 4] [-CellsFile F] [-TimeoutMin 45] [-ProbeReps 3] [-Purge]
+                            [-MaxFindings 4] [-BuilderModel M] [-CellsFile F] [-TimeoutMin 45] [-ProbeReps 3] [-Purge]
 .DESCRIPTION
   Steps run in this fixed order, whichever switches you pass:
     -Up        own local stack (prefix pulso-demo, own ports): postgres, llm-gateway, agent-core with the real demo agents imported.
@@ -17,6 +17,7 @@
                else prints exactly what would be sent.
     -Down      stops this script's own stack (-Purge also drops its volume, image and local state). Other lanes' stacks are never touched.
     -All       = -Up -Cells -Loop -Show.
+  -BuilderModel M  Builder tier (default xiaomi/mimo-v2.6-flash; the larger xiaomi/mimo-v2.6-pro writes the patch more reliably).
   Credentials come only from agent-core.env and llm-gateway.env (next to the worktrees folder, or PULSO_AGENT_CORE_ENV / PULSO_LLM_GATEWAY_ENV),
   are loaded into CHILD process environments only, are never printed, and every line a child prints is masked first.
   Exit code: 0 ok, 1 a step failed, 2 usage.
@@ -26,7 +27,7 @@ param(
     [switch]$Up, [switch]$Cells, [switch]$Loop, [switch]$Probes, [switch]$Show, [switch]$Announce, [switch]$Down, [switch]$All,
     [switch]$Synthetic, [switch]$Purge,
     [int]$MaxFindings = 4, [int]$TimeoutMin = 45, [int]$ProbeReps = 3,
-    [string]$CellsFile = '', [string]$PulsoExe = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$DataRoot = ''
+    [string]$CellsFile = '', [string]$BuilderModel = '', [string]$PulsoExe = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$DataRoot = ''
 )
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
@@ -224,7 +225,7 @@ foreach ($step in $plan.Steps) {
                 $null = New-Item -ItemType Directory -Force -Path $work, $store
                 $src = $(if ($mode -eq 'synthetic-planted') { 'synthetic' } else { 'bank' })
                 $eenv = Get-EngineEnvironment -Settings $settings -CellsPath $cellsPath -WorkDir $work -StoreDir $store -Source $src -MaxFindings $plan.MaxFindings `
-                    -GatewayKey $gwKey -RegistryToken ([string]$tok.builder) -AdminToken $adminTok -PlatformUrl $platUrl -PlatformToken $platTok -PythonCmd $python
+                    -GatewayKey $gwKey -RegistryToken ([string]$tok.builder) -AdminToken $adminTok -PlatformUrl $platUrl -PlatformToken $platTok -PythonCmd $python -BuilderModel $BuilderModel
                 $exe = Find-PulsoExe
                 Say "engine: $exe"
                 $elog = Join-Path $demoDir "engine-$runId.log"
@@ -328,7 +329,7 @@ foreach ($step in $plan.Steps) {
                 if ($ann.Count -eq 0) { Say 'no announced proposal in the last run: nothing to announce.' }
                 foreach ($rec in $ann) {
                     $payload = New-AnnouncePayload -Record $rec
-                    $json = ($payload | ConvertTo-Json -Depth 5) -replace '\u003c', '<' -replace '\u003e', '>' -replace '\u0026', '&' -replace '\u0027', "'"
+                    $json = ($payload | ConvertTo-Json -Depth 5) -replace '\\u003c', '<' -replace '\\u003e', '>' -replace '\\u0026', '&' -replace '\\u0027', "'"
                     if ($rec.platform_announce) { Say ("engine already told the platform during the loop: {0}" -f $rec.platform_announce); continue }
                     if ($url -and $tokP) {
                         $uri = $url.TrimEnd('/') + '/api/v1/internal/builder/proposals/announce'

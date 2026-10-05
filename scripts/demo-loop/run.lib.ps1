@@ -69,7 +69,7 @@ function Get-StackEnvironment {
 function Get-EngineEnvironment {
     param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)][string]$CellsPath, [Parameter(Mandatory)][string]$WorkDir, [Parameter(Mandatory)][string]$StoreDir,
         [Parameter(Mandatory)][ValidateSet('bank', 'synthetic')][string]$Source, [int]$MaxFindings = 4,
-        [string]$GatewayKey = '', [string]$RegistryToken = '', [string]$AdminToken = '', [string]$PlatformUrl = '', [string]$PlatformToken = '', [string]$PythonCmd = 'python')
+        [string]$GatewayKey = '', [string]$RegistryToken = '', [string]$AdminToken = '', [string]$PlatformUrl = '', [string]$PlatformToken = '', [string]$PythonCmd = 'python', [string]$BuilderModel = '')
     $e = [ordered]@{
         PULSO_STORAGE = 'memory'; PULSO_DATA_MODE = 'dataset'; PULSO_SOURCE_ADAPTER = 'stub'; PULSO_SOURCE_ID = 'dataset:demo-loop'
         PULSO_WORK_DIR = $WorkDir; PULSO_STORE_DIR = $StoreDir; PULSO_LISTEN_ADDR = "127.0.0.1:$($Settings.EnginePort)"; PULSO_POLL_INTERVAL_MS = '2000'
@@ -82,6 +82,7 @@ function Get-EngineEnvironment {
         PULSO_PROBE_GATEWAY = "http://127.0.0.1:$($Settings.GwPort)"
     }
     if ($Source -eq 'bank') { $e['PULSO_ALLOW_DERIVED_AGGREGATES'] = '1' }
+    if ($BuilderModel) { $e['PULSO_LLM_GATEWAY_BUILDER_MODEL'] = $BuilderModel }
     if ($GatewayKey) { $e['PULSO_LLM_GATEWAY_KEY'] = $GatewayKey; $e['GATEWAY_TOKEN_AGENT_CORE'] = $GatewayKey }
     if ($RegistryToken) { $e['PULSO_REGISTRY_TOKEN'] = $RegistryToken }
     if ($AdminToken) { $e['PULSO_ADMIN_TOKEN'] = $AdminToken }
@@ -251,7 +252,9 @@ function Format-LoopReport {
     $l = New-Object System.Collections.Generic.List[string]
     $s = $Loop.summary
     $l.Add("VALUE LOOP  mode: $Mode   cells: $CellsLabel")
-    $l.Add("models: $($Loop.models)   baseline: $($Loop.baseline.label) ($($Loop.baseline.live) live artifacts)   evaluate-before-announce: $($Loop.evaluate_before_announce)")
+    $tiers = ''
+    if ($s.builder_tiers) { $tiers = (@($s.builder_tiers.PSObject.Properties | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join ' ') }
+    $l.Add("scout/default model: $($Loop.models), verifier: xiaomi/mimo-v2.6-pro, builder tier(s) of compiled proposals: $tiers   baseline: $($Loop.baseline.label) ($($Loop.baseline.live) live artifacts)   evaluate-before-announce: $($Loop.evaluate_before_announce)")
     $l.Add("corroborated $($s.corroborated), reasoned $($s.reasoned), proposed $($s.proposed), delivered $($s.delivered), announced $($s.announced), not announced $($s.not_announced), unlinked $($s.unlinked), blocked $($s.blocked), cost `$$($s.cost_usd)")
     $l.Add('')
     foreach ($r in @($Loop.findings)) {

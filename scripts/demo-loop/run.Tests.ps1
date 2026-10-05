@@ -89,6 +89,10 @@ Describe 'Get-EngineEnvironment' {
         $e['PULSO_EVAL_BEFORE_ANNOUNCE'] | Should Be 'on'
         $e['PULSO_REGISTRY_VIA'] | Should Be 'api'
     }
+    It 'sets the Builder tier only when asked' {
+        (Get-EngineEnvironment -Settings $s -CellsPath 'c' -WorkDir 'w' -StoreDir 's' -Source bank).Contains('PULSO_LLM_GATEWAY_BUILDER_MODEL') | Should Be $false
+        (Get-EngineEnvironment -Settings $s -CellsPath 'c' -WorkDir 'w' -StoreDir 's' -Source bank -BuilderModel 'xiaomi/mimo-v2.6-pro')['PULSO_LLM_GATEWAY_BUILDER_MODEL'] | Should Be 'xiaomi/mimo-v2.6-pro'
+    }
     It 'announces to the platform only when both URL and token are given' {
         (Get-EngineEnvironment -Settings $s -CellsPath 'c' -WorkDir 'w' -StoreDir 's' -Source bank -PlatformUrl 'http://127.0.0.1:9' )['PULSO_ANNOUNCE_TO_PLATFORM'] | Should Be 'off'
         $on = Get-EngineEnvironment -Settings $s -CellsPath 'c' -WorkDir 'w' -StoreDir 's' -Source bank -PlatformUrl 'http://127.0.0.1:9' -PlatformToken 'tok-tok-tok'
