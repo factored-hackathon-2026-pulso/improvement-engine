@@ -1,0 +1,15 @@
+# Build context hygiene: sources only. Keeps the context small and keeps local state and secrets out of the image.
+.git
+**/target
+**/node_modules
+debug-console/dist
+data
+.nexus-outbox
+tmp
+.dev-stack
+local/.secrets
+**/*.env
+.env*
+**/.env*
+!**/.env.example
+*.log
