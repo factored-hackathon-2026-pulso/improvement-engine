@@ -64,6 +64,7 @@ fn run() -> Result<(), &'static str> {
         "generator_version": concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
         "preregistration_commit": prereg_commit.to_ascii_lowercase(),
         "code_revision": code_revision.to_ascii_lowercase(),
+        "result_schema_version": "2",
         "configuration": {"k": 10},
         "schema_contract_version": "r3-4-allowlist-v1",
         "analysis_cutoff_utc": null,
