@@ -23,6 +23,7 @@ pub mod reconcile;
 pub mod pins;
 pub mod registry;
 pub mod routes;
+pub mod trace;
 pub mod writer;
 
 pub use client::{CallError, ClientConfig, CoreClient, Response};
