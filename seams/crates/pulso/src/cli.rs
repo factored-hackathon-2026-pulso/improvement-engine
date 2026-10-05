@@ -1,7 +1,8 @@
 //! Argument parsing for `pulso` (pure, so it is unit-testable) and the real-Core refusal text.
 use std::path::PathBuf;
 
-pub const USAGE: &str = "usage:\n  pulso run [--exit-on-stdin-eof]   (container entrypoint; environment-only config, see `pulso run --help`)\n  pulso monitor [--once] [...]   (see `pulso monitor --help`)\n  pulso healthcheck [--port N]\n  pulso serve [--addr 127.0.0.1:4020] [--console-dir DIR] [--store-dir DIR] [--admin-token T] [--token T]\n  pulso demo [--api 127.0.0.1:4020] [--admin-token T] [--pace-ms N] [--run-id ID] [--work-dir DIR] [--sha S] [--no-override] [--denied-kind] [--real-core]\nEnv: PULSO_ADMIN_TOKEN, PULSO_DEBUG_TOKEN, PULSO_WORK_DIR, STEPS_RUNNER_EXE, THREAD10_SHA, PULSO_CORE_URL.";
+pub const USAGE: &str = "usage:\n  pulso run [--exit-on-stdin-eof]   (container entrypoint; environment-only config, see `pulso run --help`)\n  pulso loop [--check] [--break-lock]   (one run of the improvement loop; environment-only config, see `pulso loop --help`)
+  pulso monitor [--once] [...]   (see `pulso monitor --help`)\n  pulso healthcheck [--port N]\n  pulso serve [--addr 127.0.0.1:4020] [--console-dir DIR] [--store-dir DIR] [--admin-token T] [--token T]\n  pulso demo [--api 127.0.0.1:4020] [--admin-token T] [--pace-ms N] [--run-id ID] [--work-dir DIR] [--sha S] [--no-override] [--denied-kind] [--real-core]\nEnv: PULSO_ADMIN_TOKEN, PULSO_DEBUG_TOKEN, PULSO_WORK_DIR, STEPS_RUNNER_EXE, THREAD10_SHA, PULSO_CORE_URL.";
 
 #[derive(Debug, PartialEq)]
 pub struct ServeArgs {

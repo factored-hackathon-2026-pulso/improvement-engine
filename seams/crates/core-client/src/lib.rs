@@ -23,6 +23,7 @@ pub mod reconcile;
 pub mod pins;
 pub mod registry;
 pub mod routes;
+pub mod service_identity;
 pub mod trace;
 pub mod writer;
 

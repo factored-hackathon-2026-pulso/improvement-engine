@@ -1,6 +1,6 @@
 //! L1 `cells` sensor: deterministic recurring-problem signals over TREATED cell tables.
 //! Test-first. Tables here are synthetic aggregates (no ids, no free text).
-use steps::cells::{Config, Multiplicity, analyse, run, run_exploratory};
+use steps::cells::{Config, DEMO_MIN_SUPPORT, K_FLOOR, Multiplicity, analyse, run, run_exploratory, run_with};
 use steps::sensor::json::{Json, parse};
 
 fn row(metric: &str, reason: &str, channel: &str, half: &str, num: i64, den: i64) -> String {
@@ -676,4 +676,50 @@ fn discard_counts_below_k_are_suppressed_by_the_sensor_itself() {
             assert!(n >= 10, "published discard count {n} is below k");
         }
     }
+}
+
+// ---- R4: the demo support profile (PULSO_PROFILE=demo): lower SUPPORT floors only, never the privacy floor ----
+
+fn demo_out(rows: &[String]) -> Json {
+    parse(&run_with(&rows.join("\n"), &Config::demo()).expect("run")).expect("json")
+}
+
+#[test]
+fn demo_profile_admits_a_small_planted_cell_the_standard_profile_discards_for_support() {
+    // 60 + 60 = 120 pooled, 40% vs 20%: below the standard floor 500 (and the exploratory 200), above the demo floor.
+    let rows = full_table((60, 24, 60, 24));
+    let std = out(&rows);
+    assert!(dsig(&std, "Comercial").is_none());
+    assert!(discard_suppressed(&std, "below_min_support"));
+    let demo = demo_out(&rows);
+    assert!(dsig(&demo, "Comercial").is_some(), "the planted effect passes the demo floors");
+    assert!(DEMO_MIN_SUPPORT < Config::default().min_support);
+}
+
+#[test]
+fn demo_profile_is_labelled_in_the_report_and_standard_says_standard() {
+    let rows = full_table((60, 24, 60, 24));
+    let m = |j: &Json| j.get("method").and_then(|m| m.get("support_profile")).and_then(|v| v.as_str()).map(str::to_string);
+    assert_eq!(m(&demo_out(&rows)).as_deref(), Some("demo"));
+    assert_eq!(m(&out(&rows)).as_deref(), Some("standard"));
+}
+
+#[test]
+fn demo_profile_never_relaxes_the_privacy_floor() {
+    assert!(Config::demo().k_min >= K_FLOOR);
+    assert_eq!(Config::demo().k_min, Config::default().k_min);
+    let mut rows = full_table((60, 24, 60, 24));
+    rows.push(arow("M1", "Queja", Some("WhatsApp"), "discovery", "ALL", 5, 900)); // a numerator of 5: below k
+    let j = demo_out(&rows);
+    assert!(discard_suppressed(&j, "k_violation"));
+    assert!(dsig(&j, "Queja").is_none());
+}
+
+#[test]
+fn demo_profile_never_emits_corroborated_for_cells_below_the_standard_support() {
+    // a cell the demo floors let in is labelled by its tier; `corroborated` only comes from the strict tier at its (lowered) floor.
+    let j = demo_out(&full_table((60, 24, 60, 24)));
+    let s = dsig(&j, "Comercial").unwrap();
+    assert!(matches!(dst(Some(s)).0, "corroborated" | "candidate_exploratory"));
+    assert_eq!(j.get("method").and_then(|m| m.get("k_min")).and_then(|v| v.as_i64()), Some(10));
 }

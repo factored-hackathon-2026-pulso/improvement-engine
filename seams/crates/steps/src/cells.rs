@@ -59,6 +59,9 @@ pub struct Config {
     /// `None` = the strict profile (default). `Some` = the exploratory profile: the strict tier runs unchanged and an
     /// additional, visibly tagged `candidate_exploratory` tier is produced with relaxed knobs (see [`Exploratory`]).
     pub exploratory: Option<Exploratory>,
+    /// `standard` (default) or `demo` (`Config::demo`, only ever built for synthetic data): carried into the report so every
+    /// downstream record can say which floors produced it.
+    pub support_profile: &'static str,
 }
 
 /// Relaxed knobs of the exploratory tier. It adds VOLUME of candidates for downstream agents (Scout, Verifier, Builder,
@@ -89,6 +92,27 @@ impl Config {
     }
 }
 
+/// Privacy floor: no profile may go below it (the exploratory tier and the demo profile never relax it).
+pub const K_FLOOR: i64 = 10;
+/// Demo profile floors (R4): the strict tier's pooled support 500 -> 100 and the exploratory tier's 200 -> 60, so a planted effect on
+/// small SYNTHETIC cells is not discarded for support. Everything else (alpha, effect, ratio, multiplicity, replication, `k_min`) is the
+/// exploratory standard. `PULSO_PROFILE=demo` is the only way in and is refused unless the data is declared synthetic.
+pub const DEMO_MIN_SUPPORT: i64 = 100;
+pub const DEMO_EXPLORATORY_MIN_SUPPORT: i64 = 60;
+
+impl Config {
+    /// The demo support profile: exploratory tier on, lowered support floors, `k_min` untouched (>= `K_FLOOR`).
+    pub fn demo() -> Self {
+        let base = Config::default();
+        Config {
+            min_support: DEMO_MIN_SUPPORT,
+            exploratory: Some(Exploratory { min_support: DEMO_EXPLORATORY_MIN_SUPPORT, ..Exploratory::standard() }),
+            support_profile: "demo",
+            ..base
+        }
+    }
+}
+
 /// Note carried by every exploratory signal so the dossier and the Verifier see the weaker evidence.
 pub const EXPLORATORY_NOTE: &str = "exploratory: weaker statistical evidence; the regression proof is the quality gate";
 
@@ -113,6 +137,7 @@ impl Default for Config {
             // M8: more than 10% of sends to customers flagged as not accepting marketing is a compliance risk.
             level_risks: vec![LevelSpec { metric: "M8".to_string(), threshold: 0.10, min_excess: 0.05 }],
             exploratory: None,
+            support_profile: "standard",
         }
     }
 }
@@ -961,6 +986,7 @@ impl Report {
                     ("min_support", Json::Int(c.min_support)),
                     ("k_min", Json::Int(c.k_min)),
                     ("profile", Json::s(if c.exploratory.is_some() { "exploratory" } else { "strict" })),
+                    ("support_profile", Json::s(c.support_profile)),
                     ("support_basis", Json::s("pooled_discovery_plus_holdout")),
                     ("baseline", Json::s("same_channel_full_period_published_cells_minus_own_cell")),
                     ("families", Json::Obj(self.families.iter().map(|(f, n)| (f.to_string(), Json::Int(*n as i64))).collect())),
@@ -999,6 +1025,11 @@ impl Report {
 /// Step entry point: ndjson cell table in, report JSON out (default config).
 pub fn run(input: &str) -> Result<String, StepError> {
     Ok(analyse(input, &Config::default())?.to_json().write())
+}
+
+/// With an explicit config (the value loop passes `Config::demo()` for `PULSO_PROFILE=demo`).
+pub fn run_with(input: &str, cfg: &Config) -> Result<String, StepError> {
+    Ok(analyse(input, cfg)?.to_json().write())
 }
 
 /// Same, with the exploratory profile (strict tier unchanged plus the tagged `candidate_exploratory` tier).
