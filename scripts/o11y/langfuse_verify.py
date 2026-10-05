@@ -205,7 +205,23 @@ def fetch_traces(client: Client, trace_ids: list[str] | None) -> tuple[dict[str,
     ids = trace_ids if trace_ids is not None else [t["id"] for t in client.pages("/api/public/traces")]
     out: dict[str, list[dict]] = {}
     for t in ids:
-        obs = list(client.pages("/api/public/observations", {"traceId": t}))
+        # Langfuse Cloud retired GET /api/public/observations (HTTP 410); the trace detail carries the observations.
+        try:
+            detail = client.request("GET", f"/api/public/traces/{t}")
+            obs = [o for o in (detail.get("observations") or []) if isinstance(o, dict)]
+        except RuntimeError:
+            obs = []
+        if not obs:  # trace detail may list ids only: use the v2 observations API, then the legacy one (local mock)
+            for path, params in (("/api/public/v2/observations", {"traceId": t, "fields": "core,basic,io,usage", "limit": 1000}),):
+                try:
+                    obs = [o for o in (client.request("GET", path, params).get("data") or []) if isinstance(o, dict)]
+                except RuntimeError:
+                    obs = []
+        if not obs:
+            try:
+                obs = list(client.pages("/api/public/observations", {"traceId": t}))
+            except RuntimeError:
+                obs = []
         if obs:
             out[t] = obs
     scores = [s for s in client.pages("/api/public/scores") if trace_ids is None or s.get("traceId") in set(trace_ids)]
