@@ -56,7 +56,7 @@ L-CAPI: seams/crates/control-api/** ; seams/crates/debug-api/** ; seams/crates/m
 L-PG: docs/reports/pglive/** ; seams/crates/pg/** ; seams/crates/sources/** ; db/** ; seams/crates/worker/** ; local/pg/** ; migrations/00[56][0-9]_* ; docs/adr/025[0-9]-* ; docs/journal/(034[0-9]|035[0-5])-* ; local/compose.d/l-pg.yaml
 L-EVAL: seams/crates/eval/** ; agent-core-assets/eval-suites/*.json ; agent-core-assets/eval-suites/pulso-min/** ; migrations/009[0-4]_* ; docs/adr/019[0-9]-* ; docs/journal/(024[4-9]|025[0-9])-* ; local/compose.d/l-eval.yaml ; scripts/scoring/**
 L-AUTH: seams/crates/authority/** ; local-identity/** ; migrations/008[0-4]_* ; docs/adr/010[0-9]-* ; docs/journal/(010[0-9]|011[0-5])-* ; local/compose.d/l-auth.yaml
-L-MEM: seams/crates/memory/** ; scripts/feedback/** ; migrations/007[5-9]_* ; docs/adr/022[0-9]-* ; docs/journal/(029[2-9]|030[0-7])-* ; local/compose.d/l-mem.yaml
+L-MEM: seams/crates/memory/** ; scripts/feedback/** ; docs/journal/0661-* ; migrations/007[5-9]_* ; docs/adr/022[0-9]-* ; docs/journal/(029[2-9]|030[0-7])-* ; local/compose.d/l-mem.yaml
 L-CONSOLE: debug-console/** ; docs/adr/015[0-9]-* ; docs/journal/(018[0-9]|019[0-5])-* ; local/compose.d/l-console.yaml
 L-OPS: Dockerfile ; .dockerignore ; docs/runbooks/** ; docs/dev/** ; scripts/dev-stack/** ; docs/security/** ; docs/contracts/metrics.md ; local/observability/** ; docs/adr/024[0-9]-* ; docs/journal/(032[4-9]|033[0-9])-* ; local/compose.d/l-ops.yaml
 L-BREADTH: seams/crates/artifacts/** ; docs/adr/011[0-9]-* ; docs/journal/(011[6-9]|012[0-9]|013[0-1])-* ; local/compose.d/l-breadth.yaml
