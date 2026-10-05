@@ -163,7 +163,14 @@ def up(args) -> None:
     if os.environ.get("PULSO_GW_OTEL_SERVICE_NAME"):  # one OTLP endpoint, one service name per component (Langfuse closure)
         gw_env["OTEL_SERVICE_NAME"] = os.environ["PULSO_GW_OTEL_SERVICE_NAME"]
         names.append("OTEL_SERVICE_NAME") if "OTEL_SERVICE_NAME" not in names else None
-    pm("run", "-d", "--pids-limit=0", "--name", GW, "-p", f"127.0.0.1:{GW_PORT}:8080", *[a for k in names for a in ("-e", k)],
+    if os.environ.get("PULSO_GW_HOST_NETWORK") == "1":
+        # the container shares the (mirrored) host loopback: it can reach a host forwarder on 127.0.0.1 and is reached on 127.0.0.1:GW_PORT
+        gw_env["LISTEN_ADDR"] = f"127.0.0.1:{GW_PORT}"
+        names.append("LISTEN_ADDR")
+        net = ["--network", "host"]
+    else:
+        net = ["-p", f"127.0.0.1:{GW_PORT}:8080"]
+    pm("run", "-d", "--pids-limit=0", "--name", GW, *net, *[a for k in names for a in ("-e", k)],
        GW_IMAGE, env=gw_env)
     wait(lambda: http_ok(f"http://127.0.0.1:{GW_PORT}/healthz"), "llm-gateway")
     print("llm-gateway up on", GW_PORT)
