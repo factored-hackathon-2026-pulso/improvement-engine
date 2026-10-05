@@ -394,6 +394,10 @@ mod w11 {
             let (m, p) = (req.method, req.path.as_str());
             self.paths.lock().unwrap().push(format!("{m} {p}"));
             let r = |status, body| Ok(Reply { status, body });
+            if m == "GET" && p == "/v1/registry/aliases/consultas/prod" {
+                // INH1: the donor's live release, named by release_settings.inherit_from
+                return r(200, json!({"agent_id": "consultas", "alias": "prod", "release_id": "rel-donor", "status": "active"}));
+            }
             if m == "GET" && p.starts_with("/v1/registry/entities/") {
                 // the donor closure of a new-agent proposal (templates, model, tools, language detection, ruleset) is readable
                 let kind = p.trim_start_matches("/v1/registry/entities/").split('/').next().unwrap_or("");

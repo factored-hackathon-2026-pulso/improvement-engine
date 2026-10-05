@@ -198,6 +198,12 @@ fn nothing_to_write_and_unsafe_shapes_send_nothing() {
     let mut s = submission();
     s.changes = vec![json!({"kind": "release_settings", "content": {"id": "x", "version": "1"}, "docs": {}})];
     assert_eq!(w.deliver(&s).reason, Some(Reason::InvalidSubmission));
+    // INH1: values (interrupts, ruleset, limits) are never written by the engine, not even next to a donor reference
+    for content in [json!({"interrupts": []}), json!({"inherit_from": "consultas-demo", "interrupts": []}), json!({"inherit_from": "../x"}), json!({"inherit_from": 7}), json!({"max_input_chars": 100})] {
+        let mut s = submission();
+        s.changes = vec![json!({"kind": "release_settings", "content": content, "docs": {}})];
+        assert_eq!(w.deliver(&s).reason, Some(Reason::InvalidSubmission), "{content}");
+    }
     let mut s = submission();
     s.changes = vec![json!({"kind": "prompt", "content": {"id": "p/x"}, "docs": {}})];
     assert_eq!(w.deliver(&s).reason, Some(Reason::InvalidSubmission));

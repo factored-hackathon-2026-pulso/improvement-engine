@@ -95,9 +95,34 @@ impl Problem {
         let code = r.body["code"].as_str().filter(|c| c.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')).unwrap_or("").to_string();
         Problem { step, http: Some(r.status), code, retryable: r.status >= 500 || r.status == 429 }
     }
+    fn inherit_or(step: &'static str, r: &Reply, code: Option<&'static str>) -> Problem {
+        let mut p = Problem::of(step, r);
+        if let Some(c) = code {
+            p.code = c.into();
+            p.retryable = false;
+        }
+        p
+    }
     fn to_json(&self) -> Value {
         json!({"step": self.step, "http": self.http, "code": self.code})
     }
+}
+
+/// INH1: closed codes of a Core that did not take `release_settings.inherit_from`, read from the status and the (never stored) message.
+/// `None` when the draft does not carry a donor reference or the answer is not about it.
+fn inherit_problem(job_changes: &[Value], r: &Reply, validate: bool) -> Option<&'static str> {
+    let carries = job_changes.iter().any(|c| c["kind"] == "release_settings" && c["content"]["inherit_from"].is_string());
+    if !carries {
+        return None;
+    }
+    let text = r.body.to_string().to_lowercase();
+    if text.contains("inherit_from") && text.contains("extra") {
+        return Some("core_without_inherit_from"); // older Core: the field is an unknown (forbidden) one of ReleaseSettings
+    }
+    if text.contains("inherit_from") {
+        return Some("inherit_from_rejected"); // e.g. the agent has a base release
+    }
+    (validate && r.status == 404).then_some("donor_release_unknown")
 }
 
 /// `(record, retryable)`.
@@ -124,6 +149,12 @@ impl Writer<'_> {
         }
         let b = r.body;
         Some(["content", "spec"].iter().find(|k| b[**k].is_object()).map_or(b.clone(), |k| b[*k].clone()))
+    }
+
+    /// `GET /v1/registry/aliases/{agent}/{alias}`: `None` when absent or unreadable.
+    pub fn fetch_alias(&self, agent: &str, alias: &str) -> Option<Value> {
+        let r = self.call("GET", format!("/v1/registry/aliases/{agent}/{alias}"), self.registry_token(), None, None).ok()?;
+        (200..300).contains(&r.status).then_some(r.body)
     }
 
     /// One try, no retry.
@@ -166,16 +197,17 @@ impl Writer<'_> {
         let step = |name: &'static str, method: &str, path: String, body: Option<Value>| self.eval_call(name, method, path, None, body);
         match step("put_draft", "PUT", format!("{base}/draft"), Some(json!({"expected_rev": rev, "changes": draft}))) {
             Ok(r) if (200..300).contains(&r.status) => {}
-            Ok(r) => return failed(job.label, Some(pid), &Problem::of("put_draft", &r)),
+            Ok(r) => return failed(job.label, Some(pid), &Problem::inherit_or("put_draft", &r, inherit_problem(job.changes, &r, false))),
             Err(p) => return failed(job.label, Some(pid), &p),
         }
         match step("validate", "POST", format!("{base}/validate"), None) {
             Ok(r) if (200..300).contains(&r.status) => {
                 if r.body["violations"].as_array().is_none_or(|v| !v.is_empty()) {
-                    return failed(job.label, Some(pid), &Problem { step: "validate", http: Some(r.status), code: "violations".into(), retryable: false });
+                    let code = inherit_problem(job.changes, &r, true).unwrap_or("violations");
+                    return failed(job.label, Some(pid), &Problem { step: "validate", http: Some(r.status), code: code.into(), retryable: false });
                 }
             }
-            Ok(r) => return failed(job.label, Some(pid), &Problem::of("validate", &r)),
+            Ok(r) => return failed(job.label, Some(pid), &Problem::inherit_or("validate", &r, inherit_problem(job.changes, &r, true))),
             Err(p) => return failed(job.label, Some(pid), &p),
         }
         match step("freeze", "POST", format!("{base}/freeze"), None) {

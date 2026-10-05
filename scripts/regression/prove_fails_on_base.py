@@ -208,7 +208,7 @@ def native_binding(bundle: dict, base_native: dict, control: dict | None) -> dic
     return {**out, "state": "native_not_candidate_bound" if ctl_failed else "candidate_bound"}
 
 
-def coverage(bundle: dict, binding: dict) -> dict:
+def coverage(bundle: dict, binding: dict, settings: str | None = None) -> dict:
     """What was measured natively (agent-core scorer), by harness probe, and what was NOT measured: closed codes the dossier renders."""
     mech = bundle["mechanism"]
     native = ["platform_guardrails", "guards"]
@@ -229,7 +229,9 @@ def coverage(bundle: dict, binding: dict) -> dict:
     elif mech == "uncovered_topic":
         native.insert(0, "new_agent_intake_and_handoff")
         not_measured += ["base_by_absence", "routing_recepcion_to_new_agent", "traffic_stealing", "native_wording"]
-    assumptions = ["release_settings_assumed"] if mech == "uncovered_topic" else []
+    # INH1: a clone that inherits the donor release settings by server-side reference (`release_settings.inherit_from`) is evaluated AND
+    # announced with them; `release_settings_assumed` stays as the fallback label (explicit admin settings, evaluation only).
+    assumptions = [] if mech != "uncovered_topic" else ["settings_inherited" if settings == "inherit_from" else "release_settings_assumed"]
     return {"native": native, "harness_probe": probe, "not_measured": not_measured, "assumptions": assumptions}
 
 
@@ -251,7 +253,7 @@ def story_text(lang: str, d: dict, n_base_fail: int, n_cases: int, attempts: lis
     return head + "; ".join(seq) + f". [{d['outcome']}]"
 
 
-def verdict_story(bundle: dict, base: dict, attempts: list[dict], binding: dict | None = None) -> dict:
+def verdict_story(bundle: dict, base: dict, attempts: list[dict], binding: dict | None = None, settings: str | None = None) -> dict:
     d = decide(bundle, base, attempts)
     binding = binding or {"state": "not_applicable"}
     f_ids = bundle["finding_case_ids"]
@@ -275,7 +277,7 @@ def verdict_story(bundle: dict, base: dict, attempts: list[dict], binding: dict 
         "gate_items": (last or base).get("gate_items", []),
         "story_text": {lang: story_text(lang, d, n_base_fail, len(f_ids), attempts) for lang in ("es", "pt")} if attempts else {},
         "model_policy": MODEL_POLICY,
-        "native_binding": binding, "coverage": coverage(bundle, binding),
+        "native_binding": binding, "coverage": coverage(bundle, binding, settings),
     }
     if binding.get("state") == "native_not_candidate_bound":
         story["probe_only_proven"] = d["outcome"] == "native_not_candidate_bound"
