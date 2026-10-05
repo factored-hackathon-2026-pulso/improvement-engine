@@ -300,3 +300,45 @@ pub fn parse_builder(answer: &Value) -> Result<Value, String> {
     alts(&p["alternatives"])?;
     Ok(p.clone())
 }
+
+// ---------------------------------------------------------------------------------------------------------------- ART3 link review
+
+pub const LINK_REVIEW_SYSTEM: &str = "You are the independent Verifier of a proposed tool link for a bank customer-service agent. You did not write the proposal. You see only structured facts: the tool (id, risk_class, source), the agent, the flow edge the new node is inserted on (from node, to node, their types) and the wiring of the new node. Run two checks and answer pass, fail or na: read_only (the tool risk_class is read, so it has no write side effect) and edge_valid (the edge is an ordinary continuation between a collect, tool or respond node and a non-terminal node, and the new node continues to the original target while its failures go to an existing escalation). Then give verdict supported or refuted and a one-sentence rationale without digits. Answer with ONE JSON object and nothing else (no markdown fence), exactly this shape: {\"verdict\": \"supported|refuted\", \"checks\": [{\"id\": \"read_only\", \"result\": \"pass|fail|na\"}, {\"id\": \"edge_valid\", \"result\": \"pass|fail|na\"}], \"rationale\": \"<one sentence, no digits>\"}.";
+
+pub const LINK_CHECK_IDS: [&str; 2] = ["read_only", "edge_valid"];
+
+/// The structured facts of a compiled link, built from the compiled changes (never from model text).
+pub fn link_review_request(c: &crate::patch::Compiled, dc: DataClass) -> Option<ModelRequest> {
+    let tool_def = c.changes.iter().find(|x| x["kind"] == "tool")?["content"].clone();
+    let flow = &c.changes.iter().find(|x| x["kind"] == "flow")?["content"];
+    let nodes = flow["nodes"].as_array()?;
+    let new = nodes.iter().find(|n| n["id"].as_str().is_some_and(|i| i.starts_with("eng_link_")))?;
+    let from = nodes.iter().find(|n| n["next"].as_object().is_some_and(|m| m.values().any(|v| v == &json!(new["id"]))) && n["id"] != new["id"])?;
+    let ty = |id: &Value| nodes.iter().find(|n| &n["id"] == id).and_then(|n| n["type"].as_str()).unwrap_or("").to_string();
+    let target = new["next"]["ok"].clone();
+    let esc: Vec<String> = ["error", "timeout", "denied"].iter().map(|l| ty(&new["next"][*l])).collect();
+    let inputs = json!({"tool": tool_def["id"], "risk_class": tool_def["risk_class"], "source": tool_def["source"], "agent": c.agent_id,
+                        "edge": {"from": from["id"], "from_type": from["type"], "to": target, "to_type": ty(&target)}, "failure_exits": esc, "checks_requested": LINK_CHECK_IDS});
+    let schema = obj(json!({"verdict": {"type": "string", "enum": ["supported", "refuted"]},
+                            "checks": {"type": "array", "items": obj(json!({"id": {"type": "string", "enum": LINK_CHECK_IDS}, "result": {"type": "string", "enum": ["pass", "fail", "na"]}}), &["id", "result"])},
+                            "rationale": text()}), &["verdict", "checks", "rationale"]);
+    Some(request(Role::Verifier, LINK_REVIEW_SYSTEM, "review the proposed read-only tool link", inputs, json!([]), json!([]), schema, dc))
+}
+
+/// `Ok(true)` when the reviewer supports the link (verdict supported and no check failed).
+pub fn parse_link_review(answer: &Value) -> Result<(bool, String), String> {
+    exact_keys(answer, &["verdict", "checks", "rationale"], "link review")?;
+    let verdict = answer["verdict"].as_str().filter(|v| ["supported", "refuted"].contains(v)).ok_or("verdict is not supported|refuted")?;
+    let mut ok = verdict == "supported";
+    for id in LINK_CHECK_IDS {
+        let r = answer["checks"].as_array().ok_or("checks is not a list")?.iter().filter(|c| c["id"] == id).collect::<Vec<_>>();
+        if r.len() != 1 {
+            return Err(format!("check {id} must appear exactly once"));
+        }
+        let res = r[0]["result"].as_str().filter(|x| ["pass", "fail", "na"].contains(x)).ok_or("check result is not pass|fail|na")?;
+        ok &= res != "fail";
+    }
+    let why = answer["rationale"].as_str().ok_or("link review without rationale")?;
+    clean_text(why, 400).map_err(|e| format!("rationale: {e}"))?;
+    Ok((ok, why.to_string()))
+}

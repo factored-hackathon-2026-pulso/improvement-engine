@@ -384,6 +384,24 @@ pub fn reason_candidate(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Op
         Asked::Stopped(e) => finish(model_stop(r, "builder", e)),
         Asked::Rejected((st, code, why)) => finish(blocked(r, &code, st, why)),
         Asked::Done(c) => {
+            // ART3: an independent Verifier call reviews a compiled tool link (read-only, valid edge). The compiler already enforced both; the
+            // model can only refute, never widen.
+            if c.kind == "link_tool"
+                && let Some(rq) = roles::link_review_request(&c, dc)
+            {
+                let (rg, n) = ask(&rv, &rq, "link_review", 0, &|a| roles::parse_link_review(a).map_err(|e| ("link_review", "model_invalid".to_string(), e)));
+                attempts.borrow_mut()["link_review"] = json!(n);
+                match rg {
+                    Asked::Done((ok, why)) => {
+                        r.verification = Some(json!({"status": r.verification.as_ref().map_or(Value::Null, |v| v["status"].clone()), "claim_verification": r.verification.clone(), "link_review": {"supported": ok, "rationale": why}}));
+                        if !ok {
+                            return finish(blocked(r, "link_review_refuted", "link_review", why));
+                        }
+                    }
+                    Asked::Stopped(e) => return finish(model_stop(r, "link_review", e)),
+                    Asked::Rejected((st, code, why)) => return finish(blocked(r, &code, st, why)),
+                }
+            }
             r.rubric = (c.kind != "no_change").then(|| rubric::score(f, &row, &opp, &c, catalog));
             r.status = if c.kind == "no_change" { "no_change" } else { "proposed" }.into();
             r.reason = if c.kind == "no_change" { "builder_no_safe_change" } else { "compiled" }.into();
