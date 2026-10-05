@@ -8,6 +8,7 @@ pub mod source;
 pub mod signals;
 pub mod supervisor;
 pub mod tasks;
+pub mod value_loop;
 
 use crate::config::{RunConfig, Storage};
 use crate::health::{DbProbe, Health, Migrations};
@@ -53,7 +54,7 @@ pub fn build_tasks(cfg: &RunConfig, log: &Logger, health: &Arc<Health>, repo: Ar
         let exe = runner_exe().ok_or("no sensor-step runner: set STEPS_RUNNER_EXE or keep pulso-synth-runner next to the pulso executable")?;
         let work = cfg.work_dir.as_ref().ok_or("PULSO_WORK_DIR is not set")?;
         let tick = source::build_tick(cfg, repo.clone(), &cfg.tenant, &exe)?;
-        let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?;
+        let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?.with_value_loop(value_loop::ValueLoop::from_lookup(&|k| std::env::var(k).ok(), Some(work))?.map(Arc::new));
         (tick, Some(Arc::new(job)))
     };
     let monitor = MonitorTask::new(tick, ctx, cfg.poll_interval, log.clone());
@@ -113,7 +114,11 @@ pub fn main(args: &[String]) -> i32 {
         },
         None => debug_api::Store::memory(),
     });
-    let http = match HttpTask::bind(&cfg, health.clone(), store.clone()) {
+    let repo: Arc<dyn JobRepository> = match &pgcfg {
+        Some(c) => Arc::new(pg::pgrepo::PgRepo::shared(c.clone())),
+        None => Arc::new(MemRepo::new()),
+    };
+    let http = match HttpTask::bind_with(&cfg, health.clone(), store.clone(), Some(repo.clone())) {
         Ok(h) => h,
         Err(e) => {
             log.error("bind_failed", json!({"reason": e}));
@@ -145,13 +150,9 @@ pub fn main(args: &[String]) -> i32 {
             "core_port": if cfg.core_live { "live" } else { "offline-double" }
         }),
     );
-    let repo: Arc<dyn JobRepository> = match &pgcfg {
-        Some(c) => Arc::new(pg::pgrepo::PgRepo::shared(c.clone())),
-        None => Arc::new(MemRepo::new()),
-    };
     let mut sup = Supervisor::new(health.clone(), log.clone(), cfg.grace);
     sup.add(Box::new(http));
-    let tasks = match build_tasks(&cfg, &log, &health, repo, store) {
+    let tasks = match build_tasks(&cfg, &log, &health, repo.clone(), store) {
         Ok(t) => t,
         Err(e) => {
             log.error("startup_refused", json!({"reason": e}));

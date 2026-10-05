@@ -16,7 +16,11 @@ use crate::config::{DataMode, ModelPortKind, Provenance, RunConfig};
 use crate::doubles::generate;
 use crate::run::models::{MODEL_ID, ObservingScripted};
 use crate::run::source::JOB_KEY_PREFIX;
+
+/// Key prefix of the jobs the automation trigger endpoint admits (`trigger:<trigger_key>`).
+pub const TRIGGER_KEY_PREFIX: &str = "trigger:";
 use crate::run::tasks::{JobCtx, JobRunner};
+use crate::run::value_loop::{Persist, ValueLoop};
 use debug_api::ingest::double_item;
 use debug_api::panels::project;
 use debug_api::store::now_iso;
@@ -47,6 +51,7 @@ pub struct EngineRunner {
     roleplay_queue: Option<PathBuf>,
     core_live: bool,
     env: Env,
+    value_loop: Option<Arc<ValueLoop>>,
 }
 
 fn opaque(s: &str) -> bool {
@@ -70,11 +75,18 @@ impl EngineRunner {
             roleplay_queue: c.roleplay_queue.clone(),
             core_live: c.core_live,
             env,
+            value_loop: None,
         };
         // Fail at start, not at the first job: a live Core that cannot be configured, a gateway with an incomplete setup.
         r.core()?;
         r.model()?;
         Ok(r)
+    }
+
+    /// Registers the value loop (cells -> reasoning -> registry writer): it runs for `trigger:*` jobs and after every monitor tick.
+    pub fn with_value_loop(mut self, v: Option<Arc<ValueLoop>>) -> EngineRunner {
+        self.value_loop = v;
+        self
     }
 
     fn core(&self) -> Result<Option<Rc<dyn CorePort>>, String> {
@@ -312,23 +324,86 @@ fn repo_err(e: RepoError) -> String {
     format!("{e:?}")
 }
 
+/// Per-finding records of the value loop in the engine job store (steps 1..; step 0 is the job summary).
+struct JobPersist<'a, 'b> {
+    job: &'a Claimed,
+    ctx: &'a JobCtx<'b>,
+}
+
+impl Persist for JobPersist<'_, '_> {
+    fn get(&self, step: u32) -> Option<String> {
+        self.ctx.repo.output(self.ctx.tenant, &self.job.job, step).ok().flatten()
+    }
+    fn put(&self, step: u32, record: &str) -> Result<(), String> {
+        match self.ctx.repo.commit_output(self.ctx.tenant, &self.job.job, step, self.ctx.worker, self.job.fence_token, self.ctx.now, record) {
+            Ok(()) | Err(RepoError::Conflict(_)) => Ok(()),
+            Err(e) => Err(repo_err(e)),
+        }
+    }
+}
+
 impl JobRunner for EngineRunner {
     fn run(&self, job: &Claimed, ctx: &JobCtx) -> Result<(), String> {
         let key = ctx.repo.job_key(ctx.tenant, &job.job).map_err(repo_err)?;
-        let Some(run_id) = key.as_deref().and_then(|k| k.strip_prefix(JOB_KEY_PREFIX)).map(str::to_string) else {
-            return Ok(()); // not a monitor job: nothing this runner can do, and retrying would not change that
-        };
+        let key = key.unwrap_or_default();
+        let monitor = key.strip_prefix(JOB_KEY_PREFIX).map(str::to_string);
+        let trigger = key.starts_with(TRIGGER_KEY_PREFIX);
+        if monitor.is_none() && !trigger {
+            return Ok(()); // neither a monitor nor a trigger job: nothing this runner can do, and retrying would not change that
+        }
         if ctx.repo.output(ctx.tenant, &job.job, 0).map_err(repo_err)?.is_some() {
             return Ok(()); // an earlier attempt finished the work and only the completion was lost
         }
-        if self.core_live {
-            // A live Core can publish: from here a crash is an unknown effect, never an automatic retry.
-            ctx.repo.begin_effect(ctx.tenant, &job.job, ctx.worker, job.fence_token, ctx.now).map_err(repo_err)?;
+        let mut summary = match &monitor {
+            Some(run_id) => {
+                if self.core_live {
+                    // A live Core can publish: from here a crash is an unknown effect, never an automatic retry.
+                    ctx.repo.begin_effect(ctx.tenant, &job.job, ctx.worker, job.fence_token, ctx.now).map_err(repo_err)?;
+                }
+                self.process(run_id)?
+            }
+            None => json!({"trigger_job": job.job, "kind": "trigger"}),
+        };
+        match &self.value_loop {
+            Some(v) => {
+                let out = v.run(&JobPersist { job, ctx })?;
+                self.record_loop(&job.job, &out)?;
+                summary["value_loop"] = out;
+            }
+            None if trigger => summary["value_loop"] = json!({"skipped": "value loop not configured (PULSO_CELLS_NDJSON is not set)"}),
+            None => {}
         }
-        let summary = self.process(&run_id)?;
         match ctx.repo.commit_output(ctx.tenant, &job.job, 0, ctx.worker, job.fence_token, ctx.now, &summary.to_string()) {
             Ok(()) | Err(RepoError::Conflict(_)) => Ok(()),
             Err(e) => Err(repo_err(e)),
         }
+    }
+}
+
+impl EngineRunner {
+    /// The value-loop outcome in the console store: one run, one node per finding (reason codes only).
+    fn record_loop(&self, job: &str, out: &Value) -> Result<(), String> {
+        let id: String = format!("value-loop-{job}").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).take(64).collect();
+        if self.store.state(&id).is_some() {
+            return Ok(());
+        }
+        let s = &out["summary"];
+        let title = format!(
+            "value loop {id}: {} corroborated finding(s) from the claude-standin cells sensor ({}), {} proposed, {} delivered to agent-core as builder (never approved or published), {} denied, {} blocked, {} unlinked; baseline {}; no quality claim",
+            s["corroborated"], out["data_source"].as_str().unwrap_or("?"), s["proposed"], s["delivered"], s["denied"], s["blocked"], s["unlinked"], out["baseline"]["label"].as_str().unwrap_or("?")
+        );
+        self.emit(&id, NewEvent::new("run_started", "run", &id, json!({"title": title, "state": "running", "origin": "value-loop"})))?;
+        for (i, f) in out["findings"].as_array().into_iter().flatten().enumerate() {
+            let d = &f["delivery"];
+            let tail = match d["status"].as_str() {
+                Some("delivered") => format!(" delivered {}", d["proposal_id"].as_str().unwrap_or("?")),
+                Some(_) => format!(" denied {}", d["reason"].as_str().unwrap_or("?")),
+                None => String::new(),
+            };
+            let label = format!("finding-{i} [{}: {}]{tail}", f["status"].as_str().unwrap_or("?"), f["reason"].as_str().unwrap_or("?"));
+            let node = json!({"node_id": format!("finding-{i}"), "label": label, "stage": "proposal", "status": "complete", "depends_on": [], "reason_code": f["reason"], "node_kind": "material_step", "trace_id": null});
+            self.emit(&id, NewEvent::new("node_status_changed", "node", &format!("finding-{i}"), json!({"node": node})))?;
+        }
+        self.emit(&id, NewEvent::new("run_state_changed", "run", &id, json!({"state": "completed"})))
     }
 }

@@ -20,6 +20,6 @@ Accepts the `pulso.trigger.v1` request built by `scripts/triggers/agentcore_poll
 
 ## Limits
 
-- Trigger records (replay table, projection) are in memory; after a restart the job store key still prevents a second job, but the audit event may be written again.
-- The worker (`EngineRunner::run`) ignores jobs whose key is not `monitor:*`: a `trigger:*` job is admitted and visible, and consuming it (running a tick) is the runner's next step.
-- The poller's `HttpSink` does not send `X-CSRF-Token` yet; it must read it from `/api/v1/auth/session` before it can use `--engine-url`.
+- Trigger records (replay table, projection) are in memory; after a restart the job store key still prevents a second job, but the audit event may be written again. Persisting the replay table is not done: the job store would need a response column the `JobRepository` contract does not have.
+- `pulso run` injects its `JobRepository` (`RepoAdmitter`, B3) and its worker executes `trigger:*` jobs through the value loop (`seams/crates/pulso/src/run/value_loop.rs`); without a configured loop a trigger job is recorded as `skipped`. The runner cannot tell the trigger kind from the key (`trigger:<sha256>`): `outcome` triggers run the loop too (idempotent per finding, but model calls repeat unless the job store already holds the finding records).
+- The poller's `HttpSink` sends `X-CSRF-Token`, read from `/api/v1/auth/session`.

@@ -735,13 +735,17 @@ dependencies = [
 name = "pulso"
 version = "0.0.0"
 dependencies = [
+ "core-client",
  "debug-api",
  "engine",
  "pg",
  "postgres",
+ "reasoning",
+ "registry-writer",
  "rusqlite",
  "serde_json",
  "sources",
+ "steps",
  "thread10",
  "tiny_http",
 ]

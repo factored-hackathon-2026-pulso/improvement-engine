@@ -2,7 +2,7 @@
 
 A LOCAL, non-shared instance of agent-core (head `f91ac44`, includes PR 34) plus llm-gateway, used to prove the
 Builder path end to end: engine-signed `builder` principal -> `POST /v1/runs` -> task agent `pulso-builder` (ReAct
-`agent` node on `deepseek/deepseek-v4.1-flash`) -> in-process registry tools as `constructor-bot` -> a validated
+`agent` node on `xiaomi/mimo-v2.6-flash`) -> in-process registry tools as `constructor-bot` -> a validated
 draft proposal. Only SYNTHETIC input is used. This is our own instance, not the shared Core.
 
 ## Prerequisites
@@ -41,7 +41,7 @@ file-driven field classifier (`field-overlay.json`, pulso fields public) as a de
 `registry-pulso-builder/`: agent `pulso-builder@1.0.0` (`mode: task`, `invocable_by: [builder]`, inputs `agente`,
 `objetivo`, `evidencia`), flow `pulso-construir@1.0.0` (agent node reading `registry/get_entity` and
 `registry/list_versions` -> `create_proposal` -> verify -> `put_draft` -> verify -> `validate` -> `end completed`),
-prompt `p/pulso-builder@1.0.0`, model profile `pulso-deepseek@1.0.0` (the input price in it is an estimate).
+prompt `p/pulso-builder@1.0.0`, model profile `pulso-mimo-flash@1.0.0` (prices from the OpenRouter list).
 `end.output_map` returns only `proposal_id`, `rev` (rev at creation, the stored draft is rev 1) and `valid`.
 
 ## Findings (all verified live on this stack)

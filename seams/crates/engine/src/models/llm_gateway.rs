@@ -5,7 +5,7 @@
 //!
 //! Disabled unless `PULSO_LLM_GATEWAY=enabled` (exact value). Env: `PULSO_LLM_GATEWAY_ADDR` (`host:port`),
 //! `PULSO_LLM_GATEWAY_KEY` (bearer; never logged, recorded or part of any Debug output), optional `PULSO_LLM_GATEWAY_MODEL`
-//! (default `deepseek/deepseek-v4.1-flash`), `PULSO_LLM_GATEWAY_ALIAS` (default `openrouter`), `PULSO_LLM_GATEWAY_MAX_TOKENS`
+//! (default `xiaomi/mimo-v2.6-flash`), `PULSO_LLM_GATEWAY_ALIAS` (default `openrouter`), `PULSO_LLM_GATEWAY_MAX_TOKENS`
 //! (default 4000), `PULSO_LLM_GATEWAY_TIMEOUT_S` (default 60), `PULSO_LLM_GATEWAY_PRICE_IN` / `_OUT` (USD per million tokens as
 //! decimal strings; defaults are an estimate, the gateway only echoes the cost). The request passes `guard` first (E0/original
 //! data refused by class, TPS scan, size cap). `inputs` is the treated agent input dict; the payload's `output_schema`, when
@@ -17,7 +17,7 @@ use core_client::http::{HttpError, request};
 use serde_json::{Value, json};
 use std::time::Duration;
 
-pub const DEFAULT_MODEL: &str = "deepseek/deepseek-v4.1-flash";
+pub const DEFAULT_MODEL: &str = "xiaomi/mimo-v2.6-flash";
 
 #[derive(Clone)]
 struct Config {
