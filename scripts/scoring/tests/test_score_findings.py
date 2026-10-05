@@ -19,9 +19,29 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(sf.norm_value("IVR"), "phone")
         self.assertEqual(sf.norm_value("  Teléfono "), "phone")
 
+    def test_v2_cell_normalization_uses_frozen_reason_and_metric_channel_vocabularies(self):
+        self.assertEqual(
+            sf.norm_cell({"reason_category": "Comercial", "channel": "Phone"}, "M1"),
+            (("channel", "phone"), ("reason_category", "commercial")),
+        )
+        self.assertEqual(
+            sf.norm_cell({"reason_category": "Técnico", "channel": "Web Chat"}, "M1"),
+            (("channel", "web_chat"), ("reason_category", "technical")),
+        )
+        self.assertEqual(
+            sf.norm_cell({"reason_category": "Queja", "channel": "SMS"}, "M6L"),
+            (("channel", "other"), ("reason_category", "complaint")),
+        )
+
     def test_metric_variants_collapse(self):
         self.assertEqual(sf.norm_metric("M6L"), "M6")
         self.assertEqual(sf.norm_metric("M1"), "M1")
+
+    def test_only_linked_survey_metric_aliases_to_m6(self):
+        self.assertEqual(sf.norm_metric("M6L"), "M6")
+        self.assertEqual(sf.norm_metric("M6R"), "M6R")
+        self.assertEqual(sf.norm_metric("M6U"), "M6U")
+        self.assertEqual(sf.norm_metric("M6Z"), "M6Z")
 
     def test_direction_from_effect(self):
         self.assertEqual(sf.direction_of(0.2), "up")
@@ -30,6 +50,85 @@ class NormalizationTests(unittest.TestCase):
 
 
 class ScoringTests(unittest.TestCase):
+    def test_v2_spanish_sensor_labels_match_frozen_catalog_cells(self):
+        catalog = {"benchmark": "OPBENCH-lite", "version": "2", "entries": [
+            {"id": "M1-COMMERCIAL-PHONE", "type": "problem", "status": "corroborated",
+             "metric_id": "M1", "cell": {"reason_category": "commercial", "channel": "phone"},
+             "effect": {"difference": 0.12}},
+            {"id": "M6-OTHER-COMPLAINT", "type": "problem", "status": "corroborated",
+             "metric_id": "M6", "cell": {"reason_category": "complaint", "channel": "other"},
+             "effect": {"difference": 0.29}},
+        ]}
+        signals = {"cells_explored": 2, "signals": [
+            fx.sig("M1", {"reason_category": "Comercial", "channel": "Phone"}, diff=0.12),
+            fx.sig("M6L", {"reason_category": "Queja", "channel": "SMS"}, diff=0.29),
+        ]}
+        result = sf.score(catalog, signals)
+        self.assertEqual(result["scores"]["recall"], 1.0)
+        self.assertEqual(result["scores"]["precision"], 1.0)
+        self.assertEqual({item["id"] for item in result["matched_findings"]},
+                         {"M1-COMMERCIAL-PHONE", "M6-OTHER-COMPLAINT"})
+
+    def test_v2_unsupported_legacy_aliases_do_not_match_frozen_cells(self):
+        catalog = {"benchmark": "OPBENCH-lite", "version": "2", "entries": [
+            {"id": "M1-COMPLAINT-PHONE", "type": "problem", "status": "corroborated",
+             "metric_id": "M1", "cell": {"reason_category": "complaint", "channel": "phone"},
+             "effect": {"difference": 0.12}},
+        ]}
+        signals = {"cells_explored": 1, "signals": [
+            fx.sig("M1", {"reason_category": "quejas", "channel": "llamada"}, diff=0.12),
+        ]}
+        result = sf.score(catalog, signals)
+        self.assertEqual(result["scores"]["recall"], 0.0)
+        self.assertEqual(result["unmatched_engine_findings"][0]["dims"],
+                         {"reason_category": "quejas", "channel": "llamada"})
+
+    def test_v2_resolved_submetric_does_not_match_aggregate_m6(self):
+        catalog = {"benchmark": "OPBENCH-lite", "version": "2", "entries": [
+            {"id": "M6-COMPLAINT-PHONE", "type": "problem", "status": "corroborated",
+             "metric_id": "M6", "cell": {"reason_category": "complaint", "channel": "phone"},
+             "effect": {"difference": 0.12}},
+        ]}
+        result = sf.score(catalog, {"cells_explored": 1, "signals": [
+            fx.sig("M6R", {"reason_category": "Queja", "channel": "Phone"}, diff=0.12),
+        ]})
+        self.assertEqual(result["scores"]["recall"], 0.0)
+        self.assertEqual(result["unmatched_engine_findings"][0]["metric"], "M6R")
+
+    def test_v1_catalog_retains_its_legacy_value_vocabulary(self):
+        catalog = {"benchmark": "OPBENCH-lite", "version": "1.0.0", "entries": [
+            {"id": "legacy", "type": "problem", "status": "corroborated", "metric_id": "M1",
+             "cell": {"reason_category": "complaint", "channel": "phone"},
+             "effect": {"difference": 0.12}},
+        ]}
+        result = sf.score(catalog, {"cells_explored": 1, "signals": [
+            fx.sig("M1", {"reason_category": "quejas", "channel": "llamada"}, diff=0.12),
+        ]})
+        self.assertEqual(result["scores"]["recall"], 1.0)
+
+    def test_scorer_rejects_unrecognized_catalog_version(self):
+        catalog = {"benchmark": "OPBENCH-lite", "version": "3", "entries": []}
+        with self.assertRaisesRegex(sf.ScoringError, "unsupported catalog version"):
+            sf.score(catalog, {"cells_explored": 0, "signals": []})
+
+    def test_v2_score_discloses_cross_protocol_comparison_limit(self):
+        catalog = {"benchmark": "OPBENCH-lite", "version": "2", "entries": []}
+        result = sf.score(catalog, {"cells_explored": 0, "signals": []})
+        self.assertIn("different customer splits", result["validation_limitations"])
+        self.assertIn("not independent accuracy", result["interpretation"])
+
+    def test_v2_spanish_survey_alias_matches_refuted_cell_as_nonfinding(self):
+        catalog = {"benchmark": "OPBENCH-lite", "version": "2", "entries": [
+            {"id": "M6-13", "type": "problem", "status": "refuted", "metric_id": "M6",
+             "cell": {"reason_category": "technical", "channel": "mobile_app"},
+             "effect": {"difference": 0.0}},
+        ]}
+        signals = {"cells_explored": 1, "signals": [
+            fx.sig("M6L", {"reason_category": "Técnico", "channel": "App"}, diff=0.08),
+        ]}
+        result = sf.score(catalog, signals)
+        self.assertEqual(result["nonfinding_reports"][0]["id"], "M6-13")
+
     def test_perfect_run(self):
         r = sf.score(fx.catalog(), fx.signals_perfect())
         self.assertEqual(r["scores"]["recall"], 1.0)
@@ -126,7 +225,8 @@ class ScoringTests(unittest.TestCase):
             with open(sp, "w") as f:
                 json.dump(fx.signals_perfect(), f)
             p = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "score_findings.py"),
-                                "--catalog", cp, "--signals", sp, "--out", op], capture_output=True, text=True)
+                                "--catalog", cp, "--signals", sp, "--out", op], capture_output=True, text=True,
+                               cwd=d)
             self.assertEqual(p.returncode, 0, p.stderr)
             with open(op) as f:
                 self.assertEqual(json.load(f)["scores"]["recall"], 1.0)

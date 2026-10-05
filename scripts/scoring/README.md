@@ -5,9 +5,14 @@ Offline scorers, standard library only. Synthetic fixtures under `tests/`; run
 
 - `score_findings.py --catalog opbench-lite.json --signals cells.json`: scores `steps_cli cells` output
   (`{signals:[{metric,dims,status,direction,discovery.diff}]}`) against the OPBENCH-lite catalog. Match key is
-  metric_id + normalized cell + direction (catalog direction = sign of `effect.difference`). Reports recall,
+  metric_id + versioned normalized cell + direction (catalog direction = sign of `effect.difference`). Only catalog
+  versions `1.0.0` and `2` are accepted; v1 keeps its legacy aliases, while v2 uses OPBENCH v2's frozen vocabularies.
+  In v2, only the registered linked-row metric alias `M6L` maps to M6; `M6R`/`M6U` remain distinct. Unsupported v2
+  reason/channel/PQR labels remain unmatched instead of being coerced through legacy aliases. Reports recall,
   precision (reported non-findings and unknown cells both count against it, listed separately), and Spearman
-  ranking agreement. Reported = `corroborated` (`--include-candidate` adds `candidate`). Catalog status
+  ranking agreement. V2 survey `SMS` maps to
+  the catalog's `other` bucket. Do not maintain a separate alias list in this scorer. Reported = `corroborated`
+  (`--include-candidate` adds `candidate`). Catalog status
   `refuted` entries are non-findings; descriptive corroborated entries are neutral.
 - `score_proposal.py`: 12-criterion rubric. Mechanical: R3, R4, R5, R6 (independence), R7, R11 (gates
   R4/R5/R6/R7/R11). Judged: R1, R2, R8, R9, R10, R12 via an optional hook. Preconditions: anchored patch
@@ -21,6 +26,12 @@ reasoning, and may only score judged criteria. This repo holds no keys; the call
 Input shapes were fixed against the audit and the local, not yet delivered, OPBENCH-lite output; the
 registry export is read generically (any JSON whose objects carry `id`/`kind`). Re-check both when the
 Codex catalog and the real agent-core export land.
+
+For OPBENCH v2, the bank-cell sensor and catalog use the same source snapshot but different customer-hash
+splits and preregistered statistical/support gates. The resulting precision, recall, and ranking values are
+**cross-protocol agreement with the derived catalog**, not independent ground-truth accuracy or out-of-sample
+performance. The scorer returns this limitation in `validation_limitations`; do not tune sensor gates against
+the same catalog after reviewing the result.
 
 ## Judge (SC2)
 

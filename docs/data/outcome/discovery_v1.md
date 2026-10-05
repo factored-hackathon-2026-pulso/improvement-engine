@@ -133,10 +133,11 @@ registered cell and both hash halves for each hypothetical release boundary.
 
 Minimum support is 1,500 treated and 1,500 control observations in each
 pre/post window for each half (equivalent to 500 per 30-day month on average),
-with all component cells published by the upstream `k=10` rule. Require an
-80%-power minimum detectable effect (MDE) no greater than 10 percentage points
-for that half; otherwise status is `inconclusive` with reason `underpowered`.
-Materiality/equivalence margin is frozen at 2 percentage points. Return:
+with all component cells published by the upstream `k=10` rule. The active v3
+protocol does not estimate statistical power or MDE from these aggregate
+counts. Status is `inconclusive` when the minimum support, complete-window, or
+published-comparator requirements fail. Materiality/equivalence margin is
+frozen at 2 percentage points. Return:
 
 - `improved`: both halves have effect at most -2 pp and corrected interval
   upper bounds below -2 pp;
@@ -145,11 +146,13 @@ Materiality/equivalence margin is frozen at 2 percentage points. Return:
 - `no_detectable_change`: both corrected intervals fit wholly inside [-2,+2]
   pp (evidence of practical equivalence, not proof of no effect);
 - `inconclusive`: every other case, including insufficient support, missing
-  comparator cells, opposite half directions, or excessive MDE.
+  comparator cells, or opposite half directions.
 
-The output contains effect and interval, treated pre/post n, control identity,
-MDE/power note, and status. It does not publish control margins or row-level
-data. `improved` and `worsened` remain descriptive associations.
+The output contains effect and interval, treated pre/post n, bounded control
+identity, and status. It does not publish control margins or row-level data.
+`improved` and `worsened` remain descriptive associations. Any earlier text in
+this file asking for an MDE/power note belongs to superseded v1/v2 requirements
+and is not part of the active v3 output contract.
 
 ## Historical v1 placebo protocol (superseded; do not execute)
 
@@ -203,8 +206,9 @@ shifts; it is not evidence that a real release would produce the shift.
   must not be published. No new control totals/margins are emitted.
 - Output stable sorted JSON with canonical separators/order. The full command
   must regenerate byte-identical validation reports on repeated runs.
-- Publish aggregate status counts, placebo counts/rate, power by sample-size
-  bin, and dimension labels for underpowered cells only. Never publish IDs,
+- Publish aggregate status counts, finite placebo-screen counts/rate, injected
+  aggregate-shift response by sample-size bin, and dimension labels for
+  underpowered cells only. Never publish IDs,
   free text, per-customer data, raw rows, or control-cell count margins.
 - No release history, causal estimate, financial uplift, real treatment
   assignment, randomized rollout, or external model call is available here.
@@ -219,3 +223,17 @@ shifts; it is not evidence that a real release would produce the shift.
 2. Repeat the same command to a separate output path and compare report
    SHA-256 values. Generated reports stay outside Git during validation;
    only disclosure-safe aggregate summaries may be committed after review.
+
+## Round-2 brief acceptance status
+
+The round-2 Codex brief asks for a measured false-positive rate at or below 5%,
+power by cell size, and a minimum detectable effect. Active v3 deliberately
+does not claim any of those quantities: its placebo windows overlap, and its
+fixed aggregate injections do not represent repeated-sample power. Therefore
+the present T1 implementation is a deterministic outcome-screening diagnostic,
+not a statistically calibrated outcome estimator, and does not satisfy that
+part of the brief's Definition of Done. Closing the gap requires a separately
+preregistered calibration design with valid customer-cluster or equivalent
+sufficient statistics; the published six-field bank-cell schema alone is not
+enough to support that inference. Existing reports remain exploratory and
+must not be relabelled as confirmatory after such a design is added.

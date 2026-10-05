@@ -1,0 +1,15 @@
+{
+  "proposal_id": "prop-synthetic-001",
+  "origin": "auto_detect",
+  "state": "draft",
+  "changes": [
+    {
+      "kind": "prompt",
+      "docs": {
+        "description": "Problema observado: queja no resuelta. Evidencia y comparación: en el snapshot dataset auditado, 66,000/117,021 (56.4%) vs 16.6% para los demás motivos. Qué cambiaría: prompt. Efecto esperado: hipótesis, no medido. Cómo se evaluará: baseline y guardrails. Riesgo: demora. Qué no cambia: permisos.",
+        "rationale": "La asociación prioriza investigar; no prueba causa.",
+        "changelog": "Borrador propuesto; aún no publicado."
+      }
+    }
+  ]
+}
