@@ -17,6 +17,7 @@
 //! Honest labels: every report carries `doubles[]` entries for every model call that was not an answered gateway call, the
 //! artifact baseline is labelled `fixture-baseline` (agent-core e2e seed, not a live registry), and the sensor stays
 //! `claude-standin`.
+pub mod art2;
 pub mod catalog;
 pub mod dossier;
 pub mod finding;

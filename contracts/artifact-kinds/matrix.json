@@ -320,7 +320,7 @@
           "note": "Not exercised: no template proposal can be frozen by the engine."
         }
       },
-      "notes": "Codex BKT (compile, authorized-field limits)."
+      "notes": "Codex BKT (compile, authorized-field limits). ART2: reasoning::art2 compiles a read-only tool link (link_tool, offline-tested, NOT yet wired to propose/evaluate: verdicts stay denied until the live proof lands)."
     },
     {
       "kind": "tool",
