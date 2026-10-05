@@ -142,7 +142,7 @@ def test_manifest_records_pin_digest_and_head_observation():
     assert head["contracts_version"] == pin["contracts_version"], "the silent extension: same VERSION, other digest"
     assert set(head["changed_files"]) == {"openapi.json", "schemas/ProblemCode.json"}
     plat = m["platform"]["pinned"]
-    assert plat["sha"].startswith("eeb73a8") and len(plat["digest"]) == 64
+    assert plat["sha"].startswith("5261ecf") and len(plat["digest"]) == 64  # re-pinned from eeb73a8 by SIG1 (contract 1.3.0)
     assert m["platform"]["unreachable"]["a492bfa"]
     assert "inference" in m["platform"]["unreachable"]["closest_old_match"].lower()
 

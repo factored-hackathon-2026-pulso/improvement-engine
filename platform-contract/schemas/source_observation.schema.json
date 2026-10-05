@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "platform_live/1.2.0/source_observation.schema.json",
+  "$id": "platform_live/1.3.0/source_observation.schema.json",
   "title": "source_observation",
   "description": "Self-contained view of one `platform_event` observation: identity (tenant_id, source_id, native_event_id), nullable source_sequence and the discriminated `source_event` (`kind`). source_sequence is null for findings not tied to a row.",
   "type": "object",
@@ -268,5 +268,5 @@
       "additionalProperties": false
     }
   },
-  "x-contract-version": "1.2.0"
+  "x-contract-version": "1.3.0"
 }

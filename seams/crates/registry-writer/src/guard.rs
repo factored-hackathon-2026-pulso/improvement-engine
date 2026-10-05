@@ -6,7 +6,22 @@
 
 /// ANN1: the platform client's allow-list is ONE route, the engine announcement. Everything else on the platform is refused.
 pub fn platform_allowed(method: &str, path: &str) -> bool {
+    if method == "GET" {
+        return evidence_query_allowed(path);
+    }
     method == "POST" && path == "/api/v1/internal/builder/proposals/announce"
+}
+
+/// SIG1: the one read the engine makes on the platform, `GET /api/v1/internal/evidence/cases?<dims>` (which real cases sit in a
+/// cell). Exactly that path and a query of `key=value` pairs over a closed charset (no encoding, no fragment, no second path).
+fn evidence_query_allowed(path: &str) -> bool {
+    const ROUTE: &str = "/api/v1/internal/evidence/cases";
+    let Some(q) = path.strip_prefix(ROUTE) else { return false };
+    let Some(q) = q.strip_prefix('?') else { return q.is_empty() };
+    !q.is_empty()
+        && q.split('&').all(|kv| {
+            matches!(kv.split_once('='), Some((k, v)) if !k.is_empty() && !v.is_empty() && k.bytes().all(|b| b.is_ascii_alphabetic()) && v.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b':' | b'.')))
+        })
 }
 
 /// `true` only for the exact operations of the writer.

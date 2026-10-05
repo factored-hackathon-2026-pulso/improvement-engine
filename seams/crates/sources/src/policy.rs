@@ -11,7 +11,7 @@ pub const EVENT_READ_COLUMNS: &[&str] =
 
 const ALLOWED: &[(&str, &[&str])] = &[
     ("event_log", &["sequence", "event_id", "event_type", "entity", "entity_id", "case_id", "actor_role", "actor_id", "event_time", "ingested_at", "payload", "tenant_id"]),
-    ("cases", &["id", "customer_id", "channel", "language", "priority", "opened_at", "sla_due_at", "previous_case_id", "rating_score", "rated_at", "tenant_id"]),
+    ("cases", &["id", "customer_id", "channel", "language", "priority", "opened_at", "sla_due_at", "previous_case_id", "rating_score", "rated_at", "case_type", "tenant_id"]),
     ("customers", &["id", "simulator"]),
     ("staff", &["id", "roles", "languages", "team", "team_id", "active"]),
     ("turns", &["id", "case_id", "sequence", "kind", "audience", "author_role", "created_at"]),

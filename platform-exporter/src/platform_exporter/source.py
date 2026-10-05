@@ -127,6 +127,13 @@ class SqlSource:
             return {}
         return {str(c): str(u) for c, u in self._rows(select_sql("cases", cols))}
 
+    def case_types(self) -> dict[str, str]:
+        """case id -> `cases.case_type` (closed enum). Empty on a database that predates the column (platform < slice 18)."""
+        cols = self._present("cases", ("id", "case_type"))
+        if cols != ["id", "case_type"]:
+            return {}
+        return {str(c): str(t) for c, t in self._rows(select_sql("cases", cols)) if t is not None}
+
     def simulator_customers(self) -> set[str]:
         cols = self._present("customers", ("id", "simulator"))
         if cols != ["id", "simulator"]:
