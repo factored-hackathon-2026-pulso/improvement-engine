@@ -4,6 +4,11 @@
 //! candidate) before announcing it; both only ever act on a MANUAL-origin evaluation draft and neither releases anything. The human
 //! decisions (approve, publish, promote, reject) stay refused.
 
+/// ANN1: the platform client's allow-list is ONE route, the engine announcement. Everything else on the platform is refused.
+pub fn platform_allowed(method: &str, path: &str) -> bool {
+    method == "POST" && path == "/api/v1/internal/builder/proposals/announce"
+}
+
 /// `true` only for the exact operations of the writer.
 pub fn allowed(method: &str, path: &str) -> bool {
     // Space, control byte or fragment: the path is written verbatim into the HTTP request line. The ONE query the engine sends is the

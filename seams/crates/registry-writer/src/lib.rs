@@ -14,6 +14,7 @@
 //! registry. Refusals map to a closed set of reasons (`Reason`). Retries are idempotent per finding key (`Submission::key`): a local
 //! receipt store remembers the proposal of a key, because the registry at main has no list route and no `Idempotency-Key` on HTTP.
 //! No token is ever printed, stored in a receipt or put in an error.
+pub mod announce;
 pub mod baseline;
 pub mod closure;
 pub mod eval;
