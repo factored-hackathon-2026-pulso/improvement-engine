@@ -3,7 +3,7 @@
 # travel inside hashtables handed to child processes, and everything a child prints goes through Protect-Text first.
 
 $rigHere = Split-Path -Parent $MyInvocation.MyCommand.Path
-. (Join-Path $rigHere '..\demo-loop\run.lib.ps1')
+. (Join-Path $rigHere '../demo-loop/run.lib.ps1')
 
 # ---- settings ------------------------------------------------------------------------------------------------------------------------
 
@@ -48,7 +48,7 @@ function Get-RigPaths {
 # ---- memory budget ---------------------------------------------------------------------------------------------------------------------
 
 function Get-FreeRamMb {
-    try { return [int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024) } catch { return -1 }
+    Get-DevFreeRamMb
 }
 
 # $true when the budget allows a start. A free value that could not be read (-1) never allows it.
@@ -118,7 +118,7 @@ function Stop-PidTree {
     param([string]$PidFile)
     if (-not (Test-Path -LiteralPath $PidFile)) { return $false }
     $id = ([IO.File]::ReadAllText($PidFile)).Trim()
-    if ($id -match '^\d+$') { try { & taskkill /PID $id /T /F 2>&1 | Out-Null } catch { } }
+    if ($id -match '^\d+$') { Stop-DevProcessTree -ProcessId ([int]$id) }
     Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
     $true
 }

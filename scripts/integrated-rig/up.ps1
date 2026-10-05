@@ -22,17 +22,22 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$root = (Resolve-Path (Join-Path $here '..\..')).Path
+$root = (Resolve-Path (Join-Path $here '../..')).Path
 . (Join-Path $here 'rig.lib.ps1')
 
 $factored = Split-Path -Parent (Split-Path -Parent $root)
+# DevConfig: devconfig.env > env > sibling checkouts of this repo > the original machine's D:\ layout. See docs/dev/QUICKSTART_LOCAL.md.
+$devCfg = Get-DevConfig -Root $root -Export -Legacy @{
+    PULSO_PLATFORM_DIR = (Join-Path $factored 'tmp/env1/support-platform'); PULSO_AGENT_CORE_DIR = (Join-Path $factored 'tmp/env1/agent-core')
+    PULSO_LLM_GATEWAY_DIR = (Join-Path $factored 'tmp/shared/llm-gateway'); PULSO_EXE = 'D:\cargo-targets\claude-w16\debug\pulso.exe'
+}
 $settings = Get-RigSettings
 $paths = Get-RigPaths -Root $root
-if (-not $PlatformDir) { $PlatformDir = $(if ($env:PULSO_PLATFORM_DIR) { $env:PULSO_PLATFORM_DIR } else { Join-Path $factored 'tmp\env1\support-platform' }) }
-if (-not $AgentCoreDir) { $AgentCoreDir = $(if ($env:PULSO_AGENT_CORE_DIR) { $env:PULSO_AGENT_CORE_DIR } else { Join-Path $factored 'tmp\env1\agent-core' }) }
-if (-not $GatewayDir) { $GatewayDir = $(if ($env:PULSO_LLM_GATEWAY_DIR) { $env:PULSO_LLM_GATEWAY_DIR } else { Join-Path $factored 'tmp\shared\llm-gateway' }) }
+if (-not $PlatformDir) { $PlatformDir = $devCfg.Values['PULSO_PLATFORM_DIR'] }
+if (-not $AgentCoreDir) { $AgentCoreDir = $devCfg.Values['PULSO_AGENT_CORE_DIR'] }
+if (-not $GatewayDir) { $GatewayDir = $devCfg.Values['PULSO_LLM_GATEWAY_DIR'] }
 $backend = Join-Path $PlatformDir 'backend'
-$python = (Get-Command python -ErrorAction Stop).Source
+$python = Get-DevPython
 $uv = (Get-Command uv -ErrorAction Stop).Source
 $shell = Get-ChildShell
 $null = New-Item -ItemType Directory -Force -Path $paths.Rig
@@ -55,8 +60,8 @@ while ($true) {
 Say ("[0] memory gate: {0} MB free (> {1} MB){2}" -f $free, $MinFreeMb, $(if ($Force) { ' (forced)' } else { '' }))
 
 # ---- engine binary -----------------------------------------------------------------------------------------------------------------
-if (-not $PulsoExe) { $PulsoExe = $(if ($env:PULSO_EXE) { $env:PULSO_EXE } else { 'D:\cargo-targets\claude-w16\debug\pulso.exe' }) }
-if (-not (Test-Path -LiteralPath $PulsoExe)) { Fail "pulso.exe not found at $PulsoExe (build once: cd seams; cargo build -j 1 -p pulso, or pass -PulsoExe)" 2 }
+if (-not $PulsoExe) { $PulsoExe = $devCfg.Values['PULSO_EXE'] }
+if (-not (Test-Path -LiteralPath $PulsoExe)) { Fail "pulso binary not found at $PulsoExe (build once: see docs/dev/QUICKSTART_LOCAL.md, set PULSO_EXE in devconfig.env, or pass -PulsoExe)" 2 }
 
 # ---- previous run of THIS rig --------------------------------------------------------------------------------------------------------
 [void](Stop-PidTree -PidFile $paths.PlatformPid)
@@ -76,7 +81,7 @@ $envUp = [ordered]@{}
 foreach ($kv in (Get-LoopLaneEnvironment -Settings $settings).GetEnumerator()) { $envUp[$kv.Key] = $kv.Value }
 foreach ($kv in (Get-AgentCoreGrantsEnvironment -Settings $settings -ServiceToken $svc).GetEnumerator()) { $envUp[$kv.Key] = $kv.Value }
 Say ("    child environment names: " + ((Get-EnvNames -Env $envUp) -join ', '))
-if (-not $ReuseStack) { $r = Invoke-Scrubbed -File $shell -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $root 'scripts\demo-loop\run.ps1'), '-Up',
+if (-not $ReuseStack) { $r = Invoke-Scrubbed -File $shell -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $root 'scripts/demo-loop/run.ps1'), '-Up',
         '-AgentCoreDir', $AgentCoreDir, '-GatewayDir', $GatewayDir) -Env $envUp -Needles $script:Needles -WorkDir $root
 if ($r.ExitCode -ne 0) { Fail "demo-loop -Up exited $($r.ExitCode)" } }
 foreach ($u in @("http://127.0.0.1:$($settings.CorePort)/healthz", "http://127.0.0.1:$($settings.GwPort)/healthz")) { if (-not (Test-Http $u)) { Fail "not answering: $u" } }
@@ -97,8 +102,7 @@ Say "[3] support-platform API :$($settings.PlatformPort) (own SQLite, seeded; CC
 $penv = Get-PlatformEnvironment -Settings $settings -KeysFile (Join-Path $paths.PlatformKeys 'private.json') -ServiceToken $svc -DbPath $paths.PlatformDb
 Say ("    child environment names: " + ((Get-EnvNames -Env $penv) -join ', '))
 $psi = New-Object Diagnostics.ProcessStartInfo
-$psi.FileName = $env:ComSpec
-$psi.Arguments = '/c ""' + $uv + '" run --frozen --with tzdata --project "' + $backend + '" python -m uvicorn cc_platform.bootstrap.app:create_app --factory --host 127.0.0.1 --port ' + $settings.PlatformPort + ' --no-access-log >> "' + $paths.PlatformLog + '" 2>&1"'
+Set-DevShellCommand -Psi $psi -Line ('"' + $uv + '" run --frozen --with tzdata --project "' + $backend + '" python -m uvicorn cc_platform.bootstrap.app:create_app --factory --host 127.0.0.1 --port ' + $settings.PlatformPort + ' --no-access-log >> "' + $paths.PlatformLog + '" 2>&1')
 $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true; $psi.WorkingDirectory = $backend
 $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true  # the child writes its own log file; no inherited pipe may keep a caller waiting
 foreach ($k in $penv.Keys) { $psi.EnvironmentVariables[[string]$k] = [string]$penv[$k] }
@@ -130,8 +134,7 @@ if ($Spa) {
     $r = Invoke-Scrubbed -File $npx -Arguments @('--yes', 'pnpm@9', 'build') -Env @{ VITE_API_URL = "http://127.0.0.1:$($settings.PlatformPort)" } -Needles $script:Needles -WorkDir $fe -Quiet
     if ($r.ExitCode -ne 0) { Fail ("SPA build failed: " + (($r.Output | Select-Object -Last 6) -join ' ')) }
     $sp = New-Object Diagnostics.ProcessStartInfo
-    $sp.FileName = $env:ComSpec
-    $sp.Arguments = '/c ""' + $npx + '" --yes pnpm@9 exec vite preview --host 127.0.0.1 --port ' + $settings.SpaPort + ' --strictPort >> "' + $paths.SpaLog + '" 2>&1"'
+    Set-DevShellCommand -Psi $sp -Line ('"' + $npx + '" --yes pnpm@9 exec vite preview --host 127.0.0.1 --port ' + $settings.SpaPort + ' --strictPort >> "' + $paths.SpaLog + '" 2>&1')
     $sp.UseShellExecute = $false; $sp.CreateNoWindow = $true; $sp.WorkingDirectory = $fe
     $sp.RedirectStandardInput = $true; $sp.RedirectStandardOutput = $true; $sp.RedirectStandardError = $true
     $spProc = [Diagnostics.Process]::Start($sp)

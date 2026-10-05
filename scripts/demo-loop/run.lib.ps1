@@ -3,6 +3,8 @@
 # Nothing here prints a secret: values loaded from env files only travel in hashtables handed to child processes, and every line a child
 # prints goes through Protect-Text first.
 
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) '../dev-stack/DevConfig.ps1')   # portable-dev helpers (OS, RAM, podman, shell)
+
 $script:MetricNames = @{
     'M1' = 'contact_unresolved_rate'; 'M2' = 'complaint_share_of_contacts'; 'M3' = 'complaint_share_of_unresolved'
     'M4' = 'pqr_open_rate'; 'M5' = 'pqr_sla_breach_rate'; 'M6' = 'survey_low_score_rate'; 'M6L' = 'survey_low_score_rate_linked'
@@ -60,7 +62,7 @@ function Get-StackEnvironment {
     [ordered]@{
         PULSO_STACK_PREFIX = $Settings.Prefix; PULSO_PG_PORT = "$($Settings.PgPort)"; PULSO_GW_PORT = "$($Settings.GwPort)"; PULSO_CORE_PORT = "$($Settings.CorePort)"
         PULSO_AGENT_CORE_DIR = $AgentCoreDir; PULSO_LLM_GATEWAY_DIR = $GatewayDir
-        PULSO_REGISTRY_DIR = (Join-Path $AgentCoreDir 'tests\fixtures\registry-e2e'); PULSO_SERVE_E2E = '1'; PULSO_SERVE_AGENTS = 'disputas,consultas'
+        PULSO_REGISTRY_DIR = (Join-Path $AgentCoreDir 'tests/fixtures/registry-e2e'); PULSO_SERVE_E2E = '1'; PULSO_SERVE_AGENTS = 'disputas,consultas'
     }
 }
 
