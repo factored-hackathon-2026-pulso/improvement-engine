@@ -237,6 +237,32 @@ fn the_allow_list_refuses_every_management_operation() {
 }
 
 #[test]
+fn the_allow_list_refuses_query_fragment_and_control_bytes_so_nothing_can_be_smuggled_into_the_request_line() {
+    let crlf = format!("{}{}", char::from(13), char::from(10));
+    for (m, p) in [
+        ("POST", "/v1/runs?x=1".to_string()),
+        ("POST", format!("/v1/runs?x HTTP/1.1{crlf}Authorization: Bearer evil{crlf}X: ")),
+        ("POST", format!("/v1/runs HTTP/1.1{crlf}X: y")),
+        ("GET", "/v1/registry/proposals/prp_1?../../approve".to_string()),
+        ("GET", "/v1/registry/proposals/prp_1#x".to_string()),
+        ("GET", format!("/v1/registry/proposals/prp_1{crlf}X-A: b")),
+        ("POST", "/v1/registry/proposals ".to_string()),
+        ("POST", format!("/v1/runs{}", char::from(10))),
+    ] {
+        assert!(!allowed(m, &p), "{m} {p:?}");
+    }
+}
+
+#[test]
+fn registry_rule_ids_in_a_denial_are_a_closed_vocabulary_never_prose() {
+    let mut steps = direct_steps();
+    steps.truncate(2);
+    steps.push(("PUT /v1/registry/proposals/prp_1/draft", Ok(registry_writer::Reply { status: 422, body: json!({"code": "validation_failed", "violations": [{"rule": "customer jane@example.com said hello"}]}) })));
+    let (_, o, _) = reason_of(Via::RegistryApi, steps);
+    assert!(!o.detail.contains("jane") && !o.detail.contains("hello"), "{}", o.detail);
+}
+
+#[test]
 fn a_whole_delivery_only_ever_uses_the_proposal_routes() {
     let (_, s) = deliver(Via::RegistryApi, direct_steps());
     for (m, p) in s.requests() {

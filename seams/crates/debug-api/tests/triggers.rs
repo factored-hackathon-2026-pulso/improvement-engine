@@ -101,6 +101,20 @@ fn replay_returns_the_original_result_and_no_second_job_or_event() {
 }
 
 #[test]
+fn a_retry_with_a_fresh_delivery_timestamp_is_a_replay_not_a_conflict() {
+    // the poller stamps `requested_at` per attempt; the trigger_key does not cover it
+    let r = rig(None);
+    let b = trig("scheduled", "schedule.tick", json!({}));
+    let first = r.post(&b, Some(KEY));
+    let mut retry = b.clone();
+    retry["requested_at"] = json!("2026-10-04T10:05:00Z");
+    let again = r.post(&retry, Some(KEY));
+    assert_eq!((first.status, again.status), (202, 202));
+    assert_eq!(body(&first), body(&again));
+    assert_eq!((r.adm.len(), r.audit().len()), (1, 1));
+}
+
+#[test]
 fn same_key_with_a_different_body_is_a_conflict() {
     let r = rig(None);
     assert_eq!(r.post(&trig("scheduled", "schedule.tick", json!({})), Some(KEY)).status, 202);

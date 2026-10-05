@@ -410,7 +410,10 @@ impl App {
         }
         let Some(admitter) = auto.admitter.as_ref() else { return problem("admission_unavailable", 503, json!({})) };
 
-        let digest: String = Sha256::digest(b.to_string().as_bytes()).iter().map(|x| format!("{x:02x}")).collect();
+        // `requested_at` is the delivery time of this attempt, not part of the trigger: a retry must replay, not conflict.
+        let mut canon = b.clone();
+        canon.as_object_mut().map(|o| o.remove("requested_at"));
+        let digest: String = Sha256::digest(canon.to_string().as_bytes()).iter().map(|x| format!("{x:02x}")).collect();
         let mut trg = auto.triggers.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(rec) = trg.by_key.get(key) {
             if rec.digest != digest {
