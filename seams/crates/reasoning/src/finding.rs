@@ -148,7 +148,7 @@ impl Finding {
     pub fn evidence_ref(&self) -> String {
         let dims: Vec<String> = self.dims.iter().map(|(k, v)| format!("{k}={v}")).collect();
         let raw = format!("{}|{}|{}/{}|{}/{}", self.metric, dims.join(","), self.discovery.numerator, self.discovery.denominator, self.holdout.numerator, self.holdout.denominator);
-        format!("ev_{}", &steps::compile::sha256_hex(raw.as_bytes())[..16])
+        format!("ev_{}", steps::compile::sha256_hex_calm(raw.as_bytes(), 16))
     }
 
     /// The TPS observation: the two cell rows (`w1` discovery, `w2` holdout) as k-anonymous aggregate rows.

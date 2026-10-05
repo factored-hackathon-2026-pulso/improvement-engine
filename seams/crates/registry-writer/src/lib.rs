@@ -129,7 +129,7 @@ impl Submission {
     /// Idempotency key of the finding: same evidence and same target, same key. Opaque, `pulso-` + 24 hex.
     pub fn key(&self) -> String {
         let raw = format!("b2|{}|{}|{}", self.evidence_ref, self.target_ref, self.kind);
-        format!("pulso-{}", &steps::compile::sha256_hex(raw.as_bytes())[..24])
+        format!("pulso-{}", steps::compile::sha256_hex_calm(raw.as_bytes(), 24))
     }
 
     /// Deterministic proposal title (`<= 200` chars, the registry limit).

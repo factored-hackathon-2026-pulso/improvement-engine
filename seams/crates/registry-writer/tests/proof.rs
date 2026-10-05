@@ -740,6 +740,10 @@ mod w13 {
         assert_eq!(&dk[..4], ["agent", "flow", "template", "template"]);
         assert!(dk.contains(&"decision_model") && dk.contains(&"language_detection") && dk.last() == Some(&"eval_suite"));
         assert!(!dk.contains(&"release_settings") && !dk.contains(&"injection_ruleset"), "{dk:?}");
+        // BLD1(a): what the value loop delivers carries the donor's entities, so Core never answers REG-PIN for the new agent
+        let ids: Vec<&str> = sub.changes.iter().filter_map(|c| c["content"]["id"].as_str()).collect();
+        assert!(ids.contains(&"understand-turno"), "the donor decision model travels: {ids:?}");
+        assert!(sub.changes.iter().filter(|c| c["kind"] == "template" && c["docs"]["description"].as_str().is_some_and(|d| d.contains("closure copy"))).count() >= 7, "the donor templates travel: {ids:?}");
         assert_eq!(sub.agent_id, "soporte-tecnico");
         assert_eq!(sub.changes[0]["docs"]["changelog"], p.dossier["es"]["changelog"], "the proposal's own docs are the dossier's");
         assert_eq!(sub.changes[4]["docs"]["description"].as_str().map(|d| d.contains("closure copy")), Some(true), "closure copies keep their own docs");

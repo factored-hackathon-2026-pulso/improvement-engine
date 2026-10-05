@@ -228,3 +228,39 @@ fn the_target_is_the_verified_opportunitys_and_a_models_different_target_ref_is_
     let out = compile(&c, &f, &row, &o, &patch_proposal("prompt:p/copiloto", json!([es, pt]))).unwrap();
     assert_eq!(out.target_ref, "template:t/estado_pqr");
 }
+
+// ---- W15 / R11: the evidence ref and the generated docs never carry a digit run of 6 ------------------------------------------
+
+fn longest_digit_run(s: &str) -> usize {
+    let (mut best, mut cur) = (0, 0);
+    for c in s.chars() {
+        cur = if c.is_ascii_digit() { cur + 1 } else { 0 };
+        best = best.max(cur);
+    }
+    best
+}
+
+#[test]
+fn the_evidence_ref_is_hex_that_resolves_by_recomputation_and_has_no_digit_run_of_six() {
+    for n in 1..800i64 {
+        let f = finding_of(signal("M1", json!({"channel": "Phone"}), stage(300 + n, 1000 + n * 3, 0.1), stage(200 + n, 700 + n * 2, 0.1)), Source::Synthetic);
+        let r = f.evidence_ref();
+        assert!(r.starts_with("ev_") && r.len() == 19 && r[3..].chars().all(|c| c.is_ascii_hexdigit()), "{r}");
+        assert!(longest_digit_run(&r) < 6, "{r}");
+        assert_eq!(r, f.evidence_ref());
+    }
+}
+
+#[test]
+fn the_compiled_docs_are_free_of_digit_runs_of_six_whatever_the_model_wrote() {
+    let f = tecnico_finding();
+    let row = map_finding(&f).unwrap();
+    let mut o = opp("new_agent:consultas", "uncovered_reason");
+    o.hypothesis = "case 12345678 and ticket 987654321".into();
+    let d = reasoning::patch::docs(&f, &row, &o, "seen in 123456789 calls");
+    for k in ["description", "rationale"] {
+        let t = d[k].as_str().unwrap();
+        assert!(longest_digit_run(t) < 6, "{k}: {t}");
+        assert!(t.contains("seen in"), "the text is kept, only the digit runs are broken: {t}");
+    }
+}

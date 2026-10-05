@@ -503,3 +503,44 @@ fn put_draft_carries_its_own_idempotency_key_derived_from_the_finding_key() {
     let put = log.iter().find(|l| l.method == "PUT").unwrap();
     assert_eq!(put.idem.as_deref(), Some(format!("{}-draft", submission().key()).as_str()));
 }
+
+// ---- W15 / R11: no generated text carries a digit run of 6 or more ---------------------------------------------------------
+
+fn longest_digit_run(s: &str) -> usize {
+    let (mut best, mut cur) = (0, 0);
+    for c in s.chars() {
+        cur = if c.is_ascii_digit() { cur + 1 } else { 0 };
+        best = best.max(cur);
+    }
+    best
+}
+
+#[test]
+fn the_key_title_and_default_changelog_never_carry_a_digit_run_of_six() {
+    for i in 0..600u32 {
+        let mut s = submission();
+        s.evidence_ref = format!("ev_{i:016x}");
+        let key = s.key();
+        assert!(longest_digit_run(&key) < 6 && key.starts_with("pulso-") && key.len() == 30, "{key}");
+        assert!(longest_digit_run(&s.title()) < 6, "{}", s.title());
+        assert_eq!(key, s.key(), "stable");
+    }
+}
+
+#[test]
+fn delivered_docs_are_free_of_digit_runs_of_six_even_when_the_text_came_with_one() {
+    let mut s = submission();
+    s.changes[0]["docs"] = json!({"description": "evidence ev_1234567890123456 ticket 9876543", "rationale": "case 12345678 repeats", "changelog": "key pulso-111111222222333333444444"});
+    let script = Script::new(direct_steps());
+    let store = MemoryStore::new();
+    let o = Writer::new(cfg(Via::RegistryApi), &script, &store).deliver(&s);
+    assert!(o.delivered(), "{}", o.to_json());
+    let log = script.log.borrow();
+    let put = log.iter().find(|l| l.method == "PUT").unwrap().body.as_ref().unwrap().clone();
+    for k in ["description", "rationale", "changelog"] {
+        let t = put["changes"][0]["docs"][k].as_str().unwrap();
+        assert!(longest_digit_run(t) < 6, "{k}: {t}");
+    }
+    let create = log.iter().find(|l| l.method == "POST" && l.path == "/v1/registry/proposals").unwrap().body.as_ref().unwrap().clone();
+    assert!(longest_digit_run(create["title"].as_str().unwrap()) < 6);
+}

@@ -88,9 +88,12 @@ fn expected_effect(f: &Finding, row: &Row, direction: &str) -> Value {
            "guardrail": row.guardrail, "link_grade": row.link_grade, "evidence_ref": f.evidence_ref()})
 }
 
-fn docs(f: &Finding, row: &Row, opp: &Opportunity, rationale: &str) -> Value {
+/// The proposal `docs` text. Rubric R11 (hard): no run of 6 or more digits anywhere (the PII wrapper tokenises it), so the model's own
+/// hypothesis and rationale are defused too; ids built by the engine (`evidence_ref`) are digit-run free by construction.
+pub fn docs(f: &Finding, row: &Row, opp: &Opportunity, rationale: &str) -> Value {
+    use steps::compile::defuse_digit_runs as calm;
     let text = format!("[improvement-engine] {} {} {}; finding {} evidence {} link {}; hypothesis: {}; rationale: {}", opp.target_ref, opp.mechanism_class, row.id, f.id, f.evidence_ref(), row.link_grade, opp.hypothesis, rationale);
-    json!({"description": text.chars().take(4000).collect::<String>(), "rationale": rationale.chars().take(4000).collect::<String>()})
+    json!({"description": calm(&text).chars().take(4000).collect::<String>(), "rationale": calm(rationale).chars().take(4000).collect::<String>()})
 }
 
 pub fn compile(catalog: &Catalog, f: &Finding, row: &Row, opp: &Opportunity, proposal: &Value) -> Result<Compiled, Denied> {

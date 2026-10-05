@@ -241,10 +241,11 @@ impl<'a> Writer<'a> {
                 return Err(bad("content needs id and version as text"));
             }
             let d = &c["docs"];
+            let calm = steps::compile::defuse_digit_runs; // R11: no run of 6 or more digits in any text the registry stores
             let description = d["description"].as_str().filter(|t| !t.is_empty()).map(|t| clip(t, 4000)).unwrap_or_else(|| format!("{TITLE_PREFIX} {kind} change for {}", s.target_ref));
             let rationale = clip(d["rationale"].as_str().unwrap_or(""), 4000);
             let changelog = clip(d["changelog"].as_str().filter(|t| !t.is_empty()).unwrap_or(&format!("{TITLE_PREFIX} proposal key {key}")), 8000);
-            out.push(json!({"kind": kind, "content": c["content"], "docs": {"description": description, "rationale": rationale, "changelog": changelog}}));
+            out.push(json!({"kind": kind, "content": c["content"], "docs": {"description": calm(&description), "rationale": calm(&rationale), "changelog": calm(&changelog)}}));
         }
         Ok(out)
     }
