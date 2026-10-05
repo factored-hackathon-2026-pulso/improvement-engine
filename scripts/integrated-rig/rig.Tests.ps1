@@ -168,3 +168,17 @@ Describe 'CANARY: no environment value is ever printed' {
     Remove-Item -LiteralPath $envFile -Force -ErrorAction SilentlyContinue
 }
 
+
+Describe 'Save-Hops (AGT1: run_story ended with "Argument types do not match" and wrote no hops json)' {
+    It 'writes the hops list held in a List[object]' {
+        $hops = New-Object System.Collections.Generic.List[object]
+        $hops.Add([pscustomobject]@{ Hop = 'a'; Status = 'OK'; Detail = 'd'; Needs = '' })
+        $hops.Add([pscustomobject]@{ Hop = 'b'; Status = 'not-run'; Detail = 'd'; Needs = 'x' })
+        $p = Join-Path ([IO.Path]::GetTempPath()) ("hops-" + [guid]::NewGuid().ToString('N') + '.json')
+        Save-Hops -Path $p -Hops $hops
+        $back = @(Get-Content -Raw -LiteralPath $p | ConvertFrom-Json)
+        Remove-Item -LiteralPath $p -Force
+        $back.Count | Should Be 2
+        $back[1].Status | Should Be 'not-run'
+    }
+}
