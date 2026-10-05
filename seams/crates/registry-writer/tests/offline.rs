@@ -212,8 +212,6 @@ fn the_allow_list_refuses_every_management_operation() {
     for (m, p) in [
         ("POST", "/v1/registry/proposals/prp_1/approve"),
         ("POST", "/v1/registry/proposals/prp_1/publish"),
-        ("POST", "/v1/registry/proposals/prp_1/freeze"),
-        ("POST", "/v1/registry/proposals/prp_1/evaluate"),
         ("POST", "/v1/registry/proposals/prp_1/reopen"),
         ("POST", "/v1/registry/proposals/prp_1/reject"),
         ("POST", "/v1/registry/aliases/copiloto-asesor/prod"),
@@ -229,10 +227,68 @@ fn the_allow_list_refuses_every_management_operation() {
         ("GET", "/v1/registry/proposals/prp_1"),
         ("PUT", "/v1/registry/proposals/prp_1/draft"),
         ("POST", "/v1/registry/proposals/prp_1/validate"),
+        ("POST", "/v1/registry/proposals/prp_1/freeze"),
+        ("POST", "/v1/registry/proposals/prp_1/evaluate"),
         ("GET", "/v1/registry/entities/prompt/p/copiloto"),
         ("POST", "/v1/runs"),
     ] {
         assert!(allowed(m, p), "{m} {p}");
+    }
+}
+
+/// W11: freeze and evaluate are allowed, the human decisions are not, in every spelling an attacker or a bug could try.
+#[test]
+fn every_human_decision_verb_stays_refused_whatever_the_method_suffix_or_case() {
+    for verb in ["approve", "publish", "promote", "reject", "reopen", "revoke", "rollback", "release", "alias", "delete"] {
+        for m in ["POST", "PUT", "PATCH", "GET", "DELETE"] {
+            for p in [
+                format!("/v1/registry/proposals/prp_1/{verb}"),
+                format!("/v1/registry/proposals/prp_1/{verb}/"),
+                format!("/v1/registry/proposals/prp_1/freeze/{verb}"),
+                format!("/v1/registry/proposals/prp_1/evaluate/{verb}"),
+                format!("/v1/registry/{verb}/prp_1"),
+                format!("/v1/registry/proposals/prp_1/{}", verb.to_uppercase()),
+            ] {
+                assert!(!allowed(m, &p), "{m} {p}");
+            }
+        }
+    }
+    for (m, p) in [
+        ("POST", "/v1/registry/releases/r1/revoke"),
+        ("POST", "/v1/registry/aliases/consultas/prod"),
+        ("POST", "/v1/registry/proposals/prp_1/approve"),
+        ("POST", "/v1/registry/proposals/prp_1/publish"),
+        ("POST", "/v1/registry/proposals/prp_1/reject"),
+    ] {
+        assert!(!allowed(m, p), "{m} {p}");
+    }
+}
+
+#[test]
+fn freeze_and_evaluate_are_post_only_and_take_exactly_one_safe_proposal_id() {
+    let crlf = format!("{}{}", char::from(13), char::from(10));
+    for verb in ["freeze", "evaluate"] {
+        assert!(allowed("POST", &format!("/v1/registry/proposals/prp_1/{verb}")));
+        for m in ["GET", "PUT", "PATCH", "DELETE", "post", "HEAD"] {
+            assert!(!allowed(m, &format!("/v1/registry/proposals/prp_1/{verb}")), "{m} {verb}");
+        }
+        for p in [
+            format!("/v1/registry/proposals/../{verb}"),
+            format!("/v1/registry/proposals//{verb}"),
+            format!("/v1/registry/proposals/prp 1/{verb}"),
+            format!("/v1/registry/proposals/prp%2F1/{verb}"),
+            format!("/v1/registry/proposals/prp_1/extra/{verb}"),
+            format!("/v1/registry/proposals/prp_1/{verb}/extra"),
+            format!("/v1/registry/proposals/prp_1/{verb}?approve=1"),
+            format!("/v1/registry/proposals/prp_1/{verb}?agent_id=a&limit=2"),
+            format!("/v1/registry/proposals/prp_1/{verb}#approve"),
+            format!("/v1/registry/proposals/prp_1/{verb}{}", char::from(0)),
+            format!("/v1/registry/proposals/prp_1/{verb}{crlf}X: y"),
+            format!("/v1/registry/proposals/prp_1{crlf}/{verb}"),
+            format!("/v1/registry/proposals/{}/{verb}", "a".repeat(121)),
+        ] {
+            assert!(!allowed("POST", &p), "{p:?}");
+        }
     }
 }
 

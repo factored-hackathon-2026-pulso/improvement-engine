@@ -8,13 +8,16 @@
 //! - `BuilderRun`: `POST /v1/runs` of the `pulso-builder` agent (an agent-core model run that authors and writes the draft with its
 //!   in-process registry tools). The draft is then the agent's, not the engine's: the outcome says so.
 //!
-//! The engine NEVER approves, publishes, promotes, revokes, freezes or evaluates: `guard::allowed` is a closed allow-list that every
-//! request passes before it reaches the transport. Success is `proposal_id` + `valid` + a non-empty change list read back from the
+//! The engine NEVER approves, publishes, promotes, revokes or rejects: `guard::allowed` is a closed allow-list that every request
+//! passes before it reaches the transport. W11 adds `freeze` and `evaluate` (module `eval`) so the engine can PROVE a proposal on
+//! throwaway manual-origin evaluation drafts before it announces it (module `proof`). Success is `proposal_id` + `valid` + a non-empty change list read back from the
 //! registry. Refusals map to a closed set of reasons (`Reason`). Retries are idempotent per finding key (`Submission::key`): a local
 //! receipt store remembers the proposal of a key, because the registry at main has no list route and no `Idempotency-Key` on HTTP.
 //! No token is ever printed, stored in a receipt or put in an error.
 pub mod baseline;
+pub mod eval;
 pub mod guard;
+pub mod proof;
 pub mod store;
 pub mod transport;
 pub mod writer;

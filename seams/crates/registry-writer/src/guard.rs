@@ -1,5 +1,8 @@
-//! The engine's closed allow-list. Anything else (approve, publish, promote, revoke, reject, freeze, evaluate, reopen, alias writes,
-//! release reads that are not needed) is refused BEFORE the transport: the engine proposes, agent-core manages.
+//! The engine's closed allow-list. Anything else (approve, publish, promote, revoke, reject, reopen, alias writes, release reads
+//! that are not needed) is refused BEFORE the transport: the engine proposes, agent-core manages. W11 adds exactly two management
+//! verbs, `freeze` and `evaluate`, because the engine proves a proposal (regression suite fails on the base, passes on the
+//! candidate) before announcing it; both only ever act on a MANUAL-origin evaluation draft and neither releases anything. The human
+//! decisions (approve, publish, promote, reject) stay refused.
 
 /// `true` only for the exact operations of the writer.
 pub fn allowed(method: &str, path: &str) -> bool {
@@ -25,6 +28,8 @@ pub fn allowed(method: &str, path: &str) -> bool {
         ("GET", ["proposals", id]) => ok_seg(id),
         ("PUT", ["proposals", id, "draft"]) => ok_seg(id),
         ("POST", ["proposals", id, "validate"]) => ok_seg(id),
+        ("POST", ["proposals", id, "freeze"]) => ok_seg(id),
+        ("POST", ["proposals", id, "evaluate"]) => ok_seg(id),
         ("GET", ["entities", kind, tail @ ..]) => ok_seg(kind) && !tail.is_empty() && tail.iter().all(|s| ok_seg(s)),
         _ => false,
     }

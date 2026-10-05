@@ -320,6 +320,8 @@ fn verdict_text(l: Lang, verdict: Option<&Value>) -> Verdict {
         "not_fixed" => l.t("NO CORREGIDO: el candidato sigue fallando casos del hallazgo. No se anuncia.", "NÃO CORRIGIDO: o candidato continua falhando casos do achado. Não e anunciada."),
         "guard_regressed" => l.t("GUARDAS ROTAS: una guarda falla (en la base o en el candidato). No se anuncia.", "GUARDAS QUEBRADAS: uma guarda falha (na base ou no candidato). Não e anunciada."),
         "infra_failed" | "not_exercised" => l.t("NO EVALUADO: la infraestructura no produjo un veredicto. No se anuncia.", "NÃO AVALIADO: a infraestrutura não produziu um veredito. Não e anunciada."),
+        "suite_refused" => l.t("SIN SUITE: no se pudo construir una suite de regresión para este hallazgo (evidencia insuficiente o sin mecanismo). No se anuncia.", "SEM SUITE: não foi possivel construir uma suite de regressão para este achado (evidência insuficiente ou sem mecanismo). Não e anunciada."),
+        "suite_error" => l.t("NO EVALUADO: la construcción de la suite o el juez fallaron. No se anuncia.", "NÃO AVALIADO: a construção da suite ou o juiz falharam. Não e anunciada."),
         "base_only" => l.t("Solo base: no hay candidato evaluado. No se anuncia.", "Somente base: não ha candidato avaliado. Não e anunciada."),
         _ => l.t("Veredicto desconocido: no se anuncia.", "Veredito desconhecido: não e anunciada."),
     };
