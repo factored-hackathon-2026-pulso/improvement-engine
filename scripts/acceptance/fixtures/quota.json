@@ -1,0 +1,6 @@
+{
+  "used_24h": 1,
+  "limit": 10,
+  "within_limit_accepted": true,
+  "over_limit_rejected": true
+}
