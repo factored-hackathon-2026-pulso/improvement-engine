@@ -118,6 +118,14 @@ impl Finding {
         Ok((found, skipped))
     }
 
+    /// The sensor-shaped signal of this finding (what the decision dossier reads).
+    pub fn to_signal_json(&self) -> Value {
+        let st = |s: &Stage| json!({"numerator": s.numerator, "denominator": s.denominator, "rate": s.rate, "baseline_rate": s.baseline_rate, "diff": s.diff});
+        let dims: serde_json::Map<String, Value> = self.dims.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
+        json!({"finding_id": self.id, "metric": self.metric, "dims": dims, "status": "corroborated", "direction": self.direction, "claim": "association",
+               "discovery": st(&self.discovery), "holdout": st(&self.holdout), "r2": {"status": self.r2}, "p_adj": self.p_adj})
+    }
+
     pub fn metric_token(&self) -> String {
         self.metric.to_ascii_lowercase()
     }
