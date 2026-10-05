@@ -46,14 +46,18 @@ fn status<'a>(j: &'a Json, reason: &str, channel: &str) -> Option<&'a str> {
     find(j, reason, channel).and_then(|s| s.get("status")).and_then(|v| v.as_str())
 }
 
+fn discard_entries<'a>(j: &'a Json, kind: &str) -> Vec<&'a Json> {
+    j.get("discards").and_then(|d| d.as_arr()).unwrap().iter().filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some(kind)).collect()
+}
+
+/// Published count of a discard kind (0 when absent or when the count is suppressed below k).
 fn discard_count(j: &Json, kind: &str) -> i64 {
-    j.get("discards")
-        .and_then(|d| d.as_arr())
-        .unwrap()
-        .iter()
-        .filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some(kind))
-        .map(|d| d.get("count").and_then(|c| c.as_i64()).unwrap())
-        .sum()
+    discard_entries(j, kind).iter().filter_map(|d| d.get("count").and_then(|c| c.as_i64())).sum()
+}
+
+/// A discard whose count is below k is reported as `{kind, count: null, suppressed: true}`.
+fn discard_suppressed(j: &Json, kind: &str) -> bool {
+    discard_entries(j, kind).iter().any(|d| d.get("suppressed").is_some() && d.get("count") == Some(&Json::Null))
 }
 
 fn planted_queja_phone(r: &str, c: &str, _h: &str) -> Option<i64> {
@@ -178,7 +182,7 @@ fn k_violations_are_named_discards_and_never_tested() {
     rows.push(row("M1", "Leaky", "Chat", "discovery", 4, 200)); // 0 < numerator < k
     rows.push(row("M1", "Leaky2", "Chat", "discovery", 195, 200)); // 0 < complement < k
     let j = out(&rows);
-    assert_eq!(discard_count(&j, "k_violation"), 3);
+    assert!(discard_suppressed(&j, "k_violation"));
     assert_eq!(j.get("cells_explored").and_then(|v| v.as_i64()), Some(10));
     assert!(find(&j, "Tiny", "Phone").is_none());
     assert!(find(&j, "Leaky", "Chat").is_none());
@@ -190,7 +194,7 @@ fn favourable_direction_is_a_named_discard_not_a_problem() {
     let f = |r: &str, c: &str, _h: &str| (r == "Tecnico" && c == "Chat").then_some(100);
     let j = out(&grid("M1", &f));
     assert!(find(&j, "Tecnico", "Chat").is_none());
-    assert!(discard_count(&j, "favourable_direction") >= 1);
+    assert!(discard_count(&j, "favourable_direction") >= 1 || discard_suppressed(&j, "favourable_direction"));
 }
 
 #[test]
@@ -525,11 +529,11 @@ fn level_rows_obey_the_k_rule_and_min_support_with_named_discards() {
     let mut rows = level_grid("M8", &|_, _| 500);
     rows.push(m_row("M8", "Push", "Chat", "discovery", "2024-03", 5, 100)); // k violation
     let j = out(&rows);
-    assert_eq!(discard_count(&j, "k_violation"), 1);
+    assert!(discard_suppressed(&j, "k_violation"));
     let small: Vec<String> = vec![m_row("M8", "Push", "Email", "discovery", "2024-03", 200, 400), m_row("M8", "Push", "Email", "holdout", "2024-03", 200, 400)];
     let j = out(&small);
     assert!(level_of(&j, "M8").is_none());
-    assert_eq!(discard_count(&j, "level_below_min_support"), 1);
+    assert!(discard_suppressed(&j, "level_below_min_support"));
 }
 
 // ---------------------------------------------------------------- DET1: full-period cells, pooled support, exploratory
@@ -574,7 +578,7 @@ fn support_floor_applies_to_the_pooled_period_not_the_discovery_half() {
     // below the pooled floor it is still a named discard
     let j = out(&full_table((200, 80, 200, 80)));
     assert!(dsig(&j, "Comercial").is_none());
-    assert_eq!(discard_count(&j, "below_min_support"), 1);
+    assert!(discard_suppressed(&j, "below_min_support"));
 }
 
 #[test]
@@ -642,7 +646,7 @@ fn exploratory_tier_relaxes_knobs_but_never_k_and_never_corroborates() {
     bad.push(arow("M1", "Queja", Some("WhatsApp"), "discovery", "ALL", 5, 900));
     let j = parse(&run_exploratory(&bad.join("
 ")).unwrap()).unwrap();
-    assert_eq!(discard_count(&j, "k_violation"), 1);
+    assert!(discard_suppressed(&j, "k_violation"));
     assert!(dsig(&j, "Queja").is_none());
 }
 
@@ -656,4 +660,20 @@ fn exploratory_profile_leaves_the_strict_tier_untouched() {
     assert_eq!(analyse(&rows.join("
 "), &Config::default()).unwrap().signals.len(), analyse(&rows.join("
 "), &Config::default()).unwrap().signals.len());
+}
+
+#[test]
+fn discard_counts_below_k_are_suppressed_by_the_sensor_itself() {
+    let mut rows = full_table((300, 120, 300, 120));
+    rows.push(arow("M1", "Queja", Some("WhatsApp"), "discovery", "ALL", 5, 900)); // one k violation
+    let j = out(&rows);
+    let e = discard_entries(&j, "k_violation");
+    assert_eq!(e.len(), 1);
+    assert_eq!(e[0].get("count"), Some(&Json::Null));
+    assert_eq!(e[0].get("suppressed"), Some(&Json::Bool(true)));
+    for d in j.get("discards").and_then(|d| d.as_arr()).unwrap() {
+        if let Some(n) = d.get("count").and_then(|c| c.as_i64()) {
+            assert!(n >= 10, "published discard count {n} is below k");
+        }
+    }
 }

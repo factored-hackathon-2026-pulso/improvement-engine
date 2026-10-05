@@ -937,7 +937,14 @@ impl Report {
         let discards = self
             .discards
             .iter()
-            .map(|(k, n)| Json::obj(vec![("kind", Json::s(k)), ("count", Json::Int(*n))]))
+            .map(|(k, n)| {
+                // A discard count is itself a published count: below k_min it is suppressed by the sensor.
+                if *n < c.k_min {
+                    Json::obj(vec![("kind", Json::s(k)), ("count", Json::Null), ("suppressed", Json::Bool(true))])
+                } else {
+                    Json::obj(vec![("kind", Json::s(k)), ("count", Json::Int(*n))])
+                }
+            })
             .collect();
         Json::obj(vec![
             ("semantics", Json::s(crate::SEMANTICS)),
