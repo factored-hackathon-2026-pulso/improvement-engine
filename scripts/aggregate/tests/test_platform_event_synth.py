@@ -75,5 +75,54 @@ class Synthetic(unittest.TestCase):
             synth.policy.select_sql("login_accounts", ["id"])
 
 
+class SuggesterAgent(unittest.TestCase):
+    """EVT2: the suggestions (and so draft decisions) are produced by `copiloto-sugerencias`, not by the Q&A `copiloto-asesor`."""
+
+    def test_every_suggestion_event_names_the_suggester_agent(self):
+        events, _, _, _, _ = data()
+        agents = {e["payload"].get("agent") for e in events
+                  if e["event_type"] in ("copilot.suggestion_ready", "copilot.suggestion_none", "copilot.suggestion_decided")}
+        self.assertEqual(agents, {"copiloto-sugerencias@1.0.0"})
+
+    def test_the_assistant_events_keep_their_own_agent(self):
+        events, _, _, _, _ = data()
+        agents = {e["payload"].get("agent") for e in events if e["event_type"] == "assistant.turn_answered"}
+        self.assertEqual(agents, {"recepcion@1.0.0"})
+
+
+class ProductSqlite(unittest.TestCase):
+    """EVT2: the same history as a product SQLite file the engine monitor can tick (adapter `product-sqlite`)."""
+
+    def test_the_file_has_the_columns_the_monitor_reads_and_the_case_type(self):
+        import sqlite3
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            path = Path(t) / "product.sqlite"
+            events, cases, labels = synth.write_sqlite(path, seed=7, n_cases=600)
+            con = sqlite3.connect(path)
+            cols = {r[1] for r in con.execute("PRAGMA table_info(cases)")}
+            self.assertTrue({"id", "customer_id", "channel", "language", "opened_at", "case_type"} <= cols)
+            n_ev = con.execute("SELECT COUNT(*) FROM event_log").fetchone()[0]
+            self.assertEqual(n_ev, len(events))
+            types = {r[0] for r in con.execute("SELECT DISTINCT case_type FROM cases")}
+            self.assertTrue(types & set(synth.CASE_TYPES))
+            row = con.execute("SELECT payload FROM event_log WHERE event_type='copilot.suggestion_decided' LIMIT 1").fetchone()
+            self.assertIn("decision", json.loads(row[0]))
+            con.close()
+        self.assertTrue(labels["synthetic"])
+        self.assertTrue(cases)
+
+    def test_the_file_matches_the_ndjson_history(self):
+        import sqlite3
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            path = Path(t) / "product.sqlite"
+            events, cases, _ = synth.write_sqlite(path, seed=7, n_cases=400)
+            con = sqlite3.connect(path)
+            types = dict(con.execute("SELECT id, case_type FROM cases"))
+            con.close()
+        self.assertEqual({c["case_id"]: c["case_type"] for c in cases}, types)
+
+
 if __name__ == "__main__":
     unittest.main()

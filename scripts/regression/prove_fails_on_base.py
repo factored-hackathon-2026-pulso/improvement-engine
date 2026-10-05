@@ -226,6 +226,9 @@ def coverage(bundle: dict, binding: dict, settings: str | None = None) -> dict:
             native.insert(1, "response_from_model_path")
         else:
             not_measured.append("candidate_prompt_native")
+    elif mech == "draft_next_step":
+        native.insert(0, "advisor_suggestions_native")
+        not_measured += ["draft_acceptance_effect", "native_wording"]
     elif mech == "uncovered_topic":
         native.insert(0, "new_agent_intake_and_handoff")
         not_measured += ["base_by_absence", "routing_recepcion_to_new_agent", "traffic_stealing", "native_wording"]

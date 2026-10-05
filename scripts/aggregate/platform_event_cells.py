@@ -153,7 +153,9 @@ def derive_units(events, cases, split_time=None, k=K_DEFAULT):
             continue
         ch = CHANNEL_ALIAS.get(c.get("channel"), c.get("channel"))
         cmap[cid] = {
-            "customer": c.get("customer_id") or cid,
+            # the real feed carries a salted hash of the customer (`customer_key`, written by the monitor tick); a raw id is only ever
+            # hashed again by the split. Neither is emitted.
+            "customer": c.get("customer_key") or c.get("customer_id") or cid,
             "channel": ch if ch in CHANNELS else None,
             "language": c.get("language") if c.get("language") in LANGUAGES else None,
             "case_type": c.get("case_type") if c.get("case_type") in CASE_TYPES else None,
@@ -481,14 +483,64 @@ def read_ndjson(path):
     return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+def _wm_key(manifest, name):
+    """Order of packages: the numeric tail of `watermark_to` (`seq:123`), then the directory name."""
+    m = re.search(r"(\d+)$", str(manifest.get("watermark_to", "")))
+    return (int(m.group(1)) if m else -1, name)
+
+
+def read_packages(root, source_id=None):
+    """The REAL FEED: every complete package (`manifest.json` present) of one source under `root`, as `(events, cases, info)`.
+
+    The monitor tick (`sources::monitor::write_package`) writes one directory per batch: `events.ndjson` (ids, enums, times and the
+    allow-listed `payload`) and `cases.ndjson` (`case_id, channel, language, priority, previous_case_id, case_type, opened_at,
+    customer_key`). Events are unique by `sequence` (a replayed batch is dropped, counted); for a case the newest package wins
+    (its type may have been corrected since). A directory without a manifest is an unfinished write and is skipped."""
+    root = Path(root)
+    pkgs = []
+    for d in sorted(p for p in root.iterdir() if p.is_dir()):
+        mf = d / "manifest.json"
+        if not mf.is_file():
+            continue
+        m = json.loads(mf.read_text(encoding="utf-8"))
+        if source_id is not None and m.get("source_id") != source_id:
+            continue
+        pkgs.append((_wm_key(m, d.name), d))
+    pkgs.sort(key=lambda x: x[0])
+    events, seen, dup, cases = [], set(), 0, {}
+    for _, d in pkgs:
+        for e in read_ndjson(d / "events.ndjson"):
+            seq = e.get("sequence")
+            if seq is not None and seq in seen:
+                dup += 1
+                continue
+            seen.add(seq)
+            events.append(e)
+        cf = d / "cases.ndjson"
+        if cf.is_file():
+            for c in read_ndjson(cf):
+                cases[c.get("case_id")] = c
+    return events, list(cases.values()), {"packages": len(pkgs), "duplicate_events_dropped": dup}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="platform events -> cell table (aggregates only)")
-    ap.add_argument("--events", required=True, help="events.ndjson (exporter-shaped, payload allow-listed)")
-    ap.add_argument("--cases", required=True, help="cases.ndjson (case_id, customer_id, channel, language, case_type)")
+    ap.add_argument("--events", help="events.ndjson (exporter-shaped, payload allow-listed)")
+    ap.add_argument("--cases", help="cases.ndjson (case_id, customer_id|customer_key, channel, language, case_type, opened_at)")
+    ap.add_argument("--package-root", help="the monitor tick work dir `packages/` (all complete packages of --source-id)")
+    ap.add_argument("--source-id", help="only the packages of this source (with --package-root)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--k", type=int, default=K_DEFAULT)
     a = ap.parse_args(argv)
-    rows, stats = build(read_ndjson(a.events), read_ndjson(a.cases), k=a.k)
+    if a.package_root:
+        events, cases, info = read_packages(a.package_root, a.source_id)
+    elif a.events and a.cases:
+        events, cases, info = read_ndjson(a.events), read_ndjson(a.cases), None
+    else:
+        ap.error("give --package-root, or --events and --cases")
+    rows, stats = build(events, cases, k=a.k)
+    if info:
+        stats["feed"] = info
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(to_ndjson(rows), encoding="utf-8", newline="\n")
