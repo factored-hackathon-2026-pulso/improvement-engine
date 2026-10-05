@@ -16,7 +16,11 @@ use crate::StepError;
 use crate::sensor::json::{Json, parse};
 
 /// Dimension keys a treated cell table may carry. Anything else (ids, free text) is rejected.
-pub const ALLOWED_DIMS: [&str; 6] = ["reason_category", "channel", "category", "case_type", "priority", "survey_type"];
+pub const ALLOWED_DIMS: [&str; 9] = [
+    "reason_category", "channel", "category", "case_type", "priority", "survey_type",
+    // AG2: digital action, campaign type, customer segment (closed vocabularies, aggregates only).
+    "action", "campaign_type", "customer_segment",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Multiplicity {
@@ -47,7 +51,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            dependencies: [("M6", "M1"), ("M6R", "M1"), ("M6U", "M1")]
+            dependencies: [("M6", "M1"), ("M6R", "M1"), ("M6U", "M1"), ("M10", "M1")]
                 .iter()
                 .map(|(a, b)| (a.to_string(), b.to_string()))
                 .collect(),
