@@ -61,6 +61,7 @@ L-CONSOLE: debug-console/** ; docs/adr/015[0-9]-* ; docs/journal/(018[0-9]|019[0
 L-OPS: Dockerfile ; .dockerignore ; docs/runbooks/** ; docs/dev/** ; scripts/dev-stack/** ; docs/security/** ; docs/contracts/metrics.md ; local/observability/** ; docs/adr/024[0-9]-* ; docs/journal/(032[4-9]|033[0-9])-* ; local/compose.d/l-ops.yaml
 L-BREADTH: seams/crates/artifacts/** ; docs/adr/011[0-9]-* ; docs/journal/(011[6-9]|012[0-9]|013[0-1])-* ; local/compose.d/l-breadth.yaml
 L-INFRA: infra:** ; docs/adr/021[0-9]-* ; docs/journal/(027[6-9]|028[0-9]|029[0-1])-*
+L-EVAL: scripts/battery/** ; agent-core-assets/eval-battery/** ; docs/journal/064[0-5]-*
 ```
 
 ## Planned new paths
