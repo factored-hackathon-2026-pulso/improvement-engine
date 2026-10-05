@@ -1,0 +1,943 @@
+{
+  "agent": "disputas",
+  "finding_case_ids": [
+    "regffbb5234-es-cierre-seguimiento-1",
+    "regffbb5234-pt-cierre-seguimiento-1",
+    "regffbb5234-es-cierre-seguimiento-2",
+    "regffbb5234-pt-cierre-seguimiento-2",
+    "regffbb5234-es-cierre-seguimiento-3",
+    "regffbb5234-pt-cierre-seguimiento-3"
+  ],
+  "finding_id": "finding_reg1_m4",
+  "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+  "guard_case_ids": [
+    "guard-es-monto-alto-escala",
+    "guard-es-fraude-interrumpe",
+    "guard-es-cancela-confirmacion"
+  ],
+  "mechanism": "closing_followup",
+  "meta": {
+    "guard-es-cancela-confirmacion": {
+      "behaviour": "customer says no: cancelled, no write",
+      "check": "native",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "guard",
+      "mechanism": "closing_followup",
+      "source": "pulso-min"
+    },
+    "guard-es-fraude-interrumpe": {
+      "behaviour": "fraud interrupt (queue fraude, nothing written)",
+      "check": "native",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "guard",
+      "mechanism": "closing_followup",
+      "source": "pulso-min"
+    },
+    "guard-es-monto-alto-escala": {
+      "behaviour": "amount escalation policy (> 500 USD escalates, nothing written)",
+      "check": "native",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "guard",
+      "mechanism": "closing_followup",
+      "source": "pulso-min"
+    },
+    "regffbb5234-es-cierre-seguimiento-1": {
+      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (real model samples of the prompt under test)",
+      "check": "native+generated_probe",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "finding",
+      "mechanism": "closing_followup"
+    },
+    "regffbb5234-es-cierre-seguimiento-2": {
+      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (real model samples of the prompt under test)",
+      "check": "native+generated_probe",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "finding",
+      "mechanism": "closing_followup"
+    },
+    "regffbb5234-es-cierre-seguimiento-3": {
+      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (real model samples of the prompt under test)",
+      "check": "native+generated_probe",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "finding",
+      "mechanism": "closing_followup"
+    },
+    "regffbb5234-pt-cierre-seguimiento-1": {
+      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (real model samples of the prompt under test)",
+      "check": "native+generated_probe",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "finding",
+      "mechanism": "closing_followup"
+    },
+    "regffbb5234-pt-cierre-seguimiento-2": {
+      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (real model samples of the prompt under test)",
+      "check": "native+generated_probe",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "finding",
+      "mechanism": "closing_followup"
+    },
+    "regffbb5234-pt-cierre-seguimiento-3": {
+      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (real model samples of the prompt under test)",
+      "check": "native+generated_probe",
+      "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+      "kind": "finding",
+      "mechanism": "closing_followup"
+    }
+  },
+  "probes": [
+    {
+      "case_id": "regffbb5234-es-cierre-seguimiento-1",
+      "inputs": {
+        "facts.pqr_verificada": {
+          "value": {
+            "status": "Open"
+          }
+        }
+      },
+      "kind": "generated_contains",
+      "locale": "es",
+      "must_contain_any": [
+        "seguimiento",
+        "especialista"
+      ],
+      "must_not_match": "\\d",
+      "prompt_id": "p/resumen_radicado",
+      "samples": 3
+    },
+    {
+      "case_id": "regffbb5234-es-cierre-seguimiento-2",
+      "inputs": {
+        "facts.pqr_verificada": {
+          "value": {
+            "status": "Open"
+          }
+        }
+      },
+      "kind": "generated_contains",
+      "locale": "es",
+      "must_contain_any": [
+        "seguimiento",
+        "especialista"
+      ],
+      "must_not_match": "\\d",
+      "prompt_id": "p/resumen_radicado",
+      "samples": 3
+    },
+    {
+      "case_id": "regffbb5234-es-cierre-seguimiento-3",
+      "inputs": {
+        "facts.pqr_verificada": {
+          "value": {
+            "status": "Open"
+          }
+        }
+      },
+      "kind": "generated_contains",
+      "locale": "es",
+      "must_contain_any": [
+        "seguimiento",
+        "especialista"
+      ],
+      "must_not_match": "\\d",
+      "prompt_id": "p/resumen_radicado",
+      "samples": 3
+    },
+    {
+      "case_id": "regffbb5234-pt-cierre-seguimiento-1",
+      "inputs": {
+        "facts.pqr_verificada": {
+          "value": {
+            "status": "Open"
+          }
+        }
+      },
+      "kind": "generated_contains",
+      "locale": "pt",
+      "must_contain_any": [
+        "acompanhamento",
+        "especialista"
+      ],
+      "must_not_match": "\\d",
+      "prompt_id": "p/resumen_radicado",
+      "samples": 3
+    },
+    {
+      "case_id": "regffbb5234-pt-cierre-seguimiento-2",
+      "inputs": {
+        "facts.pqr_verificada": {
+          "value": {
+            "status": "Open"
+          }
+        }
+      },
+      "kind": "generated_contains",
+      "locale": "pt",
+      "must_contain_any": [
+        "acompanhamento",
+        "especialista"
+      ],
+      "must_not_match": "\\d",
+      "prompt_id": "p/resumen_radicado",
+      "samples": 3
+    },
+    {
+      "case_id": "regffbb5234-pt-cierre-seguimiento-3",
+      "inputs": {
+        "facts.pqr_verificada": {
+          "value": {
+            "status": "Open"
+          }
+        }
+      },
+      "kind": "generated_contains",
+      "locale": "pt",
+      "must_contain_any": [
+        "acompanhamento",
+        "especialista"
+      ],
+      "must_not_match": "\\d",
+      "prompt_id": "p/resumen_radicado",
+      "samples": 3
+    }
+  ],
+  "suite": {
+    "agent_id": "disputas",
+    "id": "reg-disputas-ffbb5234",
+    "repetitions": 3,
+    "scenarios": [
+      {
+        "assertions": [
+          {
+            "event": "engine.response_emitted"
+          },
+          {
+            "event": "engine.response_failed",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "actions_verified": [
+            "radicar_pqr"
+          ],
+          "escalated": false,
+          "outcome": "resolved"
+        },
+        "id": "regffbb5234-es-cierre-seguimiento-1",
+        "principal": {
+          "attrs": {
+            "country": "CO"
+          },
+          "id": "cust-reg-ffbb5234-0"
+        },
+        "seed": {
+          "tools": {
+            "buscar_transacciones": [
+              {
+                "result": [
+                  {
+                    "amount": "120.00",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-reg-1"
+                  }
+                ]
+              }
+            ],
+            "convertir_moneda": [
+              {
+                "result": 120
+              }
+            ],
+            "obtener_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-1",
+                  "status": "Open"
+                }
+              }
+            ],
+            "radicar_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-1",
+                  "status": "Open"
+                }
+              }
+            ],
+            "seleccionar": [
+              {
+                "result": {
+                  "amount": "120.00",
+                  "currency": "USD",
+                  "merchant": "Tienda Aurora",
+                  "transaction_id": "tx-reg-1"
+                }
+              }
+            ]
+          }
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "no reconozco un cargo de 120 dolares en una tienda en linea"
+          },
+          {
+            "answer": "yes",
+            "auth": "step_up",
+            "op": "confirm"
+          }
+        ]
+      },
+      {
+        "assertions": [
+          {
+            "event": "engine.response_emitted"
+          },
+          {
+            "event": "engine.response_failed",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "actions_verified": [
+            "radicar_pqr"
+          ],
+          "escalated": false,
+          "outcome": "resolved"
+        },
+        "id": "regffbb5234-pt-cierre-seguimiento-1",
+        "principal": {
+          "attrs": {
+            "country": "BR"
+          },
+          "id": "cust-reg-ffbb5234-3"
+        },
+        "seed": {
+          "tools": {
+            "buscar_transacciones": [
+              {
+                "result": [
+                  {
+                    "amount": "120.00",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-reg-4"
+                  }
+                ]
+              }
+            ],
+            "convertir_moneda": [
+              {
+                "result": 120
+              }
+            ],
+            "obtener_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-4",
+                  "status": "Open"
+                }
+              }
+            ],
+            "radicar_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-4",
+                  "status": "Open"
+                }
+              }
+            ],
+            "seleccionar": [
+              {
+                "result": {
+                  "amount": "120.00",
+                  "currency": "USD",
+                  "merchant": "Tienda Aurora",
+                  "transaction_id": "tx-reg-4"
+                }
+              }
+            ]
+          }
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "lang": "pt",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "nao reconheco uma cobranca de 120 dolares em uma loja online"
+          },
+          {
+            "answer": "yes",
+            "auth": "step_up",
+            "op": "confirm"
+          }
+        ]
+      },
+      {
+        "assertions": [
+          {
+            "event": "engine.response_emitted"
+          },
+          {
+            "event": "engine.response_failed",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "actions_verified": [
+            "radicar_pqr"
+          ],
+          "escalated": false,
+          "outcome": "resolved"
+        },
+        "id": "regffbb5234-es-cierre-seguimiento-2",
+        "principal": {
+          "attrs": {
+            "country": "CO"
+          },
+          "id": "cust-reg-ffbb5234-1"
+        },
+        "seed": {
+          "tools": {
+            "buscar_transacciones": [
+              {
+                "result": [
+                  {
+                    "amount": "80.00",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-reg-2"
+                  }
+                ]
+              }
+            ],
+            "convertir_moneda": [
+              {
+                "result": 80
+              }
+            ],
+            "obtener_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-2",
+                  "status": "Open"
+                }
+              }
+            ],
+            "radicar_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-2",
+                  "status": "Open"
+                }
+              }
+            ],
+            "seleccionar": [
+              {
+                "result": {
+                  "amount": "80.00",
+                  "currency": "USD",
+                  "merchant": "Tienda Aurora",
+                  "transaction_id": "tx-reg-2"
+                }
+              }
+            ]
+          }
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "me hicieron un cobro indebido, pague dos veces una compra de 80 dolares"
+          },
+          {
+            "answer": "yes",
+            "auth": "step_up",
+            "op": "confirm"
+          }
+        ]
+      },
+      {
+        "assertions": [
+          {
+            "event": "engine.response_emitted"
+          },
+          {
+            "event": "engine.response_failed",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "actions_verified": [
+            "radicar_pqr"
+          ],
+          "escalated": false,
+          "outcome": "resolved"
+        },
+        "id": "regffbb5234-pt-cierre-seguimiento-2",
+        "principal": {
+          "attrs": {
+            "country": "BR"
+          },
+          "id": "cust-reg-ffbb5234-4"
+        },
+        "seed": {
+          "tools": {
+            "buscar_transacciones": [
+              {
+                "result": [
+                  {
+                    "amount": "80.00",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-reg-5"
+                  }
+                ]
+              }
+            ],
+            "convertir_moneda": [
+              {
+                "result": 80
+              }
+            ],
+            "obtener_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-5",
+                  "status": "Open"
+                }
+              }
+            ],
+            "radicar_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-5",
+                  "status": "Open"
+                }
+              }
+            ],
+            "seleccionar": [
+              {
+                "result": {
+                  "amount": "80.00",
+                  "currency": "USD",
+                  "merchant": "Tienda Aurora",
+                  "transaction_id": "tx-reg-5"
+                }
+              }
+            ]
+          }
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "lang": "pt",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "tive uma cobranca indevida, paguei duas vezes uma compra de 80 dolares"
+          },
+          {
+            "answer": "yes",
+            "auth": "step_up",
+            "op": "confirm"
+          }
+        ]
+      },
+      {
+        "assertions": [
+          {
+            "event": "engine.response_emitted"
+          },
+          {
+            "event": "engine.response_failed",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "actions_verified": [
+            "radicar_pqr"
+          ],
+          "escalated": false,
+          "outcome": "resolved"
+        },
+        "id": "regffbb5234-es-cierre-seguimiento-3",
+        "principal": {
+          "attrs": {
+            "country": "CO"
+          },
+          "id": "cust-reg-ffbb5234-2"
+        },
+        "seed": {
+          "tools": {
+            "buscar_transacciones": [
+              {
+                "result": [
+                  {
+                    "amount": "45.00",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-reg-3"
+                  }
+                ]
+              }
+            ],
+            "convertir_moneda": [
+              {
+                "result": 45
+              }
+            ],
+            "obtener_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-3",
+                  "status": "Open"
+                }
+              }
+            ],
+            "radicar_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-3",
+                  "status": "Open"
+                }
+              }
+            ],
+            "seleccionar": [
+              {
+                "result": {
+                  "amount": "45.00",
+                  "currency": "USD",
+                  "merchant": "Tienda Aurora",
+                  "transaction_id": "tx-reg-3"
+                }
+              }
+            ]
+          }
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "hay un cargo de 45 dolares que no hice en una tienda"
+          },
+          {
+            "answer": "yes",
+            "auth": "step_up",
+            "op": "confirm"
+          }
+        ]
+      },
+      {
+        "assertions": [
+          {
+            "event": "engine.response_emitted"
+          },
+          {
+            "event": "engine.response_failed",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "actions_verified": [
+            "radicar_pqr"
+          ],
+          "escalated": false,
+          "outcome": "resolved"
+        },
+        "id": "regffbb5234-pt-cierre-seguimiento-3",
+        "principal": {
+          "attrs": {
+            "country": "BR"
+          },
+          "id": "cust-reg-ffbb5234-5"
+        },
+        "seed": {
+          "tools": {
+            "buscar_transacciones": [
+              {
+                "result": [
+                  {
+                    "amount": "45.00",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-reg-6"
+                  }
+                ]
+              }
+            ],
+            "convertir_moneda": [
+              {
+                "result": 45
+              }
+            ],
+            "obtener_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-6",
+                  "status": "Open"
+                }
+              }
+            ],
+            "radicar_pqr": [
+              {
+                "result": {
+                  "id": "pqr-reg-6",
+                  "status": "Open"
+                }
+              }
+            ],
+            "seleccionar": [
+              {
+                "result": {
+                  "amount": "45.00",
+                  "currency": "USD",
+                  "merchant": "Tienda Aurora",
+                  "transaction_id": "tx-reg-6"
+                }
+              }
+            ]
+          }
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "lang": "pt",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "ha uma cobranca de 45 dolares que eu nao fiz em uma loja"
+          },
+          {
+            "answer": "yes",
+            "auth": "step_up",
+            "op": "confirm"
+          }
+        ]
+      },
+      {
+        "assertions": [
+          {
+            "event": "engine.escalated",
+            "where": [
+              {
+                "field": "reason_code",
+                "op": "eq",
+                "value": "policy:escalamiento-disputa-monto"
+              }
+            ]
+          },
+          {
+            "event": "engine.action_verified",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "escalated": true,
+          "outcome": "escalated"
+        },
+        "id": "guard-es-monto-alto-escala",
+        "principal": {
+          "attrs": {
+            "country": "CO"
+          },
+          "id": "cust-min-002"
+        },
+        "seed": {
+          "tools": {
+            "buscar_transacciones": [
+              {
+                "result": [
+                  {
+                    "amount": "600.00",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-9"
+                  }
+                ]
+              }
+            ],
+            "convertir_moneda": [
+              {
+                "result": 600
+              }
+            ],
+            "seleccionar": [
+              {
+                "result": {
+                  "amount": "600.00",
+                  "currency": "USD",
+                  "merchant": "Tienda Aurora",
+                  "transaction_id": "tx-9"
+                }
+              }
+            ]
+          }
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "no reconozco un cargo de 600 dólares en una tienda"
+          }
+        ]
+      },
+      {
+        "assertions": [
+          {
+            "event": "engine.escalated",
+            "where": [
+              {
+                "field": "target_queue",
+                "op": "eq",
+                "value": "fraude"
+              }
+            ]
+          },
+          {
+            "event": "engine.action_verified",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "escalated": true,
+          "outcome": "escalated"
+        },
+        "id": "guard-es-fraude-interrumpe",
+        "principal": {
+          "attrs": {
+            "country": "CO"
+          },
+          "id": "cust-min-004"
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "me robaron la tarjeta y hay un fraude, alguien está comprando con mis datos"
+          }
+        ]
+      },
+      {
+        "assertions": [
+          {
+            "event": "engine.action_verified",
+            "expect": "none"
+          }
+        ],
+        "expect": {
+          "escalated": false,
+          "outcome": "cancelled"
+        },
+        "id": "guard-es-cancela-confirmacion",
+        "principal": {
+          "attrs": {
+            "country": "CO"
+          },
+          "id": "cust-min-009"
+        },
+        "seed": {
+          "tools": {
+            "buscar_transacciones": [
+              {
+                "result": [
+                  {
+                    "amount": "120.50",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-1"
+                  },
+                  {
+                    "amount": "30.00",
+                    "currency": "USD",
+                    "merchant": "Tienda Aurora",
+                    "transaction_id": "tx-2"
+                  }
+                ]
+              }
+            ],
+            "convertir_moneda": [
+              {
+                "result": 120.5
+              }
+            ],
+            "obtener_pqr": [
+              {
+                "result": {
+                  "id": "pqr-min-1",
+                  "status": "Open"
+                }
+              }
+            ],
+            "radicar_pqr": [
+              {
+                "result": {
+                  "id": "pqr-min-1",
+                  "status": "Open"
+                }
+              }
+            ],
+            "seleccionar": [
+              {
+                "result": {
+                  "amount": "120.50",
+                  "currency": "USD",
+                  "merchant": "Tienda Aurora",
+                  "transaction_id": "tx-1"
+                }
+              }
+            ]
+          }
+        },
+        "steps": [
+          {
+            "auth": "session",
+            "op": "start"
+          },
+          {
+            "auth": "session",
+            "op": "turn",
+            "text": "no reconozco un cargo de 120 dólares"
+          },
+          {
+            "answer": "no",
+            "auth": "step_up",
+            "op": "confirm"
+          }
+        ]
+      }
+    ],
+    "thresholds": {},
+    "version": "1.0.0"
+  },
+  "target": "prompt:p/resumen_radicado"
+}
