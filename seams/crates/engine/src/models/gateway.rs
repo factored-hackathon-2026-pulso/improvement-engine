@@ -54,7 +54,7 @@ impl Gateway {
 }
 
 /// `host:port` whose host is `localhost`, a loopback IP or an RFC1918 / unique-local IP literal. Names are not resolved.
-fn private_host(addr: &str) -> bool {
+pub(crate) fn private_host(addr: &str) -> bool {
     let Some((host, port)) = addr.rsplit_once(':') else { return false };
     if port.parse::<u16>().is_err() {
         return false;
