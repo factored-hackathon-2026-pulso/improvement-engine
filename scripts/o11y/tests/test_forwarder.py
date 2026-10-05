@@ -37,6 +37,13 @@ class MockLangfuse:
                     self.send_response(401)
                     self.end_headers()
                     return
+                if self.headers.get("Content-Type") == "application/x-protobuf":
+                    assert self.headers.get("x-langfuse-ingestion-version") == "4"
+                    outer.got.append((self.path, {"raw": body, "ct": self.headers.get("Content-Type"),
+                                                  "enc": self.headers.get("Content-Encoding")}))
+                    self.send_response(200)
+                    self.end_headers()
+                    return
                 try:
                     doc = json.loads(body)
                     if self.path == "/api/public/otel/v1/traces":
@@ -174,6 +181,45 @@ class ForwarderTests(unittest.TestCase):
             self.assertEqual(srv.server_address[0], "127.0.0.1")
         finally:
             srv.server_close()
+
+
+class ProtobufPassthroughTests(unittest.TestCase):
+    def _run(self, payload, encoding):
+        lf = MockLangfuse()
+        try:
+            f = fw.Forwarder({"LANGFUSE_BASE_URL": lf.url, "LANGFUSE_PUBLIC_KEY": PK, "LANGFUSE_SECRET_KEY": SK},
+                             False, sleep=lambda s: None)
+            srv = fw.make_server(f, 0)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            hdrs = {"Content-Type": "application/x-protobuf"}
+            if encoding:
+                hdrs["Content-Encoding"] = encoding
+            r = urllib.request.urlopen(urllib.request.Request(
+                f"http://127.0.0.1:{srv.server_address[1]}/v1/traces", data=payload, headers=hdrs, method="POST"))
+            self.assertEqual(r.status, 200)
+            while f.drain_once():
+                pass
+            srv.shutdown()
+            srv.server_close()
+            return lf.got, lf.bad
+        finally:
+            lf.close()
+
+    def test_byte_exact(self):
+        payload = bytes(range(256)) * 3 + b"Bearer not-masked-in-binary"
+        got, bad = self._run(payload, None)
+        self.assertEqual(bad, [])
+        self.assertEqual(got[0][0], "/api/public/otel/v1/traces")
+        self.assertEqual(got[0][1]["raw"], payload)
+        self.assertEqual(got[0][1]["ct"], "application/x-protobuf")
+        self.assertIsNone(got[0][1]["enc"])
+
+    def test_gzip_passthrough(self):
+        import gzip
+        payload = gzip.compress(bytes([10, 2, 8, 1]) * 50)
+        got, _ = self._run(payload, "gzip")
+        self.assertEqual(got[0][1]["raw"], payload)
+        self.assertEqual(got[0][1]["enc"], "gzip")
 
 
 class ContentDefaultTests(unittest.TestCase):

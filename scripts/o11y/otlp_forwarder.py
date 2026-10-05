@@ -1,6 +1,7 @@
 """LOCAL OTLP/HTTP forwarder (O11Y1): the single egress to Langfuse for services that cannot do TLS or hold keys.
 
-Listens on 127.0.0.1 only. `POST /v1/traces` (OTLP JSON) is masked (bearer tokens, sk-/pk-lf- keys, JWTs, key=value
+Listens on 127.0.0.1 only. `POST /v1/traces` as application/x-protobuf (the Go OTel exporter, optionally gzip) is
+forwarded byte-exact (not maskable). `POST /v1/traces` as OTLP JSON is masked (bearer tokens, sk-/pk-lf- keys, JWTs, key=value
 secrets in every string), queued, batched and forwarded to LANGFUSE_BASE_URL/api/public/otel/v1/traces with Basic
 auth (public:secret) and `x-langfuse-ingestion-version: 4`. `POST /v1/scores` goes to /api/public/scores. Retries with
 exponential backoff on 429/5xx/network errors (honours Retry-After); minimum intervals keep ingestion under
@@ -68,13 +69,17 @@ class Forwarder:
         self.stats = {"forwarded": 0, "failed": 0, "retries": 0}
         self._last = {"traces": 0.0, "scores": 0.0}
 
-    def post(self, kind: str, body: dict) -> None:
+    def post(self, kind: str, body: dict, raw: bytes | None = None, content_type: str = "application/json",
+             encoding: str | None = None) -> None:
+        """`raw` (protobuf, optionally gzip) is forwarded byte-exact with its Content-Type/Content-Encoding."""
         path, gap = (("/api/public/otel/v1/traces", TRACE_INTERVAL) if kind == "traces"
                      else ("/api/public/scores", SCORE_INTERVAL))
-        headers = {"Authorization": f"Basic {self.auth}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Basic {self.auth}", "Content-Type": content_type}
+        if encoding:
+            headers["Content-Encoding"] = encoding
         if kind == "traces":
             headers["x-langfuse-ingestion-version"] = "4"
-        data = json.dumps(body, separators=(",", ":")).encode()
+        data = raw if raw is not None else json.dumps(body, separators=(",", ":")).encode()
         for attempt in range(self.max_retries + 1):
             wait = gap - (time.monotonic() - self._last[kind])
             if wait > 0:
@@ -101,6 +106,10 @@ class Forwarder:
     def enqueue(self, kind: str, body: dict) -> None:
         self.q.put((kind, mask_value(body)))
 
+    def enqueue_raw(self, raw: bytes, content_type: str, encoding: str | None) -> None:
+        """Protobuf bodies are opaque: no masking or merging is possible, they are passed through unchanged."""
+        self.q.put(("raw", (raw, content_type, encoding)))
+
     def drain_once(self) -> int:
         """Take what is queued, merge trace batches, forward. Returns items handled."""
         items = []
@@ -109,6 +118,12 @@ class Forwarder:
                 items.append(self.q.get_nowait())
         except queue.Empty:
             pass
+        for k, b in items:
+            if k == "raw":
+                try:
+                    self.post("traces", {}, raw=b[0], content_type=b[1], encoding=b[2])
+                except RuntimeError as e:
+                    print(f"forwarder: traces dropped: {e}", file=sys.stderr)
         traces = [b for k, b in items if k == "traces"]
         if traces:
             self._safe("traces", merge_batches(traces))
@@ -133,6 +148,14 @@ def make_server(fwd: Forwarder, port: int) -> ThreadingHTTPServer:
     class H(BaseHTTPRequestHandler):
         def do_POST(self):  # noqa: N802
             kind = {"/v1/traces": "traces", "/v1/scores": "scores"}.get(self.path)
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if kind == "traces" and ctype == "application/x-protobuf":
+                raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                fwd.enqueue_raw(raw, "application/x-protobuf", self.headers.get("Content-Encoding"))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-protobuf")
+                self.end_headers()
+                return
             try:
                 if kind is None:
                     raise ValueError("path")
