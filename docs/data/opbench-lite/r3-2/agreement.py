@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare blinded human rubric labels with row-level judge scores. Stdlib only."""
+"""Compare pass-1 rubric labels with row-level judge scores. Stdlib only."""
 
 import argparse
 import json
@@ -155,13 +155,13 @@ def compare(golden, judge_output):
                 "proposal_gate_agreement": proposal_gate,
                 "per_criterion": judge_output.get("per_criterion"),
                 "cohen_kappa_unweighted": None,
-                "cohen_kappa_note": "Aggregate-only output omits agreeing rows; kappa cannot be reconstructed and these values are not comparable to the current human labels.",
+                "cohen_kappa_note": "Aggregate-only output omits agreeing rows; kappa cannot be reconstructed and these values are not comparable to the current pass-1 labels.",
                 "not_comparable_to_current_golden": True,
             }
         raise ValueError("row-level judge output or a recognized legacy aggregate summary is required")
     items = golden.get("proposals") or []
-    human = {item["id"]: item["expected"] for item in items}
-    expected_keys = {(pid, criterion) for pid, scores in human.items() for criterion in scores}
+    pass1 = {item["id"]: item["expected"] for item in items}
+    expected_keys = {(pid, criterion) for pid, scores in pass1.items() for criterion in scores}
     rows = judge_output.get("rows")
     if not isinstance(rows, list):
         raise ValueError("row-level judge output must contain a rows array")
@@ -179,7 +179,7 @@ def compare(golden, judge_output):
         if criterion not in JUDGED or isinstance(score, bool) or not isinstance(score, int) or score not in (0, 1, 2):
             raise ValueError(f"invalid judge score for {pid}/{criterion}")
         judged[key] = score
-    paired = [(human[pid][c], judged[(pid, c)], pid, c)
+    paired = [(pass1[pid][c], judged[(pid, c)], pid, c)
               for pid, c in expected_keys if (pid, c) in judged]
     n_expected, n = len(expected_keys), len(paired)
     exact = sum(h == j for h, j, _, _ in paired)
@@ -206,13 +206,13 @@ def compare(golden, judge_output):
         if all(key in judged for key in keys):
             h_delta = sum(good["expected"][c] - bad["expected"][c] for c in criteria)
             j_delta = sum(judged[(good["id"], c)] - judged[(bad["id"], c)] for c in criteria)
-            human_order = (h_delta > 0) - (h_delta < 0)
+            pass1_order = (h_delta > 0) - (h_delta < 0)
             judge_order = (j_delta > 0) - (j_delta < 0)
-            pairwise.append({"pair_id": pair_id, "human_order": human_order,
-                             "judge_order": judge_order, "agree": human_order == judge_order})
+            pairwise.append({"pair_id": pair_id, "pass1_order": pass1_order,
+                             "judge_order": judge_order, "agree": pass1_order == judge_order})
     return {
         "status": "exercised" if n else "not_exercised",
-        "label_source": "blind_manual_labels",
+        "label_source": "pass1_unblinded_codex_labels",
         "judge_rows_format": judge_output["format"],
         "n_expected": n_expected,
         "n_compared": n,
@@ -228,7 +228,7 @@ def compare(golden, judge_output):
         "pairwise_n": len(pairwise),
         "pairwise_winner_agreement": round(sum(p["agree"] for p in pairwise) / len(pairwise), 4) if pairwise else None,
         "pairwise": pairwise,
-        "mismatches": [{"id": pid, "criterion": c, "human": h, "judge": j}
+        "mismatches": [{"id": pid, "criterion": c, "pass1": h, "judge": j}
                        for h, j, pid, c in paired if h != j],
     }
 

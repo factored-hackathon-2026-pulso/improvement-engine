@@ -48,12 +48,33 @@ class AgreementTests(unittest.TestCase):
 
     def test_reports_exact_within_one_zero_gate_and_kappa(self):
         report = compare(self.golden, self.judge)
+        self.assertEqual("pass1_unblinded_codex_labels", report["label_source"])
         self.assertEqual(12, report["n_compared"])
         self.assertEqual(1.0, report["exact_agreement"])
         self.assertEqual(1.0, report["within_one_agreement"])
         self.assertEqual(1.0, report["hard_gate_agreement"])
         self.assertEqual(1.0, report["cohen_kappa_unweighted"])
         self.assertEqual(1.0, report["pairwise_winner_agreement"])
+        self.assertIn("pass1_order", report["pairwise"][0])
+        self.assertNotIn("human_order", report["pairwise"][0])
+
+    def test_incomplete_judge_pair_is_not_included_in_pairwise_ranking(self):
+        golden = {"proposals": [*self.golden["proposals"],
+                                proposal("p-good-2", "pair-2", "good", {c: 2 for c in JUDGED}),
+                                proposal("p-bad-2", "pair-2", "bad", {c: 0 for c in JUDGED})]}
+        report = compare(golden, self.judge)
+        self.assertEqual(24, report["n_expected"])
+        self.assertEqual(12, report["n_compared"])
+        self.assertEqual(1, report["pairwise_n"])
+        self.assertEqual(["pair-1"], [pair["pair_id"] for pair in report["pairwise"]])
+
+    def test_mismatch_output_names_pass1_not_human(self):
+        judge = {"format": "pulso.judge-rows.v1", "rows": [dict(row) for row in self.judge["rows"]]}
+        judge["rows"][0]["score"] = 1
+        mismatch = compare(self.golden, judge)["mismatches"][0]
+        self.assertEqual(2, mismatch["pass1"])
+        self.assertEqual(1, mismatch["judge"])
+        self.assertNotIn("human", mismatch)
 
     def test_refuses_aggregate_only_calibration_output_for_kappa(self):
         with self.assertRaisesRegex(ValueError, "row-level"):
@@ -70,6 +91,7 @@ class AgreementTests(unittest.TestCase):
         self.assertEqual(0.986, report["within_one_agreement"])
         self.assertEqual(0.97, report["hard_gate_agreement"])
         self.assertIsNone(report["cohen_kappa_unweighted"])
+        self.assertIn("pass-1 labels", report["cohen_kappa_note"])
         self.assertTrue(report["not_comparable_to_current_golden"])
 
     def test_not_exercised_summary_reports_no_agreement_metrics(self):
