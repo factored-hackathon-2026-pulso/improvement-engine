@@ -225,3 +225,8 @@ platform-contract/ (schemas, event catalog, golden, conformance; 19 tests) and p
 - Re-ran the full Windows `scripts/verify-local-ci.ps1` on the merged tree; exit 0. This confirms the local Rust/Python/fixture/Pester gates on the exact integrated code. The final original-source smoke also passed after the merge: contacts 25 partitions / 16,277 descriptive rows / 48 visible cells; complaints 25 / 1,452 / 19. Aggregates only; partial final-extract evidence, not replay, causal lift, ROI, or production acceptance.
 - The only skipped/unverified categories remain explicit opt-ins (isolated/destructive PostgreSQL tests and one Podman container test); fixture checks still report six wire contracts pending. E0 remains fail-closed on the undeclared `turn.evidence_ids -> identity_check.check_id` relation. The full V3 product acceptance is not claimed.
 - Next action is to publish this fast-forward to the existing PR #95, replace its stale description with the actual scope/results/gaps, and mark it ready for review. No merge or new feature is authorized in this closing turn.
+
+## 2026-10-05T00:24:48Z UTC — CLAUDE — TR1 trigger poller prototype
+
+- `scripts/triggers/agentcore_poller.py`: pull-only poller of agent-core `/v1/export` (runs, run events, registry events) with persisted cursor; `run.closed` and `release.*` plus `explicit` and `scheduled` become `pulso.trigger.v1` requests keyed by sha256 (also Idempotency-Key). 12 unit tests pass; live run against the local agent-core emitted 6 run.closed with a silent replay (admin token used as exporter; no release.* seen live).
+- Gap: debug-api has no trigger-accepting endpoint; proposed `POST /internal/v1/automation/triggers` (L-CAPI). No agent-core change needed. See scripts/triggers/README.md.

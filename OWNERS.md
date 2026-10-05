@@ -52,7 +52,7 @@ L-E2E: e2e-core/** ; demo/** ; scripts/e0/** ; docs/reports/demo-quejas/** ; sea
 L-PLAT: platform-contract/** ; platform-exporter/** ; platform-sim/** ; contracts/product/** ; seams/crates/control-api/src/correlation/** ; migrations/007[0-4]_* ; docs/adr/026[0-9]-* ; docs/journal/(035[6-9]|036[0-9]|037[0-1])-* ; local/compose.d/l-plat.yaml
 L-CLIENT: seams/scripts/** ; seams/Cargo.toml ; seams/Cargo.lock ; seams/README.md ; seams/crates/core-client/** ; seams/crates/model-client/** ; docs/adr/014[0-9]-* ; docs/journal/(016[4-9]|017[0-9])-* ; local/compose.d/l-client.yaml
 L-ENGINE: seams/crates/abi/** ; seams/crates/engine/** ; contracts/engine-handlers/** ; seams/crates/steps/** ; seams/crates/swap/** ; docs/adr/017[0-9]-* ; docs/journal/(021[2-9]|022[0-7])-* ; local/compose.d/l-engine.yaml
-L-CAPI: seams/crates/control-api/** ; seams/crates/debug-api/** ; seams/crates/maturity/** ; contracts/control-api/** ; migrations/008[5-9]_* ; docs/adr/013[0-9]-* ; docs/journal/(014[8-9]|015[0-9]|016[0-3])-* ; local/compose.d/l-capi.yaml
+L-CAPI: seams/crates/control-api/** ; seams/crates/debug-api/** ; seams/crates/maturity/** ; contracts/control-api/** ; migrations/008[5-9]_* ; docs/adr/013[0-9]-* ; docs/journal/(014[8-9]|015[0-9]|016[0-3])-* ; local/compose.d/l-capi.yaml ; scripts/triggers/**
 L-PG: docs/reports/pglive/** ; seams/crates/pg/** ; seams/crates/sources/** ; db/** ; seams/crates/worker/** ; local/pg/** ; migrations/00[56][0-9]_* ; docs/adr/025[0-9]-* ; docs/journal/(034[0-9]|035[0-5])-* ; local/compose.d/l-pg.yaml
 L-EVAL: seams/crates/eval/** ; agent-core-assets/eval-suites/** ; migrations/009[0-4]_* ; docs/adr/019[0-9]-* ; docs/journal/(024[4-9]|025[0-9])-* ; local/compose.d/l-eval.yaml
 L-AUTH: seams/crates/authority/** ; local-identity/** ; migrations/008[0-4]_* ; docs/adr/010[0-9]-* ; docs/journal/(010[0-9]|011[0-5])-* ; local/compose.d/l-auth.yaml
@@ -125,6 +125,7 @@ docs/security/threat-model.md -> L-OPS
 docs/lanes/l-pg/notes.md -> L-GOV
 scripts/env/baseline.ps1 -> L-ENV
 scripts/gov/w0-receipt.ps1 -> L-GOV
+scripts/triggers/agentcore_poller.py -> L-CAPI
 scripts/dc/scan.py -> L-MODEL
 scripts/verify-local-all.ps1 -> L-ENV
 tests/verify-local-all.Tests.ps1 -> L-ENV

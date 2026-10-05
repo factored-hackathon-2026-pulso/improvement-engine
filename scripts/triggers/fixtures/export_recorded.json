@@ -1,0 +1,223 @@
+{
+ "_label": "RECORDED from local agent-core (claude/l3-local-stack, 2026-10-05, synthetic input); events trimmed to run_closed",
+ "runs": {
+  "items": [
+   {
+    "run_seq": 1,
+    "cursor": 746,
+    "run_id": "01a10944-0f85-70ea-96a5-8e4430261810",
+    "session_id": null,
+    "release": "rel-b3a1f9ea8cd2523c",
+    "agent": {
+     "id": "pulso-builder",
+     "version": "1.0.0"
+    },
+    "principal_type": "builder",
+    "mode": "task",
+    "locale": "es",
+    "status": "closed",
+    "outcome": "completed",
+    "created_at": "2026-10-04T23:33:37.797247Z",
+    "closed_at": "2026-10-04T23:33:42.539022Z"
+   },
+   {
+    "run_seq": 2,
+    "cursor": 754,
+    "run_id": "01a10944-24b0-787e-9750-6b098fea1827",
+    "session_id": null,
+    "release": "rel-b3a1f9ea8cd2523c",
+    "agent": {
+     "id": "pulso-builder",
+     "version": "1.0.0"
+    },
+    "principal_type": "builder",
+    "mode": "task",
+    "locale": "es",
+    "status": "closed",
+    "outcome": "completed",
+    "created_at": "2026-10-04T23:33:43.216351Z",
+    "closed_at": "2026-10-04T23:34:01.724027Z"
+   }
+  ],
+  "next_after": 754
+ },
+ "events": {
+  "01a10944-0f85-70ea-96a5-8e4430261810": {
+   "items": [
+    {
+     "event_id": "01a10944-220b-785b-8ba3-d416b8cc7fd4",
+     "run_id": "01a10944-0f85-70ea-96a5-8e4430261810",
+     "turn_id": "01a10944-0f85-7d14-9abc-64f03a5b1b73",
+     "session_id": null,
+     "release": "rel-b3a1f9ea8cd2523c",
+     "ts": "2026-10-04T23:33:42.539022Z",
+     "seq": 21,
+     "prev_hash": "3e53233437b4bd3893e1b3df521fbfc399d20e6c16f209c09d0a5affb649e950",
+     "hash": "7ecb4e1b73595eb44ee8bc1ed33d73725acfade1aee40b7b2208ed351b313c0d",
+     "type": "run_closed",
+     "payload": {
+      "outcome": "completed",
+      "closed_by": "flow"
+     }
+    }
+   ],
+   "next_after": 22
+  },
+  "01a10944-24b0-787e-9750-6b098fea1827": {
+   "items": [
+    {
+     "event_id": "01a10944-6cfc-7b2e-a618-c31f4ea8c309",
+     "run_id": "01a10944-24b0-787e-9750-6b098fea1827",
+     "turn_id": "01a10944-24b0-7556-9f4b-5f0c2154099d",
+     "session_id": null,
+     "release": "rel-b3a1f9ea8cd2523c",
+     "ts": "2026-10-04T23:34:01.724027Z",
+     "seq": 21,
+     "prev_hash": "7d1e449d881c2e396c1cbe53c2eef8fa7fadf730ec7600df5b4d6dfdb4fb12f4",
+     "hash": "78d670cdff19f967a68084de469fc644c63155769f23fd3c59416b689afc3d6e",
+     "type": "run_closed",
+     "payload": {
+      "outcome": "completed",
+      "closed_by": "flow"
+     }
+    }
+   ],
+   "next_after": 22
+  }
+ },
+ "registry": {
+  "items": [
+   {
+    "type": "imported",
+    "actor": "root",
+    "principal_type": "builder",
+    "origin": null,
+    "proposal_id": null,
+    "candidate_hash": null,
+    "release_id": "rel-b3a1f9ea8cd2523c",
+    "at": "2026-10-04T23:33:28.390022Z"
+   },
+   {
+    "type": "proposal_created",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10944-2059-7f78-9a03-3af2882cc83d",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:33:42.105721Z"
+   },
+   {
+    "type": "draft_updated",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10944-2059-7f78-9a03-3af2882cc83d",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:33:42.262423Z"
+   },
+   {
+    "type": "proposal_created",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10944-6c1b-79ad-bf70-8896e4b7aacc",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:34:01.499994Z"
+   },
+   {
+    "type": "draft_updated",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10944-6c1b-79ad-bf70-8896e4b7aacc",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:34:01.608105Z"
+   },
+   {
+    "type": "proposal_created",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10945-2e8e-7ae3-b5ca-e82c0c378cbb",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:34:51.290496Z"
+   },
+   {
+    "type": "draft_updated",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10945-2e8e-7ae3-b5ca-e82c0c378cbb",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:34:51.399109Z"
+   },
+   {
+    "type": "proposal_created",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10946-03f1-7abe-b52a-9c6ba2b129a0",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:35:45.910448Z"
+   },
+   {
+    "type": "draft_updated",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10946-03f1-7abe-b52a-9c6ba2b129a0",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:35:46.000959Z"
+   },
+   {
+    "type": "proposal_created",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10946-30bf-738b-8688-25e773e853d5",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:35:57.376467Z"
+   },
+   {
+    "type": "draft_updated",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10946-30bf-738b-8688-25e773e853d5",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:35:57.503720Z"
+   },
+   {
+    "type": "proposal_created",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10946-5681-7c30-acab-a7a0969d8e8f",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:36:07.042325Z"
+   },
+   {
+    "type": "draft_updated",
+    "actor": "constructor-bot",
+    "principal_type": "builder",
+    "origin": "auto_detect",
+    "proposal_id": "01a10946-5681-7c30-acab-a7a0969d8e8f",
+    "candidate_hash": null,
+    "release_id": null,
+    "at": "2026-10-04T23:36:07.144494Z"
+   }
+  ],
+  "next_after": 13
+ }
+}
