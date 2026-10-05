@@ -60,7 +60,7 @@ fn alternatives_schema() -> Value {
 }
 
 fn targets_input(row: &Row) -> Value {
-    Value::Array(row.targets.iter().map(|t| json!({"target_ref": t.target_ref, "kind": t.kind, "agent": t.agent, "mechanisms": t.mechanisms})).collect())
+    Value::Array(row.targets.iter().map(|t| json!({"target_ref": t.target_ref, "kind": t.kind, "agent": t.agent, "mechanisms": t.mechanisms, "rank": t.rank})).collect())
 }
 
 pub fn scout_request(f: &Finding, row: &Row, dc: DataClass) -> ModelRequest {
@@ -69,6 +69,8 @@ pub fn scout_request(f: &Finding, row: &Row, dc: DataClass) -> ModelRequest {
     inputs["allowed_targets"] = targets_input(row);
     inputs["link_grade"] = json!(row.link_grade);
     inputs["caveats"] = json!(row.caveats);
+    inputs["topic"] = json!(row.topic);
+    inputs["mapping_claim"] = json!("hypothesis_of_where_to_intervene_not_a_cause");
     inputs["claim_window"] = json!("w1");
     inputs["opportunity_id"] = json!("h_1");
     let schema = obj(

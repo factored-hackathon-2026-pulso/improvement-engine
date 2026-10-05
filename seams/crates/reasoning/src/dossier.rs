@@ -436,6 +436,13 @@ fn risks(l: Lang, proposal: &Value, finding: &Value) -> String {
     let cascade = proposal["cascade"].as_array().map_or(0, Vec::len);
     let humans = proposal["human_items"].as_array().map_or(0, Vec::len);
     let mut s = String::new();
+    let m = &proposal["expected_effect"]["mapping"];
+    if let (Some(rank), Some(total)) = (m["rank"].as_u64(), m["candidates_total"].as_u64()) {
+        s.push_str(&l.t(
+            &format!("Hipótesis de dónde intervenir, no una causa (candidato {rank} de {total}). "),
+            &format!("Hipótese de onde intervir, não uma causa (candidato {rank} de {total}). "),
+        ));
+    }
     if !unc.is_empty() {
         s.push_str(&unc);
         s.push(' ');
@@ -572,7 +579,7 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
             ("coverage", l.t("Qué se midió", "O que foi medido"), 560),
             ("expected_effect", l.t("Efecto esperado", "Efeito esperado"), 240),
             ("measurement", l.t("Cómo se evaluará", "Como será avaliado"), 260),
-            ("risks", l.t("Riesgo", "Risco"), 300),
+            ("risks", l.t("Riesgo", "Risco"), 380),
             ("unchanged", l.t("Qué no cambia", "O que não muda"), 200),
             ("honesty", l.t("Etiquetas", "Rótulos"), 300),
             ("next_step", l.t("Siguiente paso humano", "Próximo passo humano"), 220),

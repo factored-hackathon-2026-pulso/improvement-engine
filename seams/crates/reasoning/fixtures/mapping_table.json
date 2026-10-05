@@ -1,0 +1,221 @@
+{
+  "contract": "reasoning.mapping_table/1",
+  "label": "hypothesis_table",
+  "notice": {
+    "en": "A row says WHERE an intervention could be tried for a cell. It is a hypothesis of where to intervene, never a cause: the cells are associations and a contact is not linkable to a complaint.",
+    "es": "Una fila dice DONDE se podria probar una intervencion para una celda. Es una hipotesis de donde intervenir, nunca una causa: las celdas son asociaciones y un contacto no se enlaza con una queja.",
+    "pt": "Uma linha diz ONDE uma intervencao poderia ser testada para uma celula. E uma hipotese de onde intervir, nunca uma causa: as celulas sao associacoes e um contato nao se liga a uma reclamacao."
+  },
+  "provenance": {
+    "authored": "2026-10-05",
+    "lane": "MAP1",
+    "ordering_rule": "1 prefer a patch of an EXISTING artifact when an existing agent covers the topic (user priority: new agents, prompt changes, links to existing tools, policies, flows; a new agent only for an UNCOVERED topic); 2 at equal footing, candidates whose proof can run and be announced now come first (announceable_now); 3 a candidate never leaves the closed kinds patch and new_agent (policy values, interrupts, injection rulesets, language detection, tools, release_settings, constructor-chat, pulso-* agents and model profiles are not representable)",
+    "sources": {
+      "anatomy": "docs/reports-claude/ARTIFACT_ANATOMY_AND_RUBRIC_2026-10-04.md (agent-core registry-e2e fixtures at f91ac44)",
+      "bank_audit": "docs/reports-claude/BANK_DATA_AUDIT_2026-10-04.md (F02 uncovered reasons, section 5 mapping)",
+      "star_story": "docs/reports-claude/STAR_STORY_QUEJAS_2026-10-04.md",
+      "live_passes": "docs/reports/b3-live-pass.md and docs/dev/DEMO_LOOP.md (DEMO1/INTEG5: new-agent proposals end not_announced:infra_failed, put_draft forbidden_role 403)"
+    }
+  },
+  "topics": {
+    "complaint_followup": {
+      "covered_by": ["consultas", "disputas", "copiloto-asesor"],
+      "why": "Complaint (PQR) follow-up is served today: consultas answers status inquiries, disputas files card-charge disputes (about a third of the complaints), copiloto-asesor is the advisor-side copilot for phone contacts. The finding says WHERE contacts stay unresolved, not why.",
+      "evidence": "ANATOMY sections 1.1, 1.3, 1.4 and F2; STAR_STORY 1a, 1d"
+    },
+    "uncovered_reason": {
+      "covered_by": [],
+      "why": "Tecnico, Comercial and Retencion contacts have no specialist in the directory (recepcion routes only to disputas and consultas); 46 percent of the unresolved contacts sit in reasons without a specialist.",
+      "evidence": "BANK_DATA_AUDIT F02 and section 5; ANATOMY 1.2 and R3"
+    },
+    "pqr_status": {
+      "covered_by": ["consultas"],
+      "why": "A PQR backlog finding (open or SLA-breached by category) lands on the status message of consultas.",
+      "evidence": "ANATOMY F2 and C1"
+    },
+    "advisor_repeated_lookup": {
+      "covered_by": ["copiloto-asesor"],
+      "why": "The same recent-charges lookup repeated inside a dispute case is the advisor copilot's tool-choice step.",
+      "evidence": "ANATOMY P1 and Example 1"
+    }
+  },
+  "rows": [
+    {
+      "id": "complaint_unresolved",
+      "topic": "complaint_followup",
+      "match": {"metric": ["M1"], "dims": {"reason_category": ["Queja"]}},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "tool_failure_and_low_confidence_escalations_not_worse",
+      "caveats": ["only_part_of_complaints_are_disputes", "contact_and_complaint_not_linkable", "where_not_why", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "template:t/estado_pqr", "kind": "patch", "agent": "consultas",
+          "placeholders": ["facts.pqr.value.status"], "mechanisms": ["status_message_gap", "wording"],
+          "justification": "Unresolved complaint contacts are largely 'where is my claim'; consultas covers that topic and its t/estado_pqr answers every status request with one static sentence that never reads the PQR state.",
+          "evidence": "ANATOMY F2 / C1; STAR_STORY 1a (open PQR backlog)",
+          "proof_support": "suite:status_message_gap", "announceable_now": true
+        },
+        {
+          "rank": 2, "target_ref": "prompt:p/resumen_radicado", "kind": "patch", "agent": "disputas",
+          "placeholders": [], "mechanisms": ["closing_followup", "wording"],
+          "justification": "A share of complaints are card-charge disputes covered by disputas; its generated closing message confirms the filing but does not say who follows the case up.",
+          "evidence": "ANATOMY D2 and section 1.1 (36.5 percent of complaints are Cargo no reconocido / Cobro indebido)",
+          "proof_support": "suite:closing_followup", "announceable_now": true
+        },
+        {
+          "rank": 3, "target_ref": "template:t/aclarar_cargo", "kind": "patch", "agent": "disputas",
+          "placeholders": [], "mechanisms": ["wording"],
+          "justification": "The dispute clarify loop answers one short static sentence when no charge matches; a customer who cannot find the charge may call again.",
+          "evidence": "ANATOMY D1",
+          "proof_support": "none", "announceable_now": false
+        },
+        {
+          "rank": 4, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["repeated_lookup", "wording"],
+          "when_dims": {"channel": ["Phone"]},
+          "justification": "Phone contacts are handled by advisors, whose copilot prompt (es and pt differ in length and rules) is the only existing artifact on that path.",
+          "evidence": "ANATOMY P1, P3, F7; STAR_STORY 1d",
+          "proof_support": "none", "announceable_now": false
+        },
+        {
+          "rank": 5, "target_ref": "new_agent:consultas", "kind": "new_agent", "agent": "consultas",
+          "placeholders": [], "slugs": ["intake-quejas"], "mechanisms": ["uncovered_topic"],
+          "justification": "Last resort: only the part of the complaints that no existing agent covers would go to a new intake specialist, which needs an admin for its release settings before it can be announced.",
+          "evidence": "ANATOMY R3, section 2.4; DEMO_LOOP limits",
+          "proof_support": "suite:uncovered_topic", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "uncovered_reason",
+      "topic": "uncovered_reason",
+      "match": {"metric": ["M1"], "dims": {"reason_category": ["Tecnico"]}},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "traffic_of_disputas_and_consultas_via_recepcion_unchanged",
+      "caveats": ["no_specialist_in_directory", "contact_and_complaint_not_linkable", "where_not_why", "mostly_phone_contacts", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "new_agent:consultas", "kind": "new_agent", "agent": "consultas",
+          "placeholders": [], "slugs": ["soporte-tecnico", "soporte-app"], "mechanisms": ["uncovered_topic"],
+          "justification": "No existing agent covers technical contacts, so the topic is uncovered: a narrow intake specialist cloned from consultas, not a claim of resolution.",
+          "evidence": "BANK_DATA_AUDIT F02; ANATOMY 1.2 and R3",
+          "proof_support": "suite:uncovered_topic", "announceable_now": false
+        },
+        {
+          "rank": 2, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["wording"],
+          "when_dims": {"channel": ["Phone"]},
+          "justification": "These contacts are mostly phone calls answered by advisors; the copilot prompt is the existing artifact on the advisor path (hypothesis, there is no regression suite generator for it yet).",
+          "evidence": "BANK_DATA_AUDIT F02 (mostly phone); ANATOMY P1",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "uncovered_reason",
+      "topic": "uncovered_reason",
+      "match": {"metric": ["M1"], "dims": {"reason_category": ["Comercial"]}},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "traffic_of_disputas_and_consultas_via_recepcion_unchanged",
+      "caveats": ["no_specialist_in_directory", "contact_and_complaint_not_linkable", "where_not_why", "mostly_phone_contacts", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "new_agent:consultas", "kind": "new_agent", "agent": "consultas",
+          "placeholders": [], "slugs": ["soporte-comercial"], "mechanisms": ["uncovered_topic"],
+          "justification": "No existing agent covers commercial contacts, so the topic is uncovered: a narrow intake specialist cloned from consultas.",
+          "evidence": "BANK_DATA_AUDIT F02; ANATOMY 1.2 and R3",
+          "proof_support": "suite:uncovered_topic", "announceable_now": false
+        },
+        {
+          "rank": 2, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["wording"],
+          "when_dims": {"channel": ["Phone"]},
+          "justification": "Mostly phone contacts answered by advisors; the copilot prompt is the existing artifact on that path (no suite generator yet).",
+          "evidence": "BANK_DATA_AUDIT F02; ANATOMY P1",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "uncovered_reason",
+      "topic": "uncovered_reason",
+      "match": {"metric": ["M1"], "dims": {"reason_category": ["Retencion"]}},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "traffic_of_disputas_and_consultas_via_recepcion_unchanged",
+      "caveats": ["no_specialist_in_directory", "contact_and_complaint_not_linkable", "where_not_why", "mostly_phone_contacts", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "new_agent:consultas", "kind": "new_agent", "agent": "consultas",
+          "placeholders": [], "slugs": ["soporte-retencion"], "mechanisms": ["uncovered_topic"],
+          "justification": "No existing agent covers retention contacts, so the topic is uncovered: a narrow intake specialist cloned from consultas.",
+          "evidence": "BANK_DATA_AUDIT F02; ANATOMY 1.2 and R3",
+          "proof_support": "suite:uncovered_topic", "announceable_now": false
+        },
+        {
+          "rank": 2, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["wording"],
+          "when_dims": {"channel": ["Phone"]},
+          "justification": "Mostly phone contacts answered by advisors; the copilot prompt is the existing artifact on that path (no suite generator yet).",
+          "evidence": "BANK_DATA_AUDIT F02; ANATOMY P1",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    },
+    {
+      "id": "pqr_status_message",
+      "topic": "pqr_status",
+      "match": {"metric": ["M4", "M5"], "dims_present": ["category"]},
+      "link_grade": "unlinked",
+      "guardrail": "tool_failure_and_low_confidence_escalations_not_worse",
+      "caveats": ["backlog_not_changed_by_a_message", "status_field_shape_unverified_on_real_tool", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "template:t/estado_pqr", "kind": "patch", "agent": "consultas",
+          "placeholders": ["facts.pqr.value.status"], "mechanisms": ["status_message_gap", "wording"],
+          "justification": "consultas covers PQR status inquiries and its status template never reads the status.",
+          "evidence": "ANATOMY F2 / C1",
+          "proof_support": "suite:status_message_gap", "announceable_now": true
+        }
+      ]
+    },
+    {
+      "id": "copilot_repeated_lookup",
+      "topic": "advisor_repeated_lookup",
+      "match": {"metric": ["E1"], "dims": {"case_type": ["dispute"]}},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "fallback_and_gave_up_rate_not_worse",
+      "caveats": ["e0_is_generated_data", "no_draft_acceptance_data", "advisor_agent_not_natively_evaluable", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "placeholders": [], "mechanisms": ["repeated_lookup", "wording"],
+          "justification": "The repeated recent-charges lookup in dispute cases is the tool-choice step of the advisor copilot.",
+          "evidence": "ANATOMY P1 and Example 1",
+          "proof_support": "none", "announceable_now": false
+        }
+      ]
+    }
+  ],
+  "human_owned": [
+    {
+      "id": "policy_dispute_amount",
+      "match": {"dims": {"reason_code": ["policy:escalamiento-disputa-monto"]}},
+      "owner": "riesgo",
+      "evidence": "ANATOMY F6 and D5: the registry policy holds 500 USD, the team policy document says 250 USD (R4)",
+      "note": {
+        "es": "Para una persona (riesgo): la politica de escalamiento de disputas por monto no es un artefacto que el motor pueda proponer; el valor del registro y el del documento de politicas difieren y solo un responsable humano puede decidir cual rige.",
+        "pt": "Para uma pessoa (risco): a politica de escalonamento de disputas por valor nao e um artefato que o motor possa propor; o valor do registro e o do documento de politicas diferem e so um responsavel humano pode decidir qual vale."
+      }
+    },
+    {
+      "id": "calibration_pt_thresholds",
+      "match": {"dims": {"language": ["pt"]}},
+      "owner": "plataforma",
+      "evidence": "ANATOMY F5 and F11: calibration thresholds are keyed by locale and exist only for es; the calibration is not a registry entity",
+      "note": {
+        "es": "Para una persona (plataforma): los umbrales de calibracion existen solo en espanol y no son parte del registro; una debilidad en portugues se corrige ahi, no con un parche de texto propuesto por el motor.",
+        "pt": "Para uma pessoa (plataforma): os limiares de calibracao existem so em espanhol e nao fazem parte do registro; uma fraqueza em portugues se corrige ali, nao com um patch de texto proposto pelo motor."
+      }
+    }
+  ]
+}
