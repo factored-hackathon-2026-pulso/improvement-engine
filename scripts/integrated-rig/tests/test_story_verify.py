@@ -25,13 +25,22 @@ class PureTests(unittest.TestCase):
         good = {"proposal": {"origin": "auto_detect", "state": "draft", "created_by": "pulso-engine"}, "changes": [{"kind": "eval_suite", "docs": {"description": "d"}}]}
         self.assertTrue(all(c["ok"] for c in sv.verify_core(good, "p")))
         bad = {"proposal": {"origin": "human", "state": "approved", "created_by": "x"}, "changes": []}
-        self.assertFalse(any(c["ok"] for c in sv.verify_core(bad, "p")))
+        self.assertFalse(any(c["ok"] for c in sv.verify_core(bad, "p") if "change kinds" not in c["check"]))  # that one is informational
 
     def test_verify_detail_needs_all_doc_fields(self):
         d = {"proposal": {"title": "T"}, "changes": [{"docs": {"description": "a", "rationale": "b", "changelog": ""}}]}
         res = {c["check"].split(": ")[1]: c["ok"] for c in sv.verify_detail(d, "p")}
         self.assertTrue(res["detail title"] and res["detail docs.description"] and res["detail docs.rationale"])
         self.assertFalse(res["detail docs.changelog"])
+
+    def test_human_progress_done_only_on_promotion_of_that_proposal(self):
+        ev = [{"type": "release.published", "proposal_id": "p1", "alias": "staging"}, {"type": "release.promoted", "proposal_id": "p2", "alias": "prod"}]
+        self.assertFalse(sv.human_progress("approved", ev, "p1")["done"])
+        ev.append({"type": "release.promoted", "proposal_id": "p1", "alias": "prod"})
+        p = sv.human_progress("published", ev, "p1")
+        self.assertTrue(p["done"])
+        self.assertIn("release.promoted@prod", p["events"])
+        self.assertFalse(sv.human_progress("draft", None, "p1")["done"])
 
     def test_case_id_shape(self):
         self.assertTrue(sv.CASE_ID.match("CASE-" + "0" * 25 + "1"))
