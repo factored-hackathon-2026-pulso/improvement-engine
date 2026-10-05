@@ -1,0 +1,6 @@
+# 0641 PRB1 scheduled probes: failing probe -> detection signal [DONE] (UTC 2026-10-05T04:40Z, CLAUDE)
+
+Lane PRB1 (L-EVAL), branch `claude/prb1-scheduled-probes` = ev2-agent-battery + b3-wire (OWNERS merged by union). Plan W1-5.
+Delivered: `scripts/battery/schedule_probes.py` (once/loop, trigger `pulso.trigger.v1` kind scheduled, CSRF + Idempotency-Key through the poller sinks), `probe_cells.py` (flake rule: >=2 of 3 reps and 2 consecutive runs; persisted state; P1/P2/P3 cell table; level_risk-like findings readable as contrast or level_risk; `probe_synthetic` never mixed with real counts), 13 offline tests on the recorded EV2 results, `docs/dev/PROBES.md`, `demo_core.py` env overrides (PULSO_STACK_PREFIX, ports).
+Live (own stack prb1, real gateway/JEV, b3 debug-api binary, no cargo build): run 1 candidates, run 2 triggered once, 5 corroborated findings (consultas radicado slot, es->pt switch on consultas and disputas); replay suppressed.
+Limits: Rust cells sensor not changed (dims `agent`/`scenario_family`, k and support thresholds do not fit); the engine endpoint does not persist `probe_cells` (cells go by file); the recepcion card-lure defect is not in the fixed pack, not reproduced; w14 not merged. Team: CLAUDE

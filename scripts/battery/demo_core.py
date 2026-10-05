@@ -27,10 +27,12 @@ ds = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ds)  # reuse load_env/pm/sh/wait only; stack.py main is guarded
 
 STATE = ds.STATE / "battery"
-PORT = 8002
+# Own stack per session: PULSO_STACK_PREFIX names the containers, PULSO_STACK_PORT_{CORE,PG,GW} move the ports (defaults = EV2's).
+PREFIX = os.environ.get("PULSO_STACK_PREFIX", "pulso-ev2")
+PORT = int(os.environ.get("PULSO_STACK_PORT_CORE", "8002"))
 DEMO_DB = "agentcore"
-PG, GW = "pulso-ev2-postgres", "pulso-ev2-llm-gateway"
-PG_PORT, GW_PORT = 55442, 8090
+PG, GW = f"{PREFIX}-postgres", f"{PREFIX}-llm-gateway"
+PG_PORT, GW_PORT = int(os.environ.get("PULSO_STACK_PORT_PG", "55442")), int(os.environ.get("PULSO_STACK_PORT_GW", "8090"))
 AGENTS = "recepcion,disputas,consultas"
 
 
