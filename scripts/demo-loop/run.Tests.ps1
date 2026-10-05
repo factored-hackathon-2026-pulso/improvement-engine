@@ -196,6 +196,18 @@ Describe 'Formatting the loop report' {
         ($text -match 'proof   : regression_suite_proven') | Should Be $true
         ($text -match 'cost    : \$0\.0012') | Should Be $true
     }
+    It 'shows the ranked candidates, the attempts and a human-owned note when the record has them (MAP1)' {
+        $rec = '{"finding_id":"finding_1","metric":"M1","status":"proposed","reason":"compiled","metering":{"cost_usd":0.002},"candidates":[{"rank":1,"target_ref":"template:t/estado_pqr","tried":true},{"rank":2,"target_ref":"prompt:p/resumen_radicado","tried":true},{"rank":3,"target_ref":"template:t/aclarar_cargo","tried":false}],"attempts":[{"rank":1,"target_ref":"template:t/estado_pqr","status":"proposed","reason":"compiled","outcome":"not_announced:not_fixed","proof":"not_fixed"},{"rank":2,"target_ref":"prompt:p/resumen_radicado","status":"blocked","reason":"compile_denied:edit_budget_exceeded","outcome":null,"proof":null}]}' | ConvertFrom-Json
+        $h = '{"finding_id":"finding_2","metric":"E2","status":"human_owned","reason":"policy_dispute_amount","metering":{"cost_usd":0.0},"human_owned":{"owner":"riesgo","note":{"es":"Para una persona."}}}' | ConvertFrom-Json
+        $l2 = '{"models":"m","baseline":{"label":"x","live":1},"evaluate_before_announce":"on","summary":{"human_owned":1,"cost_usd":0.002},"findings":[]}' | ConvertFrom-Json
+        $l2.findings = @($rec, $h)
+        $t = (Format-LoopReport -Loop $l2) -join "`n"
+        ($t -match 'candidates: 1=template:t/estado_pqr\*  2=prompt:p/resumen_radicado\*  3=template:t/aclarar_cargo ') | Should Be $true
+        ($t -match 'hypothesis of where to intervene, not a cause') | Should Be $true
+        ($t -match 'tried   : #2 prompt:p/resumen_radicado -> ; proof ; status blocked/compile_denied:edit_budget_exceeded') | Should Be $true
+        ($t -match 'human   : for a person \(riesgo\): Para una persona\.') | Should Be $true
+        ($t -match 'human-owned 1') | Should Be $true
+    }
     It 'says so when the sensor binary was not found' {
         ((Format-LoopReport -Loop $loop) -join "`n") | Should Match 'sensor binary not found'
     }

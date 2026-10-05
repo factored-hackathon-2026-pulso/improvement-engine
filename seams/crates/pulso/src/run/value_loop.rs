@@ -18,7 +18,8 @@ use crate::config::Secret;
 use core_client::authorizer::Jws;
 use reasoning::catalog::Catalog;
 use reasoning::finding::{Finding, Source};
-use reasoning::pipeline::{Opts, Ports, reason};
+use reasoning::mapping::Caps;
+use reasoning::pipeline::{Opts, Ports, candidate_plan, reason_candidate};
 use registry_writer::eval::EvalOptions;
 use registry_writer::proof::{FileProofStore, ProofInput, PythonScripts, Scripts, announce_submission, prove};
 use registry_writer::{Config, Environment, FileStore, HttpTransport, Submission, Transport, Via, Writer};
@@ -84,6 +85,9 @@ pub struct ValueLoop {
     /// ANN1: tells the support platform about an `announced` proposal AFTER agent-core accepted it (best effort, never fails the delivery).
     /// `PULSO_ANNOUNCE_TO_PLATFORM` / `PULSO_PLATFORM_URL` / `PULSO_PLATFORM_SERVICE_TOKEN`; default OFF.
     pub announcer: Option<registry_writer::announce::Announcer>,
+    /// MAP1: what the engine can announce today (a NEW agent needs an admin credential for the release settings of its evaluation draft:
+    /// `PULSO_NEW_AGENT_ADMIN=1`, default off). Decides the order in which a finding's candidates are tried.
+    pub caps: Caps,
 }
 
 /// `scripts/regression` of the working directory, else of the checkout the binary was built from.
@@ -173,6 +177,7 @@ impl ValueLoop {
             max_findings: get("PULSO_LOOP_MAX_FINDINGS").and_then(|v| v.parse().ok()),
             proof,
             announcer: registry_writer::announce::Announcer::from_lookup(get)?,
+            caps: Caps { new_agent_admin: truthy(get("PULSO_NEW_AGENT_ADMIN")) },
         }))
     }
 
@@ -229,22 +234,97 @@ impl ValueLoop {
                 case_type: f.metric.clone(),
                 ..Default::default()
             });
-            let r = reason(&refreshed.catalog, f, ports.as_ref().expect("just built"), &opts);
-            if !r.call_records.is_empty() {
-                // before the finding record: a replayed finding either has both or is reasoned again
-                persist.put(CALLS_STEP_BASE.saturating_add(step), &Value::Array(r.call_records.clone()).to_string())?;
+            let mut call_records: Vec<Value> = vec![];
+            let plan = candidate_plan(f, self.caps);
+            let row = reasoning::pipeline::row_of(f);
+            // MAP1: candidates are tried in rank order (at most MAX_CANDIDATES) and the loop stops at the first PROVEN one. A finding with no
+            // candidate (unlinked, human owned, direction not up) still gets one attempt so that its typed outcome is recorded.
+            let tries: Vec<Option<String>> = if plan.is_empty() { vec![None] } else { plan.iter().cloned().map(Some).collect() };
+            let (mut recs, mut attempts, mut tried, mut cost) = (vec![], vec![], vec![], 0.0f64);
+            for cand in &tries {
+                let (r_rec, r) = self.attempt(&w, ew.as_ref(), proofs.as_ref(), &refreshed, f, ports.as_ref().expect("just built"), &opts, cand.as_deref());
+                append_calls(&mut call_records, &r.call_records);
+                cost += r_rec["metering"]["cost_usd"].as_f64().unwrap_or(0.0);
+                if let Some(t) = cand {
+                    tried.push(t.clone());
+                }
+                attempts.push(json!({"rank": r.candidate.as_ref().map(|c| c["rank"].clone()), "target_ref": cand, "status": r_rec["status"], "reason": r_rec["reason"], "outcome": r_rec["outcome"],
+                                     "proof": r_rec["evaluation"]["verdict"].clone(), "delivery": r_rec["delivery"]["status"].clone(), "cost_usd": r_rec["metering"]["cost_usd"]}));
+                let proven = r_rec["outcome"] == "announced";
+                let ended = !matches!(r_rec["status"].as_str(), Some("proposed" | "blocked"));
+                recs.push(r_rec);
+                if proven || ended {
+                    break;
+                }
             }
+            // The record of the finding is the proven attempt; else the first attempt that produced a proposal (the most informative
+            // non-proven one); else the first. `attempts` lists every one.
+            let pick = recs.iter().position(|r| r["outcome"] == "announced").or_else(|| recs.iter().position(|r| r["status"] == "proposed")).unwrap_or(0);
+            let mut rec = recs.swap_remove(pick);
+            rec["candidates"] = row.as_ref().map_or(Value::Null, |r| json!(r.candidate_list(self.caps, &tried)));
+            rec["attempts"] = json!(attempts);
+            rec["mapping_claim"] = json!("hypothesis_of_where_to_intervene_not_a_cause");
+            rec["metering"]["cost_usd"] = json!((cost * 1e6).round() / 1e6);
+            if !call_records.is_empty() {
+                // before the finding record: a replayed finding either has both or is reasoned again
+                persist.put(CALLS_STEP_BASE.saturating_add(step), &Value::Array(call_records).to_string())?;
+            }
+            persist.put(step, &rec.to_string())?;
+            records.push(rec);
+        }
+        let n = |s: &str| records.iter().filter(|r| r["status"] == s).count();
+        let mut by_reason = serde_json::Map::new();
+        let mut tiers = serde_json::Map::new();
+        for r in &records {
+            if r["status"] == "unlinked" {
+                let k = r["reason"].as_str().unwrap_or("no_mapping").to_string();
+                let c = by_reason.get(&k).and_then(Value::as_u64).unwrap_or(0) + 1;
+                by_reason.insert(k, json!(c));
+            }
+            if let Some(t) = r["builder_tier"].as_str().filter(|_| r["status"] == "proposed") {
+                let c = tiers.get(t).and_then(Value::as_u64).unwrap_or(0) + 1;
+                tiers.insert(t.to_string(), json!(c));
+            }
+        }
+        let delivered = records.iter().filter(|r| r["delivery"]["status"] == "delivered").count();
+        let denied = records.iter().filter(|r| r["delivery"]["status"] == "denied").count();
+        let announced = records.iter().filter(|r| r["outcome"] == "announced").count();
+        let not_announced = records.iter().filter(|r| r["outcome"].as_str().is_some_and(|o| o.starts_with("not_announced:"))).count();
+        Ok(json!({
+            "contract": "value-loop/b3-0", "sensor": "claude-standin (steps::cells, real code, labelled stand-in)", "data_source": self.source.as_str(),
+            "baseline": {"label": refreshed.catalog.label, "live": refreshed.live.len(), "fixture": refreshed.fixture.len()},
+            "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
+            "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "human_owned": n("human_owned"), "blocked": n("blocked"),
+                        "delivered": delivered, "denied": denied, "announced": announced, "not_announced": not_announced,
+                        // unlinked findings are descriptive with an explicit reason, never a failure; only `blocked` counts against the roles
+                        "unlinked_by_reason": by_reason, "failed": n("blocked"),
+                        "cost_usd": (records.iter().map(|r| r["metering"]["cost_usd"].as_f64().unwrap_or(0.0)).sum::<f64>() * 1e6).round() / 1e6,
+                        "builder_tiers": tiers},
+            "evaluate_before_announce": if self.proof.is_some() { "on" } else { "off" },
+            "findings": records,
+            "engine_never_approves_publishes_or_promotes": true,
+        }))
+    }
+
+    /// One attempt of one finding on one candidate (`None` = the whole row, only for findings with no candidate): the roles, then the
+    /// proof and, when proven, the delivery.
+    #[allow(clippy::too_many_arguments)]
+    fn attempt(
+        &self, w: &Writer<'_>, ew: Option<&Writer<'_>>, proofs: Option<&FileProofStore>, refreshed: &registry_writer::baseline::Refreshed, f: &Finding, ports: &Ports, opts: &Opts, only: Option<&str>,
+    ) -> (Value, reasoning::pipeline::Reasoned) {
+            let r = reason_candidate(&refreshed.catalog, f, ports, opts, only);
             let mut rec = json!({
-                "finding_id": f.id, "evidence_ref": f.evidence_ref(), "metric": f.metric, "status": r.status, "reason": r.reason, "stage": r.stage, "mapping_row": r.mapping_row,
+                "finding_id": f.id, "evidence_ref": f.evidence_ref(), "metric": f.metric, "dims": f.dims, "status": r.status, "reason": r.reason, "stage": r.stage, "mapping_row": r.mapping_row,
                 "rubric": r.rubric.as_ref().map(|x| json!({"total": x["total"], "band": x["band"]})), "independence": r.independence, "metering": r.metering, "builder_tier": r.metering["builder"]["tier"],
                 "models": r.calls.iter().map(|c| c["model_id"].clone()).collect::<Vec<_>>(), "doubles": r.doubles.len(), "delivery": null,
+                "candidate": r.candidate, "human_owned": r.human_owned,
             });
             if let Some(c) = &r.compiled_raw {
                 rec["target_ref"] = json!(c.target_ref);
                 rec["proposal_kind"] = json!(c.kind);
                 if r.status == "proposed" {
                     engine::trace::set_stage("deliver", 1);
-                    match (&self.proof, &ew, &proofs) {
+                    match (&self.proof, ew, proofs) {
                         (Some(pc), Some(ew), Some(ps)) => {
                             let inp = ProofInput {
                                 finding: f,
@@ -277,41 +357,29 @@ impl ValueLoop {
                     }
                 }
             }
-            persist.put(step, &rec.to_string())?;
-            records.push(rec);
+        (rec, r)
+    }
+
+}
+
+/// Appends the call records of one candidate attempt to the finding's. Each attempt numbers its calls from 1 per role; the store keys a call by
+/// (evidence_ref, role, n), so the numbers (and the generation span ids derived from them) continue across the attempts of one finding.
+fn append_calls(all: &mut Vec<Value>, fresh: &[Value]) {
+    let mut next: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for c in all.iter() {
+        let e = next.entry(c["role"].as_str().unwrap_or("").to_string()).or_insert(0);
+        *e = (*e).max(c["n"].as_u64().unwrap_or(0));
+    }
+    for c in fresh {
+        let mut c = c.clone();
+        let role = c["role"].as_str().unwrap_or("").to_string();
+        let n = next.get(&role).copied().unwrap_or(0) + 1;
+        next.insert(role.clone(), n);
+        c["n"] = json!(n);
+        if let Some(t) = c["trace_id"].as_str().map(str::to_string) {
+            c["span_id"] = json!(core_client::trace::generation_span_id(&t, &role, u32::try_from(n).unwrap_or(u32::MAX)));
         }
-        let n = |s: &str| records.iter().filter(|r| r["status"] == s).count();
-        let mut by_reason = serde_json::Map::new();
-        let mut tiers = serde_json::Map::new();
-        for r in &records {
-            if r["status"] == "unlinked" {
-                let k = r["reason"].as_str().unwrap_or("no_mapping").to_string();
-                let c = by_reason.get(&k).and_then(Value::as_u64).unwrap_or(0) + 1;
-                by_reason.insert(k, json!(c));
-            }
-            if let Some(t) = r["builder_tier"].as_str().filter(|_| r["status"] == "proposed") {
-                let c = tiers.get(t).and_then(Value::as_u64).unwrap_or(0) + 1;
-                tiers.insert(t.to_string(), json!(c));
-            }
-        }
-        let delivered = records.iter().filter(|r| r["delivery"]["status"] == "delivered").count();
-        let denied = records.iter().filter(|r| r["delivery"]["status"] == "denied").count();
-        let announced = records.iter().filter(|r| r["outcome"] == "announced").count();
-        let not_announced = records.iter().filter(|r| r["outcome"].as_str().is_some_and(|o| o.starts_with("not_announced:"))).count();
-        Ok(json!({
-            "contract": "value-loop/b3-0", "sensor": "claude-standin (steps::cells, real code, labelled stand-in)", "data_source": self.source.as_str(),
-            "baseline": {"label": refreshed.catalog.label, "live": refreshed.live.len(), "fixture": refreshed.fixture.len()},
-            "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
-            "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "blocked": n("blocked"),
-                        "delivered": delivered, "denied": denied, "announced": announced, "not_announced": not_announced,
-                        // unlinked findings are descriptive with an explicit reason, never a failure; only `blocked` counts against the roles
-                        "unlinked_by_reason": by_reason, "failed": n("blocked"),
-                        "cost_usd": (records.iter().map(|r| r["metering"]["cost_usd"].as_f64().unwrap_or(0.0)).sum::<f64>() * 1e6).round() / 1e6,
-                        "builder_tiers": tiers},
-            "evaluate_before_announce": if self.proof.is_some() { "on" } else { "off" },
-            "findings": records,
-            "engine_never_approves_publishes_or_promotes": true,
-        }))
+        all.push(c);
     }
 }
 

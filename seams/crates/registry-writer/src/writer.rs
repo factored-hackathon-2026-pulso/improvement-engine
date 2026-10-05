@@ -37,11 +37,14 @@ pub struct Config {
     pub run_agent: String,
     /// Label of the registry credential (`builder principal` unless a stand-in was used).
     pub credential: &'static str,
+    /// INH1: the credential is an EXPLICIT admin one, so a Core without `release_settings.inherit_from` may be served the old way
+    /// (explicit donor settings, labelled `release_settings_assumed`). Off by default: the builder principal never writes interrupts.
+    pub admin_settings_fallback: bool,
 }
 
 impl Config {
     pub fn new(via: Via, environment: Environment, registry_token: Jws) -> Config {
-        Config { via, environment, registry_token, run_token: None, check_base: true, run_agent: "pulso-builder".into(), credential: "engine builder principal" }
+        Config { via, environment, registry_token, run_token: None, check_base: true, run_agent: "pulso-builder".into(), credential: "engine builder principal", admin_settings_fallback: false }
     }
 }
 
@@ -123,6 +126,10 @@ impl<'a> Writer<'a> {
     pub fn with_clock(mut self, clock: impl Fn() -> u64 + 'a) -> Writer<'a> {
         self.clock = Box::new(clock);
         self
+    }
+
+    pub(crate) fn admin_settings_fallback(&self) -> bool {
+        self.cfg.admin_settings_fallback
     }
 
     pub(crate) fn registry_token(&self) -> &Jws {
@@ -234,20 +241,30 @@ impl<'a> Writer<'a> {
             let bad = |m: &str| (Reason::InvalidSubmission, format!("change {i}: {m}"));
             let kind = c["kind"].as_str().filter(|k| !k.is_empty()).ok_or_else(|| bad("no kind"))?;
             if kind == "release_settings" {
-                return Err(bad("release_settings is human-owned; the engine never proposes it"));
+                // INH1: the ONE release_settings the engine may write is a donor reference; values (interrupts, ruleset, limits) never.
+                let by_reference = c["content"].as_object().is_some_and(|o| o.len() == 1 && o.get("inherit_from").and_then(Value::as_str).is_some_and(guard::ok_seg));
+                if !by_reference {
+                    return Err(bad("release_settings is human-owned; the engine only writes {inherit_from: <release id>}, never values"));
+                }
+                out.push(json!({"kind": kind, "content": c["content"], "docs": Self::docs_of(c, kind, key, &s.target_ref)}));
+                continue;
             }
             let content = c["content"].as_object().ok_or_else(|| bad("content is not an object"))?;
             if !content.get("id").is_some_and(Value::is_string) || !content.get("version").is_some_and(Value::is_string) {
                 return Err(bad("content needs id and version as text"));
             }
-            let d = &c["docs"];
-            let calm = steps::compile::defuse_digit_runs; // R11: no run of 6 or more digits in any text the registry stores
-            let description = d["description"].as_str().filter(|t| !t.is_empty()).map(|t| clip(t, 4000)).unwrap_or_else(|| format!("{TITLE_PREFIX} {kind} change for {}", s.target_ref));
-            let rationale = clip(d["rationale"].as_str().unwrap_or(""), 4000);
-            let changelog = clip(d["changelog"].as_str().filter(|t| !t.is_empty()).unwrap_or(&format!("{TITLE_PREFIX} proposal key {key}")), 8000);
-            out.push(json!({"kind": kind, "content": c["content"], "docs": {"description": calm(&description), "rationale": calm(&rationale), "changelog": calm(&changelog)}}));
+            out.push(json!({"kind": kind, "content": c["content"], "docs": Self::docs_of(c, kind, key, &s.target_ref)}));
         }
         Ok(out)
+    }
+
+    fn docs_of(c: &Value, kind: &str, key: &str, target_ref: &str) -> Value {
+        let d = &c["docs"];
+        let calm = steps::compile::defuse_digit_runs; // R11: no run of 6 or more digits in any text the registry stores
+        let description = d["description"].as_str().filter(|t| !t.is_empty()).map(|t| clip(t, 4000)).unwrap_or_else(|| format!("{TITLE_PREFIX} {kind} change for {target_ref}"));
+        let rationale = clip(d["rationale"].as_str().unwrap_or(""), 4000);
+        let changelog = clip(d["changelog"].as_str().filter(|t| !t.is_empty()).unwrap_or(&format!("{TITLE_PREFIX} proposal key {key}")), 8000);
+        json!({"description": calm(&description), "rationale": calm(&rationale), "changelog": calm(&changelog)})
     }
 
     fn proposal_path(id: &str) -> Result<String, Fail> {

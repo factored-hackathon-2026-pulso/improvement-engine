@@ -6,15 +6,22 @@
 //! `understand` decision model). This module reads those entities, unchanged, from the live registry through the guarded read route and
 //! returns them as draft changes (`copies`).
 //!
-//! Two release-level facts of the donor release are NOT entities of the agent and cannot be proposed by the engine
-//! (`release_settings` is human-owned; `Writer::prepare` refuses it): the `fraude` interrupt and the injection ruleset. Verified live:
-//! without them agent-core cannot even evaluate the clone (`evaluate` answers 500: the `understand` decision model has no askable
-//! field in a release with neither interrupts nor more than one flow). So the PROOF evaluates the clone WITH the donor's settings
-//! (`eval_only`, never delivered) and says so (`coverage.assumptions: release_settings_assumed`): the human admin adds exactly those
-//! before prod. What the engine delivers is `compiled changes + copies + eval_suite`.
+//! Release-level settings (INH1). The `fraude` interrupt, the injection ruleset, language detection and `max_input_chars` of the donor
+//! release are not entities of the agent and the engine must never WRITE them (interrupts are admin-gated, D-17). With agent-core
+//! PR 51 the draft instead carries `release_settings: {inherit_from: <donor release id>}`: the server copies the donor's settings into
+//! the candidate of an agent without a base, so nothing can be removed, weakened or forged by the caller. The SAME reference is in the
+//! evaluation drafts and in the announced proposal (what is evaluated is what is announced); the platform human still approves and
+//! publishes with step-up. The donor release id is read live (`GET /aliases/consultas/{prod|staging}`, active release only); no
+//! published donor release fails closed. Without that field in Core (older Core) the proof says `core_without_inherit_from`, and the
+//! old way (explicit settings, evaluation only, labelled `release_settings_assumed`) is used ONLY when the operator configured an
+//! explicit admin credential (`Config::admin_settings_fallback`).
 use crate::writer::Writer;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
+
+/// The donor agent whose closure is cloned, and the aliases tried (in order) to find its published release.
+pub const DONOR_AGENT: &str = "consultas";
+pub const DONOR_ALIASES: [&str; 2] = ["prod", "staging"];
 
 /// Names of the donor release (`consultas-demo`): language detection and injection ruleset the clone cannot work without.
 pub const LANGUAGE_DETECTION: &str = "lang-es-pt";
@@ -24,8 +31,43 @@ pub const INJECTION_RULESET: &str = "injection-rules";
 pub struct Closure {
     /// Unchanged live copies of the entities the clone references (delivered with the proposal).
     pub copies: Vec<Value>,
-    /// Evaluation-only drafts: the injection ruleset entity and the `release_settings` of the donor release (never delivered).
+    /// Evaluation-only drafts (never delivered): with `Settings::Assumed` the injection ruleset entity and the explicit settings.
     pub eval_only: Vec<Value>,
+    pub settings: Settings,
+    /// With `Settings::Inherit`: the `release_settings {inherit_from}` change, delivered AND evaluated.
+    pub inherit: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Settings {
+    /// The clone inherits the donor release's settings by server-side reference.
+    Inherit { donor_release: String },
+    /// Fallback with an explicit admin credential: the donor's settings written explicitly, evaluation only.
+    Assumed,
+}
+
+impl Settings {
+    /// The code the judge input carries (`settings_inherited` vs `release_settings_assumed` assumption).
+    pub fn code(&self) -> &'static str {
+        match self {
+            Settings::Inherit { .. } => "inherit_from",
+            Settings::Assumed => "assumed",
+        }
+    }
+}
+
+/// The donor's live release id: the alias `prod`, else `staging`, of `DONOR_AGENT`, active. `Err` is the closed reason.
+pub fn donor_release(w: &Writer) -> Result<String, String> {
+    for alias in DONOR_ALIASES {
+        let Some(st) = w.fetch_alias(DONOR_AGENT, alias) else { continue };
+        if st["status"].as_str().is_some_and(|s| s != "active") {
+            continue;
+        }
+        if let Some(id) = st["release_id"].as_str().filter(|r| crate::guard::ok_seg(r)) {
+            return Ok(id.to_string());
+        }
+    }
+    Err(format!("donor_without_published_release: agent {DONOR_AGENT} has no active release on alias prod or staging, so the clone has nothing to inherit its settings from"))
 }
 
 fn ref_id(v: &Value) -> Option<String> {
@@ -50,6 +92,11 @@ fn copy_of(kind: &str, content: Value) -> Value {
 /// The entities the cloned agent references and that are not drafted by the clone itself. `Err` names the reference that could not be
 /// read (the proof then reports `suite_error`, nothing is announced).
 pub fn donor_closure(w: &Writer, clone_changes: &[Value]) -> Result<Closure, String> {
+    donor_closure_with(w, clone_changes, false)
+}
+
+/// `assumed`: the explicit-admin fallback (only ever asked for after a Core without `inherit_from`).
+pub fn donor_closure_with(w: &Writer, clone_changes: &[Value], assumed: bool) -> Result<Closure, String> {
     let agent = clone_changes.iter().find(|c| c["kind"] == "agent").ok_or("the new-agent proposal has no agent change")?;
     let own: BTreeSet<(String, String)> = clone_changes.iter().filter_map(kind_and_id).collect();
     let content = &agent["content"];
@@ -62,6 +109,11 @@ pub fn donor_closure(w: &Writer, clone_changes: &[Value]) -> Result<Closure, Str
         want.extend(ref_id(v).map(|id| ("tool", id)));
     }
     want.push(("language_detection", LANGUAGE_DETECTION.to_string()));
+    if !assumed {
+        // The server resolves the donor's ruleset by reference, but the entity must be in the draft (REG-PIN): an unchanged copy.
+        want.push(("injection_ruleset", INJECTION_RULESET.to_string()));
+    }
+    let donor = if assumed { None } else { Some(donor_release(w)?) };
     let mut seen = BTreeSet::new();
     let mut copies = vec![];
     for (kind, id) in want {
@@ -71,25 +123,42 @@ pub fn donor_closure(w: &Writer, clone_changes: &[Value]) -> Result<Closure, Str
         let live = w.fetch_content(kind, &id).ok_or_else(|| format!("closure: {kind} {id} cannot be read from the registry"))?;
         copies.push(copy_of(kind, live));
     }
+    if let Some(donor_release) = donor {
+        let settings = json!({"kind": "release_settings", "content": {"inherit_from": donor_release}, "docs": {
+            "description": format!("[improvement-engine] the clone inherits the safety settings of the donor release {donor_release} (interrupts, language detection, injection ruleset, max input chars) by server-side reference"),
+            "rationale": "The engine never writes release settings: agent-core copies them from the donor release. Approval and publication still need the platform human with step-up.",
+            "changelog": "Adds release_settings.inherit_from; no interrupt is written by the engine."}});
+        return Ok(Closure { copies, eval_only: vec![], settings: Settings::Inherit { donor_release }, inherit: Some(settings) });
+    }
     let ruleset = w.fetch_content("injection_ruleset", INJECTION_RULESET).ok_or_else(|| format!("closure: injection_ruleset {INJECTION_RULESET} cannot be read from the registry"))?;
     let settings = json!({"kind": "release_settings", "content": {
         "interrupts": [{"id": "fraude", "priority": 100, "action": {"type": "escalate", "target_queue": "fraude", "priority": "critical"}}],
         "injection_ruleset": format!("{INJECTION_RULESET}@1"), "language_detection": format!("{LANGUAGE_DETECTION}@1")},
         "docs": {"description": "evaluation-only: the release-level settings of the donor release (human-owned)", "rationale": "The proof evaluates the clone with the donor's settings; the engine never delivers them.", "changelog": "evaluation only"}});
-    Ok(Closure { copies, eval_only: vec![copy_of("injection_ruleset", ruleset), settings] })
+    Ok(Closure { copies, eval_only: vec![copy_of("injection_ruleset", ruleset), settings], settings: Settings::Assumed, inherit: None })
 }
 
-/// The changes of ONE evaluation run of a new-agent candidate: the proposal, its closure and the evaluation-only settings.
+/// The changes of ONE evaluation run of a new-agent candidate: the proposal, its closure and the settings (by reference, or the
+/// evaluation-only explicit ones of the admin fallback).
 pub fn eval_changes(proposal: &[Value], c: &Closure) -> Vec<Value> {
     let mut v: Vec<Value> = proposal.to_vec();
     v.extend(c.copies.iter().cloned());
+    v.extend(c.inherit.iter().cloned());
     v.extend(c.eval_only.iter().cloned());
     v
 }
 
-/// What is delivered when announced: the proposal and the unchanged closure copies (no release-level settings).
+/// What is delivered when announced: the proposal, the unchanged closure copies and, by reference, the donor's settings.
 pub fn delivered_changes(proposal: &[Value], c: &Closure) -> Vec<Value> {
     let mut v: Vec<Value> = proposal.to_vec();
     v.extend(c.copies.iter().cloned());
+    v.extend(c.inherit.iter().cloned());
+    v
+}
+
+/// The closure parts an announced proposal carries beyond the compiled changes.
+pub fn delivered_extra(c: &Closure) -> Vec<Value> {
+    let mut v = c.copies.clone();
+    v.extend(c.inherit.iter().cloned());
     v
 }

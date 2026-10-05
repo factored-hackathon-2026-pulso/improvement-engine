@@ -47,7 +47,14 @@ try {
 }
 
 $factored = Split-Path -Parent (Split-Path -Parent $root)
-$settings = Get-DemoStackSettings -Prefix $StackPrefix -PgPort $PgPort -GwPort $GwPort -CorePort $CorePort -EnginePort $EnginePort
+# MAP1: a lane runs on its OWN prefix and ports. Explicit script parameters win; else PULSO_STACK_PREFIX / PULSO_DEMO_{PG,GW,CORE,ENGINE}_PORT (never PULSO_CORE_PORT, an engine setting); else defaults.
+$stackArgs = @{}
+if ($PSBoundParameters.ContainsKey('StackPrefix')) { $stackArgs['Prefix'] = $StackPrefix } elseif ($env:PULSO_STACK_PREFIX) { $stackArgs['Prefix'] = $env:PULSO_STACK_PREFIX }
+if ($PSBoundParameters.ContainsKey('PgPort')) { $stackArgs['PgPort'] = $PgPort } elseif ($env:PULSO_DEMO_PG_PORT) { $stackArgs['PgPort'] = [int]$env:PULSO_DEMO_PG_PORT }
+if ($PSBoundParameters.ContainsKey('GwPort')) { $stackArgs['GwPort'] = $GwPort } elseif ($env:PULSO_DEMO_GW_PORT) { $stackArgs['GwPort'] = [int]$env:PULSO_DEMO_GW_PORT }
+if ($PSBoundParameters.ContainsKey('CorePort')) { $stackArgs['CorePort'] = $CorePort } elseif ($env:PULSO_DEMO_CORE_PORT) { $stackArgs['CorePort'] = [int]$env:PULSO_DEMO_CORE_PORT }
+if ($PSBoundParameters.ContainsKey('EnginePort')) { $stackArgs['EnginePort'] = $EnginePort } elseif ($env:PULSO_DEMO_ENGINE_PORT) { $stackArgs['EnginePort'] = [int]$env:PULSO_DEMO_ENGINE_PORT }
+$settings = Get-DemoStackSettings @stackArgs
 $demoDir = Join-Path $root (Join-Path '.dev-stack' $StateName)
 $null = New-Item -ItemType Directory -Force -Path $demoDir
 $statePath = Join-Path $demoDir 'state.json'

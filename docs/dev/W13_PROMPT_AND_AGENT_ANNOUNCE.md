@@ -16,9 +16,11 @@ Builds on `W11_EVALUATE_BEFORE_ANNOUNCE.md` (evaluate before announce) and `REGR
   ES/PT in the dossier section "Que se midio".
 * New agent. `build_suite.py` generates the suite for a `new_agent:<x>` target; the suite runs on the NEW agent itself. The base has no
   such agent: `verdict: absent`, its finding cases fail by absence (not measured). `registry_writer::closure` adds the FULL donor closure
-  (templates, decision model, tools, language detection; REG-PIN fails without it) to the draft, and, for the evaluation only, the donor's
-  release settings (fraude interrupt, injection ruleset, lang-es-pt), without which agent-core `evaluate` answers 500. These settings are
-  labelled `release_settings_assumed` and are NOT delivered with the announced proposal. The recepcion routing change cannot be in the same
+  (templates, decision model, tools, language detection, injection ruleset; REG-PIN fails without it) to the draft. The donor's release
+  settings (fraude interrupt, injection ruleset, lang-es-pt, max_input_chars) are NOT written by the engine (INH1, below): both the
+  evaluation drafts and the announced proposal carry `release_settings: {inherit_from: <donor release id>}`. The old way (explicit
+  settings, evaluation only, labelled `release_settings_assumed`) survives only as a fallback for an older Core when the operator
+  configured an explicit admin credential (`Config::admin_settings_fallback`). The recepcion routing change cannot be in the same
   proposal: human-owned follow-up, stated as not measured (`routing_recepcion_to_new_agent`, `traffic_stealing`).
 
 ## Live results (2026-10-05, own stack `pulso-w13`: agent-core + PR 50 local on :8203, gateway :8213, engine builder principal)
@@ -31,14 +33,46 @@ Builds on `W11_EVALUATE_BEFORE_ANNOUNCE.md` (evaluate before announce) and `REGR
 | (ii) text-identical prompt (no-op candidate) | NOT announced: `not_announced:not_fixed`. `candidate_bound`; native evaluate passes (as for any prompt), the wording probe fails 6/6: the harness probe is what separates a patch from a no-op. 241 s. |
 | (iii) NEW agent `soporte-tecnico` (clone closure of the donor) | ANNOUNCED. Proven on itself, all finding cases and guards pass natively, base by absence. Delivered as auto_detect draft: 14 changes (agent, flow, 9 templates, decision_model, language_detection, eval_suite), NO release_settings. 9 s. |
 
-### Blocker found and how it is carried (iii)
+### Blocker found at W13 (iii), resolved by INH1
 
-agent-core `put_draft` refuses release `interrupts` unless the actor has the `admin` role (`forbidden_role`, "cambiar las interrupciones de la
-release exige el rol admin"). The engine builder cannot put the donor's fraude interrupt in the evaluation draft. The live run therefore used
-the local staff admin credential (stand-in, labelled) ONLY for the manual-origin evaluation drafts; the announced proposal is delivered by the
-builder and carries no settings. What the engine must carry for the real path: either an admin-role evaluation credential owned by a human, or
-an agent-core change that lets evaluation drafts take the donor release settings by reference (agent-core scope, not ours). Until then a new
-agent proof in production is `infra_failed` (not announced), never silently green.
+agent-core `put_draft` refuses release `interrupts` unless the actor has the `admin` role (`forbidden_role`). The W13 live run used the local
+staff admin credential as a labelled stand-in for the evaluation drafts; without it a new-agent proof was `not_announced:infra_failed`. INH1
+removes the need (next section).
+
+## INH1: the clone inherits the donor settings by server-side reference (2026-10-05)
+
+agent-core PR 51 (`feat/constructor-release-settings-eval-drafts`) adds an optional `release_settings.inherit_from: <release_id>`: for an agent
+with NO base the server copies the donor release's interrupts, language detection, injection ruleset and `max_input_chars` into the candidate.
+The caller never writes those values, so nothing can be removed, weakened, re-prioritised or forged, and it needs no admin; explicit
+`interrupts` still do, REG-LOCKED applies against the donor, and approve/publish/promote still need the platform human with step-up.
+
+* The donor release id is read live: `GET /v1/registry/aliases/consultas/prod` (then `staging`), active release only. No published donor
+  release fails closed (`not_announced:suite_error`, reason `donor_without_published_release`) before any draft is opened. Two read-only routes
+  were added to the allow-list (`GET aliases/{agent}/{alias}`, `GET releases/{id}`).
+* `registry_writer::closure` puts `release_settings {inherit_from}` (and an unchanged copy of the donor injection ruleset entity, needed for
+  the pin) in the evaluation drafts AND in the announced proposal: what is evaluated is what is announced. `Writer::prepare` accepts a
+  `release_settings` change only when its content is exactly `{inherit_from: <safe id>}`; interrupts, ruleset or limits are refused.
+* Closed reasons when Core refuses it (all `not_announced:suite_error`, nothing is announced): `core_without_inherit_from` (older Core: validate
+  answers REG-SCHEMA "Extra inputs are not permitted" for the field), `inherit_from_rejected` (e.g. the agent has a base), `donor_release_unknown`
+  (validate 404). Only with `Config::admin_settings_fallback` AND an older Core the proof reruns the old way; its story keeps
+  `assumptions: [release_settings_assumed]`, the inherit path has `[settings_inherited]`.
+* Dossier coverage (ES/PT): the safety settings (fraude interrupt, injection-rules, lang-es-pt, input limit) are inherited by the clone from
+  the donor release by server-side reference (`inherit_from`); the engine writes no interrupt; what was evaluated is exactly what is announced;
+  approval and publication still need the platform human with step-up. The judge input carries `settings: inherit_from|assumed`.
+* Observation for the agent-core team: `ApprovalReview.release_changes` (what the approver sees) is computed from the explicit
+  `release_settings` fields only, so an `inherit_from` draft shows NO inherited interrupts to the approver. The values are only visible by
+  reading the donor release. Suggest `release_changes` also lists the resolved inherited fields.
+
+### INH1 live result (own stack `pulso-inh1`, agent-core = origin/main + PR 50 + PR 51 on a local scratch branch, never pushed)
+
+`tests/live_inh1.rs`, planted uncovered-topic cell Tecnico/Phone, engine `builder` principal ONLY (no admin stand-in, no fallback): ANNOUNCED in
+12 s. `regression_suite_proven`: base absent (6/6 finding cases fail by absence), candidate passes every finding case and guard, 13/13
+GateItems, one manual-origin evaluation draft. Delivered as `auto_detect` draft `soporte-tecnico` (state `draft`, created_by `pulso-engine`,
+16 changes: agent, flow, 9 templates, decision_model, language_detection, injection_ruleset, release_settings, eval_suite). Registry read-back:
+`release_settings` content `{"inherit_from":"rel-f18a4d2c61045bf7"}` (the donor `consultas` prod release, active); rebuilding the candidate
+read-only from the DB gives interrupts `[fraude, priority 100, escalate to queue fraude critical]`, `lang-es-pt@1.0.0`,
+`injection-rules@1.0.0`, `max_input_chars 4000`, all equal to the donor's. 21 requests, none to approve, publish, promote, reject or revoke;
+DB afterwards: 0 approvals, 0 releases for the new agent, the proposal still `draft`.
 
 ### Bugs found live and fixed
 

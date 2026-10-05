@@ -264,3 +264,16 @@ fn the_compiled_docs_are_free_of_digit_runs_of_six_whatever_the_model_wrote() {
         assert!(t.contains("seen in"), "the text is kept, only the digit runs are broken: {t}");
     }
 }
+
+#[test]
+fn a_single_brace_placeholder_is_denied_with_a_problem_the_builder_can_act_on() {
+    let c = cat();
+    let f = pqr_finding();
+    let row = map_finding(&f).unwrap();
+    let bad = json!([
+        {"locale": "es", "anchor_id": "es.a1", "op": "replace", "replacement": "Tu PQR est\u{e1} en estado {facts.pqr.value.status}."},
+        {"locale": "pt", "anchor_id": "pt.a1", "op": "replace", "replacement": "Sua solicita\u{e7}\u{e3}o est\u{e1} com status {{ facts.pqr.value.status }}."}]);
+    let e = compile(&c, &f, &row, &opp("template:t/estado_pqr", "status_message_gap"), &patch_proposal("template:t/estado_pqr", bad)).expect_err("a single brace is refused");
+    assert_eq!(e.code, "placeholder_not_allowed");
+    assert!(e.why.contains("curly braces"), "{}", e.why);
+}

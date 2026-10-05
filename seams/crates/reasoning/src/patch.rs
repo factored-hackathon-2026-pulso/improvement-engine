@@ -67,6 +67,11 @@ fn placeholders(t: &str) -> Result<Vec<String>, String> {
     let mut out = vec![];
     let mut rest = t;
     while let Some(i) = rest.find("{{") {
+        // MAP1: a single curly brace outside a double-brace span is a broken placeholder (the engine renders it literally; the regression
+        // proof refused such texts after a full evaluation). Refused here so the Builder gets the problem fed back.
+        if rest[..i].contains(['{', '}']) {
+            return Err("a placeholder needs two opening and two closing curly braces, one brace renders as literal text".into());
+        }
         let after = &rest[i + 2..];
         let j = after.find("}}").ok_or("unclosed {{")?;
         if after[..j].contains("{{") {
@@ -78,11 +83,16 @@ fn placeholders(t: &str) -> Result<Vec<String>, String> {
     if rest.contains("}}") {
         return Err("stray }}".into());
     }
+    if rest.contains(['{', '}']) {
+        return Err("a placeholder needs two opening and two closing curly braces, one brace renders as literal text".into());
+    }
     Ok(out)
 }
 
-fn expected_effect(f: &Finding, row: &Row, direction: &str) -> Value {
-    json!({"metric_id": f.metric_token(), "population": f.dims, "direction": direction, "current_cell_rate": round2(f.discovery.rate),
+fn expected_effect(f: &Finding, row: &Row, target: &Target, direction: &str) -> Value {
+    json!({"mapping": {"claim": "hypothesis_of_where_to_intervene_not_a_cause", "row": row.id, "topic": row.topic, "rank": target.rank, "candidates_total": row.candidates_total,
+                       "justification": target.justification, "evidence": target.evidence},
+           "metric_id": f.metric_token(), "population": f.dims, "direction": direction, "current_cell_rate": round2(f.discovery.rate),
            "reference_rate": round2(f.discovery.baseline_rate), "min_detectable_gap": round2(f.discovery.diff / 2.0),
            "success_if": "the cell rate falls by at least min_detectable_gap toward the reference rate over a new window with the same k-anonymity",
            "guardrail": row.guardrail, "link_grade": row.link_grade, "evidence_ref": f.evidence_ref()})
@@ -92,7 +102,7 @@ fn expected_effect(f: &Finding, row: &Row, direction: &str) -> Value {
 /// hypothesis and rationale are defused too; ids built by the engine (`evidence_ref`) are digit-run free by construction.
 pub fn docs(f: &Finding, row: &Row, opp: &Opportunity, rationale: &str) -> Value {
     use steps::compile::defuse_digit_runs as calm;
-    let text = format!("[improvement-engine] {} {} {}; finding {} evidence {} link {}; hypothesis: {}; rationale: {}", opp.target_ref, opp.mechanism_class, row.id, f.id, f.evidence_ref(), row.link_grade, opp.hypothesis, rationale);
+    let text = format!("[improvement-engine] {} {} {}; finding {} evidence {} link {}; mapping: a hypothesis of where to intervene, not a cause; hypothesis: {}; rationale: {}", opp.target_ref, opp.mechanism_class, row.id, f.id, f.evidence_ref(), row.link_grade, opp.hypothesis, rationale);
     json!({"description": calm(&text).chars().take(4000).collect::<String>(), "rationale": calm(rationale).chars().take(4000).collect::<String>()})
 }
 
@@ -117,7 +127,7 @@ pub fn compile(catalog: &Catalog, f: &Finding, row: &Row, opp: &Opportunity, pro
     }
     let direction = "decrease";
     let docs = docs(f, row, opp, &rationale);
-    let effect = expected_effect(f, row, direction);
+    let effect = expected_effect(f, row, target, direction);
     match kind {
         "patch" => compile_patch(catalog, target, proposal, docs, effect, rationale, uncertainty),
         "new_agent" => compile_new_agent(catalog, target, proposal, docs, effect, rationale, uncertainty),

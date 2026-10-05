@@ -309,8 +309,17 @@ class NewAgentVerdicts(unittest.TestCase):
         self.assertEqual(s["native_binding"]["state"], "not_applicable")
         cov = s["coverage"]
         self.assertIn("routing_recepcion_to_new_agent", cov["not_measured"])
-        self.assertIn("release_settings_assumed", cov["assumptions"])
+        self.assertIn("release_settings_assumed", cov["assumptions"], "no settings mode given: the fallback label")
         self.assertIn("new_agent_intake_and_handoff", cov["native"])
+
+    def test_a_clone_that_inherits_the_donor_settings_drops_the_assumed_label(self):
+        run = self.run_()
+        s = judge_story.judge({"bundle": self.b, "base": self.base, "settings": "inherit_from",
+                               "attempts": [{"attempt": 1, "changes": self.cand, "run": run}]})
+        self.assertEqual(s["coverage"]["assumptions"], ["settings_inherited"])
+        s = judge_story.judge({"bundle": self.b, "base": self.base, "settings": "assumed",
+                               "attempts": [{"attempt": 1, "changes": self.cand, "run": run}]})
+        self.assertEqual(s["coverage"]["assumptions"], ["release_settings_assumed"])
 
     def test_a_failing_finding_case_on_the_new_agent_is_not_fixed(self):
         s = self.judge(self.run_([self.b["finding_case_ids"][0]]))

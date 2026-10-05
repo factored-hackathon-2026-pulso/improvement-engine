@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pulso-factored.github.io/improvement-engine/opbench-lite-v2.schema.json",
+  "title": "OPBENCH-lite v2 aggregate benchmark",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["benchmark", "version", "interpretation", "inputs", "privacy", "source_coverage", "negative_controls", "entries"],
+  "properties": {
+    "benchmark": {"const": "OPBENCH-lite"},
+    "version": {"const": "2"},
+    "interpretation": {"type": "string"},
+    "inputs": {
+      "type": "object", "additionalProperties": false,
+      "required": ["bank_tables", "e0_tables"],
+      "properties": {
+        "bank_tables": {"type": "array", "uniqueItems": true, "items": {"enum": ["call_center_interactions", "complaints", "satisfaction_surveys", "digital_events", "campaign_sends", "customers"]}},
+        "e0_tables": {"type": "array", "uniqueItems": true, "items": {"enum": ["case", "copilot_query"]}}
+      }
+    },
+    "privacy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["minimum_count", "aggregate_only", "row_data_included"],
+      "properties": {"minimum_count": {"const": 10}, "aggregate_only": {"const": true}, "row_data_included": {"const": false}}
+    },
+    "source_coverage": {"$ref": "#/$defs/sourceCoverage"},
+    "negative_controls": {
+      "type": "object", "additionalProperties": false,
+      "required": ["entry_refs", "agent_outliers"],
+      "properties": {
+        "entry_refs": {
+          "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true,
+          "items": {"enum": ["M2:phone", "M3:phone", "M4:technical", "M5:technical"]}
+        },
+        "agent_outliers": {
+          "type": "object", "additionalProperties": false,
+          "required": ["origin", "status", "aggregate_statement", "individuals_emitted"],
+          "properties": {
+            "origin": {"const": "audited_source"},
+            "status": {"const": "no_outlier_evidence"},
+            "aggregate_statement": {"type": "string"},
+            "individuals_emitted": {"const": false}
+          }
+        }
+      }
+    },
+    "entries": {
+      "type": "array", "minItems": 98, "maxItems": 98,
+      "items": {"$ref": "#/$defs/entry"}
+    }
+  },
+  "$defs": {
+    "coverageCount": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "suppressed", "suppression_reason"],
+      "properties": {
+        "value": {"type": ["integer", "null"], "minimum": 10},
+        "suppressed": {"type": "boolean"},
+        "suppression_reason": {"type": ["string", "null"], "pattern": "^[a-z0-9_]+$"}
+      }
+    },
+    "digitalCoverage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["numerator", "denominator", "rate", "suppressed", "suppression_reason"],
+      "properties": {
+        "numerator": {"type": ["integer", "null"], "minimum": 10},
+        "denominator": {"type": ["integer", "null"], "minimum": 10},
+        "rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "suppressed": {"type": "boolean"},
+        "suppression_reason": {"type": ["string", "null"], "pattern": "^[a-z0-9_]+$"}
+      }
+    },
+    "nullableCount": {"type": ["integer", "null"], "minimum": 10},
+    "nullableRate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["numerator", "denominator", "rate", "suppressed", "suppression_reason"],
+      "properties": {
+        "numerator": {"$ref": "#/$defs/nullableCount"},
+        "denominator": {"$ref": "#/$defs/nullableCount"},
+        "rate": {"$ref": "#/$defs/nullableRate"},
+        "suppressed": {"type": "boolean"},
+        "suppression_reason": {"type": ["string", "null"], "pattern": "^[a-z0-9_]+$"}
+      }
+    },
+    "effect": {
+      "type": "object", "additionalProperties": false,
+      "required": ["difference", "ci95_low", "ci95_high"],
+      "properties": {
+        "difference": {"type": "number"}, "ci95_low": {"type": "number"}, "ci95_high": {"type": "number"}
+      }
+    },
+    "descriptiveTesting": {
+      "type": "object", "additionalProperties": false,
+      "required": ["method", "adjusted_q"],
+      "properties": {
+        "method": {"const": "not_applicable_preregistered_descriptive"},
+        "adjusted_q": {"type": "null"}
+      }
+    },
+    "inferentialTesting": {
+      "type": "object", "additionalProperties": false,
+      "required": ["method", "family_size", "adjusted_q"],
+      "properties": {
+        "method": {"const": "two_proportion_z_benjamini_hochberg_fdr"},
+        "family_size": {"const": 95},
+        "adjusted_q": {"$ref": "#/$defs/nullableRate"}
+      }
+    },
+    "discovery": {
+      "type": "object", "additionalProperties": false,
+      "required": ["numerator", "denominator", "baseline_numerator", "baseline_denominator", "effect", "adjusted_q"],
+      "properties": {
+        "numerator": {"$ref": "#/$defs/nullableCount"}, "denominator": {"$ref": "#/$defs/nullableCount"},
+        "baseline_numerator": {"$ref": "#/$defs/nullableCount"}, "baseline_denominator": {"$ref": "#/$defs/nullableCount"},
+        "effect": {"oneOf": [{"$ref": "#/$defs/effect"}, {"type": "null"}]},
+        "adjusted_q": {"$ref": "#/$defs/nullableRate"}
+      }
+    },
+    "replication": {
+      "type": "object", "additionalProperties": false,
+      "required": ["numerator", "denominator", "effect", "adjusted_q", "p_value"],
+      "properties": {
+        "numerator": {"$ref": "#/$defs/nullableCount"}, "denominator": {"$ref": "#/$defs/nullableCount"},
+        "baseline_numerator": {"$ref": "#/$defs/nullableCount"}, "baseline_denominator": {"$ref": "#/$defs/nullableCount"},
+        "effect": {"oneOf": [{"$ref": "#/$defs/effect"}, {"type": "null"}]},
+        "adjusted_q": {"$ref": "#/$defs/nullableRate"}, "p_value": {"$ref": "#/$defs/nullableRate"}
+      }
+    },
+    "statSnapshot": {"$ref": "#/$defs/summary"},
+    "digitalSnapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metric_id", "type", "actionability", "groups", "difference", "multiple_testing", "causal_claim"],
+      "properties": {
+        "metric_id": {"const": "D1"}, "type": {"const": "descriptive_only"}, "actionability": {"const": "context_only"},
+        "groups": {"type": "object", "additionalProperties": false, "required": ["transactional_actions", "other_views"], "properties": {
+          "transactional_actions": {"$ref": "#/$defs/digitalCoverage"}, "other_views": {"$ref": "#/$defs/digitalCoverage"}
+        }},
+        "difference": {"$ref": "#/$defs/nullableRate"}, "multiple_testing": {"$ref": "#/$defs/descriptiveTesting"},
+        "causal_claim": {"const": false}
+      }
+    },
+    "marketingSnapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metric_id", "type", "actionability", "numerator", "denominator", "rate", "suppressed", "suppression_reason", "by_channel", "multiple_testing", "causal_claim", "legal_conclusion"],
+      "properties": {
+        "metric_id": {"const": "R1"}, "type": {"const": "risk"}, "actionability": {"const": "context_only"},
+        "numerator": {"$ref": "#/$defs/nullableCount"}, "denominator": {"$ref": "#/$defs/nullableCount"}, "rate": {"$ref": "#/$defs/nullableRate"},
+        "suppressed": {"type": "boolean"}, "suppression_reason": {"type": ["string", "null"], "pattern": "^[a-z0-9_]+$"},
+        "by_channel": {"type": "object", "additionalProperties": {"$ref": "#/$defs/summary"}},
+        "multiple_testing": {"$ref": "#/$defs/descriptiveTesting"}, "causal_claim": {"const": false}, "legal_conclusion": {"const": false}
+      }
+    },
+    "linkageSnapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metric_id", "type", "actionability", "numerator", "denominator", "rate", "suppressed", "suppression_reason", "multiple_testing"],
+      "properties": {
+        "metric_id": {"const": "L1"}, "type": {"const": "descriptive_only"}, "actionability": {"const": "context_only"},
+        "numerator": {"$ref": "#/$defs/nullableCount"}, "denominator": {"$ref": "#/$defs/nullableCount"}, "rate": {"$ref": "#/$defs/nullableRate"},
+        "suppressed": {"type": "boolean"}, "suppression_reason": {"type": ["string", "null"], "pattern": "^[a-z0-9_]+$"},
+        "multiple_testing": {"$ref": "#/$defs/descriptiveTesting"}
+      }
+    },
+    "sourceCoverage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["bank", "digital_actions", "marketing_consent", "e0_linkage"],
+      "properties": {
+        "bank": {
+          "type": "object", "additionalProperties": false,
+          "required": ["contact_rows", "contacts_with_reason", "contacts_with_channel", "pqr_valid_status", "pqr_valid_sla_flag", "eligible_csat", "linked_eligible_csat"],
+          "properties": {
+            "contact_rows": {"$ref": "#/$defs/coverageCount"},
+            "contacts_with_reason": {"$ref": "#/$defs/coverageCount"},
+            "contacts_with_channel": {"$ref": "#/$defs/coverageCount"},
+            "pqr_valid_status": {"$ref": "#/$defs/coverageCount"},
+            "pqr_valid_sla_flag": {"$ref": "#/$defs/coverageCount"},
+            "eligible_csat": {"$ref": "#/$defs/coverageCount"},
+            "linked_eligible_csat": {"$ref": "#/$defs/coverageCount"}
+          }
+        },
+        "digital_actions": {
+          "type": "object", "additionalProperties": false, "required": ["transactional_actions", "other_views"],
+          "properties": {"transactional_actions": {"$ref": "#/$defs/digitalCoverage"}, "other_views": {"$ref": "#/$defs/digitalCoverage"}}
+        },
+        "marketing_consent": {
+          "type": "object", "additionalProperties": false, "required": ["total_valid"],
+          "properties": {"total_valid": {"$ref": "#/$defs/coverageCount"}}
+        },
+        "e0_linkage": {
+          "type": "object", "additionalProperties": false, "required": ["eligible_cases", "matched_cases"],
+          "properties": {"eligible_cases": {"type": ["integer", "null"], "minimum": 10}, "matched_cases": {"type": ["integer", "null"], "minimum": 10}}
+        }
+      },
+      "allOf": [{
+        "properties": {
+          "e0_linkage": {
+            "oneOf": [
+              {"properties": {"eligible_cases": {"type": "null"}, "matched_cases": {"type": "null"}}},
+              {"properties": {"eligible_cases": {"type": "integer"}, "matched_cases": {"type": "integer"}}}
+            ]
+          }
+        }
+      }]
+    },
+    "entry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "family", "title", "metric_id", "cell", "definition", "numerator", "denominator", "snapshot", "discovery", "effect", "replication", "cells_explored", "multiple_testing", "status", "type", "actionability", "caveats"],
+      "properties": {
+        "id": {"type": "string"},
+        "family": {"type": "string"},
+        "title": {"type": "string"},
+        "metric_id": {"enum": ["M1", "M2", "M3", "M4", "M5", "M6", "E1", "D1", "R1", "L1"]},
+        "cell": {"type": "object", "additionalProperties": {"type": "string"}},
+        "definition": {"type": "string"},
+        "numerator": {"type": ["integer", "null"], "minimum": 10},
+        "denominator": {"type": ["integer", "null"], "minimum": 10},
+        "snapshot": {"oneOf": [{"$ref": "#/$defs/statSnapshot"}, {"$ref": "#/$defs/digitalSnapshot"}, {"$ref": "#/$defs/marketingSnapshot"}, {"$ref": "#/$defs/linkageSnapshot"}]},
+        "discovery": {"oneOf": [{"$ref": "#/$defs/discovery"}, {"type": "null"}]},
+        "effect": {"oneOf": [{"$ref": "#/$defs/effect"}, {"type": "null"}]},
+        "replication": {"oneOf": [{"$ref": "#/$defs/replication"}, {"type": "null"}]},
+        "cells_explored": {"type": "object", "additionalProperties": false, "required": ["family_size"], "properties": {"family_size": {"type": "integer", "minimum": 0, "maximum": 95}}},
+        "multiple_testing": {"oneOf": [{"$ref": "#/$defs/inferentialTesting"}, {"$ref": "#/$defs/descriptiveTesting"}]},
+        "negative_control_status": {"enum": ["audit_consistent", "audit_discrepancy"]},
+        "status": {"enum": ["candidate", "candidate_descriptive", "corroborated", "corroborated_descriptive", "uncertain", "refuted", "context_only", "covered"]},
+        "type": {"enum": ["problem", "inefficiency", "risk", "descriptive_only"]},
+        "actionability": {"enum": ["candidate", "context_only", "covered_existing_capability"]},
+        "caveats": {"type": "array", "items": {"type": "string"}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"metric_id": {"enum": ["M1", "M2", "M3", "M4", "M5", "M6", "E1"]}}, "required": ["metric_id"]},
+          "then": {"properties": {"snapshot": {"$ref": "#/$defs/statSnapshot"}, "discovery": {"$ref": "#/$defs/discovery"}, "replication": {"$ref": "#/$defs/replication"}, "multiple_testing": {"$ref": "#/$defs/inferentialTesting"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"const": "D1"}}, "required": ["metric_id"]},
+          "then": {"properties": {"snapshot": {"$ref": "#/$defs/digitalSnapshot"}, "discovery": {"type": "null"}, "effect": {"type": "null"}, "replication": {"type": "null"}, "multiple_testing": {"$ref": "#/$defs/descriptiveTesting"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"const": "R1"}}, "required": ["metric_id"]},
+          "then": {"properties": {"snapshot": {"$ref": "#/$defs/marketingSnapshot"}, "discovery": {"type": "null"}, "effect": {"type": "null"}, "replication": {"type": "null"}, "multiple_testing": {"$ref": "#/$defs/descriptiveTesting"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"const": "L1"}}, "required": ["metric_id"]},
+          "then": {"properties": {"snapshot": {"$ref": "#/$defs/linkageSnapshot"}, "discovery": {"type": "null"}, "effect": {"type": "null"}, "replication": {"type": "null"}, "multiple_testing": {"$ref": "#/$defs/descriptiveTesting"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"const": "M6"}}, "required": ["metric_id"]},
+          "then": {"properties": {"type": {"const": "descriptive_only"}, "actionability": {"const": "context_only"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"const": "E1"}}, "required": ["metric_id"]},
+          "then": {"properties": {"type": {"const": "descriptive_only"}, "actionability": {"const": "covered_existing_capability"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"enum": ["D1", "R1", "L1"]}}, "required": ["metric_id"]},
+          "then": {"properties": {"status": {"const": "context_only"}, "actionability": {"const": "context_only"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"const": "R1"}}, "required": ["metric_id"]},
+          "then": {"properties": {"type": {"const": "risk"}}}
+        },
+        {
+          "if": {"required": ["negative_control_status"]},
+          "then": {"properties": {"type": {"const": "descriptive_only"}, "actionability": {"const": "context_only"}, "status": {"enum": ["uncertain", "refuted"]}}}
+        }
+      ]
+    }
+  }
+}

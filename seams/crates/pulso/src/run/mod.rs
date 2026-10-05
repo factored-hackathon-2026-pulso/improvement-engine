@@ -4,6 +4,7 @@ pub mod engine_job;
 pub mod http;
 pub mod log;
 pub mod models;
+pub mod outcome;
 pub mod source;
 pub mod signals;
 pub mod supervisor;
@@ -51,21 +52,22 @@ pub fn build_tasks(cfg: &RunConfig, log: &Logger, health: &Arc<Health>, repo: Ar
     // The value loop (cells -> reasoning -> registry writer) may be configured with any adapter, `stub` included: with `stub` the only
     // jobs are the ones the trigger endpoint admits, and the worker runs them.
     let loop_cfg = |work: Option<&std::path::Path>| value_loop::ValueLoop::from_lookup(&|k| std::env::var(k).ok(), work);
+    let outcome_cfg = |work: Option<&std::path::Path>| outcome::OutcomeStep::from_lookup(&|k| std::env::var(k).ok(), work);
     let (tick, runner): (Box<dyn Tick>, Option<Arc<dyn JobRunner>>) = if cfg.adapter == "stub" {
-        match (cfg.work_dir.as_ref(), loop_cfg(cfg.work_dir.as_deref())?) {
-            (Some(work), Some(v)) => {
+        match (cfg.work_dir.as_ref(), loop_cfg(cfg.work_dir.as_deref())?, outcome_cfg(cfg.work_dir.as_deref())?) {
+            (Some(work), v, o) if v.is_some() || o.is_some() => {
                 let exe = runner_exe().ok_or("no sensor-step runner: set STEPS_RUNNER_EXE or keep pulso-synth-runner next to the pulso executable")?;
-                let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?.with_value_loop(Some(Arc::new(v)));
+                let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?.with_value_loop(v.map(Arc::new)).with_outcome(o.map(Arc::new));
                 (Box::new(StubTick), Some(Arc::new(job)))
             }
-            (None, Some(_)) => return Err("PULSO_WORK_DIR is required with the value loop".into()),
+            (None, v, o) if v.is_some() || o.is_some() => return Err("PULSO_WORK_DIR is required with the value loop and the outcome step".into()),
             _ => (Box::new(StubTick), None),
         }
     } else {
         let exe = runner_exe().ok_or("no sensor-step runner: set STEPS_RUNNER_EXE or keep pulso-synth-runner next to the pulso executable")?;
         let work = cfg.work_dir.as_ref().ok_or("PULSO_WORK_DIR is not set")?;
         let tick = source::build_tick(cfg, repo.clone(), &cfg.tenant, &exe)?;
-        let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?.with_value_loop(loop_cfg(Some(work))?.map(Arc::new));
+        let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?.with_value_loop(loop_cfg(Some(work))?.map(Arc::new)).with_outcome(outcome_cfg(Some(work))?.map(Arc::new));
         (tick, Some(Arc::new(job)))
     };
     let monitor = MonitorTask::new(tick, ctx, cfg.poll_interval, log.clone());
