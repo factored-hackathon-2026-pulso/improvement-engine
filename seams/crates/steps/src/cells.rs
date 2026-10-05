@@ -52,11 +52,45 @@ pub struct Config {
     pub min_ratio: f64,
     /// Minimum absolute rate difference vs the rest of the metric (discovery); holdout needs half of it.
     pub min_effect: f64,
-    /// Minimum cell denominator in discovery.
+    /// Minimum POOLED (discovery + holdout) cell denominator.
     pub min_support: i64,
     /// Pre-registered level-risk specs (the Bonferroni family of level tests).
     pub level_risks: Vec<LevelSpec>,
+    /// `None` = the strict profile (default). `Some` = the exploratory profile: the strict tier runs unchanged and an
+    /// additional, visibly tagged `candidate_exploratory` tier is produced with relaxed knobs (see [`Exploratory`]).
+    pub exploratory: Option<Exploratory>,
 }
+
+/// Relaxed knobs of the exploratory tier. It adds VOLUME of candidates for downstream agents (Scout, Verifier, Builder,
+/// regression proof); it never relaxes the privacy floor `k_min`, never emits `corroborated`, and stays an association.
+/// Rationale and false-positive cost of each knob: docs/data/bank-cells-metrics.md ("Exploratory profile").
+#[derive(Debug, Clone, PartialEq)]
+pub struct Exploratory {
+    /// BH q for the exploratory tier (strict: 0.01). Expected share of false discoveries among the exploratory tier <= q.
+    pub alpha: f64,
+    /// Absolute effect floor (strict: 0.05).
+    pub min_effect: f64,
+    /// Rate-ratio floor (strict: 1.25).
+    pub min_ratio: f64,
+    /// Minimum POOLED (discovery + holdout) support (strict: 500).
+    pub min_support: i64,
+}
+
+impl Exploratory {
+    pub fn standard() -> Self {
+        Exploratory { alpha: 0.10, min_effect: 0.03, min_ratio: 1.15, min_support: 200 }
+    }
+}
+
+impl Config {
+    /// Strict tier unchanged plus the exploratory tier.
+    pub fn exploratory() -> Self {
+        Config { exploratory: Some(Exploratory::standard()), ..Config::default() }
+    }
+}
+
+/// Note carried by every exploratory signal so the dossier and the Verifier see the weaker evidence.
+pub const EXPLORATORY_NOTE: &str = "exploratory: weaker statistical evidence; the regression proof is the quality gate";
 
 /// A metric whose level is a risk above `threshold` (fixed before looking at the data, set by the analyst, not by the sensor).
 #[derive(Debug, Clone, PartialEq)]
@@ -78,6 +112,7 @@ impl Default for Config {
             multiplicity: Multiplicity::Bh, k_min: 10, alpha: 0.01, min_ratio: 1.25, min_effect: 0.05, min_support: 500,
             // M8: more than 10% of sends to customers flagged as not accepting marketing is a compliance risk.
             level_risks: vec![LevelSpec { metric: "M8".to_string(), threshold: 0.10, min_excess: 0.05 }],
+            exploratory: None,
         }
     }
 }
@@ -87,6 +122,8 @@ pub struct Stage {
     pub numerator: i64,
     pub denominator: i64,
     pub rate: f64,
+    pub baseline_numerator: i64,
+    pub baseline_denominator: i64,
     pub baseline_rate: f64,
     pub diff: f64,
     pub p: f64,
@@ -106,6 +143,8 @@ pub struct Signal {
     pub r2: Option<R2>,
     /// Parent metric whose finding on the same cell explains this one (e.g. CSAT low depends on M1).
     pub depends_on: Option<String>,
+    /// Ranking score (effect x support x replication evidence), set on every reported cell signal; see `priority`.
+    pub priority: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -159,6 +198,8 @@ pub struct LevelSignal {
 #[derive(Debug, Clone)]
 pub struct Report {
     pub cells_explored: usize,
+    /// Explored cells per multiplicity family: `main` (every cell except reason-only) and `reason_only` (BH of its own).
+    pub families: Vec<(&'static str, usize)>,
     /// Size of the pre-registered level-test family (`Config::level_risks.len()`).
     pub level_tests: usize,
     pub level_signals: Vec<LevelSignal>,
@@ -250,6 +291,9 @@ fn window_of(period: &str) -> Option<usize> {
 }
 
 fn valid_period(p: &str) -> bool {
+    if matches!(p, "ALL" | "W1" | "W2") {
+        return true;
+    }
     let b = p.as_bytes();
     b.len() == 7
         && b[4] == b'-'
@@ -291,7 +335,7 @@ fn parse_rows(input: &str) -> Result<Vec<Row>, StepError> {
         let period = match v.get("period") {
             None => None,
             Some(Json::Str(p)) if valid_period(p) => Some(p.clone()),
-            _ => return invalid(format!("line {}: period must be YYYY-MM", ln + 1)),
+            _ => return invalid(format!("line {}: period must be YYYY-MM, ALL, W1 or W2", ln + 1)),
         };
         let num = v.get("numerator").and_then(|x| x.as_i64()).ok_or_else(|| StepError::Invalid(format!("line {}: numerator", ln + 1)))?;
         let den = v.get("denominator").and_then(|x| x.as_i64()).ok_or_else(|| StepError::Invalid(format!("line {}: denominator", ln + 1)))?;
@@ -325,7 +369,19 @@ fn stage(cell: &Cell, rest_num: i64, rest_den: i64) -> (Stage, bool) {
     let (diff, p) = two_prop(cell.num, cell.den, rest_num, rest_den);
     let rate = cell.num as f64 / cell.den as f64;
     let base = rest_num as f64 / rest_den as f64;
-    (Stage { numerator: cell.num, denominator: cell.den, rate: r6(rate), baseline_rate: r6(base), diff: r6(diff), p }, diff > 0.0)
+    (
+        Stage {
+            numerator: cell.num,
+            denominator: cell.den,
+            rate: r6(rate),
+            baseline_numerator: rest_num,
+            baseline_denominator: rest_den,
+            baseline_rate: r6(base),
+            diff: r6(diff),
+            p,
+        },
+        diff > 0.0,
+    )
 }
 
 /// Level-risk findings over the valid cells (see the module doc for the family and multiplicity rules).
@@ -420,10 +476,65 @@ fn level_risks(
     out
 }
 
+/// Multiplicity family of a cell: `reason_only` (a sole `reason_category` dimension) has its own BH; everything else is `main`.
+const FAMILIES: [&str; 2] = ["main", "reason_only"];
+
+fn family_of(dims: &[(String, String)]) -> usize {
+    usize::from(dims.len() == 1 && dims[0].0 == "reason_category")
+}
+
+/// Adjusted p-values for the tests of ONE family; `m` is the number of explored cells of the family (untested ones count as p = 1).
+fn adjust_p(ps: &[f64], keys: &[&Key], m: usize, mult: Multiplicity) -> Vec<f64> {
+    let mut order: Vec<usize> = (0..ps.len()).collect();
+    order.sort_by(|&a, &b| ps[a].partial_cmp(&ps[b]).unwrap_or(std::cmp::Ordering::Equal).then(keys[a].cmp(keys[b])));
+    let mut adj = vec![1.0f64; ps.len()];
+    match mult {
+        Multiplicity::Bonferroni => {
+            for &i in &order {
+                adj[i] = (ps[i] * m as f64).min(1.0);
+            }
+        }
+        Multiplicity::Bh => {
+            let mut running = 1.0f64;
+            for (rank, &i) in order.iter().enumerate().rev() {
+                running = running.min(ps[i] * m as f64 / (rank + 1) as f64).min(1.0);
+                adj[i] = running;
+            }
+        }
+    }
+    adj
+}
+
+/// Ranking score: effect x support x replication evidence. `evidence` = 0.4 (discovery) + 0.3 (holdout same direction)
+/// + 0.2 (holdout significant: strict corroboration) + 0.1 (R2 windows replicated). Ranking only; never a test.
+fn priority(diff: f64, pooled: i64, hold_up: bool, hold_sig: bool, r2_ok: bool) -> f64 {
+    let evidence = 0.4 + 0.3 * f64::from(u8::from(hold_up)) + 0.2 * f64::from(u8::from(hold_sig)) + 0.1 * f64::from(u8::from(r2_ok));
+    r6(diff * (1.0 + pooled as f64).ln() * evidence)
+}
+
+struct Tested {
+    key: Key,
+    disc: Stage,
+    up: bool,
+    pooled: i64,
+    fam: usize,
+    strict_ok: bool,
+}
+
+const PERIOD_ALL: &str = "ALL";
+
 pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
     let rows = parse_rows(input)?;
     let mut discards: BTreeMap<String, i64> = BTreeMap::new();
     let mut bump = |k: &str| *discards.entry(k.to_string()).or_insert(0) += 1;
+
+    // Metrics with FULL-PERIOD rows (`ALL`, per half) take their half totals from those rows; month rows then only feed the
+    // per-month counts. Metrics with window rows (`W1`/`W2`) take R2 from them. Tables without those rows (older exports,
+    // level-risk metrics) keep the original month-sum behaviour.
+    let full_metrics: std::collections::BTreeSet<String> =
+        rows.iter().filter(|r| r.period.as_deref() == Some(PERIOD_ALL)).map(|r| r.key.0.clone()).collect();
+    let win_metrics: std::collections::BTreeSet<String> =
+        rows.iter().filter(|r| matches!(r.period.as_deref(), Some("W1" | "W2"))).map(|r| r.key.0.clone()).collect();
 
     // k rule: a violating row is a named discard and is dropped everywhere (never tested, not in baselines).
     let mut valid: BTreeMap<Key, Slots> = BTreeMap::new();
@@ -440,17 +551,32 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
             bump("k_violation");
             continue;
         }
-        if let Some(p) = &r.period {
-            if cfg.level_risks.iter().any(|l| l.metric == r.key.0) {
-                let t = months.entry((r.key.0.clone(), p.clone())).or_insert((0, 0));
+        let metric = r.key.0.clone();
+        let per = r.period.clone();
+        let month = per.as_deref().filter(|p| !matches!(*p, PERIOD_ALL | "W1" | "W2"));
+        if let Some(p) = month {
+            if cfg.level_risks.iter().any(|l| l.metric == metric) {
+                let t = months.entry((metric.clone(), p.to_string())).or_insert((0, 0));
                 t.0 += r.cell.num;
                 t.1 += r.cell.den;
             }
         }
         let slots = valid.entry(r.key).or_insert([None, None, None, None]);
-        add(&mut slots[r.half], &r.cell);
-        if let Some(w) = r.period.as_deref().and_then(window_of) {
-            add(&mut slots[2 + w], &r.cell);
+        match per.as_deref() {
+            Some(PERIOD_ALL) => add(&mut slots[r.half], &r.cell),
+            Some("W1") => add(&mut slots[2], &r.cell),
+            Some("W2") => add(&mut slots[3], &r.cell),
+            Some(p) => {
+                if !full_metrics.contains(&metric) {
+                    add(&mut slots[r.half], &r.cell);
+                }
+                if !win_metrics.contains(&metric) {
+                    if let Some(w) = window_of(p) {
+                        add(&mut slots[2 + w], &r.cell);
+                    }
+                }
+            }
+            None => add(&mut slots[r.half], &r.cell),
         }
     }
     let before = valid.len();
@@ -461,7 +587,9 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
 
     let level_signals = level_risks(&valid, &months, cfg, &mut bump);
 
-    // Totals per (metric, comparison stratum, slot); baseline = stratum total minus the cell itself.
+    // Baseline = the same-channel stratum total (all PUBLISHED full-period cells of the metric/stratum in this slot) minus the
+    // cell itself. Cells suppressed by k are absent from both sides; the aggregator publishes the full-period cells so the
+    // share of the stratum that survives is high (see docs/data/bank-cells-metrics.md).
     let mut totals: BTreeMap<(String, Vec<(String, String)>, usize), (i64, i64)> = BTreeMap::new();
     for ((metric, dims), slots) in &valid {
         let st = stratum(dims);
@@ -476,92 +604,89 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
     let rest = |key: &Key, slot: usize, c: &Cell| -> Option<(i64, i64)> {
         let t = totals.get(&(key.0.clone(), stratum(&key.1), slot))?;
         let (rn, rd) = (t.0 - c.num, t.1 - c.den);
-        (rd >= cfg.k_min).then_some((rn, rd))
+        k_ok(&Cell { num: rn, den: rd }, cfg.k_min).then_some((rn, rd))
     };
 
-    // Explored cells: every valid discovery cell of the whole package (Bonferroni family).
-    let m = valid.len();
-    struct Pass {
-        key: Key,
-        disc: Stage,
-        p_adj: f64,
+    // Explored cells: every valid discovery cell of the whole package; BH is applied per family (`main`, `reason_only`).
+    let mut m_fam = [0usize; 2];
+    for key in valid.keys() {
+        m_fam[family_of(&key.1)] += 1;
     }
-    let mut passed: Vec<Pass> = vec![];
-    let mut signals: Vec<Signal> = vec![];
-    // Discovery statistics for every testable cell.
-    let mut tested: Vec<(Key, Stage, bool)> = vec![];
+    let m = valid.len();
+    let expl = cfg.exploratory.as_ref();
+    let mut tested: Vec<Tested> = vec![];
     for (key, halves) in &valid {
         let Some(c) = &halves[0] else { continue };
         let Some((rn, rd)) = rest(key, 0, c) else {
             bump("no_baseline");
             continue;
         };
-        if c.den < cfg.min_support {
+        // Support floor on the POOLED discovery + holdout support (the full period), not on the discovery half alone.
+        let pooled = c.den + halves[1].as_ref().map_or(0, |h| h.den);
+        let strict_ok = pooled >= cfg.min_support;
+        if !strict_ok && !expl.is_some_and(|e| pooled >= e.min_support) {
             bump("below_min_support");
             continue;
         }
         let (disc, up) = stage(c, rn, rd);
-        tested.push((key.clone(), disc, up));
+        tested.push(Tested { key: key.clone(), disc, up, pooled, fam: family_of(&key.1), strict_ok });
     }
-    // Adjusted p over ALL explored cells (m), computed on the tested ones (the rest count as p = 1).
-    let mut order: Vec<usize> = (0..tested.len()).collect();
-    order.sort_by(|&a, &b| tested[a].1.p.partial_cmp(&tested[b].1.p).unwrap_or(std::cmp::Ordering::Equal).then(tested[a].0.cmp(&tested[b].0)));
-    let mut adj = vec![1.0f64; tested.len()];
-    match cfg.multiplicity {
-        Multiplicity::Bonferroni => {
-            for &i in &order {
-                adj[i] = (tested[i].1.p * m as f64).min(1.0);
-            }
-        }
-        Multiplicity::Bh => {
-            let mut running = 1.0f64;
-            for (rank, &i) in order.iter().enumerate().rev() {
-                running = running.min(tested[i].1.p * m as f64 / (rank + 1) as f64).min(1.0);
-                adj[i] = running;
+    // Adjusted p per family: strict tier over the strict-eligible tests only (the exploratory tier never changes it),
+    // exploratory tier over every eligible test.
+    let mut adj_strict = vec![1.0f64; tested.len()];
+    let mut adj_expl = vec![1.0f64; tested.len()];
+    for f in 0..2 {
+        for (strict_only, out) in [(true, &mut adj_strict), (false, &mut adj_expl)] {
+            let idx: Vec<usize> = (0..tested.len()).filter(|&i| tested[i].fam == f && (!strict_only || tested[i].strict_ok)).collect();
+            let ps: Vec<f64> = idx.iter().map(|&i| tested[i].disc.p).collect();
+            let ks: Vec<&Key> = idx.iter().map(|&i| &tested[i].key).collect();
+            for (j, a) in adjust_p(&ps, &ks, m_fam[f], cfg.multiplicity).into_iter().enumerate() {
+                out[idx[j]] = a;
             }
         }
     }
-    for (i, (key, disc, up)) in tested.into_iter().enumerate() {
-        let p_adj = adj[i];
-        let ratio = if disc.baseline_rate > 0.0 { disc.rate / disc.baseline_rate } else { f64::INFINITY };
-        let big = disc.diff.abs() >= cfg.min_effect && (ratio >= cfg.min_ratio || ratio <= 1.0 / cfg.min_ratio);
-        if !up {
-            if p_adj < cfg.alpha && big {
+
+    let ratio_of = |d: &Stage| if d.baseline_rate > 0.0 { d.rate / d.baseline_rate } else { f64::INFINITY };
+    let mut passed: Vec<usize> = vec![];
+    let mut signals: Vec<Signal> = vec![];
+    let mut exploratory_idx: Vec<usize> = vec![];
+    for (i, t) in tested.iter().enumerate() {
+        let ratio = ratio_of(&t.disc);
+        let big = t.disc.diff.abs() >= cfg.min_effect && (ratio >= cfg.min_ratio || ratio <= 1.0 / cfg.min_ratio);
+        if !t.up {
+            if t.strict_ok && adj_strict[i] < cfg.alpha && big {
                 bump("favourable_direction");
             }
             continue;
         }
-        if p_adj < cfg.alpha && big {
-            passed.push(Pass { key, disc, p_adj });
-        } else if disc.p < 0.05 && big {
+        if t.strict_ok && adj_strict[i] < cfg.alpha && big {
+            passed.push(i);
+            continue;
+        }
+        let expl_pass = expl.is_some_and(|e| adj_expl[i] < e.alpha && t.disc.diff >= e.min_effect && ratio >= e.min_ratio);
+        if expl_pass {
+            exploratory_idx.push(i);
+        } else if t.strict_ok && t.disc.p < 0.05 && big {
             signals.push(Signal {
-                metric: key.0,
-                dims: key.1,
+                metric: t.key.0.clone(),
+                dims: t.key.1.clone(),
                 status: "uncertain",
                 reason: "not_significant_after_correction",
                 direction: "up",
-                discovery: Some(disc),
+                discovery: Some(t.disc.clone()),
                 holdout: None,
-                p_adj: Some(p_adj),
+                p_adj: Some(adj_strict[i]),
                 r2: None,
                 depends_on: None,
+                priority: None,
             });
         }
     }
 
-    // Replication on the holdout half; the holdout test is corrected over the number of candidates.
-    let ncand = passed.len().max(1) as f64;
-    let mut metrics_with_finding: BTreeMap<String, bool> = BTreeMap::new();
-    for (key, _) in valid.keys().map(|k| (k, ())) {
-        metrics_with_finding.entry(key.0.clone()).or_insert(false);
-    }
-    for pa in passed {
-        metrics_with_finding.insert(pa.key.0.clone(), true);
-        let halves = &valid[&pa.key];
-        let hold = halves[1].as_ref().and_then(|h| rest(&pa.key, 1, h).map(|(rn, rd)| stage(h, rn, rd).0));
-        let w = |i: usize| halves[i].as_ref().and_then(|c| rest(&pa.key, i, c).map(|(rn, rd)| stage(c, rn, rd).0));
+    let r2_of = |key: &Key, halves: &Slots| -> R2 {
+        let w = |i: usize| halves[i].as_ref().and_then(|c| rest(key, i, c).map(|(rn, rd)| stage(c, rn, rd).0));
         let (w1, w2) = (w(2), w(3));
-        let r2 = match (&w1, &w2) {
+        match (&w1, &w2) {
             (Some(a), Some(b)) => {
                 let ok = |x: &Stage| x.diff >= cfg.min_effect / 2.0 && x.p < 0.05;
                 let status = if ok(a) && ok(b) {
@@ -574,25 +699,83 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
                 R2 { status, w1: w1.clone(), w2: w2.clone() }
             }
             _ => R2 { status: "not_evaluated", w1: None, w2: None },
-        };
-        let (status, reason) = match &hold {
+        }
+    };
+    let hold_of = |key: &Key, halves: &Slots| halves[1].as_ref().and_then(|h| rest(key, 1, h).map(|(rn, rd)| stage(h, rn, rd).0));
+
+    // Replication on the holdout half; the holdout test is corrected over the number of strict candidates.
+    let ncand = passed.len().max(1) as f64;
+    let mut metrics_with_finding: BTreeMap<String, bool> = BTreeMap::new();
+    for key in valid.keys() {
+        metrics_with_finding.entry(key.0.clone()).or_insert(false);
+    }
+    for &i in &passed {
+        let t = &tested[i];
+        metrics_with_finding.insert(t.key.0.clone(), true);
+        let halves = &valid[&t.key];
+        let hold = hold_of(&t.key, halves);
+        let r2 = r2_of(&t.key, halves);
+        let (mut status, reason) = match &hold {
             None => ("candidate", "holdout_unavailable"),
             Some(h) if h.diff <= 0.0 => ("refuted", "holdout_direction_reversed"),
+            Some(h) if h.denominator < cfg.min_support / 2 => ("uncertain", "replication_underpowered"),
             Some(h) if h.p * ncand < 0.05 && h.diff >= cfg.min_effect / 2.0 => ("corroborated", "replicated_in_holdout"),
             Some(_) => ("uncertain", "holdout_not_significant"),
         };
+        if expl.is_some() && status == "uncertain" {
+            // The strict discovery passed; weaker replication is a LABEL in the exploratory profile, not a gate.
+            status = "candidate_exploratory";
+        }
+        let pr = (status != "refuted").then(|| {
+            priority(t.disc.diff, t.pooled, hold.as_ref().is_some_and(|h| h.diff > 0.0), status == "corroborated", r2.status == "replicated")
+        });
         signals.push(Signal {
-            metric: pa.key.0,
-            dims: pa.key.1,
+            metric: t.key.0.clone(),
+            dims: t.key.1.clone(),
             status,
             reason,
             direction: "up",
-            discovery: Some(pa.disc),
+            discovery: Some(t.disc.clone()),
             holdout: hold,
-            p_adj: Some(pa.p_adj),
+            p_adj: Some(adj_strict[i]),
             r2: Some(r2),
             depends_on: None,
+            priority: pr,
         });
+    }
+    // Exploratory tier: discovery passes the relaxed knobs, replication is a label.
+    if let Some(e) = expl {
+        for &i in &exploratory_idx {
+            let t = &tested[i];
+            let halves = &valid[&t.key];
+            let hold = hold_of(&t.key, halves);
+            let r2 = r2_of(&t.key, halves);
+            let reason = match &hold {
+                None => "exploratory_discovery_only",
+                Some(h) if h.diff <= 0.0 => {
+                    bump("exploratory_holdout_reversed");
+                    continue;
+                }
+                Some(h) if h.denominator < e.min_support / 2 => "replication_underpowered",
+                Some(h) if h.p < 0.05 && h.diff >= e.min_effect / 2.0 => "exploratory_holdout_replicated",
+                Some(_) => "holdout_not_significant",
+            };
+            metrics_with_finding.insert(t.key.0.clone(), true);
+            let pr = priority(t.disc.diff, t.pooled, hold.as_ref().is_some_and(|h| h.diff > 0.0), false, r2.status == "replicated");
+            signals.push(Signal {
+                metric: t.key.0.clone(),
+                dims: t.key.1.clone(),
+                status: "candidate_exploratory",
+                reason,
+                direction: "up",
+                discovery: Some(t.disc.clone()),
+                holdout: hold,
+                p_adj: Some(adj_expl[i]),
+                r2: Some(r2),
+                depends_on: None,
+                priority: Some(pr),
+            });
+        }
     }
     // A metric with no cell passing discovery is reported once as refuted / no differential.
     for (metric, found) in metrics_with_finding {
@@ -608,35 +791,44 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
                 p_adj: None,
                 r2: None,
                 depends_on: None,
+                priority: None,
             });
         }
     }
-    let findings: Vec<(String, Vec<(String, String)>)> = signals
-        .iter()
-        .filter(|s| !s.dims.is_empty() && matches!(s.status, "corroborated" | "candidate"))
-        .map(|s| (s.metric.clone(), s.dims.clone()))
-        .collect();
+    // Dependency flag from the metric dependency table, NOT from the presence of a parent finding: a dependent metric
+    // (CSAT low, handle-time share) is a re-expression of its parent, so any cell of it is flagged even when the parent
+    // has no finding on the same cell.
     for s in signals.iter_mut().filter(|s| !s.dims.is_empty()) {
-        for (dep, parent) in &cfg.dependencies {
-            if *dep == s.metric && findings.iter().any(|(m, d)| m == parent && d.iter().all(|x| s.dims.contains(x))) {
-                s.depends_on = Some(parent.clone());
-            }
+        if let Some((_, parent)) = cfg.dependencies.iter().find(|(dep, _)| *dep == s.metric) {
+            s.depends_on = Some(parent.clone());
         }
     }
     let rank = |s: &str| match s {
         "corroborated" => 0,
         "candidate" => 1,
-        "uncertain" => 2,
-        _ => 3,
+        "candidate_exploratory" => 2,
+        "uncertain" => 3,
+        _ => 4,
     };
     signals.sort_by(|a, b| {
-        rank(a.status)
-            .cmp(&rank(b.status))
-            .then(a.p_adj.unwrap_or(2.0).partial_cmp(&b.p_adj.unwrap_or(2.0)).unwrap_or(std::cmp::Ordering::Equal))
-            .then(a.metric.cmp(&b.metric))
-            .then(a.dims.cmp(&b.dims))
+        let ord = rank(a.status).cmp(&rank(b.status));
+        let ord = if ord == std::cmp::Ordering::Equal && a.status == "candidate_exploratory" {
+            // best first: the reasoning cap takes the highest priority
+            b.priority.unwrap_or(0.0).partial_cmp(&a.priority.unwrap_or(0.0)).unwrap_or(std::cmp::Ordering::Equal)
+        } else {
+            ord.then(a.p_adj.unwrap_or(2.0).partial_cmp(&b.p_adj.unwrap_or(2.0)).unwrap_or(std::cmp::Ordering::Equal))
+        };
+        ord.then(a.metric.cmp(&b.metric)).then(a.dims.cmp(&b.dims))
     });
-    Ok(Report { cells_explored: m, level_tests: cfg.level_risks.len(), level_signals, signals, discards: discards.into_iter().collect(), config: cfg.clone() })
+    Ok(Report {
+        cells_explored: m,
+        families: FAMILIES.iter().copied().zip(m_fam).collect(),
+        level_tests: cfg.level_risks.len(),
+        level_signals,
+        signals,
+        discards: discards.into_iter().collect(),
+        config: cfg.clone(),
+    })
 }
 
 fn level_stage_json(s: &LevelStage) -> Json {
@@ -686,6 +878,8 @@ fn stage_json(s: &Stage) -> Json {
         ("numerator", Json::Int(s.numerator)),
         ("denominator", Json::Int(s.denominator)),
         ("rate", Json::Float(s.rate)),
+        ("baseline_numerator", Json::Int(s.baseline_numerator)),
+        ("baseline_denominator", Json::Int(s.baseline_denominator)),
         ("baseline_rate", Json::Float(s.baseline_rate)),
         ("diff", Json::Float(s.diff)),
         ("p", Json::Float(s.p)),
@@ -729,6 +923,12 @@ impl Report {
                 if let Some(p) = s.p_adj {
                     kv.push(("p_adj", Json::Float(p)));
                 }
+                if let Some(p) = s.priority {
+                    kv.push(("priority", Json::Float(p)));
+                }
+                if s.status == "candidate_exploratory" {
+                    kv.push(("exploratory_note", Json::s(EXPLORATORY_NOTE)));
+                }
                 Json::obj(kv)
             })
             .chain(self.level_signals.iter().map(level_json))
@@ -752,6 +952,24 @@ impl Report {
                     ("min_effect", Json::Float(c.min_effect)),
                     ("min_support", Json::Int(c.min_support)),
                     ("k_min", Json::Int(c.k_min)),
+                    ("profile", Json::s(if c.exploratory.is_some() { "exploratory" } else { "strict" })),
+                    ("support_basis", Json::s("pooled_discovery_plus_holdout")),
+                    ("baseline", Json::s("same_channel_full_period_published_cells_minus_own_cell")),
+                    ("families", Json::Obj(self.families.iter().map(|(f, n)| (f.to_string(), Json::Int(*n as i64))).collect())),
+                    (
+                        "exploratory",
+                        match &c.exploratory {
+                            None => Json::Null,
+                            Some(e) => Json::obj(vec![
+                                ("alpha", Json::Float(e.alpha)),
+                                ("min_effect", Json::Float(e.min_effect)),
+                                ("min_ratio", Json::Float(e.min_ratio)),
+                                ("min_support", Json::Int(e.min_support)),
+                                ("explored", Json::Int(self.cells_explored as i64)),
+                                ("never_corroborated", Json::Bool(true)),
+                            ]),
+                        },
+                    ),
                     (
                         "level_risk",
                         Json::obj(vec![
@@ -773,4 +991,9 @@ impl Report {
 /// Step entry point: ndjson cell table in, report JSON out (default config).
 pub fn run(input: &str) -> Result<String, StepError> {
     Ok(analyse(input, &Config::default())?.to_json().write())
+}
+
+/// Same, with the exploratory profile (strict tier unchanged plus the tagged `candidate_exploratory` tier).
+pub fn run_exploratory(input: &str) -> Result<String, StepError> {
+    Ok(analyse(input, &Config::exploratory())?.to_json().write())
 }
