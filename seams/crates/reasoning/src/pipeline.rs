@@ -213,8 +213,6 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
             "latency_ms": recs.iter().map(|c| c.wall_ms).sum::<u64>(),
             "builder": tu.map(|(tier, model, escalated)| json!({"tier": tier, "model": model, "escalated": escalated})),
         });
-        r.calls = [&rs, &rv, &rb].iter().flat_map(|x| x.calls().iter().map(|c| c.to_json()).collect::<Vec<_>>()).collect();
-        r.doubles = [&rs, &rv, &rb].iter().flat_map(|x| x.doubles()).collect();
         if r.status == "proposed" {
             let real = [&ports.scout, &ports.verifier, &ports.builder].iter().all(|p| p.label() == Label::Gateway);
             let labels = crate::dossier::Labels { runtime: if real { crate::dossier::Runtime::Real } else { crate::dossier::Runtime::Doubles }, ..Default::default() };
