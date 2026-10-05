@@ -91,3 +91,17 @@ impl Row {
         self.targets.iter().find(|t| t.target_ref == target_ref)
     }
 }
+
+/// Why a finding has NO row: a closed, explicit reason (never a failure: an unlinked finding is descriptive and is not counted against
+/// the Builder). `(code, why)`.
+pub fn unlinked_reason(f: &Finding) -> (&'static str, String) {
+    match f.metric.as_str() {
+        m if m.starts_with("M6") => (
+            "dependency_metric",
+            format!("metric {m} (customer satisfaction after a contact) is a dependency metric: it follows how the contact was resolved (M1), no agent-core artifact moves it directly; descriptive, the proposal starts from the M1 findings"),
+        ),
+        "M10" => ("dependent_on_m1", "metric M10 depends on the unresolved-contact rate (M1) and has no artifact of its own; descriptive, the proposal starts from the M1 findings".to_string()),
+        "M8" => ("level_risk_human_owned", "metric M8 is a level risk (sends to customers without consent): a consent and marketing policy question that only a human owner can change, not an agent artifact".to_string()),
+        m => ("no_mapping", format!("metric {m} with these dimensions maps to no agent-core artifact: descriptive finding, no proposal")),
+    }
+}

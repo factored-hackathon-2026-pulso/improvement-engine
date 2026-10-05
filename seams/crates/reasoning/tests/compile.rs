@@ -127,9 +127,7 @@ fn the_compiler_denies_every_unsafe_proposal_with_a_closed_reason() {
     assert_eq!(denied(run(json!([{"locale": "es", "anchor_id": "es.a1", "op": "replace", "replacement": long}, ok_pt]))), "edit_budget_exceeded");
     // a patch for a locale the artifact does not have
     assert_eq!(denied(run(json!([ok_es, ok_pt, {"locale": "en", "anchor_id": "en.a1", "op": "replace", "replacement": "Hello there."}]))), "locale_parity");
-    // another target than the verified opportunity, and the wrong kind for the target
-    let other = compile(&c, &f, &row, &o, &patch_proposal("prompt:p/copiloto", json!([ok_es, ok_pt])));
-    assert_eq!(denied(other), "target_mismatch");
+    // the wrong kind for the target (the target itself is the engine's, see the next test)
     let wrong_kind = compile(&c, &f, &row, &o, &json!({"kind": "new_agent", "rationale": "r", "expected_direction": "decrease", "alternatives": alts(), "uncertainty": "u"}));
     assert_eq!(denied(wrong_kind), "kind_mismatch");
 }
@@ -198,16 +196,35 @@ fn no_change_compiles_to_nothing() {
 }
 
 #[test]
-fn an_expected_direction_that_contradicts_the_finding_is_denied() {
-    // every cells metric is higher-is-worse and the finding is "up": a proposal promising an increase would write a
-    // contradictory expected_effect (its success rule says the rate falls).
+fn the_direction_is_derived_from_the_finding_and_the_models_wording_never_fails_the_proposal() {
+    // every cells metric is higher-is-worse and the finding is "up": the expected direction is `decrease`, decided by the engine.
+    // A model that says "increase" (BLD1: it meant "resolution increases"), omits it or writes anything else is simply overruled.
     let c = cat();
     let f = pqr_finding();
     let row = map_finding(&f).unwrap();
     let o = opp("template:t/estado_pqr", "status_message_gap");
     let es = json!({"locale": "es", "anchor_id": "es.a1", "op": "replace", "replacement": "Ya consult\u{e9} tu PQR y su estado es {{ facts.pqr.value.status }}."});
     let pt = json!({"locale": "pt", "anchor_id": "pt.a1", "op": "replace", "replacement": "J\u{e1} consultei sua solicita\u{e7}\u{e3}o e o estado \u{e9} {{ facts.pqr.value.status }}."});
+    for wording in [json!("increase"), json!("down"), json!(null), json!(7)] {
+        let mut p = patch_proposal("template:t/estado_pqr", json!([es, pt]));
+        p["expected_direction"] = wording.clone();
+        let out = compile(&c, &f, &row, &o, &p).unwrap_or_else(|d| panic!("{wording}: {d:?}"));
+        assert_eq!(out.expected_effect["direction"], "decrease", "{wording}");
+    }
     let mut p = patch_proposal("template:t/estado_pqr", json!([es, pt]));
-    p["expected_direction"] = json!("increase");
-    assert_eq!(denied(compile(&c, &f, &row, &o, &p)), "direction_mismatch");
+    p.as_object_mut().unwrap().remove("expected_direction");
+    assert_eq!(compile(&c, &f, &row, &o, &p).unwrap().expected_effect["direction"], "decrease");
+}
+
+#[test]
+fn the_target_is_the_verified_opportunitys_and_a_models_different_target_ref_is_ignored() {
+    // BLD1: for a new agent the model wrote the slug (`new_agent:soporte-tecnico`) where the target is `new_agent:consultas`.
+    let c = cat();
+    let f = pqr_finding();
+    let row = map_finding(&f).unwrap();
+    let o = opp("template:t/estado_pqr", "status_message_gap");
+    let es = json!({"locale": "es", "anchor_id": "es.a1", "op": "replace", "replacement": "Ya consult\u{e9} tu PQR y su estado es {{ facts.pqr.value.status }}."});
+    let pt = json!({"locale": "pt", "anchor_id": "pt.a1", "op": "replace", "replacement": "J\u{e1} consultei sua solicita\u{e7}\u{e3}o e o estado \u{e9} {{ facts.pqr.value.status }}."});
+    let out = compile(&c, &f, &row, &o, &patch_proposal("prompt:p/copiloto", json!([es, pt]))).unwrap();
+    assert_eq!(out.target_ref, "template:t/estado_pqr");
 }

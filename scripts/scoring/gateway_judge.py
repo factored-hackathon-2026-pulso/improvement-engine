@@ -23,12 +23,12 @@ CRITERIA = {
     "R10": "uncertainty and the strength of the data-to-artifact link are stated honestly",
     "R12": "the change is minimal: no budget raised, no model call added",
 }
-SCHEMA = {"type": "object", "required": list(CRITERIA), "properties": {k: {"type": "integer", "minimum": 0, "maximum": 2} for k in CRITERIA}}
+SCHEMA = {"type": "object", "required": list(CRITERIA), "properties": {k: {"type": "integer", "enum": [0, 1, 2]} for k in CRITERIA}}
 PROMPT = ("You are an independent reviewer of an improvement proposal for a bank's customer-service agents. Score each criterion 0 (fails), 1 (partly) or 2 (fully). "
           "Be strict; judge only what the proposal and base text show. Answer only the JSON object of scores. Criteria: " + json.dumps(CRITERIA))
 
 
-def post(addr: str, key: str, body: dict, timeout: int = 90) -> dict:
+def post(addr: str, key: str, body: dict, timeout: int = 150) -> dict:
     if not addr.split(":")[0] in ("127.0.0.1", "localhost", "::1"):
         raise RuntimeError("the judge gateway must be loopback")
     r = urllib.request.Request(f"http://{addr}/v1/generate", data=json.dumps(body).encode(), method="POST",
@@ -48,7 +48,7 @@ def make_judge(send=post, env=os.environ):
 
     def judge(request: dict) -> dict:
         body = {"prompt": PROMPT, "inputs": {"proposal": request.get("proposal"), "base": request.get("base")}, "schema": SCHEMA,
-                "profile": {"endpoint_alias": env.get("PULSO_LLM_GATEWAY_ALIAS", "openrouter"), "model": model, "temperature": 0, "max_tokens": 1500, "timeout_s": 60,
+                "profile": {"endpoint_alias": env.get("PULSO_LLM_GATEWAY_ALIAS", "openrouter"), "model": model, "temperature": 0, "max_tokens": 6000, "timeout_s": 120,
                             "structured": "prompted", "price": {"input_per_mtok": pin, "output_per_mtok": pout}},
                 "labels": {"agent": "pulso-rubric-judge"}}
         out = send(env.get("PULSO_LLM_GATEWAY_ADDR", ""), env.get("PULSO_LLM_GATEWAY_KEY", ""), body).get("output")

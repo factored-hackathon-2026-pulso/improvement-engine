@@ -97,21 +97,22 @@ pub fn compile(catalog: &Catalog, f: &Finding, row: &Row, opp: &Opportunity, pro
     let kind = proposal["kind"].as_str().unwrap_or("");
     let rationale = proposal["rationale"].as_str().unwrap_or("").to_string();
     let uncertainty = proposal["uncertainty"].as_str().unwrap_or("").to_string();
-    let direction = proposal["expected_direction"].as_str().unwrap_or("decrease");
     let target = row.target(&opp.target_ref).ok_or_else(|| Denied { code: "target_mismatch", why: "the opportunity target is not in the mapping row".into() })?;
     if kind == "no_change" {
         return Ok(Compiled { kind: "no_change".into(), target_ref: opp.target_ref.clone(), agent_id: target.agent.to_string(), changes: vec![], diff: vec![], base_digest: String::new(), cascade: vec![], edit_chars: 0, edit_budget: 0,
                              human_items: vec![], expected_effect: Value::Null, rationale, uncertainty });
     }
-    if proposal.get("target_ref").and_then(Value::as_str).is_some_and(|t| t != opp.target_ref) {
-        return deny("target_mismatch", "the proposal targets another artifact than the verified opportunity");
-    }
     if kind != target.kind {
         return deny("kind_mismatch", format!("the target {} takes kind {}, the proposal is {kind}", opp.target_ref, target.kind));
     }
-    if f.direction != "up" || direction != "decrease" {
-        return deny("direction_mismatch", "every cells metric is higher-is-worse: the finding must be up and the expected direction decrease");
+    // The direction is DETERMINISTIC (every cells metric is higher-is-worse: a finding that is up asks for a decrease). It is derived
+    // here, never read from the model, and so are the target (the verified opportunity's) and the kind (the mapping row's): a model
+    // that words the direction differently, omits it or names another target ref cannot fail a proposal over it (BLD1: flash wrote
+    // `increase` for 5 of 10 findings and the slug where the target ref belongs). Only a finding that is NOT up is refused.
+    if f.direction != "up" {
+        return deny("direction_mismatch", "every cells metric is higher-is-worse: only a finding that is up has a decrease to ask for");
     }
+    let direction = "decrease";
     let docs = docs(f, row, opp, &rationale);
     let effect = expected_effect(f, row, direction);
     match kind {

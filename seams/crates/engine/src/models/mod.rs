@@ -2,6 +2,7 @@
 //! Implementations: `Scripted` (fixed answers, no model), `Roleplay` (replay of the roleplay-llm queue), `Gateway`
 //! (HTTP to an llm-gateway-compatible endpoint). Every call is recorded with the label and model id of the port that
 //! handled it, so a report never calls an answer `real` unless the Gateway actually answered it.
+pub mod extract;
 pub mod gateway;
 pub mod llm_gateway;
 pub mod roleplay;
@@ -101,10 +102,30 @@ pub enum ModelError {
     Invalid(String),
 }
 
+/// What a call cost: tokens, the price the gateway computed (decimal string, USD) and the wall time of the call. Known even for a
+/// call whose answer was unusable (the provider charged for it).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Usage {
+    pub tokens_in: u64,
+    pub tokens_out: u64,
+    pub cost_usd: String,
+    pub latency_ms: u64,
+}
+
+impl Usage {
+    pub fn cost_f64(&self) -> f64 {
+        self.cost_usd.parse().unwrap_or(0.0)
+    }
+}
+
 pub trait ModelPort {
     fn label(&self) -> Label;
     fn model_id(&self) -> String;
     fn call(&self, req: &ModelRequest) -> Result<ModelAnswer, ModelError>;
+    /// Usage of the most recent `call` (answered or not); `None` for ports that do not meter (scripted, replay).
+    fn last_usage(&self) -> Option<Usage> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,6 +143,9 @@ pub struct CallRecord {
     pub model_id: String,
     pub data_class: DataClass,
     pub outcome: Outcome,
+    pub usage: Option<Usage>,
+    /// Wall time of the call as the caller saw it (retries are separate records).
+    pub wall_ms: u64,
 }
 
 impl CallRecord {
@@ -152,7 +176,9 @@ impl CallRecord {
             Outcome::Invalid(w) => ("invalid", w.clone()),
         };
         json!({"role": self.role.as_str(), "label": self.label.as_str(), "model_id": self.model_id, "data_class": self.data_class.as_str(),
-               "outcome": outcome, "why": why, "status": status, "provider": provider, "real": status == "real"})
+               "outcome": outcome, "why": why, "status": status, "provider": provider, "real": status == "real",
+               "tokens_in": self.usage.as_ref().map(|u| u.tokens_in), "tokens_out": self.usage.as_ref().map(|u| u.tokens_out),
+               "cost_usd": self.usage.as_ref().map(|u| u.cost_usd.clone()), "latency_ms": self.wall_ms})
     }
 }
 
@@ -191,15 +217,20 @@ impl ModelPort for Recording {
     fn model_id(&self) -> String {
         self.inner.model_id()
     }
+    fn last_usage(&self) -> Option<Usage> {
+        self.inner.last_usage()
+    }
     fn call(&self, req: &ModelRequest) -> Result<ModelAnswer, ModelError> {
+        let t0 = std::time::Instant::now();
         let r = self.inner.call(req);
+        let wall_ms = u64::try_from(t0.elapsed().as_millis()).unwrap_or(u64::MAX);
         let (label, model_id, outcome) = match &r {
             Ok(a) => (a.label, a.model_id.clone(), Outcome::Answered),
             Err(ModelError::Refused(w)) => (self.inner.label(), self.inner.model_id(), Outcome::Refused(w.clone())),
             Err(ModelError::Unavailable(w)) => (self.inner.label(), self.inner.model_id(), Outcome::Unavailable(w.clone())),
             Err(ModelError::Invalid(w)) => (self.inner.label(), self.inner.model_id(), Outcome::Invalid(w.clone())),
         };
-        self.calls.borrow_mut().push(CallRecord { role: req.role, label, model_id, data_class: req.data_class, outcome });
+        self.calls.borrow_mut().push(CallRecord { role: req.role, label, model_id, data_class: req.data_class, outcome, usage: self.inner.last_usage(), wall_ms });
         r
     }
 }

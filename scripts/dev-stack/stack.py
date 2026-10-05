@@ -27,9 +27,10 @@ HERE = Path(__file__).resolve().parent
 STATE = REPO / ".dev-stack"
 CONN = os.environ.get("PULSO_PODMAN_CONNECTION", "pulso-dev-root")
 # PULSO_STACK_PREFIX (+ PULSO_PG_PORT / PULSO_GW_PORT / PULSO_CORE_PORT): a second stack beside another lane's one (REG1).
-# Defaults are unchanged. The gateway image is shared (built once); only containers, volume and ports are renamed.
+# Defaults are unchanged. With a non-default prefix the gateway image is ALSO prefixed: a shared image name lets another lane's
+# `down --purge` (`rmi -f`) kill every lane's gateway container (BLD1 lost its gateway that way).
 _PFX = os.environ.get("PULSO_STACK_PREFIX", "pulso-l3")
-PG, GW, GW_IMAGE, PG_VOL = f"{_PFX}-postgres", f"{_PFX}-llm-gateway", "pulso-l3-llm-gateway", f"{_PFX}-pgdata"
+PG, GW, GW_IMAGE, PG_VOL = f"{_PFX}-postgres", f"{_PFX}-llm-gateway", f"{_PFX}-llm-gateway", f"{_PFX}-pgdata"
 PG_PORT = int(os.environ.get("PULSO_PG_PORT", 55432))
 GW_PORT = int(os.environ.get("PULSO_GW_PORT", 8080))
 CORE_PORT = int(os.environ.get("PULSO_CORE_PORT", 8001))
@@ -185,7 +186,6 @@ def up(args) -> None:
         ["uv", "run", "agentcore", "serve", "--port", str(CORE_PORT), "--registry-api",
          "--identity-keys", str(STATE / "identity-keys.json"), "--staff-keys", str(STATE / "staff-keys.json"),
          "--lang-thresholds", str(ac / "scripts" / "e2e" / "lang-thresholds.json"), "--agents", os.environ.get("PULSO_SERVE_AGENTS", "pulso-builder"),
-         "--field-classifier", "agent_core.composition.classification:field_classifier",
          *serve_ports()],
         cwd=ac, env={**os.environ, **env}, stdout=log, stderr=log, creationflags=flags)
     (STATE / "serve.pid").write_text(str(proc.pid))
