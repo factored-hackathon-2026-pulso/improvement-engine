@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pulso-factored.github.io/improvement-engine/opbench-lite.schema.json",
+  "title": "OPBENCH-lite aggregate benchmark",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["benchmark", "version", "interpretation", "inputs", "privacy", "source_coverage", "entries"],
+  "properties": {
+    "benchmark": {"const": "OPBENCH-lite"},
+    "version": {"type": "string"},
+    "interpretation": {"type": "string"},
+    "inputs": {
+      "type": "object", "additionalProperties": false,
+      "required": ["bank_tables", "e0_tables"],
+      "properties": {
+        "bank_tables": {"type": "array", "items": {"enum": ["call_center_interactions", "complaints", "satisfaction_surveys"]}},
+        "e0_tables": {"type": "array", "items": {"enum": ["case", "copilot_query"]}}
+      }
+    },
+    "privacy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["minimum_count", "aggregate_only", "row_data_included"],
+      "properties": {"minimum_count": {"const": 10}, "aggregate_only": {"const": true}, "row_data_included": {"const": false}}
+    },
+    "source_coverage": {"type": "object"},
+    "entries": {"type": "array", "minItems": 6, "maxItems": 8, "items": {"$ref": "#/$defs/entry"}}
+  },
+  "$defs": {
+    "entry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "family", "title", "population", "metric_id", "cell", "numerator", "denominator", "snapshot", "discovery", "effect", "effect_basis", "replicated", "replication", "cells_explored", "multiple_testing", "k_min_ok", "status", "type", "mechanism_class", "improvement_tags", "adequate_proposal_notes", "caveats"],
+      "properties": {
+        "id": {"type": "string"}, "family": {"type": "string"}, "title": {"type": "string"}, "population": {"type": "string"},
+        "metric_id": {"enum": ["M1", "M2", "M3", "M4", "M5", "M6", "E1"]},
+        "cell": {"type": "object", "additionalProperties": {"type": "string"}},
+        "numerator": {"type": ["integer", "null"], "minimum": 10}, "denominator": {"type": ["integer", "null"], "minimum": 10},
+        "snapshot": {"type": "object", "required": ["numerator", "denominator", "rate", "suppressed", "suppression_reason"]},
+        "discovery": {"type": "object", "required": ["numerator", "denominator", "baseline_numerator", "baseline_denominator", "effect", "adjusted_q"]},
+        "effect": {"type": ["object", "null"]}, "effect_basis": {"type": "string"}, "replicated": {"type": "boolean"}, "replication": {"type": "object"},
+        "cells_explored": {"type": "object", "required": ["family_size"]}, "multiple_testing": {"type": "object", "required": ["method", "family_size", "adjusted_q"]},
+        "k_min_ok": {"type": "boolean"}, "status": {"enum": ["candidate", "candidate_descriptive", "corroborated", "corroborated_descriptive", "uncertain", "refuted"]},
+        "type": {"enum": ["problem", "inefficiency", "risk", "descriptive_only"]}, "mechanism_class": {"type": "string"},
+        "improvement_tags": {"type": "array", "items": {"enum": ["prompt", "template", "policy", "flow", "decision_model", "agent", "tool_link"]}},
+        "adequate_proposal_notes": {"type": "array", "minItems": 2, "maxItems": 3, "items": {"type": "string"}}, "caveats": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

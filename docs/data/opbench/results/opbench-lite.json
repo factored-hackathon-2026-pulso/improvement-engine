@@ -1,0 +1,640 @@
+{
+  "benchmark": "OPBENCH-lite",
+  "entries": [
+    {
+      "adequate_proposal_notes": [
+        "Use this as a measured signal to focus a bounded proposal on the named normalized population and preserve the outcome definition.",
+        "Do not claim that the reason or channel caused the outcome; any benefit estimate requires a separate validated scenario."
+      ],
+      "caveats": [
+        "The comparison is against the pooled complement of this metric, not a causal control.",
+        "The source flag measures first-call resolution only; the complaint tag is not a root cause.",
+        "Synthetic hackathon snapshot; not real-bank prevalence or causal evidence."
+      ],
+      "cell": {
+        "channel": "phone",
+        "reason_category": "complaint"
+      },
+      "cells_explored": {
+        "family_size": 181
+      },
+      "denominator": 99554,
+      "discovery": {
+        "adjusted_q": 0.0,
+        "baseline_denominator": 293216,
+        "baseline_numerator": 51837,
+        "denominator": 49649,
+        "effect": {
+          "ci95_high": 0.391304,
+          "ci95_low": 0.382152,
+          "difference": 0.386728
+        },
+        "numerator": 27978
+      },
+      "effect": {
+        "ci95_high": 0.391304,
+        "ci95_low": 0.382152,
+        "difference": 0.386728
+      },
+      "effect_basis": "discovery cell versus its pooled complement; replicated independently in the second hash split",
+      "family": "attention_contact",
+      "id": "OPB-01",
+      "improvement_tags": [
+        "flow",
+        "decision_model",
+        "agent"
+      ],
+      "k_min_ok": true,
+      "mechanism_class": "observed_outcome_association_hypothesis_only",
+      "metric_id": "M1",
+      "multiple_testing": {
+        "adjusted_q": 0.0,
+        "family_size": 181,
+        "method": "two_proportion_z_benjamini_hochberg_fdr"
+      },
+      "numerator": 56129,
+      "population": "pre-registered aggregate cell in the synthetic hackathon snapshot",
+      "replicated": true,
+      "replication": {
+        "adjusted_q": 0.0,
+        "baseline_denominator": 293526,
+        "baseline_numerator": 52300,
+        "denominator": 49905,
+        "effect": {
+          "ci95_high": 0.390479,
+          "ci95_low": 0.381348,
+          "difference": 0.385913
+        },
+        "numerator": 28151,
+        "p_value": 0.0
+      },
+      "snapshot": {
+        "denominator": 99554,
+        "numerator": 56129,
+        "rate": 0.563805,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "corroborated",
+      "title": "First-call unresolved rate is higher for phone contacts tagged complaint",
+      "type": "problem"
+    },
+    {
+      "adequate_proposal_notes": [
+        "Use this as a measured signal to focus a bounded proposal on the named normalized population and preserve the outcome definition.",
+        "Do not claim that the reason or channel caused the outcome; any benefit estimate requires a separate validated scenario."
+      ],
+      "caveats": [
+        "The comparison is against the pooled complement of this metric, not a causal control.",
+        "The source flag measures first-call resolution only; the complaint tag is not a root cause.",
+        "Synthetic hackathon snapshot; not real-bank prevalence or causal evidence."
+      ],
+      "cell": {
+        "channel": "mobile_app",
+        "reason_category": "complaint"
+      },
+      "cells_explored": {
+        "family_size": 181
+      },
+      "denominator": 4399,
+      "discovery": {
+        "adjusted_q": 0.0,
+        "baseline_denominator": 340686,
+        "baseline_numerator": 78576,
+        "denominator": 2179,
+        "effect": {
+          "ci95_high": 0.358812,
+          "ci95_low": 0.317125,
+          "difference": 0.337969
+        },
+        "numerator": 1239
+      },
+      "effect": {
+        "ci95_high": 0.358812,
+        "ci95_low": 0.317125,
+        "difference": 0.337969
+      },
+      "effect_basis": "discovery cell versus its pooled complement; replicated independently in the second hash split",
+      "family": "attention_contact",
+      "id": "OPB-02",
+      "improvement_tags": [
+        "flow",
+        "decision_model",
+        "agent"
+      ],
+      "k_min_ok": true,
+      "mechanism_class": "observed_outcome_association_hypothesis_only",
+      "metric_id": "M1",
+      "multiple_testing": {
+        "adjusted_q": 0.0,
+        "family_size": 181,
+        "method": "two_proportion_z_benjamini_hochberg_fdr"
+      },
+      "numerator": 2460,
+      "population": "pre-registered aggregate cell in the synthetic hackathon snapshot",
+      "replicated": true,
+      "replication": {
+        "adjusted_q": 0.0,
+        "baseline_denominator": 341211,
+        "baseline_numerator": 79230,
+        "denominator": 2220,
+        "effect": {
+          "ci95_high": 0.338541,
+          "ci95_low": 0.297054,
+          "difference": 0.317798
+        },
+        "numerator": 1221,
+        "p_value": 4.9463595627944404e-272
+      },
+      "snapshot": {
+        "denominator": 4399,
+        "numerator": 2460,
+        "rate": 0.559218,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "corroborated",
+      "title": "First-call unresolved rate is higher for mobile_app contacts tagged complaint",
+      "type": "problem"
+    },
+    {
+      "adequate_proposal_notes": [
+        "Use this as a measured signal to focus a bounded proposal on the named normalized population and preserve the outcome definition.",
+        "Do not claim that the reason or channel caused the outcome; any benefit estimate requires a separate validated scenario."
+      ],
+      "caveats": [
+        "Low CSAT is score 1–2 on a 1–5 scale; this is not NPS.",
+        "Survey channel 'other' includes unsupported delivery labels; association does not establish cause.",
+        "Synthetic hackathon snapshot; not real-bank prevalence or causal evidence."
+      ],
+      "cell": {
+        "channel": "email",
+        "reason_category": "complaint"
+      },
+      "cells_explored": {
+        "family_size": 181
+      },
+      "denominator": 8607,
+      "discovery": {
+        "adjusted_q": 0.0,
+        "baseline_denominator": 59466,
+        "baseline_numerator": 17693,
+        "denominator": 4318,
+        "effect": {
+          "ci95_high": 0.257153,
+          "ci95_low": 0.226524,
+          "difference": 0.241839
+        },
+        "numerator": 2329
+      },
+      "effect": {
+        "ci95_high": 0.257153,
+        "ci95_low": 0.226524,
+        "difference": 0.241839
+      },
+      "effect_basis": "discovery cell versus its pooled complement; replicated independently in the second hash split",
+      "family": "attention_contact",
+      "id": "OPB-03",
+      "improvement_tags": [
+        "flow",
+        "decision_model",
+        "agent"
+      ],
+      "k_min_ok": true,
+      "mechanism_class": "observed_outcome_association_hypothesis_only",
+      "metric_id": "M6",
+      "multiple_testing": {
+        "adjusted_q": 0.0,
+        "family_size": 181,
+        "method": "two_proportion_z_benjamini_hochberg_fdr"
+      },
+      "numerator": 4687,
+      "population": "pre-registered aggregate cell in the synthetic hackathon snapshot",
+      "replicated": true,
+      "replication": {
+        "adjusted_q": 0.0,
+        "baseline_denominator": 59783,
+        "baseline_numerator": 17688,
+        "denominator": 4289,
+        "effect": {
+          "ci95_high": 0.269241,
+          "ci95_low": 0.238576,
+          "difference": 0.253908
+        },
+        "numerator": 2358,
+        "p_value": 5.786510631532395e-263
+      },
+      "snapshot": {
+        "denominator": 8607,
+        "numerator": 4687,
+        "rate": 0.544557,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "corroborated",
+      "title": "Low CSAT is more common for linked complaint contacts surveyed via email",
+      "type": "problem"
+    },
+    {
+      "adequate_proposal_notes": [
+        "Do not prioritize a targeted change for this cell from the current evidence; the registered material-difference rule was not met.",
+        "Keep this result as a negative benchmark so future proposals do not overfit noise or turn the category into a cause."
+      ],
+      "caveats": [
+        "This is a repeated opaque query signature, not repeated customer intent or a causal mechanism.",
+        "The discovery-to-replication difference is below the preregistered five-percentage-point threshold.",
+        "Synthetic hackathon snapshot; not real-bank prevalence or causal evidence."
+      ],
+      "cell": {
+        "scope": "overall"
+      },
+      "cells_explored": {
+        "family_size": 181
+      },
+      "denominator": 1709,
+      "discovery": {
+        "adjusted_q": 1.0,
+        "baseline_denominator": null,
+        "baseline_numerator": null,
+        "denominator": 870,
+        "effect": {
+          "ci95_high": 0.035837,
+          "ci95_low": -0.012922,
+          "difference": 0.011457
+        },
+        "numerator": 803
+      },
+      "effect": {
+        "ci95_high": 0.035837,
+        "ci95_low": -0.012922,
+        "difference": 0.011457
+      },
+      "effect_basis": "discovery-selected modal signature rate: replication minus discovery",
+      "family": "e0_operations",
+      "id": "OPB-04",
+      "improvement_tags": [],
+      "k_min_ok": true,
+      "mechanism_class": "observed_outcome_association_hypothesis_only",
+      "metric_id": "E1",
+      "multiple_testing": {
+        "adjusted_q": 1.0,
+        "family_size": 181,
+        "method": "two_proportion_z_benjamini_hochberg_fdr"
+      },
+      "numerator": 1587,
+      "population": "pre-registered aggregate cell in the synthetic hackathon snapshot",
+      "replicated": true,
+      "replication": {
+        "adjusted_q": 1.0,
+        "denominator": 839,
+        "effect": {
+          "ci95_high": 0.035837,
+          "ci95_low": -0.012922,
+          "difference": 0.011457
+        },
+        "numerator": 784,
+        "p_value": 0.35775395392820614
+      },
+      "snapshot": {
+        "denominator": 1709,
+        "numerator": 1587,
+        "rate": 0.928613,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "corroborated_descriptive",
+      "title": "The discovery-leading E0 query signature appears at a similar rate in replication",
+      "type": "descriptive_only"
+    },
+    {
+      "adequate_proposal_notes": [
+        "Do not prioritize a targeted change for this cell from the current evidence; the registered material-difference rule was not met.",
+        "Keep this result as a negative benchmark so future proposals do not overfit noise or turn the category into a cause."
+      ],
+      "caveats": [
+        "The cell did not meet the preregistered minimum-effect rule; this does not mean complaints are absent.",
+        "Synthetic hackathon snapshot; not real-bank prevalence or causal evidence."
+      ],
+      "cell": {
+        "channel": "phone"
+      },
+      "cells_explored": {
+        "family_size": 181
+      },
+      "denominator": 583250,
+      "discovery": {
+        "adjusted_q": 1.0,
+        "baseline_denominator": 51354,
+        "baseline_numerator": 8706,
+        "denominator": 291511,
+        "effect": {
+          "ci95_high": 0.004307,
+          "ci95_low": -0.002734,
+          "difference": 0.000787
+        },
+        "numerator": 49649
+      },
+      "effect": {
+        "ci95_high": 0.004307,
+        "ci95_low": -0.002734,
+        "difference": 0.000787
+      },
+      "effect_basis": "discovery cell versus its pooled complement; replicated independently in the second hash split",
+      "family": "attention_contact",
+      "id": "OPB-05",
+      "improvement_tags": [],
+      "k_min_ok": true,
+      "mechanism_class": "observed_outcome_association_hypothesis_only",
+      "metric_id": "M2",
+      "multiple_testing": {
+        "adjusted_q": 1.0,
+        "family_size": 181,
+        "method": "two_proportion_z_benjamini_hochberg_fdr"
+      },
+      "numerator": 99554,
+      "population": "pre-registered aggregate cell in the synthetic hackathon snapshot",
+      "replicated": false,
+      "replication": {
+        "adjusted_q": null,
+        "baseline_denominator": 51692,
+        "baseline_numerator": 8761,
+        "denominator": 291739,
+        "effect": {
+          "ci95_high": 0.005087,
+          "ci95_low": -0.001935,
+          "difference": 0.001576
+        },
+        "numerator": 49905,
+        "p_value": 0.38027596258990237
+      },
+      "snapshot": {
+        "denominator": 583250,
+        "numerator": 99554,
+        "rate": 0.170688,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "refuted",
+      "title": "Complaint-tagged contacts are not materially overrepresented in phone",
+      "type": "descriptive_only"
+    },
+    {
+      "adequate_proposal_notes": [
+        "Do not prioritize a targeted change for this cell from the current evidence; the registered material-difference rule was not met.",
+        "Keep this result as a negative benchmark so future proposals do not overfit noise or turn the category into a cause."
+      ],
+      "caveats": [
+        "This is a first-call unresolved subset and a coarse category association, not an explanation of why contacts failed.",
+        "Synthetic hackathon snapshot; not real-bank prevalence or causal evidence."
+      ],
+      "cell": {
+        "channel": "phone"
+      },
+      "cells_explored": {
+        "family_size": 181
+      },
+      "denominator": 136319,
+      "discovery": {
+        "adjusted_q": 1.0,
+        "baseline_denominator": 11900,
+        "baseline_numerator": 4929,
+        "denominator": 67915,
+        "effect": {
+          "ci95_high": 0.007348,
+          "ci95_low": -0.011839,
+          "difference": -0.002246
+        },
+        "numerator": 27978
+      },
+      "effect": {
+        "ci95_high": 0.007348,
+        "ci95_low": -0.011839,
+        "difference": -0.002246
+      },
+      "effect_basis": "discovery cell versus its pooled complement; replicated independently in the second hash split",
+      "family": "attention_contact",
+      "id": "OPB-06",
+      "improvement_tags": [],
+      "k_min_ok": true,
+      "mechanism_class": "observed_outcome_association_hypothesis_only",
+      "metric_id": "M3",
+      "multiple_testing": {
+        "adjusted_q": 1.0,
+        "family_size": 181,
+        "method": "two_proportion_z_benjamini_hochberg_fdr"
+      },
+      "numerator": 56129,
+      "population": "pre-registered aggregate cell in the synthetic hackathon snapshot",
+      "replicated": false,
+      "replication": {
+        "adjusted_q": null,
+        "baseline_denominator": 12047,
+        "baseline_numerator": 4942,
+        "denominator": 68404,
+        "effect": {
+          "ci95_high": 0.01084,
+          "ci95_low": -0.008213,
+          "difference": 0.001314
+        },
+        "numerator": 28151,
+        "p_value": 0.7870183732715874
+      },
+      "snapshot": {
+        "denominator": 136319,
+        "numerator": 56129,
+        "rate": 0.411747,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "refuted",
+      "title": "Complaint tags do not form a materially higher share of unresolved phone contacts",
+      "type": "descriptive_only"
+    },
+    {
+      "adequate_proposal_notes": [
+        "Do not prioritize a targeted change for this cell from the current evidence; the registered material-difference rule was not met.",
+        "Keep this result as a negative benchmark so future proposals do not overfit noise or turn the category into a cause."
+      ],
+      "caveats": [
+        "Open-state is a final-extract status snapshot (open, in process, or escalated), not status history.",
+        "Synthetic hackathon snapshot; not real-bank prevalence or causal evidence."
+      ],
+      "cell": {
+        "pqr_category": "technical"
+      },
+      "cells_explored": {
+        "family_size": 181
+      },
+      "denominator": 13407,
+      "discovery": {
+        "adjusted_q": 0.399178,
+        "baseline_denominator": 26877,
+        "baseline_numerator": 20159,
+        "denominator": 6674,
+        "effect": {
+          "ci95_high": 0.020806,
+          "ci95_low": -0.00217,
+          "difference": 0.009318
+        },
+        "numerator": 5068
+      },
+      "effect": {
+        "ci95_high": 0.020806,
+        "ci95_low": -0.00217,
+        "difference": 0.009318
+      },
+      "effect_basis": "discovery cell versus its pooled complement; replicated independently in the second hash split",
+      "family": "pqr_sla",
+      "id": "OPB-07",
+      "improvement_tags": [],
+      "k_min_ok": true,
+      "mechanism_class": "observed_outcome_association_hypothesis_only",
+      "metric_id": "M4",
+      "multiple_testing": {
+        "adjusted_q": 0.399178,
+        "family_size": 181,
+        "method": "two_proportion_z_benjamini_hochberg_fdr"
+      },
+      "numerator": 10069,
+      "population": "pre-registered aggregate cell in the synthetic hackathon snapshot",
+      "replicated": false,
+      "replication": {
+        "adjusted_q": null,
+        "baseline_denominator": 26811,
+        "baseline_numerator": 20041,
+        "denominator": 6733,
+        "effect": {
+          "ci95_high": 0.006932,
+          "ci95_low": -0.016397,
+          "difference": -0.004732
+        },
+        "numerator": 5001,
+        "p_value": 0.4248389441886681
+      },
+      "snapshot": {
+        "denominator": 13407,
+        "numerator": 10069,
+        "rate": 0.751026,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "refuted",
+      "title": "Open-state PQR share does not materially differ for technical PQRs",
+      "type": "descriptive_only"
+    },
+    {
+      "adequate_proposal_notes": [
+        "Do not prioritize a targeted change for this cell from the current evidence; the registered material-difference rule was not met.",
+        "Keep this result as a negative benchmark so future proposals do not overfit noise or turn the category into a cause."
+      ],
+      "caveats": [
+        "The data dictionary has no SLA deadline or eligibility field; this is the supplied flag, not an independent SLA audit.",
+        "Synthetic hackathon snapshot; not real-bank prevalence or causal evidence."
+      ],
+      "cell": {
+        "pqr_category": "technical"
+      },
+      "cells_explored": {
+        "family_size": 181
+      },
+      "denominator": 13407,
+      "discovery": {
+        "adjusted_q": 1.0,
+        "baseline_denominator": 26877,
+        "baseline_numerator": 5428,
+        "denominator": 6674,
+        "effect": {
+          "ci95_high": 0.00789,
+          "ci95_low": -0.013542,
+          "difference": -0.002826
+        },
+        "numerator": 1329
+      },
+      "effect": {
+        "ci95_high": 0.00789,
+        "ci95_low": -0.013542,
+        "difference": -0.002826
+      },
+      "effect_basis": "discovery cell versus its pooled complement; replicated independently in the second hash split",
+      "family": "pqr_sla",
+      "id": "OPB-08",
+      "improvement_tags": [],
+      "k_min_ok": true,
+      "mechanism_class": "observed_outcome_association_hypothesis_only",
+      "metric_id": "M5",
+      "multiple_testing": {
+        "adjusted_q": 1.0,
+        "family_size": 181,
+        "method": "two_proportion_z_benjamini_hochberg_fdr"
+      },
+      "numerator": 2681,
+      "population": "pre-registered aggregate cell in the synthetic hackathon snapshot",
+      "replicated": false,
+      "replication": {
+        "adjusted_q": null,
+        "baseline_denominator": 26811,
+        "baseline_numerator": 5386,
+        "denominator": 6733,
+        "effect": {
+          "ci95_high": 0.010618,
+          "ci95_low": -0.010789,
+          "difference": -8.6e-05
+        },
+        "numerator": 1352,
+        "p_value": 0.987484005704415
+      },
+      "snapshot": {
+        "denominator": 13407,
+        "numerator": 2681,
+        "rate": 0.19997,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "refuted",
+      "title": "Observed SLA-breach flag rate does not materially differ for technical PQRs",
+      "type": "descriptive_only"
+    }
+  ],
+  "inputs": {
+    "bank_tables": [
+      "call_center_interactions",
+      "complaints",
+      "satisfaction_surveys"
+    ],
+    "e0_tables": [
+      "case",
+      "copilot_query"
+    ]
+  },
+  "interpretation": "Synthetic hackathon dataset; descriptive association and split replication only, not causal or production impact evidence.",
+  "privacy": {
+    "aggregate_only": true,
+    "minimum_count": 10,
+    "row_data_included": false
+  },
+  "source_coverage": {
+    "contact_rows_deduplicated": {
+      "suppressed": false,
+      "suppression_reason": null,
+      "value": 686296
+    },
+    "csat_linkage": {
+      "eligible_csat": null,
+      "link_rate": null,
+      "linked_eligible_csat": null,
+      "suppressed": true,
+      "suppression_reason": "unlinked_or_identity_mismatch_below_k"
+    },
+    "pqr_rows_with_valid_sla_flag": {
+      "suppressed": false,
+      "suppression_reason": null,
+      "value": 67095
+    },
+    "pqr_rows_with_valid_status": {
+      "suppressed": false,
+      "suppression_reason": null,
+      "value": 67095
+    }
+  },
+  "version": "1.0.0"
+}
