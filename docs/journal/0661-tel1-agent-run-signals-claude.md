@@ -1,0 +1,6 @@
+# 0661 TEL1 agent-run behaviour signals [DONE] (UTC 2026-10-05T14:40Z, CLAUDE)
+
+Lane TEL1 (L-ENGINE), branch `claude/tel1-agent-signals` off origin/main e49f7ad0 (PR 104 merged). Question: can the engine detect "tool always used" / "handoffs concentrate in one agent/locale"? Yes, over RUN exports, now.
+Delivered: `scripts/telemetry/` (adapter over the X-DOC T3 reader, which is untouched; metrics A1..A9, level finding `always_same_tool`, findings pipeline, local exporter, own-stack wrapper, 16 offline tests); Rust `steps` cells: dims agent/locale/tool, (agent,tool) stratum = same tool, `cells_agent_runs` entry (support floor 20, k=10), 5 tests; `docs/dev/AGENT_SIGNALS.md` with definitions, mapping proposal and results. Mapping rows are a proposal (`agent_signal_mapping.json`), not merged into the MAP1 table.
+Live: own stack, battery traffic (synthetic), 596 runs: 6 comparative + 4 level findings; 3 reps (120 runs) published 33 cells and no finding. k=10 needs >= 20 runs per agent x locale half; rare events never publish.
+Limits: synthetic battery, tools are flow nodes (100% by design); 429 rate limits in the big pass; no cargo-wide run; private T3 helpers imported (X-DOC may rename them). Team: CL
