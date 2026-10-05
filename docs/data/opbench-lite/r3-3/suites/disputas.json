@@ -1,0 +1,359 @@
+{
+  "agent_id": "disputas",
+  "id": "disputas",
+  "repetitions": 3,
+  "scenarios": [
+    {
+      "assertions": [],
+      "expect": {
+        "actions_verified": [
+          "radicar_pqr"
+        ],
+        "escalated": false,
+        "outcome": "resolved"
+      },
+      "id": "probe-cargo-no-reconocido-es",
+      "principal": {
+        "attrs": {
+          "country": "MX"
+        },
+        "id": "syn-customer-dis-01"
+      },
+      "seed": {
+        "tools": {
+          "buscar_transacciones": [
+            {
+              "result": [
+                {
+                  "amount": "120.00",
+                  "currency": "USD",
+                  "transaction_id": "syn-tx-101"
+                }
+              ]
+            }
+          ],
+          "convertir_moneda": [
+            {
+              "result": "120.00"
+            }
+          ],
+          "obtener_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-101",
+                "status": "Open"
+              }
+            }
+          ],
+          "radicar_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-101",
+                "status": "Open"
+              }
+            }
+          ],
+          "seleccionar": [
+            {
+              "result": {
+                "amount": "120.00",
+                "currency": "USD",
+                "transaction_id": "syn-tx-101"
+              }
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "No reconozco el cargo ficticio syn-tx-101 y quiero reportarlo."
+        },
+        {
+          "answer": "yes",
+          "auth": "step_up",
+          "op": "confirm"
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": false,
+        "outcome": "cancelled"
+      },
+      "id": "probe-cobro-duplicado-cancelado-pt",
+      "principal": {
+        "attrs": {
+          "country": "CO"
+        },
+        "id": "syn-customer-dis-02"
+      },
+      "seed": {
+        "tools": {
+          "buscar_transacciones": [
+            {
+              "result": [
+                {
+                  "amount": "120.00",
+                  "currency": "USD",
+                  "transaction_id": "syn-tx-202"
+                }
+              ]
+            }
+          ],
+          "convertir_moneda": [
+            {
+              "result": "120.00"
+            }
+          ],
+          "obtener_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-202",
+                "status": "Open"
+              }
+            }
+          ],
+          "radicar_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-202",
+                "status": "Open"
+              }
+            }
+          ],
+          "seleccionar": [
+            {
+              "result": {
+                "amount": "120.00",
+                "currency": "USD",
+                "transaction_id": "syn-tx-202"
+              }
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "pt",
+          "op": "start"
+        },
+        {
+          "lang": "pt",
+          "op": "turn",
+          "text": "Vejo duas cobranças de teste syn-tx-202; ajude-me a revisar."
+        },
+        {
+          "answer": "no",
+          "auth": "step_up",
+          "op": "confirm"
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": true,
+        "outcome": "escalated"
+      },
+      "id": "probe-motivo-vago-es",
+      "principal": {
+        "attrs": {
+          "country": "AR"
+        },
+        "id": "syn-customer-dis-03"
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "Hay algo raro en mis movimientos ficticios."
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "No puedo precisar monto, fecha ni comercio."
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": true,
+        "outcome": "escalated"
+      },
+      "id": "probe-lookup-failure-pt",
+      "principal": {
+        "attrs": {
+          "country": "MX"
+        },
+        "id": "syn-customer-dis-04"
+      },
+      "seed": {
+        "tools": {
+          "buscar_transacciones": [
+            {
+              "error": "synthetic_lookup_failure",
+              "status": "error"
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "pt",
+          "op": "start"
+        },
+        {
+          "lang": "pt",
+          "op": "turn",
+          "text": "Não reconheço o movimento fictício syn-tx-404."
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": true,
+        "outcome": "escalated"
+      },
+      "id": "probe-amount-boundary-600-es",
+      "principal": {
+        "attrs": {
+          "country": "CO"
+        },
+        "id": "syn-customer-dis-05"
+      },
+      "seed": {
+        "tools": {
+          "buscar_transacciones": [
+            {
+              "result": [
+                {
+                  "amount": "600.00",
+                  "currency": "USD",
+                  "transaction_id": "syn-tx-505"
+                }
+              ]
+            }
+          ],
+          "convertir_moneda": [
+            {
+              "result": "600.00"
+            }
+          ],
+          "seleccionar": [
+            {
+              "result": {
+                "amount": "600.00",
+                "currency": "USD",
+                "transaction_id": "syn-tx-505"
+              }
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "No reconozco la operación sintética syn-tx-505 por USD 600."
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": true,
+        "outcome": "escalated"
+      },
+      "id": "probe-readback-failure-es",
+      "principal": {
+        "attrs": {
+          "country": "AR"
+        },
+        "id": "syn-customer-dis-06"
+      },
+      "seed": {
+        "tools": {
+          "buscar_transacciones": [
+            {
+              "result": [
+                {
+                  "amount": "120.00",
+                  "currency": "USD",
+                  "transaction_id": "syn-tx-606"
+                }
+              ]
+            }
+          ],
+          "convertir_moneda": [
+            {
+              "result": "120.00"
+            }
+          ],
+          "obtener_pqr": [
+            {
+              "error": "synthetic_readback_failure",
+              "status": "error"
+            }
+          ],
+          "radicar_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-606",
+                "status": "Open"
+              }
+            }
+          ],
+          "seleccionar": [
+            {
+              "result": {
+                "amount": "120.00",
+                "currency": "USD",
+                "transaction_id": "syn-tx-606"
+              }
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "No reconozco el cargo sintético syn-tx-606; quiero reportarlo."
+        },
+        {
+          "answer": "yes",
+          "auth": "step_up",
+          "op": "confirm"
+        }
+      ]
+    }
+  ],
+  "version": "1.1.0"
+}

@@ -1,0 +1,296 @@
+{
+  "agent_id": "consultas",
+  "id": "consultas",
+  "repetitions": 3,
+  "scenarios": [
+    {
+      "assertions": [
+        {
+          "event": "engine.tool_called",
+          "expect": "at_least_one",
+          "where": [
+            {
+              "field": "status",
+              "op": "eq",
+              "value": "ok"
+            }
+          ]
+        },
+        {
+          "event": "engine.response_failed",
+          "expect": "none"
+        }
+      ],
+      "expect": {
+        "escalated": false,
+        "outcome": "resolved"
+      },
+      "id": "probe-pqr-status-01",
+      "principal": {
+        "attrs": {
+          "country": "MX"
+        },
+        "id": "syn-customer-con-01"
+      },
+      "seed": {
+        "tools": {
+          "obtener_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-501",
+                "status": "Open"
+              }
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "Quiero consultar el estado de mi PQR sintética syn-pqr-501."
+        }
+      ]
+    },
+    {
+      "assertions": [
+        {
+          "event": "engine.tool_called",
+          "expect": "at_least_one",
+          "where": [
+            {
+              "field": "status",
+              "op": "eq",
+              "value": "ok"
+            }
+          ]
+        },
+        {
+          "event": "engine.response_failed",
+          "expect": "none"
+        }
+      ],
+      "expect": {
+        "escalated": false,
+        "outcome": "resolved"
+      },
+      "id": "probe-pqr-status-02",
+      "principal": {
+        "attrs": {
+          "country": "CO"
+        },
+        "id": "syn-customer-con-02"
+      },
+      "seed": {
+        "tools": {
+          "obtener_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-502",
+                "status": "InProgress"
+              }
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "¿Qué avance tiene la solicitud de soporte ficticia syn-pqr-502?"
+        }
+      ]
+    },
+    {
+      "assertions": [
+        {
+          "event": "engine.tool_called",
+          "expect": "at_least_one",
+          "where": [
+            {
+              "field": "status",
+              "op": "eq",
+              "value": "ok"
+            }
+          ]
+        },
+        {
+          "event": "engine.response_failed",
+          "expect": "none"
+        }
+      ],
+      "expect": {
+        "escalated": false,
+        "outcome": "resolved"
+      },
+      "id": "probe-pqr-status-03",
+      "principal": {
+        "attrs": {
+          "country": "AR"
+        },
+        "id": "syn-customer-con-03"
+      },
+      "seed": {
+        "tools": {
+          "obtener_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-503",
+                "status": "Closed"
+              }
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "Necesito revisar mi reclamo de prueba syn-pqr-503."
+        }
+      ]
+    },
+    {
+      "assertions": [
+        {
+          "event": "engine.tool_called",
+          "expect": "at_least_one",
+          "where": [
+            {
+              "field": "status",
+              "op": "eq",
+              "value": "ok"
+            }
+          ]
+        },
+        {
+          "event": "engine.response_failed",
+          "expect": "none"
+        }
+      ],
+      "expect": {
+        "escalated": false,
+        "outcome": "resolved"
+      },
+      "id": "probe-pqr-status-04",
+      "principal": {
+        "attrs": {
+          "country": "CO"
+        },
+        "id": "syn-customer-con-04"
+      },
+      "seed": {
+        "tools": {
+          "obtener_pqr": [
+            {
+              "result": {
+                "id": "syn-pqr-504",
+                "status": "Open"
+              }
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "pt",
+          "op": "start"
+        },
+        {
+          "lang": "pt",
+          "op": "turn",
+          "text": "Quero consultar o andamento da solicitação fictícia syn-pqr-504."
+        }
+      ]
+    },
+    {
+      "assertions": [
+        {
+          "event": "engine.tool_called",
+          "expect": "none"
+        }
+      ],
+      "expect": {
+        "escalated": true,
+        "outcome": "escalated"
+      },
+      "id": "probe-missing-radicado",
+      "principal": {
+        "attrs": {
+          "country": "MX"
+        },
+        "id": "syn-customer-con-05"
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "Quiero consultar mi PQR de prueba, pero no recuerdo el radicado."
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "No tengo ningún identificador; por favor escálalo."
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": true,
+        "outcome": "escalated"
+      },
+      "id": "probe-fallo-de-consulta",
+      "principal": {
+        "attrs": {
+          "country": "AR"
+        },
+        "id": "syn-customer-con-06"
+      },
+      "seed": {
+        "tools": {
+          "obtener_pqr": [
+            {
+              "error": "synthetic_tool_failure",
+              "status": "error"
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "pt",
+          "op": "start"
+        },
+        {
+          "lang": "pt",
+          "op": "turn",
+          "text": "Minha consulta de suporte está indisponível; também preciso revisar SYN-PQR-506."
+        }
+      ]
+    }
+  ],
+  "version": "1.1.0"
+}
