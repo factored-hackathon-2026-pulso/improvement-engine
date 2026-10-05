@@ -1,0 +1,344 @@
+{
+ "schema": "pulso.engine_story/1",
+ "_note": "RECORDED SHAPE, NOT A LIVE RUN: loop/events follow the engine's real record shapes (seams/crates/pulso/src/run/value_loop.rs, debug-api event wire); counts and blocked reasons come from docs/reports/b3-live-pass.md; model_calls, verdict_story and dossier for finding 0 are SYNTHETIC illustrations of the pulso.model_call/1 contract and reg1.verdict_story/1 (the engine does not record prompts/responses today)",
+ "run_id": "value-loop-trg-20261005-0001",
+ "events": [
+  {
+   "event_id": "value-loop-trg-20261005-0001:1",
+   "run_id": "value-loop-trg-20261005-0001",
+   "run_ref": "value-loop-trg-20261005-0001",
+   "sequence": 1,
+   "entity_ref": {
+    "kind": "run",
+    "id": "value-loop-trg-20261005-0001"
+   },
+   "projection_revision": 1,
+   "kind": "run_started",
+   "event_code": "run_started",
+   "occurred_at": "2026-10-05T14:00:00.000Z",
+   "data": {
+    "title": "value loop value-loop-trg-20261005-0001: 3 corroborated finding(s) from the claude-standin cells sensor (bank), 1 proposed, 1 delivered to agent-core as builder (never approved or published), 0 denied, 1 blocked, 1 unlinked; baseline fixture-baseline; no quality claim",
+    "state": "running",
+    "origin": "value-loop"
+   }
+  },
+  {
+   "event_id": "value-loop-trg-20261005-0001:2",
+   "run_id": "value-loop-trg-20261005-0001",
+   "run_ref": "value-loop-trg-20261005-0001",
+   "sequence": 2,
+   "entity_ref": {
+    "kind": "node",
+    "id": "finding-0"
+   },
+   "projection_revision": 2,
+   "kind": "node_status_changed",
+   "event_code": "node_status_changed",
+   "occurred_at": "2026-10-05T14:01:42.500Z",
+   "data": {
+    "node": {
+     "node_id": "finding-0",
+     "label": "finding-0 [proposed: proposed] delivered prop-local-001",
+     "stage": "proposal",
+     "status": "complete",
+     "depends_on": [],
+     "reason_code": "proposed",
+     "node_kind": "material_step",
+     "trace_id": null
+    }
+   }
+  },
+  {
+   "event_id": "value-loop-trg-20261005-0001:3",
+   "run_id": "value-loop-trg-20261005-0001",
+   "run_ref": "value-loop-trg-20261005-0001",
+   "sequence": 3,
+   "entity_ref": {
+    "kind": "node",
+    "id": "finding-1"
+   },
+   "projection_revision": 3,
+   "kind": "node_status_changed",
+   "event_code": "node_status_changed",
+   "occurred_at": "2026-10-05T14:02:19.000Z",
+   "data": {
+    "node": {
+     "node_id": "finding-1",
+     "label": "finding-1 [blocked: model_invalid]",
+     "stage": "proposal",
+     "status": "complete",
+     "depends_on": [],
+     "reason_code": "model_invalid",
+     "node_kind": "material_step",
+     "trace_id": null
+    }
+   }
+  },
+  {
+   "event_id": "value-loop-trg-20261005-0001:4",
+   "run_id": "value-loop-trg-20261005-0001",
+   "run_ref": "value-loop-trg-20261005-0001",
+   "sequence": 4,
+   "entity_ref": {
+    "kind": "node",
+    "id": "finding-2"
+   },
+   "projection_revision": 4,
+   "kind": "node_status_changed",
+   "event_code": "node_status_changed",
+   "occurred_at": "2026-10-05T14:02:19.020Z",
+   "data": {
+    "node": {
+     "node_id": "finding-2",
+     "label": "finding-2 [unlinked: no_mapping]",
+     "stage": "proposal",
+     "status": "complete",
+     "depends_on": [],
+     "reason_code": "no_mapping",
+     "node_kind": "material_step",
+     "trace_id": null
+    }
+   }
+  },
+  {
+   "event_id": "value-loop-trg-20261005-0001:5",
+   "run_id": "value-loop-trg-20261005-0001",
+   "run_ref": "value-loop-trg-20261005-0001",
+   "sequence": 5,
+   "entity_ref": {
+    "kind": "run",
+    "id": "value-loop-trg-20261005-0001"
+   },
+   "projection_revision": 5,
+   "kind": "run_state_changed",
+   "event_code": "run_state_changed",
+   "occurred_at": "2026-10-05T14:02:19.100Z",
+   "data": {
+    "state": "completed"
+   }
+  }
+ ],
+ "loop": {
+  "contract": "value-loop/b3-0",
+  "sensor": "claude-standin (steps::cells, real code, labelled stand-in)",
+  "data_source": "bank",
+  "baseline": {
+   "label": "fixture-baseline",
+   "live": 0,
+   "fixture": 29
+  },
+  "opt_in_derived_aggregates": true,
+  "models": "xiaomi/mimo-v2.6-flash",
+  "quality_claims": "forbidden",
+  "summary": {
+   "corroborated": 3,
+   "reasoned": 3,
+   "skipped_not_corroborated": 7,
+   "proposed": 1,
+   "no_change": 0,
+   "unlinked": 1,
+   "blocked": 1,
+   "delivered": 1,
+   "denied": 0
+  },
+  "findings": [
+   {
+    "finding_id": "f-0001",
+    "evidence_ref": "ev_3f9a1c07d2b84e51",
+    "metric": "recontact_rate",
+    "status": "proposed",
+    "reason": "proposed",
+    "stage": "compile",
+    "mapping_row": "M3",
+    "rubric": {
+     "total": 14,
+     "band": "adequate"
+    },
+    "independence": {
+     "scout_model": "xiaomi/mimo-v2.6-flash",
+     "verifier_model": "xiaomi/mimo-v2.6-pro",
+     "builder_model": "xiaomi/mimo-v2.6-flash",
+     "verifier_separate_port": true,
+     "level": "same_family_other_tier"
+    },
+    "models": [
+     "xiaomi/mimo-v2.6-flash",
+     "xiaomi/mimo-v2.6-pro",
+     "xiaomi/mimo-v2.6-flash"
+    ],
+    "doubles": 0,
+    "delivery": {
+     "status": "delivered",
+     "proposal_id": "prop-local-001",
+     "credential": "engine builder principal"
+    },
+    "target_ref": "pulso-builder/templates/saludo",
+    "proposal_kind": "patch"
+   },
+   {
+    "finding_id": "f-0002",
+    "evidence_ref": "ev_a77c0e92b1d3f604",
+    "metric": "transfer_rate",
+    "status": "blocked",
+    "reason": "model_invalid",
+    "stage": "builder",
+    "mapping_row": "M5",
+    "rubric": null,
+    "independence": {
+     "scout_model": "xiaomi/mimo-v2.6-flash",
+     "verifier_model": "xiaomi/mimo-v2.6-pro",
+     "builder_model": "xiaomi/mimo-v2.6-flash",
+     "verifier_separate_port": true,
+     "level": "same_family_other_tier"
+    },
+    "models": [
+     "xiaomi/mimo-v2.6-flash",
+     "xiaomi/mimo-v2.6-pro",
+     "xiaomi/mimo-v2.6-flash"
+    ],
+    "doubles": 0,
+    "delivery": null
+   },
+   {
+    "finding_id": "f-0003",
+    "evidence_ref": "ev_0d5be18a96c2f733",
+    "metric": "dispute_rate",
+    "status": "unlinked",
+    "reason": "no_mapping",
+    "stage": "mapping",
+    "mapping_row": null,
+    "rubric": null,
+    "independence": {
+     "scout_model": "xiaomi/mimo-v2.6-flash",
+     "verifier_model": "xiaomi/mimo-v2.6-pro",
+     "builder_model": "xiaomi/mimo-v2.6-flash",
+     "verifier_separate_port": true,
+     "level": "same_family_other_tier"
+    },
+    "models": [],
+    "doubles": 0,
+    "delivery": null
+   }
+  ],
+  "engine_never_approves_publishes_or_promotes": true
+ },
+ "model_calls": [
+  {
+   "schema": "pulso.model_call/1",
+   "evidence_ref": "ev_3f9a1c07d2b84e51",
+   "role": "scout",
+   "n": 1,
+   "model_id": "xiaomi/mimo-v2.6-flash",
+   "started_at": "2026-10-05T14:00:03.000Z",
+   "duration_ms": 9200,
+   "tokens_in": 812,
+   "tokens_out": 215,
+   "outcome": "answered",
+   "why": "",
+   "request": {
+    "messages": [
+     {
+      "role": "system",
+      "content": "Eres el Scout. Responde solo JSON."
+     },
+     {
+      "role": "user",
+      "content": "Hallazgo ev_3f9a: recontact_rate 0.31 vs 0.22 referencia (n=480). Propone una hipotesis."
+     }
+    ],
+    "max_tokens": 1024
+   },
+   "response": "{\"hypothesis\":\"el saludo omite el siguiente paso\",\"mechanism_class\":\"template_text\",\"claimed_rate\":0.09}"
+  },
+  {
+   "schema": "pulso.model_call/1",
+   "evidence_ref": "ev_3f9a1c07d2b84e51",
+   "role": "verifier",
+   "n": 1,
+   "model_id": "xiaomi/mimo-v2.6-pro",
+   "started_at": "2026-10-05T14:00:20.000Z",
+   "duration_ms": 31000,
+   "tokens_in": 1500,
+   "tokens_out": 310,
+   "outcome": "answered",
+   "why": "",
+   "request": {
+    "messages": [
+     {
+      "role": "system",
+      "content": "Eres el Verificador independiente. Responde solo JSON."
+     },
+     {
+      "role": "user",
+      "content": "Verifica la hipotesis contra los numeros del hallazgo."
+     }
+    ],
+    "max_tokens": 1024
+   },
+   "response": "{\"verdict\":\"supported\",\"checks\":[[\"recompute\",\"pass\"]]}"
+  },
+  {
+   "schema": "pulso.model_call/1",
+   "evidence_ref": "ev_3f9a1c07d2b84e51",
+   "role": "builder",
+   "n": 1,
+   "model_id": "xiaomi/mimo-v2.6-flash",
+   "started_at": "2026-10-05T14:01:05.000Z",
+   "duration_ms": 24500,
+   "tokens_in": 2100,
+   "tokens_out": 640,
+   "outcome": "answered",
+   "why": "",
+   "request": {
+    "messages": [
+     {
+      "role": "system",
+      "content": "Eres el Builder. Responde solo JSON."
+     },
+     {
+      "role": "user",
+      "content": "Redacta el parche de plantilla para la hipotesis verificada."
+     }
+    ],
+    "max_tokens": 1024
+   },
+   "response": "{\"op\":\"replace\",\"path\":\"templates/saludo\",\"text\":\"Hola, te explico el siguiente paso...\"}"
+  }
+ ],
+ "verdict_story": {
+  "schema": "reg1.verdict_story/1",
+  "finding_key": "recontact_rate|region=norte|150/480|140/500",
+  "finding_id": "f-0001",
+  "target": "pulso-builder/templates/saludo",
+  "mechanism": "template_text",
+  "agent": "pulso-builder",
+  "suite_id": "suite-saludo-1",
+  "suite_is_regression_suite": true,
+  "outcome": "regression_suite_proven",
+  "reason": "fails_on_base_passes_on_change",
+  "announce": true,
+  "base": {
+   "per_case": []
+  },
+  "attempts": [
+   {
+    "verdict": "pass"
+   }
+  ],
+  "gate_items": [],
+  "model_policy": {
+   "judge": "z-ai/glm-5.3-flash"
+  }
+ },
+ "dossier": {
+  "schema": "dossier/1",
+  "announce": true,
+  "announce_reason": "announce",
+  "outcome": "regression_suite_proven",
+  "finding_kind": "contrast",
+  "refs": {
+   "finding_id": "f-0001",
+   "evidence_ref": "ev_3f9a1c07d2b84e51"
+  }
+ }
+}
