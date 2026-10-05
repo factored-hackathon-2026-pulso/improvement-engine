@@ -272,6 +272,17 @@ time.sleep(30)
 }
 
 #[test]
+fn a_synthetic_data_label_travels_on_the_card_and_in_the_dossier() {
+    let work = temp("label");
+    announced(&work);
+    let s = step(&work, &canned(&work, canned_cell("improved", None, Some(-5.2), Some([-7.0, -3.4]))), &[("PULSO_OUTCOME_DATA_LABEL", "synthetic-planted-effect".into())]);
+    let c = s.run(&release("release.published", "rel-14", Some("prop-1"))).unwrap()["cards"][0].clone();
+    assert_eq!(c["data_label"], "synthetic-planted-effect");
+    assert!(c["dossier"]["es"].as_str().unwrap().contains("DATOS SINTETICOS") && c["dossier"]["pt"].as_str().unwrap().contains("DADOS SINTETICOS"));
+    assert!(c["caveats"].to_string().contains("not a result about any release"));
+}
+
+#[test]
 fn a_live_release_takes_its_period_from_the_event_and_says_so() {
     let work = temp("live");
     announced(&work);

@@ -125,6 +125,8 @@ pub struct OutcomeStep {
     /// `YYYY-MM` that replaces the release period of the event (historical data). Implies `period_kind = pseudo_release_historical`.
     pub pseudo_release: Option<String>,
     pub window_months: u32,
+    /// `PULSO_OUTCOME_DATA_LABEL` (e.g. `synthetic`): travels on every card and in its caveats.
+    pub data_label: Option<String>,
     pub estimator: Arc<dyn Estimator>,
 }
 
@@ -339,6 +341,7 @@ impl OutcomeStep {
             post_cells: on("PULSO_OUTCOME_POST_CELLS").map(PathBuf::from),
             pseudo_release: pseudo,
             window_months,
+            data_label: on("PULSO_OUTCOME_DATA_LABEL").map(|l| slug(&l)),
             estimator: Arc::new(Subprocess { cmd, cwd: on("PULSO_OUTCOME_CWD").map(PathBuf::from), timeout }),
         }))
     }
@@ -459,10 +462,14 @@ impl OutcomeStep {
     fn fill(&self, card: &mut Value, v: &Verdict, metric: &str, dims: Option<&Dims>, release_id: &str, pseudo: bool) {
         let label = dims.map_or("celda desconocida".to_string(), |d| d.values().cloned().collect::<Vec<_>>().join(" / "));
         let underpowered = v.reason.as_deref().is_some_and(|r| r.starts_with("underpowered"));
-        let mut caveats = vec![
+        let mut caveats: Vec<String> = vec![
             "association, not cause: a descriptive pre/post comparison against sibling cells; nothing was randomized and nothing here shows the release caused the change".to_string(),
             "one release, one cell, a short window: other changes in the same months are not excluded".to_string(),
         ];
+        if let Some(l) = &self.data_label {
+            caveats.push(format!("data label: {l}. A synthetic label means the numbers were planted to exercise the pipeline: it is not a result about any release"));
+            card["data_label"] = json!(l);
+        }
         if pseudo {
             caveats.push("historical data: the release date is a PSEUDO-release (no release happened); the post period is only the months after an arbitrary date".into());
         }
@@ -485,7 +492,12 @@ impl OutcomeStep {
         card["controls"] = json!({"kind": "same-metric sibling cells (same channel, other reasons); the customer-hash halves are replication cohorts that must agree, not controls", "dimension": v.control_dimension, "cells": v.controls});
         card["power_note"] = json!(power_note(v));
         card["caveats"] = json!(caveats);
-        card["dossier"] = dossier(v, metric, &label, release_id, pseudo);
+        let mut d = dossier(v, metric, &label, release_id, pseudo);
+        if self.data_label.as_deref().is_some_and(|l| l.contains("synthetic")) {
+            d["es"] = json!(format!("{} DATOS SINTETICOS: efecto plantado para probar el flujo, no es un resultado real.", d["es"].as_str().unwrap_or("")));
+            d["pt"] = json!(format!("{} DADOS SINTETICOS: efeito plantado para testar o fluxo, nao e um resultado real.", d["pt"].as_str().unwrap_or("")));
+        }
+        card["dossier"] = d;
         card["success_claimed"] = json!(v.status == "improved");
     }
 
