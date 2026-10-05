@@ -196,3 +196,18 @@ fn no_change_compiles_to_nothing() {
     let out = compile(&c, &f, &row, &opp("template:t/estado_pqr", "wording"), &json!({"kind": "no_change", "rationale": "No safe change.", "expected_direction": "decrease", "alternatives": alts(), "uncertainty": "u"})).unwrap();
     assert!(out.changes.is_empty() && out.kind == "no_change");
 }
+
+#[test]
+fn an_expected_direction_that_contradicts_the_finding_is_denied() {
+    // every cells metric is higher-is-worse and the finding is "up": a proposal promising an increase would write a
+    // contradictory expected_effect (its success rule says the rate falls).
+    let c = cat();
+    let f = pqr_finding();
+    let row = map_finding(&f).unwrap();
+    let o = opp("template:t/estado_pqr", "status_message_gap");
+    let es = json!({"locale": "es", "anchor_id": "es.a1", "op": "replace", "replacement": "Ya consult\u{e9} tu PQR y su estado es {{ facts.pqr.value.status }}."});
+    let pt = json!({"locale": "pt", "anchor_id": "pt.a1", "op": "replace", "replacement": "J\u{e1} consultei sua solicita\u{e7}\u{e3}o e o estado \u{e9} {{ facts.pqr.value.status }}."});
+    let mut p = patch_proposal("template:t/estado_pqr", json!([es, pt]));
+    p["expected_direction"] = json!("increase");
+    assert_eq!(denied(compile(&c, &f, &row, &o, &p)), "direction_mismatch");
+}

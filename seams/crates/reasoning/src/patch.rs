@@ -107,6 +107,9 @@ pub fn compile(catalog: &Catalog, f: &Finding, row: &Row, opp: &Opportunity, pro
     if kind != target.kind {
         return deny("kind_mismatch", format!("the target {} takes kind {}, the proposal is {kind}", opp.target_ref, target.kind));
     }
+    if f.direction != "up" || direction != "decrease" {
+        return deny("direction_mismatch", "every cells metric is higher-is-worse: the finding must be up and the expected direction decrease");
+    }
     let docs = docs(f, row, opp, &rationale);
     let effect = expected_effect(f, row, direction);
     match kind {
