@@ -113,7 +113,7 @@ fn a_missing_live_artifact_is_base_missing() {
 #[test]
 fn registry_refusals_map_to_closed_reasons() {
     let create_with = |reply| {
-        let steps = vec![("GET /v1/registry/entities/", ok(entity("1.0.0", BASE_ES))), ("POST /v1/registry/proposals", reply)];
+        let steps = vec![("GET /v1/registry/entities/", ok(entity("1.0.0", BASE_ES))), listing_empty(), ("POST /v1/registry/proposals", reply)];
         reason_of(Via::RegistryApi, steps).0
     };
     assert_eq!(create_with(status(429, "quota_exceeded")), Reason::QuotaExceeded);
@@ -128,7 +128,7 @@ fn registry_refusals_map_to_closed_reasons() {
 #[test]
 fn a_refused_draft_keeps_the_proposal_id_and_never_leaks_free_text() {
     let mut steps = direct_steps();
-    steps.truncate(2);
+    steps.truncate(3);
     steps.push(("PUT /v1/registry/proposals/prp_1/draft", Ok(registry_writer::Reply { status: 422, body: json!({"code": "validation_failed", "detail": "SECRET free text", "violations": [{"rule": "REG-SCHEMA"}]}) })));
     let (r, o, _) = reason_of(Via::RegistryApi, steps);
     assert_eq!(r, Reason::ValidationFailed);
@@ -139,7 +139,7 @@ fn a_refused_draft_keeps_the_proposal_id_and_never_leaks_free_text() {
 #[test]
 fn stale_proposal_is_closed() {
     let mut steps = direct_steps();
-    steps.truncate(2);
+    steps.truncate(3);
     steps.push(("PUT /v1/registry/proposals/prp_1/draft", status(409, "proposal_stale")));
     assert_eq!(reason_of(Via::RegistryApi, steps).0, Reason::ProposalStale);
 }
@@ -147,7 +147,7 @@ fn stale_proposal_is_closed() {
 #[test]
 fn registry_violations_are_draft_invalid_not_success() {
     let mut steps = direct_steps();
-    steps.truncate(3);
+    steps.truncate(4);
     steps.push(("POST /v1/registry/proposals/prp_1/validate", ok(json!({"violations": [{"rule": "REG-REF", "path": "x", "message": "m"}], "candidate_hash": null, "auto_bumped": []}))));
     let (r, o, _) = reason_of(Via::RegistryApi, steps);
     assert_eq!(r, Reason::DraftInvalid);
@@ -157,7 +157,7 @@ fn registry_violations_are_draft_invalid_not_success() {
 #[test]
 fn an_empty_stored_draft_is_not_success() {
     let mut steps = direct_steps();
-    steps.truncate(4);
+    steps.truncate(5);
     steps.push(("GET /v1/registry/proposals/prp_1", ok(proposal_detail(1, "draft", 0))));
     assert_eq!(reason_of(Via::RegistryApi, steps).0, Reason::EmptyDraft);
 }
@@ -241,6 +241,10 @@ fn the_allow_list_refuses_query_fragment_and_control_bytes_so_nothing_can_be_smu
     let crlf = format!("{}{}", char::from(13), char::from(10));
     for (m, p) in [
         ("POST", "/v1/runs?x=1".to_string()),
+        ("GET", "/v1/registry/proposals?agent_id=a&limit=200&approve=1".to_string()),
+        ("GET", "/v1/registry/proposals?agent_id=a/../b&limit=200".to_string()),
+        ("POST", "/v1/registry/proposals?agent_id=a&limit=200".to_string()),
+        ("GET", "/v1/registry/proposals/prp_1?agent_id=a&limit=2".to_string()),
         ("POST", format!("/v1/runs?x HTTP/1.1{crlf}Authorization: Bearer evil{crlf}X: ")),
         ("POST", format!("/v1/runs HTTP/1.1{crlf}X: y")),
         ("GET", "/v1/registry/proposals/prp_1?../../approve".to_string()),
@@ -256,7 +260,7 @@ fn the_allow_list_refuses_query_fragment_and_control_bytes_so_nothing_can_be_smu
 #[test]
 fn registry_rule_ids_in_a_denial_are_a_closed_vocabulary_never_prose() {
     let mut steps = direct_steps();
-    steps.truncate(2);
+    steps.truncate(3);
     steps.push(("PUT /v1/registry/proposals/prp_1/draft", Ok(registry_writer::Reply { status: 422, body: json!({"code": "validation_failed", "violations": [{"rule": "customer jane@example.com said hello"}]}) })));
     let (_, o, _) = reason_of(Via::RegistryApi, steps);
     assert!(!o.detail.contains("jane") && !o.detail.contains("hello"), "{}", o.detail);
@@ -410,4 +414,36 @@ fn an_entity_answer_becomes_an_artifact_with_its_other_fields() {
     assert!(registry_writer::baseline::parse_entity(&json!({"ref": {"kind": "prompt", "id": "x", "version": "1"}, "content": {"locales": {}}}), vec![]).is_none());
     assert!(registry_writer::baseline::entity_path("prompt", "../x").is_none());
     let _: Value = entity("1", "x");
+}
+
+#[test]
+fn the_fixed_listing_query_is_allowed() {
+    assert!(allowed("GET", "/v1/registry/proposals?agent_id=copiloto-asesor&limit=200"));
+    assert!(allowed("GET", "/v1/registry/proposals?agent_id=copiloto-asesor&limit=50&offset=100"));
+}
+
+#[test]
+fn a_lost_receipt_is_recovered_from_the_registry_listing_and_no_second_proposal_is_opened() {
+    let title = submission().title();
+    let listing = ok(json!({"items": [{"proposal_id": "prp_1", "agent_id": "copiloto-asesor", "state": "draft", "title": title, "rev": 1}], "total": 1}));
+    let script = Script::new(vec![
+        ("GET /v1/registry/entities/", ok(entity("1.0.0", BASE_ES))),
+        ("GET /v1/registry/proposals?agent_id=copiloto-asesor", listing),
+        ("GET /v1/registry/proposals/prp_1", ok(proposal_detail(1, "draft", 1))),
+        ("POST /v1/registry/proposals/prp_1/validate", ok(valid())),
+        ("GET /v1/registry/proposals/prp_1", ok(proposal_detail(1, "draft", 1))),
+    ]);
+    let store = MemoryStore::new();
+    let o = Writer::new(cfg(Via::RegistryApi), &script, &store).deliver(&submission());
+    assert!(o.delivered() && o.replayed, "{}", o.to_json());
+    assert!(!script.requests().contains(&("POST".to_string(), "/v1/registry/proposals".to_string())), "nothing was created");
+    assert!(store.get(&submission().key()).is_some(), "the receipt is rebuilt");
+}
+
+#[test]
+fn put_draft_carries_its_own_idempotency_key_derived_from_the_finding_key() {
+    let (_, s) = deliver(Via::RegistryApi, direct_steps());
+    let log = s.log.borrow();
+    let put = log.iter().find(|l| l.method == "PUT").unwrap();
+    assert_eq!(put.idem.as_deref(), Some(format!("{}-draft", submission().key()).as_str()));
 }

@@ -48,13 +48,24 @@ pub fn runner_exe() -> Option<std::path::PathBuf> {
 /// worker runs `engine_job::EngineRunner` (`run_signals` per admitted signal, events into `store` in process).
 pub fn build_tasks(cfg: &RunConfig, log: &Logger, health: &Arc<Health>, repo: Arc<dyn JobRepository>, store: Arc<debug_api::Store>) -> Result<Vec<Box<dyn Task>>, String> {
     let ctx = TickCtx { data_mode: cfg.data_mode, adapter: cfg.adapter.clone(), batch_cap: cfg.batch_cap };
+    // The value loop (cells -> reasoning -> registry writer) may be configured with any adapter, `stub` included: with `stub` the only
+    // jobs are the ones the trigger endpoint admits, and the worker runs them.
+    let loop_cfg = |work: Option<&std::path::Path>| value_loop::ValueLoop::from_lookup(&|k| std::env::var(k).ok(), work);
     let (tick, runner): (Box<dyn Tick>, Option<Arc<dyn JobRunner>>) = if cfg.adapter == "stub" {
-        (Box::new(StubTick), None)
+        match (cfg.work_dir.as_ref(), loop_cfg(cfg.work_dir.as_deref())?) {
+            (Some(work), Some(v)) => {
+                let exe = runner_exe().ok_or("no sensor-step runner: set STEPS_RUNNER_EXE or keep pulso-synth-runner next to the pulso executable")?;
+                let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?.with_value_loop(Some(Arc::new(v)));
+                (Box::new(StubTick), Some(Arc::new(job)))
+            }
+            (None, Some(_)) => return Err("PULSO_WORK_DIR is required with the value loop".into()),
+            _ => (Box::new(StubTick), None),
+        }
     } else {
         let exe = runner_exe().ok_or("no sensor-step runner: set STEPS_RUNNER_EXE or keep pulso-synth-runner next to the pulso executable")?;
         let work = cfg.work_dir.as_ref().ok_or("PULSO_WORK_DIR is not set")?;
         let tick = source::build_tick(cfg, repo.clone(), &cfg.tenant, &exe)?;
-        let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?.with_value_loop(value_loop::ValueLoop::from_lookup(&|k| std::env::var(k).ok(), Some(work))?.map(Arc::new));
+        let job = engine_job::EngineRunner::new(cfg, work, &exe, store)?.with_value_loop(loop_cfg(Some(work))?.map(Arc::new));
         (tick, Some(Arc::new(job)))
     };
     let monitor = MonitorTask::new(tick, ctx, cfg.poll_interval, log.clone());

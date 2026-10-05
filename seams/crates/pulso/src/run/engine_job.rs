@@ -368,6 +368,9 @@ impl JobRunner for EngineRunner {
             Some(v) => {
                 let out = v.run(&JobPersist { job, ctx })?;
                 self.record_loop(&job.job, &out)?;
+                // aggregates, reason codes and ids only: the readable outcome of the job next to the other run records
+                let dir = self.work.join("value-loop");
+                let _ = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(dir.join(format!("{}.json", job.job)), serde_json::to_vec_pretty(&out).unwrap_or_default()));
                 summary["value_loop"] = out;
             }
             None if trigger => summary["value_loop"] = json!({"skipped": "value loop not configured (PULSO_CELLS_NDJSON is not set)"}),

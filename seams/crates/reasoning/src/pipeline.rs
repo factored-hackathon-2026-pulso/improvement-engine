@@ -121,6 +121,14 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
         r.doubles = [&rs, &rv, &rb].iter().flat_map(|x| x.doubles()).collect();
         r
     };
+    if f.direction != "up" {
+        // Every cells metric is higher-is-worse: a cell BELOW its reference is a good result, not an opportunity. No model is called.
+        r.status = "no_change".into();
+        r.reason = "better_than_reference".into();
+        r.stage = "direction".into();
+        r.detail = format!("metric {} is {} against the reference in this cell: nothing to improve", f.metric, f.direction);
+        return finish(r);
+    }
     let Some(row) = map_finding(f) else {
         r.status = "unlinked".into();
         r.reason = "no_mapping".into();

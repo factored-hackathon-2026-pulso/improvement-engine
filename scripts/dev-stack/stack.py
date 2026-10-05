@@ -167,7 +167,7 @@ def up(args) -> None:
         ["uv", "run", "agentcore", "serve", "--port", str(CORE_PORT), "--registry-api",
          "--identity-keys", str(STATE / "identity-keys.json"), "--staff-keys", str(STATE / "staff-keys.json"),
          "--lang-thresholds", str(ac / "scripts" / "e2e" / "lang-thresholds.json"), "--agents", "pulso-builder",
-         "--field-classifier", "agent_core.adapters.classification:field_classifier"],
+         "--field-classifier", "agent_core.composition.classification:field_classifier"],
         cwd=ac, env={**os.environ, **env}, stdout=log, stderr=log, creationflags=flags)
     (STATE / "serve.pid").write_text(str(proc.pid))
     wait(lambda: http_ok(f"http://127.0.0.1:{CORE_PORT}/healthz"), "agent-core serve", tries=60)

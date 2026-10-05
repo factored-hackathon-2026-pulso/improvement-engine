@@ -57,6 +57,8 @@ pub struct ValueLoop {
     pub transport: Arc<dyn Transport + Send + Sync>,
     pub ports: PortsFactory,
     pub model_label: String,
+    /// `PULSO_LOOP_MAX_FINDINGS`: cost bound per run (the first N corroborated findings in sensor order); the rest are counted, not silently dropped.
+    pub max_findings: Option<usize>,
 }
 
 fn truthy(v: Option<String>) -> bool {
@@ -109,6 +111,7 @@ impl ValueLoop {
             transport: Arc::new(HttpTransport::new(&addr, Duration::from_secs(90))),
             ports,
             model_label,
+            max_findings: get("PULSO_LOOP_MAX_FINDINGS").and_then(|v| v.parse().ok()),
         }))
     }
 
@@ -124,7 +127,11 @@ impl ValueLoop {
     pub fn run(&self, persist: &dyn Persist) -> Result<Value, String> {
         let ndjson = std::fs::read_to_string(&self.cells).map_err(|e| format!("cells package: {e}"))?;
         let report: Value = serde_json::from_str(&steps::cells::run(&ndjson).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        let (findings, skipped) = Finding::from_report(&report, self.source)?;
+        let (mut findings, skipped) = Finding::from_report(&report, self.source)?;
+        let total_corroborated = findings.len();
+        if let Some(n) = self.max_findings {
+            findings.truncate(n);
+        }
         let mut ports: Option<Ports> = None; // built on the first finding that needs a model: a full replay calls none
         let store = FileStore::new(&self.receipts);
         let w = self.writer(&store);
@@ -166,7 +173,7 @@ impl ValueLoop {
             "contract": "value-loop/b3-0", "sensor": "claude-standin (steps::cells, real code, labelled stand-in)", "data_source": self.source.as_str(),
             "baseline": {"label": refreshed.catalog.label, "live": refreshed.live.len(), "fixture": refreshed.fixture.len()},
             "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
-            "summary": {"corroborated": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "blocked": n("blocked"),
+            "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "blocked": n("blocked"),
                         "delivered": delivered, "denied": denied},
             "findings": records,
             "engine_never_approves_publishes_or_promotes": true,

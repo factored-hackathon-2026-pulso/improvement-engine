@@ -273,6 +273,13 @@ impl<'a> Writer<'a> {
         Ok(Some(o))
     }
 
+    /// The listed proposal of this agent whose title is the deterministic title of the submission (`GET /v1/registry/proposals`).
+    fn lookup(&self, s: &Submission, _key: &str) -> Result<Option<String>, Fail> {
+        let body = self.ok_call("GET", format!("/v1/registry/proposals?agent_id={}&limit=200", s.agent_id), &self.cfg.registry_token, None, None)?;
+        let title = s.title();
+        Ok(body["items"].as_array().into_iter().flatten().find(|p| p["title"].as_str() == Some(title.as_str()) && p["state"].as_str() == Some("draft")).and_then(|p| p["proposal_id"].as_str()).filter(|id| guard::ok_seg(id)).map(str::to_string))
+    }
+
     // ---- RegistryApi ------------------------------------------------------------------------------------------------------
 
     fn direct(&self, s: &Submission, key: &str, changes: &[Value]) -> Outcome {
@@ -284,6 +291,19 @@ impl<'a> Writer<'a> {
                 }
                 Ok(_) => {}
             }
+        }
+        // Secondary lookup: a proposal with this deterministic title may exist although the local receipt was lost (GET /proposals).
+        match self.lookup(s, key) {
+            Ok(Some(pid)) => {
+                let rec = Receipt { proposal_id: pid, agent_id: s.agent_id.clone(), created_at: (self.clock)() };
+                let _ = self.store.put(key, rec.clone());
+                return match self.resume(s, key, &rec, changes) {
+                    Ok(Some(o)) => o,
+                    Ok(None) => self.denied(key, (Reason::RegistryError, "the listed proposal vanished".into()), Some(&rec.proposal_id)),
+                    Err(f) => self.denied(key, f, Some(&rec.proposal_id)),
+                };
+            }
+            Ok(None) | Err(_) => {} // not found, or a registry without the listing route: the idempotency key still protects the create
         }
         let created = match self.ok_call("POST", "/v1/registry/proposals".into(), &self.cfg.registry_token, Some(key), Some(json!({"agent_id": s.agent_id, "origin": "auto_detect", "title": s.title()}))) {
             Ok(v) => v,
@@ -303,7 +323,8 @@ impl<'a> Writer<'a> {
 
     fn write_and_check(&self, _s: &Submission, key: &str, pid: &str, rev: u64, changes: &[Value], replayed: bool) -> Result<Outcome, Fail> {
         let path = format!("{}/draft", Self::proposal_path(pid)?);
-        self.ok_call("PUT", path, &self.cfg.registry_token, None, Some(json!({"expected_rev": rev, "changes": changes})))?;
+        let draft_key = format!("{key}-draft"); // server-side replay of a lost answer (agent-core Idempotency-Key on put_draft)
+        self.ok_call("PUT", path, &self.cfg.registry_token, Some(&draft_key), Some(json!({"expected_rev": rev, "changes": changes})))?;
         let mut o = self.check(key, pid, changes.len(), replayed)?;
         o.replayed = replayed;
         Ok(o)

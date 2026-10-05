@@ -61,6 +61,9 @@ impl Transport for Wire {
         if m == "GET" && p.starts_with("/v1/registry/entities/") {
             return r(404, json!({"code": "not_found"}));
         }
+        if m == "GET" && p.starts_with("/v1/registry/proposals?") {
+            return r(200, json!({"items": [], "total": 0}));
+        }
         if m == "POST" && p == "/v1/registry/proposals" {
             let mut n = self.next.lock().unwrap();
             *n += 1;
@@ -138,6 +141,7 @@ fn value_loop(work: &Path, wire: Arc<dyn Transport + Send + Sync>) -> ValueLoop 
         transport: wire,
         ports: scripted_ports(),
         model_label: "scripted".into(),
+        max_findings: None,
     }
 }
 

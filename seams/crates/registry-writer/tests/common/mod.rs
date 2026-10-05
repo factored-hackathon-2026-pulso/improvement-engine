@@ -149,11 +149,16 @@ pub fn created_body() -> Value {
 pub fn direct_steps() -> Vec<Step> {
     vec![
         ("GET /v1/registry/entities/prompt/p/copiloto", ok(entity("1.0.0", BASE_ES))),
+        listing_empty(),
         ("POST /v1/registry/proposals", created(created_body())),
         ("PUT /v1/registry/proposals/prp_1/draft", ok(json!({"proposal_id": "prp_1", "rev": 1, "state": "draft"}))),
         ("POST /v1/registry/proposals/prp_1/validate", ok(valid())),
         ("GET /v1/registry/proposals/prp_1", ok(proposal_detail(1, "draft", 1))),
     ]
+}
+
+pub fn listing_empty() -> Step {
+    ("GET /v1/registry/proposals?agent_id=", ok(json!({"items": [], "total": 0})))
 }
 
 pub fn none_of(map: &BTreeMap<String, String>) -> bool {

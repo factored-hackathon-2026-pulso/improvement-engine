@@ -246,3 +246,19 @@ fn independence_level_names_the_vendor_relation() {
     assert_eq!(l("xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash"), "other_family");
     assert_eq!(l("xiaomi/mimo-v2.6-flash", "xiaomi/mimo-v2.6-flash"), "separate_prompt_and_context_only");
 }
+
+#[test]
+fn a_cell_below_its_reference_is_not_an_opportunity_and_no_model_is_called() {
+    let mut f = tecnico_finding();
+    f.direction = "down".into();
+    let calls = Rc::new(Cell::new(0u32));
+    let c2 = calls.clone();
+    let p = ports(
+        FnPort::scripted("s", count_calls(c2.clone(), scout_ok(&f, "new_agent:consultas", "uncovered_topic"))),
+        FnPort::scripted("v", count_calls(c2.clone(), verifier_ok("supported"))),
+        FnPort::scripted("b", count_calls(c2, |_| Err(ModelError::Invalid("must not be called".into())))),
+    );
+    let r = reason(&cat(), &f, &p, &opts());
+    assert_eq!((r.status.as_str(), r.reason.as_str(), r.stage.as_str()), ("no_change", "better_than_reference", "direction"));
+    assert_eq!(calls.get(), 0);
+}

@@ -3,11 +3,18 @@
 
 /// `true` only for the exact operations of the writer.
 pub fn allowed(method: &str, path: &str) -> bool {
-    // No query, fragment, space or control byte: the path is written verbatim into the HTTP request line.
-    if !path.bytes().all(|b| b.is_ascii_graphic() && b != b'?' && b != b'#') {
+    // Space, control byte or fragment: the path is written verbatim into the HTTP request line. The ONE query the engine sends is the
+    // proposal listing with a fixed shape (below); every other `?` is refused.
+    if !path.bytes().all(|b| b.is_ascii_graphic() && b != b'#') {
         return false;
     }
-    let p = path;
+    let (p, query) = match path.split_once('?') {
+        Some((p, q)) => (p, Some(q)),
+        None => (path, None),
+    };
+    if let Some(q) = query {
+        return method == "GET" && p == "/v1/registry/proposals" && listing_query(q);
+    }
     if p == "/v1/runs" {
         return method == "POST";
     }
@@ -26,4 +33,18 @@ pub fn allowed(method: &str, path: &str) -> bool {
 /// A path segment: ids, kinds and versions only (no traversal, no encoded separators).
 pub fn ok_seg(s: &str) -> bool {
     !s.is_empty() && s != "." && s != ".." && s.len() <= 120 && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'@'))
+}
+
+/// `agent_id=<id>&limit=<1-3 digits>[&offset=<1-6 digits>]`: nothing else may travel in a query.
+fn listing_query(q: &str) -> bool {
+    let parts: Vec<&str> = q.split('&').collect();
+    let num = |v: &str, n: usize| !v.is_empty() && v.len() <= n && v.bytes().all(|b| b.is_ascii_digit());
+    match parts.as_slice() {
+        [a, l] | [a, l, _] => {
+            a.strip_prefix("agent_id=").is_some_and(ok_seg)
+                && l.strip_prefix("limit=").is_some_and(|v| num(v, 3))
+                && parts.get(2).is_none_or(|o| o.strip_prefix("offset=").is_some_and(|v| num(v, 6)))
+        }
+        _ => false,
+    }
 }
