@@ -67,6 +67,11 @@ fn placeholders(t: &str) -> Result<Vec<String>, String> {
     let mut out = vec![];
     let mut rest = t;
     while let Some(i) = rest.find("{{") {
+        // MAP1: a single curly brace outside a double-brace span is a broken placeholder (the engine renders it literally; the regression
+        // proof refused such texts after a full evaluation). Refused here so the Builder gets the problem fed back.
+        if rest[..i].contains(['{', '}']) {
+            return Err("a placeholder needs two opening and two closing curly braces, one brace renders as literal text".into());
+        }
         let after = &rest[i + 2..];
         let j = after.find("}}").ok_or("unclosed {{")?;
         if after[..j].contains("{{") {
@@ -77,6 +82,9 @@ fn placeholders(t: &str) -> Result<Vec<String>, String> {
     }
     if rest.contains("}}") {
         return Err("stray }}".into());
+    }
+    if rest.contains(['{', '}']) {
+        return Err("a placeholder needs two opening and two closing curly braces, one brace renders as literal text".into());
     }
     Ok(out)
 }
