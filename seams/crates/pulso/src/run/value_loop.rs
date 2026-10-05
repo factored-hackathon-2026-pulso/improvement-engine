@@ -48,6 +48,9 @@ pub struct ValueLoop {
     pub receipts: PathBuf,
     pub via: Via,
     pub environment: Environment,
+    /// Label of the credential the registry accepted. LOCAL STACK ONLY: trusting the engine kid through the staff-keys file (or any
+    /// stand-in credential) is a property of our own instance; it must never be reused against a shared Core, which has to mint the
+    /// `builder` principal itself. A stand-in is declared (`PULSO_REGISTRY_CREDENTIAL=standin`) and travels in every delivery label.
     pub credential: &'static str,
     pub registry_token: Jws,
     pub run_token: Option<Jws>,

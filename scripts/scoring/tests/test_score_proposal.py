@@ -335,5 +335,27 @@ class ScoreTests(unittest.TestCase):
                 self.assertEqual(json.load(f)["verdict"], "needs_judge")
 
 
+class GatewayJudgeTests(unittest.TestCase):
+    def test_other_family_judge_scores_through_run_judge_and_never_leaks_the_key(self):
+        import gateway_judge as gj
+        seen = []
+
+        def send(addr, key, body):
+            seen.append((addr, key, body))
+            return {"output": {c: 2 for c in JUDGED}}
+
+        j = gj.make_judge(send, {"PULSO_LLM_GATEWAY_ADDR": "127.0.0.1:8080", "PULSO_LLM_GATEWAY_KEY": "k"})
+        out = sp.run_judge(j, {"proposal": {"x": 1}, "base": {}, "builder_reasoning": "hidden"}, "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash")
+        self.assertEqual(out["scores"], {c: 2 for c in JUDGED})
+        self.assertEqual((out["builder_family"], out["judge_family"]), ("xiaomi", "z-ai"))
+        self.assertEqual(seen[0][2]["profile"]["model"], "z-ai/glm-5.3-flash")
+        self.assertNotIn("hidden", json.dumps(seen[0][2]))
+        self.assertNotIn("\"k\"", json.dumps(seen[0][2]))
+
+    def test_same_vendor_tier_is_still_refused(self):
+        with self.assertRaises(sp.JudgeError):
+            sp.run_judge(good_judge, {}, "xiaomi/mimo-v2.6-flash", "xiaomi/mimo-v2.6-pro")
+
+
 if __name__ == "__main__":
     unittest.main()
