@@ -34,7 +34,7 @@ fn without_evidence_refs(s: &str) -> String {
     out
 }
 
-fn long_digits(s: &str, n: usize) -> bool {
+pub(crate) fn long_digits(s: &str, n: usize) -> bool {
     let mut run = 0;
     for c in without_evidence_refs(s).chars() {
         run = if c.is_ascii_digit() { run + 1 } else { 0 };

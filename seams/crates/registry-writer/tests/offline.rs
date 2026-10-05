@@ -212,8 +212,6 @@ fn the_allow_list_refuses_every_management_operation() {
     for (m, p) in [
         ("POST", "/v1/registry/proposals/prp_1/approve"),
         ("POST", "/v1/registry/proposals/prp_1/publish"),
-        ("POST", "/v1/registry/proposals/prp_1/freeze"),
-        ("POST", "/v1/registry/proposals/prp_1/evaluate"),
         ("POST", "/v1/registry/proposals/prp_1/reopen"),
         ("POST", "/v1/registry/proposals/prp_1/reject"),
         ("POST", "/v1/registry/aliases/copiloto-asesor/prod"),
@@ -229,10 +227,68 @@ fn the_allow_list_refuses_every_management_operation() {
         ("GET", "/v1/registry/proposals/prp_1"),
         ("PUT", "/v1/registry/proposals/prp_1/draft"),
         ("POST", "/v1/registry/proposals/prp_1/validate"),
+        ("POST", "/v1/registry/proposals/prp_1/freeze"),
+        ("POST", "/v1/registry/proposals/prp_1/evaluate"),
         ("GET", "/v1/registry/entities/prompt/p/copiloto"),
         ("POST", "/v1/runs"),
     ] {
         assert!(allowed(m, p), "{m} {p}");
+    }
+}
+
+/// W11: freeze and evaluate are allowed, the human decisions are not, in every spelling an attacker or a bug could try.
+#[test]
+fn every_human_decision_verb_stays_refused_whatever_the_method_suffix_or_case() {
+    for verb in ["approve", "publish", "promote", "reject", "reopen", "revoke", "rollback", "release", "alias", "delete"] {
+        for m in ["POST", "PUT", "PATCH", "GET", "DELETE"] {
+            for p in [
+                format!("/v1/registry/proposals/prp_1/{verb}"),
+                format!("/v1/registry/proposals/prp_1/{verb}/"),
+                format!("/v1/registry/proposals/prp_1/freeze/{verb}"),
+                format!("/v1/registry/proposals/prp_1/evaluate/{verb}"),
+                format!("/v1/registry/{verb}/prp_1"),
+                format!("/v1/registry/proposals/prp_1/{}", verb.to_uppercase()),
+            ] {
+                assert!(!allowed(m, &p), "{m} {p}");
+            }
+        }
+    }
+    for (m, p) in [
+        ("POST", "/v1/registry/releases/r1/revoke"),
+        ("POST", "/v1/registry/aliases/consultas/prod"),
+        ("POST", "/v1/registry/proposals/prp_1/approve"),
+        ("POST", "/v1/registry/proposals/prp_1/publish"),
+        ("POST", "/v1/registry/proposals/prp_1/reject"),
+    ] {
+        assert!(!allowed(m, p), "{m} {p}");
+    }
+}
+
+#[test]
+fn freeze_and_evaluate_are_post_only_and_take_exactly_one_safe_proposal_id() {
+    let crlf = format!("{}{}", char::from(13), char::from(10));
+    for verb in ["freeze", "evaluate"] {
+        assert!(allowed("POST", &format!("/v1/registry/proposals/prp_1/{verb}")));
+        for m in ["GET", "PUT", "PATCH", "DELETE", "post", "HEAD"] {
+            assert!(!allowed(m, &format!("/v1/registry/proposals/prp_1/{verb}")), "{m} {verb}");
+        }
+        for p in [
+            format!("/v1/registry/proposals/../{verb}"),
+            format!("/v1/registry/proposals//{verb}"),
+            format!("/v1/registry/proposals/prp 1/{verb}"),
+            format!("/v1/registry/proposals/prp%2F1/{verb}"),
+            format!("/v1/registry/proposals/prp_1/extra/{verb}"),
+            format!("/v1/registry/proposals/prp_1/{verb}/extra"),
+            format!("/v1/registry/proposals/prp_1/{verb}?approve=1"),
+            format!("/v1/registry/proposals/prp_1/{verb}?agent_id=a&limit=2"),
+            format!("/v1/registry/proposals/prp_1/{verb}#approve"),
+            format!("/v1/registry/proposals/prp_1/{verb}{}", char::from(0)),
+            format!("/v1/registry/proposals/prp_1/{verb}{crlf}X: y"),
+            format!("/v1/registry/proposals/prp_1{crlf}/{verb}"),
+            format!("/v1/registry/proposals/{}/{verb}", "a".repeat(121)),
+        ] {
+            assert!(!allowed("POST", &p), "{p:?}");
+        }
     }
 }
 
@@ -284,7 +340,18 @@ fn the_key_is_stable_per_finding_and_target() {
     let mut other = compiled_patch();
     other.target_ref = "prompt:p/otro".into();
     assert_ne!(Submission::new(&finding(), &other).key(), a.key());
-    assert!(a.title().len() <= 200);
+    assert!(a.title().len() <= 120);
+}
+
+#[test]
+fn the_registry_title_is_capped_at_the_platform_120_keeping_the_key_suffix() {
+    let mut c = compiled_patch();
+    c.target_ref = format!("prompt:p/{}", "nombre_largo ".repeat(30));
+    let s = Submission::new(&finding(), &c);
+    let t = s.title();
+    assert!(t.chars().count() <= 120, "{t}");
+    assert!(t.starts_with("[improvement-engine] ") && t.ends_with(&s.key()[6..14]), "{t}");
+    assert_eq!(t, Submission::new(&finding(), &c).title(), "deterministic, so the title lookup still finds it");
 }
 
 use registry_writer::Submission;
@@ -502,4 +569,45 @@ fn the_http_transport_adds_the_story_traceparent_as_a_header_only_and_refuses_a_
     let r = t.send(&Request { method: "POST", path: "/v1/runs".into(), bearer: &jws, idempotency_key: Some(&evil), body: None });
     assert!(matches!(r, Err(TransportError::NotSent(ref m)) if m.contains("refused")), "{r:?}");
     assert_eq!(srv.join().unwrap(), "", "nothing reached the server");
+}
+
+// ---- W15 / R11: no generated text carries a digit run of 6 or more ---------------------------------------------------------
+
+fn longest_digit_run(s: &str) -> usize {
+    let (mut best, mut cur) = (0, 0);
+    for c in s.chars() {
+        cur = if c.is_ascii_digit() { cur + 1 } else { 0 };
+        best = best.max(cur);
+    }
+    best
+}
+
+#[test]
+fn the_key_title_and_default_changelog_never_carry_a_digit_run_of_six() {
+    for i in 0..600u32 {
+        let mut s = submission();
+        s.evidence_ref = format!("ev_{i:016x}");
+        let key = s.key();
+        assert!(longest_digit_run(&key) < 6 && key.starts_with("pulso-") && key.len() == 30, "{key}");
+        assert!(longest_digit_run(&s.title()) < 6, "{}", s.title());
+        assert_eq!(key, s.key(), "stable");
+    }
+}
+
+#[test]
+fn delivered_docs_are_free_of_digit_runs_of_six_even_when_the_text_came_with_one() {
+    let mut s = submission();
+    s.changes[0]["docs"] = json!({"description": "evidence ev_1234567890123456 ticket 9876543", "rationale": "case 12345678 repeats", "changelog": "key pulso-111111222222333333444444"});
+    let script = Script::new(direct_steps());
+    let store = MemoryStore::new();
+    let o = Writer::new(cfg(Via::RegistryApi), &script, &store).deliver(&s);
+    assert!(o.delivered(), "{}", o.to_json());
+    let log = script.log.borrow();
+    let put = log.iter().find(|l| l.method == "PUT").unwrap().body.as_ref().unwrap().clone();
+    for k in ["description", "rationale", "changelog"] {
+        let t = put["changes"][0]["docs"][k].as_str().unwrap();
+        assert!(longest_digit_run(t) < 6, "{k}: {t}");
+    }
+    let create = log.iter().find(|l| l.method == "POST" && l.path == "/v1/registry/proposals").unwrap().body.as_ref().unwrap().clone();
+    assert!(longest_digit_run(create["title"].as_str().unwrap()) < 6);
 }

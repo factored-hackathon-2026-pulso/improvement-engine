@@ -112,7 +112,7 @@ def serve_ports() -> list[str]:
     if os.environ.get("PULSO_SERVE_E2E") == "1":
         return ["--tools", "testing.e2e_demo:tools", "--classifier", "testing.e2e_demo:classifier_provider",
                 "--field-classifier", "testing.e2e_demo:field_classifier", "--calibration", "testing.e2e_demo:calibration"]
-    return ["--field-classifier", os.environ.get("PULSO_FIELD_CLASSIFIER", "agent_core.adapters.classification:field_classifier")]
+    return ["--field-classifier", os.environ.get("PULSO_FIELD_CLASSIFIER", "agent_core.composition.classification:field_classifier")]
 
 
 def up(args) -> None:
@@ -191,6 +191,7 @@ def up(args) -> None:
         ["uv", "run", "agentcore", "serve", "--port", str(CORE_PORT), "--registry-api",
          "--identity-keys", str(STATE / "identity-keys.json"), "--staff-keys", str(STATE / "staff-keys.json"),
          "--lang-thresholds", str(ac / "scripts" / "e2e" / "lang-thresholds.json"), "--agents", os.environ.get("PULSO_SERVE_AGENTS", "pulso-builder"),
+         "--field-classifier", "agent_core.composition.classification:field_classifier",
          *serve_ports()],
         cwd=ac, env={**os.environ, **env}, stdout=log, stderr=log, creationflags=flags)
     (STATE / "serve.pid").write_text(str(proc.pid))

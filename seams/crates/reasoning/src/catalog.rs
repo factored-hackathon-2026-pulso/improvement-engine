@@ -29,7 +29,7 @@ impl Artifact {
         for (l, t) in &self.locales {
             raw.push_str(&format!("|{l}={t}"));
         }
-        steps::compile::sha256_hex(raw.as_bytes())[..16].to_string()
+        steps::compile::sha256_hex_calm(raw.as_bytes(), 16)
     }
 }
 

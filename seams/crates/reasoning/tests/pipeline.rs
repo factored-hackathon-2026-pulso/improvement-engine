@@ -265,6 +265,19 @@ fn a_cell_below_its_reference_is_not_an_opportunity_and_no_model_is_called() {
     assert_eq!(calls.get(), 0);
 }
 
+#[test]
+fn a_level_risk_signal_never_becomes_a_contrast_finding() {
+    let mut sensor = synthetic_cells_report();
+    let (before, _) = Finding::from_report(&sensor, Source::Synthetic).unwrap();
+    let risk = json!({"metric": "M8", "type": "level_risk", "class": "risk", "dims": {}, "status": "corroborated", "reason": "replicated_in_holdout",
+        "direction": "up", "claim": "association",
+        "discovery": {"numerator": 50, "denominator": 100, "rate": 0.5, "baseline_rate": 0.1, "diff": 0.4},
+        "holdout": {"numerator": 50, "denominator": 100, "rate": 0.5, "baseline_rate": 0.1, "diff": 0.4}});
+    sensor["signals"].as_array_mut().unwrap().push(risk);
+    let (after, skipped) = Finding::from_report(&sensor, Source::Synthetic).unwrap();
+    assert_eq!(after.len(), before.len());
+    assert!(skipped.iter().any(|s| s.metric == "M8" && s.status == "level_risk"));
+}
 
 fn lookup_scripted(f: &Finding) -> FnPort {
     FnPort::scripted("scripted-scout", scout_ok(f, "new_agent:consultas", "uncovered_topic"))

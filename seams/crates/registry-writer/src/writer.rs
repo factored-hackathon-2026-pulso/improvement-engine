@@ -45,7 +45,7 @@ impl Config {
     }
 }
 
-type Fail = (Reason, String);
+pub(crate) type Fail = (Reason, String);
 
 pub struct Writer<'a> {
     cfg: Config,
@@ -87,7 +87,7 @@ fn reject(r: &Reply) -> Fail {
     (reason, detail)
 }
 
-fn clip(s: &str, n: usize) -> String {
+pub(crate) fn clip(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }
 
@@ -125,6 +125,10 @@ impl<'a> Writer<'a> {
         self
     }
 
+    pub(crate) fn registry_token(&self) -> &Jws {
+        &self.cfg.registry_token
+    }
+
     fn labels(&self) -> Labels {
         Labels {
             environment: match self.cfg.environment {
@@ -156,7 +160,7 @@ impl<'a> Writer<'a> {
     }
 
     /// One guarded request. Non-2xx answers are returned as `Reply` for the caller to interpret (a 404 can mean "not there").
-    fn call(&self, method: &str, path: String, bearer: &Jws, idem: Option<&str>, body: Option<Value>) -> Result<Reply, Fail> {
+    pub(crate) fn call(&self, method: &str, path: String, bearer: &Jws, idem: Option<&str>, body: Option<Value>) -> Result<Reply, Fail> {
         if !guard::allowed(method, &path) {
             return Err((Reason::ForbiddenOperation, format!("{method} {} is not an operation of the engine", clip(&path, 80))));
         }
@@ -166,7 +170,7 @@ impl<'a> Writer<'a> {
         })
     }
 
-    fn ok_call(&self, method: &str, path: String, bearer: &Jws, idem: Option<&str>, body: Option<Value>) -> Result<Value, Fail> {
+    pub(crate) fn ok_call(&self, method: &str, path: String, bearer: &Jws, idem: Option<&str>, body: Option<Value>) -> Result<Value, Fail> {
         let r = self.call(method, path, bearer, idem, body)?;
         if (200..300).contains(&r.status) { Ok(r.body) } else { Err(reject(&r)) }
     }
@@ -237,10 +241,11 @@ impl<'a> Writer<'a> {
                 return Err(bad("content needs id and version as text"));
             }
             let d = &c["docs"];
+            let calm = steps::compile::defuse_digit_runs; // R11: no run of 6 or more digits in any text the registry stores
             let description = d["description"].as_str().filter(|t| !t.is_empty()).map(|t| clip(t, 4000)).unwrap_or_else(|| format!("{TITLE_PREFIX} {kind} change for {}", s.target_ref));
             let rationale = clip(d["rationale"].as_str().unwrap_or(""), 4000);
             let changelog = clip(d["changelog"].as_str().filter(|t| !t.is_empty()).unwrap_or(&format!("{TITLE_PREFIX} proposal key {key}")), 8000);
-            out.push(json!({"kind": kind, "content": c["content"], "docs": {"description": description, "rationale": rationale, "changelog": changelog}}));
+            out.push(json!({"kind": kind, "content": c["content"], "docs": {"description": calm(&description), "rationale": calm(&rationale), "changelog": calm(&changelog)}}));
         }
         Ok(out)
     }

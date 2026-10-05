@@ -68,6 +68,13 @@ prompt `p/pulso-builder@1.0.0`, model profile `pulso-mimo-flash@1.0.0` (prices f
 9. Podman rootful and rootless on this machine reject containers without `--pids-limit=0` (cgroup `pids`
    controller missing): the script passes it.
 
+## Concurrent agents: do not share the singleton stack
+
+`scripts/dev-stack/stack.py` manages ONE singleton stack and wipes/kills whatever it finds (containers, ports,
+data). Two agents or lanes running it at the same time destroy each other's runs. Each lane must either use its own
+ports and its own container-name prefix, or use `scripts/battery/demo_core.py`, which starts an isolated demo core
+that does not touch the singleton stack.
+
 ## A second stack beside another lane's (BLD1)
 
 `stack.py` accepts `PULSO_STACK_PREFIX` (container, volume and gateway-image names), `PULSO_PG_PORT`, `PULSO_GW_PORT`, `PULSO_CORE_PORT`,

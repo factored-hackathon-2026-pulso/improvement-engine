@@ -9,6 +9,14 @@
 //! metric (same half), Benjamini-Hochberg (default) or Bonferroni over ALL explored cells of the package, discovery/holdout replication,
 //! named discards, status vocabulary `candidate | corroborated | refuted | uncertain`.
 //! Signals are associations (`claim: association`); the sensor never names a cause or mechanism.
+//!
+//! Second finding type, `level_risk` (W1-4): a metric whose VALUE is a risk against an explicit, pre-registered threshold
+//! (`Config::level_risks`, e.g. M8: share of sends to non-consenting customers > 10%) rather than a vs-rest contrast. The
+//! level is the pooled rate of the metric's valid cells; the test is one-sided (rate > threshold) with a Wilson 95% interval,
+//! a minimum excess over the threshold, discovery/holdout replication, R2 windows and a per-month count. Level tests form a
+//! separate pre-registered family: Bonferroni over `level_risks.len()` (fixed in advance, independent of which metrics are
+//! present) and they do not enter `cells_explored` (the contrast BH family), so neither family dilutes the other. A level
+//! signal is `class: risk`, `claim: association`, never a cause.
 
 use std::collections::BTreeMap;
 
@@ -16,7 +24,11 @@ use crate::StepError;
 use crate::sensor::json::{Json, parse};
 
 /// Dimension keys a treated cell table may carry. Anything else (ids, free text) is rejected.
-pub const ALLOWED_DIMS: [&str; 6] = ["reason_category", "channel", "category", "case_type", "priority", "survey_type"];
+pub const ALLOWED_DIMS: [&str; 9] = [
+    "reason_category", "channel", "category", "case_type", "priority", "survey_type",
+    // AG2: digital action, campaign type, customer segment (closed vocabularies, aggregates only).
+    "action", "campaign_type", "customer_segment",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Multiplicity {
@@ -42,16 +54,31 @@ pub struct Config {
     pub min_effect: f64,
     /// Minimum cell denominator in discovery.
     pub min_support: i64,
+    /// Pre-registered level-risk specs (the Bonferroni family of level tests).
+    pub level_risks: Vec<LevelSpec>,
+}
+
+/// A metric whose level is a risk above `threshold` (fixed before looking at the data, set by the analyst, not by the sensor).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LevelSpec {
+    pub metric: String,
+    /// The pooled rate must exceed this level.
+    pub threshold: f64,
+    /// Minimum pooled rate minus threshold in discovery; holdout needs half of it.
+    pub min_excess: f64,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            dependencies: [("M6", "M1"), ("M6R", "M1"), ("M6U", "M1")]
+            dependencies: [("M6", "M1"), ("M6R", "M1"), ("M6U", "M1"), ("M10", "M1")]
                 .iter()
                 .map(|(a, b)| (a.to_string(), b.to_string()))
                 .collect(),
-            multiplicity: Multiplicity::Bh, k_min: 10, alpha: 0.01, min_ratio: 1.25, min_effect: 0.05, min_support: 500 }
+            multiplicity: Multiplicity::Bh, k_min: 10, alpha: 0.01, min_ratio: 1.25, min_effect: 0.05, min_support: 500,
+            // M8: more than 10% of sends to customers flagged as not accepting marketing is a compliance risk.
+            level_risks: vec![LevelSpec { metric: "M8".to_string(), threshold: 0.10, min_excess: 0.05 }],
+        }
     }
 }
 
@@ -89,9 +116,52 @@ pub struct R2 {
     pub w2: Option<Stage>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct LevelStage {
+    pub numerator: i64,
+    pub denominator: i64,
+    pub rate: f64,
+    pub ci_low: f64,
+    pub ci_high: f64,
+    pub threshold: f64,
+    /// rate minus threshold
+    pub excess: f64,
+    /// One-sided p of H0: rate <= threshold.
+    pub p: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LevelR2 {
+    /// `replicated | not_replicated | reversed | not_evaluated`
+    pub status: &'static str,
+    pub w1: Option<LevelStage>,
+    pub w2: Option<LevelStage>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LevelSignal {
+    pub metric: String,
+    pub status: &'static str,
+    pub reason: &'static str,
+    pub discovery: LevelStage,
+    pub holdout: Option<LevelStage>,
+    /// Bonferroni over the pre-registered level family.
+    pub p_adj: f64,
+    pub r2: LevelR2,
+    /// Months (all halves pooled, support >= min_support) / months above the threshold.
+    pub periods_total: i64,
+    pub periods_above: i64,
+    /// Valid discovery cells of the metric / cells whose own rate is above the threshold (descriptive, untested).
+    pub cells_total: i64,
+    pub cells_above: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct Report {
     pub cells_explored: usize,
+    /// Size of the pre-registered level-test family (`Config::level_risks.len()`).
+    pub level_tests: usize,
+    pub level_signals: Vec<LevelSignal>,
     pub signals: Vec<Signal>,
     /// (kind, count), sorted by kind.
     pub discards: Vec<(String, i64)>,
@@ -137,6 +207,24 @@ fn two_prop(x1: i64, n1: i64, x0: i64, n0: i64) -> (f64, f64) {
 
 fn r6(x: f64) -> f64 {
     (x * 1e6).round() / 1e6
+}
+
+/// Wilson score interval (95%).
+fn wilson(x: i64, n: i64) -> (f64, f64) {
+    let (p, n) = (x as f64 / n as f64, n as f64);
+    let z = 1.959964f64;
+    let d = 1.0 + z * z / n;
+    let c = (p + z * z / (2.0 * n)) / d;
+    let h = z * (p * (1.0 - p) / n + z * z / (4.0 * n * n)).sqrt() / d;
+    ((c - h).max(0.0), (c + h).min(1.0))
+}
+
+fn level_stage(num: i64, den: i64, thr: f64) -> LevelStage {
+    let rate = num as f64 / den as f64;
+    let se = (thr * (1.0 - thr) / den as f64).sqrt();
+    let p = if se > 0.0 { (0.5 * erfc((rate - thr) / se / std::f64::consts::SQRT_2)).clamp(0.0, 1.0) } else { 1.0 };
+    let (lo, hi) = wilson(num, den);
+    LevelStage { numerator: num, denominator: den, rate: r6(rate), ci_low: r6(lo), ci_high: r6(hi), threshold: thr, excess: r6(rate - thr), p }
 }
 
 fn k_ok(c: &Cell, k: i64) -> bool {
@@ -240,6 +328,98 @@ fn stage(cell: &Cell, rest_num: i64, rest_den: i64) -> (Stage, bool) {
     (Stage { numerator: cell.num, denominator: cell.den, rate: r6(rate), baseline_rate: r6(base), diff: r6(diff), p }, diff > 0.0)
 }
 
+/// Level-risk findings over the valid cells (see the module doc for the family and multiplicity rules).
+fn level_risks(
+    valid: &BTreeMap<Key, Slots>,
+    months: &BTreeMap<(String, String), (i64, i64)>,
+    cfg: &Config,
+    bump: &mut dyn FnMut(&str),
+) -> Vec<LevelSignal> {
+    let family = cfg.level_risks.len().max(1) as f64;
+    let mut out = vec![];
+    for spec in &cfg.level_risks {
+        let mut pooled = [(0i64, 0i64); 4];
+        let (mut cells_total, mut cells_above) = (0i64, 0i64);
+        let mut present = false;
+        for ((metric, _), slots) in valid {
+            if *metric != spec.metric {
+                continue;
+            }
+            present = true;
+            for (i, c) in slots.iter().enumerate() {
+                if let Some(c) = c {
+                    pooled[i].0 += c.num;
+                    pooled[i].1 += c.den;
+                }
+            }
+            if let Some(d) = &slots[0] {
+                cells_total += 1;
+                cells_above += (d.num as f64 / d.den as f64 > spec.threshold) as i64;
+            }
+        }
+        if !present {
+            continue;
+        }
+        if pooled[0].1 < cfg.min_support {
+            bump("level_below_min_support");
+            continue;
+        }
+        let thr = spec.threshold;
+        let disc = level_stage(pooled[0].0, pooled[0].1, thr);
+        let p_adj = (disc.p * family).min(1.0);
+        let hold = (pooled[1].1 >= cfg.k_min).then(|| level_stage(pooled[1].0, pooled[1].1, thr));
+        let w = |i: usize| (pooled[i].1 >= cfg.min_support).then(|| level_stage(pooled[i].0, pooled[i].1, thr));
+        let (w1, w2) = (w(2), w(3));
+        let r2 = match (&w1, &w2) {
+            (Some(a), Some(b)) => {
+                let ok = |x: &LevelStage| x.ci_low > thr;
+                let status = if ok(a) && ok(b) {
+                    "replicated"
+                } else if a.excess <= 0.0 || b.excess <= 0.0 {
+                    "reversed"
+                } else {
+                    "not_replicated"
+                };
+                LevelR2 { status, w1: w1.clone(), w2: w2.clone() }
+            }
+            _ => LevelR2 { status: "not_evaluated", w1: None, w2: None },
+        };
+        let (status, reason) = if disc.excess <= 0.0 || p_adj >= cfg.alpha {
+            ("refuted", "level_not_above_threshold")
+        } else if disc.excess < spec.min_excess {
+            ("refuted", "excess_below_floor")
+        } else {
+            match &hold {
+                None => ("candidate", "holdout_unavailable"),
+                Some(h) if h.excess <= 0.0 => ("refuted", "holdout_level_not_above_threshold"),
+                Some(h) if h.p * family < 0.05 && h.excess >= spec.min_excess / 2.0 => ("corroborated", "replicated_in_holdout"),
+                Some(_) => ("uncertain", "holdout_not_significant"),
+            }
+        };
+        let (mut total, mut above) = (0i64, 0i64);
+        for ((metric, _), (n, d)) in months {
+            if *metric == spec.metric && *d >= cfg.min_support {
+                total += 1;
+                above += (*n as f64 / *d as f64 > thr) as i64;
+            }
+        }
+        out.push(LevelSignal {
+            metric: spec.metric.clone(),
+            status,
+            reason,
+            discovery: disc,
+            holdout: hold,
+            p_adj,
+            r2,
+            periods_total: total,
+            periods_above: above,
+            cells_total,
+            cells_above,
+        });
+    }
+    out
+}
+
 pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
     let rows = parse_rows(input)?;
     let mut discards: BTreeMap<String, i64> = BTreeMap::new();
@@ -254,10 +434,18 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
         }
         None => *slot = Some(Cell { num: c.num, den: c.den }),
     };
+    let mut months: BTreeMap<(String, String), (i64, i64)> = BTreeMap::new();
     for r in rows {
         if !k_ok(&r.cell, cfg.k_min) {
             bump("k_violation");
             continue;
+        }
+        if let Some(p) = &r.period {
+            if cfg.level_risks.iter().any(|l| l.metric == r.key.0) {
+                let t = months.entry((r.key.0.clone(), p.clone())).or_insert((0, 0));
+                t.0 += r.cell.num;
+                t.1 += r.cell.den;
+            }
         }
         let slots = valid.entry(r.key).or_insert([None, None, None, None]);
         add(&mut slots[r.half], &r.cell);
@@ -270,6 +458,8 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
     for _ in 0..(before - valid.len()) {
         bump("holdout_without_discovery");
     }
+
+    let level_signals = level_risks(&valid, &months, cfg, &mut bump);
 
     // Totals per (metric, comparison stratum, slot); baseline = stratum total minus the cell itself.
     let mut totals: BTreeMap<(String, Vec<(String, String)>, usize), (i64, i64)> = BTreeMap::new();
@@ -446,7 +636,49 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
             .then(a.metric.cmp(&b.metric))
             .then(a.dims.cmp(&b.dims))
     });
-    Ok(Report { cells_explored: m, signals, discards: discards.into_iter().collect(), config: cfg.clone() })
+    Ok(Report { cells_explored: m, level_tests: cfg.level_risks.len(), level_signals, signals, discards: discards.into_iter().collect(), config: cfg.clone() })
+}
+
+fn level_stage_json(s: &LevelStage) -> Json {
+    Json::obj(vec![
+        ("numerator", Json::Int(s.numerator)),
+        ("denominator", Json::Int(s.denominator)),
+        ("rate", Json::Float(s.rate)),
+        ("baseline_rate", Json::Float(s.threshold)),
+        ("diff", Json::Float(s.excess)),
+        ("ci95_low", Json::Float(s.ci_low)),
+        ("ci95_high", Json::Float(s.ci_high)),
+        ("p", Json::Float(s.p)),
+    ])
+}
+
+fn level_json(s: &LevelSignal) -> Json {
+    let mut r2 = vec![("status", Json::s(s.r2.status))];
+    if let Some(w) = &s.r2.w1 {
+        r2.push(("w1", level_stage_json(w)));
+    }
+    if let Some(w) = &s.r2.w2 {
+        r2.push(("w2", level_stage_json(w)));
+    }
+    let mut kv = vec![
+        ("metric", Json::s(&s.metric)),
+        ("type", Json::s("level_risk")),
+        ("class", Json::s("risk")),
+        ("dims", Json::Obj(vec![])),
+        ("status", Json::s(s.status)),
+        ("reason", Json::s(s.reason)),
+        ("direction", Json::s("up")),
+        ("claim", Json::s("association")),
+        ("discovery", level_stage_json(&s.discovery)),
+    ];
+    if let Some(h) = &s.holdout {
+        kv.push(("holdout", level_stage_json(h)));
+    }
+    kv.push(("r2", Json::obj(r2)));
+    kv.push(("periods", Json::obj(vec![("total", Json::Int(s.periods_total)), ("above_threshold", Json::Int(s.periods_above))])));
+    kv.push(("level_cells", Json::obj(vec![("total", Json::Int(s.cells_total)), ("above_threshold", Json::Int(s.cells_above))])));
+    kv.push(("p_adj", Json::Float(s.p_adj)));
+    Json::obj(kv)
 }
 
 fn stage_json(s: &Stage) -> Json {
@@ -463,7 +695,7 @@ fn stage_json(s: &Stage) -> Json {
 impl Report {
     pub fn to_json(&self) -> Json {
         let c = &self.config;
-        let signals = self
+        let signals: Vec<Json> = self
             .signals
             .iter()
             .map(|s| {
@@ -499,6 +731,7 @@ impl Report {
                 }
                 Json::obj(kv)
             })
+            .chain(self.level_signals.iter().map(level_json))
             .collect();
         let discards = self
             .discards
@@ -519,9 +752,18 @@ impl Report {
                     ("min_effect", Json::Float(c.min_effect)),
                     ("min_support", Json::Int(c.min_support)),
                     ("k_min", Json::Int(c.k_min)),
+                    (
+                        "level_risk",
+                        Json::obj(vec![
+                            ("test", Json::s("one_sided_z_vs_pre_registered_threshold_wilson_95_interval")),
+                            ("multiplicity", Json::s("bonferroni_over_pre_registered_level_family_separate_from_cells_explored")),
+                            ("specs", Json::Arr(c.level_risks.iter().map(|l| Json::obj(vec![("metric", Json::s(&l.metric)), ("threshold", Json::Float(l.threshold)), ("min_excess", Json::Float(l.min_excess))])).collect())),
+                        ]),
+                    ),
                 ]),
             ),
             ("cells_explored", Json::Int(self.cells_explored as i64)),
+            ("level_tests", Json::Int(self.level_tests as i64)),
             ("signals", Json::Arr(signals)),
             ("discards", Json::Arr(discards)),
         ])

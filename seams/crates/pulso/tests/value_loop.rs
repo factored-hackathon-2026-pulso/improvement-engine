@@ -143,6 +143,8 @@ fn value_loop(work: &Path, wire: Arc<dyn Transport + Send + Sync>) -> ValueLoop 
         ports: scripted_ports(),
         model_label: "scripted".into(),
         max_findings: None,
+        proof: None,
+        announcer: None,
     }
 }
 
@@ -375,4 +377,229 @@ fn every_model_call_of_a_trigger_job_is_recorded_with_content_and_served_at_the_
     let resp = app.handle(&debug_api::Req { method: "GET".into(), path: format!("/internal/v1/debug/runs/{run}/model-calls"), query: String::new(), headers: HashMap::new(), body: vec![] });
     let body: Value = serde_json::from_slice(&resp.body).unwrap();
     assert_eq!((resp.status, body["items"].as_array().map(Vec::len)), (200, Some(3)));
+}
+
+// ---------------------------------------------------------------------------------------------------- W11: evaluate before announce
+mod w11 {
+    use super::*;
+    use pulso::run::value_loop::ProofConfig;
+    use registry_writer::eval::EvalOptions;
+    use registry_writer::proof::{Scripts, SuiteError};
+
+    /// build_suite refuses (or answers a minimal bundle) and the judge answers a fixed story. The Python judge itself is tested in
+    /// registry-writer/tests/proof.rs.
+    struct Fake {
+        refuse: bool,
+        story_outcome: &'static str,
+    }
+
+    impl Scripts for Fake {
+        fn build_suite_for(&self, f: &Value, t: &str, _new_agent: Option<&str>) -> Result<Value, SuiteError> {
+            self.build_suite(f, t)
+        }
+        fn build_suite(&self, _: &Value, _: &str) -> Result<Value, SuiteError> {
+            if self.refuse {
+                return Err(SuiteError::Refused("k_below_minimum".into(), "thin".into()));
+            }
+            Ok(json!({"agent": "consultas", "suite": {"id": "reg-consultas-aa", "version": "1.0.0", "agent_id": "consultas", "thresholds": {}, "scenarios": [{"id": "c1"}, {"id": "guard-g1"}]},
+                      "finding_case_ids": ["c1"], "guard_case_ids": ["guard-g1"]}))
+        }
+        fn judge(&self, input: &Value) -> Result<Value, String> {
+            let proven = self.story_outcome == "regression_suite_proven";
+            let attempts = input["attempts"].as_array().cloned().unwrap_or_default();
+            let base_only = attempts.is_empty();
+            Ok(json!({"schema": "reg1.verdict_story/1", "outcome": if base_only { "base_only" } else { self.story_outcome }, "reason": "scripted", "announce": proven && !base_only,
+                      "suite_id": "reg-consultas-aa", "mechanism": "scripted", "suite_is_regression_suite": proven,
+                      "base": {"label": "base", "verdict": "fail", "per_case": {"c1": {"passed": false}, "guard-g1": {"passed": true}}, "failed_cases": ["c1"], "guards_failed": [], "gate_items": [], "infra_retries": []},
+                      "attempts": attempts.iter().map(|a| json!({"label": "candidate-1", "attempt": 1, "verdict": if proven { "pass" } else { "fail" }, "failed_cases": if proven { json!([]) } else { json!(["c1"]) }, "guards_failed": [], "gate_items": [{"metric": "scenario/c1", "phase": "gate", "passed": proven}], "proposal_id": a["run"]["proposal_id"]})).collect::<Vec<_>>(),
+                      "gate_items": [{"metric": "scenario/c1", "phase": "gate", "passed": proven}], "story_text": {"es": "scripted", "pt": "scripted"}, "model_policy": {"judge": "none", "judge_rule": "deterministic checks only"}}))
+        }
+    }
+
+    /// Registry double that also freezes and evaluates; remembers the origin of every proposal it created.
+    #[derive(Default)]
+    struct Core {
+        origins: Mutex<Vec<String>>,
+        paths: Mutex<Vec<String>>,
+        n: Mutex<u32>,
+        changes: Mutex<usize>,
+    }
+
+    impl Transport for Core {
+        fn send(&self, req: &Request) -> Result<Reply, TransportError> {
+            assert_eq!(req.bearer.reveal(), TOKEN);
+            let (m, p) = (req.method, req.path.as_str());
+            self.paths.lock().unwrap().push(format!("{m} {p}"));
+            let r = |status, body| Ok(Reply { status, body });
+            if m == "GET" && p.starts_with("/v1/registry/entities/") {
+                // the donor closure of a new-agent proposal (templates, model, tools, language detection, ruleset) is readable
+                let kind = p.trim_start_matches("/v1/registry/entities/").split('/').next().unwrap_or("");
+                if ["template", "decision_model", "tool", "language_detection", "injection_ruleset"].contains(&kind) {
+                    return r(200, json!({"content": {"id": "donor-copy", "version": "1.0.0"}}));
+                }
+                return r(404, json!({"code": "not_found"}));
+            }
+            if m == "GET" && p.starts_with("/v1/registry/proposals?") {
+                return r(200, json!({"items": [], "total": 0}));
+            }
+            if m == "POST" && p == "/v1/registry/proposals" {
+                self.origins.lock().unwrap().push(req.body.as_ref().unwrap()["origin"].as_str().unwrap().to_string());
+                let mut n = self.n.lock().unwrap();
+                *n += 1;
+                return r(201, json!({"proposal_id": format!("prp_{n}"), "rev": 0, "state": "draft"}));
+            }
+            if m == "PUT" && p.ends_with("/draft") {
+                *self.changes.lock().unwrap() = req.body.as_ref().unwrap()["changes"].as_array().unwrap().len();
+                return r(200, json!({"rev": 1}));
+            }
+            if m == "POST" && p.ends_with("/validate") {
+                return r(200, json!({"violations": [], "candidate_hash": "h"}));
+            }
+            if m == "POST" && p.ends_with("/freeze") {
+                return r(200, json!({"candidate_hash": "h"}));
+            }
+            if m == "POST" && p.ends_with("/evaluate") {
+                return r(200, json!({"verdict": "pass", "items": [], "runs": {"cand_on_new": {"scenarios": {"c1": true, "guard-g1": true}}}, "results": []}));
+            }
+            if m == "GET" && p.starts_with("/v1/registry/proposals/") {
+                let n = *self.changes.lock().unwrap();
+                return r(200, json!({"proposal": {"proposal_id": "prp_x", "rev": 1, "state": "draft"}, "changes": vec![json!({}); n]}));
+            }
+            panic!("unexpected request {m} {p}");
+        }
+    }
+
+    fn with_proof(work: &Path, core: Arc<Core>, fake: Fake) -> ValueLoop {
+        let mut v = value_loop(work, core.clone());
+        v.proof = Some(ProofConfig {
+            scripts: Arc::new(fake),
+            eval_transport: core,
+            opts: EvalOptions { infra_retries: 0, backoff: std::time::Duration::ZERO, sleep: |_| {} },
+            proofs: work.join("w11-proofs.json"),
+        });
+        v
+    }
+
+    #[test]
+    fn a_proven_finding_is_announced_as_auto_detect_after_two_manual_evaluation_drafts() {
+        let work = temp("w11-proven");
+        let core = Arc::new(Core::default());
+        let out = with_proof(&work, core.clone(), Fake { refuse: false, story_outcome: "regression_suite_proven" }).run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!(rec["outcome"], "announced", "{rec}");
+        assert_eq!(rec["delivery"]["status"], "delivered");
+        assert_eq!(rec["evaluation"]["verdict"], "regression_suite_proven");
+        assert_eq!(rec["evaluation"]["dossier"]["announce"], true);
+        assert_eq!(rec["evaluation"]["labels"]["calibration"], "uncalibrated");
+        assert_eq!(*core.origins.lock().unwrap(), vec!["manual", "auto_detect"], "the base has no new agent (not evaluated): only the candidate evaluation draft; it never uses the auto_detect quota, the announced proposal does");
+        assert_eq!(out["summary"]["announced"], 1);
+        assert_eq!(out["evaluate_before_announce"], "on");
+        let paths = core.paths.lock().unwrap().join("\n");
+        assert!(!paths.contains("approve") && !paths.contains("publish") && !paths.contains("promote") && !paths.contains("reject"), "{paths}");
+        assert!(!out.to_string().contains(TOKEN));
+    }
+
+    /// Platform double: answers a fixed status for every announce and remembers what it was sent.
+    struct Platform {
+        status: u16,
+        sent: Mutex<Vec<(String, Value)>>,
+    }
+    impl Transport for Platform {
+        fn send(&self, req: &Request) -> Result<Reply, TransportError> {
+            assert_eq!(req.bearer.reveal(), "platform-throwaway");
+            self.sent.lock().unwrap().push((format!("{} {}", req.method, req.path), req.body.clone().unwrap()));
+            Ok(Reply { status: self.status, body: json!({"proposalId": req.body.as_ref().unwrap()["proposalId"]}) })
+        }
+    }
+    fn announcing(work: &Path, core: Arc<Core>, fake: Fake, p: Arc<Platform>) -> ValueLoop {
+        let mut v = with_proof(work, core, fake);
+        let mut a = registry_writer::announce::Announcer::new(p, Jws::new("platform-throwaway".into()));
+        a.sleep = |_| {};
+        v.announcer = Some(a);
+        v
+    }
+
+    #[test]
+    fn an_announced_proposal_is_relayed_to_the_platform_after_agent_core_accepted_it() {
+        let work = temp("ann1-ok");
+        let p = Arc::new(Platform { status: 201, sent: Mutex::new(vec![]) });
+        let out = announcing(&work, Arc::new(Core::default()), Fake { refuse: false, story_outcome: "regression_suite_proven" }, p.clone()).run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!((rec["outcome"].as_str(), rec["delivery"]["status"].as_str(), rec["platform_announce"].as_str()), (Some("announced"), Some("delivered"), Some("platform_announced")), "{rec}");
+        let sent = p.sent.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].0, "POST /api/v1/internal/builder/proposals/announce");
+        assert_eq!(sent[0].1["proposalId"], rec["delivery"]["proposal_id"]);
+        assert!(!out.to_string().contains("platform-throwaway"));
+    }
+
+    #[test]
+    fn a_failing_platform_never_fails_the_agent_core_delivery() {
+        let work = temp("ann1-down");
+        let p = Arc::new(Platform { status: 503, sent: Mutex::new(vec![]) });
+        let out = announcing(&work, Arc::new(Core::default()), Fake { refuse: false, story_outcome: "regression_suite_proven" }, p.clone()).run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!((rec["outcome"].as_str(), rec["delivery"]["status"].as_str(), rec["platform_announce"].as_str()), (Some("announced"), Some("delivered"), Some("platform_announce_failed:unavailable")), "{rec}");
+        assert_eq!(p.sent.lock().unwrap().len(), 3, "bounded retries");
+    }
+
+    #[test]
+    fn a_not_announced_finding_never_calls_the_platform() {
+        let work = temp("ann1-none");
+        let p = Arc::new(Platform { status: 201, sent: Mutex::new(vec![]) });
+        let out = announcing(&work, Arc::new(Core::default()), Fake { refuse: false, story_outcome: "not_fixed" }, p.clone()).run(&pulso::run::value_loop::NoPersist).unwrap();
+        assert!(out["findings"][0]["platform_announce"].is_null());
+        assert!(p.sent.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_non_proven_finding_is_kept_as_an_internal_outcome_with_its_dossier_and_nothing_is_announced() {
+        let work = temp("w11-notfixed");
+        let core = Arc::new(Core::default());
+        let out = with_proof(&work, core.clone(), Fake { refuse: false, story_outcome: "not_fixed" }).run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!(rec["outcome"], "not_announced:not_fixed", "{rec}");
+        assert!(rec["delivery"].is_null());
+        assert_eq!(rec["evaluation"]["dossier"]["announce"], false);
+        assert!(rec["evaluation"]["dossier"]["es"]["description"].as_str().unwrap().contains("NO SE ANUNCIA"));
+        assert_eq!(*core.origins.lock().unwrap(), vec!["manual"], "no auto_detect proposal exists (new agent: only the candidate was evaluated)");
+        assert_eq!((out["summary"]["announced"].as_u64(), out["summary"]["not_announced"].as_u64(), out["summary"]["delivered"].as_u64()), (Some(0), Some(1), Some(0)));
+    }
+
+    #[test]
+    fn a_refused_suite_is_not_announced_and_touches_no_registry() {
+        let work = temp("w11-refused");
+        let core = Arc::new(Core::default());
+        let out = with_proof(&work, core.clone(), Fake { refuse: true, story_outcome: "" }).run(&pulso::run::value_loop::NoPersist).unwrap();
+        assert_eq!(out["findings"][0]["outcome"], "not_announced:suite_refused");
+        assert!(core.origins.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_proof_is_off_when_not_configured_and_the_old_delivery_is_unchanged() {
+        let work = temp("w11-off");
+        let wire = Arc::new(Wire::default());
+        let out = value_loop(&work, wire.clone()).run(&pulso::run::value_loop::NoPersist).unwrap();
+        assert_eq!(out["evaluate_before_announce"], "off");
+        assert!(out["findings"][0]["outcome"].is_null() && out["findings"][0]["delivery"]["status"] == "delivered");
+    }
+
+    #[test]
+    fn from_lookup_turns_the_proof_on_for_the_live_path_unless_it_is_switched_off() {
+        let work = temp("w11-cfg");
+        let w = work.to_str().unwrap().to_string();
+        let mk = |extra: &[(&str, &str)]| {
+            let mut m: HashMap<String, String> = [("PULSO_CELLS_NDJSON", "c.ndjson"), ("PULSO_CELLS_SOURCE", "synthetic"), ("PULSO_REGISTRY_ADDR", "127.0.0.1:1"), ("PULSO_REGISTRY_TOKEN", "t"), ("PULSO_LLM_GATEWAY", "enabled"), ("PULSO_LLM_GATEWAY_ADDR", "127.0.0.1:1"), ("PULSO_LLM_GATEWAY_KEY", "k")]
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            m.extend(extra.iter().map(|(k, v)| (k.to_string(), v.to_string())));
+            ValueLoop::from_lookup(&move |k| m.get(k).cloned(), Some(Path::new(&w)))
+        };
+        assert!(mk(&[]).unwrap().unwrap().proof.is_some(), "live path default: ON");
+        assert!(mk(&[("PULSO_EVAL_BEFORE_ANNOUNCE", "off")]).unwrap().unwrap().proof.is_none());
+        assert!(mk(&[("PULSO_REGISTRY_VIA", "run")]).unwrap().unwrap().proof.is_none(), "a builder-run draft cannot be proven here");
+        assert!(mk(&[("PULSO_REGISTRY_VIA", "run"), ("PULSO_EVAL_BEFORE_ANNOUNCE", "on")]).err().unwrap().contains("PULSO_REGISTRY_VIA=api"));
+        assert!(mk(&[("PULSO_EVAL_BEFORE_ANNOUNCE", "maybe")]).err().unwrap().contains("on|off"));
+    }
 }

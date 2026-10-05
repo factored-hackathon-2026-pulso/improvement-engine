@@ -118,6 +118,9 @@ pub struct Reasoned {
     pub doubles: Vec<Value>,
     pub independence: Value,
     pub source: &'static str,
+    /// Decision dossier (W1-2) of a proposed finding, built without a regression verdict: `announce` stays false until the REG1
+    /// verdict story is supplied (`reason_cli dossier --verdict`), the dossier says so. `{"error": ..}` if its PII guard refused.
+    pub dossier: Option<Value>,
     /// Cost, tokens, latency and attempts of every model call of this finding, and the Builder tier that answered.
     pub metering: Value,
 }
@@ -126,7 +129,7 @@ impl Reasoned {
     pub fn to_json(&self) -> Value {
         json!({"finding_id": self.finding_id, "status": self.status, "reason": self.reason, "stage": self.stage, "detail": self.detail, "mapping_row": self.mapping_row,
                "source": self.source, "opportunity": self.opportunity, "verification": self.verification, "proposal": self.compiled, "rubric": self.rubric,
-               "model_calls": self.calls, "doubles": self.doubles, "independence": self.independence, "metering": self.metering})
+               "model_calls": self.calls, "doubles": self.doubles, "independence": self.independence, "dossier": self.dossier, "metering": self.metering})
     }
 }
 
@@ -186,7 +189,7 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
     let rbe = ports.builder_escalation.as_ref().map(|p| Rc::new(Recording::new(p.clone())));
     let mut r = Reasoned {
         finding_id: f.id.clone(), status: "blocked".into(), reason: String::new(), stage: String::new(), detail: String::new(), mapping_row: None, opportunity: None, verification: None,
-        compiled: None, compiled_raw: None, rubric: None, calls: vec![], call_records: vec![], doubles: vec![], source: f.source.as_str(), metering: Value::Null,
+        compiled: None, compiled_raw: None, rubric: None, calls: vec![], call_records: vec![], doubles: vec![], source: f.source.as_str(), dossier: None, metering: Value::Null,
         independence: json!({"scout_model": ports.scout.model_id(), "verifier_model": ports.verifier.model_id(), "builder_model": ports.builder.model_id(),
                              "builder_escalation_model": ports.builder_escalation.as_ref().map(|p| p.model_id()),
                              "verifier_separate_port": !Rc::ptr_eq(&ports.scout, &ports.verifier),
@@ -222,6 +225,12 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
             "latency_ms": recs.iter().map(|c| c.wall_ms).sum::<u64>(),
             "builder": tu.map(|(tier, model, escalated)| json!({"tier": tier, "model": model, "escalated": escalated})),
         });
+        if r.status == "proposed" {
+            let real = [&ports.scout, &ports.verifier, &ports.builder].iter().all(|p| p.label() == Label::Gateway);
+            let labels = crate::dossier::Labels { runtime: if real { crate::dossier::Runtime::Real } else { crate::dossier::Runtime::Doubles }, ..Default::default() };
+            let record = json!({"proposal": r.compiled, "doubles": r.doubles, "rubric": r.rubric});
+            r.dossier = Some(crate::dossier::build(&f.to_signal_json(), &record, None, &labels).unwrap_or_else(|e| json!({"error": e})));
+        }
         r
     };
     if f.direction != "up" {

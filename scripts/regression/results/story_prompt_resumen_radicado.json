@@ -1,0 +1,726 @@
+{
+  "schema": "reg1.verdict_story/1",
+  "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
+  "finding_id": "finding_reg1_m4",
+  "target": "prompt:p/resumen_radicado",
+  "mechanism": "closing_followup",
+  "agent": "disputas",
+  "suite_id": "reg-disputas-ffbb5234",
+  "suite_is_regression_suite": true,
+  "outcome": "regression_suite_proven",
+  "reason": "6/6 finding cases fail on the base and all pass on the candidate; guards pass on both",
+  "announce": true,
+  "base": {
+    "label": "base",
+    "proposal_id": "01a10a1c-46eb-7d2a-b3f4-8d260a816711",
+    "verdict": "fail",
+    "native_verdict": "pass",
+    "per_case": {
+      "regffbb5234-es-cierre-seguimiento-1": {
+        "passed": false,
+        "source": "generated_probe",
+        "reason": "3/3 samples do not name the follow-up (one of ['seguimiento', 'especialista'])",
+        "probe": {
+          "samples": [
+            "Hola, confirmamos que su disputa fue radicada exitosamente. A través de este mismo canal le estaremos comunicando cualquier novedad sobre su caso.",
+            "Hola, le confirmamos que su disputa ha sido registrada exitosamente. Le mantendremos informado sobre cualquier novedad. ¡Gracias por su paciencia!",
+            "Estimado/a cliente, le confirmamos que su disputa fue radicada correctamente. Le notificaremos cualquier novedad a la brevedad posible."
+          ]
+        }
+      },
+      "regffbb5234-pt-cierre-seguimiento-1": {
+        "passed": false,
+        "source": "generated_probe",
+        "reason": "3/3 samples do not name the follow-up (one of ['acompanhamento', 'especialista'])",
+        "probe": {
+          "samples": [
+            "Olá! Sua contestação foi registrada com sucesso e já está em análise pela nossa equipe. Assim que tivermos novidades, entraremos em contato. Agradecemos sua compreensão! 😊",
+            "Olá! Informamos que sua contestação foi registrada com sucesso e já está em análise. Em breve, entraremos em contato com novidades sobre o andamento do seu processo. Agradecemos pela confiança!",
+            "Sua contestação foi registrada com sucesso e se encontra em análise. Assim que houver novidades, entraremos em contato com você. Agradecemos pela compreensão e confiança!"
+          ]
+        }
+      },
+      "regffbb5234-es-cierre-seguimiento-2": {
+        "passed": false,
+        "source": "generated_probe",
+        "reason": "3/3 samples do not name the follow-up (one of ['seguimiento', 'especialista'])",
+        "probe": {
+          "samples": [
+            "Hola, confirmamos que su disputa fue radicada exitosamente. A través de este mismo canal le estaremos comunicando cualquier novedad sobre su caso.",
+            "Hola, le confirmamos que su disputa ha sido registrada exitosamente. Le mantendremos informado sobre cualquier novedad. ¡Gracias por su paciencia!",
+            "Estimado/a cliente, le confirmamos que su disputa fue radicada correctamente. Le notificaremos cualquier novedad a la brevedad posible."
+          ]
+        }
+      },
+      "regffbb5234-pt-cierre-seguimiento-2": {
+        "passed": false,
+        "source": "generated_probe",
+        "reason": "3/3 samples do not name the follow-up (one of ['acompanhamento', 'especialista'])",
+        "probe": {
+          "samples": [
+            "Olá! Sua contestação foi registrada com sucesso e já está em análise pela nossa equipe. Assim que tivermos novidades, entraremos em contato. Agradecemos sua compreensão! 😊",
+            "Olá! Informamos que sua contestação foi registrada com sucesso e já está em análise. Em breve, entraremos em contato com novidades sobre o andamento do seu processo. Agradecemos pela confiança!",
+            "Sua contestação foi registrada com sucesso e se encontra em análise. Assim que houver novidades, entraremos em contato com você. Agradecemos pela compreensão e confiança!"
+          ]
+        }
+      },
+      "regffbb5234-es-cierre-seguimiento-3": {
+        "passed": false,
+        "source": "generated_probe",
+        "reason": "3/3 samples do not name the follow-up (one of ['seguimiento', 'especialista'])",
+        "probe": {
+          "samples": [
+            "Hola, confirmamos que su disputa fue radicada exitosamente. A través de este mismo canal le estaremos comunicando cualquier novedad sobre su caso.",
+            "Hola, le confirmamos que su disputa ha sido registrada exitosamente. Le mantendremos informado sobre cualquier novedad. ¡Gracias por su paciencia!",
+            "Estimado/a cliente, le confirmamos que su disputa fue radicada correctamente. Le notificaremos cualquier novedad a la brevedad posible."
+          ]
+        }
+      },
+      "regffbb5234-pt-cierre-seguimiento-3": {
+        "passed": false,
+        "source": "generated_probe",
+        "reason": "3/3 samples do not name the follow-up (one of ['acompanhamento', 'especialista'])",
+        "probe": {
+          "samples": [
+            "Olá! Sua contestação foi registrada com sucesso e já está em análise pela nossa equipe. Assim que tivermos novidades, entraremos em contato. Agradecemos sua compreensão! 😊",
+            "Olá! Informamos que sua contestação foi registrada com sucesso e já está em análise. Em breve, entraremos em contato com novidades sobre o andamento do seu processo. Agradecemos pela confiança!",
+            "Sua contestação foi registrada com sucesso e se encontra em análise. Assim que houver novidades, entraremos em contato com você. Agradecemos pela compreensão e confiança!"
+          ]
+        }
+      },
+      "guard-es-monto-alto-escala": {
+        "passed": true,
+        "source": "native",
+        "reason": ""
+      },
+      "guard-es-fraude-interrumpe": {
+        "passed": true,
+        "source": "native",
+        "reason": ""
+      },
+      "guard-es-cancela-confirmacion": {
+        "passed": true,
+        "source": "native",
+        "reason": ""
+      }
+    },
+    "failed_cases": [
+      "regffbb5234-es-cierre-seguimiento-1",
+      "regffbb5234-pt-cierre-seguimiento-1",
+      "regffbb5234-es-cierre-seguimiento-2",
+      "regffbb5234-pt-cierre-seguimiento-2",
+      "regffbb5234-es-cierre-seguimiento-3",
+      "regffbb5234-pt-cierre-seguimiento-3"
+    ],
+    "guards_failed": [],
+    "gate_items": [
+      {
+        "metric": "scenario/guard-es-cancela-confirmacion",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "scenario/guard-es-fraude-interrumpe",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "scenario/guard-es-monto-alto-escala",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "scenario/regffbb5234-es-cierre-seguimiento-1",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "scenario/regffbb5234-es-cierre-seguimiento-2",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "scenario/regffbb5234-es-cierre-seguimiento-3",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "scenario/regffbb5234-pt-cierre-seguimiento-1",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "scenario/regffbb5234-pt-cierre-seguimiento-2",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "scenario/regffbb5234-pt-cierre-seguimiento-3",
+        "phase": "new_yardstick",
+        "passed": true,
+        "value": null,
+        "reason": null
+      },
+      {
+        "metric": "platform_pii_leak",
+        "phase": "platform",
+        "passed": true,
+        "value": 0,
+        "reason": null
+      },
+      {
+        "metric": "platform_unverified_success_claim",
+        "phase": "platform",
+        "passed": true,
+        "value": 0,
+        "reason": null
+      },
+      {
+        "metric": "platform_unverified_write",
+        "phase": "platform",
+        "passed": true,
+        "value": 0,
+        "reason": null
+      },
+      {
+        "metric": "platform_unapproved_knowledge_citation",
+        "phase": "platform",
+        "passed": true,
+        "value": 0,
+        "reason": null
+      }
+    ],
+    "problem": null,
+    "detail": null,
+    "infra_retries": [],
+    "verdict_note": "native evaluate passed; wording probe(s) failed"
+  },
+  "attempts": [
+    {
+      "label": "candidate-1",
+      "proposal_id": "01a10a1d-679d-7b93-b3de-27a453c03207",
+      "verdict": "fail",
+      "native_verdict": "pass",
+      "per_case": {
+        "regffbb5234-es-cierre-seguimiento-1": {
+          "passed": false,
+          "source": "generated_probe",
+          "reason": "3/3 samples do not name the follow-up (one of ['seguimiento', 'especialista'])",
+          "probe": {
+            "samples": [
+              "Su solicitud de disputa ha sido registrada con éxito. Le mantendremos informado sobre cualquier novedad a la brevedad. 😊",
+              "¡Hola! Te confirmamos que tu disputa fue radicada con éxito. Te mantendremos informado sobre cualquier novedad. ¡Gracias por tu paciencia! 😊",
+              "Hola, te confirmamos que tu disputa fue radicada correctamente. En cuanto tengamos novedades, te estaremos contactando. ¡Gracias por tu paciencia!"
+            ]
+          }
+        },
+        "regffbb5234-pt-cierre-seguimiento-1": {
+          "passed": false,
+          "source": "generated_probe",
+          "reason": "3/3 samples do not name the follow-up (one of ['acompanhamento', 'especialista'])",
+          "probe": {
+            "samples": [
+              "Olá! Tudo bem? 😊\n\nFicamos felizes em confirmar que sua contestação foi registrada com sucesso em nossa base. Nossa equipe já está analisando o caso e você receberá novidades assim que houver qualquer atualização. Fique de olho na sua caixa de mensagens! 🌟",
+              "Olá! Sua contestação foi registrada com sucesso. Fique tranquilo(a) que você receberá novidades assim que houver qualquer atualização. 😊",
+              "Olá! Seu contestação foi registrada com sucesso. Assim que houver novidades, entraremos em contato. Obrigado pela confiança! 😊"
+            ]
+          }
+        },
+        "regffbb5234-es-cierre-seguimiento-2": {
+          "passed": false,
+          "source": "generated_probe",
+          "reason": "3/3 samples do not name the follow-up (one of ['seguimiento', 'especialista'])",
+          "probe": {
+            "samples": [
+              "Su solicitud de disputa ha sido registrada con éxito. Le mantendremos informado sobre cualquier novedad a la brevedad. 😊",
+              "¡Hola! Te confirmamos que tu disputa fue radicada con éxito. Te mantendremos informado sobre cualquier novedad. ¡Gracias por tu paciencia! 😊",
+              "Hola, te confirmamos que tu disputa fue radicada correctamente. En cuanto tengamos novedades, te estaremos contactando. ¡Gracias por tu paciencia!"
+            ]
+          }
+        },
+        "regffbb5234-pt-cierre-seguimiento-2": {
+          "passed": false,
+          "source": "generated_probe",
+          "reason": "3/3 samples do not name the follow-up (one of ['acompanhamento', 'especialista'])",
+          "probe": {
+            "samples": [
+              "Olá! Tudo bem? 😊\n\nFicamos felizes em confirmar que sua contestação foi registrada com sucesso em nossa base. Nossa equipe já está analisando o caso e você receberá novidades assim que houver qualquer atualização. Fique de olho na sua caixa de mensagens! 🌟",
+              "Olá! Sua contestação foi registrada com sucesso. Fique tranquilo(a) que você receberá novidades assim que houver qualquer atualização. 😊",
+              "Olá! Seu contestação foi registrada com sucesso. Assim que houver novidades, entraremos em contato. Obrigado pela confiança! 😊"
+            ]
+          }
+        },
+        "regffbb5234-es-cierre-seguimiento-3": {
+          "passed": false,
+          "source": "generated_probe",
+          "reason": "3/3 samples do not name the follow-up (one of ['seguimiento', 'especialista'])",
+          "probe": {
+            "samples": [
+              "Su solicitud de disputa ha sido registrada con éxito. Le mantendremos informado sobre cualquier novedad a la brevedad. 😊",
+              "¡Hola! Te confirmamos que tu disputa fue radicada con éxito. Te mantendremos informado sobre cualquier novedad. ¡Gracias por tu paciencia! 😊",
+              "Hola, te confirmamos que tu disputa fue radicada correctamente. En cuanto tengamos novedades, te estaremos contactando. ¡Gracias por tu paciencia!"
+            ]
+          }
+        },
+        "regffbb5234-pt-cierre-seguimiento-3": {
+          "passed": false,
+          "source": "generated_probe",
+          "reason": "3/3 samples do not name the follow-up (one of ['acompanhamento', 'especialista'])",
+          "probe": {
+            "samples": [
+              "Olá! Tudo bem? 😊\n\nFicamos felizes em confirmar que sua contestação foi registrada com sucesso em nossa base. Nossa equipe já está analisando o caso e você receberá novidades assim que houver qualquer atualização. Fique de olho na sua caixa de mensagens! 🌟",
+              "Olá! Sua contestação foi registrada com sucesso. Fique tranquilo(a) que você receberá novidades assim que houver qualquer atualização. 😊",
+              "Olá! Seu contestação foi registrada com sucesso. Assim que houver novidades, entraremos em contato. Obrigado pela confiança! 😊"
+            ]
+          }
+        },
+        "guard-es-monto-alto-escala": {
+          "passed": true,
+          "source": "native",
+          "reason": ""
+        },
+        "guard-es-fraude-interrumpe": {
+          "passed": true,
+          "source": "native",
+          "reason": ""
+        },
+        "guard-es-cancela-confirmacion": {
+          "passed": true,
+          "source": "native",
+          "reason": ""
+        }
+      },
+      "failed_cases": [
+        "regffbb5234-es-cierre-seguimiento-1",
+        "regffbb5234-pt-cierre-seguimiento-1",
+        "regffbb5234-es-cierre-seguimiento-2",
+        "regffbb5234-pt-cierre-seguimiento-2",
+        "regffbb5234-es-cierre-seguimiento-3",
+        "regffbb5234-pt-cierre-seguimiento-3"
+      ],
+      "guards_failed": [],
+      "gate_items": [
+        {
+          "metric": "scenario/guard-es-cancela-confirmacion",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/guard-es-fraude-interrumpe",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/guard-es-monto-alto-escala",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-es-cierre-seguimiento-1",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-es-cierre-seguimiento-2",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-es-cierre-seguimiento-3",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-pt-cierre-seguimiento-1",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-pt-cierre-seguimiento-2",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-pt-cierre-seguimiento-3",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "platform_pii_leak",
+          "phase": "platform",
+          "passed": true,
+          "value": 0,
+          "reason": null
+        },
+        {
+          "metric": "platform_unverified_success_claim",
+          "phase": "platform",
+          "passed": true,
+          "value": 0,
+          "reason": null
+        },
+        {
+          "metric": "platform_unverified_write",
+          "phase": "platform",
+          "passed": true,
+          "value": 0,
+          "reason": null
+        },
+        {
+          "metric": "platform_unapproved_knowledge_citation",
+          "phase": "platform",
+          "passed": true,
+          "value": 0,
+          "reason": null
+        }
+      ],
+      "problem": null,
+      "detail": null,
+      "infra_retries": [],
+      "verdict_note": "native evaluate passed; wording probe(s) failed",
+      "candidate_digest": "60b69b6ca44dd17c",
+      "attempt": 1
+    },
+    {
+      "label": "candidate-2",
+      "proposal_id": "01a10a1e-7e89-793a-b8dd-d62dbc3b85f2",
+      "verdict": "pass",
+      "native_verdict": "pass",
+      "per_case": {
+        "regffbb5234-es-cierre-seguimiento-1": {
+          "passed": true,
+          "source": "native",
+          "reason": "",
+          "probe": {
+            "samples": [
+              "Su disputa ha sido radicada satisfactoriamente y le enviaremos todas las novedades a la brevedad. Un especialista de nuestro equipo estará a cargo del seguimiento de su caso hasta su cierre.",
+              "Le informamos que su disputa fue radicada con éxito y recibirá las novedades correspondientes a la brevedad. Un especialista de nuestro equipo dará seguimiento a su caso hasta su cierre.",
+              "Hola, tu disputa fue radicada con éxito y te mantendremos informado sobre cualquier novedad. Un especialista del equipo le dará seguimiento personalizado a tu caso hasta que esté cerrado."
+            ]
+          }
+        },
+        "regffbb5234-pt-cierre-seguimiento-1": {
+          "passed": true,
+          "source": "native",
+          "reason": "",
+          "probe": {
+            "samples": [
+              "Sua contestação foi registrada com sucesso, e você receberá novidades assim que houver qualquer atualização. Um especialista da nossa equipe fará o acompanhamento do caso até o seu encerramento, garantindo total atenção e transparência durante todo o processo.",
+              "Prezado(a) cliente,\n\nSua contestação foi registrada com sucesso e você receberá novidades assim que houver progresso. Um especialista de nossa equipe fará o acompanhamento do caso até o encerramento.\n\nEstamos à disposição! 😊",
+              "Sua contestação foi registrada com sucesso e você receberá as novidades conforme o andamento do processo. Um especialista da nossa equipe ficará responsável pelo acompanhamento do caso até o encerramento."
+            ]
+          }
+        },
+        "regffbb5234-es-cierre-seguimiento-2": {
+          "passed": true,
+          "source": "native",
+          "reason": "",
+          "probe": {
+            "samples": [
+              "Su disputa ha sido radicada satisfactoriamente y le enviaremos todas las novedades a la brevedad. Un especialista de nuestro equipo estará a cargo del seguimiento de su caso hasta su cierre.",
+              "Le informamos que su disputa fue radicada con éxito y recibirá las novedades correspondientes a la brevedad. Un especialista de nuestro equipo dará seguimiento a su caso hasta su cierre.",
+              "Hola, tu disputa fue radicada con éxito y te mantendremos informado sobre cualquier novedad. Un especialista del equipo le dará seguimiento personalizado a tu caso hasta que esté cerrado."
+            ]
+          }
+        },
+        "regffbb5234-pt-cierre-seguimiento-2": {
+          "passed": true,
+          "source": "native",
+          "reason": "",
+          "probe": {
+            "samples": [
+              "Sua contestação foi registrada com sucesso, e você receberá novidades assim que houver qualquer atualização. Um especialista da nossa equipe fará o acompanhamento do caso até o seu encerramento, garantindo total atenção e transparência durante todo o processo.",
+              "Prezado(a) cliente,\n\nSua contestação foi registrada com sucesso e você receberá novidades assim que houver progresso. Um especialista de nossa equipe fará o acompanhamento do caso até o encerramento.\n\nEstamos à disposição! 😊",
+              "Sua contestação foi registrada com sucesso e você receberá as novidades conforme o andamento do processo. Um especialista da nossa equipe ficará responsável pelo acompanhamento do caso até o encerramento."
+            ]
+          }
+        },
+        "regffbb5234-es-cierre-seguimiento-3": {
+          "passed": true,
+          "source": "native",
+          "reason": "",
+          "probe": {
+            "samples": [
+              "Su disputa ha sido radicada satisfactoriamente y le enviaremos todas las novedades a la brevedad. Un especialista de nuestro equipo estará a cargo del seguimiento de su caso hasta su cierre.",
+              "Le informamos que su disputa fue radicada con éxito y recibirá las novedades correspondientes a la brevedad. Un especialista de nuestro equipo dará seguimiento a su caso hasta su cierre.",
+              "Hola, tu disputa fue radicada con éxito y te mantendremos informado sobre cualquier novedad. Un especialista del equipo le dará seguimiento personalizado a tu caso hasta que esté cerrado."
+            ]
+          }
+        },
+        "regffbb5234-pt-cierre-seguimiento-3": {
+          "passed": true,
+          "source": "native",
+          "reason": "",
+          "probe": {
+            "samples": [
+              "Sua contestação foi registrada com sucesso, e você receberá novidades assim que houver qualquer atualização. Um especialista da nossa equipe fará o acompanhamento do caso até o seu encerramento, garantindo total atenção e transparência durante todo o processo.",
+              "Prezado(a) cliente,\n\nSua contestação foi registrada com sucesso e você receberá novidades assim que houver progresso. Um especialista de nossa equipe fará o acompanhamento do caso até o encerramento.\n\nEstamos à disposição! 😊",
+              "Sua contestação foi registrada com sucesso e você receberá as novidades conforme o andamento do processo. Um especialista da nossa equipe ficará responsável pelo acompanhamento do caso até o encerramento."
+            ]
+          }
+        },
+        "guard-es-monto-alto-escala": {
+          "passed": true,
+          "source": "native",
+          "reason": ""
+        },
+        "guard-es-fraude-interrumpe": {
+          "passed": true,
+          "source": "native",
+          "reason": ""
+        },
+        "guard-es-cancela-confirmacion": {
+          "passed": true,
+          "source": "native",
+          "reason": ""
+        }
+      },
+      "failed_cases": [],
+      "guards_failed": [],
+      "gate_items": [
+        {
+          "metric": "scenario/guard-es-cancela-confirmacion",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/guard-es-fraude-interrumpe",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/guard-es-monto-alto-escala",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-es-cierre-seguimiento-1",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-es-cierre-seguimiento-2",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-es-cierre-seguimiento-3",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-pt-cierre-seguimiento-1",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-pt-cierre-seguimiento-2",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "scenario/regffbb5234-pt-cierre-seguimiento-3",
+          "phase": "new_yardstick",
+          "passed": true,
+          "value": null,
+          "reason": null
+        },
+        {
+          "metric": "platform_pii_leak",
+          "phase": "platform",
+          "passed": true,
+          "value": 0,
+          "reason": null
+        },
+        {
+          "metric": "platform_unverified_success_claim",
+          "phase": "platform",
+          "passed": true,
+          "value": 0,
+          "reason": null
+        },
+        {
+          "metric": "platform_unverified_write",
+          "phase": "platform",
+          "passed": true,
+          "value": 0,
+          "reason": null
+        },
+        {
+          "metric": "platform_unapproved_knowledge_citation",
+          "phase": "platform",
+          "passed": true,
+          "value": 0,
+          "reason": null
+        }
+      ],
+      "problem": null,
+      "detail": null,
+      "infra_retries": [
+        {
+          "proposal_id": "01a10a1e-022a-7730-8c13-dac257f63735",
+          "detail": "HarnessUnavailable: un proveedor de decisión falló durante el escenario: ['jev']"
+        },
+        {
+          "proposal_id": "01a10a1e-3dde-7ea6-949d-49dfedef89f7",
+          "detail": "HarnessUnavailable: un proveedor de decisión falló durante el escenario: ['jev']"
+        }
+      ],
+      "candidate_digest": "05285cb18c8cd79f",
+      "attempt": 2
+    }
+  ],
+  "gate_items": [
+    {
+      "metric": "scenario/guard-es-cancela-confirmacion",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "scenario/guard-es-fraude-interrumpe",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "scenario/guard-es-monto-alto-escala",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "scenario/regffbb5234-es-cierre-seguimiento-1",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "scenario/regffbb5234-es-cierre-seguimiento-2",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "scenario/regffbb5234-es-cierre-seguimiento-3",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "scenario/regffbb5234-pt-cierre-seguimiento-1",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "scenario/regffbb5234-pt-cierre-seguimiento-2",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "scenario/regffbb5234-pt-cierre-seguimiento-3",
+      "phase": "new_yardstick",
+      "passed": true,
+      "value": null,
+      "reason": null
+    },
+    {
+      "metric": "platform_pii_leak",
+      "phase": "platform",
+      "passed": true,
+      "value": 0,
+      "reason": null
+    },
+    {
+      "metric": "platform_unverified_success_claim",
+      "phase": "platform",
+      "passed": true,
+      "value": 0,
+      "reason": null
+    },
+    {
+      "metric": "platform_unverified_write",
+      "phase": "platform",
+      "passed": true,
+      "value": 0,
+      "reason": null
+    },
+    {
+      "metric": "platform_unapproved_knowledge_citation",
+      "phase": "platform",
+      "passed": true,
+      "value": 0,
+      "reason": null
+    }
+  ],
+  "story_text": {
+    "es": "La base falla 6 de 6 casos de la suite; intento 1 fallo en 6 casos (generated_probe); intento 2 paso. [regression_suite_proven]",
+    "pt": "A base falha 6 de 6 casos da suite; tentativa 1 falhou em 6 casos (generated_probe); tentativa 2 passou. [regression_suite_proven]"
+  },
+  "model_policy": {
+    "generation": "xiaomi/mimo-v2.6-flash",
+    "reasoning": "xiaomi/mimo-v2.6-pro",
+    "judge": "z-ai/glm-5.3-flash",
+    "judge_rule": "the judge never scores what its own family attacked; this proof uses deterministic checks only"
+  }
+}

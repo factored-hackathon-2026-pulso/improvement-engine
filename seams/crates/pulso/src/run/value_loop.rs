@@ -3,7 +3,10 @@
 //!
 //! Every corroborated finding ends in one closed outcome kept in the engine job store (one record per finding, plus a summary):
 //! `unlinked`, `blocked(<reason>)`, `no_change`, or `proposed` with the writer's delivery (`delivered` + proposal id, or `denied` +
-//! closed reason). Nothing here approves, publishes, promotes, freezes or evaluates (the writer's allow-list). Idempotent per
+//! closed reason). W11 (`ProofConfig`, on for the live path): a proposed finding is first PROVEN on agent-core (regression suite
+//! fails on the base, passes on the candidate, `registry_writer::proof`) and only then announced; otherwise the record says
+//! `outcome: not_announced:<verdict>` with the dossier and the verdict story, delivery null. Nothing here approves, publishes or
+//! promotes (the writer's allow-list admits only `freeze` and `evaluate` of manual-origin evaluation drafts). Idempotent per
 //! finding twice over: a replayed job reuses the per-finding records it already committed (no second model call), and the writer's
 //! receipt store (key = evidence + target + kind) never opens a second proposal for the same finding across jobs.
 //!
@@ -16,6 +19,8 @@ use core_client::authorizer::Jws;
 use reasoning::catalog::Catalog;
 use reasoning::finding::{Finding, Source};
 use reasoning::pipeline::{Opts, Ports, reason};
+use registry_writer::eval::EvalOptions;
+use registry_writer::proof::{FileProofStore, ProofInput, PythonScripts, Scripts, announce_submission, prove};
 use registry_writer::{Config, Environment, FileStore, HttpTransport, Submission, Transport, Via, Writer};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -45,6 +50,18 @@ impl Persist for NoPersist {
     }
 }
 
+/// W11 "evaluate before announce". `None` in `ValueLoop::proof` = off (unit tests); `from_lookup` turns it ON by default for the
+/// live path (`PULSO_EVAL_BEFORE_ANNOUNCE=off` disables it; `via=run` cannot be proven and keeps it off).
+pub struct ProofConfig {
+    /// build_suite.py and judge_story.py (subprocess, stdin/stdout JSON; PyYAML needed by build_suite).
+    pub scripts: Arc<dyn Scripts + Send + Sync>,
+    /// Same registry, long timeout: `evaluate` runs the real engine and the real JEV and takes minutes.
+    pub eval_transport: Arc<dyn Transport + Send + Sync>,
+    pub opts: EvalOptions,
+    /// Conclusive proofs by (finding key, candidate digest): a replay makes no request.
+    pub proofs: PathBuf,
+}
+
 pub struct ValueLoop {
     pub cells: PathBuf,
     pub source: Source,
@@ -63,6 +80,16 @@ pub struct ValueLoop {
     pub model_label: String,
     /// `PULSO_LOOP_MAX_FINDINGS`: cost bound per run (the first N corroborated findings in sensor order); the rest are counted, not silently dropped.
     pub max_findings: Option<usize>,
+    pub proof: Option<ProofConfig>,
+    /// ANN1: tells the support platform about an `announced` proposal AFTER agent-core accepted it (best effort, never fails the delivery).
+    /// `PULSO_ANNOUNCE_TO_PLATFORM` / `PULSO_PLATFORM_URL` / `PULSO_PLATFORM_SERVICE_TOKEN`; default OFF.
+    pub announcer: Option<registry_writer::announce::Announcer>,
+}
+
+/// `scripts/regression` of the working directory, else of the checkout the binary was built from.
+fn default_script_dir() -> PathBuf {
+    let local = PathBuf::from("scripts/regression");
+    if local.join("judge_story.py").exists() { local } else { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../scripts/regression") }
 }
 
 fn truthy(v: Option<String>) -> bool {
@@ -105,6 +132,31 @@ impl ValueLoop {
         let ports: PortsFactory = Arc::new(move || reasoning::live::ports_from_env(&|k| envs.get(k).cloned()));
         // Fail at start, not at the first job: the gateway setup must be complete.
         ports().map(drop)?;
+        let work_dir = work.map(PathBuf::from).or_else(|| receipts.parent().map(PathBuf::from)).unwrap_or_else(|| PathBuf::from("."));
+        let proof = match get("PULSO_EVAL_BEFORE_ANNOUNCE").as_deref().unwrap_or("") {
+            "off" | "0" | "false" => None,
+            "on" | "1" | "true" if via == Via::BuilderRun => {
+                return Err("PULSO_EVAL_BEFORE_ANNOUNCE=on needs PULSO_REGISTRY_VIA=api: a builder-run draft is authored by the agent and cannot be proven here".into());
+            }
+            "" if via == Via::BuilderRun => None,
+            "" | "on" | "1" | "true" => {
+                let script_dir = get("PULSO_REGRESSION_SCRIPTS").map(PathBuf::from).unwrap_or_else(default_script_dir);
+                let python: Vec<String> = get("PULSO_REGRESSION_PYTHON").unwrap_or_else(|| "python".into()).split_whitespace().map(str::to_string).collect();
+                if python.is_empty() {
+                    return Err("PULSO_REGRESSION_PYTHON is blank".into());
+                }
+                let secs = get("PULSO_EVAL_TIMEOUT_SECS").and_then(|v| v.parse().ok()).unwrap_or(900);
+                let w11 = work_dir.join("w11");
+                std::fs::create_dir_all(&w11).map_err(|e| format!("work dir for the proof: {e}"))?;
+                Some(ProofConfig {
+                    scripts: Arc::new(PythonScripts { python, script_dir, work: w11, env: vec![] }),
+                    eval_transport: Arc::new(HttpTransport::new(&addr, Duration::from_secs(secs))),
+                    opts: EvalOptions::default(),
+                    proofs: work_dir.join("w11-proofs.json"),
+                })
+            }
+            _ => return Err("PULSO_EVAL_BEFORE_ANNOUNCE is not on|off".into()),
+        };
         Ok(Some(ValueLoop {
             cells: PathBuf::from(cells),
             source,
@@ -119,6 +171,8 @@ impl ValueLoop {
             ports,
             model_label,
             max_findings: get("PULSO_LOOP_MAX_FINDINGS").and_then(|v| v.parse().ok()),
+            proof,
+            announcer: registry_writer::announce::Announcer::from_lookup(get)?,
         }))
     }
 
@@ -147,6 +201,12 @@ impl ValueLoop {
         let mut ports: Option<Ports> = None; // built on the first finding that needs a model: a full replay calls none
         let store = FileStore::new(&self.receipts);
         let w = self.writer(&store);
+        let ew = self.proof.as_ref().map(|p| {
+            let mut c = Config::new(self.via, self.environment, self.registry_token.clone());
+            c.credential = self.credential;
+            Writer::new(c, &*p.eval_transport, &store)
+        });
+        let proofs = self.proof.as_ref().map(|p| FileProofStore::new(&p.proofs));
         let refreshed = w.refresh_catalog(&Catalog::bundled());
         let opts = Opts { allow_derived_aggregates: self.allow_derived };
         let mut records: Vec<Value> = vec![];
@@ -184,8 +244,37 @@ impl ValueLoop {
                 rec["proposal_kind"] = json!(c.kind);
                 if r.status == "proposed" {
                     engine::trace::set_stage("deliver", 1);
-                    let o = w.deliver(&Submission::new(f, c));
-                    rec["delivery"] = o.to_json();
+                    match (&self.proof, &ew, &proofs) {
+                        (Some(pc), Some(ew), Some(ps)) => {
+                            let inp = ProofInput {
+                                finding: f,
+                                compiled: c,
+                                attempts: vec![],
+                                base_artifact: refreshed.catalog.get(&c.target_ref),
+                                labels: reasoning::dossier::Labels { runtime: reasoning::dossier::Runtime::Real, ..Default::default() },
+                                doubles: json!(r.doubles),
+                                rubric: r.rubric.clone().unwrap_or(Value::Null),
+                            };
+                            let proof = prove(ew, &*pc.scripts, ps, &pc.opts, &inp);
+                            rec["evaluation"] = proof.record();
+                            rec["outcome"] = json!(proof.outcome);
+                            if proof.announce {
+                                let o = w.deliver(&announce_submission(f, c, &proof));
+                                if !o.delivered() {
+                                    rec["outcome"] = json!(format!("proven_not_delivered:{}", o.reason.map_or("unknown", registry_writer::Reason::code)));
+                                }
+                                rec["delivery"] = o.to_json();
+                                // ANN1: only an announced proposal that agent-core accepted; the outcome is a record, never a failure of the delivery.
+                                if let (true, Some(a), Some(id)) = (o.delivered(), &self.announcer, o.proposal_id.as_deref()) {
+                                    rec["platform_announce"] = json!(a.announce(f, id, &proof.dossier).record());
+                                }
+                            }
+                        }
+                        _ => {
+                            let o = w.deliver(&Submission::new(f, c));
+                            rec["delivery"] = o.to_json();
+                        }
+                    }
                 }
             }
             persist.put(step, &rec.to_string())?;
@@ -207,16 +296,19 @@ impl ValueLoop {
         }
         let delivered = records.iter().filter(|r| r["delivery"]["status"] == "delivered").count();
         let denied = records.iter().filter(|r| r["delivery"]["status"] == "denied").count();
+        let announced = records.iter().filter(|r| r["outcome"] == "announced").count();
+        let not_announced = records.iter().filter(|r| r["outcome"].as_str().is_some_and(|o| o.starts_with("not_announced:"))).count();
         Ok(json!({
             "contract": "value-loop/b3-0", "sensor": "claude-standin (steps::cells, real code, labelled stand-in)", "data_source": self.source.as_str(),
             "baseline": {"label": refreshed.catalog.label, "live": refreshed.live.len(), "fixture": refreshed.fixture.len()},
             "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
             "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "blocked": n("blocked"),
-                        "delivered": delivered, "denied": denied,
+                        "delivered": delivered, "denied": denied, "announced": announced, "not_announced": not_announced,
                         // unlinked findings are descriptive with an explicit reason, never a failure; only `blocked` counts against the roles
                         "unlinked_by_reason": by_reason, "failed": n("blocked"),
                         "cost_usd": (records.iter().map(|r| r["metering"]["cost_usd"].as_f64().unwrap_or(0.0)).sum::<f64>() * 1e6).round() / 1e6,
                         "builder_tiers": tiers},
+            "evaluate_before_announce": if self.proof.is_some() { "on" } else { "off" },
             "findings": records,
             "engine_never_approves_publishes_or_promotes": true,
         }))

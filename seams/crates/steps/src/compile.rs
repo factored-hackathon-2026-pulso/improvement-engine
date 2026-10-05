@@ -300,6 +300,56 @@ fn st(v: &str) -> Json {
 
 // ---------------------------------------------------------------- SHA-256
 
+/// Longest run of ASCII digits in `s`.
+fn longest_digit_run(s: &str) -> usize {
+    let (mut best, mut cur) = (0, 0);
+    for c in s.chars() {
+        cur = if c.is_ascii_digit() { cur + 1 } else { 0 };
+        best = best.max(cur);
+    }
+    best
+}
+
+/// The first `n` hex chars of the SHA-256 of `data`, re-hashed (`data` + `#k`) until they carry no run of 6 or more digits (rubric R11:
+/// the PII wrapper tokenises such a run in any generated text). Deterministic, so ids built from it still resolve by recomputation;
+/// a digest that is already calm is returned unchanged.
+pub fn sha256_hex_calm(data: &[u8], n: usize) -> String {
+    let mut h = sha256_hex(data);
+    let mut k = 0u32;
+    while longest_digit_run(&h[..n]) >= 6 {
+        k += 1;
+        let mut d = data.to_vec();
+        d.extend_from_slice(format!("#{k}").as_bytes());
+        h = sha256_hex(&d);
+    }
+    h[..n].to_string()
+}
+
+/// Breaks every run of 6 or more digits with a `-` every 4 digits (no digit is lost): safety net for free text that may carry ids.
+pub fn defuse_digit_runs(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 4);
+    let mut run = String::new();
+    let mut flush = |run: &mut String, out: &mut String| {
+        if run.len() >= 6 {
+            let parts: Vec<&str> = run.as_bytes().chunks(4).map(|c| std::str::from_utf8(c).unwrap_or("")).collect();
+            out.push_str(&parts.join("-"));
+        } else {
+            out.push_str(run);
+        }
+        run.clear();
+    };
+    for c in s.chars() {
+        if c.is_ascii_digit() {
+            run.push(c);
+        } else {
+            flush(&mut run, &mut out);
+            out.push(c);
+        }
+    }
+    flush(&mut run, &mut out);
+    out
+}
+
 pub fn sha256_hex(data: &[u8]) -> String {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
