@@ -40,6 +40,11 @@ the only outcome with `announce: true` and `suite_is_regression_suite: true`. Ot
 `guard_regressed`, `infra_failed` (retries: `evaluate` answers `failed_infra` when the real JEV drops, 4 retries with 20 s
 backoff, all recorded in `infra_retries`), `not_exercised` (stack down, exit 3), `base_only`.
 
+`--candidate-always` (needs agent-core PR 50, `evaluate` binds the gateway to the candidate closure, so a candidate can be
+measured on its own): by default a candidate is evaluated only when the base fails a finding case. With the flag it is
+evaluated even when the base passes everything; the suite is still `non_discriminating` (never announced), but a candidate
+that fails any case the base passes is reported `guard_regressed`. Guards failing on the base still skip candidates.
+
 ## Verdict story (schema `reg1.verdict_story/1`, for the dossier)
 
 `finding_key, finding_id, target, mechanism, agent, suite_id, suite_is_regression_suite, outcome, reason, announce,

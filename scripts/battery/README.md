@@ -13,7 +13,7 @@ minimal `eval_suite` (`agent-core-assets/eval-suites/pulso-min/`, not touched he
 | Path | What |
 |---|---|
 | `agent-core-assets/eval-battery/amount_probes.yaml` | amount-boundary grid + the human-owned policy finding |
-| `agent-core-assets/eval-battery/attacker_pack.yaml` | FIXED attacker pack, 7 families x 3 agents = 21 scripted scenarios |
+| `agent-core-assets/eval-battery/attacker_pack.yaml` | FIXED attacker pack, 7 families x 3 agents = 21 scripted + 15 `card_lure` (EV3) scenarios |
 | `agent-core-assets/eval-battery/results/` | real result JSONs of the live run (base, candidate, diff) |
 | `scripts/battery/run_battery.py` | runner (`run`, `diff`, `export-suite`, `list`) |
 | `scripts/battery/demo_core.py` | ISOLATED local stack for the demo agents (own postgres, gateway, serve :8002) |
