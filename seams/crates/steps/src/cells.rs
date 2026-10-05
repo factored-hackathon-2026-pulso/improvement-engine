@@ -715,7 +715,7 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
         let halves = &valid[&t.key];
         let hold = hold_of(&t.key, halves);
         let r2 = r2_of(&t.key, halves);
-        let (mut status, reason) = match &hold {
+        let (mut status, mut reason) = match &hold {
             None => ("candidate", "holdout_unavailable"),
             Some(h) if h.diff <= 0.0 => ("refuted", "holdout_direction_reversed"),
             Some(h) if h.denominator < cfg.min_support / 2 => ("uncertain", "replication_underpowered"),
@@ -724,6 +724,7 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
         };
         if expl.is_some() && status == "uncertain" {
             // The strict discovery passed; weaker replication is a LABEL in the exploratory profile, not a gate.
+            reason = if reason == "replication_underpowered" { "exploratory_replication_underpowered" } else { "exploratory_holdout_weak" };
             status = "candidate_exploratory";
         }
         let pr = (status != "refuted").then(|| {
@@ -756,9 +757,9 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
                     bump("exploratory_holdout_reversed");
                     continue;
                 }
-                Some(h) if h.denominator < e.min_support / 2 => "replication_underpowered",
+                Some(h) if h.denominator < e.min_support / 2 => "exploratory_replication_underpowered",
                 Some(h) if h.p < 0.05 && h.diff >= e.min_effect / 2.0 => "exploratory_holdout_replicated",
-                Some(_) => "holdout_not_significant",
+                Some(_) => "exploratory_holdout_weak",
             };
             metrics_with_finding.insert(t.key.0.clone(), true);
             let pr = priority(t.disc.diff, t.pooled, hold.as_ref().is_some_and(|h| h.diff > 0.0), false, r2.status == "replicated");

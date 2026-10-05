@@ -61,7 +61,7 @@ DIRECTION_EPS = 0.005
 K_MIN = 10
 SIGNAL_FIELDS = {
     "metric", "dims", "status", "reason", "direction", "claim", "discovery", "holdout",
-    "r2", "depends_on", "p_adj",
+    "r2", "depends_on", "p_adj", "priority", "exploratory_note",
 }
 SIGNAL_DIMS = {
     "reason_category", "channel", "category", "case_type", "priority", "survey_type",
@@ -74,16 +74,24 @@ STAGE_FIELDS = {
 SIGNAL_REASONS = {
     "not_significant_after_correction", "holdout_unavailable", "holdout_direction_reversed",
     "replicated_in_holdout", "holdout_not_significant", "no_differential",
+    # DET1: pooled-support era and the exploratory tier (never `corroborated`)
+    "replication_underpowered", "exploratory_discovery_only", "exploratory_replication_underpowered",
+    "exploratory_holdout_replicated", "exploratory_holdout_weak",
 }
+EXPLORATORY_STATUS = "candidate_exploratory"
+EXPLORATORY_REASONS = {"exploratory_discovery_only", "exploratory_replication_underpowered",
+                       "exploratory_holdout_replicated", "exploratory_holdout_weak"}
 DISCARD_KINDS = {
     "k_violation", "holdout_without_discovery", "no_baseline", "below_min_support",
-    "favourable_direction",
+    "favourable_direction", "exploratory_holdout_reversed",
 }
 SUMMARY_FIELDS = {"semantics", "method", "cells_explored", "signals", "discards"}
 METHOD_FIELDS = {
     "test", "multiplicity", "min_ratio", "replication", "secondary_replication", "alpha",
     "min_effect", "min_support", "k_min",
 }
+# Optional producer additions (level-risk spec, DET1 profile / pooled-support / baseline / family accounting).
+METHOD_OPTIONAL_FIELDS = {"level_risk", "profile", "support_basis", "baseline", "families", "exploratory"}
 METRICS = {"M1", "M2", "M3", "M4", "M5", "M6", "M6L", "M6R", "M6U", "M7", "M8", "M9", "M10"}
 METRIC_DIMS = {
     "M1": {"reason_category", "channel"}, "M2": {"channel"}, "M3": {"channel"},
@@ -274,7 +282,8 @@ def _validate_signal_summary(signals):
     if isinstance(explored, bool) or not isinstance(explored, int) or explored < 0:
         raise ScoringError("cells_explored must be a non-negative integer")
     method = signals["method"]
-    if not isinstance(method, dict) or set(method) != METHOD_FIELDS:
+    if (not isinstance(method, dict) or not METHOD_FIELDS <= set(method)
+            or set(method) - METHOD_FIELDS - METHOD_OPTIONAL_FIELDS):
         raise ScoringError("signal method must match the producer method envelope")
     for key, expected in METHOD_STRING_VALUES.items():
         if method[key] != expected:
@@ -360,7 +369,7 @@ def _validate_signal_summary(signals):
                     or set(signal) != {"metric", "dims", "status", "reason", "direction", "claim"}):
                 raise ScoringError("no_differential aggregate shape is invalid")
             continue
-        if set(dims) != METRIC_DIMS[metric]:
+        if set(dims) != METRIC_DIMS[metric] and not (metric == "M1" and set(dims) == {"reason_category"}):
             raise ScoringError("signal dimensions do not match metric")
         for key, value in dims.items():
             folded = _strip(value)
@@ -398,7 +407,7 @@ def _validate_signal_summary(signals):
                 raise ScoringError("dimension value is unsupported")
         if "status" in signal and (
             not isinstance(signal["status"], str)
-            or signal["status"] not in {"candidate", "corroborated", "refuted", "uncertain"}
+            or signal["status"] not in {"candidate", "corroborated", "refuted", "uncertain", EXPLORATORY_STATUS}
         ):
             raise ScoringError("signal status is unsupported")
         if "direction" in signal and (
@@ -430,12 +439,14 @@ def _validate_signal_summary(signals):
                 "holdout_direction_reversed": "refuted",
                 "replicated_in_holdout": "corroborated",
                 "holdout_not_significant": "uncertain",
+                "replication_underpowered": "uncertain",
+                **{r: EXPLORATORY_STATUS for r in EXPLORATORY_REASONS},
             }
             expected_status = status_by_reason.get(signal["reason"])
             if (expected_status is None or signal["status"] != expected_status
                     or not {"discovery", "p_adj", "r2"}.issubset(signal_keys)):
                 raise ScoringError("signal status requires holdout evidence")
-            if signal["reason"] == "holdout_unavailable":
+            if signal["reason"] in {"holdout_unavailable", "exploratory_discovery_only"}:
                 if "holdout" in signal:
                     raise ScoringError("candidate without holdout has an invalid shape")
             elif "holdout" not in signal:
@@ -532,6 +543,7 @@ def score(catalog, signals, include_candidate=False, effect_tolerance=0.05, acce
                  ) for a in (acceptable or [])}
 
     accepted = {"corroborated"} | ({"candidate"} if include_candidate else set())
+    expl_signals = [s for s in signals["signals"] if s.get("status") == EXPLORATORY_STATUS and s.get("direction") == "up"]
     reported = [s for s in signals["signals"]
                 if s.get("status") in accepted and s.get("direction") in ("up", "down")]
 
@@ -590,6 +602,32 @@ def score(catalog, signals, include_candidate=False, effect_tolerance=0.05, acce
              if m["engine_effect"] is not None and m["catalog_effect"] is not None]
     rank = spearman([p[0] for p in pairs], [p[1] for p in pairs])
     matched_ids = {m["id"] for m in matched}
+    # Exploratory tier (DET1), scored SEPARATELY: never part of recall / precision above. Unlabelled = not in the catalog; it is
+    # neither a finding nor a false positive (the regression proof is the quality gate).
+    expl_matched, expl_unlabelled, expl_nonfinding, expl_ignored = [], [], [], 0
+    expl_seen = set(seen)
+    for s in expl_signals:
+        k = _key(s["metric"], s["dims"], s["direction"], catalog_version)
+        mc = (k[0], k[1])
+        if k in positives and k not in expl_seen:
+            expl_seen.add(k)
+            expl_matched.append(positives[k]["id"])
+        elif k in positives:
+            expl_ignored += 1
+        elif mc in nonfindings:
+            expl_nonfinding.append(_signal_view(s))
+        elif mc in ok_cells or mc in neutral:
+            expl_ignored += 1
+        else:
+            expl_unlabelled.append(_signal_view(s))
+    all_matched = matched_ids | set(expl_matched)
+    exploratory = {
+        "signals": len(expl_signals), "newly_matched_positives": len(expl_matched),
+        "unlabelled": len(expl_unlabelled), "matched_nonfindings": len(expl_nonfinding), "ignored_neutral_or_duplicate": expl_ignored,
+        "recall_strict_plus_exploratory": None if n_pos == 0 else round(len(all_matched) / n_pos, 6),
+        "unlabelled_cells": expl_unlabelled, "nonfinding_cells": expl_nonfinding,
+        "note": "exploratory: weaker statistical evidence; unlabelled cells are not findings and not false positives",
+    }
     return {
         "benchmark": catalog.get("benchmark"),
         "catalog_version": catalog.get("version"),
@@ -603,6 +641,7 @@ def score(catalog, signals, include_candidate=False, effect_tolerance=0.05, acce
         "unmatched_engine_findings": unmatched_engine,
         "nonfinding_reports": nonfinding_reports,
         "risk": risk,
+        "exploratory": exploratory,
         "interpretation": "Agreement with a derived OPBENCH-lite catalog; not independent accuracy, causal evidence, or production performance.",
         "validation_limitations": (
             "The catalog is a method reference, not independent ground truth. For v2, the bank-cell sensor and "
