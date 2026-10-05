@@ -40,6 +40,10 @@ impl LlmGateway {
         LlmGateway { config: None }
     }
 
+    pub fn is_enabled(&self) -> bool {
+        self.config.is_some()
+    }
+
     pub fn from_env(get: &dyn Fn(&str) -> Option<String>) -> Result<LlmGateway, String> {
         if get("PULSO_LLM_GATEWAY").as_deref() != Some("enabled") {
             return Ok(LlmGateway::disabled());
