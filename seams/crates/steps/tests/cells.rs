@@ -350,3 +350,29 @@ fn dependent_metric_findings_are_flagged_not_dropped() {
     assert!(indep.get("depends_on").is_none());
     assert!(find_m(&j, "M1", "Queja", "Phone").unwrap().get("depends_on").is_none());
 }
+
+#[test]
+fn handled_time_share_m10_is_flagged_as_a_re_expression_of_m1() {
+    let mut rows = grid("M1", &planted_queja_phone);
+    let f10 = |r: &str, c: &str, _h: &str| match (r, c) {
+        ("Queja", "Phone") | ("Tecnico", "Chat") => Some(300),
+        _ => None,
+    };
+    rows.extend(grid("M10", &f10));
+    let j = out(&rows);
+    let dep = find_m(&j, "M10", "Queja", "Phone").expect("kept");
+    assert_eq!(dep.get("depends_on").and_then(|v| v.as_str()), Some("M1"));
+    assert!(find_m(&j, "M10", "Tecnico", "Chat").unwrap().get("depends_on").is_none());
+}
+
+#[test]
+fn ag2_dimensions_are_accepted_and_unknown_ones_still_rejected() {
+    let ok = r#"{"metric":"M7","dims":{"action":"initiate_transfer","channel":"App"},"half":"discovery","period":"2024-01","numerator":0,"denominator":600}"#;
+    assert!(analyse(ok, &Config::default()).is_ok());
+    let ok2 = r#"{"metric":"M9","dims":{"customer_segment":"Plus","channel":"Web"},"half":"holdout","numerator":30,"denominator":600}"#;
+    assert!(analyse(ok2, &Config::default()).is_ok());
+    let ok3 = r#"{"metric":"M8","dims":{"campaign_type":"Push","channel":"Email"},"half":"holdout","numerator":300,"denominator":600}"#;
+    assert!(analyse(ok3, &Config::default()).is_ok());
+    let bad = r#"{"metric":"M7","dims":{"customer_id":"x"},"half":"discovery","numerator":1,"denominator":600}"#;
+    assert!(analyse(bad, &Config::default()).is_err());
+}

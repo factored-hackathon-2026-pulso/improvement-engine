@@ -1,0 +1,318 @@
+{
+ "schema": "pulso.judge_golden/1",
+ "origin": "synthetic; derived from ARTIFACT_ANATOMY_AND_RUBRIC_2026-10-04 anchors; not human-labelled",
+ "proposals": [
+  {
+   "id": "syn-01",
+   "proposal": {
+    "id": "syn-01",
+    "agent_id": "disputas",
+    "finding": "Elevated repeat-clarify rate in cell disputas/cargo_no_reconocido (synthetic).",
+    "change": "replace template t/aclarar_problema disputas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent disputas owns this topic; the change replaces template t/aclarar_problema (the artifact that drives the observed branch, node aclarar is on the evidence path).",
+    "mechanism": "Hypothesis: the wording at aclarar never names the document the customer must give, so customers loop (evidence: 31% repeat clarify). The change adds that phrase. Alternatives: (a) do nothing, rejected because the loop rate is stable for 6 weeks; (b) raise max_steps, rejected because it hides the loop.",
+    "expected_effect": "Primary metric: repeat-clarify rate in cell disputas/cargo_no_reconocido, baseline 31%, target <= 21% over 100 cases in 14 days. Guardrail: fallback_used rate not worse by > 2 points. Source: engine.agent_step events (supported). Success if target met and guardrail holds, else revert.",
+    "side_effects": "Shared entities: template t/aclarar is used by 5 agents; this edit is scoped to disputas only (release bump disputas@1.0.1, 1 agent, es+pt both updated). Routing card unchanged, so no traffic shift; 5 guard queries on non-disputes questions.",
+    "uncertainty": "Link grade: mechanism_proxy. E0 data is generated, contact cannot be linked to the complaint outcome, so no causal claim. Falsified if the repeat-clarify rate does not drop after 100 cases. The native eval cannot see wording quality.",
+    "cost": "Prompt +9% chars (about 40 tokens), no extra model call, max_steps 6 unchanged, within the 8000 ms wall budget of disputas; eval cost 20 scenarios x 3 reps x 2 calls = 120 calls, about 0.2 USD (limit 1)."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 2,
+    "R2": 2,
+    "R8": 2,
+    "R9": 2,
+    "R10": 2,
+    "R12": 2
+   }
+  },
+  {
+   "id": "syn-02",
+   "proposal": {
+    "id": "syn-02",
+    "agent_id": "consultas",
+    "finding": "Elevated repeat-clarify rate in cell consultas/estado_pqr (synthetic).",
+    "change": "replace routing card of consultas consultas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent consultas owns this topic; the change replaces routing card of consultas (the artifact that drives the observed branch, node consultar is on the evidence path).",
+    "mechanism": "Hypothesis: the wording at consultar never names the document the customer must give, so customers loop (evidence: 31% repeat clarify). The change adds that phrase. Alternatives: (a) do nothing, rejected because the loop rate is stable for 6 weeks; (b) raise max_steps, rejected because it hides the loop.",
+    "expected_effect": "Primary metric: repeat-clarify rate in cell consultas/estado_pqr, baseline 31%, target <= 21% over 100 cases in 14 days. Guardrail: fallback_used rate not worse by > 2 points. Source: engine.agent_step events (supported). Success if target met and guardrail holds, else revert.",
+    "side_effects": "Shared entities: template t/aclarar is used by 5 agents; this edit is scoped to consultas only (release bump consultas@1.0.1, 1 agent, es+pt both updated). Routing card unchanged, so no traffic shift; 5 guard queries on non-status questions.",
+    "uncertainty": "Link grade: mechanism_proxy. E0 data is generated, contact cannot be linked to the complaint outcome, so no causal claim. Falsified if the repeat-clarify rate does not drop after 100 cases. The native eval cannot see wording quality.",
+    "cost": "Prompt +9% chars (about 40 tokens), no extra model call, max_steps 6 unchanged, within the 8000 ms wall budget of consultas; eval cost 20 scenarios x 3 reps x 2 calls = 120 calls, about 0.2 USD (limit 1)."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 2,
+    "R2": 2,
+    "R8": 2,
+    "R9": 2,
+    "R10": 2,
+    "R12": 2
+   }
+  },
+  {
+   "id": "syn-03",
+   "proposal": {
+    "id": "syn-03",
+    "agent_id": "disputas",
+    "finding": "Elevated repeat-clarify rate in cell disputas/cargo_no_reconocido (synthetic).",
+    "change": "replace template t/aclarar_problema disputas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent disputas owns this topic; the change replaces template t/aclarar_problema (the artifact that drives the observed branch, node aclarar is on the evidence path).",
+    "mechanism": "Hypothesis: the wording at aclarar never names the document the customer must give, so customers loop (evidence: 31% repeat clarify). The change adds that phrase. Alternatives: (a) do nothing, rejected because the loop rate is stable for 6 weeks; (b) raise max_steps, rejected because it hides the loop.",
+    "expected_effect": "Primary metric: repeat-clarify rate in cell disputas/cargo_no_reconocido, baseline 31%, target <= 21% over 100 cases in 14 days. Guardrail: fallback_used rate not worse by > 2 points. Source: engine.agent_step events (supported). Success if target met and guardrail holds, else revert.",
+    "side_effects": "Shared entities: template t/aclarar is used by 5 agents; this edit is scoped to disputas only (release bump disputas@1.0.1, 1 agent, es+pt both updated). Routing card unchanged, so no traffic shift; 5 guard queries on non-disputes questions.",
+    "uncertainty": "Link grade: mechanism_proxy. E0 data is generated, contact cannot be linked to the complaint outcome, so no causal claim. Falsified if the repeat-clarify rate does not drop after 100 cases. The native eval cannot see wording quality.",
+    "cost": "Prompt gets slightly longer and there is one more step; budgets are expected to hold but were not measured."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 2,
+    "R2": 2,
+    "R8": 2,
+    "R9": 2,
+    "R10": 2,
+    "R12": 1
+   }
+  },
+  {
+   "id": "syn-04",
+   "proposal": {
+    "id": "syn-04",
+    "agent_id": "consultas",
+    "finding": "Elevated repeat-clarify rate in cell consultas/estado_pqr (synthetic).",
+    "change": "replace routing card of consultas consultas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent consultas owns this topic; the change replaces routing card of consultas (the artifact that drives the observed branch, node consultar is on the evidence path).",
+    "mechanism": "Hypothesis: the wording at consultar never names the document the customer must give, so customers loop (evidence: 31% repeat clarify). The change adds that phrase. Alternatives: (a) do nothing, rejected because the loop rate is stable for 6 weeks; (b) raise max_steps, rejected because it hides the loop.",
+    "expected_effect": "Primary metric: repeat-clarify rate should go down noticeably. Source: engine events. No baseline or threshold.",
+    "side_effects": "Shared entities: template t/aclarar is used by 5 agents; this edit is scoped to consultas only (release bump consultas@1.0.1, 1 agent, es+pt both updated). Routing card unchanged, so no traffic shift; 5 guard queries on non-status questions.",
+    "uncertainty": "Link grade: mechanism_proxy. E0 data is generated, contact cannot be linked to the complaint outcome, so no causal claim. Falsified if the repeat-clarify rate does not drop after 100 cases. The native eval cannot see wording quality.",
+    "cost": "Prompt +9% chars (about 40 tokens), no extra model call, max_steps 6 unchanged, within the 8000 ms wall budget of consultas; eval cost 20 scenarios x 3 reps x 2 calls = 120 calls, about 0.2 USD (limit 1)."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 2,
+    "R2": 2,
+    "R8": 1,
+    "R9": 2,
+    "R10": 2,
+    "R12": 2
+   }
+  },
+  {
+   "id": "syn-05",
+   "proposal": {
+    "id": "syn-05",
+    "agent_id": "disputas",
+    "finding": "Elevated repeat-clarify rate in cell disputas/cargo_no_reconocido (synthetic).",
+    "change": "replace template t/aclarar_problema disputas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent disputas owns this topic; the change replaces template t/aclarar_problema (the artifact that drives the observed branch, node aclarar is on the evidence path).",
+    "mechanism": "Hypothesis: customers are confused by the wording at aclarar. The change rewords it. Alternatives: do nothing.",
+    "expected_effect": "Primary metric: repeat-clarify rate in cell disputas/cargo_no_reconocido, baseline 31%, target <= 21% over 100 cases in 14 days. Guardrail: fallback_used rate not worse by > 2 points. Source: engine.agent_step events (supported). Success if target met and guardrail holds, else revert.",
+    "side_effects": "Shared entities: template t/aclarar is used by 5 agents; this edit is scoped to disputas only (release bump disputas@1.0.1, 1 agent, es+pt both updated). Routing card unchanged, so no traffic shift; 5 guard queries on non-disputes questions.",
+    "uncertainty": "Data is synthetic, so results may differ. No falsification condition.",
+    "cost": "Prompt +9% chars (about 40 tokens), no extra model call, max_steps 6 unchanged, within the 8000 ms wall budget of disputas; eval cost 20 scenarios x 3 reps x 2 calls = 120 calls, about 0.2 USD (limit 1)."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 2,
+    "R2": 1,
+    "R8": 2,
+    "R9": 2,
+    "R10": 1,
+    "R12": 2
+   }
+  },
+  {
+   "id": "syn-06",
+   "proposal": {
+    "id": "syn-06",
+    "agent_id": "consultas",
+    "finding": "Elevated repeat-clarify rate in cell consultas/estado_pqr (synthetic).",
+    "change": "replace routing card of consultas consultas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent consultas owns this topic; the change edits template t/estado_pqr, defensible but a routing card of consultas would be the more direct artifact (alternative named).",
+    "mechanism": "Hypothesis: customers are confused by the wording at consultar. The change rewords it. Alternatives: do nothing.",
+    "expected_effect": "Primary metric: repeat-clarify rate should go down noticeably. Source: engine events. No baseline or threshold.",
+    "side_effects": "Touches a template shared across agents; other agents may be affected but this was not quantified.",
+    "uncertainty": "Data is synthetic, so results may differ. No falsification condition.",
+    "cost": "Prompt gets slightly longer and there is one more step; budgets are expected to hold but were not measured."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 1,
+    "R2": 1,
+    "R8": 1,
+    "R9": 1,
+    "R10": 1,
+    "R12": 1
+   }
+  },
+  {
+   "id": "syn-07",
+   "proposal": {
+    "id": "syn-07",
+    "agent_id": "disputas",
+    "finding": "Elevated repeat-clarify rate in cell disputas/cargo_no_reconocido (synthetic).",
+    "change": "replace template t/aclarar_problema disputas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent disputas owns this topic; the change edits prompt p/disputas, defensible but a template t/aclarar_problema would be the more direct artifact (alternative named).",
+    "mechanism": "Hypothesis: the wording at aclarar never names the document the customer must give, so customers loop (evidence: 31% repeat clarify). The change adds that phrase. Alternatives: (a) do nothing, rejected because the loop rate is stable for 6 weeks; (b) raise max_steps, rejected because it hides the loop.",
+    "expected_effect": "Primary metric: repeat-clarify rate should go down noticeably. Source: engine events. No baseline or threshold.",
+    "side_effects": "Shared entities: template t/aclarar is used by 5 agents; this edit is scoped to disputas only (release bump disputas@1.0.1, 1 agent, es+pt both updated). Routing card unchanged, so no traffic shift; 5 guard queries on non-disputes questions.",
+    "uncertainty": "Data is synthetic, so results may differ. No falsification condition.",
+    "cost": "Prompt gets slightly longer and there is one more step; budgets are expected to hold but were not measured."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 1,
+    "R2": 2,
+    "R8": 1,
+    "R9": 2,
+    "R10": 1,
+    "R12": 1
+   }
+  },
+  {
+   "id": "syn-08",
+   "proposal": {
+    "id": "syn-08",
+    "agent_id": "consultas",
+    "finding": "Elevated repeat-clarify rate in cell consultas/estado_pqr (synthetic).",
+    "change": "replace routing card of consultas consultas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent consultas owns this topic; the change replaces routing card of consultas (the artifact that drives the observed branch, node consultar is on the evidence path).",
+    "mechanism": "Hypothesis: customers are confused by the wording at consultar. The change rewords it. Alternatives: do nothing.",
+    "expected_effect": "Primary metric: repeat-clarify rate should go down noticeably. Source: engine events. No baseline or threshold.",
+    "side_effects": "Touches a template shared across agents; other agents may be affected but this was not quantified.",
+    "uncertainty": "Link grade: mechanism_proxy. E0 data is generated, contact cannot be linked to the complaint outcome, so no causal claim. Falsified if the repeat-clarify rate does not drop after 100 cases. The native eval cannot see wording quality.",
+    "cost": "Raises max_steps from 6 to 12 and adds a second generate step per turn; no cost or latency analysis."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 2,
+    "R2": 1,
+    "R8": 1,
+    "R9": 1,
+    "R10": 2,
+    "R12": 0
+   }
+  },
+  {
+   "id": "syn-09",
+   "proposal": {
+    "id": "syn-09",
+    "agent_id": "disputas",
+    "finding": "Elevated repeat-clarify rate in cell disputas/cargo_no_reconocido (synthetic).",
+    "change": "replace template t/aclarar_problema disputas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "The change only edits tools_allowed of an unrelated agent (copiloto-asesor) which cannot affect the observed branch at node aclarar.",
+    "mechanism": "Hypothesis: customers are confused by the wording at aclarar. The change rewords it. Alternatives: do nothing.",
+    "expected_effect": "Primary metric: repeat-clarify rate in cell disputas/cargo_no_reconocido, baseline 31%, target <= 21% over 100 cases in 14 days. Guardrail: fallback_used rate not worse by > 2 points. Source: engine.agent_step events (supported). Success if target met and guardrail holds, else revert.",
+    "side_effects": "Shared entities: template t/aclarar is used by 5 agents; this edit is scoped to disputas only (release bump disputas@1.0.1, 1 agent, es+pt both updated). Routing card unchanged, so no traffic shift; 5 guard queries on non-disputes questions.",
+    "uncertainty": "Link grade: mechanism_proxy. E0 data is generated, contact cannot be linked to the complaint outcome, so no causal claim. Falsified if the repeat-clarify rate does not drop after 100 cases. The native eval cannot see wording quality.",
+    "cost": "Prompt +9% chars (about 40 tokens), no extra model call, max_steps 6 unchanged, within the 8000 ms wall budget of disputas; eval cost 20 scenarios x 3 reps x 2 calls = 120 calls, about 0.2 USD (limit 1)."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 0,
+    "R2": 1,
+    "R8": 2,
+    "R9": 2,
+    "R10": 2,
+    "R12": 2
+   }
+  },
+  {
+   "id": "syn-10",
+   "proposal": {
+    "id": "syn-10",
+    "agent_id": "consultas",
+    "finding": "Elevated repeat-clarify rate in cell consultas/estado_pqr (synthetic).",
+    "change": "replace routing card of consultas consultas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent consultas owns this topic; the change edits template t/estado_pqr, defensible but a routing card of consultas would be the more direct artifact (alternative named).",
+    "mechanism": "Goal: reduce escalations. The change lowers the escalation threshold so fewer cases escalate. No cause is stated.",
+    "expected_effect": "Primary metric: repeat-clarify rate should go down noticeably. Source: engine events. No baseline or threshold.",
+    "side_effects": "Touches a template shared across agents; other agents may be affected but this was not quantified.",
+    "uncertainty": "This change will reduce complaints by 30% and will raise satisfaction, as shown by the CSV outcomes.",
+    "cost": "Prompt gets slightly longer and there is one more step; budgets are expected to hold but were not measured."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 1,
+    "R2": 0,
+    "R8": 1,
+    "R9": 1,
+    "R10": 0,
+    "R12": 1
+   }
+  },
+  {
+   "id": "syn-11",
+   "proposal": {
+    "id": "syn-11",
+    "agent_id": "disputas",
+    "finding": "Elevated repeat-clarify rate in cell disputas/cargo_no_reconocido (synthetic).",
+    "change": "replace template t/aclarar_problema disputas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "The change only edits tools_allowed of an unrelated agent (copiloto-asesor) which cannot affect the observed branch at node aclarar.",
+    "mechanism": "Goal: reduce escalations. The change lowers the escalation threshold so fewer cases escalate. No cause is stated.",
+    "expected_effect": "Expected effect: customers will be happier. Measured by draft acceptance rate of the advisor (E0 has 0 rows for it).",
+    "side_effects": "No side effects. The routing summary is widened to cover any customer problem.",
+    "uncertainty": "This change will reduce complaints by 30% and will raise satisfaction, as shown by the CSV outcomes.",
+    "cost": "Raises max_steps from 6 to 12 and adds a second generate step per turn; no cost or latency analysis."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 0,
+    "R2": 0,
+    "R8": 0,
+    "R9": 0,
+    "R10": 0,
+    "R12": 0
+   }
+  },
+  {
+   "id": "syn-12",
+   "proposal": {
+    "id": "syn-12",
+    "agent_id": "consultas",
+    "finding": "Elevated repeat-clarify rate in cell consultas/estado_pqr (synthetic).",
+    "change": "replace routing card of consultas consultas 1.0.0 -> 1.0.1 (anchored patch, es+pt)",
+    "target_rationale": "Target agent consultas owns this topic; the change replaces routing card of consultas (the artifact that drives the observed branch, node consultar is on the evidence path).",
+    "mechanism": "Hypothesis: the wording at consultar never names the document the customer must give, so customers loop (evidence: 31% repeat clarify). The change adds that phrase. Alternatives: (a) do nothing, rejected because the loop rate is stable for 6 weeks; (b) raise max_steps, rejected because it hides the loop.",
+    "expected_effect": "Expected effect: customers will be happier. Measured by draft acceptance rate of the advisor (E0 has 0 rows for it).",
+    "side_effects": "No side effects. The routing summary is widened to cover any customer problem.",
+    "uncertainty": "This change will reduce complaints by 30% and will raise satisfaction, as shown by the CSV outcomes.",
+    "cost": "Prompt +9% chars (about 40 tokens), no extra model call, max_steps 6 unchanged, within the 8000 ms wall budget of consultas; eval cost 20 scenarios x 3 reps x 2 calls = 120 calls, about 0.2 USD (limit 1)."
+   },
+   "base": {
+    "note": "synthetic base excerpt"
+   },
+   "expected": {
+    "R1": 2,
+    "R2": 2,
+    "R8": 0,
+    "R9": 0,
+    "R10": 0,
+    "R12": 2
+   }
+  }
+ ]
+}
