@@ -55,7 +55,9 @@ ENV TMPDIR=/tmp \
     PULSO_ALLOW_NON_LOOPBACK=1 \
     PULSO_CONSOLE_DIR=/opt/pulso/console \
     PULSO_WORK_DIR=/var/lib/pulso/work \
-    PULSO_STORE_DIR=/var/lib/pulso/store \n    PULSO_REGRESSION_PYTHON=python3 \n    PULSO_REGRESSION_SCRIPTS=/opt/pulso/scripts/regression
+    PULSO_STORE_DIR=/var/lib/pulso/store \
+    PULSO_REGRESSION_PYTHON=python3 \
+    PULSO_REGRESSION_SCRIPTS=/opt/pulso/scripts/regression
 VOLUME ["/var/lib/pulso"]
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 CMD ["/usr/local/bin/pulso", "healthcheck"]
