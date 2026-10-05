@@ -14,6 +14,7 @@ $root = (Resolve-Path (Join-Path $here '..\..')).Path
 $factored = Split-Path -Parent (Split-Path -Parent $root)
 $settings = Get-RigSettings
 $paths = Get-RigPaths -Root $root
+[void](Stop-PidTree -PidFile $paths.SpaPid)
 $stopped = Stop-PidTree -PidFile $paths.PlatformPid
 Write-Host ("platform API: {0}" -f $(if ($stopped) { 'stopped' } else { 'was not running (no pid file)' }))
 $agentCore = $(if ($env:PULSO_AGENT_CORE_DIR) { $env:PULSO_AGENT_CORE_DIR } else { Join-Path $factored 'tmp\env1\agent-core' })

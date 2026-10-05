@@ -19,7 +19,10 @@
 param(
     [ValidateSet('planted', 'bank')][string]$Profile = 'planted', [string]$CellsFile = '', [int]$MaxFindings = 1,
     [string]$BuilderModel = 'xiaomi/mimo-v2.6-pro', [string]$FallbackModel = 'xiaomi/mimo-v2.6-flash', [int]$TimeoutMin = 25,
-    [switch]$NoEval, [switch]$NativeAnnounce
+    [switch]$NoEval, [switch]$NativeAnnounce,
+    # -Cycle: ONE engine process stays alive from the loop through the release event; after the announce a PERSON approves, publishes and
+    # promotes in the platform SPA while this script only WATCHES (read-only); then poller -> engine -> outcome card. No decision automation.
+    [string]$ResumeWork = '', [switch]$Cycle, [int]$HumanTimeoutMin = 60, [string]$PseudoRelease = '2025-06', [string]$SpaUrl = 'http://127.0.0.1:5174'
 )
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
@@ -54,7 +57,7 @@ Add-Needles @($svc, [string]$tok.admin, [string]$tok.builder, [string]$tok.expor
 $rig = Read-JsonFile -Path (Join-Path $paths.Rig 'rig.json')
 $core = "http://127.0.0.1:$($settings.CorePort)"; $plat = "http://127.0.0.1:$($settings.PlatformPort)"; $engineUrl = "http://127.0.0.1:$($settings.EnginePort)"
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
-$work = Join-Path $paths.Rig "work-$runId"; $store = Join-Path $paths.Rig "store-$runId"; $cellsDir = Join-Path $paths.Rig 'cells'
+$work = $(if ($ResumeWork) { $ResumeWork } else { Join-Path $paths.Rig "work-$runId" }); $store = Join-Path $paths.Rig "store-$runId"; $cellsDir = Join-Path $paths.Rig 'cells'
 $null = New-Item -ItemType Directory -Force -Path $work, $store, $cellsDir
 $hops = New-Object System.Collections.Generic.List[object]
 function Hop { param([string]$Name, [string]$Status, [string]$Detail, [string]$Needs = '') $hops.Add([pscustomobject]@{ Hop = $Name; Status = $Status; Detail = $Detail; Needs = $Needs }); Say ("[{0}] {1}: {2}" -f $Status, $Name, $Detail) }
@@ -72,6 +75,13 @@ if ($Profile -eq 'planted') {
 } else {
     if (-not $CellsFile -or -not (Test-Path -LiteralPath $CellsFile)) { Hop 'cells' 'BREAK' '-Profile bank needs -CellsFile (cached bank aggregates, never raw data)'; exit 2 }
     $cellsPath = (Resolve-Path -LiteralPath $CellsFile).Path; $mode = 'bank-file'; $src = 'bank'
+}
+$postPath = ''
+if ($Cycle) {
+    if ($Profile -ne 'planted') { Hop 'cells' 'BREAK' '-Cycle needs -Profile planted (the post-release table is the planted one with the effect cut)'; exit 2 }
+    $postPath = Join-Path $cellsDir 'planted-post.ndjson'
+    $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'post_cells.py'), '--in', $cellsPath, '--out', $postPath, '--release', $PseudoRelease, '--category', 'Cobro indebido', '--cut-pp', '8') -Needles $script:Needles -WorkDir $root -Quiet
+    if ($r.ExitCode -ne 0) { Hop 'cells' 'BREAK' 'post_cells.py failed'; exit 1 }
 }
 $info = Get-CellsInfo -Path $cellsPath
 Hop 'cells' 'OK' ("{0}: {1} rows, metrics {2}, sha256:{3}  [{4}]" -f $mode, $info.Rows, $info.ByMetric, $info.Sha, $(if ($Profile -eq 'planted') { 'SYNTHETIC, invented numbers' } else { 'real bank aggregates' }))
@@ -93,6 +103,14 @@ function Start-Engine {
     if ($NativeAnnounce) { $pu = $plat; $pt = $svc }
     $eenv = Get-EngineEnvironment -Settings $settings -CellsPath $cellsPath -WorkDir $work -StoreDir $store -Source $src -MaxFindings $MaxFindings `
         -GatewayKey $gwKey -RegistryToken ([string]$tok.builder) -AdminToken $adm -PlatformUrl $pu -PlatformToken $pt -PythonCmd $python -BuilderModel $Model
+    if ($Cycle) {
+        # R1/R2: demo clock. Pseudo release month, the planted POST table (treated cell cut by 8 pp, SYNTHETIC), staging-or-prod release events accepted.
+        $eenv['PULSO_OUTCOME_PRE_CELLS'] = $cellsPath; $eenv['PULSO_OUTCOME_POST_CELLS'] = $postPath
+        $eenv['PULSO_OUTCOME_PSEUDO_RELEASE'] = $PseudoRelease; $eenv['PULSO_OUTCOME_WINDOW_MONTHS'] = '3'
+        # the engine splits the command on whitespace (no quoting): both paths contain no spaces. The wrapper maps the invented planted labels to the estimator's closed set and applies the demo floor (R4, synthetic label only).
+        $eenv['PULSO_OUTCOME_CMD'] = $python + ' ' + (Join-Path $here 'outcome_demo_adapter.py')
+        $eenv['PULSO_OUTCOME_CWD'] = $root; $eenv['PULSO_OUTCOME_DATA_LABEL'] = 'synthetic-planted-effect'; $eenv['PULSO_OUTCOME_TIMEOUT_SECS'] = '180'
+    }
     Say ("    engine environment names: " + ((Get-EnvNames -Env $eenv) -join ', '))
     $elog = Join-Path $paths.Rig "engine-$runId.log"
     $psi = New-Object Diagnostics.ProcessStartInfo
@@ -108,10 +126,17 @@ function Start-Engine {
 
 function Invoke-LoopJob {
     param([string]$Model)
-    Remove-Item -LiteralPath (Join-Path $work 'value-loop') -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $ResumeWork) { Remove-Item -LiteralPath (Join-Path $work 'value-loop') -Recurse -Force -ErrorAction SilentlyContinue }
     $e = Start-Engine -Model $Model
     try {
         if (-not $e.Ready) { return [pscustomobject]@{ Ok = $false; Why = 'engine did not become ready'; Result = $null } }
+        if ($ResumeWork) {
+            # RESUME: the loop already ran in this work dir (record on disk); a new engine process only has to take the release event
+            $rf = Get-ChildItem -LiteralPath (Join-Path $work 'value-loop') -Filter '*.json' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $rf) { return [pscustomobject]@{ Ok = $false; Why = 'no value-loop record in the resume work dir'; Result = $null } }
+            $script:KeepEngine = $e
+            return [pscustomobject]@{ Ok = $true; Why = ''; Result = $rf.FullName }
+        }
         $key = "env1-$runId-" + ($Model -replace '[^a-z0-9]', '')
         $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\triggers\agentcore_poller.py'), 'explicit', $key, '--engine-url', $engineUrl, '--state', (Join-Path $work 'trigger-state.json')) `
             -Env @{ PULSO_ENGINE_TOKEN = $e.Admin } -Needles $script:Needles -WorkDir $root -Quiet
@@ -125,11 +150,14 @@ function Invoke-LoopJob {
             Start-Sleep -Seconds 3
         }
         if (-not $f) { return [pscustomobject]@{ Ok = $false; Why = "no job result within $TimeoutMin min"; Result = $null } }
+        $script:KeepEngine = $(if ($Cycle) { $e } else { $null })
         [pscustomobject]@{ Ok = $true; Why = ''; Result = $f.FullName }
     } finally {
-        try { $e.Proc.StandardInput.Close() } catch { }
-        Start-Sleep -Milliseconds 800
-        Stop-Tree $e.Proc
+        if (-not ($Cycle -and $script:KeepEngine -and [object]::ReferenceEquals($script:KeepEngine, $e))) {
+            try { $e.Proc.StandardInput.Close() } catch { }
+            Start-Sleep -Milliseconds 800
+            Stop-Tree $e.Proc
+        }
     }
 }
 
@@ -138,6 +166,7 @@ $job = Invoke-LoopJob -Model $BuilderModel
 $lres = $null; $ann = @()
 if ($job.Ok) { $lres = Read-JsonFile -Path $job.Result; $ann = @(Get-AnnouncedRecords -Loop $lres) }
 if ((-not $job.Ok -or $ann.Count -eq 0) -and $FallbackModel -and $FallbackModel -ne $BuilderModel) {
+    if ($script:KeepEngine) { try { $script:KeepEngine.Proc.StandardInput.Close() } catch { }; Start-Sleep -Milliseconds 800; Stop-Tree $script:KeepEngine.Proc; $script:KeepEngine = $null }
     Say ("    no announced proposal with {0} ({1}); retrying once with the fallback {2}" -f $BuilderModel, $(if ($job.Ok) { 'announced 0' } else { $job.Why }), $FallbackModel)
     $job = Invoke-LoopJob -Model $FallbackModel
     if ($job.Ok) { $lres = Read-JsonFile -Path $job.Result; $ann = @(Get-AnnouncedRecords -Loop $lres) }
@@ -151,7 +180,7 @@ else {
 
 # ---- announce (rig side, with CASE- ids) -------------------------------------------------------------------------------------------------
 $results = @()
-foreach ($rec in $ann) {
+foreach ($rec in $(if ($ResumeWork) { @() } else { $ann })) {
     $links = @(Select-EvidenceLinks -CaseIds $caseIds -EvidenceRef ([string]$rec.evidence_ref) -Count 2)
     $payload = New-AnnouncePayload -Record $rec -EvidenceLinks $links
     $json = ($payload | ConvertTo-Json -Depth 5) -replace '\\u003c', '<' -replace '\\u003e', '>' -replace '\\u0026', '&' -replace '\\u0027', "'"
@@ -170,20 +199,21 @@ foreach ($rec in $ann) {
     Say ("    announce {0}: HTTP {1}, replay HTTP {2}, {3} evidence links" -f $payload.proposalId, $codes[0], $codes[1], $links.Count)
 }
 Write-JsonFile -Path $paths.AnnounceResults -Obj ([ordered]@{ results = $results })
-if ($ann.Count -gt 0) {
+if ($ResumeWork) { Hop 'announce' 'OK' 'done in the first run (resume)' }
+elseif ($ann.Count -gt 0) {
     $okAnn = (@($results | Where-Object { $_.status -in 200, 201 }).Count -eq $results.Count)
     Hop 'announce' $(if ($okAnn) { 'OK' } else { 'BREAK' }) ("{0} proposal(s); status {1}" -f $results.Count, ((@($results | ForEach-Object { "$($_.status)/$($_.replay_status)" })) -join ' ')) $(if (-not $okAnn) { 'platform: see platform.log (404 token unset, 422 payload, 502 agent-core read of the engine proposal = G6)' } else { '' })
 } else { Hop 'announce' 'not-run' 'nothing announced by the loop' }
 
 # ---- verify -------------------------------------------------------------------------------------------------------------------------------
-if ($job.Ok -and $ann.Count -gt 0) {
+if ($job.Ok -and $ann.Count -gt 0 -and -not $ResumeWork) {
     $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'story_verify.py'), 'verify', '--platform', $plat, '--core', $core, '--tokens', $paths.Tokens, '--loop-result', $job.Result,
             '--announce', $paths.AnnounceResults, '--out', $paths.Story) -Needles $script:Needles -WorkDir $root
     Hop 'verify' $(if ($r.ExitCode -eq 0) { 'OK' } else { 'BREAK' }) 'see the check table above' $(if ($r.ExitCode -ne 0) { 'the FAIL rows name the owning side' } else { '' })
 } else { Hop 'verify' 'not-run' 'no announced proposal' }
 
 # ---- eval suite attach + evaluate (EV1, by script) ----------------------------------------------------------------------------------------------
-if (-not $NoEval -and $job.Ok -and $ann.Count -gt 0) {
+if (-not $NoEval -and -not $ResumeWork -and $job.Ok -and $ann.Count -gt 0) {
     $pid2 = [string]$ann[0].delivery.proposal_id
     $agent = ''
     try { $pr = Invoke-RestMethod -Uri "$core/v1/registry/proposals/$pid2" -Headers @{ Authorization = "Bearer $($tok.builder)" } -TimeoutSec 20; $agent = [string]$pr.proposal.agent_id } catch { }
@@ -196,8 +226,56 @@ if (-not $NoEval -and $job.Ok -and $ann.Count -gt 0) {
     } else { Hop 'eval' 'BREAK' ("no pulso-min suite for agent '{0}'" -f $agent) 'G11: a real eval suite for this agent (Codex T2)' }
 } else { Hop 'eval' 'not-run' 'skipped' }
 
-foreach ($n in 'approve (dev step-up)', 'publish (staging)', 'promote (prod)', 'release event -> poller -> engine', 'outcome step') {
-    Hop $n 'not-run' 'blocked in this run: the permission layer refused the approve/publish/promote automation; needs the user to decide' 'user decision'
+if ($Cycle -and $script:KeepEngine -and $ann.Count -gt 0) {
+    $pidH = [string]$ann[0].delivery.proposal_id
+    $eng = $script:KeepEngine
+    $spaOk = Test-Http $SpaUrl
+    $banner = @(
+        '', '================================================================================',
+        'ACTION FOR A PERSON (local synthetic stack; the rig only watches, it decides nothing)',
+        "  Platform SPA : $SpaUrl   (API $plat)   SPA reachable now: $spaOk",
+        '  Account      : Lucia Herrera, lucia.herrera@latambank.example (Supervision), password demo1234',
+        '  Second factor: 000000 (the published dev constant of the seeded accounts, CC_ENV=dev only)',
+        "  Proposal     : $pidH   (agent consultas, source 'Del motor de mejora')",
+        '  Three clicks : Automatizacion > Propuestas > open the proposal;',
+        '                 1) Aprobar (enter 000000)   2) Publicar (enter 000000)   3) Pasar a produccion (enter 000000)',
+        "  The rig waits up to $HumanTimeoutMin min, then runs: release event -> poller -> engine -> outcome card.",
+        '================================================================================', '')
+    foreach ($l in $banner) { Say $l }
+    Write-JsonFile -Path (Join-Path $paths.Rig 'waiting.json') -Obj ([ordered]@{ spa = $SpaUrl; api = $plat; account = 'lucia.herrera@latambank.example'; step_up = '000000'; proposal_id = $pidH; since = (Get-Date).ToUniversalTime().ToString('o') })
+    $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'story_verify.py'), 'wait-human', '--core', $core, '--tokens', $paths.Tokens, '--proposal-id', $pidH, '--timeout-min', "$HumanTimeoutMin") -Needles $script:Needles -WorkDir $root
+    $humanOk = ($r.ExitCode -eq 0)
+    Hop 'human: approve + publish + promote prod' $(if ($humanOk) { 'OK' } else { 'BREAK' }) $(if ($humanOk) { 'a person did it in the SPA (observed in agent-core registry events)' } else { "not seen within $HumanTimeoutMin min" }) $(if (-not $humanOk) { 'the person (or a platform/SPA break: see platform.log)' } else { '' })
+    if ($humanOk) {
+        # release event -> poller -> the SAME engine process (trigger records are in memory)
+        $tries = 0; $sent = $false; $txt = ''; $r = $null
+        while ($tries -lt 5 -and -not $sent) {
+            $tries++
+            $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\triggers\agentcore_poller.py'), 'poll', '--once', '--core-url', $core, '--engine-url', $engineUrl, '--state', (Join-Path $work 'poller-state.json'),
+                    '--token-file', $paths.Tokens, '--token-key', 'exporter', '--only-agent', 'no-run-triggers', '--only-origin', 'auto_detect') -Env @{ PULSO_ENGINE_TOKEN = $eng.Admin } -Needles $script:Needles -WorkDir $root -Quiet
+            $txt = $r.Output -join ' '
+            if ($r.ExitCode -eq 0 -and $txt -match '[1-9]\d*') { $sent = $true } elseif ($r.ExitCode -ne 0) { break } else { Start-Sleep -Seconds 5 }
+        }
+        Hop 'release event -> poller -> engine' $(if ($sent) { 'OK' } else { 'BREAK' }) ("poller exit {0}: {1}" -f $r.ExitCode, ($txt.Substring(0, [math]::Min(160, $txt.Length)))) $(if (-not $sent) { 'agent-core: release.* event with proposal_id/origin on /v1/export/registry-events; poller exporter token' } else { '' })
+        $card = $null
+        if ($sent) {
+            $dl = (Get-Date).AddMinutes(6)
+            while ((Get-Date) -lt $dl -and -not $card) {
+                $cf = Get-ChildItem -LiteralPath (Join-Path $work 'outcome') -Filter '*.json' -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '*.cells*' -and $_.Name -notlike '*.treated.json' } | Select-Object -First 1
+                if ($cf) { $wrap = Read-JsonFile -Path $cf.FullName; $card = $(if ($wrap.cards) { @($wrap.cards)[0] } else { $wrap }) } else { Start-Sleep -Seconds 4 }
+            }
+        }
+        if ($card) {
+            $okV = (@('improved', 'no_detectable_change', 'worsened', 'inconclusive') -contains [string]$card.verdict)
+            Hop 'outcome step' $(if ($okV) { 'OK' } else { 'BREAK' }) ("verdict={0} effect_pp={1} interval_pp={2} period_kind={3} data_label={4} success_claimed={5}" -f $card.verdict, $card.effect_pp, ($card.interval_pp -join '..'), $card.period_kind, $card.data_label, $card.success_claimed) ''
+            Write-JsonFile -Path (Join-Path $paths.Rig 'outcome-card.json') -Obj $card -Depth 10
+        } else { Hop 'outcome step' 'BREAK' 'no outcome card within 6 min of the release event' 'engine log under .dev-stack/integrated-rig (trigger admitted? proposal_id on the event? estimator)' }
+    } else {
+        foreach ($n in 'release event -> poller -> engine', 'outcome step') { Hop $n 'not-run' 'waiting for the human hop' '' }
+    }
+    $eng2 = $script:KeepEngine
+} else {
+    foreach ($n in 'human approve/publish/promote', 'release event -> poller -> engine', 'outcome step') { Hop $n 'not-run' 'run with -Cycle (a person decides in the SPA; this script never does)' '' }
 }
 
 Say ''
@@ -208,4 +286,5 @@ Say '--- hops'
 foreach ($x in $hops) { Say ("  {0,-8} {1}  {2}" -f $x.Status, $x.Hop, $x.Needs) }
 Write-JsonFile -Path (Join-Path $paths.Rig "hops-$runId.json") -Obj @($hops)
 $bad = @($hops | Where-Object { $_.Status -eq 'BREAK' }).Count
+if ($script:KeepEngine) { try { $script:KeepEngine.Proc.StandardInput.Close() } catch { }; Start-Sleep -Milliseconds 800; Stop-Tree $script:KeepEngine.Proc; Say 'engine stopped; the rest of the rig stays up until down.ps1' }
 exit $(if ($bad -gt 0) { 1 } else { 0 })
