@@ -67,6 +67,7 @@ class Forwarder:
         self.max_retries, self.backoff, self.sleep, self.batch_max = max_retries, backoff, sleep, batch_max
         self.q: queue.Queue = queue.Queue()
         self.stats = {"forwarded": 0, "failed": 0, "retries": 0}
+        self.inflight = 0
         self._last = {"traces": 0.0, "scores": 0.0}
 
     def post(self, kind: str, body: dict, raw: bytes | None = None, content_type: str = "application/json",
@@ -118,6 +119,18 @@ class Forwarder:
                 items.append(self.q.get_nowait())
         except queue.Empty:
             pass
+        self.inflight += len(items)
+        try:
+            self._handle(items)
+        finally:
+            self.inflight -= len(items)
+        return len(items)
+
+    @property
+    def pending(self) -> int:
+        return self.q.qsize() + self.inflight
+
+    def _handle(self, items) -> None:
         for k, b in items:
             if k == "raw":
                 try:
@@ -130,7 +143,6 @@ class Forwarder:
         for k, b in items:
             if k == "scores":
                 self._safe("scores", b)
-        return len(items)
 
     def _safe(self, kind, body):
         try:
@@ -146,6 +158,17 @@ class Forwarder:
 
 def make_server(fwd: Forwarder, port: int) -> ThreadingHTTPServer:
     class H(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.path in ("/healthz", "/v1/stats"):  # counts only, no content
+                body = json.dumps({"pending": fwd.pending, **fwd.stats}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
         def do_POST(self):  # noqa: N802
             kind = {"/v1/traces": "traces", "/v1/scores": "scores"}.get(self.path)
             ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()

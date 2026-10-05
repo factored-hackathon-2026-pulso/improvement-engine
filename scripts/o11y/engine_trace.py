@@ -101,6 +101,15 @@ def for_finding(obj: dict | None, rec: dict) -> dict | None:
     return obj if fid in (None, rec.get("finding_id")) else None
 
 
+def verdict_from_record(rec: dict) -> dict | None:
+    """The value-loop record of an evaluated finding carries the proof (`evaluation`, contract w11.proof/1): same facts as a verdict story."""
+    ev = rec.get("evaluation")
+    if not isinstance(ev, dict) or not ev.get("verdict"):
+        return None
+    return {"finding_id": rec.get("finding_id"), "outcome": ev["verdict"], "reason": ev.get("reason"), "suite_id": ev.get("suite_id"),
+            "attempts": ev.get("attempts") or [], "announce": bool(ev.get("announce"))}
+
+
 def case_type(rec: dict, story: dict) -> str:
     d = for_finding(story.get("dossier"), rec) or {}
     return str(d.get("finding_kind") or story.get("case_type") or rec.get("proposal_kind") or "unknown")
@@ -158,7 +167,7 @@ class StoryConverter:
         tid = story_trace_id(key, run_id)
         root_id = root_span_id(tid)
         w0, w1 = window_of(story, idx)
-        verdict, dossier = for_finding(story.get("verdict_story"), rec), for_finding(story.get("dossier"), rec)
+        verdict, dossier = for_finding(story.get("verdict_story"), rec) or verdict_from_record(rec), for_finding(story.get("dossier"), rec)
         stages = ["sensor", *executed_stages(rec)]
         if rec.get("delivery"):
             stages.append("deliver")

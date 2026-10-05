@@ -30,6 +30,15 @@ class PlantedCells(unittest.TestCase):
             self.assertGreater(rates[pc.PLANTED], 0.55)
             self.assertTrue(all(v < 0.40 for k, v in rates.items() if k != pc.PLANTED), rates)
 
+    def test_plant_two_raises_a_second_category_and_default_is_unchanged(self):
+        self.assertEqual(pc.build(7), pc.build(7, 1))
+        tot = {}
+        for r in pc.build(7, 2):
+            n, d = tot.get(r["dims"]["category"], (0, 0))
+            tot[r["dims"]["category"]] = (n + r["numerator"], d + r["denominator"])
+        high = sorted(k for k, (n, d) in tot.items() if n / d > 0.55)
+        self.assertEqual(high, sorted([pc.PLANTED, pc.SECOND_PLANTED]))
+
     def test_cli_writes_ndjson(self):
         with tempfile.TemporaryDirectory() as t:
             out = Path(t) / "c.ndjson"
