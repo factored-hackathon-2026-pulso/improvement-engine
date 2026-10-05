@@ -114,6 +114,13 @@ function Write-JsonFile {
     [IO.File]::WriteAllText($Path, ($Obj | ConvertTo-Json -Depth $Depth), (New-Object Text.UTF8Encoding($false)))
 }
 
+# The hops list is a List[object]; `@($list)` throws "Argument types do not match" in PowerShell 7 (AGT1), so it is copied with ToArray().
+function Save-Hops {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)]$Hops)
+    $arr = $(if ($Hops -is [System.Collections.Generic.List[object]]) { $Hops.ToArray() } else { , $Hops })
+    Write-JsonFile -Path $Path -Obj $arr
+}
+
 function Stop-PidTree {
     param([string]$PidFile)
     if (-not (Test-Path -LiteralPath $PidFile)) { return $false }

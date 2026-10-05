@@ -312,7 +312,7 @@ foreach ($l in (Format-RealityTable -Rows (Get-RigRealityRows))) { Say $l }
 Say ''
 Say '--- hops'
 foreach ($x in $hops) { Say ("  {0,-8} {1}  {2}" -f $x.Status, $x.Hop, $x.Needs) }
-Write-JsonFile -Path (Join-Path $paths.Rig "hops-$runId.json") -Obj @($hops)
+Save-Hops -Path (Join-Path $paths.Rig "hops-$runId.json") -Hops $hops
 $bad = @($hops | Where-Object { $_.Status -eq 'BREAK' }).Count
 if ($script:KeepEngine) { try { $script:KeepEngine.Proc.StandardInput.Close() } catch { }; Start-Sleep -Milliseconds 800; Stop-Tree $script:KeepEngine.Proc; Say 'engine stopped; the rest of the rig stays up until down.ps1' }
 exit $(if ($bad -gt 0) { 1 } else { 0 })

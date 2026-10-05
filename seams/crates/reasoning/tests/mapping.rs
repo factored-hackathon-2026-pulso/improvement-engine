@@ -306,3 +306,43 @@ fn platform_aggregates_are_a_derived_source_with_their_own_label_synthetic_stays
     assert!(Source::PlatformTreated.derived() && !Source::Synthetic.derived());
     assert_eq!(Source::PlatformTreated.as_str(), "platform_treated");
 }
+
+// ---- FIXAGT: a transient gateway failure of the Builder is retried (bounded, backoff), then typed ---------------------------------------
+
+fn flaky_builder(fail_first: u32, calls: Rc<Cell<u32>>) -> FnPort {
+    let ok = estado_builder();
+    FnPort::scripted("b", move |req| {
+        calls.set(calls.get() + 1);
+        if calls.get() <= fail_first { Err(engine::models::ModelError::Unavailable("gateway_http_504: upstream_timeout".into())) } else { ok(req) }
+    })
+}
+
+#[test]
+fn a_builder_504_then_200_is_retried_and_the_retries_are_counted() {
+    reasoning::pipeline::set_transient_backoff_ms(1);
+    let f = cell("M1", "Queja", "Phone");
+    let calls = Rc::new(Cell::new(0u32));
+    // inside a story scope the record carries the attempt, so the retry is visible in `retries`
+    let _story = engine::trace::enter(engine::trace::TraceCtx { finding_key: f.evidence_ref(), run_id: "run-1".into(), ..Default::default() });
+    let p = ports(FnPort::scripted("s", scout_ok(&f_clone(), "template:t/estado_pqr", "status_message_gap")), FnPort::scripted("v", verifier_ok("supported")), flaky_builder(1, calls.clone()));
+    let r = reason_candidate(&cat(), &f, &p, &Opts { allow_derived_aggregates: true }, Some("template:t/estado_pqr"));
+    assert_eq!(r.status, "proposed", "{}", r.detail);
+    assert_eq!(calls.get(), 2);
+    assert_eq!(r.metering["transient_retries"], 1);
+    let b: Vec<&Value> = r.call_records.iter().filter(|c| c["role"] == "builder").collect();
+    assert_eq!((b.len(), b[0]["outcome"].as_str(), b[1]["outcome"].as_str()), (2, Some("unavailable"), Some("answered")));
+    assert_eq!(b[1]["retries"], 1);
+}
+
+#[test]
+fn a_builder_504_three_times_ends_model_unavailable_with_the_real_cause() {
+    reasoning::pipeline::set_transient_backoff_ms(1);
+    let f = cell("M1", "Queja", "Phone");
+    let calls = Rc::new(Cell::new(0u32));
+    let p = ports(FnPort::scripted("s", scout_ok(&f_clone(), "template:t/estado_pqr", "status_message_gap")), FnPort::scripted("v", verifier_ok("supported")), flaky_builder(99, calls.clone()));
+    let r = reason_candidate(&cat(), &f, &p, &Opts { allow_derived_aggregates: true }, Some("template:t/estado_pqr"));
+    assert_eq!((r.status.as_str(), r.reason.as_str(), r.stage.as_str()), ("blocked", "model_unavailable", "builder"));
+    assert_eq!(calls.get(), 3, "bounded: 3 attempts");
+    assert!(r.detail.contains("gateway_http_504"), "{}", r.detail);
+    assert_eq!(r.metering["transient_retries"], 2);
+}

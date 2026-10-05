@@ -66,27 +66,71 @@ enum Asked<T> {
     Rejected(Reject),
 }
 
-/// One role call with up to `MAX_RETRIES` retries. A retry is the SAME request plus the previous problem as `feedback`. Returns how
-/// many calls were made.
+/// Transient gateway failures (HTTP 5xx, 429, timeouts and I/O errors, unreachable) are retried before the role stops as
+/// `model_unavailable`: at most this many calls in total, with jittered exponential backoff, and never beyond the cost budget below.
+pub const TRANSIENT_ATTEMPTS: u32 = 3;
+/// USD that the calls of one role may have cost already for a transient retry to still start (the per-attempt budget of a finding).
+pub const TRANSIENT_COST_BUDGET_USD: f64 = 0.50;
+
+static TRANSIENT_BACKOFF_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(400);
+
+/// Base of the transient backoff (tests set it to 1 ms).
+pub fn set_transient_backoff_ms(ms: u64) {
+    TRANSIENT_BACKOFF_MS.store(ms, std::sync::atomic::Ordering::Relaxed);
+}
+
+thread_local! {
+    /// Transient retries made by the roles of the attempt in progress (reported in `metering.transient_retries`).
+    static TRANSIENT_RETRIES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Whether the `Unavailable` reason is worth another try: a gateway 5xx/429, a timeout or I/O error, an unreachable endpoint.
+pub fn is_transient(why: &str) -> bool {
+    let Some(code) = why.strip_prefix("gateway_http_") else {
+        return why.starts_with("gateway_io") || why.starts_with("gateway_unreachable");
+    };
+    let status = code.split(':').next().unwrap_or("");
+    status == "429" || status.starts_with('5')
+}
+
+fn transient_pause(retry: u32) {
+    let base = TRANSIENT_BACKOFF_MS.load(std::sync::atomic::Ordering::Relaxed);
+    let exp = base.saturating_mul(1u64 << retry.min(6));
+    let jitter = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| u64::from(d.subsec_nanos())) % (exp / 2 + 1);
+    std::thread::sleep(std::time::Duration::from_millis(exp + jitter));
+}
+
+/// One role call with up to `MAX_RETRIES` retries. A retry is the SAME request plus the previous problem as `feedback`. A transient
+/// gateway failure is retried separately (`TRANSIENT_ATTEMPTS` calls in total, backoff, cost budget) and does not use the answer retries.
+/// Returns how many calls were made.
 fn ask<T>(port: &Recording, req: &ModelRequest, stage: &'static str, base_attempt: usize, check: &dyn Fn(&Value) -> Result<T, Reject>) -> (Asked<T>, usize) {
     let mut last: Option<Reject> = None;
-    for attempt in 0..=MAX_RETRIES {
+    let (mut attempt, mut calls, mut transient) = (0usize, 0usize, 0u32);
+    while attempt <= MAX_RETRIES {
         let mut r = req.clone();
         if let Some((_, _, why)) = &last {
             r.payload["feedback"] = json!(format!("Attempt {attempt} was rejected: {}. Answer again with ONE JSON object that follows output_schema exactly.", feedback_text(why)));
         }
-        // the story span of this attempt: gateway calls made from here carry `traceparent` with the stage span as parent
-        engine::trace::set_stage(stage, u32::try_from(base_attempt + attempt + 1).unwrap_or(u32::MAX));
+        // the story span of this call: gateway calls made from here carry `traceparent` with the stage span as parent
+        calls += 1;
+        engine::trace::set_stage(stage, u32::try_from(base_attempt + calls).unwrap_or(u32::MAX));
         match port.call(&r) {
             Err(ModelError::Invalid(w)) => last = Some((stage, "model_invalid".into(), packaging_hint(&w))),
-            Err(e) => return (Asked::Stopped(e), attempt + 1),
+            Err(ModelError::Unavailable(w)) if is_transient(&w) && transient + 1 < TRANSIENT_ATTEMPTS && port.calls().iter().filter_map(|c| c.usage.as_ref()).map(|u| u.cost_f64()).sum::<f64>() < TRANSIENT_COST_BUDGET_USD => {
+                transient += 1;
+                TRANSIENT_RETRIES.with(|t| t.set(t.get() + 1));
+                transient_pause(transient);
+                continue;
+            }
+            Err(e) => return (Asked::Stopped(e), calls),
             Ok(a) => match check(&a.content) {
-                Ok(t) => return (Asked::Done(t), attempt + 1),
+                Ok(t) => return (Asked::Done(t), calls),
                 Err(rej) => last = Some(rej),
             },
         }
+        attempt += 1;
     }
-    (Asked::Rejected(last.expect("at least one attempt")), MAX_RETRIES + 1)
+    (Asked::Rejected(last.expect("at least one attempt")), calls)
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -215,6 +259,7 @@ pub fn reason_candidate(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Op
                              "verifier_separate_port": !Rc::ptr_eq(&ports.scout, &ports.verifier),
                              "level": independence_level(&ports.scout.model_id(), &ports.verifier.model_id())}),
     };
+    TRANSIENT_RETRIES.with(|t| t.set(0));
     let attempts = std::cell::RefCell::new(json!({"scout": 0, "verifier": 0, "builder": 0, "builder_escalation": 0}));
     let tier_used: std::cell::RefCell<Option<(String, String, bool)>> = std::cell::RefCell::new(None);
     let finish = |mut r: Reasoned| {
@@ -239,7 +284,7 @@ pub fn reason_candidate(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Op
         let usage = |f: &dyn Fn(&engine::models::Usage) -> f64| recs.iter().filter_map(|c| c.usage.as_ref()).map(f).sum::<f64>();
         let tu = tier_used.borrow().clone();
         r.metering = json!({
-            "calls": recs.len(), "attempts": attempts.borrow().clone(),
+            "calls": recs.len(), "attempts": attempts.borrow().clone(), "transient_retries": TRANSIENT_RETRIES.with(std::cell::Cell::get),
             "tokens_in": usage(&|u| u.tokens_in as f64) as u64, "tokens_out": usage(&|u| u.tokens_out as f64) as u64,
             "cost_usd": (usage(&|u| u.cost_f64()) * 1e6).round() / 1e6,
             "latency_ms": recs.iter().map(|c| c.wall_ms).sum::<u64>(),
