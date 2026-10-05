@@ -1,0 +1,48 @@
+id: registry/put_draft
+version: 1.0.0
+risk_class: write_draft
+min_auth_level: session
+idempotent: true
+readback_by: idempotency_key
+confirmation_ttl: PT5M
+description: Reemplaza los cambios del borrador de una propuesta.
+args_schema:
+  type: object
+  additionalProperties: false
+  required:
+  - proposal_id
+  - expected_rev
+  - changes
+  properties:
+    proposal_id:
+      type: string
+    expected_rev:
+      type: integer
+    changes:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required:
+        - kind
+        - content
+        - docs
+        properties:
+          kind:
+            type: string
+          content:
+            type: object
+          docs:
+            type: object
+            additionalProperties: false
+            required:
+            - description
+            - rationale
+            - changelog
+            properties:
+              description:
+                type: string
+              rationale:
+                type: string
+              changelog:
+                type: string

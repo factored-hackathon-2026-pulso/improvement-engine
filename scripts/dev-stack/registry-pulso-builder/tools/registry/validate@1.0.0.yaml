@@ -1,0 +1,15 @@
+id: registry/validate
+version: 1.0.0
+risk_class: compute
+min_auth_level: session
+idempotent: true
+confirmation_ttl: PT5M
+description: Valida el borrador sin congelarlo.
+args_schema:
+  type: object
+  additionalProperties: false
+  required:
+  - proposal_id
+  properties:
+    proposal_id:
+      type: string

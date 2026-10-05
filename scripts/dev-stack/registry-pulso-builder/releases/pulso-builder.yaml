@@ -1,0 +1,7 @@
+id: pulso-builder
+agents:
+  - {agent: "pulso-builder@^1", aliases: [prod]}
+flows: ["pulso-construir@^1"]
+interrupts: []
+injection_ruleset: "injection-rules@1"
+language_detection: "lang-es-pt@1"

@@ -1,0 +1,26 @@
+id: pulso-builder
+version: 1.0.0
+mode: task
+entry_flow: pulso-construir@1
+invocable_by: [builder]
+min_auth_level: session
+subject_kinds: []
+supported_locales: [es]
+default_locale: es
+input_schema:
+  agente: {type: string, required: true}
+  objetivo: {type: string, required: true}
+  evidencia: {type: string, required: true}
+tools_allowed: [registry/get_entity@1, registry/list_versions@1, registry/get_proposal@1, registry/get_write@1, registry/create_proposal@1, registry/put_draft@1, registry/validate@1]
+budgets: {max_nodes_per_turn: 40, max_model_calls_per_turn: 8, max_tokens_per_run: 60000, max_cost_per_run: 1.00, max_wall_ms_per_turn: 120000}
+default_target_queue: general
+templates:
+  clarify: t/aclarar
+  abstain: t/abstencion
+  handoff: t/traspaso
+  pending_ack: t/acuse
+  pending_offer: t/oferta
+  unsupported_language: t/idioma_no_soportado
+  input_too_large: t/mensaje_largo
+max_clarifications: 2
+on_clarify_exhausted: end
