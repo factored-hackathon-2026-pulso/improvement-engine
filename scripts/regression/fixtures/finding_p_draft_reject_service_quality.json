@@ -1,0 +1,5 @@
+{"finding_id": "finding_evt2_p_draft_reject_service_quality", "metric": "P_DRAFT_REJECT", "direction": "up",
+ "dims": {"case_type": "service_quality", "channel": "app_chat"},
+ "discovery": {"numerator": 410, "denominator": 600, "rate": 0.683, "baseline_rate": 0.40, "diff": 0.283},
+ "holdout": {"numerator": 405, "denominator": 590, "rate": 0.686, "baseline_rate": 0.41, "diff": 0.276},
+ "source": "synthetic", "note": "a planted service_quality x app_chat cell of scripts/aggregate/platform_event_synth.py (SYNTHETIC counts); drafts of copiloto-sugerencias discarded or ignored far more often than the same channel without it"}
