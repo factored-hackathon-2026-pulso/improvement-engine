@@ -34,3 +34,10 @@ agent-core registry-e2e ToolDef `source` differs from tool-service (`productos` 
 local stack use ALIGNED sources (`scripts/reasoning/export_art2_graph.py`, additive). Ask to agent-core: align the fixtures; to tool-service: keep
 `GET /v1/tools` as the oracle and publish the source classification. The tool-service listing used here is a snapshot of its `registry/tools`,
 not a live `GET /v1/tools` (the service needs its dataset).
+
+## ART3: the model drives the link (live)
+`pipeline::reason_candidate` on `tool_link:consultas/leer_pqr_cliente`: Scout and Builder mimo flash, claim Verifier and an independent LINK REVIEW (second Verifier call, mimo pro, on
+structured facts only: tool risk_class and source, edge node types, wiring) before the proof. The Builder sees the edge menu as a tool and answers `edge_id`; the compiler refuses an unknown
+edge (`edge_unknown`) and a write tool (`write_tool_human_only`) whatever the model says; a refuting review blocks (`link_review_refuted`). Policy findings take no model call (deterministic hypothesis
+note and tighten draft, `needs_owner_ack`). Live result: see journal 0665. `tool_called.tool_source` (agent-core PR 56) is in the event payload but NOT in the metric catalog
+(`engine.tool_called` = status, latency_ms, attempt), so a scenario assertion cannot use it yet: ask to agent-core to add it to the catalog.
