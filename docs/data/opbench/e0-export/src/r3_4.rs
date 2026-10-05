@@ -113,6 +113,7 @@ struct CategoryStats {
     csat_missing: u64,
     bank_status_open_like: u64,
     bank_status_resolved_or_closed: u64,
+    bank_status_unknown: u64,
     bank_sla_yes: u64,
     bank_sla_no: u64,
     bank_sla_unknown: u64,
@@ -250,9 +251,10 @@ pub fn aggregate(input: &Input, k: u64) -> Result<Value, &'static str> {
             .and_then(|complaint_id| complaints_by_id.get(complaint_id))
         {
             match complaint_status_bucket(&complaint.status)? {
-                "open_like" => stats.bank_status_open_like += 1,
-                "resolved_or_closed" => stats.bank_status_resolved_or_closed += 1,
-                _ => unreachable!("status bucketing is closed"),
+                Some("open_like") => stats.bank_status_open_like += 1,
+                Some("resolved_or_closed") => stats.bank_status_resolved_or_closed += 1,
+                None => stats.bank_status_unknown += 1,
+                Some(_) => unreachable!("status bucketing is closed"),
             }
             match complaint.sla_breached {
                 Some(true) => stats.bank_sla_yes += 1,
@@ -441,10 +443,13 @@ fn answer_class(value: &str) -> Result<&'static str, &'static str> {
     }
 }
 
-fn complaint_status_bucket(value: &str) -> Result<&'static str, &'static str> {
+fn complaint_status_bucket(value: &str) -> Result<Option<&'static str>, &'static str> {
+    if value.trim().is_empty() {
+        return Ok(None);
+    }
     match value.trim().to_ascii_lowercase().as_str() {
-        "open" | "in process" | "escalated" => Ok("open_like"),
-        "resolved" | "closed" => Ok("resolved_or_closed"),
+        "open" | "in process" | "escalated" => Ok(Some("open_like")),
+        "resolved" | "closed" => Ok(Some("resolved_or_closed")),
         _ => Err("unknown bank complaint status"),
     }
 }
@@ -621,11 +626,14 @@ fn bank_complaint_tables(
         ]);
 
         let mut coverage = category_label(category);
+        coverage["status_unknown"] = json!(stats.bank_status_unknown);
         coverage["sla_breached_unknown"] = json!(stats.bank_sla_unknown);
         coverage["resolution_missing"] = json!(stats.bank_resolution_missing);
         coverage["resolution_days_missing"] = json!(stats.bank_resolution_days_missing);
         coverage_rows.push(coverage);
         coverage_cells.extend([
+            stats.bank_status_unknown,
+            stats.bank_status_open_like + stats.bank_status_resolved_or_closed,
             stats.bank_sla_unknown,
             stats.bank_sla_yes + stats.bank_sla_no,
             stats.bank_resolution_missing,
@@ -1192,6 +1200,15 @@ mod tests {
             aggregate(&linked_unknown, 10).unwrap_err(),
             "unknown bank complaint status"
         );
+
+        let mut linked_missing = fixture();
+        linked_missing.complaints[0].status = "  ".into();
+        let output = aggregate(&linked_missing, 10)
+            .expect("missing status is explicit unknown coverage, not schema drift");
+        assert_eq!(
+            output["tables"]["bank_complaint_coverage_by_category"]["suppressed"],
+            true
+        );
     }
 
     fn fixture() -> Input {
@@ -1399,6 +1416,9 @@ mod tests {
     fn emits_bank_outcomes_only_when_all_joint_coverage_cells_are_k_safe() {
         let mut input = fixture();
         for complaint in input.complaints.iter_mut().take(10) {
+            complaint.status.clear();
+        }
+        for complaint in input.complaints.iter_mut().take(10) {
             complaint.sla_breached = None;
         }
         for complaint in input.complaints.iter_mut().skip(10).take(10) {
@@ -1416,6 +1436,10 @@ mod tests {
         assert_eq!(
             output["tables"]["bank_complaint_coverage_by_category"]["suppressed"],
             false
+        );
+        assert_eq!(
+            output["tables"]["bank_complaint_coverage_by_category"]["rows"][0]["status_unknown"],
+            10
         );
     }
 
