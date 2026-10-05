@@ -204,7 +204,7 @@ foreach ($step in $plan.Steps) {
                     if (-not (Test-Http $u)) { throw "not answering at $u : agent-core unreachable = the lfc stack is not up (run -Up)" }
                 }
                 $rel = @{ PULSO_RELEASE = ('lfc-' + (Get-Date -Format 'yyyyMMdd')) }
-                $r = Invoke-Runner -Arguments @('-Cells', '-Loop', '-Synthetic', '-MaxFindings', '2', '-BuilderModel', 'xiaomi/mimo-v2.6-pro', '-TimeoutMin', "$TimeoutMin") -Env $rel
+                $r = Invoke-Runner -Arguments @('-Cells', '-Loop', '-Synthetic', '-PlantedCount', '2', '-MaxFindings', '2', '-BuilderModel', 'xiaomi/mimo-v2.6-pro', '-TimeoutMin', "$TimeoutMin") -Env $rel
                 if ($r.ExitCode -ne 0) { throw 'the value loop did not finish (run.ps1 -Loop failed, output above)' }
                 $st = Read-LfcState
                 foreach ($f in 'result_path', 'events_path', 'calls_path', 'run_id') { if (-not $st.PSObject.Properties[$f]) { throw "the loop left no '$f' (engine snapshot missing)" } }

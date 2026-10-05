@@ -182,6 +182,9 @@ def up(args) -> None:
     if "GATEWAY_TOKEN_AGENT_CORE" in gw_env:
         ac_env["AGENTCORE_LLM_GATEWAY_TOKEN"] = gw_env["GATEWAY_TOKEN_AGENT_CORE"]
     env = {**ac_env, "AGENTCORE_FIELD_CLASSIFICATION_FILES": str(HERE / "field-overlay.json")}
+    for k in os.environ:  # the caller's tracing settings win over whatever agent-core.env carries (for example a Phoenix endpoint)
+        if k.startswith(("OTEL_", "AGENTCORE_TRACE_")):
+            env[k] = os.environ[k]
     if os.environ.get("PULSO_CORE_OTEL_SERVICE_NAME"):
         env["OTEL_SERVICE_NAME"] = os.environ["PULSO_CORE_OTEL_SERVICE_NAME"]
     sh(["uv", "sync", "--locked"], cwd=ac)

@@ -30,7 +30,7 @@ param(
     [string]$CellsFile = '', [string]$BuilderModel = '', [string]$PulsoExe = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$DataRoot = '',
     # own stack and state (the Langfuse closure runs a second one beside the demo's): prefix, ports, state folder, gateway built from -GatewayDir
     [string]$StackPrefix = 'pulso-demo', [int]$PgPort = 55490, [int]$GwPort = 8190, [int]$CorePort = 8191, [int]$EnginePort = 4190,
-    [string]$StateName = 'demo-loop', [switch]$FreshGateway
+    [string]$StateName = 'demo-loop', [switch]$FreshGateway, [ValidateRange(1, 2)][int]$PlantedCount = 1
 )
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
@@ -122,14 +122,14 @@ function Find-PulsoExe {
     if ($PulsoExe) { $cands += $PulsoExe }
     if ($env:PULSO_EXE) { $cands += $env:PULSO_EXE }
     if ($env:CARGO_TARGET_DIR) { $cands += (Join-Path $env:CARGO_TARGET_DIR 'debug\pulso.exe') }
-    foreach ($lane in 'claude-demo1', 'claude-ann1') { $cands += (Join-Path "D:\cargo-targets\$lane" 'debug\pulso.exe') }
+    foreach ($lane in 'claude-lfc', 'claude-demo1', 'claude-ann1') { $cands += (Join-Path "D:\cargo-targets\$lane" 'debug\pulso.exe') }
     foreach ($c in $cands) { if ($c -and (Test-Path -LiteralPath $c)) { return (Resolve-Path -LiteralPath $c).Path } }
     throw "pulso.exe not found (tried: $($cands -join '; ')). Build it once: cd seams; cargo build -j 1 -p pulso   (or pass -PulsoExe)"
 }
 function Find-StepsCli {
     $c = @()
     if ($env:PULSO_STEPS_CLI) { $c += $env:PULSO_STEPS_CLI }
-    foreach ($lane in 'claude-demo1', 'claude-ann1') { $c += (Join-Path "D:\cargo-targets\$lane" 'debug\steps_cli.exe') }
+    foreach ($lane in 'claude-lfc', 'claude-demo1', 'claude-ann1') { $c += (Join-Path "D:\cargo-targets\$lane" 'debug\steps_cli.exe') }
     foreach ($x in $c) { if ($x -and (Test-Path -LiteralPath $x)) { return $x } }
     $null
 }
@@ -168,6 +168,8 @@ foreach ($step in $plan.Steps) {
                 Initialize-GatewayImage -ImageName "$($settings.Prefix)-llm-gateway"
                 $e = Get-StackEnvironment -Settings $settings -AgentCoreDir $AgentCoreDir -GatewayDir $GatewayDir
                 $envAll = @{}; foreach ($k in $secretEnv.Keys) { $envAll[$k] = $secretEnv[$k] }; foreach ($k in $e.Keys) { $envAll[$k] = $e[$k] }
+                # tracing settings the CALLER put in the environment win over the env files (agent-core.env carries a Phoenix endpoint)
+                foreach ($it in (Get-ChildItem Env:)) { if ($it.Name -match '^(OTEL_|LLM_GATEWAY_TRACE_|AGENTCORE_TRACE_|PULSO_GW_|PULSO_CORE_OTEL)') { $envAll[$it.Name] = $it.Value } }
                 $upArgs = @((Join-Path $root 'scripts\dev-stack\stack.py'), 'up'); if ($FreshGateway) { $upArgs += '--rebuild-gateway' }
                 $r = Invoke-Scrubbed -File $python -Arguments $upArgs -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0) { throw "stack.py up failed (exit $($r.ExitCode))" }
@@ -180,7 +182,7 @@ foreach ($step in $plan.Steps) {
                 $null = New-Item -ItemType Directory -Force -Path $cellsDir
                 if ($plan.Synthetic) {
                     $out = Join-Path $cellsDir 'planted.ndjson'
-                    $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'planted_cells.py'), '--out', $out) -Needles $script:Needles -WorkDir $root
+                    $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'planted_cells.py'), '--out', $out, '--plant', "$PlantedCount") -Needles $script:Needles -WorkDir $root
                     if ($r.ExitCode -ne 0) { throw 'planted_cells.py failed' }
                     $mode = 'synthetic-planted'; $path = $out
                 } elseif ($plan.CellsFile) {
