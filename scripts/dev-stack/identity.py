@@ -4,8 +4,8 @@
 
 `keys`  writes identity-keys.json / staff-keys.json (public keys only) and an engine Ed25519 key (private, kept in
         the gitignored state dir, dev only).
-`mint`  writes tokens.json with `admin` (registry import, step-up human) and `builder` (the engine-signed
-        `builder` principal used for POST /v1/runs). Tokens last 12 h. Nothing is printed.
+`mint`  writes tokens.json with `admin` (registry import, step-up human), `builder` (the engine-signed
+        `builder` principal used for POST /v1/runs) and `exporter` (read-only, for the trigger poller). Tokens last 12 h. Nothing is printed.
 """
 import argparse
 import json
@@ -64,7 +64,13 @@ def main() -> int:
         "type": "builder", "id": "pulso-engine", "roles": ["constructor"], "attrs": {},
         "auth": {"level": "session", "at": now}, "exp": now + TTL})
     header = {"alg": ALG, "kid": ENGINE_KID, "typ": PRINCIPAL_TYP}
-    tokens = {"admin": staff.admin(), "builder": sign_jws(header, dumps(builder).encode("utf-8"), engine)}
+    # ENV1 (G9): read-only `exporter` principal for scripts/triggers/agentcore_poller.py (GET /v1/export/*, staff verifier). Same engine
+    # kid (already in staff-keys); no constructor role, so it cannot touch proposals.
+    exporter = Principal.model_validate({
+        "type": "builder", "id": "pulso-poller", "roles": ["exporter"], "attrs": {},
+        "auth": {"level": "session", "at": now}, "exp": now + TTL})
+    tokens = {"admin": staff.admin(), "builder": sign_jws(header, dumps(builder).encode("utf-8"), engine),
+              "exporter": sign_jws(header, dumps(exporter).encode("utf-8"), engine)}
     (state / "tokens.json").write_text(json.dumps(tokens), encoding="utf-8")
     return 0
 

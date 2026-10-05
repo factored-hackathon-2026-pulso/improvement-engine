@@ -347,7 +347,8 @@ function Limit-Text {
 
 # Body of POST /api/v1/internal/builder/proposals/announce, or throws with the field named. Texts are cut to the platform bounds.
 function New-AnnouncePayload {
-    param([Parameter(Mandatory)]$Record)
+    # -EvidenceLinks (ENV1/G1): explicit CASE- ids (the integrated rig passes ids of seeded platform cases); default = the opaque derived id.
+    param([Parameter(Mandatory)]$Record, [string[]]$EvidenceLinks = @())
     $es = Get-DossierEs $Record
     if (-not $es) { throw 'dossier: this record has no Spanish dossier' }
     if ($Record.outcome -ne 'announced') { throw 'dossier: not an announced record' }
@@ -366,7 +367,7 @@ function New-AnnouncePayload {
         problem = (& $field 'problem' $es.sections.problem 600)
         evidence = (& $field 'evidence' $es.sections.evidence 600)
         expectedEffect = (& $field 'expectedEffect' $es.sections.expected_effect 400)
-        evidenceLinks = @(Get-OpaqueLink -EvidenceRef ([string]$Record.evidence_ref) -Index 0)
+        evidenceLinks = $(if (@($EvidenceLinks).Count -gt 0) { @($EvidenceLinks) } else { @(Get-OpaqueLink -EvidenceRef ([string]$Record.evidence_ref) -Index 0) })
     }
 }
 
