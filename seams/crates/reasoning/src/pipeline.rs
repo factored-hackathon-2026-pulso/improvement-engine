@@ -44,13 +44,16 @@ pub struct Reasoned {
     pub doubles: Vec<Value>,
     pub independence: Value,
     pub source: &'static str,
+    /// Decision dossier (W1-2) of a proposed finding, built without a regression verdict: `announce` stays false until the REG1
+    /// verdict story is supplied (`reason_cli dossier --verdict`), the dossier says so. `{"error": ..}` if its PII guard refused.
+    pub dossier: Option<Value>,
 }
 
 impl Reasoned {
     pub fn to_json(&self) -> Value {
         json!({"finding_id": self.finding_id, "status": self.status, "reason": self.reason, "stage": self.stage, "detail": self.detail, "mapping_row": self.mapping_row,
                "source": self.source, "opportunity": self.opportunity, "verification": self.verification, "proposal": self.compiled, "rubric": self.rubric,
-               "model_calls": self.calls, "doubles": self.doubles, "independence": self.independence})
+               "model_calls": self.calls, "doubles": self.doubles, "independence": self.independence, "dossier": self.dossier})
     }
 }
 
@@ -98,7 +101,7 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
     let (rs, rv, rb) = (Rc::new(Recording::new(ports.scout.clone())), Rc::new(Recording::new(ports.verifier.clone())), Rc::new(Recording::new(ports.builder.clone())));
     let mut r = Reasoned {
         finding_id: f.id.clone(), status: "blocked".into(), reason: String::new(), stage: String::new(), detail: String::new(), mapping_row: None, opportunity: None, verification: None,
-        compiled: None, rubric: None, calls: vec![], doubles: vec![], source: f.source.as_str(),
+        compiled: None, rubric: None, calls: vec![], doubles: vec![], source: f.source.as_str(), dossier: None,
         independence: json!({"scout_model": ports.scout.model_id(), "verifier_model": ports.verifier.model_id(), "builder_model": ports.builder.model_id(),
                              "verifier_separate_port": !Rc::ptr_eq(&ports.scout, &ports.verifier),
                              "level": if ports.scout.model_id() != ports.verifier.model_id() { "other_model" } else { "separate_prompt_and_context_only" }}),
@@ -106,6 +109,12 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
     let finish = |mut r: Reasoned| {
         r.calls = [&rs, &rv, &rb].iter().flat_map(|x| x.calls().iter().map(|c| c.to_json()).collect::<Vec<_>>()).collect();
         r.doubles = [&rs, &rv, &rb].iter().flat_map(|x| x.doubles()).collect();
+        if r.status == "proposed" {
+            let real = [&ports.scout, &ports.verifier, &ports.builder].iter().all(|p| p.label() == Label::Gateway);
+            let labels = crate::dossier::Labels { runtime: if real { crate::dossier::Runtime::Real } else { crate::dossier::Runtime::Doubles }, ..Default::default() };
+            let record = json!({"proposal": r.compiled, "doubles": r.doubles, "rubric": r.rubric});
+            r.dossier = Some(crate::dossier::build(&f.to_signal_json(), &record, None, &labels).unwrap_or_else(|e| json!({"error": e})));
+        }
         r
     };
     let Some(row) = map_finding(f) else {

@@ -1,0 +1,40 @@
+{
+  "note": "compiled-proposal shape (Compiled::to_json) rebuilt from scripts/regression/fixtures/candidates/estado_pqr_attempt1.json and the base text of t/estado_pqr; the live REG1 run is results/story_template_estado_pqr.json",
+  "kind": "patch",
+  "target_ref": "template:t/estado_pqr",
+  "base_digest": "fixture-baseline",
+  "diff": [
+    {
+      "locale": "es",
+      "anchor_id": "s1",
+      "op": "replace",
+      "anchor_text": "Ya consulté tu PQR.",
+      "replacement": "Ya consulté tu PQR. Su estado actual es: {{ facts.pqr.value.status }}."
+    },
+    {
+      "locale": "pt",
+      "anchor_id": "s1",
+      "op": "replace",
+      "anchor_text": "Já consultei sua solicitação.",
+      "replacement": "Já consultei sua solicitação. O estado atual é: {{ facts.pqr.value.status }}."
+    }
+  ],
+  "cascade": [
+    "flow:consulta-pqr"
+  ],
+  "edit_chars": 104,
+  "edit_budget": 240,
+  "human_items": [],
+  "expected_effect": {
+    "metric_id": "m4",
+    "direction": "decrease",
+    "current_cell_rate": 0.4,
+    "reference_rate": 0.2,
+    "min_detectable_gap": 0.1,
+    "success_if": "the cell rate falls by at least min_detectable_gap toward the reference rate over a new window with the same k-anonymity",
+    "guardrail": "no more human escalations than the base; protected clauses intact",
+    "link_grade": "plausible"
+  },
+  "rationale": "The base sentence is static; the customer cannot tell the state of the PQR.",
+  "uncertainty": "The data says where the problem is, not why; a status line may not change the unresolved rate."
+}

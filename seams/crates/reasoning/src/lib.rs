@@ -18,6 +18,7 @@
 //! artifact baseline is labelled `fixture-baseline` (agent-core e2e seed, not a live registry), and the sensor stays
 //! `claude-standin`.
 pub mod catalog;
+pub mod dossier;
 pub mod finding;
 pub mod live;
 pub mod mapping;
