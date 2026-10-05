@@ -229,7 +229,7 @@ fn every_gateway_call_of_a_finding_carries_the_story_traceparent_and_baggage_and
     let seen = f.seen.lock().unwrap();
     assert!(!seen[0].1.contains_key("traceparent") && !seen[0].1.contains_key("baggage"));
     assert_eq!(seen[1].1["traceparent"], "00-7e1ffba44834058839ef1a914c474128-69dba9a106f229ee-01", "the stage span of the python vectors");
-    assert_eq!(seen[1].1["baggage"], "session=value-loop-trg-20261005-0001,release=rel%201,agent=pulso-scout,locale=es,case-type=prompt,stage=scout");
+    assert_eq!(seen[1].1["baggage"], "session.id=value-loop-trg-20261005-0001,release=rel%201,langfuse.trace.tags=agent%3Apulso-scout%2Clocale%3Aes%2Ccase-type%3Aprompt%2Cstage%3Ascout");
     assert_ne!(seen[1].1["traceparent"], seen[2].1["traceparent"], "a retry is another attempt of the stage");
     assert!(seen[2].1["traceparent"].starts_with("00-7e1ffba44834058839ef1a914c474128-"));
     for s in &seen[..] {

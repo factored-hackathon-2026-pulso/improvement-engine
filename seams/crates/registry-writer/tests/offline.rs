@@ -490,7 +490,7 @@ fn the_http_transport_adds_the_story_traceparent_as_a_header_only_and_refuses_a_
     let head = srv.join().unwrap().to_ascii_lowercase();
     assert!(head.starts_with("post /v1/runs http/1.1\r\n"), "path unchanged: {head}");
     assert!(head.contains("\r\ntraceparent: 00-7e1ffba44834058839ef1a914c474128-91881332db42dd99-01\r\n") || head.contains("\r\ntraceparent: 00-"), "{head}");
-    assert!(head.contains("\r\nbaggage: session=value-loop-trg-20261005-0001,release=r1,agent=pulso-writer,case-type=prompt,stage=deliver\r\n"), "{head}");
+    assert!(head.contains("\r\nbaggage: session.id=value-loop-trg-20261005-0001,release=r1,langfuse.trace.tags=agent%3apulso-writer%2ccase-type%3aprompt%2cstage%3adeliver\r\n"), "{head}");
     assert!(head.contains("\r\nidempotency-key: k1\r\n") && head.contains("\r\nauthorization: bearer tok\r\n"));
     assert!(allowed("POST", "/v1/runs"), "the allow-list is untouched: headers only");
 

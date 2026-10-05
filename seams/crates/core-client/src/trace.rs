@@ -120,19 +120,27 @@ fn pct(v: &str) -> String {
     o
 }
 
-/// W3C baggage: `session` (the run id), `release`, `agent`, `locale`, `case-type`, `stage`; empty values are left out.
+/// W3C baggage in the names llm-gateway reads (its README: `session.id`, `release`, `user.id`, `langfuse.trace.tags` comma separated):
+/// `session.id` = the run id, `release`, and `langfuse.trace.tags` = `agent:<id>,locale:<xx>,case-type:<kind>,stage:<stage>` (O11Y.md tags;
+/// empty ones are left out). Values are percent-encoded, so a comma or a CR/LF in a value can never split an entry or a header.
 pub fn baggage(c: &Current) -> String {
     let stage = c.stage.clone().unwrap_or_default();
     // no explicit agent: the callee is the engine's role for the stage (`pulso-scout`, `pulso-builder`, ...)
     let agent = if c.ctx.agent.is_empty() && !stage.is_empty() { format!("pulso-{stage}") } else { c.ctx.agent.clone() };
-    let items = [("session", &c.ctx.run_id), ("release", &c.ctx.release), ("agent", &agent), ("locale", &c.ctx.locale), ("case-type", &c.ctx.case_type), ("stage", &stage)];
+    let cut = |v: &str| v.chars().take(96).collect::<String>();
+    let tags: Vec<String> = [("agent", &agent), ("locale", &c.ctx.locale), ("case-type", &c.ctx.case_type), ("stage", &stage)]
+        .iter()
+        .filter(|(_, v)| !v.is_empty())
+        .map(|(k, v)| format!("{k}:{}", cut(v)))
+        .collect();
+    let items = [("session.id", cut(&c.ctx.run_id)), ("release", cut(&c.ctx.release)), ("langfuse.trace.tags", tags.join(","))];
     let mut out = String::new();
     for (k, v) in items {
         if v.is_empty() {
             continue;
         }
-        let item = format!("{k}={}", pct(&v.chars().take(128).collect::<String>()));
-        if out.len() + item.len() + 1 > 512 {
+        let item = format!("{k}={}", pct(&v));
+        if out.len() + item.len() + 1 > 900 {
             break;
         }
         if !out.is_empty() {
@@ -203,7 +211,7 @@ mod tests {
             set_stage("scout", 1);
             let h = headers();
             assert_eq!(h[0].1, "00-7e1ffba44834058839ef1a914c474128-69dba9a106f229ee-01");
-            assert_eq!(h[1], ("baggage", "session=value-loop-trg-20261005-0001,release=r1,agent=pulso-scout,locale=es,case-type=prompt,stage=scout".to_string()));
+            assert_eq!(h[1], ("baggage", "session.id=value-loop-trg-20261005-0001,release=r1,langfuse.trace.tags=agent%3Apulso-scout%2Clocale%3Aes%2Ccase-type%3Aprompt%2Cstage%3Ascout".to_string()));
             {
                 let _inner = enter(TraceCtx { run_id: "x".into(), ..ctx.clone() });
                 assert_eq!(current().unwrap().ctx.run_id, "x");
@@ -217,10 +225,10 @@ mod tests {
     fn baggage_is_percent_encoded_bounded_and_never_carries_control_bytes() {
         let c = Current { ctx: TraceCtx { run_id: "a b,c=d\r\nX: y".into(), release: "\u{e9}".into(), ..TraceCtx::default() }, stage: None, attempt: 1 };
         let b = baggage(&c);
-        assert_eq!(b, "session=a%20b%2Cc%3Dd%0D%0AX%3A%20y,release=%C3%A9");
+        assert_eq!(b, "session.id=a%20b%2Cc%3Dd%0D%0AX%3A%20y,release=%C3%A9");
         assert!(header_value_ok(&b));
         let long = Current { ctx: TraceCtx { run_id: "z".repeat(400), release: "r".repeat(400), agent: "a".repeat(400), ..TraceCtx::default() }, stage: None, attempt: 1 };
-        assert!(baggage(&long).len() <= 512);
+        assert!(baggage(&long).len() <= 900);
     }
 
     #[test]
