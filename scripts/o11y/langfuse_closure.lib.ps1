@@ -2,7 +2,7 @@
 # Windows PowerShell 5.1 AND pwsh: no `??`, no ternary, no `&&`, no `-AsHashtable`.
 # Nothing here prints a credential VALUE: env files are read into hashtables that only feed redaction needles and child environments.
 
-. (Join-Path $PSScriptRoot '..\demo-loop\run.lib.ps1')
+. (Join-Path $PSScriptRoot '../demo-loop/run.lib.ps1')
 
 $script:LangfuseKeys = @('LANGFUSE_SECRET_KEY', 'LANGFUSE_PUBLIC_KEY', 'LANGFUSE_BASE_URL')
 $script:ClosureOrder = @('Models', 'Up', 'Traffic', 'Verify', 'Down')

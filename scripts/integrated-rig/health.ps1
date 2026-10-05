@@ -7,18 +7,19 @@
 param([switch]$Quiet)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$root = (Resolve-Path (Join-Path $here '..\..')).Path
+$root = (Resolve-Path (Join-Path $here '../..')).Path
 . (Join-Path $here 'rig.lib.ps1')
 
+$null = Get-DevConfig -Root $root -Export
 $settings = Get-RigSettings
 $paths = Get-RigPaths -Root $root
-$conn = $(if ($env:PULSO_PODMAN_CONNECTION) { $env:PULSO_PODMAN_CONNECTION } else { 'pulso-dev-root' })
+$podmanArgs = @(Get-DevPodmanArgs)
 $ok = $true
 function Line { param([string]$Name, [bool]$Good, [string]$Extra = '') $script:ok = $script:ok -and $Good; if (-not $Quiet) { Write-Host ("{0} {1} {2}" -f $(if ($Good) { 'OK  ' } else { 'FAIL' }), $Name, $Extra) } }
 
 foreach ($c in @("$($settings.Prefix)-postgres", "$($settings.Prefix)-llm-gateway")) {
     $st = ''
-    try { $st = ((& podman --connection $conn inspect -f '{{.State.Status}}' $c 2>$null) | Out-String).Trim() } catch { }
+    try { $st = ((& podman @podmanArgs inspect -f '{{.State.Status}}' $c 2>$null) | Out-String).Trim() } catch { }
     Line $c ($st -eq 'running') $st
 }
 $core = "http://127.0.0.1:$($settings.CorePort)"; $plat = "http://127.0.0.1:$($settings.PlatformPort)"

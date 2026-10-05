@@ -35,7 +35,7 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$root = (Resolve-Path (Join-Path $here '..\..')).Path
+$root = (Resolve-Path (Join-Path $here '../..')).Path
 . (Join-Path $here 'run.lib.ps1')
 
 try {
@@ -47,6 +47,12 @@ try {
 }
 
 $factored = Split-Path -Parent (Split-Path -Parent $root)
+# DevConfig (scripts/dev-stack/DevConfig.ps1): devconfig.env > env > sibling checkouts of this repo > the original machine's D:\ layout. See docs/dev/QUICKSTART_LOCAL.md.
+$devCfg = Get-DevConfig -Root $root -Export -Legacy @{
+    PULSO_AGENT_CORE_DIR = (Join-Path $factored 'worktrees/agent-core-claude-w15'); PULSO_LLM_GATEWAY_DIR = (Join-Path $factored 'worktrees/llm-gateway-claude-otel')
+    PULSO_AGENT_CORE_ENV = (Join-Path $factored 'agent-core.env'); PULSO_LLM_GATEWAY_ENV = (Join-Path $factored 'llm-gateway.env')
+    PULSO_EXE = 'D:\cargo-targets\claude-lfc\debug\pulso.exe'; PULSO_STEPS_EXE = 'D:\cargo-targets\claude-lfc\debug\steps_cli.exe'
+}
 # MAP1: a lane runs on its OWN prefix and ports. Explicit script parameters win; else PULSO_STACK_PREFIX / PULSO_DEMO_{PG,GW,CORE,ENGINE}_PORT (never PULSO_CORE_PORT, an engine setting); else defaults.
 $stackArgs = @{}
 if ($PSBoundParameters.ContainsKey('StackPrefix')) { $stackArgs['Prefix'] = $StackPrefix } elseif ($env:PULSO_STACK_PREFIX) { $stackArgs['Prefix'] = $env:PULSO_STACK_PREFIX }
@@ -59,13 +65,13 @@ $demoDir = Join-Path $root (Join-Path '.dev-stack' $StateName)
 $null = New-Item -ItemType Directory -Force -Path $demoDir
 $statePath = Join-Path $demoDir 'state.json'
 $logPath = Join-Path $demoDir ("run-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-$python = (Get-Command python -ErrorAction Stop).Source
-if (-not $AgentCoreDir) { $AgentCoreDir = $(if ($env:PULSO_AGENT_CORE_DIR) { $env:PULSO_AGENT_CORE_DIR } else { Join-Path $factored 'worktrees\agent-core-claude-w15' }) }
-if (-not $GatewayDir) { $GatewayDir = $(if ($env:PULSO_LLM_GATEWAY_DIR) { $env:PULSO_LLM_GATEWAY_DIR } else { Join-Path $factored 'worktrees\llm-gateway-claude-otel' }) }
+$python = Get-DevPython
+if (-not $AgentCoreDir) { $AgentCoreDir = $devCfg.Values['PULSO_AGENT_CORE_DIR'] }
+if (-not $GatewayDir) { $GatewayDir = $devCfg.Values['PULSO_LLM_GATEWAY_DIR'] }
 if (-not $DataRoot) { $DataRoot = $(if ($env:PULSO_DEMO_DATA_ROOT) { $env:PULSO_DEMO_DATA_ROOT } else { Join-Path $factored 'data' }) }
-$acEnvPath = $(if ($env:PULSO_AGENT_CORE_ENV) { $env:PULSO_AGENT_CORE_ENV } else { Join-Path $factored 'agent-core.env' })
-$gwEnvPath = $(if ($env:PULSO_LLM_GATEWAY_ENV) { $env:PULSO_LLM_GATEWAY_ENV } else { Join-Path $factored 'llm-gateway.env' })
-$podmanConn = $(if ($env:PULSO_PODMAN_CONNECTION) { $env:PULSO_PODMAN_CONNECTION } else { 'pulso-dev-root' })
+$acEnvPath = $devCfg.Values['PULSO_AGENT_CORE_ENV']
+$gwEnvPath = $devCfg.Values['PULSO_LLM_GATEWAY_ENV']
+$podmanArgs = @(Get-DevPodmanArgs)
 
 # secrets: in memory only; the needles mask them in anything a child prints
 $acEnv = Read-EnvFileValues -Path $acEnvPath
@@ -94,7 +100,7 @@ function Set-StateField {
 function Step-Header { param([string]$Name, [string]$Text) Say ''; Say ("=== [{0}] {1}" -f $Name, $Text) }
 function Get-Tokens {
     if ($script:Tokens) { return $script:Tokens }
-    $p = Join-Path $root '.dev-stack\tokens.json'
+    $p = Join-Path $root '.dev-stack/tokens.json'
     if (-not (Test-Path -LiteralPath $p)) { throw "no .dev-stack/tokens.json: run -Up first" }
     $script:Tokens = Read-JsonFile -Path $p
     Add-Needles @([string]$script:Tokens.admin, [string]$script:Tokens.builder)
@@ -106,7 +112,7 @@ function Test-Http {
 }
 function Invoke-Podman {
     param([string[]]$PodmanArgs)
-    $r = Invoke-Scrubbed -File 'podman' -Arguments (@('--connection', $podmanConn) + $PodmanArgs) -Needles $script:Needles -Quiet
+    $r = Invoke-Scrubbed -File 'podman' -Arguments (@($podmanArgs) + $PodmanArgs) -Needles $script:Needles -Quiet
     $r
 }
 function Initialize-GatewayImage {
@@ -127,16 +133,17 @@ function Initialize-GatewayImage {
 function Find-PulsoExe {
     $cands = @()
     if ($PulsoExe) { $cands += $PulsoExe }
-    if ($env:PULSO_EXE) { $cands += $env:PULSO_EXE }
-    if ($env:CARGO_TARGET_DIR) { $cands += (Join-Path $env:CARGO_TARGET_DIR 'debug\pulso.exe') }
-    foreach ($lane in 'claude-lfc', 'claude-demo1', 'claude-ann1') { $cands += (Join-Path "D:\cargo-targets\$lane" 'debug\pulso.exe') }
+    $cands += $devCfg.Values['PULSO_EXE']
+    if ($env:CARGO_TARGET_DIR) { $cands += (Join-Path (Join-Path $env:CARGO_TARGET_DIR 'debug') ('pulso' + (Get-DevExeSuffix))) }
+    foreach ($lane in 'claude-lfc', 'claude-demo1', 'claude-ann1') { $cands += (Join-Path "D:\cargo-targets\$lane" 'debug\pulso.exe') }   # original machine only
     foreach ($c in $cands) { if ($c -and (Test-Path -LiteralPath $c)) { return (Resolve-Path -LiteralPath $c).Path } }
-    throw "pulso.exe not found (tried: $($cands -join '; ')). Build it once: cd seams; cargo build -j 1 -p pulso   (or pass -PulsoExe)"
+    throw "pulso binary not found (tried: $($cands -join '; ')). Build it once: cd seams; cargo build -j 1 -p pulso   (or pass -PulsoExe)"
 }
 function Find-StepsCli {
     $c = @()
     if ($env:PULSO_STEPS_CLI) { $c += $env:PULSO_STEPS_CLI }
-    foreach ($lane in 'claude-lfc', 'claude-demo1', 'claude-ann1') { $c += (Join-Path "D:\cargo-targets\$lane" 'debug\steps_cli.exe') }
+    $c += $devCfg.Values['PULSO_STEPS_EXE']
+    foreach ($lane in 'claude-lfc', 'claude-demo1', 'claude-ann1') { $c += (Join-Path "D:\cargo-targets\$lane" 'debug\steps_cli.exe') }   # original machine only
     foreach ($x in $c) { if ($x -and (Test-Path -LiteralPath $x)) { return $x } }
     $null
 }
@@ -153,7 +160,7 @@ function Get-CellsInfo {
 }
 function Stop-Tree {
     param($Proc)
-    if ($Proc -and -not $Proc.HasExited) { try { & taskkill /PID $Proc.Id /T /F 2>&1 | Out-Null } catch { } }
+    if ($Proc -and -not $Proc.HasExited) { Stop-DevProcessTree -ProcessId $Proc.Id }
 }
 
 $results = New-Object System.Collections.Generic.List[string]
@@ -177,7 +184,7 @@ foreach ($step in $plan.Steps) {
                 $envAll = @{}; foreach ($k in $secretEnv.Keys) { $envAll[$k] = $secretEnv[$k] }; foreach ($k in $e.Keys) { $envAll[$k] = $e[$k] }
                 # tracing settings the CALLER put in the environment win over the env files (agent-core.env carries a Phoenix endpoint)
                 foreach ($it in (Get-ChildItem Env:)) { if ($it.Name -match '^(OTEL_|LLM_GATEWAY_TRACE_|AGENTCORE_TRACE_|PULSO_GW_|PULSO_CORE_OTEL)') { $envAll[$it.Name] = $it.Value } }
-                $upArgs = @((Join-Path $root 'scripts\dev-stack\stack.py'), 'up'); if ($FreshGateway) { $upArgs += '--rebuild-gateway' }
+                $upArgs = @((Join-Path $root 'scripts/dev-stack/stack.py'), 'up'); if ($FreshGateway) { $upArgs += '--rebuild-gateway' }
                 $r = Invoke-Scrubbed -File $python -Arguments $upArgs -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0) { throw "stack.py up failed (exit $($r.ExitCode))" }
                 $null = Get-Tokens
@@ -204,7 +211,7 @@ foreach ($step in $plan.Steps) {
                         $mode = 'bank-aggregated'
                         if (-not (Test-Path -LiteralPath $DataRoot)) { throw "bank data root not found at $DataRoot (-DataRoot) and no cached cells at $path" }
                         Say "no cache: running scripts/aggregate/bank_cells.py over $DataRoot (aggregates only leave it)"
-                        $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\aggregate\bank_cells.py'), '--data-root', $DataRoot, '--out', $path) -Needles $script:Needles -WorkDir $root -Quiet -LogPath $logPath
+                        $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts/aggregate/bank_cells.py'), '--data-root', $DataRoot, '--out', $path) -Needles $script:Needles -WorkDir $root -Quiet -LogPath $logPath
                         if ($r.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $path)) { throw 'bank_cells.py failed' }
                     }
                 }
@@ -217,7 +224,7 @@ foreach ($step in $plan.Steps) {
                 $st = Read-State
                 $cellsPath = $null; $mode = $plan.Mode
                 if ($st.PSObject.Properties['cells_path']) { $cellsPath = [string]$st.cells_path; $mode = [string]$st.cells_mode }
-                if ($plan.Synthetic) { $cellsPath = Join-Path $demoDir 'cells\planted.ndjson'; $mode = 'synthetic-planted' }
+                if ($plan.Synthetic) { $cellsPath = Join-Path $demoDir 'cells/planted.ndjson'; $mode = 'synthetic-planted' }
                 elseif ($plan.CellsFile) { $cellsPath = (Resolve-Path -LiteralPath $plan.CellsFile).Path; $mode = 'bank-file' }
                 if (-not $cellsPath -or -not (Test-Path -LiteralPath $cellsPath)) { throw 'no cells table: add -Cells (or -Synthetic -Cells)' }
                 $tok = Get-Tokens
@@ -244,8 +251,7 @@ foreach ($step in $plan.Steps) {
                 Say "engine: $exe"
                 $elog = Join-Path $demoDir "engine-$runId.log"
                 $psi = New-Object Diagnostics.ProcessStartInfo
-                $psi.FileName = $env:ComSpec
-                $psi.Arguments = '/c ""' + $exe + '" run >> "' + $elog + '" 2>&1"'
+                Set-DevShellCommand -Psi $psi -Line ('"' + $exe + '" run >> "' + $elog + '" 2>&1')
                 $psi.UseShellExecute = $false; $psi.RedirectStandardInput = $true; $psi.CreateNoWindow = $true; $psi.WorkingDirectory = $root
                 foreach ($k in $eenv.Keys) { $psi.EnvironmentVariables[[string]$k] = [string]$eenv[$k] }
                 $engine = [Diagnostics.Process]::Start($psi)
@@ -262,7 +268,7 @@ foreach ($step in $plan.Steps) {
                 }
                 Say "engine ready on $base (loopback, ephemeral admin token never printed)"
                 $key = "demo-loop-$runId"
-                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\triggers\agentcore_poller.py'), 'explicit', $key, '--engine-url', $base, '--state', (Join-Path $work 'trigger-state.json')) `
+                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts/triggers/agentcore_poller.py'), 'explicit', $key, '--engine-url', $base, '--state', (Join-Path $work 'trigger-state.json')) `
                     -Env @{ PULSO_ENGINE_TOKEN = $adminTok } -Needles $script:Needles -WorkDir $root -Quiet
                 if ($r.ExitCode -ne 0) { throw ("trigger refused: " + ($r.Output -join ' ')) }
                 Say "trigger posted (explicit, key $key); waiting for the job (timeout $($plan.TimeoutMin) min)"
@@ -302,7 +308,7 @@ foreach ($step in $plan.Steps) {
                 $cli = Find-StepsCli
                 if ($cli) {
                     $sensorOut = Join-Path $work 'sensor.json'
-                    & $env:ComSpec /c ('""' + $cli + '" cells < "' + $cellsPath + '" > "' + $sensorOut + '" 2>nul"')
+                    Invoke-DevShellLine -Line ('"' + $cli + '" cells < "' + $cellsPath + '" > "' + $sensorOut + '" 2>{NULL}')
                     if (Test-Path -LiteralPath $sensorOut) {
                         $sj = Read-JsonFile -Path $sensorOut
                         $nc = @($sj.signals | Where-Object { $_.status -eq 'corroborated' -and $_.type -ne 'level_risk' }).Count
@@ -320,10 +326,10 @@ foreach ($step in $plan.Steps) {
                     PULSO_STACK_PORT_GW = "$($settings.BatteryGw)"; PULSO_AGENT_CORE_DIR = $AgentCoreDir; PULSO_LLM_GATEWAY_DIR = $GatewayDir }
                 $envAll = @{}; foreach ($k in $secretEnv.Keys) { $envAll[$k] = $secretEnv[$k] }; foreach ($k in $benv.Keys) { $envAll[$k] = $benv[$k] }
                 Initialize-GatewayImage -ImageName "$($settings.BatteryPrefix)-llm-gateway"
-                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\battery\demo_core.py'), 'up') -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
+                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts/battery/demo_core.py'), 'up') -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0) { throw 'battery core did not start' }
                 $rep = Join-Path $demoDir 'probes-report.json'
-                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\battery\schedule_probes.py'), '--run', '--base-url', "http://127.0.0.1:$($settings.BatteryCore)",
+                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts/battery/schedule_probes.py'), '--run', '--base-url', "http://127.0.0.1:$($settings.BatteryCore)",
                         '--reps', "$($plan.ProbeReps)", '--state', (Join-Path $demoDir 'probes-state.json'), '--out-jsonl', (Join-Path $demoDir 'probe-trigger.jsonl'),
                         '--report-out', $rep, '--cells-out', (Join-Path $demoDir 'probe-cells.ndjson'), '--once') -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $rep)) { throw 'schedule_probes.py failed' }
@@ -382,11 +388,11 @@ foreach ($step in $plan.Steps) {
             'Down' {
                 Step-Header 'Down' "stopping the stack '$($settings.Prefix)' only"
                 $e = Get-StackEnvironment -Settings $settings -AgentCoreDir $AgentCoreDir -GatewayDir $GatewayDir
-                $a = @((Join-Path $root 'scripts\dev-stack\stack.py'), 'down'); if ($Purge) { $a += '--purge' }
+                $a = @((Join-Path $root 'scripts/dev-stack/stack.py'), 'down'); if ($Purge) { $a += '--purge' }
                 $r = Invoke-Scrubbed -File $python -Arguments $a -Env $e -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0) { throw 'stack.py down failed' }
                 $benv = [ordered]@{ PULSO_STACK_PREFIX = $settings.BatteryPrefix; PULSO_STACK_PORT_CORE = "$($settings.BatteryCore)"; PULSO_STACK_PORT_PG = "$($settings.BatteryPg)"; PULSO_STACK_PORT_GW = "$($settings.BatteryGw)" }
-                $ba = @((Join-Path $root 'scripts\battery\demo_core.py'), 'down'); if ($Purge) { $ba += '--purge' }
+                $ba = @((Join-Path $root 'scripts/battery/demo_core.py'), 'down'); if ($Purge) { $ba += '--purge' }
                 [void](Invoke-Scrubbed -File $python -Arguments $ba -Env $benv -Needles $script:Needles -WorkDir $root -LogPath $logPath)
                 # the battery core's own containers (only the ones this script named)
                 [void](Invoke-Podman -PodmanArgs @('rm', '-f', "$($settings.BatteryPrefix)-postgres", "$($settings.BatteryPrefix)-llm-gateway"))

@@ -27,17 +27,18 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$root = (Resolve-Path (Join-Path $here '..\..')).Path
+$root = (Resolve-Path (Join-Path $here '../..')).Path
 . (Join-Path $here 'rig.lib.ps1')
 
 $factored = Split-Path -Parent (Split-Path -Parent $root)
+$devCfg = Get-DevConfig -Root $root -Export -Legacy @{ PULSO_AGENT_CORE_ENV = (Join-Path $factored 'agent-core.env'); PULSO_LLM_GATEWAY_ENV = (Join-Path $factored 'llm-gateway.env') }
 $settings = Get-RigSettings
 if (-not $SpaUrl) { $SpaUrl = "http://127.0.0.1:$($settings.SpaPort)" }
 $paths = Get-RigPaths -Root $root
-$python = (Get-Command python -ErrorAction Stop).Source
+$python = Get-DevPython
 $uv = (Get-Command uv -ErrorAction Stop).Source
-$acEnvPath = $(if ($env:PULSO_AGENT_CORE_ENV) { $env:PULSO_AGENT_CORE_ENV } else { Join-Path $factored 'agent-core.env' })
-$gwEnvPath = $(if ($env:PULSO_LLM_GATEWAY_ENV) { $env:PULSO_LLM_GATEWAY_ENV } else { Join-Path $factored 'llm-gateway.env' })
+$acEnvPath = $devCfg.Values['PULSO_AGENT_CORE_ENV']
+$gwEnvPath = $devCfg.Values['PULSO_LLM_GATEWAY_ENV']
 $acEnv = Read-EnvFileValues -Path $acEnvPath
 $gwEnv = Read-EnvFileValues -Path $gwEnvPath
 $secretAll = @{}
@@ -62,7 +63,7 @@ $work = $(if ($ResumeWork) { $ResumeWork } else { Join-Path $paths.Rig "work-$ru
 $null = New-Item -ItemType Directory -Force -Path $work, $store, $cellsDir
 $hops = New-Object System.Collections.Generic.List[object]
 function Hop { param([string]$Name, [string]$Status, [string]$Detail, [string]$Needs = '') $hops.Add([pscustomobject]@{ Hop = $Name; Status = $Status; Detail = $Detail; Needs = $Needs }); Say ("[{0}] {1}: {2}" -f $Status, $Name, $Detail) }
-function Stop-Tree { param($Proc) if ($Proc -and -not $Proc.HasExited) { try { & taskkill /PID $Proc.Id /T /F 2>&1 | Out-Null } catch { } } }
+function Stop-Tree { param($Proc) if ($Proc -and -not $Proc.HasExited) { Stop-DevProcessTree -ProcessId $Proc.Id } }
 
 Say ("ENV1 stage 1 story  {0}  profile={1} builder={2} (fallback {3})  free RAM {4} MB" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Profile, $BuilderModel, $FallbackModel, (Get-FreeRamMb))
 
@@ -71,7 +72,7 @@ $cellsPath = ''
 if ($Profile -in 'planted', 'newagent') {
     # newagent (AGT1): ONE planted M1 cell, Tecnico/Phone, an uncovered topic: the mapping tries `new_agent:consultas` first.
     $cellsPath = Join-Path $cellsDir $(if ($Profile -eq 'newagent') { 'planted-newagent.ndjson' } else { 'planted.ndjson' })
-    $pcArgs = @((Join-Path $root 'scripts\demo-loop\planted_cells.py'), '--out', $cellsPath)
+    $pcArgs = @((Join-Path $root 'scripts/demo-loop/planted_cells.py'), '--out', $cellsPath)
     if ($Profile -eq 'newagent') { $pcArgs += @('--profile', 'uncovered-topic') }
     $r = Invoke-Scrubbed -File $python -Arguments $pcArgs -Needles $script:Needles -WorkDir $root -Quiet
     if ($r.ExitCode -ne 0) { Hop 'cells' 'BREAK' 'planted_cells.py failed'; exit 1 }
@@ -118,8 +119,7 @@ function Start-Engine {
     Say ("    engine environment names: " + ((Get-EnvNames -Env $eenv) -join ', '))
     $elog = Join-Path $paths.Rig "engine-$runId.log"
     $psi = New-Object Diagnostics.ProcessStartInfo
-    $psi.FileName = $env:ComSpec
-    $psi.Arguments = '/c ""' + $rig.pulso_exe + '" run >> "' + $elog + '" 2>&1"'
+    Set-DevShellCommand -Psi $psi -Line ('"' + $rig.pulso_exe + '" run >> "' + $elog + '" 2>&1')
     $psi.UseShellExecute = $false; $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.CreateNoWindow = $true; $psi.WorkingDirectory = $root
     foreach ($k in $eenv.Keys) { $psi.EnvironmentVariables[[string]$k] = [string]$eenv[$k] }
     $p = [Diagnostics.Process]::Start($psi)
@@ -142,7 +142,7 @@ function Invoke-LoopJob {
             return [pscustomobject]@{ Ok = $true; Why = ''; Result = $rf.FullName }
         }
         $key = "env1-$runId-" + ($Model -replace '[^a-z0-9]', '')
-        $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\triggers\agentcore_poller.py'), 'explicit', $key, '--engine-url', $engineUrl, '--state', (Join-Path $work 'trigger-state.json')) `
+        $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts/triggers/agentcore_poller.py'), 'explicit', $key, '--engine-url', $engineUrl, '--state', (Join-Path $work 'trigger-state.json')) `
             -Env @{ PULSO_ENGINE_TOKEN = $e.Admin } -Needles $script:Needles -WorkDir $root -Quiet
         if ($r.ExitCode -ne 0) { return [pscustomobject]@{ Ok = $false; Why = ('trigger refused: ' + ($r.Output -join ' ')); Result = $null } }
         $deadline = (Get-Date).AddMinutes($TimeoutMin); $f = $null; $last = Get-Date
@@ -222,9 +222,9 @@ elseif (-not $NoEval -and -not $ResumeWork -and $job.Ok -and $ann.Count -gt 0) {
     $pid2 = [string]$ann[0].delivery.proposal_id
     $agent = ''
     try { $pr = Invoke-RestMethod -Uri "$core/v1/registry/proposals/$pid2" -Headers @{ Authorization = "Bearer $($tok.builder)" } -TimeoutSec 20; $agent = [string]$pr.proposal.agent_id } catch { }
-    $suite = Join-Path $root "agent-core-assets\eval-suites\pulso-min\$agent\$agent-min@1.0.0.yaml"
+    $suite = Join-Path $root "agent-core-assets/eval-suites/pulso-min/$agent/$agent-min@1.0.0.yaml"
     if ($agent -and (Test-Path -LiteralPath $suite)) {
-        $r = Invoke-Scrubbed -File $uv -Arguments @('run', '--project', $rig.agent_core_dir, '--with', 'pyyaml', 'python', (Join-Path $root 'scripts\dev-stack\attach_eval_suite.py'),
+        $r = Invoke-Scrubbed -File $uv -Arguments @('run', '--project', $rig.agent_core_dir, '--with', 'pyyaml', 'python', (Join-Path $root 'scripts/dev-stack/attach_eval_suite.py'),
                 '--suite', $suite, '--base', $core, '--state-dir', $paths.Dev, '--proposal-id', $pid2, '--agent-core', $rig.agent_core_dir) -Needles $script:Needles -WorkDir $root `
             -Env @{ PULSO_AGENT_CORE_DIR = [string]$rig.agent_core_dir }
         Hop 'eval' $(if ($r.ExitCode -eq 0) { 'OK' } else { 'BREAK' }) ("agent {0}, suite pulso-min (R6 stand-in), exit {1}" -f $agent, $r.ExitCode) $(if ($r.ExitCode -ne 0) { 'agent-core evaluate (see output above); a real suite is Codex T2 / G11' } else { '' })
@@ -279,7 +279,7 @@ if ($Cycle -and $script:KeepEngine -and $ann.Count -gt 0) {
         $tries = 0; $sent = $false; $txt = ''; $r = $null
         while ($tries -lt 5 -and -not $sent) {
             $tries++
-            $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\triggers\agentcore_poller.py'), 'poll', '--once', '--core-url', $core, '--engine-url', $engineUrl, '--state', (Join-Path $work 'poller-state.json'),
+            $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts/triggers/agentcore_poller.py'), 'poll', '--once', '--core-url', $core, '--engine-url', $engineUrl, '--state', (Join-Path $work 'poller-state.json'),
                     '--token-file', $paths.Tokens, '--token-key', 'exporter', '--only-agent', 'no-run-triggers', '--only-origin', 'auto_detect') -Env @{ PULSO_ENGINE_TOKEN = $eng.Admin } -Needles $script:Needles -WorkDir $root -Quiet
             $txt = $r.Output -join ' '
             if ($r.ExitCode -eq 0 -and $txt -match '[1-9]\d*') { $sent = $true } elseif ($r.ExitCode -ne 0) { break } else { Start-Sleep -Seconds 5 }

@@ -16,3 +16,4 @@ output/
 .nexus-outbox/
 /seams/target/
 /.dev-stack/
+/devconfig.env

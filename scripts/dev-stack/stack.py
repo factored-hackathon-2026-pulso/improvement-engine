@@ -25,7 +25,18 @@ from urllib.parse import urlparse
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 STATE = REPO / ".dev-stack"
-CONN = os.environ.get("PULSO_PODMAN_CONNECTION", "pulso-dev-root")
+def podman_conn_args(environ=None, os_name=None):
+    """`podman` selector args. PULSO_PODMAN_CONNECTION wins; else PULSO_PODMAN_MACHINE ('' = default connection, name -> '<name>-root');
+    else the original machine's pulso-dev-root on Windows only; native podman (no args) elsewhere. Mirrors Get-DevPodmanArgs."""
+    environ = os.environ if environ is None else environ
+    os_name = os.name if os_name is None else os_name
+    conn = environ.get("PULSO_PODMAN_CONNECTION")
+    if conn:
+        return ["--connection", conn]
+    machine = environ.get("PULSO_PODMAN_MACHINE")
+    if machine is not None:
+        return ["--connection", machine + "-root"] if machine else []
+    return ["--connection", "pulso-dev-root"] if os_name == "nt" else []
 # PULSO_STACK_PREFIX (+ PULSO_PG_PORT / PULSO_GW_PORT / PULSO_CORE_PORT): a second stack beside another lane's one (REG1).
 # Defaults are unchanged. With a non-default prefix the gateway image is ALSO prefixed: a shared image name lets another lane's
 # `down --purge` (`rmi -f`) kill every lane's gateway container (BLD1 lost its gateway that way).
@@ -70,7 +81,7 @@ def sh(args, env=None, cwd=None, check=True):
 
 
 def pm(*a, env=None, check=True):
-    return sh(["podman", "--connection", CONN, *a], env=env, check=check)
+    return sh(["podman", *podman_conn_args(), *a], env=env, check=check)
 
 
 def source_dir(var: str, name: str, url: str) -> Path:

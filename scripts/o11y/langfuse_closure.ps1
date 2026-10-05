@@ -30,7 +30,7 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$root = (Resolve-Path (Join-Path $here '..\..')).Path
+$root = (Resolve-Path (Join-Path $here '../..')).Path
 Set-Location -LiteralPath $root          # absolute-path safe: the caller's current directory does not matter
 . (Join-Path $here 'langfuse_closure.lib.ps1')
 
@@ -38,17 +38,18 @@ try { $plan = Get-LfcPlan -Models:$Models -Up:$Up -Traffic:$Traffic -Verify:$Ver
 catch { [Console]::Error.WriteLine("usage error: $($_.Exception.Message)"); exit 2 }
 
 $factored = Split-Path -Parent (Split-Path -Parent $root)
+$devCfg = Get-DevConfig -Root $root -Export -Legacy @{ PULSO_AGENT_CORE_ENV = (Join-Path $factored 'agent-core.env'); PULSO_LLM_GATEWAY_ENV = (Join-Path $factored 'llm-gateway.env') }
 $S = Get-LfcSettings
-$stateDir = Join-Path $root '.dev-stack\lfc'
+$stateDir = Join-Path $root '.dev-stack/lfc'
 $null = New-Item -ItemType Directory -Force -Path $stateDir
 $logPath = Join-Path $stateDir ("closure-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-$python = (Get-Command python -ErrorAction Stop).Source
+$python = Get-DevPython
 $psExe = (Get-Process -Id $PID).Path
-$runPs1 = Join-Path $root 'scripts\demo-loop\run.ps1'
-$o11y = Join-Path $root 'scripts\o11y'
+$runPs1 = Join-Path $root 'scripts/demo-loop/run.ps1'
+$o11y = Join-Path $root 'scripts/o11y'
 if (-not $EnvFile) { $EnvFile = $(if ($env:PULSO_LANGFUSE_ENV) { $env:PULSO_LANGFUSE_ENV } else { Join-Path $factored 'langfuse.env' }) }
-if (-not $AgentCoreDir) { $AgentCoreDir = $(if ($env:PULSO_LFC_AGENT_CORE_DIR) { $env:PULSO_LFC_AGENT_CORE_DIR } else { Join-Path $factored 'worktrees\agent-core-claude-lfc' }) }
-if (-not $GatewayDir) { $GatewayDir = $(if ($env:PULSO_LFC_GATEWAY_DIR) { $env:PULSO_LFC_GATEWAY_DIR } else { Join-Path $factored 'worktrees\llm-gateway-claude-otel' }) }
+if (-not $AgentCoreDir) { $AgentCoreDir = $(if ($env:PULSO_LFC_AGENT_CORE_DIR) { $env:PULSO_LFC_AGENT_CORE_DIR } else { Join-Path $factored 'worktrees/agent-core-claude-lfc' }) }
+if (-not $GatewayDir) { $GatewayDir = $(if ($env:PULSO_LFC_GATEWAY_DIR) { $env:PULSO_LFC_GATEWAY_DIR } else { Join-Path $factored 'worktrees/llm-gateway-claude-otel' }) }
 $mockEnvPath = Join-Path $stateDir 'mock.env'
 $activeEnv = $(if ($plan.Mock) { $mockEnvPath } else { $EnvFile })
 
@@ -56,7 +57,7 @@ $activeEnv = $(if ($plan.Mock) { $mockEnvPath } else { $EnvFile })
 $lfValues = @{}
 if (-not $plan.Mock) { $lfValues = Read-EnvFileValues -Path $EnvFile }
 $others = @{}
-foreach ($f in @($(if ($env:PULSO_AGENT_CORE_ENV) { $env:PULSO_AGENT_CORE_ENV } else { Join-Path $factored 'agent-core.env' }), $(if ($env:PULSO_LLM_GATEWAY_ENV) { $env:PULSO_LLM_GATEWAY_ENV } else { Join-Path $factored 'llm-gateway.env' }))) {
+foreach ($f in @($devCfg.Values['PULSO_AGENT_CORE_ENV'], $devCfg.Values['PULSO_LLM_GATEWAY_ENV'])) {
     $v = Read-EnvFileValues -Path $f; foreach ($k in $v.Keys) { $others["$f|$k"] = $v[$k] }
 }
 $script:Needles = @(Get-LfcNeedles -LangfuseValues $lfValues -Others @($others))
@@ -71,7 +72,7 @@ function Test-Http {
     param([string]$Url)
     try { $r = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 4; return ($r.StatusCode -eq 200) } catch { return $false }
 }
-function Stop-Tree { param([int]$ProcId) if ($ProcId -gt 0) { try { & taskkill /PID $ProcId /T /F 2>&1 | Out-Null } catch { } } }
+function Stop-Tree { param([int]$ProcId) Stop-DevProcessTree -ProcessId $ProcId }
 function Invoke-Py {
     param([string[]]$Arguments, [System.Collections.IDictionary]$Env = @{}, [switch]$Quiet)
     Invoke-Scrubbed -File $python -Arguments $Arguments -Env $Env -Needles $script:Needles -WorkDir $root -Quiet:$Quiet -LogPath $logPath
@@ -83,7 +84,7 @@ function Invoke-Runner {
     Invoke-Scrubbed -File $psExe -Arguments (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $runPs1) + $common + $Arguments) -Env $Env -Needles $script:Needles -WorkDir $root -LogPath $logPath
 }
 function Read-LfcState {
-    $p = Join-Path $root '.dev-stack\lfc\state.json'
+    $p = Join-Path $root '.dev-stack/lfc/state.json'
     if (-not (Test-Path -LiteralPath $p)) { throw 'no lfc state yet: the Traffic loop has not run' }
     Read-JsonFile -Path $p
 }
@@ -92,8 +93,7 @@ function Start-Background {
     $log = Join-Path $stateDir "$Name.log"
     $argLine = ($Arguments | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_ + '"' } else { $_ } }) -join ' '
     $psi = New-Object Diagnostics.ProcessStartInfo
-    $psi.FileName = $env:ComSpec
-    $psi.Arguments = '/c ""' + $python + '" ' + $argLine + ' >> "' + $log + '" 2>&1"'
+    Set-DevShellCommand -Psi $psi -Line ('"' + $python + '" ' + $argLine + ' >> "' + $log + '" 2>&1')
     $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true; $psi.WorkingDirectory = $root
     foreach ($k in $Env.Keys) { $psi.EnvironmentVariables[[string]$k] = [string]$Env[$k] }
     $p = [Diagnostics.Process]::Start($psi)
@@ -127,7 +127,7 @@ function Test-LangfuseReachable {
 function Initialize-ScratchAgentCore {
     # LOCAL scratch branch = origin/main + PR 48 (feat/otel-traceparent-langfuse). Never pushed.
     if (-not (Test-Path -LiteralPath (Join-Path $AgentCoreDir 'pyproject.toml'))) {
-        $repo = Join-Path $factored 'tmp\shared\agent-core'
+        $repo = Join-Path $factored 'tmp/shared/agent-core'
         if (-not (Test-Path -LiteralPath (Join-Path $repo '.git'))) { throw "no agent-core checkout at $AgentCoreDir and none at $repo to create it from (-AgentCoreDir)" }
         Say "creating the local scratch worktree $AgentCoreDir (origin/main + PR 48; never pushed)"
         & git -C $repo fetch -q origin 2>&1 | Out-Null
@@ -135,8 +135,8 @@ function Initialize-ScratchAgentCore {
         & git -C $AgentCoreDir merge --no-edit 'origin/feat/otel-traceparent-langfuse' 2>&1 | ForEach-Object { Say "  $_" }
         if ($LASTEXITCODE -ne 0) { throw 'merging PR 48 into the scratch branch failed' }
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $AgentCoreDir 'tests\m09\test_traceparent_extract.py'))) { throw "agent-core at $AgentCoreDir does not contain PR 48 (traceparent + langfuse attributes)" }
-    if (-not (Test-Path -LiteralPath (Join-Path $GatewayDir 'docs\adr\0002-langfuse-attributes-and-opt-in-content-capture.md'))) { throw "llm-gateway at $GatewayDir does not contain PR 4 (langfuse attributes + content)" }
+    if (-not (Test-Path -LiteralPath (Join-Path $AgentCoreDir 'tests/m09/test_traceparent_extract.py'))) { throw "agent-core at $AgentCoreDir does not contain PR 48 (traceparent + langfuse attributes)" }
+    if (-not (Test-Path -LiteralPath (Join-Path $GatewayDir 'docs/adr/0002-langfuse-attributes-and-opt-in-content-capture.md'))) { throw "llm-gateway at $GatewayDir does not contain PR 4 (langfuse attributes + content)" }
 }
 function Wait-ForwarderDrained {
     $stats = $null; $quiet = 0
@@ -228,7 +228,7 @@ foreach ($step in $plan.Steps) {
                 if ($r.ExitCode -ne 0) { throw 'the plain agent runs failed (output above)' }
                 $runs = Read-JsonFile -Path $runsOut
                 $b = Invoke-Py -Env $fwdEnv -Arguments @((Join-Path $o11y 'runtrace_bridge.py'), '--target', 'forwarder', '--core-url', "http://127.0.0.1:$($S.CorePort)", '--token-file',
-                    (Join-Path $root '.dev-stack\tokens.json'), '--token-key', 'admin', '--state', (Join-Path $stateDir 'bridge-state.json'), '--once')
+                    (Join-Path $root '.dev-stack/tokens.json'), '--token-key', 'admin', '--state', (Join-Path $stateDir 'bridge-state.json'), '--once')
                 if ($b.ExitCode -ne 0) { Say 'WARNING: the run-trace bridge failed (its agent.run traces are extra; the story traces are not affected)' }
                 Wait-ForwarderDrained
                 $man = [ordered]@{ stories = @($stories); agent_runs = @($runs.agent_runs); created = (Get-Date -Format 'o') }
