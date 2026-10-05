@@ -906,6 +906,7 @@ version = "0.1.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "csv",
  "improvement-engine-source-adapters",
  "parquet",
  "serde_json",
@@ -1733,3 +1734,4 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
