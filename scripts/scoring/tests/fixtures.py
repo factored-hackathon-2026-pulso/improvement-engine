@@ -21,6 +21,16 @@ def sig(metric, dims, status="corroborated", direction="up", diff=0.3):
             "claim": "association", "discovery": {"diff": diff}}
 
 
+def risk_entry(status="corroborated", metric="M8", cell=None, diff=0.4):
+    return {"id": "T-R1", "type": "risk", "status": status, "metric_id": metric,
+            "cell": {"scope": "overall"} if cell is None else cell, "effect": {"difference": diff}}
+
+
+def level_sig(metric="M8", status="corroborated", diff=0.4):
+    return {"metric": metric, "type": "level_risk", "class": "risk", "dims": {}, "status": status,
+            "reason": "x", "direction": "up", "claim": "association", "discovery": {"diff": diff}}
+
+
 def signals_perfect():
     return {"cells_explored": 181, "discards": [], "signals": [
         sig("M1", {"reason_category": "Queja", "channel": "Phone"}, diff=0.38),

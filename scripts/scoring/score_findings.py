@@ -17,6 +17,12 @@ Catalog roles
 An engine signal is "reported" when its status is `corroborated` (plus `candidate` with
 --include-candidate) and its direction is not `none`.
 
+Level risks (W1-4): a signal with `type == "level_risk"` is a LEVEL against a pre-registered threshold, not a vs-rest
+contrast. It is matched (metric + cell, direction ignored; a catalog cell {} or {"scope": "overall"} is the metric level)
+only against catalog entries of `type == "risk"`: `corroborated` risk entries are risk positives, `refuted` ones are
+non-findings. Level risks and risk entries never enter `recall` / `precision` (problem scores); they are scored under the
+separate `risk` block (recall over risk positives, unmatched level risks listed, never penalised).
+
 Scores
   recall      matched positives / positives
   precision   matched positives / reported signals (neutral matches and acceptable disagreements excluded)
@@ -104,6 +110,12 @@ def spearman(a, b):
     return round(cov / (va * vb) ** 0.5, 6)
 
 
+def norm_risk_cell(cell):
+    """The metric level: {} and {"scope": "overall"} are the same cell."""
+    c = norm_cell(cell)
+    return () if c == (("scope", "overall"),) else c
+
+
 def _entry_view(e):
     return {"id": e.get("id"), "metric_id": e.get("metric_id"), "cell": e.get("cell"),
             "status": e.get("status"), "effect": (e.get("effect") or {}).get("difference")}
@@ -136,6 +148,17 @@ def _validate(catalog, signals):
 
 def score(catalog, signals, include_candidate=False, effect_tolerance=0.05, acceptable=None):
     _validate(catalog, signals)
+    risk_pos, risk_non = {}, {}
+    for e in catalog["entries"]:
+        if e.get("type") == "risk":
+            rk = (norm_metric(e["metric_id"]), norm_risk_cell(e["cell"]))
+            if e.get("status") == "corroborated":
+                risk_pos[rk] = e
+            elif e.get("status") == "refuted":
+                risk_non[rk] = e
+    catalog = dict(catalog, entries=[e for e in catalog["entries"] if e.get("type") != "risk"])
+    level_signals = [s for s in signals["signals"] if s.get("type") == "level_risk"]
+    signals = dict(signals, signals=[s for s in signals["signals"] if s.get("type") != "level_risk"])
     positives, nonfindings = {}, {}
     for e in catalog["entries"]:
         eff = (e.get("effect") or {}).get("difference")
@@ -177,6 +200,30 @@ def score(catalog, signals, include_candidate=False, effect_tolerance=0.05, acce
         else:
             unmatched_engine.append(_signal_view(s))
 
+    risk_matched, risk_unmatched, risk_nonfindings = [], [], []
+    for s in level_signals:
+        if s.get("status") not in accepted:
+            continue
+        rk = (norm_metric(s["metric"]), norm_risk_cell(s["dims"]))
+        if rk in risk_pos and rk not in {(norm_metric(m["metric_id"]), norm_risk_cell(m["cell"])) for m in risk_matched}:
+            e = risk_pos[rk]
+            risk_matched.append({"id": e["id"], "metric_id": e["metric_id"], "cell": e["cell"], "engine": _signal_view(s)})
+        elif rk in risk_non:
+            e = risk_non[rk]
+            risk_nonfindings.append({"id": e["id"], "metric_id": e["metric_id"], "cell": e["cell"], "engine": _signal_view(s)})
+        elif rk not in risk_pos:
+            risk_unmatched.append(_signal_view(s))
+    nonfinding_reports.extend(risk_nonfindings)
+    rm_ids = {m["id"] for m in risk_matched}
+    risk = {
+        "positives": len(risk_pos), "reported": len(risk_matched) + len(risk_unmatched) + len(risk_nonfindings),
+        "matched": len(risk_matched),
+        "recall": None if not risk_pos else round(len(risk_matched) / len(risk_pos), 6),
+        "matched_risks": risk_matched,
+        "unmatched_benchmark_risks": [_entry_view(e) for e in risk_pos.values() if e["id"] not in rm_ids],
+        "unmatched_level_risks": risk_unmatched,
+        "matching": "metric_id + normalized cell (type risk entries only; direction ignored)",
+    }
     n_pos, n_rep = len(positives), len(reported) - ignored
     recall = None if n_pos == 0 else round(len(matched) / n_pos, 6)
     precision = None if n_rep <= 0 else round(len(matched) / n_rep, 6)
@@ -196,6 +243,7 @@ def score(catalog, signals, include_candidate=False, effect_tolerance=0.05, acce
         "unmatched_benchmark_findings": [_entry_view(e) for e in positives.values() if e["id"] not in matched_ids],
         "unmatched_engine_findings": unmatched_engine,
         "nonfinding_reports": nonfinding_reports,
+        "risk": risk,
         "interpretation": "Association-level agreement with a synthetic benchmark; not causal or production evidence.",
     }
 
