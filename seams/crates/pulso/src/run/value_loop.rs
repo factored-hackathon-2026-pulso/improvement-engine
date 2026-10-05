@@ -214,7 +214,7 @@ impl ValueLoop {
             }
             let r = reason(&refreshed.catalog, f, ports.as_ref().expect("just built"), &opts);
             let mut rec = json!({
-                "finding_id": f.id, "evidence_ref": f.evidence_ref(), "metric": f.metric, "status": r.status, "reason": r.reason, "stage": r.stage, "mapping_row": r.mapping_row,
+                "finding_id": f.id, "evidence_ref": f.evidence_ref(), "metric": f.metric, "dims": f.dims, "status": r.status, "reason": r.reason, "stage": r.stage, "mapping_row": r.mapping_row,
                 "rubric": r.rubric.as_ref().map(|x| json!({"total": x["total"], "band": x["band"]})), "independence": r.independence, "metering": r.metering, "builder_tier": r.metering["builder"]["tier"],
                 "models": r.calls.iter().map(|c| c["model_id"].clone()).collect::<Vec<_>>(), "doubles": r.doubles.len(), "delivery": null,
             });

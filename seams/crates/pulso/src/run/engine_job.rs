@@ -19,6 +19,7 @@ use crate::run::source::JOB_KEY_PREFIX;
 
 /// Key prefix of the jobs the automation trigger endpoint admits (`trigger:<trigger_key>`).
 pub const TRIGGER_KEY_PREFIX: &str = "trigger:";
+use crate::run::outcome::{OutcomeStep, find_trigger};
 use crate::run::tasks::{JobCtx, JobRunner};
 use crate::run::value_loop::{Persist, ValueLoop};
 use debug_api::ingest::double_item;
@@ -52,6 +53,7 @@ pub struct EngineRunner {
     core_live: bool,
     env: Env,
     value_loop: Option<Arc<ValueLoop>>,
+    outcome: Option<Arc<OutcomeStep>>,
 }
 
 fn opaque(s: &str) -> bool {
@@ -76,6 +78,7 @@ impl EngineRunner {
             core_live: c.core_live,
             env,
             value_loop: None,
+            outcome: None,
         };
         // Fail at start, not at the first job: a live Core that cannot be configured, a gateway with an incomplete setup.
         r.core()?;
@@ -86,6 +89,12 @@ impl EngineRunner {
     /// Registers the value loop (cells -> reasoning -> registry writer): it runs for `trigger:*` jobs and after every monitor tick.
     pub fn with_value_loop(mut self, v: Option<Arc<ValueLoop>>) -> EngineRunner {
         self.value_loop = v;
+        self
+    }
+
+    /// Registers the outcome step (OUT1): an `outcome` trigger of type `release.*` runs it instead of the value loop.
+    pub fn with_outcome(mut self, o: Option<Arc<OutcomeStep>>) -> EngineRunner {
+        self.outcome = o;
         self
     }
 
@@ -354,6 +363,22 @@ impl JobRunner for EngineRunner {
         if ctx.repo.output(ctx.tenant, &job.job, 0).map_err(repo_err)?.is_some() {
             return Ok(()); // an earlier attempt finished the work and only the completion was lost
         }
+        // OUT1: a `release.*` outcome trigger is the outcome step, not another pass of the value loop.
+        if let Some(t) = find_trigger(&self.store, &key) {
+            let mut summary = json!({"trigger_job": job.job, "kind": "outcome", "event_type": t.event_type});
+            summary["outcome"] = match &self.outcome {
+                Some(o) => {
+                    let out = o.run(&t)?;
+                    self.record_outcome(&job.job, &out)?;
+                    out
+                }
+                None => json!({"skipped": "outcome step not configured (PULSO_OUTCOME_PRE_CELLS or PULSO_CELLS_NDJSON is not set)"}),
+            };
+            return match ctx.repo.commit_output(ctx.tenant, &job.job, 0, ctx.worker, job.fence_token, ctx.now, &summary.to_string()) {
+                Ok(()) | Err(RepoError::Conflict(_)) => Ok(()),
+                Err(e) => Err(repo_err(e)),
+            };
+        }
         let mut summary = match &monitor {
             Some(run_id) => {
                 if self.core_live {
@@ -384,6 +409,25 @@ impl JobRunner for EngineRunner {
 }
 
 impl EngineRunner {
+    /// The outcome cards in the console store: one run per release, one node per card (verdict words and reason codes only).
+    fn record_outcome(&self, job: &str, out: &Value) -> Result<(), String> {
+        let id: String = format!("outcome-{job}").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).take(64).collect();
+        if self.store.state(&id).is_some() {
+            return Ok(());
+        }
+        let title = format!(
+            "outcome {id}: release {} ({}), state {}; descriptive association against sibling cells, not cause; success claimed: {}",
+            out["release_id"].as_str().unwrap_or("?"), out["event_type"].as_str().unwrap_or("?"), out["state"].as_str().unwrap_or("?"), out["success_claimed"]
+        );
+        self.emit(&id, NewEvent::new("run_started", "run", &id, json!({"title": title, "state": "running", "origin": "outcome"})))?;
+        for (i, c) in out["cards"].as_array().into_iter().flatten().enumerate() {
+            let label = format!("card-{i} [{}{}] {} ({})", c["verdict"].as_str().unwrap_or("?"), c["reason"].as_str().map_or(String::new(), |r| format!(": {r}")), c["finding"]["metric"].as_str().unwrap_or("?"), c["period_kind"].as_str().unwrap_or("?"));
+            let node = json!({"node_id": format!("card-{i}"), "label": label, "stage": "evaluation", "status": "complete", "depends_on": [], "reason_code": c["reason"], "node_kind": "material_step", "trace_id": null});
+            self.emit(&id, NewEvent::new("node_status_changed", "node", &format!("card-{i}"), json!({"node": node})))?;
+        }
+        self.emit(&id, NewEvent::new("run_state_changed", "run", &id, json!({"state": "completed"})))
+    }
+
     /// The value-loop outcome in the console store: one run, one node per finding (reason codes only).
     fn record_loop(&self, job: &str, out: &Value) -> Result<(), String> {
         let id: String = format!("value-loop-{job}").chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' }).take(64).collect();
