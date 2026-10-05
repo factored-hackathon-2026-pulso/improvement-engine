@@ -440,6 +440,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--lang", default="es", choices=["es", "pt", "en"])
     ap.add_argument("--now", default=None)
     a = ap.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     toks = []
     try:
         if a.cmd == "poll":
