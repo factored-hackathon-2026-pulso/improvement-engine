@@ -35,7 +35,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "triggers"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agentcore_poller import LOOPBACK, HttpFetch, redact, require_loopback  # noqa: E402  (reuse, do not fork)
+from trace_id import story_trace_id  # noqa: E402
 
 SCOPE = "pulso.runtrace-bridge"
 SEEN_CAP = 5000
@@ -56,8 +58,9 @@ def price_usd(model: str | None, tokens_in: int, tokens_out: int) -> float | Non
     return None if p is None else tokens_in * p[0] + tokens_out * p[1]
 
 
-def trace_id_for(run_id: str) -> str:
-    return hashlib.sha256(("trace:" + run_id).encode()).hexdigest()[:32]
+def trace_id_for(run_id: str, finding_key: str | None = None) -> str:
+    """Story trace id (see trace_id.py): the engine derives the same id from finding key + run id."""
+    return story_trace_id(finding_key, run_id)
 
 
 def span_id_for(*parts: str) -> str:
@@ -115,8 +118,8 @@ def scrub(v):
 # ---------------------------------------------------------------------------------------------- conversion
 
 class Converter:
-    def __init__(self, capture_content: bool = False, environment: str = "local"):
-        self.capture, self.env = capture_content, environment
+    def __init__(self, capture_content: bool = False, environment: str = "local", finding_key: str | None = None):
+        self.capture, self.env, self.finding_key = capture_content, environment, finding_key
 
     def _content(self, v):
         return json.dumps(scrub(v), sort_keys=True, default=str)
@@ -128,7 +131,7 @@ class Converter:
     def run_to_trace(self, run: dict, events: list[dict]) -> dict:
         """One run + its events -> one OTLP `resourceSpans` entry (a single trace)."""
         rid = run["run_id"]
-        tid = trace_id_for(rid)
+        tid = trace_id_for(rid, self.finding_key)
         root_id = span_id_for(rid, "root")
         evs = sorted(events, key=lambda e: e.get("seq", 0))
         closed = next((e for e in reversed(evs) if e["type"] == "run_closed"), None)
@@ -147,6 +150,7 @@ class Converter:
             "langfuse.trace.tags": ["pulso", f"agent:{agent}", f"release:{run.get('release')}",
                                     f"locale:{run.get('locale')}"],
             "langfuse.trace.metadata.agent": agent,
+            "langfuse.trace.metadata.finding_key": self.finding_key,
             "langfuse.trace.metadata.release": run.get("release"),
             "langfuse.trace.metadata.locale": run.get("locale"),
             "langfuse.trace.metadata.outcome": outcome,
@@ -335,7 +339,7 @@ class Converter:
 
     def scores_for(self, run: dict, resource_spans: dict) -> list[dict]:
         """Trace scores (sent after the trace): completion gate, early close. Deterministic ids -> idempotent."""
-        rid, tid = run["run_id"], trace_id_for(run["run_id"])
+        rid, tid = run["run_id"], trace_id_for(run["run_id"], self.finding_key)
         root = next(sp for sp in resource_spans["scopeSpans"][0]["spans"] if "parentSpanId" not in sp)
         at = {a["key"]: a["value"] for a in root["attributes"]}
         out = []
@@ -409,6 +413,23 @@ class LangfuseApi:
         self.request("POST", "/api/public/scores", sc)
 
 
+class ForwarderScores:
+    """Scores go through the local forwarder (which holds the key and throttles); no auth here."""
+
+    def __init__(self, base: str):
+        self.url = base + "/v1/scores"
+
+    def score(self, sc: dict) -> None:
+        req = urllib.request.Request(self.url, data=json.dumps(sc).encode(), method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=15).close()  # noqa: S310 (loopback enforced)
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"forwarder HTTP {e.code}") from None
+        except OSError as e:
+            raise RuntimeError(f"forwarder unreachable: {type(e).__name__}") from None
+
+
 def register_models(api: LangfuseApi) -> dict:
     """Idempotent: one model definition per PRICES entry unless one with that name already exists."""
     have = {m["modelName"] for m in api.request("GET", "/api/public/models?limit=100").get("data", [])}
@@ -421,6 +442,13 @@ def register_models(api: LangfuseApi) -> dict:
             "inputPrice": pin, "outputPrice": pout})
         made.append(name)
     return {"created": made, "existing": sorted(have & set(PRICES))}
+
+
+def resolve_capture(target: str, force_on: bool, no_content: bool, cfg: str | None) -> bool:
+    """Full content is ON by default for Langfuse (standing user authorization), OFF otherwise; secrets are always scrubbed."""
+    if no_content:
+        return False
+    return force_on or (_truthy(cfg) if cfg is not None else target == "langfuse")
 
 
 def _truthy(v: str | None) -> bool:
@@ -436,6 +464,11 @@ def build_endpoints(target: str, env: dict, allow_external: bool) -> tuple[OtlpS
         base = env.get("PULSO_O11Y_OTLP_ENDPOINT") or "http://127.0.0.1:4318"
         require_loopback(base)
         return OtlpSender(base.rstrip("/") + "/v1/traces"), None
+    if target == "forwarder":
+        base = env.get("PULSO_O11Y_FORWARDER_ENDPOINT") or "http://127.0.0.1:4318"
+        require_loopback(base)
+        base = base.rstrip("/")
+        return OtlpSender(base + "/v1/traces"), ForwarderScores(base)
     if target != "langfuse":
         raise ValueError("unknown target")
     base, pk, sk = env.get("LANGFUSE_BASE_URL", ""), env.get("LANGFUSE_PUBLIC_KEY", ""), env.get("LANGFUSE_SECRET_KEY", "")
@@ -565,9 +598,11 @@ def _load_env_file(path: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--core-url", default="http://127.0.0.1:8001")
-    ap.add_argument("--target", choices=["local", "langfuse"], default="local")
+    ap.add_argument("--target", choices=["local", "forwarder", "langfuse"], default="local")
     ap.add_argument("--allow-external", action="store_true")
-    ap.add_argument("--capture-content", action="store_true")
+    ap.add_argument("--capture-content", action="store_true", help="force content on (default: on for langfuse)")
+    ap.add_argument("--no-content", action="store_true", help="export structure only, no content")
+    ap.add_argument("--finding-key", help="finding key mixed into the story trace id (same value as the engine)")
     ap.add_argument("--state", default="o11y-state.json")
     ap.add_argument("--token-env", default="AGENTCORE_EXPORT_TOKEN")
     ap.add_argument("--token-file", help="JSON file holding the token (local dev stack); never printed")
@@ -588,7 +623,8 @@ def main(argv: list[str] | None = None) -> int:
     tok = (json.loads(Path(a.token_file).read_text(encoding="utf-8"))[a.token_key]
            if a.token_file else env.get(a.token_env, ""))
     allow = a.allow_external or _truthy(env.get("PULSO_O11Y_ALLOW_EXTERNAL"))
-    capture = a.capture_content or _truthy(env.get("PULSO_O11Y_CAPTURE_CONTENT"))
+    # full content is ON by default for Langfuse (standing user authorization); secrets are always scrubbed
+    capture = resolve_capture(a.target, a.capture_content, a.no_content, env.get("PULSO_O11Y_CAPTURE_CONTENT"))
     secrets = [tok]
     try:
         sender, api = build_endpoints(a.target, env, allow)
@@ -600,7 +636,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         b = Bridge(fetch=HttpFetch(a.core_url, tok), send=sender,
                    score=None if (api is None or a.no_scores) else api.score, state_path=Path(a.state), overlap=a.overlap,
-                   converter=Converter(capture, a.environment), only_agent=a.only_agent)
+                   converter=Converter(capture, a.environment, a.finding_key), only_agent=a.only_agent)
         while True:
             r = b.poll_once()
             print(f"target={a.target} capture_content={capture} " + " ".join(f"{k}={v}" for k, v in r.items())
