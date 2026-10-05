@@ -40,3 +40,20 @@ Nothing is approved, published or promoted.
 ## Extending
 
 Add a row or a candidate to the JSON; `cargo test -p reasoning --test mapping` validates it (ranks, kinds, mechanisms, deny-list, catalogue grounding, agreement with the suite generator). A new patch target also needs its anchors and protected markers in `catalog.rs` and, to be announceable, a mechanism in `scripts/regression/build_suite.py`.
+
+## Live result (2026-10-05, own stack `pulso-map1`, agent-core main + PR 50 on a local scratch branch, real bank cells, aggregates only)
+
+Cells: the cached output of `scripts/aggregate/bank_cells.py` (7,995 treated rows, 19 corroborated findings, 10 of them M1). Models: Scout and default Builder `xiaomi/mimo-v2.6-flash`, Verifier `xiaomi/mimo-v2.6-pro`; the pro Builder was run as asked when flash was refused by the proof. Nothing was approved, published or promoted; the announced drafts are `state=draft`, `origin=auto_detect`.
+
+| finding (M1 unresolved, cell) | candidates tried (rank order, cap 2) | proof verdict | announced |
+|---|---|---|---|
+| Queja x Phone | flash run 1: estado_pqr; pro run: estado_pqr (not fixed), resumen_radicado (compile denied, edit budget); flash run 3: estado_pqr | proven (flash 1 and 3), not_fixed (pro) | yes |
+| Queja x Email | estado_pqr, in all three runs | proven in all three | yes |
+| Queja x App | flash 1: estado_pqr not_fixed, resumen_radicado denied; pro: estado_pqr; flash 3: estado_pqr | proven (pro, flash 3) | yes |
+| Queja x WhatsApp | flash 1: not_fixed; pro: estado_pqr; flash 3: gateway model_unavailable on both candidates | proven (pro) | yes |
+| Queja x Web Chat | flash 1: not_fixed; pro: not_fixed; flash 3: estado_pqr | proven (flash 3) | yes |
+| Comercial x Phone / Email / App, Tecnico x Phone, Retencion x Phone | new agent, then (Phone only) p/copiloto | new agent: infra_failed (put_draft forbidden_role 403); p/copiloto: suite_refused (no generator) | no |
+
+Reasons the first flash pass refused three of five Queja cells: the Builder wrote the placeholder with ONE brace (`{facts.pqr.value.status}`), the compiler accepted it, the proof ran a full evaluation and the wording probe refused it in 8 of 8 cases. Fix in this lane: `patch::placeholders` denies a single brace with a message the Builder gets as feedback; the same flash pass then announced 4 of 5 (the fifth was a transient `model_unavailable` from the gateway). Cost of a finding that is proven at the first candidate: about USD 0.001. The second candidate `p/resumen_radicado` was denied at compile (`edit_budget_exceeded`: a replace on a 200-character prompt costs the removed anchor plus the new text); the Builder prompt now says to prefer `insert_after` on short texts, not yet measured because the first candidate was proven.
+
+Why the other real findings cannot be announced now: a NEW agent needs release settings (fraud interrupt, injection ruleset) in its evaluation draft and agent-core `put_draft` answers `forbidden_role` HTTP 403 to the engine `builder` role; the only other candidate (`p/copiloto`) has no regression suite generator (`build_suite.py` refuses `no_mechanism`), so no proof can run. Unblock: a human-owned admin credential for the evaluation release settings (`PULSO_NEW_AGENT_ADMIN=1` then ranks the new agent as announceable), and a suite generator for `p/copiloto` / `t/aclarar_cargo`.

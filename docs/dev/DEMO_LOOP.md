@@ -91,7 +91,7 @@ Limits to say out loud:
   change) is the unblock. See `W13_PROMPT_AND_AGENT_ANNOUNCE.md`.
 * **Routing from `recepcion` to a new agent is a human-owned follow-up**, not part of the proposal (`routing_recepcion_to_new_agent` is listed as not measured).
 * **Evidence links in the platform announce are opaque ids** (`CASE-` + 26 characters hashed from the finding); they have the shape the route requires and name no real case.
-* **The bank data has no announceable patch finding today**: M4/M5 (PQR) are flat across categories, so the template patch path (the announceable one) has
+* **Real bank data now yields announceable patches (MAP1).** The M1 Queja cells map first to the existing artifacts that cover complaint follow-up (`t/estado_pqr`, then `p/resumen_radicado`), not to a new agent; with real cells the loop announced the `t/estado_pqr` patch for Queja on Phone, Email, App, WhatsApp and Web Chat (see `MAPPING.md`, section live result). The uncovered reasons (Tecnico, Comercial, Retencion) still map to a new agent and still end `not_announced:infra_failed`. The mapping is a hypothesis of where to intervene, never a cause. The synthetic planted mode is no longer needed to show an announced proposal.
   no real trigger. That is why the synthetic planted mode exists; the report says which mode ran.
 * **Variance.** The Builder is a model. With the default `flash` tier, 2 of 3 synthetic runs wrote the placeholder without its braces and the proof
   correctly refused them (`not_announced:not_fixed`, wording probe failed in 8 of 8 cases); with `-BuilderModel xiaomi/mimo-v2.6-pro` the one run made was announced (about
@@ -99,6 +99,10 @@ Limits to say out loud:
 * Re-running the same finding on the same stack replays the earlier drafts (registry idempotency) and the proposal id stays the same; agent-core allows 10
   `auto_detect` proposals per 24 h. `-Down -Purge` and `-Up` give a clean registry.
 * One bank run had a transient `blocked (model_unavailable)` on one finding (gateway); it is counted and shown, not retried.
+
+## Own prefix and ports (MAP1)
+
+`PULSO_STACK_PREFIX` and `PULSO_DEMO_PG_PORT`, `PULSO_DEMO_GW_PORT`, `PULSO_DEMO_CORE_PORT`, `PULSO_DEMO_ENGINE_PORT` give a lane its own stack (never `PULSO_CORE_PORT`/`PULSO_PG_PORT`: the first is an engine setting and breaks `pulso run`). The report now prints per finding the ranked candidate list (`*` = tried, at most 2), one `tried` line per attempt and the human-owned note.
 
 ## Troubleshooting
 
