@@ -354,6 +354,9 @@ mod w11 {
     }
 
     impl Scripts for Fake {
+        fn build_suite_for(&self, f: &Value, t: &str, _new_agent: Option<&str>) -> Result<Value, SuiteError> {
+            self.build_suite(f, t)
+        }
         fn build_suite(&self, _: &Value, _: &str) -> Result<Value, SuiteError> {
             if self.refuse {
                 return Err(SuiteError::Refused("k_below_minimum".into(), "thin".into()));
@@ -389,6 +392,11 @@ mod w11 {
             self.paths.lock().unwrap().push(format!("{m} {p}"));
             let r = |status, body| Ok(Reply { status, body });
             if m == "GET" && p.starts_with("/v1/registry/entities/") {
+                // the donor closure of a new-agent proposal (templates, model, tools, language detection, ruleset) is readable
+                let kind = p.trim_start_matches("/v1/registry/entities/").split('/').next().unwrap_or("");
+                if ["template", "decision_model", "tool", "language_detection", "injection_ruleset"].contains(&kind) {
+                    return r(200, json!({"content": {"id": "donor-copy", "version": "1.0.0"}}));
+                }
                 return r(404, json!({"code": "not_found"}));
             }
             if m == "GET" && p.starts_with("/v1/registry/proposals?") {
@@ -443,7 +451,7 @@ mod w11 {
         assert_eq!(rec["evaluation"]["verdict"], "regression_suite_proven");
         assert_eq!(rec["evaluation"]["dossier"]["announce"], true);
         assert_eq!(rec["evaluation"]["labels"]["calibration"], "uncalibrated");
-        assert_eq!(*core.origins.lock().unwrap(), vec!["manual", "manual", "auto_detect"], "base + candidate evaluation drafts never use the auto_detect quota; the announced proposal does");
+        assert_eq!(*core.origins.lock().unwrap(), vec!["manual", "auto_detect"], "the base has no new agent (not evaluated): only the candidate evaluation draft; it never uses the auto_detect quota, the announced proposal does");
         assert_eq!(out["summary"]["announced"], 1);
         assert_eq!(out["evaluate_before_announce"], "on");
         let paths = core.paths.lock().unwrap().join("\n");
@@ -461,7 +469,7 @@ mod w11 {
         assert!(rec["delivery"].is_null());
         assert_eq!(rec["evaluation"]["dossier"]["announce"], false);
         assert!(rec["evaluation"]["dossier"]["es"]["description"].as_str().unwrap().contains("NO SE ANUNCIA"));
-        assert_eq!(*core.origins.lock().unwrap(), vec!["manual", "manual"], "no auto_detect proposal exists");
+        assert_eq!(*core.origins.lock().unwrap(), vec!["manual"], "no auto_detect proposal exists (new agent: only the candidate was evaluated)");
         assert_eq!((out["summary"]["announced"].as_u64(), out["summary"]["not_announced"].as_u64(), out["summary"]["delivered"].as_u64()), (Some(0), Some(1), Some(0)));
     }
 
