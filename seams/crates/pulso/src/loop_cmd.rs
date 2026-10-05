@@ -14,8 +14,9 @@
 //! Exit codes (systemd): 0 the run finished (every finding has a closed outcome, blocked or denied included); 1 the run could not run
 //! (unreadable cells, sensor, model setup: retry); 2 refused configuration (never retry as is); 3 the run finished but a finding ended on
 //! an infrastructure failure (registry, evaluation, delivery: its record is kept and a re-run resumes it); 75 another run holds the lock
-//! (nothing was done; `SuccessExitStatus=75`).
+//! (nothing was done; `SuccessExitStatus=75`); 143 SIGTERM/SIGINT during a run (the lock is released first).
 use crate::run::log::Logger;
+use crate::run::supervisor::StopToken;
 use crate::run::value_loop::{Persist, ValueLoop, default_script_dir};
 use serde_json::{Value, json};
 use std::fs;
@@ -28,6 +29,8 @@ pub const EXIT_FAILED: i32 = 1;
 pub const EXIT_REFUSED: i32 = 2;
 pub const EXIT_INFRA_FINDING: i32 = 3;
 pub const EXIT_LOCKED: i32 = 75;
+/// SIGTERM/SIGINT (128 + 15) during a run: the lock is released first.
+pub const EXIT_TERMINATED: i32 = 143;
 
 pub const USAGE: &str = "usage: pulso loop [--check] [--break-lock]\nOne run of the improvement loop (cells -> findings -> reasoning -> proof -> registry -> announce). Environment only:\n\
 PULSO_LOOP_INPUTS_DIR [+ PULSO_LOOP_CELLS_FILE] | PULSO_CELLS_NDJSON, PULSO_CELLS_SOURCE, PULSO_WORK_DIR, PULSO_REGISTRY_ADDR | PULSO_CORE_ADDR,\n\
@@ -102,6 +105,16 @@ impl Drop for RunLock {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
     }
+}
+
+/// Releases the lock and exits 143 as soon as `stop` is raised (the signal watcher of `run`). `exit` is `std::process::exit` in production.
+pub fn guard_termination(stop: StopToken, lock: PathBuf, log: Logger, run_id: String, exit: impl FnOnce(i32) + Send + 'static) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        while !stop.wait(std::time::Duration::from_millis(100)) {}
+        let _ = fs::remove_file(&lock);
+        log.warn("loop_terminated", json!({"run_id": run_id, "action": "signal received: lock released, run abandoned; finished findings are kept"}));
+        exit(EXIT_TERMINATED);
+    })
 }
 
 /// Per-finding records on disk (`<work>/loop-store/<step>.json`): a re-run over the same findings reuses what it already committed.
@@ -252,6 +265,9 @@ pub fn run(args: &[String], get: &dyn Fn(&str) -> Option<String>, log: &Logger) 
             return EXIT_FAILED;
         }
     };
+    let stop = StopToken::new();
+    crate::run::signals::install(stop.clone());
+    guard_termination(stop, p.work.join(LOCK_FILE), log.clone(), p.run_id.clone(), |c| std::process::exit(c));
     if !cells.is_file() {
         log.error("loop_failed", json!({"run_id": p.run_id, "reason": "cells_missing", "hint": "the inputs mirror has not synced the cells package"}));
         return EXIT_FAILED;
@@ -351,6 +367,24 @@ mod tests {
         std::mem::forget(held); // a killed run: the file stays
         assert!(matches!(RunLock::acquire(&w, 7200, now_secs() + 100), Err(LockError::Busy { .. })), "young lock: busy");
         assert!(RunLock::acquire(&w, 7200, now_secs() + 7201 + 5).is_ok(), "older than the TTL: taken over");
+    }
+
+    #[test]
+    fn a_termination_signal_releases_the_lock_and_exits_143() {
+        let w = tmp("term");
+        let held = RunLock::acquire(&w, 7200, now_secs()).ok().unwrap();
+        std::mem::forget(held); // owned by the guard below, as in `run`
+        let stop = StopToken::new();
+        let codes = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+        let c2 = codes.clone();
+        let buf = Buf::default();
+        let h = guard_termination(stop.clone(), w.join(LOCK_FILE), Logger::new(Box::new(buf.clone())), "r1".into(), move |c| c2.lock().unwrap().push(c));
+        assert!(w.join(LOCK_FILE).exists());
+        stop.stop();
+        h.join().unwrap();
+        assert!(!w.join(LOCK_FILE).exists(), "lock released");
+        assert_eq!(*codes.lock().unwrap(), vec![EXIT_TERMINATED]);
+        assert!(buf.text().contains("loop_terminated"));
     }
 
     #[test]

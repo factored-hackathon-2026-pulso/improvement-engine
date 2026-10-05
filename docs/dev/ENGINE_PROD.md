@@ -67,6 +67,7 @@ One run of the improvement loop as a process of its own (no HTTP service, no job
 | 2 | refused configuration (a named variable, never a value) | `RestartPreventExitStatus=2`: do not retry as is |
 | 3 | finished, but at least one finding ended on an infrastructure failure (registry unreachable or unauthorized, evaluation `failed_infra`, proof suite error, model unavailable); the records are kept and a re-run resumes them | failure, alert |
 | 75 | another run holds `loop.lock`; nothing was done | `SuccessExitStatus=75` |
+| 143 | SIGTERM or SIGINT during a run: `loop.lock` is released first, finished findings stay in `loop-store/`, a re-run resumes | `SuccessExitStatus=143` for a stop |
 
 ### Run lock, results, logs
 
@@ -74,7 +75,7 @@ One run of the improvement loop as a process of its own (no HTTP service, no job
 - Per-finding records in `loop-store/`; a re-run over the same findings reuses them (no second model call; the writer's receipt store never opens a second proposal for the same finding).
 - Results: `loop-runs/<run>.json` and `loop-latest.json` (ids, reason codes and numbers only: no token, no model free text).
 - Logs: one JSON object per line on stdout, through the engine logger (it redacts secret-looking keys). Events: `loop_start`, `loop_finding` (one per finding), `loop_done` (summary, `infra_failures`), `loop_failed`, `loop_refused`, `loop_locked`, `loop_check`. Names only in `auth_mode`, `support_profile`, `source`.
-- SIGTERM is not trapped: a stop mid-run leaves the lock (see above) and the per-finding records already written.
+- SIGTERM/SIGINT are trapped (`guard_termination`): the lock is released, `loop_terminated` is logged, exit 143. Only SIGKILL leaves the lock (TTL above).
 
 ## 3. `PULSO_PROFILE=demo` (R4): lower support floors, nothing else
 
@@ -89,13 +90,9 @@ One run of the improvement loop as a process of its own (no HTTP service, no job
 
 Never implicit: an unset variable is `standard`; an unknown value is refused. Every report carries `method.support_profile`, and the loop summary carries `support_profile`, so a dossier or a card can say which floors produced it. The floors live in one place (`steps::cells::Config::demo`).
 
-## 4. Image check (PR 112)
+## 4. Image
 
-The engine image has `pulso`, `pulso-synth-runner` and `steps_cli`. `pulso loop` is a `pulso` subcommand, so it runs in that image, with its sensor linked in (it does not need `steps_cli`). What the image does NOT have is what the regression proof runs: Python, PyYAML and `scripts/regression/{build_suite,judge_story}.py`. Consequences:
-
-- With the default `PULSO_EVAL_BEFORE_ANNOUNCE` (on) the job refuses with exit 2 and the reason, before any model call.
-- With `PULSO_EVAL_BEFORE_ANNOUNCE=off` it runs; proposals are delivered to agent-core UNPROVEN and NOT announced to the platform (announce is only after a proof).
-- To run the whole loop on the host the image needs `python3`, `python3-yaml` and `scripts/regression/` copied in, plus whatever `judge_story.py` imports (L-OPS owns the Dockerfile; not changed here).
+The runtime image has `pulso`, `pulso-synth-runner`, `steps_cli`, `python3` + `python3-yaml` and the regression proof (`/opt/pulso/scripts/regression/{build_suite,judge_story,prove_fails_on_base}.py`, `/opt/pulso/agent-core-assets/eval-suites/{pulso-min,pulso-w13}`), non-root (uid 10001). Defaults `PULSO_REGRESSION_PYTHON=python3`, `PULSO_REGRESSION_SCRIPTS=/opt/pulso/scripts/regression`, so `pulso loop` runs the proof and announce in it. The scripts import only the standard library and PyYAML.
 
 ## 5. Tests and how to run them
 
