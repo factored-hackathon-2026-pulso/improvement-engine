@@ -19,6 +19,7 @@ const TABLE: &[(&str, StepFn)] = &[
     ("compile", compile_step),
     // --- L1 ---
     ("cells", steps::cells::run),
+    ("cells_agent_runs", steps::cells::run_agent_runs),
     // --- GSI ---
     ("gate", gate_step),
 ];

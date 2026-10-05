@@ -16,10 +16,13 @@ use crate::StepError;
 use crate::sensor::json::{Json, parse};
 
 /// Dimension keys a treated cell table may carry. Anything else (ids, free text) is rejected.
-pub const ALLOWED_DIMS: [&str; 9] = [
+pub const ALLOWED_DIMS: [&str; 12] = [
     "reason_category", "channel", "category", "case_type", "priority", "survey_type",
     // AG2: digital action, campaign type, customer segment (closed vocabularies, aggregates only).
     "action", "campaign_type", "customer_segment",
+    // TEL1: agent-run cells (`scripts/telemetry/agent_signals.py`): registry-allow-listed agent and tool labels
+    // (unknown -> "other") and locale (es|pt|other). Never raw ids.
+    "agent", "locale", "tool",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -228,9 +231,12 @@ type Slots = [Option<Cell>; 4];
 
 /// Comparison group of a cell: the same metric and the same non-reason dimensions (same channel),
 /// excluding the cell's own reason. Cells without a reason or with only a reason dimension compare
-/// against the rest of the metric.
+/// against the rest of the metric. TEL1: an (agent, tool) cell compares with the OTHER agents on the SAME tool
+/// (stratum = the tool), never with other tools of the same agent.
 fn stratum(dims: &[(String, String)]) -> Vec<(String, String)> {
-    if dims.len() > 1 && dims.iter().any(|(k, _)| k == "reason_category") {
+    if dims.iter().any(|(k, _)| k == "agent") && dims.iter().any(|(k, _)| k == "tool") {
+        dims.iter().filter(|(k, _)| k == "tool").cloned().collect()
+    } else if dims.len() > 1 && dims.iter().any(|(k, _)| k == "reason_category") {
         dims.iter().filter(|(k, _)| k != "reason_category").cloned().collect()
     } else {
         vec![]
@@ -535,4 +541,17 @@ impl Report {
 /// Step entry point: ndjson cell table in, report JSON out (default config).
 pub fn run(input: &str) -> Result<String, StepError> {
     Ok(analyse(input, &Config::default())?.to_json().write())
+}
+
+impl Config {
+    /// TEL1 agent-run cells (volumes of hundreds, not thousands): the same k = 10 rule, the same multiplicity and
+    /// effect floors, a lower discovery support floor (20 runs) and no bank metric dependencies.
+    pub fn agent_runs() -> Config {
+        Config { dependencies: vec![], min_support: 20, ..Config::default() }
+    }
+}
+
+/// `cells_agent_runs` step: agent-run cell tables (`A1..A9`), see `Config::agent_runs`.
+pub fn run_agent_runs(input: &str) -> Result<String, StepError> {
+    Ok(analyse(input, &Config::agent_runs())?.to_json().write())
 }

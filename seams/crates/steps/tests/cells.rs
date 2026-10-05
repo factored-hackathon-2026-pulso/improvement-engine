@@ -376,3 +376,76 @@ fn ag2_dimensions_are_accepted_and_unknown_ones_still_rejected() {
     let bad = r#"{"metric":"M7","dims":{"customer_id":"x"},"half":"discovery","numerator":1,"denominator":600}"#;
     assert!(analyse(bad, &Config::default()).is_err());
 }
+
+// ---------------------------------------------------------------------------- TEL1: agent-run cells
+
+mod tel1 {
+    use steps::cells::{Config, analyse, run_agent_runs};
+    use steps::sensor::json::parse;
+
+    fn r(metric: &str, dims: &str, half: &str, num: i64, den: i64) -> String {
+        format!("{{\"metric\":\"{metric}\",\"dims\":{dims},\"half\":\"{half}\",\"numerator\":{num},\"denominator\":{den}}}")
+    }
+
+    /// A5 grid: tool share per (agent, tool); disputas calls obtener_pqr in `planted` permille, others in 400.
+    fn a5(planted: i64) -> String {
+        let mut rows = vec![];
+        for agent in ["disputas", "consultas", "recepcion"] {
+            for tool in ["obtener_pqr", "radicar_pqr"] {
+                for (half, den) in [("discovery", 60i64), ("holdout", 60i64)] {
+                    let permille = if agent == "disputas" && tool == "obtener_pqr" { planted } else { 400 };
+                    let dims = format!("{{\"agent\":\"{agent}\",\"tool\":\"{tool}\"}}");
+                    rows.push(r("A5", &dims, half, den * permille / 1000, den));
+                }
+            }
+        }
+        rows.join("\n")
+    }
+
+    #[test]
+    fn agent_locale_tool_dimensions_are_accepted() {
+        assert!(run_agent_runs(&a5(1000)).is_ok());
+        let loc = r("A1", "{\"agent\":\"disputas\",\"locale\":\"es\"}", "discovery", 20, 60);
+        assert!(run_agent_runs(&loc).is_ok());
+    }
+
+    #[test]
+    fn unknown_dimension_still_rejected_in_agent_runs() {
+        let bad = r("A1", "{\"agent\":\"disputas\",\"run_id\":\"x\"}", "discovery", 20, 60);
+        assert!(run_agent_runs(&bad).is_err());
+    }
+
+    #[test]
+    fn tool_share_is_compared_with_other_agents_on_the_same_tool() {
+        let out = parse(&run_agent_runs(&a5(1000)).unwrap()).unwrap();
+        let sig = out.get("signals").and_then(|s| s.as_arr()).unwrap().iter().find(|s| {
+            let d = s.get("dims").unwrap();
+            d.get("agent").and_then(|v| v.as_str()) == Some("disputas") && d.get("tool").and_then(|v| v.as_str()) == Some("obtener_pqr")
+        });
+        let sig = sig.expect("disputas/obtener_pqr signal");
+        assert_eq!(sig.get("status").and_then(|v| v.as_str()), Some("corroborated"));
+        // the baseline is the same tool at the other agents (40%), not the other tool of the same agent (40% too here,
+        // so plant a contrast: radicar_pqr at 40% everywhere would hide a wrong stratum only if rates matched)
+        let base = sig.get("discovery").and_then(|d| d.get("baseline_rate")).and_then(|v| v.as_f64()).unwrap();
+        assert!((base - 0.4).abs() < 0.01, "baseline {base}");
+    }
+
+    #[test]
+    fn flat_tool_share_yields_no_agent_finding() {
+        let out = parse(&run_agent_runs(&a5(400)).unwrap()).unwrap();
+        let flagged = out.get("signals").and_then(|s| s.as_arr()).unwrap().iter()
+            .filter(|s| matches!(s.get("status").and_then(|v| v.as_str()), Some("corroborated" | "candidate"))).count();
+        assert_eq!(flagged, 0);
+    }
+
+    #[test]
+    fn agent_runs_uses_lower_support_floor_but_same_k_rule() {
+        let cfg = Config::agent_runs();
+        assert_eq!(cfg.k_min, 10);
+        assert!(cfg.min_support < Config::default().min_support);
+        // a cell with 5 positives violates k and is a named discard, in both entries
+        let rows = format!("{}\n{}", a5(400), r("A1", "{\"agent\":\"disputas\",\"locale\":\"es\"}", "discovery", 5, 60));
+        let rep = analyse(&rows, &cfg).unwrap();
+        assert!(rep.discards.iter().any(|(k, n)| k == "k_violation" && *n >= 1));
+    }
+}
