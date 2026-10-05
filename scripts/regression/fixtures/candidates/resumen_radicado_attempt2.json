@@ -1,0 +1,25 @@
+{
+ "note": "attempt 2: same text, model_profile in the exact form the live registry stores",
+ "changes": [
+  {
+   "kind": "prompt",
+   "content": {
+    "id": "p/resumen_radicado",
+    "version": "1.0.1",
+    "locales": {
+     "es": "Redacta un mensaje breve y cordial, en una o dos frases, para el cliente que confirme que su disputa fue radicada y que recibirá novedades. Indica que un especialista del equipo le dará seguimiento a su caso hasta cerrarlo. No incluyas ningún número, cifra, fecha ni identificador.",
+     "pt": "Redija uma mensagem breve e cordial, em uma ou duas frases, para o cliente confirmando que sua contestação foi registrada e que receberá novidades. Informe que um especialista da equipe fará o acompanhamento do caso até o encerramento. Não inclua nenhum número, valor, data ou identificador."
+    },
+    "model_profile": {
+     "id": "perfil-generacion",
+     "spec": "1.0.0"
+    }
+   },
+   "docs": {
+    "description": "[regression-demo] p/resumen_radicado closing_followup: the closing message says who follows the case up",
+    "rationale": "Unresolved complaints: the base closing message promises news but names no follow-up owner.",
+    "changelog": "Adds one follow-up sentence to both locales."
+   }
+  }
+ ]
+}

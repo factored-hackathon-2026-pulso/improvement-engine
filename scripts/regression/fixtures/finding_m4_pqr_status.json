@@ -1,0 +1,5 @@
+{"finding_id": "finding_reg1_m4", "metric": "M4", "direction": "up",
+ "dims": {"category": "Queja", "channel": "Phone", "locale": "es"},
+ "discovery": {"numerator": 96, "denominator": 240, "rate": 0.4, "baseline_rate": 0.2, "diff": 0.2},
+ "holdout": {"numerator": 90, "denominator": 236, "rate": 0.38, "baseline_rate": 0.2, "diff": 0.18},
+ "source": "synthetic", "note": "invented counts for the REG1 demo; same shape as a corroborated cells signal"}
