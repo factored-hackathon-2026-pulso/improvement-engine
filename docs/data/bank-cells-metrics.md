@@ -85,3 +85,7 @@ Why: the monthly k rule (k >= 10 on numerator, complement and denominator per me
 - Every exploratory signal carries `exploratory_note`: "exploratory: weaker statistical evidence; the regression proof is the quality gate". `method.profile` is `strict` or `exploratory`; `method.exploratory` echoes the knobs and the explored count.
 - Scoring: `score_findings.py` keeps recall/precision on `corroborated` only and reports the exploratory tier under `exploratory` (newly matched positives, `unlabelled` cells = not in the catalog, neither findings nor false positives).
 - Pipeline wiring (reasoning / value loop reading `candidate_exploratory` and showing the status to the Verifier) is NOT done here: `Finding::from_report` still only takes `corroborated`.
+
+## Demo support profile (`PULSO_PROFILE=demo`, ENGPROD)
+
+`steps::cells::Config::demo()` lowers only the SUPPORT floors: strict pooled `min_support` 500 -> 100 and exploratory pooled support 200 -> 60 (the exploratory tier is on). `k_min` stays 10 (`K_FLOOR`), alpha, effect, ratio, multiplicity and replication are unchanged. The report says `method.support_profile: "demo"` (`"standard"` otherwise). It exists so a planted effect on small SYNTHETIC cells is not discarded for support; the loop refuses it unless `PULSO_PROFILE=demo` is set explicitly and `PULSO_CELLS_SOURCE=synthetic` (docs/dev/ENGINE_PROD.md section 3).

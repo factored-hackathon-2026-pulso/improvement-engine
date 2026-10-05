@@ -33,6 +33,11 @@
       "why": "A PQR backlog finding (open or SLA-breached by category) lands on the status message of consultas.",
       "evidence": "ANATOMY F2 and C1"
     },
+    "tool_peers": {
+      "covered_by": ["consultas"],
+      "why": "Peers (the advisor copilot) read the customer's cases with leer_pqr_cliente while the customer-facing consultas agent only reads one PQR by radicado; a read tool that exists and that peers use is the candidate link (ART2).",
+      "evidence": "ARTIFACT_KINDS_FEASIBILITY 4.3; TEL1 A5 tool_share vs peers (agent_signal_mapping.json, not merged)"
+    },
     "advisor_repeated_lookup": {
       "covered_by": ["copiloto-asesor"],
       "why": "The same recent-charges lookup repeated inside a dispute case is the advisor copilot's tool-choice step.",
@@ -194,6 +199,24 @@
       ]
     },
     {
+      "id": "tool_peers_gap",
+      "topic": "tool_peers",
+      "match": {"metric": ["A5"], "dims": {"tool": ["leer_pqr_cliente"]}},
+      "link_grade": "mechanism_proxy",
+      "guardrail": "tool_failure_and_low_confidence_escalations_not_worse",
+      "caveats": ["agents_serve_different_topics", "link_is_to_an_existing_read_tool_only", "answer_wording_not_changed_by_the_link", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "candidates": [
+        {
+          "rank": 1, "target_ref": "tool_link:consultas/leer_pqr_cliente", "kind": "link_tool", "agent": "consultas",
+          "placeholders": [], "mechanisms": ["missing_tool", "stale_tool_answer"],
+          "params": {"tool": "leer_pqr_cliente"},
+          "justification": "Peers use the read tool leer_pqr_cliente a lot and consultas does not have it: the link adds a pass-through read of the customer's cases to its flow, wired to the existing tool_failure exit.",
+          "evidence": "ARTIFACT_KINDS_FEASIBILITY 4.3 (agent lacks a tool its peers use); TEL1 A5 (proposal rows, not merged)",
+          "proof_support": "suite:tool_link", "announceable_now": true
+        }
+      ]
+    },
+    {
       "id": "copilot_repeated_lookup",
       "topic": "advisor_repeated_lookup",
       "match": {"metric": ["E1"], "dims": {"case_type": ["dispute"]}},
@@ -338,6 +361,7 @@
       "id": "policy_dispute_amount",
       "match": {"dims": {"reason_code": ["policy:escalamiento-disputa-monto"]}},
       "owner": "riesgo",
+      "policy": {"policy": "escalamiento-disputa-monto", "registry_threshold": 500, "document_threshold": 250, "tighten_to": 250, "tighten_to_source": "team policy document value (human-owned)"},
       "evidence": "ANATOMY F6 and D5: the registry policy holds 500 USD, the team policy document says 250 USD (R4)",
       "note": {
         "es": "Para una persona (riesgo): la politica de escalamiento de disputas por monto no es un artefacto que el motor pueda proponer; el valor del registro y el del documento de politicas difieren y solo un responsable humano puede decidir cual rige.",

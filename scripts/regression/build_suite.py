@@ -54,8 +54,11 @@ GUARD_BEHAVIOUR = {
 
 # Which mechanism a target ref defaults to (the reasoning crate names it in its mapping row).
 DEFAULT_MECHANISM = {"template:t/estado_pqr": "status_message_gap", "prompt:p/resumen_radicado": "closing_followup",
-                     "new_agent:consultas": "uncovered_topic"}
-TARGET_AGENT = {"status_message_gap": "consultas", "closing_followup": "disputas", "uncovered_topic": NEW_AGENT}
+                     "new_agent:consultas": "uncovered_topic",
+                     "tool_link:consultas/leer_pqr_cliente": "tool_link",
+                     "policy:escalamiento-disputa-monto": "policy_threshold"}
+TARGET_AGENT = {"status_message_gap": "consultas", "closing_followup": "disputas", "uncovered_topic": NEW_AGENT,
+                "tool_link": "<params>", "policy_threshold": "<params>"}
 
 PII_PATTERNS = (re.compile(r"\d{6,}"), re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), re.compile(r"https?://", re.I),
                 re.compile(r"\b\d{3}[ -]\d{3}[ -]\d{4}\b"))
@@ -245,8 +248,92 @@ def uncovered_topic(f: dict, h: str) -> tuple[list[dict], dict, list[dict]]:
     return cases, meta, []
 
 
+TOOL_SEED = {"error": {"status": "error", "error": "servicio no disponible"}, "timeout": {"status": "timeout"},
+             "denied": {"status": "denied"}}
+
+
+def tool_link(f: dict, h: str) -> tuple[list[dict], dict, list[dict]]:
+    """ART2 link to an EXISTING read-only tool (flow `tool` node on an engine-chosen edge, pass-through). Native evidence: the new node
+    is ON the path, so seeding the linked tool with error, timeout or denied sends the run to the existing `tool_failure` exit (the base
+    never calls the tool and resolves); agent-core's `engine.tool_called` carries no tool id, so this is how a call is observed. What is
+    NOT measured: that the answer uses the tool data (the link only makes the data available to the flow)."""
+    a = f["art2"]
+    cases, meta = [], {}
+    for lang, country, text in (("es", "CO", "quiero saber el estado de mi PQR, el radicado es {tag}"),
+                                ("pt", "BR", "quero saber o estado da minha solicitacao, o protocolo e {tag}")):
+        for i, st in enumerate(a["statuses"]):
+            tag = f"pqr-reg-{i + 1}"
+            cid = f"reg{h}-{lang}-link-{st}"
+            cases.append({
+                "id": cid, "principal": _principal(h, i, country),
+                "steps": [_start(lang), {"op": "turn", "text": text.format(tag=tag), "auth": "session"}],
+                "seed": {"tools": {"obtener_pqr": [{"result": {"status": "Open", "id": tag}}], a["tool"]: [TOOL_SEED[st]]}},
+                "expect": {"outcome": "escalated", "escalated": True},
+                "assertions": [{"event": "engine.escalated", "where": [{"field": "reason_code", "op": "eq", "value": "tool_failure"}]}]})
+            meta[cid] = {"behaviour": f"the linked read tool answers {st} ({lang}): the run takes the existing tool_failure exit", "check": "native"}
+    return cases, meta, []
+
+
+def tool_link_guards(f: dict, h: str) -> list[dict]:
+    a = f["art2"]
+    return [{"id": "guard-link-pasa-sin-cambio", "principal": _principal(h, 9, "CO"),
+             "steps": [_start("es"), {"op": "turn", "text": "quiero saber el estado de mi PQR, el radicado es pqr-reg-9", "auth": "session"}],
+             "seed": {"tools": {"obtener_pqr": [{"result": {"status": "Open", "id": "pqr-reg-9"}}], a["tool"]: [{"result": [{"id": "pqr-reg-8", "status": "Open"}]}]}},
+             "expect": {"outcome": "resolved", "escalated": False},
+             "assertions": [{"event": "engine.response_failed", "expect": "none"}, {"event": "engine.escalated", "expect": "none"}]}]
+
+
+def _amount_case(cid: str, h: str, i: int, lang: str, amt: int, escalates: bool) -> dict:
+    text = {"es": "no reconozco un cargo de {amt} dolares en una tienda", "pt": "nao reconheco uma cobranca de {amt} dolares em uma loja"}[lang]
+    tx = {"transaction_id": f"tx-reg-{i}", "amount": f"{amt}.00", "currency": "USD", "merchant": "Tienda Aurora"}
+    steps = [_start(lang), {"op": "turn", "text": text.format(amt=amt), "auth": "session"}]
+    seed = {"buscar_transacciones": [{"result": [tx]}], "seleccionar": [{"result": tx}], "convertir_moneda": [{"result": amt}]}
+    country = "CO" if lang == "es" else "BR"
+    if escalates:
+        return {"id": cid, "principal": _principal(h, i, country), "steps": steps, "seed": {"tools": seed},
+                "expect": {"outcome": "escalated", "escalated": True},
+                "assertions": [{"event": "engine.escalated", "where": [{"field": "reason_code", "op": "eq", "value": "policy:escalamiento-disputa-monto"}]},
+                               {"event": "engine.action_verified", "expect": "none"}]}
+    pqr = {"status": "Open", "id": f"pqr-reg-{i}"}
+    seed.update({"radicar_pqr": [{"result": pqr}], "obtener_pqr": [{"result": pqr}]})
+    return {"id": cid, "principal": _principal(h, i, country),
+            "steps": steps + [{"op": "confirm", "answer": "yes", "auth": "step_up"}], "seed": {"tools": seed},
+            "expect": {"outcome": "resolved", "actions_verified": ["radicar_pqr"], "escalated": False},
+            "assertions": [{"event": "engine.escalated", "expect": "none"}]}
+
+
+def policy_threshold(f: dict, h: str) -> tuple[list[dict], dict, list[dict]]:
+    """ART2 tighten-only policy (`escalamiento-disputa-monto`, escalate when USD amount > threshold). Finding cases: amounts in the window
+    (new, old] that the stricter policy escalates and the base auto-processes (fail on the base, pass on the candidate)."""
+    a = f["art2"]
+    old, new = a["old"], a["new"]
+    cases, meta = [], {}
+    for i, amt in enumerate(int(b) for b in a["boundaries"] if new < b <= old):
+        for lang in ("es", "pt"):
+            cid = f"reg{h}-{lang}-monto-{amt}"
+            cases.append(_amount_case(cid, h, i, lang, amt, True))
+            meta[cid] = {"behaviour": f"{amt} USD is above the new threshold {new:g} and not above the old {old:g}: the stricter policy escalates ({lang})", "check": "native"}
+    return cases, meta, []
+
+
+def policy_threshold_guards(f: dict, h: str) -> list[dict]:
+    """Boundary guards on the OLD and the NEW threshold: at or below the new one nothing escalates; above the old one both escalate."""
+    a = f["art2"]
+    old, new = a["old"], a["new"]
+    out = []
+    for i, b in enumerate(int(x) for x in a["boundaries"]):
+        if b <= new:
+            out.append(_amount_case(f"guard-monto-{b}-sin-escalar", h, 20 + i, "es", b, False))
+        elif b > old:
+            out.append(_amount_case(f"guard-monto-{b}-escala", h, 20 + i, "es", b, True))
+    return out
+
+
 MECHANISMS = {"status_message_gap": status_message_gap, "closing_followup": closing_followup,
-              "uncovered_topic": uncovered_topic}
+              "uncovered_topic": uncovered_topic, "tool_link": tool_link, "policy_threshold": policy_threshold}
+# ART2: extra guards of a mechanism (on top of the pulso-min ones of its agent): (generator, behaviour text)
+EXTRA_GUARDS = {"tool_link": (tool_link_guards, "the linked tool answers ok: the flow still resolves as before (pass-through)"),
+                "policy_threshold": (policy_threshold_guards, "boundary of the old and the new threshold holds")}
 
 
 # --------------------------------------------------------------------------------------------------------------- builder
@@ -262,6 +349,10 @@ def build_suite(finding: dict, target: str, mechanism: str | None = None, max_fi
     if mechanism not in MECHANISMS:
         raise SuiteRefused("no_mechanism", f"no case generator for target {target!r} (known: {sorted(DEFAULT_MECHANISM)})")
     agent = TARGET_AGENT[mechanism]
+    if agent == "<params>":
+        if not (finding.get("art2") or {}).get("agent"):
+            raise SuiteRefused("params_missing", "this target needs the structured art2 params of the compiled proposal")
+        agent = finding["art2"]["agent"]
     if agent == NEW_AGENT and not (new_agent and SLUG.match(new_agent)):
         raise SuiteRefused("new_agent_missing", "a new-agent suite needs the slug of the new agent (--agent)")
     h = finding_hash(finding)
@@ -288,6 +379,11 @@ def build_suite(finding: dict, target: str, mechanism: str | None = None, max_fi
         meta[g["id"]] = {"kind": "guard", "finding_key": key, "mechanism": mechanism, "check": "native",
                          "source": "pulso-w13 (adapted from pulso-min)" if new_agent else "pulso-min",
                          "behaviour": GUARD_BEHAVIOUR[g["id"][len("guard-"):]]}
+    if mechanism in EXTRA_GUARDS:
+        make, why = EXTRA_GUARDS[mechanism]
+        for g in make(finding, h):
+            guards.append(g)
+            meta[g["id"]] = {"kind": "guard", "finding_key": key, "mechanism": mechanism, "check": "native", "source": "art2", "behaviour": why}
     agent = new_agent if agent == NEW_AGENT else agent
     suite = {"id": f"reg-{agent}-{h}", "version": "1.0.0", "agent_id": agent, "repetitions": 3, "thresholds": {},
              "scenarios": cases + guards}

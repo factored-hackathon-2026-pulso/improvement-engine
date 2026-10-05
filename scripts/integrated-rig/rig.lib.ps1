@@ -24,7 +24,7 @@ function Get-RigPaths {
     $rig = Join-Path $dev 'integrated-rig'
     [pscustomobject]@{
         Dev = $dev; Rig = $rig; Tokens = (Join-Path $dev 'tokens.json'); Secrets = (Join-Path $rig 'secrets.json'); PlatformKeys = (Join-Path $rig 'platform-keys')
-        PlatformDb = (Join-Path $rig 'cc_platform.db'); PlatformPid = (Join-Path $rig 'platform.pid'); PlatformLog = (Join-Path $rig 'platform.log')
+        PlatformDb = (Join-Path $rig 'cc_platform.db'); PlatformPid = (Join-Path $rig 'platform.pid'); SpaPid = (Join-Path $rig 'spa.pid'); SpaLog = (Join-Path $rig 'spa.log'); PlatformLog = (Join-Path $rig 'platform.log')
         AnnounceResults = (Join-Path $rig 'announce-results.json'); Story = (Join-Path $rig 'story-report.json'); CaseIds = (Join-Path $rig 'case-ids.json')
     }
 }

@@ -1,7 +1,8 @@
 //! W11: one EVALUATION RUN on agent-core, as the Python proof (`scripts/regression/prove_fails_on_base.py`) does it, but through the
 //! guarded writer: create a MANUAL-origin draft proposal (so the 10 per 24 h `auto_detect` quota is not consumed), put the candidate
 //! changes plus the regression `eval_suite` in it, `validate`, `freeze`, `evaluate`. Never approve, publish, promote or reject: the
-//! allow-list admits `freeze` and `evaluate` only.
+//! allow-list admits `freeze` and `evaluate` only. E8: the draft is marked PROOF SCRATCH (title and change docs) and, once evaluated, closed
+//! again with `reopen` (back to `draft`, so an approver cannot approve or publish it); see `Writer::close_scratch`.
 //!
 //! A run answers a raw JSON record (the contract of `scripts/regression/judge_story.py`):
 //! `{label, proposal_id, verdict, gate_items[], per_case_native{case: {passed, reason}}, detail, problem, infra_retries[], attempts}`.
@@ -32,6 +33,12 @@ impl Default for EvalOptions {
         EvalOptions { infra_retries: 4, backoff: Duration::from_secs(20), sleep: std::thread::sleep }
     }
 }
+
+/// E8: every evaluation draft is PROOF SCRATCH, never a deliverable. The title carries this marker right after the engine prefix and
+/// every change of the draft opens its description with `kind: proof_scratch;`, so a human (and a platform filter) can tell it at a
+/// glance. The real proposal the engine announces is a different, `auto_detect` one.
+pub const SCRATCH_MARK: &str = "[proof-scratch]";
+pub const SCRATCH_KIND: &str = "kind: proof_scratch;";
 
 /// What to evaluate: the suite and the candidate changes of ONE run (empty `changes` = the BASE).
 pub struct EvalJob<'a> {
@@ -140,7 +147,7 @@ impl Writer<'_> {
         }
     }
 
-    /// Content of a live entity (`kind`, `id`) through the guarded read route; `None` when it cannot be read.
+/// Content of a live entity (`kind`, `id`) through the guarded read route; `None` when it cannot be read.
     pub fn fetch_content(&self, kind: &str, id: &str) -> Option<Value> {
         let path = crate::baseline::entity_path(kind, id)?;
         let r = self.call("GET", path, self.registry_token(), None, None).ok()?;
@@ -165,7 +172,7 @@ impl Writer<'_> {
             return failed(job.label, None, &Problem { step: "input", http: None, code: "unsafe_id".into(), retryable: false });
         }
         let idem = format!("{}-{}-t{tries}", job.key, job.label);
-        let title = clip(&format!("[improvement-engine] evaluation {} {suite_id}", job.label), 120);
+        let title = clip(&format!("{} {SCRATCH_MARK} evaluation {} {suite_id} - not a deliverable, never approve or publish", crate::TITLE_PREFIX, job.label), 120);
         let r = match self.eval_call("create", "POST", "/v1/registry/proposals".into(), Some(&idem), Some(json!({"agent_id": job.agent_id, "origin": "manual", "title": title}))) {
             Ok(r) => r,
             Err(p) => return failed(job.label, None, &p),
@@ -173,10 +180,18 @@ impl Writer<'_> {
         if !(200..300).contains(&r.status) {
             return failed(job.label, None, &Problem::of("create", &r));
         }
-        let (Some(pid), Some(rev)) = (r.body["proposal_id"].as_str().filter(|p| guard::ok_seg(p)).map(str::to_string), r.body["rev"].as_u64()) else {
+        let (Some(pid), Some(_)) = (r.body["proposal_id"].as_str().filter(|p| guard::ok_seg(p)).map(str::to_string), r.body["rev"].as_u64()) else {
             return failed(job.label, None, &Problem { step: "create", http: Some(r.status), code: "malformed_answer".into(), retryable: false });
         };
-        let pid = pid.as_str();
+        let (mut run, retry) = self.prove_on_scratch(job, &suite, &suite_id, &suite_version, &r.body, pid.as_str());
+        // E8: the proof is done, leave nothing an approver could approve and publish. A close that fails never fails the proof.
+        run["scratch_closed"] = json!(self.close_scratch(pid.as_str()));
+        (run, retry)
+    }
+
+    /// The draft, validate, freeze and evaluate steps on the scratch proposal `pid` (already created).
+    fn prove_on_scratch(&self, job: &EvalJob, suite: &Value, suite_id: &str, suite_version: &str, created: &Value, pid: &str) -> Try {
+        let rev = created["rev"].as_u64().unwrap_or(0);
         let base = format!("/v1/registry/proposals/{pid}");
         // agent-core wants description, rationale and changelog on every change (a 422 otherwise, seen live on the new-agent closure).
         let mut draft: Vec<Value> = job.changes.iter().cloned().map(|mut c| {
@@ -188,10 +203,12 @@ impl Writer<'_> {
                     c["docs"][k] = json!(d);
                 }
             }
+            let d = c["docs"]["description"].as_str().unwrap_or("").to_string();
+            c["docs"]["description"] = json!(clip(&format!("{SCRATCH_KIND} {d}"), 4000));
             c
         }).collect();
-        draft.push(json!({"kind": "eval_suite", "content": suite, "docs": {
-            "description": clip(&format!("Synthetic regression eval_suite {suite_id} for {}", job.agent_id), 4000),
+        draft.push(json!({"kind": "eval_suite", "content": suite.clone(), "docs": {
+            "description": clip(&format!("{SCRATCH_KIND} synthetic regression eval_suite {suite_id} for {}; evaluation scratch, not a deliverable", job.agent_id), 4000),
             "rationale": "Regression suite derived from a detected finding; must fail on the base and pass with the candidate.",
             "changelog": "Adds the suite (new yardstick)."}}));
         let step = |name: &'static str, method: &str, path: String, body: Option<Value>| self.eval_call(name, method, path, None, body);
@@ -229,6 +246,33 @@ impl Writer<'_> {
         let detail = rep["detail"].as_str().map(|d| clip(d, 200));
         let run = json!({"label": job.label, "proposal_id": pid, "verdict": verdict, "gate_items": items, "per_case_native": native_from_report(rep, &case_ids), "detail": detail, "problem": null});
         (run, verdict == "failed_infra")
+    }
+
+    /// E8: close the engine's OWN evaluation scratch so no approver can approve and publish it. agent-core has no withdraw or delete and
+    /// `reject` is a human decision (approver + step-up), so the one verb the engine may use is `reopen` (a `constructor` operation:
+    /// `candidate | evaluated -> draft`, nothing is released). It is allowed here and nowhere else (`guard::scratch_close_allowed`) and only
+    /// after a read-back proves the proposal is manual-origin, carries the scratch title mark and still waits in `candidate` or
+    /// `evaluated`; a proposal that is already a draft needs no call, and an `approved` one is a human decision the engine never undoes.
+    /// `true` when the scratch is a draft afterwards.
+    fn close_scratch(&self, pid: &str) -> bool {
+        let path = format!("/v1/registry/proposals/{pid}");
+        let Ok(r) = self.call("GET", path.clone(), self.registry_token(), None, None) else { return false };
+        if !(200..300).contains(&r.status) {
+            return false;
+        }
+        let p = if r.body["proposal"].is_object() { &r.body["proposal"] } else { &r.body };
+        if p["origin"] != "manual" || !p["title"].as_str().is_some_and(|t| t.starts_with(crate::TITLE_PREFIX) && t.contains(SCRATCH_MARK)) {
+            return false; // not ours: never touch it
+        }
+        match p["state"].as_str() {
+            Some("draft") => true,
+            Some("candidate" | "evaluated") => {
+                // NO Idempotency-Key: agent-core replays a keyed `reopen` as a no-op, and a rerun of the same finding reuses the same
+                // scratch (the create is keyed), so a stable key would swallow the second close (seen live). The state read above is the guard.
+                self.call_scratch_close(pid).is_some_and(|s| (200..300).contains(&s))
+            }
+            _ => false,
+        }
     }
 
     /// One evaluation with bounded infrastructure retries. The returned record lists every retry (`infra_retries`).

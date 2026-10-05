@@ -14,7 +14,8 @@
 //! texts came from the live registry; the models are whatever the ports are (the live ports are the real gateway; there is no
 //! scripted fallback in this module); derived aggregates reach a hosted model only with the explicit opt-in. Records hold reason
 //! codes, ids and numbers only: never model free text, never a token.
-use crate::config::Secret;
+use crate::run::profile::Profile;
+use crate::run::registry_auth::RegistryAuth;
 use core_client::authorizer::Jws;
 use reasoning::catalog::Catalog;
 use reasoning::finding::{Finding, Source};
@@ -29,7 +30,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub type PortsFactory = Arc<dyn Fn() -> Result<Ports, String> + Send + Sync>;
-pub type Lookup = dyn Fn(&str) -> Option<String>;
+pub type Lookup<'a> = dyn Fn(&str) -> Option<String> + 'a;
 
 /// Where per-finding records live (the engine job store in `pulso run`; nothing in a one-shot).
 pub trait Persist {
@@ -84,6 +85,8 @@ pub struct ValueLoop {
     /// `PULSO_LOOP_MAX_EXPLORATORY` (default 2): how many `candidate_exploratory` findings (labelled, never corroborated) join the loop per
     /// run, after the corroborated ones. 0 = strict sensor only.
     pub max_exploratory: usize,
+    /// `PULSO_PROFILE` (R4): `standard` or `demo` (lowered SUPPORT floors, synthetic data only). Travels in the run summary.
+    pub profile: Profile,
     pub proof: Option<ProofConfig>,
     /// ANN1: tells the support platform about an `announced` proposal AFTER agent-core accepted it (best effort, never fails the delivery).
     /// `PULSO_ANNOUNCE_TO_PLATFORM` / `PULSO_PLATFORM_URL` / `PULSO_PLATFORM_SERVICE_TOKEN`; default OFF.
@@ -94,7 +97,7 @@ pub struct ValueLoop {
 }
 
 /// `scripts/regression` of the working directory, else of the checkout the binary was built from.
-fn default_script_dir() -> PathBuf {
+pub fn default_script_dir() -> PathBuf {
     let local = PathBuf::from("scripts/regression");
     if local.join("judge_story.py").exists() { local } else { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../scripts/regression") }
 }
@@ -111,7 +114,8 @@ impl ValueLoop {
         let source = get("PULSO_CELLS_SOURCE").ok_or("PULSO_CELLS_SOURCE (synthetic|bank|e0) is required with PULSO_CELLS_NDJSON")?;
         let source = Source::parse(&source).ok_or("PULSO_CELLS_SOURCE is not synthetic|bank|e0")?;
         let addr = get("PULSO_REGISTRY_ADDR").filter(|v| !v.is_empty()).ok_or("PULSO_REGISTRY_ADDR (host:port of the agent-core registry) is required with PULSO_CELLS_NDJSON")?;
-        let token = Secret::new(get("PULSO_REGISTRY_TOKEN").filter(|v| !v.is_empty()).ok_or("PULSO_REGISTRY_TOKEN (the builder principal) is required with PULSO_CELLS_NDJSON")?);
+        let profile = Profile::from_lookup(get, source)?;
+        let auth = RegistryAuth::from_lookup(get)?;
         let via = match get("PULSO_REGISTRY_VIA").as_deref().unwrap_or("api") {
             "api" => Via::RegistryApi,
             "run" => Via::BuilderRun,
@@ -122,7 +126,17 @@ impl ValueLoop {
             "shared" => Environment::SharedCore,
             _ => return Err("PULSO_REGISTRY_ENV is not local|shared".into()),
         };
-        let credential = if get("PULSO_REGISTRY_CREDENTIAL").as_deref() == Some("standin") { "operator-declared stand-in credential (not the engine builder principal)" } else { "engine builder principal" };
+        if auth.is_minted() && via == Via::BuilderRun {
+            return Err("PULSO_REGISTRY_AUTH=mint needs PULSO_REGISTRY_VIA=api: a builder-run needs its own run token (PULSO_RUN_TOKEN)".into());
+        }
+        let credential = if get("PULSO_REGISTRY_CREDENTIAL").as_deref() == Some("standin") {
+            if auth.is_minted() {
+                return Err("PULSO_REGISTRY_CREDENTIAL=standin cannot be combined with minted credentials".into());
+            }
+            "operator-declared stand-in credential (not the engine builder principal)"
+        } else {
+            auth.label()
+        };
         let receipts = get("PULSO_RECEIPTS")
             .map(PathBuf::from)
             .or_else(|| work.map(|w| w.join("registry-receipts.json")))
@@ -157,7 +171,7 @@ impl ValueLoop {
                 std::fs::create_dir_all(&w11).map_err(|e| format!("work dir for the proof: {e}"))?;
                 Some(ProofConfig {
                     scripts: Arc::new(PythonScripts { python, script_dir, work: w11, env: vec![] }),
-                    eval_transport: Arc::new(HttpTransport::new(&addr, Duration::from_secs(secs))),
+                    eval_transport: auth.wrap(Arc::new(HttpTransport::new(&addr, Duration::from_secs(secs)))),
                     opts: EvalOptions::default(),
                     proofs: work_dir.join("w11-proofs.json"),
                 })
@@ -172,13 +186,14 @@ impl ValueLoop {
             via,
             environment,
             credential,
-            registry_token: Jws::new(token.expose().to_string()),
+            registry_token: auth.config_token(),
             run_token: get("PULSO_RUN_TOKEN").filter(|v| !v.is_empty()).map(Jws::new),
-            transport: Arc::new(HttpTransport::new(&addr, Duration::from_secs(90))),
+            transport: auth.wrap(Arc::new(HttpTransport::new(&addr, Duration::from_secs(90)))),
             ports,
             model_label,
             max_findings: get("PULSO_LOOP_MAX_FINDINGS").and_then(|v| v.parse().ok()),
-            max_exploratory: get("PULSO_LOOP_MAX_EXPLORATORY").and_then(|v| v.parse().ok()).unwrap_or(2),
+            max_exploratory: get("PULSO_LOOP_MAX_EXPLORATORY").and_then(|v| v.parse().ok()).unwrap_or(profile.default_max_exploratory()),
+            profile,
             proof,
             announcer: registry_writer::announce::Announcer::from_lookup(get)?,
             caps: Caps { new_agent_admin: truthy(get("PULSO_NEW_AGENT_ADMIN")) },
@@ -201,7 +216,7 @@ impl ValueLoop {
     /// As `run`; `run_id` is the debug-api run id of this job (`value-loop-<job>`): the session and the trace key of every story.
     pub fn run_as(&self, persist: &dyn Persist, run_id: &str) -> Result<Value, String> {
         let ndjson = std::fs::read_to_string(&self.cells).map_err(|e| format!("cells package: {e}"))?;
-        let sensor = if self.max_exploratory > 0 { steps::cells::run_exploratory(&ndjson) } else { steps::cells::run(&ndjson) };
+        let sensor = steps::cells::run_with(&ndjson, &self.profile.sensor_config(self.max_exploratory));
         let report: Value = serde_json::from_str(&sensor.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         let (mut findings, skipped) = Finding::from_report_with(&report, self.source, self.max_exploratory)?;
         let total_corroborated = findings.iter().filter(|f| !f.is_exploratory()).count();
@@ -266,7 +281,7 @@ impl ValueLoop {
             }
             // The record of the finding is the proven attempt; else the first attempt that produced a proposal (the most informative
             // non-proven one); else the first. `attempts` lists every one.
-            let pick = recs.iter().position(|r| r["outcome"] == "announced").or_else(|| recs.iter().position(|r| r["status"] == "proposed")).unwrap_or(0);
+            let pick = recs.iter().position(|r| r["outcome"] == "announced").or_else(|| recs.iter().position(|r| r["status"] == "proposed" || r["status"] == "needs_owner_ack")).unwrap_or(0);
             let mut rec = recs.swap_remove(pick);
             rec["candidates"] = row.as_ref().map_or(Value::Null, |r| json!(r.candidate_list(self.caps, &tried)));
             rec["attempts"] = json!(attempts);
@@ -300,8 +315,8 @@ impl ValueLoop {
         Ok(json!({
             "contract": "value-loop/b3-0", "sensor": "claude-standin (steps::cells, real code, labelled stand-in)", "data_source": self.source.as_str(),
             "baseline": {"label": refreshed.catalog.label, "live": refreshed.live.len(), "fixture": refreshed.fixture.len()},
-            "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
-            "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "human_owned": n("human_owned"), "blocked": n("blocked"),
+            "support_profile": self.profile.as_str(), "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
+            "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "human_owned": n("human_owned"), "policy_hypothesis": n("policy_hypothesis"), "needs_owner_ack": n("needs_owner_ack"), "blocked": n("blocked"),
                         "delivered": delivered, "denied": denied, "announced": announced, "not_announced": not_announced,
                         // unlinked findings are descriptive with an explicit reason, never a failure; only `blocked` counts against the roles
                         "unlinked_by_reason": by_reason, "failed": n("blocked"),
@@ -329,7 +344,7 @@ impl ValueLoop {
             if let Some(c) = &r.compiled_raw {
                 rec["target_ref"] = json!(c.target_ref);
                 rec["proposal_kind"] = json!(c.kind);
-                if r.status == "proposed" {
+                if r.status == "proposed" || r.status == "needs_owner_ack" {
                     engine::trace::set_stage("deliver", 1);
                     match (&self.proof, ew, proofs) {
                         (Some(pc), Some(ew), Some(ps)) => {
@@ -361,10 +376,12 @@ impl ValueLoop {
                                 }
                             }
                         }
-                        _ => {
+                        // ART2: a draft that waits for its owner is never delivered without a proof
+                        _ if r.status == "proposed" => {
                             let o = w.deliver(&Submission::new(f, c));
                             rec["delivery"] = o.to_json();
                         }
+                        _ => {}
                     }
                 }
             }

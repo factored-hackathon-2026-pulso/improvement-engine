@@ -269,6 +269,31 @@ pub fn reason_candidate(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Op
             r.stage = "mapping".into();
             r.detail = h.note_es.chars().take(300).collect();
             r.human_owned = Some(json!({"id": h.id, "owner": h.owner, "evidence": h.evidence, "note": {"es": h.note_es, "pt": h.note_pt}, "builder_proposal": false}));
+            if h.policy.is_object() {
+                // ART2: a policy finding is a HYPOTHESIS for a person (boundary evidence, no draft chosen by a model). When the table carries a
+                // structured `tighten_to`, a tighten-only draft is compiled DETERMINISTICALLY (no model call) and waits for the owner.
+                let pid = h.policy["policy"].as_str().unwrap_or("");
+                let pol = catalog.policy(pid).cloned().unwrap_or_else(|| json!({"id": pid, "owner": h.owner}));
+                let hyp = crate::art2::policy_hypothesis(&pol, h.policy["registry_threshold"].as_f64().unwrap_or(0.0), h.policy["document_threshold"].as_f64().unwrap_or(0.0));
+                r.status = "policy_hypothesis".into();
+                r.reason = "policy_hypothesis".into();
+                r.stage = "mapping".into();
+                if let Some(ho) = r.human_owned.as_mut() {
+                    ho["policy_hypothesis"] = hyp;
+                }
+                if h.policy["tighten_to"].is_number() {
+                    match crate::patch::compile_policy_tighten(catalog, &h.policy) {
+                        Ok(c) => {
+                            r.status = "needs_owner_ack".into();
+                            r.reason = "needs_owner_ack".into();
+                            r.stage = "compile".into();
+                            r.compiled = Some(c.to_json());
+                            r.compiled_raw = Some(c);
+                        }
+                        Err(d) => r.detail = format!("tighten draft refused: {}: {}", d.code, d.why).chars().take(300).collect(),
+                    }
+                }
+            }
             return finish(r);
         }
         Mapped::Unmapped => {
@@ -359,6 +384,24 @@ pub fn reason_candidate(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Op
         Asked::Stopped(e) => finish(model_stop(r, "builder", e)),
         Asked::Rejected((st, code, why)) => finish(blocked(r, &code, st, why)),
         Asked::Done(c) => {
+            // ART3: an independent Verifier call reviews a compiled tool link (read-only, valid edge). The compiler already enforced both; the
+            // model can only refute, never widen.
+            if c.kind == "link_tool"
+                && let Some(rq) = roles::link_review_request(&c, dc)
+            {
+                let (rg, n) = ask(&rv, &rq, "link_review", 0, &|a| roles::parse_link_review(a).map_err(|e| ("link_review", "model_invalid".to_string(), e)));
+                attempts.borrow_mut()["link_review"] = json!(n);
+                match rg {
+                    Asked::Done((ok, why)) => {
+                        r.verification = Some(json!({"status": r.verification.as_ref().map_or(Value::Null, |v| v["status"].clone()), "claim_verification": r.verification.clone(), "link_review": {"supported": ok, "rationale": why}}));
+                        if !ok {
+                            return finish(blocked(r, "link_review_refuted", "link_review", why));
+                        }
+                    }
+                    Asked::Stopped(e) => return finish(model_stop(r, "link_review", e)),
+                    Asked::Rejected((st, code, why)) => return finish(blocked(r, &code, st, why)),
+                }
+            }
             r.rubric = (c.kind != "no_change").then(|| rubric::score(f, &row, &opp, &c, catalog));
             r.status = if c.kind == "no_change" { "no_change" } else { "proposed" }.into();
             r.reason = if c.kind == "no_change" { "builder_no_safe_change" } else { "compiled" }.into();

@@ -291,7 +291,11 @@ fn diff_text(l: Lang, proposal: &Value) -> String {
     if entries.len() > 4 {
         lines.push(l.t(&format!("(+{} más)", entries.len() - 4), &format!("(+{} mais)", entries.len() - 4)).to_string());
     }
-    let head = if proposal["kind"].as_str() == Some("new_agent") {
+    let head = if proposal["kind"].as_str() == Some("link_tool") {
+        l.t(&format!("Enlace a una herramienta existente, solo lectura (nodo pass-through y tools_allowed del agente) en {target}: "), &format!("Vínculo a uma ferramenta existente, somente leitura (nó pass-through e tools_allowed do agente) em {target}: ")).to_string()
+    } else if proposal["kind"].as_str() == Some("tighten_policy") {
+        l.t(&format!("Umbral de política MAS ESTRICTO (solo endurece) en {target}: "), &format!("Limiar de política MAIS ESTRITO (so endurece) em {target}: ")).to_string()
+    } else if proposal["kind"].as_str() == Some("new_agent") {
         l.t(&format!("Nuevo especialista (copia de cierre del donante) en {target}: "), &format!("Novo especialista (cópia de fechamento do doador) em {target}: ")).to_string()
     } else {
         l.t(&format!("Parche anclado sobre {target} ({} caracteres editados de {}): ", proposal["edit_chars"], proposal["edit_budget"]),
@@ -378,6 +382,11 @@ fn coverage_text(l: Lang, verdict: Option<&Value>) -> String {
             "flow_outcome" => l.t("flujo verificado y resuelto", "fluxo verificado e resolvido"),
             "response_from_model_path" => l.t("respuesta generada por el modelo (sin plantilla de respaldo)", "resposta gerada pelo modelo (sem template de reserva)"),
             "new_agent_intake_and_handoff" => l.t("el agente nuevo toma el tema, avisa y deriva a una persona sin herramientas", "o agente novo assume o tema, avisa e encaminha a uma pessoa sem ferramentas"),
+            "link_tool_failure_exits" => l.t("la herramienta enlazada está en el camino: si responde error, timeout o denegado el flujo toma la salida tool_failure existente", "a ferramenta vinculada está no caminho: se responder erro, timeout ou negado o fluxo toma a saída tool_failure existente"),
+            "tool_identity" => l.t("qué herramienta se llamó (el evento nativo no trae su id)", "qual ferramenta foi chamada (o evento nativo não traz seu id)"),
+            "answer_uses_tool_data" => l.t("que la respuesta use el dato de la herramienta (el enlace solo lo deja disponible al flujo)", "que a resposta use o dado da ferramenta (o vínculo so o deixa disponível ao fluxo)"),
+            "policy_boundary_escalation" => l.t("escalamiento en los límites del umbral viejo y del nuevo (casos en la ventana fallan en la base y pasan con el candidato)", "escalonamento nos limites do limiar antigo e do novo (casos na janela falham na base e passam com o candidato)"),
+            "owner_decision" => l.t("la decisión del responsable de la política", "a decisão do responsável pela política"),
             "platform_guardrails" => l.t("guardarraíles de plataforma", "guardrails de plataforma"),
             "guards" => l.t("casos guarda", "casos guarda"),
             "state_reflected" => l.t("el texto renderizado refleja el estado", "o texto renderizado reflete o estado"),
@@ -467,6 +476,14 @@ fn unchanged(l: Lang, proposal: &Value) -> String {
             "Cláusulas protegidas del texto base intactas (el menú de anclas las excluye y el compilador verifica los marcadores); ningún presupuesto, modelo ni permiso cambia; solo se tocan los textos nombrados.",
             "Cláusulas protegidas do texto base intactas (o menú de âncoras as exclui e o compilador verifica os marcadores); nenhum orçamento, modelo ou permissão muda; so os textos nomeados sao tocados.",
         ),
+        Some("link_tool") => l.t(
+            "Enlace a herramienta existente, solo lectura: no se crea ninguna herramienta ni se enlaza una de escritura; la copia del ToolDef es idéntica a la del registro; las ramas existentes del flujo no cambian (nodo pass-through); la autorización real (clasificador de campos, permisos de campo, regla de principal del tool-service) está fuera del registro y se verificó contra el listado del tool-service. La redacción de la respuesta no cambia.",
+            "Vínculo a ferramenta existente, somente leitura: nenhuma ferramenta é criada nem vinculada uma de escrita; a cópia do ToolDef é idêntica à do registro; os ramos existentes do fluxo não mudam (nó pass-through); a autorização real (classificador de campos, permissões de campo, regra de principal do tool-service) está fora do registro e foi verificada contra a listagem do tool-service. A redação da resposta não muda.",
+        ),
+        Some("tighten_policy") => l.t(
+            "Solo endurece: todo valor que la política anterior escalaba se sigue escalando (comparador monótono). Requiere el reconocimiento explícito del responsable (owner_ack) y NUNCA se anuncia automáticamente; el valor lo fija el responsable, no el motor. Ningún flujo, herramienta ni permiso cambia.",
+            "So endurece: todo valor que a política anterior escalava continua escalado (comparador monótono). Exige o reconhecimento explícito do responsável (owner_ack) e NUNCA é anunciada automaticamente; o valor é definido pelo responsável, não pelo motor. Nenhum fluxo, ferramenta ou permissão muda.",
+        ),
         Some("new_agent") => l.t(
             "Recepción no cambia (solo ruta a disputas y consultas): llega al agente nuevo solo tras la aprobación y publicación del humano de plataforma (con step-up) y el promote humano a prod (seguimiento humano). Sin herramientas ni permisos nuevos.",
             "A recepção não muda (so roteia a disputas e consultas): chega ao agente novo somente apos a aprovação e publicação do humano da plataforma (com step-up) e o promote humano para prod (acompanhamento humano). Sem ferramentas nem permissoes novas.",
@@ -532,9 +549,13 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
     let judge = judge_family(verdict, labels);
 
     let vd_es = verdict_text(Lang::Es, verdict);
-    let announce = vd_es.announce && finding_ok && has_change;
+    // ART2: a draft of a human-owned artifact waits for its owner and is never announced automatically
+    let owner_ack = proposal["human_items"].as_array().is_some_and(|h| h.iter().any(|x| x.as_str().is_some_and(|t| t.starts_with("owner_ack required"))));
+    let announce = vd_es.announce && finding_ok && has_change && !owner_ack;
     let reason_key = if announce {
         "announce"
+    } else if owner_ack && vd_es.announce {
+        "needs_owner_ack"
     } else if verdict.is_none() {
         "not_evaluated"
     } else if !vd_es.announce {
