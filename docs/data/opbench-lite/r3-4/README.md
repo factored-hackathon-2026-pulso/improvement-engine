@@ -49,6 +49,11 @@ creates only:
 - `results.json`: stable, aggregate-only tables; suppression status and
   provenance labels are explicit. It contains no source digests or row data.
 
+The R3-4 schema-v2 envelope includes the preregistered category coverage table:
+cases missing either complaint category field are excluded from category
+cuts and contribute only to one global `bank_category_coverage` count, which is
+suppressed below `k=10`. See the immutable [`PREREGISTRATION_AMENDMENT_1.md`](PREREGISTRATION_AMENDMENT_1.md).
+
 The manifest records that no temporal cutoff is applied (the full registered
 snapshot is used), deterministic partition/aggregate ordering, and fingerprints
 of the observed allowlisted schema projection. It is written before aggregate calculation and finalized only after
