@@ -1,0 +1,205 @@
+{
+  "format": "pulso.blind-label-manifest.v1",
+  "items": {
+    "case_13dlfrfq": {
+      "source_id": "r3-01-good",
+      "pair_id": "pair-01",
+      "variant": "good"
+    },
+    "case_yjhrh7vf": {
+      "source_id": "r3-01-bad",
+      "pair_id": "pair-01",
+      "variant": "bad"
+    },
+    "case_rbcc7ivq": {
+      "source_id": "r3-02-good",
+      "pair_id": "pair-02",
+      "variant": "good"
+    },
+    "case_nmcxe04o": {
+      "source_id": "r3-02-bad",
+      "pair_id": "pair-02",
+      "variant": "bad"
+    },
+    "case_tcj753xp": {
+      "source_id": "r3-03-good",
+      "pair_id": "pair-03",
+      "variant": "good"
+    },
+    "case_2p849bpz": {
+      "source_id": "r3-03-bad",
+      "pair_id": "pair-03",
+      "variant": "bad"
+    },
+    "case_57icq8vv": {
+      "source_id": "r3-04-good",
+      "pair_id": "pair-04",
+      "variant": "good"
+    },
+    "case_ua2fpx5f": {
+      "source_id": "r3-04-bad",
+      "pair_id": "pair-04",
+      "variant": "bad"
+    },
+    "case_xi4w83yz": {
+      "source_id": "r3-05-good",
+      "pair_id": "pair-05",
+      "variant": "good"
+    },
+    "case_s1esgbgt": {
+      "source_id": "r3-05-bad",
+      "pair_id": "pair-05",
+      "variant": "bad"
+    },
+    "case_z6soqdv0": {
+      "source_id": "r3-06-good",
+      "pair_id": "pair-06",
+      "variant": "good"
+    },
+    "case_cu36purn": {
+      "source_id": "r3-06-bad",
+      "pair_id": "pair-06",
+      "variant": "bad"
+    },
+    "case_j4fpx15d": {
+      "source_id": "r3-07-good",
+      "pair_id": "pair-07",
+      "variant": "good"
+    },
+    "case_rdibnlqg": {
+      "source_id": "r3-07-bad",
+      "pair_id": "pair-07",
+      "variant": "bad"
+    },
+    "case_nb8eyi0b": {
+      "source_id": "r3-08-good",
+      "pair_id": "pair-08",
+      "variant": "good"
+    },
+    "case_3crmbvrv": {
+      "source_id": "r3-08-bad",
+      "pair_id": "pair-08",
+      "variant": "bad"
+    },
+    "case_bb0g0yb0": {
+      "source_id": "r3-09-good",
+      "pair_id": "pair-09",
+      "variant": "good"
+    },
+    "case_7lo4m66c": {
+      "source_id": "r3-09-bad",
+      "pair_id": "pair-09",
+      "variant": "bad"
+    },
+    "case_hjvjz6rz": {
+      "source_id": "r3-10-good",
+      "pair_id": "pair-10",
+      "variant": "good"
+    },
+    "case_bmlrk7li": {
+      "source_id": "r3-10-bad",
+      "pair_id": "pair-10",
+      "variant": "bad"
+    },
+    "case_lg2zd19e": {
+      "source_id": "r3-11-good",
+      "pair_id": "pair-11",
+      "variant": "good"
+    },
+    "case_wf5jld22": {
+      "source_id": "r3-11-bad",
+      "pair_id": "pair-11",
+      "variant": "bad"
+    },
+    "case_7g7bt7eb": {
+      "source_id": "r3-12-good",
+      "pair_id": "pair-12",
+      "variant": "good"
+    },
+    "case_7ni05mqc": {
+      "source_id": "r3-12-bad",
+      "pair_id": "pair-12",
+      "variant": "bad"
+    },
+    "case_48uecqx9": {
+      "source_id": "r3-13-good",
+      "pair_id": "pair-13",
+      "variant": "good"
+    },
+    "case_o2jcs32n": {
+      "source_id": "r3-13-bad",
+      "pair_id": "pair-13",
+      "variant": "bad"
+    },
+    "case_qna2nhhh": {
+      "source_id": "r3-14-good",
+      "pair_id": "pair-14",
+      "variant": "good"
+    },
+    "case_vtlf91lv": {
+      "source_id": "r3-14-bad",
+      "pair_id": "pair-14",
+      "variant": "bad"
+    },
+    "case_xzo1wmc2": {
+      "source_id": "r3-15-good",
+      "pair_id": "pair-15",
+      "variant": "good"
+    },
+    "case_kvn886yl": {
+      "source_id": "r3-15-bad",
+      "pair_id": "pair-15",
+      "variant": "bad"
+    },
+    "case_lyngg9uh": {
+      "source_id": "r3-16-good",
+      "pair_id": "pair-16",
+      "variant": "good"
+    },
+    "case_e96ftnw7": {
+      "source_id": "r3-16-bad",
+      "pair_id": "pair-16",
+      "variant": "bad"
+    },
+    "case_455tb82j": {
+      "source_id": "r3-17-good",
+      "pair_id": "pair-17",
+      "variant": "good"
+    },
+    "case_8cq3tkf5": {
+      "source_id": "r3-17-bad",
+      "pair_id": "pair-17",
+      "variant": "bad"
+    },
+    "case_8uy86pny": {
+      "source_id": "r3-18-good",
+      "pair_id": "pair-18",
+      "variant": "good"
+    },
+    "case_ait2sjl8": {
+      "source_id": "r3-18-bad",
+      "pair_id": "pair-18",
+      "variant": "bad"
+    },
+    "case_34cwykc0": {
+      "source_id": "r3-19-good",
+      "pair_id": "pair-19",
+      "variant": "good"
+    },
+    "case_6iqpn5wu": {
+      "source_id": "r3-19-bad",
+      "pair_id": "pair-19",
+      "variant": "bad"
+    },
+    "case_yd0wqljr": {
+      "source_id": "r3-20-good",
+      "pair_id": "pair-20",
+      "variant": "good"
+    },
+    "case_3zh2hmj9": {
+      "source_id": "r3-20-bad",
+      "pair_id": "pair-20",
+      "variant": "bad"
+    }
+  }
+}
