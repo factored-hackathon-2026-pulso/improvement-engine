@@ -7,7 +7,7 @@
     3. the support-platform API (`uvicorn`, own SQLite recreated, seeded) with CC_AGENT_CORE_URL, CC_AGENT_KEYS_FILE and CC_INTERNAL_SERVICE_TOKEN,
     4. a check that the engine binary resolves. The engine itself (`pulso run`, with the builder identity PULSO_REGISTRY_TOKEN and the
        platform URL/token) lives only as long as one loop job: run_story.ps1 starts and stops it.
-  up.ps1 [-MinFreeMb 1500] [-WaitRamMin 0] [-Force] [-ReuseStack] [-PlatformDir D] [-AgentCoreDir D] [-GatewayDir D] [-PulsoExe F]
+  up.ps1 [-MinFreeMb 1500] [-WaitRamMin 0] [-Force] [-ReuseStack] [-Spa] [-PlatformDir D] [-AgentCoreDir D] [-GatewayDir D] [-PulsoExe F]
 .DESCRIPTION
   Memory gate: starts only when free RAM > -MinFreeMb (default 1500). -WaitRamMin N waits up to N minutes for it. -Force skips the gate.
   Credentials: agent-core.env and llm-gateway.env are read by scripts/demo-loop/run.ps1 and go only into child process environments. The
@@ -16,7 +16,7 @@
 #>
 [CmdletBinding()]
 param(
-    [int]$MinFreeMb = 1500, [int]$WaitRamMin = 0, [switch]$Force, [switch]$ReuseStack,
+    [int]$MinFreeMb = 1500, [int]$WaitRamMin = 0, [switch]$Force, [switch]$ReuseStack, [switch]$Spa,
     [string]$PlatformDir = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$PulsoExe = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -115,6 +115,32 @@ if (-not $ok) {
     Fail ("the platform did not become healthy. Log tail:`n" + (Protect-Text $tail $script:Needles))
 }
 Say ('    /api/v1/meta answers: ' + (Test-Http "http://127.0.0.1:$($settings.PlatformPort)/api/v1/meta") + ' (builder availability is checked by story_verify through a supervisor session)')
+
+
+# ---- 3b. SPA (only with -Spa): lockfile install, build against this API, `vite preview` on 5174 (CORS origin is in CC_CORS_ORIGINS) -----------------
+if ($Spa) {
+    $fe = Join-Path $PlatformDir 'frontend'
+    $npx = (Get-Command npx.cmd -ErrorAction Stop).Source
+    Say "[3b] SPA build + preview :5174 (pnpm@9 via npx, frozen lockfile; node_modules stay in the platform checkout, never committed)"
+    [void](Stop-PidTree -PidFile $paths.SpaPid)
+    if (-not (Test-Path -LiteralPath (Join-Path $fe 'node_modules'))) {
+        $r = Invoke-Scrubbed -File $npx -Arguments @('--yes', 'pnpm@9', 'install', '--frozen-lockfile') -Needles $script:Needles -WorkDir $fe -Quiet
+        if ($r.ExitCode -ne 0) { Fail ("pnpm install failed: " + (($r.Output | Select-Object -Last 4) -join ' ')) }
+    }
+    $r = Invoke-Scrubbed -File $npx -Arguments @('--yes', 'pnpm@9', 'build') -Env @{ VITE_API_URL = "http://127.0.0.1:$($settings.PlatformPort)" } -Needles $script:Needles -WorkDir $fe -Quiet
+    if ($r.ExitCode -ne 0) { Fail ("SPA build failed: " + (($r.Output | Select-Object -Last 6) -join ' ')) }
+    $sp = New-Object Diagnostics.ProcessStartInfo
+    $sp.FileName = $env:ComSpec
+    $sp.Arguments = '/c ""' + $npx + '" --yes pnpm@9 exec vite preview --host 127.0.0.1 --port 5174 --strictPort >> "' + $paths.SpaLog + '" 2>&1"'
+    $sp.UseShellExecute = $false; $sp.CreateNoWindow = $true; $sp.WorkingDirectory = $fe
+    $sp.RedirectStandardInput = $true; $sp.RedirectStandardOutput = $true; $sp.RedirectStandardError = $true
+    $spProc = [Diagnostics.Process]::Start($sp)
+    [IO.File]::WriteAllText($paths.SpaPid, [string]$spProc.Id)
+    $spaOk = $false
+    for ($i = 0; $i -lt 40 -and -not $spaOk; $i++) { Start-Sleep -Seconds 1; $spaOk = Test-Http 'http://127.0.0.1:5174' }
+    if (-not $spaOk) { Fail 'the SPA preview did not answer on :5174 (see spa.log)' }
+    Say '    SPA: http://127.0.0.1:5174'
+}
 
 # ---- 4. the engine ----------------------------------------------------------------------------------------------------------------------
 Say "[4] engine binary: $PulsoExe (started per loop job by run_story.ps1 on :$($settings.EnginePort); PULSO_REGISTRY_TOKEN = builder principal pulso-engine, kid pulso-engine-dev-1)"

@@ -168,6 +168,43 @@ def cmd_cases(a) -> int:
     return 0 if ids else 1
 
 
+def human_progress(state: str, events: list, proposal_id: str) -> dict:
+    """Pure: what the registry says about a proposal a person is deciding. `events` are registry export events.
+    A `published` event carries the proposal id; the later `promoted` event carries only the RELEASE id (proposal_id is null), so a
+    promotion belongs to the proposal when its release id is the one the proposal published."""
+    mine = [e for e in events or [] if e.get("proposal_id") == proposal_id]
+    releases = {e.get("release_id") for e in mine if e.get("type") in ("published", "release.published") and e.get("release_id")}
+    promoted = [e for e in events or [] if e.get("type") in ("promoted", "release.promoted") and e.get("release_id") in releases and e.get("alias") in (None, "prod")]
+    types = sorted({e.get("type", "?") for e in mine} | {"promoted@" + str(e.get("alias")) for e in promoted})
+    return {"state": state, "events": types, "done": bool(promoted), "release_id": next(iter(releases), None)}
+
+
+def cmd_wait_human(a) -> int:
+    """READ-ONLY wait: a person approves, publishes and promotes in the platform; this only watches agent-core (builder token to read the
+    proposal, exporter token to read registry events) and prints one line per change. It never decides anything."""
+    import time
+    tokens = json.loads(Path(a.tokens).read_text(encoding="utf-8"))
+    _secrets.extend(str(v) for v in tokens.values())
+    deadline = time.time() + a.timeout_min * 60
+    last = None
+    t0 = time.time()
+    while time.time() < deadline:
+        st, body = call("GET", f"{a.core}/v1/registry/proposals/{a.proposal_id}", tokens.get("builder"))
+        state = ((body or {}).get("proposal") or {}).get("state") or f"HTTP {st}"
+        st2, page = call("GET", f"{a.core}/v1/export/registry-events?after=0&limit=500", tokens.get("exporter"))
+        prog = human_progress(state, (page or {}).get("items") if st2 == 200 else [], a.proposal_id)
+        key = (prog["state"], tuple(prog["events"]))
+        if key != last:
+            say(f"wait-for-human [{int(time.time() - t0)} s] proposal state={prog['state']} registry events={','.join(prog['events']) or '-'}")
+            last = key
+        if prog["done"]:
+            say("wait-for-human: published and promoted to prod")
+            return 0
+        time.sleep(a.interval)
+    say(f"wait-for-human: timeout after {a.timeout_min} min")
+    return 1
+
+
 def cmd_verify(a) -> int:
     tokens = json.loads(Path(a.tokens).read_text(encoding="utf-8"))
     _secrets.extend(str(v) for v in tokens.values())
@@ -222,6 +259,12 @@ def main(argv=None) -> int:
     c.add_argument("--platform", required=True)
     c.add_argument("--out", required=True)
     c.add_argument("--secrets", help="rig secrets.json (service token for the evidence route)")
+    w = sub.add_parser("wait-human")
+    w.add_argument("--core", required=True)
+    w.add_argument("--tokens", required=True)
+    w.add_argument("--proposal-id", required=True)
+    w.add_argument("--timeout-min", type=int, default=60)
+    w.add_argument("--interval", type=float, default=10.0)
     v = sub.add_parser("verify")
     v.add_argument("--platform", required=True)
     v.add_argument("--core", required=True)
@@ -230,7 +273,7 @@ def main(argv=None) -> int:
     v.add_argument("--announce", required=True)
     v.add_argument("--out", required=True)
     a = ap.parse_args(argv)
-    return cmd_cases(a) if a.cmd == "cases" else cmd_verify(a)
+    return {"cases": cmd_cases, "wait-human": cmd_wait_human, "verify": cmd_verify}[a.cmd](a)
 
 
 if __name__ == "__main__":
