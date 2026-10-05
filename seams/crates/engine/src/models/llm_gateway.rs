@@ -5,8 +5,8 @@
 //!
 //! Disabled unless `PULSO_LLM_GATEWAY=enabled` (exact value). Env: `PULSO_LLM_GATEWAY_ADDR` (`host:port`),
 //! `PULSO_LLM_GATEWAY_KEY` (bearer; never logged, recorded or part of any Debug output), optional `PULSO_LLM_GATEWAY_MODEL`
-//! (default `deepseek/deepseek-v4.1-flash`), `PULSO_LLM_GATEWAY_ALIAS` (default `openrouter`), `PULSO_LLM_GATEWAY_MAX_TOKENS`
-//! (default 4000), `PULSO_LLM_GATEWAY_TIMEOUT_S` (default 60), `PULSO_LLM_GATEWAY_PRICE_IN` / `_OUT` (USD per million tokens as
+//! (default `xiaomi/mimo-v2.6-flash`), `PULSO_LLM_GATEWAY_ALIAS` (default `openrouter`), `PULSO_LLM_GATEWAY_MAX_TOKENS`
+//! (default 4000; the model is per PORT: each role has its own instance, hence its own `profile.model` and price in every request), `PULSO_LLM_GATEWAY_TIMEOUT_S` (default 60), `PULSO_LLM_GATEWAY_PRICE_IN` / `_OUT` (USD per million tokens as
 //! decimal strings; defaults are an estimate, the gateway only echoes the cost). The request passes `guard` first (E0/original
 //! data refused by class, TPS scan, size cap). `inputs` is the treated agent input dict; the payload's `output_schema`, when
 //! present, travels as the gateway response `schema` (prompted mode, validated by the gateway). A refusal, an outage or an
@@ -17,7 +17,16 @@ use core_client::http::{HttpError, request};
 use serde_json::{Value, json};
 use std::time::Duration;
 
-pub const DEFAULT_MODEL: &str = "deepseek/deepseek-v4.1-flash";
+/// USD per million tokens (in, out) from the OpenRouter list, by model id; any other model gets the generation-tier estimate.
+pub fn default_price(model: &str) -> (&'static str, &'static str) {
+    match model {
+        "xiaomi/mimo-v2.6-pro" => ("0.435", "0.87"),
+        "z-ai/glm-5.3-flash" => ("0.15", "0.5"),
+        _ => ("0.14", "0.28"),
+    }
+}
+
+pub const DEFAULT_MODEL: &str = "xiaomi/mimo-v2.6-flash";
 
 #[derive(Clone)]
 struct Config {
@@ -58,16 +67,18 @@ impl LlmGateway {
             let v = get(k).unwrap_or_else(|| d.to_string());
             if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit() || b == b'.') { Err(format!("{k} is not a decimal string")) } else { Ok(v) }
         };
+        let model = get("PULSO_LLM_GATEWAY_MODEL").filter(|m| !m.is_empty()).unwrap_or_else(|| DEFAULT_MODEL.into());
+        let (pin, pout) = default_price(&model);
         Ok(LlmGateway {
             config: Some(Config {
                 addr,
                 key: need("PULSO_LLM_GATEWAY_KEY")?,
-                model: get("PULSO_LLM_GATEWAY_MODEL").filter(|m| !m.is_empty()).unwrap_or_else(|| DEFAULT_MODEL.into()),
+                model,
                 alias: get("PULSO_LLM_GATEWAY_ALIAS").filter(|m| !m.is_empty()).unwrap_or_else(|| "openrouter".into()),
                 max_tokens: num("PULSO_LLM_GATEWAY_MAX_TOKENS", 4000)?,
                 timeout_s: num("PULSO_LLM_GATEWAY_TIMEOUT_S", 60)?,
-                price_in: dec("PULSO_LLM_GATEWAY_PRICE_IN", "0.15")?,
-                price_out: dec("PULSO_LLM_GATEWAY_PRICE_OUT", "2.4")?,
+                price_in: dec("PULSO_LLM_GATEWAY_PRICE_IN", pin)?,
+                price_out: dec("PULSO_LLM_GATEWAY_PRICE_OUT", pout)?,
             }),
         })
     }

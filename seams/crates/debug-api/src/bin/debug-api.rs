@@ -57,7 +57,9 @@ fn main() {
         p.as_ref().map(|f| std::fs::read_to_string(f).map_err(|e| e.to_string()).and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string())).unwrap_or_else(|e| fail(&format!("{f}: {e}"))))
     };
     let automation = if auto[..3].iter().any(Option::is_some) {
-        Some(Arc::new(debug_api::automation::Automation::from_json(load(&auto[1]).as_ref(), load(&auto[0]).as_ref(), load(&auto[2]).as_ref()).unwrap_or_else(|e| fail(&e))))
+        // Triggers are admitted in process here (keyed, idempotent); `pulso` injects its job repository instead.
+        let a = debug_api::automation::Automation::from_json(load(&auto[1]).as_ref(), load(&auto[0]).as_ref(), load(&auto[2]).as_ref()).unwrap_or_else(|e| fail(&e));
+        Some(Arc::new(a.with_admitter(Arc::new(debug_api::automation::MemoryAdmitter::default()))))
     } else {
         None
     };

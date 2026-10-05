@@ -58,7 +58,7 @@ fn every_scripted_call_is_labelled_scripted_and_listed_as_a_double() {
     }
     let parts: Vec<&str> = r.doubles.iter().map(|d| d["part"].as_str().unwrap()).collect();
     assert_eq!(parts, ["model.scout", "model.verifier", "model.builder"]);
-    assert_eq!(r.independence["level"], "other_model", "different model ids -> the verifier is a different model");
+    assert_eq!(r.independence["level"], "other_family", "different vendors -> other family");
     assert_eq!(r.independence["verifier_separate_port"], true);
 }
 
@@ -237,4 +237,28 @@ fn the_run_report_counts_outcomes_and_lists_every_double() {
     // aggregates only: nothing in the report looks like a row, an id of a customer or an email
     let s = rep.to_string();
     assert!(!reasoning::email_like(&s) && !s.contains("customer_id"));
+}
+
+#[test]
+fn independence_level_names_the_vendor_relation() {
+    use reasoning::pipeline::independence_level as l;
+    assert_eq!(l("xiaomi/mimo-v2.6-flash", "xiaomi/mimo-v2.6-pro"), "same_family_other_tier");
+    assert_eq!(l("xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash"), "other_family");
+    assert_eq!(l("xiaomi/mimo-v2.6-flash", "xiaomi/mimo-v2.6-flash"), "separate_prompt_and_context_only");
+}
+
+#[test]
+fn a_cell_below_its_reference_is_not_an_opportunity_and_no_model_is_called() {
+    let mut f = tecnico_finding();
+    f.direction = "down".into();
+    let calls = Rc::new(Cell::new(0u32));
+    let c2 = calls.clone();
+    let p = ports(
+        FnPort::scripted("s", count_calls(c2.clone(), scout_ok(&f, "new_agent:consultas", "uncovered_topic"))),
+        FnPort::scripted("v", count_calls(c2.clone(), verifier_ok("supported"))),
+        FnPort::scripted("b", count_calls(c2, |_| Err(ModelError::Invalid("must not be called".into())))),
+    );
+    let r = reason(&cat(), &f, &p, &opts());
+    assert_eq!((r.status.as_str(), r.reason.as_str(), r.stage.as_str()), ("no_change", "better_than_reference", "direction"));
+    assert_eq!(calls.get(), 0);
 }

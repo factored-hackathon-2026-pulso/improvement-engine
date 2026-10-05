@@ -19,4 +19,4 @@ locales:
     read. Each change has
     kind, content and docs with description, rationale and changelog. If the evidence is not enough, return an empty
     list of changes.
-model_profile: pulso-deepseek@1
+model_profile: pulso-mimo-flash@1

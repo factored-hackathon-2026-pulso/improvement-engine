@@ -5,7 +5,9 @@ use crate::config::RunConfig;
 use crate::health::Health;
 use crate::run::supervisor::{StopToken, Task};
 use debug_api::server::{Front, serve_with};
+use debug_api::automation::{Automation, TriggerAdmitter};
 use debug_api::{App, Config, Resp, Store};
+use pg::repo::JobRepository;
 use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -18,8 +20,27 @@ pub struct HttpTask {
     base: String,
 }
 
+/// The automation trigger endpoint admits into the real job store: same keyed, idempotent contract as the monitor hand-over.
+pub struct RepoAdmitter(pub Arc<dyn JobRepository>);
+
+impl TriggerAdmitter for RepoAdmitter {
+    fn admit_keyed(&self, tenant: &str, key: &str) -> Result<String, String> {
+        self.0.admit_keyed(tenant, key).map_err(|e| format!("{e:?}"))
+    }
+}
+
 impl HttpTask {
+    /// Without a job repository the automation surface does not exist (404), as before.
     pub fn bind(cfg: &RunConfig, health: Arc<Health>, store: Arc<Store>) -> Result<HttpTask, String> {
+        HttpTask::bind_with(cfg, health, store, None)
+    }
+
+    /// With a repository, `POST /internal/v1/automation/triggers` admits `trigger:<key>` jobs into it (the runner executes them).
+    pub fn bind_with(cfg: &RunConfig, health: Arc<Health>, store: Arc<Store>, repo: Option<Arc<dyn JobRepository>>) -> Result<HttpTask, String> {
+        let automation = match repo {
+            Some(r) => Some(Arc::new(Automation::from_json(None, None, None)?.with_admitter(Arc::new(RepoAdmitter(r))))),
+            None => None,
+        };
         let server = tiny_http::Server::http(cfg.listen_addr).map_err(|e| format!("bind {}: {e}", cfg.listen_addr))?;
         let addr = server.server_addr().to_ip().ok_or("listener is not an IP socket")?;
         let console = cfg.console_dir.clone().filter(|d| d.join("index.html").is_file());
@@ -28,6 +49,7 @@ impl HttpTask {
             tenant: cfg.tenant.clone(),
             token: cfg.debug_token.as_ref().map(|t| t.expose().to_string()),
             admin_token: cfg.admin_token.as_ref().map(|t| t.expose().to_string()),
+            automation,
             static_dir: console,
             config_json: Some(config_json),
             ..Config::default()
