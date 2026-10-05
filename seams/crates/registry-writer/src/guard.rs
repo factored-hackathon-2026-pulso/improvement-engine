@@ -3,7 +3,11 @@
 
 /// `true` only for the exact operations of the writer.
 pub fn allowed(method: &str, path: &str) -> bool {
-    let p = path.split('?').next().unwrap_or("");
+    // No query, fragment, space or control byte: the path is written verbatim into the HTTP request line.
+    if !path.bytes().all(|b| b.is_ascii_graphic() && b != b'?' && b != b'#') {
+        return false;
+    }
+    let p = path;
     if p == "/v1/runs" {
         return method == "POST";
     }

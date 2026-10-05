@@ -62,8 +62,13 @@ fn now_secs() -> u64 {
 fn problem(body: &Value) -> (String, String) {
     let code = body["code"].as_str().filter(|c| c.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')).unwrap_or("").to_string();
     let v = body.get("violations").or_else(|| body.get("payload"));
-    let rules: Vec<&str> = v.and_then(Value::as_array).into_iter().flatten().filter_map(|x| x["rule"].as_str()).take(3).collect();
+    let rules: Vec<&str> = v.and_then(Value::as_array).into_iter().flatten().filter_map(|x| x["rule"].as_str()).filter(|r| rule_id(r)).take(3).collect();
     (code, rules.join(","))
+}
+
+/// A rule id (`REG-SCHEMA`, `limits.size`): short, no spaces, so registry prose never reaches an outcome.
+fn rule_id(r: &str) -> bool {
+    !r.is_empty() && r.len() <= 40 && r.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
 
 fn reject(r: &Reply) -> Fail {
@@ -309,7 +314,7 @@ impl<'a> Writer<'a> {
         let v = self.ok_call("POST", format!("{}/validate", Self::proposal_path(pid)?), &self.cfg.registry_token, None, None)?;
         let viol = v["violations"].as_array().ok_or((Reason::RegistryError, "validate answered without violations".into()))?;
         if !viol.is_empty() {
-            let rules: Vec<&str> = viol.iter().filter_map(|x| x["rule"].as_str()).take(3).collect();
+            let rules: Vec<&str> = viol.iter().filter_map(|x| x["rule"].as_str()).filter(|r| rule_id(r)).take(3).collect();
             return Err((Reason::DraftInvalid, format!("{} violations, rules {}", viol.len(), rules.join(","))));
         }
         let detail = self.read_proposal(pid)?.ok_or((Reason::RegistryError, "the proposal vanished after the write".into()))?;
