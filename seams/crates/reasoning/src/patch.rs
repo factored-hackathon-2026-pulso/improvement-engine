@@ -132,6 +132,7 @@ pub fn compile(catalog: &Catalog, f: &Finding, row: &Row, opp: &Opportunity, pro
         "patch" => compile_patch(catalog, target, proposal, docs, effect, rationale, uncertainty),
         "new_agent" => compile_new_agent(catalog, target, proposal, docs, effect, rationale, uncertainty),
         "link_tool" => compile_link(catalog, target, proposal, effect, rationale, uncertainty),
+        "flow_edit" => compile_flow(catalog, target, proposal, effect, rationale, uncertainty),
         other => deny("kind_mismatch", format!("unknown kind {other:?}")),
     }
 }
@@ -381,6 +382,65 @@ fn compile_link(catalog: &Catalog, target: &Target, p: &Value, mut effect: Value
             "deployment authorisation is outside the registry: field classifier by source, field grants, tool-service principal rule (checked against the tool-service listing)".into(),
             "the link makes the tool data available to the flow; wording of the answer is unchanged until a template or prompt uses it".into(),
         ],
+        expected_effect: effect,
+        rationale,
+        uncertainty,
+    })
+}
+
+/// FLOW1 `flow_edit`: an additive edit of the entry flow of an existing agent. The Builder names a POSITION id of the menu the engine derived
+/// from the real graph and a PRESET id of the mapping data; nodes, edges, texts, versions and pins are derived by `flow_edits`.
+fn compile_flow(catalog: &Catalog, target: &Target, p: &Value, mut effect: Value, rationale: String, uncertainty: String) -> Result<Compiled, Denied> {
+    let miss = |what: &str| Denied { code: "target_mismatch", why: format!("{what} is not in the baseline catalogue") };
+    let flow_id = target.params["flow"].as_str().ok_or_else(|| miss("params.flow"))?;
+    let op = target.params["op"].as_str().ok_or_else(|| miss("params.op"))?;
+    if let Some(given) = p["op"].as_str().filter(|g| *g != op) {
+        return deny("op_mismatch", format!("the target {} takes op {op}, the proposal says {given}", target.target_ref));
+    }
+    let agent = catalog.agent(target.agent).ok_or_else(|| miss(target.agent))?;
+    if crate::art2::ref_id(&agent["entry_flow"]) != flow_id {
+        return deny("target_mismatch", format!("the entry flow of {} is not {flow_id}", target.agent));
+    }
+    let flow = catalog.flow(flow_id).ok_or_else(|| miss(flow_id))?;
+    let position = p["position"].as_str().unwrap_or("");
+    let preset_id = p["preset"].as_str().unwrap_or("");
+    let pj = target.params["presets"].as_array().into_iter().flatten().find(|x| x["id"] == preset_id).ok_or_else(|| Denied { code: "preset_unknown", why: format!("preset {preset_id:?} is not one of the presets of the target") })?;
+    let preset = crate::flow_edits::Preset::from_json(pj).map_err(|e| Denied { code: "preset_invalid", why: e })?;
+    let taken = |tid: &str| catalog.get(&format!("template:{tid}")).is_some();
+    let edit = crate::flow_edits::compile_flow_edit(flow, agent, op, position, &preset, &taken).map_err(from_art2)?;
+    // a proof needs a native discriminator: ask and validator are only proposed where agent-core's events tell the candidate from the base
+    if ["add_validator", "insert_ask"].contains(&op) && edit.facts["native_evidence"] != true {
+        return deny("no_native_evidence", format!("{op} at {position}: no event of a scripted run tells the edited flow from the base here, the suite could not prove it"));
+    }
+    let diff = edit.changes.iter().map(|c| json!({"kind": c["kind"], "id": c["content"]["id"], "version": c["content"]["version"], "op": op, "position": position})).collect();
+    let agent_version = agent["version"].as_str().unwrap_or("");
+    // the read tool whose failure the edited edge carries (a notice sits on a tool failure exit); the suite seeds it
+    let from_tool = position.split('.').next().and_then(|n| flow["nodes"].as_array()?.iter().find(|x| x["id"] == n)).filter(|n| n["type"] == "tool").map(|n| crate::art2::ref_id(&n["config"]["tool"]));
+    effect["art2"] = json!({"mode": "flow_edit", "facts": edit.facts,
+        "suite_params": {"agent": target.agent, "flow": flow_id, "op": op, "position": position, "from_tool": from_tool, "discriminator": edit.facts["discriminator"], "chain": edit.facts["chain"],
+                         "node_id": edit.node_id, "preset": {"id": preset.id, "es": preset.es, "pt": preset.pt, "slot": preset.slot, "validator": preset.validator,
+                                                             "accept": pj["accept"], "reject": pj["reject"]}}});
+    let mut human_items = vec![
+        format!("additive flow edit ({op}): no node is removed; every rule, decide, confirm, verify, escalate, end and write node and the edges leaving them are byte-identical to the base (recomputed by the compiler)"),
+        "the new nodes are pass-through: every old edge still reaches the same old node, every failure branch that was a safe exit still is".into(),
+        "wording is reviewed es/pt text from the mapping data, not generated".into(),
+    ];
+    match op {
+        "add_validator" => human_items.push("the id format of the validator comes from the reviewed mapping data (fixture convention), not from a registry or service: the approver confirms the format before approving; a customer whose text has no id is re-asked and then handed off through the existing low_confidence escalation".into()),
+        "insert_ask" => human_items.push("one more customer turn before the flow continues; the exhausted attempts go to the existing low_confidence escalation; the new slot is a validated text that the handoff packet may carry".into()),
+        _ => human_items.push("native evaluation cannot tell this edit from the base (no event carries a node or template id): the proof exercises the path and the guards, it does not measure the effect".into()),
+    }
+    Ok(Compiled {
+        kind: "flow_edit".into(),
+        target_ref: target.target_ref.clone(),
+        agent_id: target.agent.to_string(),
+        changes: edit.changes,
+        diff,
+        base_digest: entity_digest(&[flow, agent]),
+        cascade: vec![format!("agent:{}@{}", target.agent, bump_patch(agent_version))],
+        edit_chars: 0,
+        edit_budget: 0,
+        human_items,
         expected_effect: effect,
         rationale,
         uncertainty,

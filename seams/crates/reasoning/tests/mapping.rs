@@ -39,13 +39,27 @@ fn the_bundled_table_is_valid_and_every_candidate_is_grounded() {
                 let tool = c.params["tool"].as_str().expect("link_tool carries params.tool");
                 assert!(c.target_ref.ends_with(&format!("/{tool}")) && catalog.tool_def(tool).is_some() && catalog.agent(c.agent).is_some(), "{}", c.target_ref);
             }
+            "flow_edit" => {
+                // FLOW1: the flow is the entry flow of the agent, and every preset compiles somewhere on the real graph
+                let (flow, op) = (c.params["flow"].as_str().unwrap(), c.params["op"].as_str().unwrap());
+                assert_eq!(c.target_ref, format!("flow_edit:{flow}/{op}"));
+                let agent = catalog.agent(c.agent).unwrap_or_else(|| panic!("{}: unknown agent {}", c.target_ref, c.agent));
+                assert_eq!(reasoning::art2::ref_id(&agent["entry_flow"]), flow, "{}", c.target_ref);
+                let f = catalog.flow(flow).unwrap_or_else(|| panic!("{flow} is not in the catalogue"));
+                for pj in c.params["presets"].as_array().unwrap() {
+                    let preset = reasoning::flow_edits::Preset::from_json(pj).unwrap();
+                    let ok = reasoning::flow_edits::menu(op, f).iter().any(|m| reasoning::flow_edits::compile_flow_edit(f, agent, op, m["position_id"].as_str().unwrap(), &preset, &|_| false).is_ok());
+                    assert!(ok, "{}: preset {} compiles on no position of the real flow", c.target_ref, preset.id);
+                }
+            }
             _ => assert!(!c.slugs.is_empty() && catalog.agent(c.agent).is_some()),
         }
         // `proof_support` and `announceable_now` must agree with the real suite generator
-        let has_generator = suite_py.contains(&format!("\"{}\":", c.target_ref));
+        let key = if c.kind == "flow_edit" { format!("flow_{}", c.proof_support.trim_start_matches("suite:flow_")) } else { c.target_ref.clone() };
+        let has_generator = suite_py.contains(&format!("\"{key}\":"));
         assert_eq!(c.proof_support != "none", has_generator, "{}: proof_support disagrees with scripts/regression/build_suite.py", c.target_ref);
         if c.announceable_now {
-            assert!(has_generator && (c.kind == "patch" || c.kind == "link_tool"), "{} claims announceable_now without a generator", c.target_ref);
+            assert!(has_generator && (c.kind == "patch" || c.kind == "link_tool" || c.kind == "flow_edit"), "{} claims announceable_now without a generator", c.target_ref);
         }
     }
 }
@@ -60,7 +74,8 @@ fn a_complaint_cell_prefers_patches_of_existing_covering_agents_over_a_new_agent
         assert_eq!(row.targets[0].target_ref, "template:t/estado_pqr", "{ch}");
         assert_eq!(row.targets[1].target_ref, "prompt:p/resumen_radicado", "{ch}");
         // the new agent is the LAST candidate, never first
-        assert_eq!(row.targets.last().unwrap().kind, "new_agent");
+        let pos = |k: &str| row.targets.iter().position(|t| t.kind == k).unwrap();
+        assert!(pos("new_agent") < pos("flow_edit"), "the flow edits were appended after the new agent: no existing order changed");
         let tried: Vec<_> = row.ordered(Caps::default()).iter().map(|t| t.target_ref.clone()).collect();
         assert_eq!(tried, vec!["template:t/estado_pqr", "prompt:p/resumen_radicado"], "{ch}: at most {MAX_CANDIDATES} candidates, in rank order");
         assert_eq!(row.targets.iter().any(|t| t.target_ref == "prompt:p/copiloto"), ch == "Phone", "{ch}: the advisor copilot is a Phone candidate only");
@@ -184,13 +199,13 @@ fn one_attempt_sees_one_candidate_and_the_proposal_carries_the_hypothesis_label(
     assert_eq!(r.status, "proposed", "{}", r.detail);
     assert_eq!(seen.get(), 1, "the Scout sees exactly the candidate under attempt, not the whole row");
     let c = r.candidate.as_ref().unwrap();
-    assert_eq!((c["rank"].as_u64(), c["candidates_total"].as_u64(), c["claim"].as_str()), (Some(1), Some(5), Some("hypothesis_of_where_to_intervene_not_a_cause")));
+    assert_eq!((c["rank"].as_u64(), c["candidates_total"].as_u64(), c["claim"].as_str()), (Some(1), Some(7), Some("hypothesis_of_where_to_intervene_not_a_cause")));
     assert!(c["justification"].as_str().unwrap().contains("static sentence"));
     let eff = &r.compiled.as_ref().unwrap()["expected_effect"]["mapping"];
     assert_eq!(eff["claim"], "hypothesis_of_where_to_intervene_not_a_cause");
     assert!(r.compiled.as_ref().unwrap()["changes"][0]["docs"]["description"].as_str().unwrap().contains("hypothesis of where to intervene, not a cause"));
     let es = r.dossier.as_ref().unwrap()["es"]["sections"]["risks"].as_str().unwrap().to_string();
-    assert!(es.contains("Hipótesis de dónde intervenir, no una causa (candidato 1 de 5)"), "{es}");
+    assert!(es.contains("Hipótesis de dónde intervenir, no una causa (candidato 1 de 7)"), "{es}");
     // a target outside the row is refused as a typed stop
     let bad = reason_candidate(&cat(), &f, &p, &Opts { allow_derived_aggregates: true }, Some("template:t/aclarar_problema"));
     assert_eq!((bad.status.as_str(), bad.reason.as_str()), ("blocked", "precondition_missing"));
@@ -204,7 +219,7 @@ fn f_clone() -> reasoning::Finding {
 fn candidate_lists_say_why_a_candidate_was_not_tried() {
     let row = map_finding(&cell("M1", "Queja", "Phone")).unwrap();
     let list = row.candidate_list(Caps::default(), &["template:t/estado_pqr".to_string()]);
-    assert_eq!(list.len(), 5);
+    assert_eq!(list.len(), 7);
     assert_eq!(list[0]["tried"], true);
     assert_eq!(list[1]["not_tried_because"], "an_earlier_candidate_was_proven_or_the_finding_stopped");
     assert_eq!(list[2]["not_tried_because"], "over_the_candidate_cap");

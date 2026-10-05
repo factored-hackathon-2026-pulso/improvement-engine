@@ -21,6 +21,7 @@ pub mod art2;
 pub mod catalog;
 pub mod dossier;
 pub mod finding;
+pub mod flow_edits;
 pub mod live;
 pub mod mapping;
 pub mod patch;
