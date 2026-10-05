@@ -144,6 +144,7 @@ fn value_loop(work: &Path, wire: Arc<dyn Transport + Send + Sync>) -> ValueLoop 
         model_label: "scripted".into(),
         max_findings: None,
         max_exploratory: 0,
+        profile: pulso::run::profile::Profile::Standard,
         proof: None,
         announcer: None,
         caps: Default::default(),
@@ -762,4 +763,113 @@ fn every_model_call_of_a_trigger_job_is_recorded_with_content_and_served_at_the_
     let resp = app.handle(&debug_api::Req { method: "GET".into(), path: format!("/internal/v1/debug/runs/{run}/model-calls"), query: String::new(), headers: HashMap::new(), body: vec![] });
     let body: Value = serde_json::from_slice(&resp.body).unwrap();
     assert_eq!((resp.status, body["items"].as_array().map(Vec::len)), (200, Some(calls.len())));
+}
+
+
+// ---- ENGPROD: minted registry credentials (serve) and the demo support profile ---------------------------------------------------
+
+mod engprod {
+    use super::*;
+    use core_client::service_identity::ServiceIdentity;
+    use pulso::run::profile::Profile;
+    use registry_writer::MintingTransport;
+
+    const SEED: &str = "0707070707070707070707070707070707070707070707070707070707070707";
+
+    fn mk(extra: &[(&str, &str)]) -> Result<Option<ValueLoop>, String> {
+        let mut m: HashMap<String, String> = [("PULSO_CELLS_NDJSON", "c.ndjson"), ("PULSO_CELLS_SOURCE", "synthetic"), ("PULSO_REGISTRY_ADDR", "127.0.0.1:1"), ("PULSO_LLM_GATEWAY", "enabled"), ("PULSO_LLM_GATEWAY_ADDR", "127.0.0.1:1"), ("PULSO_LLM_GATEWAY_KEY", "k")]
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        m.extend(extra.iter().map(|(k, v)| (k.to_string(), v.to_string())));
+        ValueLoop::from_lookup(&move |k| m.get(k).cloned(), Some(Path::new(".")))
+    }
+
+    #[test]
+    fn the_loop_configures_minted_credentials_from_the_seed_and_the_kid_without_any_token() {
+        let v = mk(&[("PULSO_SERVICE_SEED_HEX", SEED), ("PULSO_SERVICE_KID", "pulso-engine-1")]).unwrap().unwrap();
+        assert_eq!(v.credential, "engine builder principal (minted from the service seed, short-lived)");
+        assert_eq!(v.registry_token.reveal(), "", "no ready-made token exists in minted mode");
+        assert!(v.proof.is_some(), "the proof's long transport is minted too");
+    }
+
+    #[test]
+    fn the_old_static_token_path_is_unchanged() {
+        let v = mk(&[("PULSO_REGISTRY_TOKEN", "t.o.k")]).unwrap().unwrap();
+        assert_eq!(v.credential, "engine builder principal");
+        assert_eq!(v.registry_token.reveal(), "t.o.k");
+    }
+
+    #[test]
+    fn refusals_name_the_variable_and_leak_no_value() {
+        let e = mk(&[]).err().unwrap();
+        assert!(e.contains("PULSO_SERVICE_SEED_HEX") && e.contains("PULSO_REGISTRY_TOKEN"), "{e}");
+        let e = mk(&[("PULSO_SERVICE_SEED_HEX", "not-a-seed-secret-material"), ("PULSO_SERVICE_KID", "k")]).err().unwrap();
+        assert!(e.contains("PULSO_SERVICE_SEED_HEX") && !e.contains("secret-material"), "{e}");
+        let e = mk(&[("PULSO_SERVICE_SEED_HEX", SEED), ("PULSO_SERVICE_KID", "k"), ("PULSO_REGISTRY_VIA", "run")]).err().unwrap();
+        assert!(e.contains("PULSO_REGISTRY_VIA=api"), "{e}");
+        let e = mk(&[("PULSO_SERVICE_SEED_HEX", SEED), ("PULSO_SERVICE_KID", "k"), ("PULSO_REGISTRY_CREDENTIAL", "standin")]).err().unwrap();
+        assert!(e.contains("standin"), "{e}");
+    }
+
+    /// The wire a minted loop sees: every request carries a three-part credential that is NOT a placeholder, and the writer is unchanged.
+    #[test]
+    fn a_whole_loop_delivers_with_minted_credentials_and_never_with_the_placeholder() {
+        struct Spy {
+            inner: Wire,
+            bearers: Mutex<Vec<String>>,
+        }
+        impl Transport for Spy {
+            fn send(&self, req: &Request) -> Result<Reply, TransportError> {
+                self.bearers.lock().unwrap().push(req.bearer.reveal().to_string());
+                // the inner Wire asserts the static TOKEN: answer as it would, with the bearer it expects
+                self.inner.send(&Request { method: req.method, path: req.path.clone(), bearer: &Jws::new(TOKEN.into()), idempotency_key: req.idempotency_key, body: req.body.clone() })
+            }
+        }
+        let work = temp("engprod-mint");
+        let spy = Arc::new(Spy { inner: Wire::default(), bearers: Mutex::new(vec![]) });
+        let minting: Arc<dyn Transport + Send + Sync> = Arc::new(MintingTransport::new(spy.clone(), Arc::new(ServiceIdentity::new("k1", [7u8; 32]))));
+        let mut v = value_loop(&work, minting);
+        v.registry_token = Jws::new(String::new());
+        let out = v.run(&pulso::run::value_loop::NoPersist).unwrap();
+        assert!(out["summary"]["delivered"].as_u64().unwrap() >= 1, "{}", out["summary"]);
+        let seen = spy.bearers.lock().unwrap();
+        assert!(!seen.is_empty() && seen.iter().all(|b| b.split('.').count() == 3 && !b.is_empty()), "every request carries a minted credential");
+        assert!(!out.to_string().contains(&seen[0]), "no credential in the loop record");
+    }
+
+    fn small_cells(work: &Path) -> PathBuf {
+        // the planted table at 1/75 scale: 80 + 60 = 140 pooled per cell: below the standard floors, above the demo floors
+        let mut rows = vec![];
+        for r in ["Queja", "Tecnico", "Comercial", "Retencion", "Transaccional", "Producto"] {
+            for c in ["Phone", "Chat"] {
+                for (half, den) in [("discovery", 80i64), ("holdout", 60i64)] {
+                    let permille = if r == "Tecnico" && c == "Phone" { 450 } else { 200 };
+                    rows.push(format!("{{\"metric\":\"M1\",\"dims\":{{\"reason_category\":\"{r}\",\"channel\":\"{c}\"}},\"half\":\"{half}\",\"numerator\":{},\"denominator\":{den}}}", den * permille / 1000));
+                }
+            }
+        }
+        let p = work.join("small.ndjson");
+        std::fs::write(&p, rows.join("
+")).unwrap();
+        p
+    }
+
+    #[test]
+    fn the_demo_profile_lets_the_planted_small_cells_reach_the_roles_and_says_so() {
+        let work = temp("engprod-demo");
+        let mut standard = value_loop(&work, Arc::new(Wire::default()));
+        standard.cells = small_cells(&work);
+        let out = standard.run(&pulso::run::value_loop::NoPersist).unwrap();
+        assert_eq!(out["support_profile"], "standard");
+        assert_eq!(out["summary"]["reasoned"], 0, "below the standard support floors nothing reaches the roles");
+
+        let wire = Arc::new(Wire::default());
+        let mut demo = value_loop(&work, wire.clone());
+        demo.cells = small_cells(&work);
+        demo.profile = Profile::Demo;
+        let out = demo.run(&pulso::run::value_loop::NoPersist).unwrap();
+        assert_eq!(out["support_profile"], "demo");
+        assert!(out["summary"]["reasoned"].as_u64().unwrap() >= 1, "{}", out["summary"]);
+    }
 }

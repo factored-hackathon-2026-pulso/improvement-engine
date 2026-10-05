@@ -5,6 +5,8 @@ pub mod http;
 pub mod log;
 pub mod models;
 pub mod outcome;
+pub mod profile;
+pub mod registry_auth;
 pub mod source;
 pub mod signals;
 pub mod supervisor;

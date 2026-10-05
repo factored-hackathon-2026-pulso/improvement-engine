@@ -2,6 +2,7 @@
 pub mod cli;
 pub mod doubles;
 pub mod live;
+pub mod loop_cmd;
 pub mod monitor_cmd;
 pub mod sink;
 pub mod config;

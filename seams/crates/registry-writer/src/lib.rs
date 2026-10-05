@@ -29,7 +29,7 @@ use reasoning::patch::Compiled;
 use serde_json::{Value, json};
 
 pub use store::{FileStore, MemoryStore, Receipt, ReceiptStore};
-pub use transport::{HttpTransport, Reply, Request, Transport, TransportError};
+pub use transport::{HttpTransport, MintingTransport, Reply, Request, Transport, TransportError};
 pub use writer::{Config, Environment, Via, Writer};
 
 /// Registry quota of proposals opened with origin `auto_detect` per rolling 24 hours (agent-core `DEFAULT_QUOTAS`).
