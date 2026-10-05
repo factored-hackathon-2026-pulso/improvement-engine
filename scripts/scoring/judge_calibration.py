@@ -16,23 +16,35 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from score_proposal import JUDGED, JudgeError, run_judge  # noqa: E402
+from score_proposal import JUDGED, JudgeError, model_family, run_judge  # noqa: E402
 
 DEFAULT_GOLDEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden", "synthetic_golden_12.json")
 
 
 def calibrate(golden, judge, builder_model, judge_model, limit=None):
-    rows, esc = [], []
+    rows, esc, denied = [], [], []
+    fb, fj = model_family(builder_model), model_family(judge_model)
+    if fb is None or fj is None or fb == fj:  # configuration errors stay fatal; only per-proposal judge failures are denials
+        raise JudgeError("judge/Builder families unknown or equal; refusing to calibrate")
     items = golden["proposals"][:limit] if limit else golden["proposals"]
     for it in items:
         req = {"proposal": it["proposal"], "base": it.get("base", {}), "rubric_criteria": list(JUDGED)}
-        res = run_judge(judge, req, builder_model, judge_model)
+        try:
+            res = run_judge(judge, req, builder_model, judge_model)
+        except JudgeError as e:
+            if "unreachable" in str(e):  # infrastructure down: abort, do not report it as 'denied' proposals
+                raise
+            # fail-closed per proposal (e.g. model output never valid): counted, not scored
+            denied.append({"id": it["id"], "reason": str(e)[:160]})
+            continue
         if res["escalate_human"]:
             esc.append({"id": it["id"], "criteria": res["escalate_human"]})
         for c, got in res["scores"].items():
             if c in it["expected"] and c not in res["escalate_human"]:
                 rows.append({"id": it["id"], "criterion": c, "expected": it["expected"][c], "judged": got})
-    return summarize(rows, esc, len(items))
+    out = summarize(rows, esc, len(items))
+    out["denied"] = denied
+    return out
 
 
 def _rate(rs, f):

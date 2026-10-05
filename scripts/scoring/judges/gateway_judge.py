@@ -8,7 +8,7 @@ Environment (values are never printed, logged, put in argv or written to files):
   PULSO_LLM_GATEWAY_KEY     consumer bearer token (fallback: GATEWAY_TOKEN_AGENT_CORE, the local-stack name)
   PULSO_JUDGE_MODEL         default z-ai/glm-5.3-flash
   PULSO_JUDGE_BUILDER_MODEL default xiaomi/mimo-v2.6-flash (family guard: judge family must differ)
-  PULSO_LLM_GATEWAY_ALIAS   default openrouter; PULSO_LLM_GATEWAY_TIMEOUT_S default 60
+  PULSO_LLM_GATEWAY_ALIAS   default openrouter; PULSO_LLM_GATEWAY_TIMEOUT_S default 240
 """
 import http.client
 import json
@@ -39,7 +39,7 @@ INSTRUCTIONS = ("You are an independent reviewer of an improvement proposal for 
 def _schema(criteria):
     item = {"type": "object", "additionalProperties": False, "required": ["score", "justification"],
             "properties": {"score": {"type": "integer", "enum": [0, 1, 2]},
-                           "justification": {"type": "string", "maxLength": 240}}}
+                           "justification": {"type": "string"}}}
     return {"type": "object", "additionalProperties": False, "required": list(criteria),
             "properties": {c: item for c in criteria}}
 
@@ -64,28 +64,32 @@ def parse_answer(output, criteria):
         sc, just = v["score"], v["justification"]
         if isinstance(sc, bool) or not isinstance(sc, int) or sc not in (0, 1, 2):
             raise ValueError(f"{c}: score must be 0, 1 or 2")
-        if not isinstance(just, str) or not just.strip() or "\n" in just.strip() or len(just) > 240:
-            raise ValueError(f"{c}: justification must be one non-empty line")
-        res[c] = (sc, just.strip())
+        if not isinstance(just, str) or not just.strip():
+            raise ValueError(f"{c}: justification must be a non-empty string")
+        res[c] = (sc, " ".join(just.split())[:240])  # informational only: one line, capped
     return res
 
 
 def http_transport(addr, key, body, timeout):
     host, _, port = addr.partition(":")
-    conn = http.client.HTTPConnection(host, int(port or 80), timeout=timeout)
-    try:
-        conn.request("POST", "/v1/generate", json.dumps(body),
-                     {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
-        r = conn.getresponse()
-        raw = r.read()
+    for attempt in (0, 1):  # one retry on a dropped connection (the live gateway closed a long call once)
+        conn = http.client.HTTPConnection(host, int(port or 80), timeout=timeout)
         try:
-            return r.status, json.loads(raw)
-        except ValueError:
-            return r.status, None
-    except OSError as e:
-        raise JudgeError(f"gateway unreachable ({type(e).__name__})") from None
-    finally:
-        conn.close()
+            conn.request("POST", "/v1/generate", json.dumps(body),
+                         {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+            r = conn.getresponse()
+            raw = r.read()
+            try:
+                return r.status, json.loads(raw)
+            except ValueError:
+                return r.status, None
+        except (http.client.RemoteDisconnected, ConnectionError) as e:
+            if attempt:
+                raise JudgeError(f"gateway unreachable ({type(e).__name__})") from None
+        except OSError as e:
+            raise JudgeError(f"gateway unreachable ({type(e).__name__})") from None
+        finally:
+            conn.close()
 
 
 def _private(addr):
@@ -114,16 +118,23 @@ class GatewayJudge:
         if not _private(self.addr):
             raise JudgeError("gateway address must be loopback or private")
         self.alias = e.get("PULSO_LLM_GATEWAY_ALIAS") or "openrouter"
-        self.timeout = int(e.get("PULSO_LLM_GATEWAY_TIMEOUT_S") or 60)
+        # the gateway requires profile.price; declared ESTIMATE (USD per Mtok), override via env, used for metering only
+        self.price = {"input_per_mtok": str(float(e.get("PULSO_JUDGE_PRICE_IN_PER_MTOK") or 0.1)),
+                      "output_per_mtok": str(float(e.get("PULSO_JUDGE_PRICE_OUT_PER_MTOK") or 0.4))}
+        self.max_tokens = int(e.get("PULSO_JUDGE_MAX_TOKENS") or 8000)  # glm reasons at length: 4000 was hit (502 invalid_output) in the live run
+        self.timeout = int(e.get("PULSO_LLM_GATEWAY_TIMEOUT_S") or 240)
         self.transport = transport or http_transport
         self.justifications = {}  # last call, for reports (no secrets, no builder reasoning)
 
     def _call(self, system, inputs, criteria):
         body = {"prompt": system, "inputs": inputs, "schema": _schema(criteria),
                 "profile": {"endpoint_alias": self.alias, "model": self.judge_model, "temperature": 0,
-                            "max_tokens": 1200, "timeout_s": self.timeout, "structured": "prompted"},
+                            "max_tokens": self.max_tokens, "price": self.price, "timeout_s": self.timeout, "structured": "prompted"},
                 "labels": {"agent": "pulso-rubric-judge"}}
         status, doc = self.transport(self.addr, self.key, body, self.timeout + 10)
+        err = doc.get("error") if isinstance(doc, dict) else None
+        if status == 502 and isinstance(err, dict) and err.get("kind") == "invalid_output":
+            raise ValueError("gateway invalid_output (model output not valid for the schema)")
         if status != 200:
             raise JudgeError(f"gateway_http_{status}")
         return doc.get("output") if isinstance(doc, dict) else None
