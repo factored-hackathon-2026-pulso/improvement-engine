@@ -2,7 +2,7 @@
 .SYNOPSIS
   Integrated rig, STAGE 1 story at API level: detect -> propose -> prove -> announce -> platform lists it -> supervisor reads it -> eval suite attached
   and evaluated. It NEVER approves, publishes or promotes (those hops are reported as not run).
-  scripts/integrated-rig/run_story.ps1 [-Profile planted|bank] [-CellsFile F] [-MaxFindings 1] [-BuilderModel xiaomi/mimo-v2.6-pro]
+  scripts/integrated-rig/run_story.ps1 [-Profile planted|bank|newagent] [-CellsFile F] [-MaxFindings 1] [-BuilderModel xiaomi/mimo-v2.6-pro]
                                        [-FallbackModel xiaomi/mimo-v2.6-flash] [-TimeoutMin 25] [-NoEval] [-NativeAnnounce]
 .DESCRIPTION
   Needs up.ps1 first. Hops (each reported OK / BREAK / not-run, with what a break needs):
@@ -17,12 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('planted', 'bank')][string]$Profile = 'planted', [string]$CellsFile = '', [int]$MaxFindings = 1,
+    [ValidateSet('planted', 'bank', 'newagent')][string]$Profile = 'planted', [string]$CellsFile = '', [int]$MaxFindings = 1,
     [string]$BuilderModel = 'xiaomi/mimo-v2.6-pro', [string]$FallbackModel = 'xiaomi/mimo-v2.6-flash', [int]$TimeoutMin = 25,
     [switch]$NoEval, [switch]$NativeAnnounce,
     # -Cycle: ONE engine process stays alive from the loop through the release event; after the announce a PERSON approves, publishes and
     # promotes in the platform SPA while this script only WATCHES (read-only); then poller -> engine -> outcome card. No decision automation.
-    [string]$ResumeWork = '', [switch]$Cycle, [int]$HumanTimeoutMin = 60, [string]$PseudoRelease = '2025-06', [string]$SpaUrl = 'http://127.0.0.1:5174'
+    [string]$ResumeWork = '', [switch]$Cycle, [int]$HumanTimeoutMin = 60, [string]$PseudoRelease = '2025-06', [string]$SpaUrl = ''
 )
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
@@ -32,6 +32,7 @@ $root = (Resolve-Path (Join-Path $here '..\..')).Path
 
 $factored = Split-Path -Parent (Split-Path -Parent $root)
 $settings = Get-RigSettings
+if (-not $SpaUrl) { $SpaUrl = "http://127.0.0.1:$($settings.SpaPort)" }
 $paths = Get-RigPaths -Root $root
 $python = (Get-Command python -ErrorAction Stop).Source
 $uv = (Get-Command uv -ErrorAction Stop).Source
@@ -67,9 +68,12 @@ Say ("ENV1 stage 1 story  {0}  profile={1} builder={2} (fallback {3})  free RAM 
 
 # ---- cells ------------------------------------------------------------------------------------------------------------------------------
 $cellsPath = ''
-if ($Profile -eq 'planted') {
-    $cellsPath = Join-Path $cellsDir 'planted.ndjson'
-    $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\demo-loop\planted_cells.py'), '--out', $cellsPath) -Needles $script:Needles -WorkDir $root -Quiet
+if ($Profile -in 'planted', 'newagent') {
+    # newagent (AGT1): ONE planted M1 cell, Tecnico/Phone, an uncovered topic: the mapping tries `new_agent:consultas` first.
+    $cellsPath = Join-Path $cellsDir $(if ($Profile -eq 'newagent') { 'planted-newagent.ndjson' } else { 'planted.ndjson' })
+    $pcArgs = @((Join-Path $root 'scripts\demo-loop\planted_cells.py'), '--out', $cellsPath)
+    if ($Profile -eq 'newagent') { $pcArgs += @('--profile', 'uncovered-topic') }
+    $r = Invoke-Scrubbed -File $python -Arguments $pcArgs -Needles $script:Needles -WorkDir $root -Quiet
     if ($r.ExitCode -ne 0) { Hop 'cells' 'BREAK' 'planted_cells.py failed'; exit 1 }
     $mode = 'synthetic-planted'; $src = 'synthetic'
 } else {
@@ -77,14 +81,14 @@ if ($Profile -eq 'planted') {
     $cellsPath = (Resolve-Path -LiteralPath $CellsFile).Path; $mode = 'bank-file'; $src = 'bank'
 }
 $postPath = ''
-if ($Cycle) {
+if ($Cycle -and $Profile -ne 'newagent') {
     if ($Profile -ne 'planted') { Hop 'cells' 'BREAK' '-Cycle needs -Profile planted (the post-release table is the planted one with the effect cut)'; exit 2 }
     $postPath = Join-Path $cellsDir 'planted-post.ndjson'
     $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'post_cells.py'), '--in', $cellsPath, '--out', $postPath, '--release', $PseudoRelease, '--category', 'Cobro indebido', '--cut-pp', '8') -Needles $script:Needles -WorkDir $root -Quiet
     if ($r.ExitCode -ne 0) { Hop 'cells' 'BREAK' 'post_cells.py failed'; exit 1 }
 }
 $info = Get-CellsInfo -Path $cellsPath
-Hop 'cells' 'OK' ("{0}: {1} rows, metrics {2}, sha256:{3}  [{4}]" -f $mode, $info.Rows, $info.ByMetric, $info.Sha, $(if ($Profile -eq 'planted') { 'SYNTHETIC, invented numbers' } else { 'real bank aggregates' }))
+Hop 'cells' 'OK' ("{0}: {1} rows, metrics {2}, sha256:{3}  [{4}]" -f $mode, $info.Rows, $info.ByMetric, $info.Sha, $(if ($Profile -in 'planted', 'newagent') { 'SYNTHETIC, invented numbers' } else { 'real bank aggregates' }))
 
 # ---- evidence ids (G1) ------------------------------------------------------------------------------------------------------------------
 $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'story_verify.py'), 'cases', '--platform', $plat, '--out', $paths.CaseIds, '--secrets', $paths.Secrets) -Needles $script:Needles -WorkDir $root
@@ -103,7 +107,7 @@ function Start-Engine {
     if ($NativeAnnounce) { $pu = $plat; $pt = $svc }
     $eenv = Get-EngineEnvironment -Settings $settings -CellsPath $cellsPath -WorkDir $work -StoreDir $store -Source $src -MaxFindings $MaxFindings `
         -GatewayKey $gwKey -RegistryToken ([string]$tok.builder) -AdminToken $adm -PlatformUrl $pu -PlatformToken $pt -PythonCmd $python -BuilderModel $Model
-    if ($Cycle) {
+    if ($Cycle -and $Profile -ne 'newagent') {
         # R1/R2: demo clock. Pseudo release month, the planted POST table (treated cell cut by 8 pp, SYNTHETIC), staging-or-prod release events accepted.
         $eenv['PULSO_OUTCOME_PRE_CELLS'] = $cellsPath; $eenv['PULSO_OUTCOME_POST_CELLS'] = $postPath
         $eenv['PULSO_OUTCOME_PSEUDO_RELEASE'] = $PseudoRelease; $eenv['PULSO_OUTCOME_WINDOW_MONTHS'] = '3'
@@ -213,7 +217,8 @@ if ($job.Ok -and $ann.Count -gt 0 -and -not $ResumeWork) {
 } else { Hop 'verify' 'not-run' 'no announced proposal' }
 
 # ---- eval suite attach + evaluate (EV1, by script) ----------------------------------------------------------------------------------------------
-if (-not $NoEval -and -not $ResumeWork -and $job.Ok -and $ann.Count -gt 0) {
+if ($Profile -eq 'newagent') { Hop 'eval' 'not-run' 'a new agent brings its own generated eval_suite change in the proposal (proven by the engine); no pulso-min stand-in' }
+elseif (-not $NoEval -and -not $ResumeWork -and $job.Ok -and $ann.Count -gt 0) {
     $pid2 = [string]$ann[0].delivery.proposal_id
     $agent = ''
     try { $pr = Invoke-RestMethod -Uri "$core/v1/registry/proposals/$pid2" -Headers @{ Authorization = "Bearer $($tok.builder)" } -TimeoutSec 20; $agent = [string]$pr.proposal.agent_id } catch { }
@@ -230,6 +235,24 @@ if ($Cycle -and $script:KeepEngine -and $ann.Count -gt 0) {
     $pidH = [string]$ann[0].delivery.proposal_id
     $eng = $script:KeepEngine
     $spaOk = Test-Http $SpaUrl
+    if ($Profile -eq 'newagent') {
+        $naAgent = ''
+        try { $pr = Invoke-RestMethod -Uri "$core/v1/registry/proposals/$pidH" -Headers @{ Authorization = "Bearer $($tok.builder)" } -TimeoutSec 20; $naAgent = [string]$pr.proposal.agent_id } catch { }
+        $banner = @(
+            '', '================================================================================',
+            'ACTION FOR A PERSON: A NEW AGENT IS WAITING (local synthetic stack; the rig only watches, it decides nothing)',
+            "  Platform SPA : $SpaUrl   (API $plat)   SPA reachable now: $spaOk",
+            '  Account      : Lucia Herrera, lucia.herrera@latambank.example (Supervision), password demo1234',
+            '  Second factor: 000000 (the published dev constant of the seeded accounts, CC_ENV=dev only)',
+            "  Proposal     : $pidH   (NEW agent '$naAgent', source 'Del motor de mejora', origin auto_detect)",
+            '  Clicks       : Automatizacion > Propuestas > open the proposal (read the dossier and the approval review: the release settings',
+            '                 appear as inherited from the donor consultas);',
+            '                 1) Probar/Evaluar if offered  2) Aprobar (000000)  3) Publicar (000000, lands in staging)',
+            '                 4) Activar agente (000000): open the proposal with ?type=Cobro%20indebido, the only seeded type that is "ready" for an agent;',
+            '                    this promotes prod and records the agent on that case type',
+            "  The rig waits up to $HumanTimeoutMin min (read-only), then prints what the registry and the platform say.",
+            '================================================================================', '')
+    } else {
     $banner = @(
         '', '================================================================================',
         'ACTION FOR A PERSON (local synthetic stack; the rig only watches, it decides nothing)',
@@ -241,12 +264,17 @@ if ($Cycle -and $script:KeepEngine -and $ann.Count -gt 0) {
         '                 1) Aprobar (enter 000000)   2) Publicar (enter 000000)   3) Pasar a produccion (enter 000000)',
         "  The rig waits up to $HumanTimeoutMin min, then runs: release event -> poller -> engine -> outcome card.",
         '================================================================================', '')
+    }
     foreach ($l in $banner) { Say $l }
     Write-JsonFile -Path (Join-Path $paths.Rig 'waiting.json') -Obj ([ordered]@{ spa = $SpaUrl; api = $plat; account = 'lucia.herrera@latambank.example'; step_up = '000000'; proposal_id = $pidH; since = (Get-Date).ToUniversalTime().ToString('o') })
     $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'story_verify.py'), 'wait-human', '--core', $core, '--tokens', $paths.Tokens, '--proposal-id', $pidH, '--timeout-min', "$HumanTimeoutMin") -Needles $script:Needles -WorkDir $root
     $humanOk = ($r.ExitCode -eq 0)
     Hop 'human: approve + publish + promote prod' $(if ($humanOk) { 'OK' } else { 'BREAK' }) $(if ($humanOk) { 'a person did it in the SPA (observed in agent-core registry events)' } else { "not seen within $HumanTimeoutMin min" }) $(if (-not $humanOk) { 'the person (or a platform/SPA break: see platform.log)' } else { '' })
-    if ($humanOk) {
+    if ($humanOk -and $Profile -eq 'newagent') {
+        $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'story_verify.py'), 'activation', '--platform', $plat, '--core', $core, '--tokens', $paths.Tokens, '--proposal-id', $pidH, '--agent', $naAgent) -Needles $script:Needles -WorkDir $root
+        Hop 'activation facts' $(if ($r.ExitCode -eq 0) { 'OK' } else { 'BREAK' }) 'registry prod alias points at this proposal release; platform case type records the agent' ''
+        foreach ($n in 'release event -> poller -> engine', 'outcome step') { Hop $n 'not-run' 'a new agent has no outcome measure in this story (no traffic reaches it until recepcion routes to it)' '' }
+    } elseif ($humanOk) {
         # release event -> poller -> the SAME engine process (trigger records are in memory)
         $tries = 0; $sent = $false; $txt = ''; $r = $null
         while ($tries -lt 5 -and -not $sent) {

@@ -350,6 +350,18 @@ fn the_key_is_stable_per_finding_and_target() {
 }
 
 #[test]
+fn a_new_agent_title_names_the_new_agent_not_the_donor() {
+    // AGT1 live: the approver saw "[improvement-engine] new_agent:consultas ..." for the agent soporte-tecnico (target_ref carries the DONOR).
+    let mut c = compiled_patch();
+    c.kind = "new_agent".into();
+    c.target_ref = "new_agent:consultas".into();
+    c.agent_id = "soporte-tecnico".into();
+    let t = Submission::new(&finding(), &c).title();
+    assert!(t.contains("new_agent:soporte-tecnico") && !t.contains("consultas"), "{t}");
+    assert!(t.chars().count() <= 120);
+}
+
+#[test]
 fn the_registry_title_is_capped_at_the_platform_120_keeping_the_key_suffix() {
     let mut c = compiled_patch();
     c.target_ref = format!("prompt:p/{}", "nombre_largo ".repeat(30));

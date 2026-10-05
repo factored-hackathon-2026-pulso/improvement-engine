@@ -8,14 +8,30 @@ $rigHere = Split-Path -Parent $MyInvocation.MyCommand.Path
 # ---- settings ------------------------------------------------------------------------------------------------------------------------
 
 # Own stack, own ports. pulso-l3 (shared dev stack), pulso-demo (demo loop) and the other lanes' prefixes are refused.
+function Get-RigEnvInt {
+    param([string]$Name, [int]$Default)
+    $v = [Environment]::GetEnvironmentVariable($Name)
+    if ($v -and $v -match '^\d{4,5}$') { return [int]$v }
+    $Default
+}
+
+# AGT1: a lane may run its own rig beside ENV1: PULSO_STACK_PREFIX and PULSO_RIG_{PG,GW,CORE,ENGINE,PLATFORM,SPA}_PORT override the defaults
+# (explicit parameters still win).
 function Get-RigSettings {
-    param([string]$Prefix = 'pulso-env1', [int]$PgPort = 55510, [int]$GwPort = 8210, [int]$CorePort = 8211, [int]$EnginePort = 4210, [int]$PlatformPort = 8200)
+    param([string]$Prefix = '', [int]$PgPort = 0, [int]$GwPort = 0, [int]$CorePort = 0, [int]$EnginePort = 0, [int]$PlatformPort = 0, [int]$SpaPort = 0)
+    if (-not $Prefix) { $Prefix = $(if ($env:PULSO_STACK_PREFIX) { $env:PULSO_STACK_PREFIX } else { 'pulso-env1' }) }
+    if (-not $PgPort) { $PgPort = Get-RigEnvInt 'PULSO_RIG_PG_PORT' 55510 }
+    if (-not $GwPort) { $GwPort = Get-RigEnvInt 'PULSO_RIG_GW_PORT' 8210 }
+    if (-not $CorePort) { $CorePort = Get-RigEnvInt 'PULSO_RIG_CORE_PORT' 8211 }
+    if (-not $EnginePort) { $EnginePort = Get-RigEnvInt 'PULSO_RIG_ENGINE_PORT' 4210 }
+    if (-not $PlatformPort) { $PlatformPort = Get-RigEnvInt 'PULSO_RIG_PLATFORM_PORT' 8200 }
+    if (-not $SpaPort) { $SpaPort = Get-RigEnvInt 'PULSO_RIG_SPA_PORT' 5174 }
     $base = Get-DemoStackSettings -Prefix $Prefix -PgPort $PgPort -GwPort $GwPort -CorePort $CorePort -EnginePort $EnginePort
     if ($Prefix -eq 'pulso-demo') { throw "stack prefix 'pulso-demo' belongs to the demo loop; pick another" }
     if ($PlatformPort -lt 1024 -or $PlatformPort -gt 65535) { throw "port $PlatformPort is outside 1024..65535" }
-    $all = @($PgPort, $GwPort, $CorePort, $EnginePort, $PlatformPort, $base.BatteryPg, $base.BatteryGw, $base.BatteryCore)
+    $all = @($PgPort, $GwPort, $CorePort, $EnginePort, $PlatformPort, $SpaPort, $base.BatteryPg, $base.BatteryGw, $base.BatteryCore)
     if (@($all | Select-Object -Unique).Count -ne $all.Count) { throw 'the rig ports (including the battery ones the loop reserves) must all be different' }
-    $base | Add-Member -NotePropertyName PlatformPort -NotePropertyValue $PlatformPort -PassThru
+    $base | Add-Member -NotePropertyName PlatformPort -NotePropertyValue $PlatformPort -PassThru | Add-Member -NotePropertyName SpaPort -NotePropertyValue $SpaPort -PassThru
 }
 
 function Get-RigPaths {
@@ -59,7 +75,7 @@ function Get-PlatformEnvironment {
     [ordered]@{
         CC_ENV = 'dev'; CC_SEED_DEMO_DATA = 'true'; CC_DATABASE_URL = $db; CC_HOST = '127.0.0.1'; CC_PORT = "$($Settings.PlatformPort)"
         CC_AGENT_CORE_URL = "http://127.0.0.1:$($Settings.CorePort)"; CC_AGENT_KEYS_FILE = $KeysFile; CC_INTERNAL_SERVICE_TOKEN = $ServiceToken
-        CC_CORS_ORIGINS = '["http://localhost:5174","http://127.0.0.1:5174"]'; CC_LOG_FORMAT = 'console'; CC_NOTIFICATION_SWEEP_SECONDS = '0'
+        CC_CORS_ORIGINS = ('["http://localhost:{0}","http://127.0.0.1:{0}"]' -f $Settings.SpaPort); CC_LOG_FORMAT = 'console'; CC_NOTIFICATION_SWEEP_SECONDS = '0'
     }
 }
 

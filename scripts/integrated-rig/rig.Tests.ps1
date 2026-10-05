@@ -18,6 +18,29 @@ Describe 'Get-RigSettings' {
     }
 }
 
+Describe 'Get-RigSettings overrides (AGT1: a lane runs its own rig beside ENV1)' {
+    It 'reads prefix and ports from PULSO_STACK_PREFIX and PULSO_RIG_*_PORT' {
+        $keep = @{}
+        $names = 'PULSO_STACK_PREFIX', 'PULSO_RIG_PG_PORT', 'PULSO_RIG_GW_PORT', 'PULSO_RIG_CORE_PORT', 'PULSO_RIG_ENGINE_PORT', 'PULSO_RIG_PLATFORM_PORT', 'PULSO_RIG_SPA_PORT'
+        foreach ($n in $names) { $keep[$n] = [Environment]::GetEnvironmentVariable($n) }
+        try {
+            $env:PULSO_STACK_PREFIX = 'agt1'; $env:PULSO_RIG_PG_PORT = '55540'; $env:PULSO_RIG_GW_PORT = '8240'; $env:PULSO_RIG_CORE_PORT = '8241'
+            $env:PULSO_RIG_ENGINE_PORT = '4240'; $env:PULSO_RIG_PLATFORM_PORT = '8245'; $env:PULSO_RIG_SPA_PORT = '5184'
+            $s = Get-RigSettings
+            $s.Prefix | Should Be 'agt1'
+            $s.PgPort | Should Be 55540
+            $s.CorePort | Should Be 8241
+            $s.PlatformPort | Should Be 8245
+            $s.SpaPort | Should Be 5184
+            (Get-PlatformEnvironment -Settings $s -KeysFile 'k' -ServiceToken 't' -DbPath 'd')['CC_CORS_ORIGINS'] | Should Match 'localhost:5184'
+        } finally { foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $keep[$n]) } }
+    }
+    It 'keeps the ENV1 defaults and SPA port 5174 without overrides' {
+        $s = Get-RigSettings
+        $s.SpaPort | Should Be 5174
+    }
+}
+
 Describe 'Test-RamBudget' {
     It 'allows above the minimum only' {
         (Test-RamBudget -FreeMb 1501 -MinMb 1500) | Should Be $true

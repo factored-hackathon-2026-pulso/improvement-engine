@@ -121,7 +121,7 @@ Say ('    /api/v1/meta answers: ' + (Test-Http "http://127.0.0.1:$($settings.Pla
 if ($Spa) {
     $fe = Join-Path $PlatformDir 'frontend'
     $npx = (Get-Command npx.cmd -ErrorAction Stop).Source
-    Say "[3b] SPA build + preview :5174 (pnpm@9 via npx, frozen lockfile; node_modules stay in the platform checkout, never committed)"
+    Say "[3b] SPA build + preview :$($settings.SpaPort) (pnpm@9 via npx, frozen lockfile; node_modules stay in the platform checkout, never committed)"
     [void](Stop-PidTree -PidFile $paths.SpaPid)
     if (-not (Test-Path -LiteralPath (Join-Path $fe 'node_modules'))) {
         $r = Invoke-Scrubbed -File $npx -Arguments @('--yes', 'pnpm@9', 'install', '--frozen-lockfile') -Needles $script:Needles -WorkDir $fe -Quiet
@@ -131,15 +131,15 @@ if ($Spa) {
     if ($r.ExitCode -ne 0) { Fail ("SPA build failed: " + (($r.Output | Select-Object -Last 6) -join ' ')) }
     $sp = New-Object Diagnostics.ProcessStartInfo
     $sp.FileName = $env:ComSpec
-    $sp.Arguments = '/c ""' + $npx + '" --yes pnpm@9 exec vite preview --host 127.0.0.1 --port 5174 --strictPort >> "' + $paths.SpaLog + '" 2>&1"'
+    $sp.Arguments = '/c ""' + $npx + '" --yes pnpm@9 exec vite preview --host 127.0.0.1 --port ' + $settings.SpaPort + ' --strictPort >> "' + $paths.SpaLog + '" 2>&1"'
     $sp.UseShellExecute = $false; $sp.CreateNoWindow = $true; $sp.WorkingDirectory = $fe
     $sp.RedirectStandardInput = $true; $sp.RedirectStandardOutput = $true; $sp.RedirectStandardError = $true
     $spProc = [Diagnostics.Process]::Start($sp)
     [IO.File]::WriteAllText($paths.SpaPid, [string]$spProc.Id)
     $spaOk = $false
-    for ($i = 0; $i -lt 40 -and -not $spaOk; $i++) { Start-Sleep -Seconds 1; $spaOk = Test-Http 'http://127.0.0.1:5174' }
-    if (-not $spaOk) { Fail 'the SPA preview did not answer on :5174 (see spa.log)' }
-    Say '    SPA: http://127.0.0.1:5174'
+    for ($i = 0; $i -lt 40 -and -not $spaOk; $i++) { Start-Sleep -Seconds 1; $spaOk = Test-Http "http://127.0.0.1:$($settings.SpaPort)" }
+    if (-not $spaOk) { Fail "the SPA preview did not answer on :$($settings.SpaPort) (see spa.log)" }
+    Say "    SPA: http://127.0.0.1:$($settings.SpaPort)"
 }
 
 # ---- 4. the engine ----------------------------------------------------------------------------------------------------------------------

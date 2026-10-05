@@ -44,6 +44,20 @@ class PureTests(unittest.TestCase):
         self.assertEqual(p["release_id"], "r1")
         self.assertFalse(sv.human_progress("draft", None, "p1")["done"])
 
+    def test_activation_facts_reads_the_published_release_of_a_new_agent(self):
+        # AGT1: after a person published and activated a NEW agent, what the registry and the platform say (read-only).
+        rel = {"release_id": "rel-1", "status": "active", "agent_id": "soporte-tecnico", "proposal_id": "prp_1",
+               "interrupts": [{"id": "fraude", "priority": 100}], "language_detection": {"id": "lang-es-pt", "version": "1.0.0"},
+               "injection_ruleset": {"id": "injection-rules", "version": "1.0.0"}, "max_input_chars": 4000}
+        f = sv.activation_facts("soporte-tecnico", "prp_1", {"prod": {"release_id": "rel-1", "status": "active"}, "staging": {"release_id": "rel-1", "status": "active"}}, rel,
+                                [{"caseType": "Cobro indebido", "agentId": "soporte-tecnico"}, {"caseType": "Cargo no reconocido", "agentId": "disputas"}])
+        self.assertTrue(f["published"] and f["prod_is_this_proposal"])
+        self.assertEqual(f["inherited_settings"], {"interrupts": ["fraude"], "language_detection": "lang-es-pt", "injection_ruleset": "injection-rules", "max_input_chars": 4000})
+        self.assertEqual(f["serves_case_types"], ["Cobro indebido"])
+        none = sv.activation_facts("soporte-tecnico", "prp_1", {}, None, [])
+        self.assertFalse(none["published"] or none["prod_is_this_proposal"])
+        self.assertEqual(none["serves_case_types"], [])
+
     def test_case_id_shape(self):
         self.assertTrue(sv.CASE_ID.match("CASE-" + "0" * 25 + "1"))
         self.assertFalse(sv.CASE_ID.match("CASE-" + "I" * 26))  # I is not Crockford

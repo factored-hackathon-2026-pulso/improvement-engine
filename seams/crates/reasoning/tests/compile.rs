@@ -174,7 +174,10 @@ fn a_new_agent_is_a_closure_copy_of_the_donor_with_a_narrow_routing_card() {
     for t in [&out.changes[2], &out.changes[3]] {
         assert!(t["content"]["locales"]["es"].is_string() && t["content"]["locales"]["pt"].is_string());
     }
-    assert!(out.human_items.iter().any(|h| h.contains("fraude")) && out.human_items.iter().any(|h| h.contains("injection")));
+    // AGT1: since INH1 the clone INHERITS the donor release settings by reference (agent-core `inherit_from`): the approver must not be told that an
+    // admin still has to write the fraude interrupt or the injection ruleset (stale advice); the item names the inheritance and where to read it.
+    assert!(out.human_items.iter().all(|h| !h.contains("admin release settings")), "stale pre-INH1 advice: {:?}", out.human_items);
+    assert!(out.human_items.iter().any(|h| h.contains("inherit_from") && h.contains("fraude") && h.contains("injection")), "{:?}", out.human_items);
 
     let exs = (json!(["la app se cierra sola", "no puedo entrar a la aplicaci\u{f3}n"]), json!(["o aplicativo fecha sozinho", "n\u{e3}o consigo entrar no aplicativo"]));
     let try_with = |slug: &str, sum: &str, ex_es: Value| denied(compile(&c, &f, &row, &o, &agent_proposal(slug, sum, ex_es, exs.1.clone())));
