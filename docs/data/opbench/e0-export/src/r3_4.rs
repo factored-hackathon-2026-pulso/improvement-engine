@@ -10,8 +10,8 @@ use std::{
 };
 
 use arrow_array::{
-    Array, BooleanArray, Int32Array, Int64Array, LargeListArray, LargeStringArray, ListArray,
-    RecordBatch, StringArray, TimestampMicrosecondArray,
+    Array, BooleanArray, Float64Array, Int32Array, Int64Array, LargeListArray, LargeStringArray,
+    ListArray, RecordBatch, StringArray, TimestampMicrosecondArray,
 };
 use parquet::arrow::{ProjectionMask, arrow_reader::ParquetRecordBatchReaderBuilder};
 use serde_json::{Value, json};
@@ -720,6 +720,20 @@ fn integer_at(array: &dyn Array, row: usize) -> Result<Option<i64>, &'static str
     if let Some(values) = array.as_any().downcast_ref::<Int64Array>() {
         return Ok((!values.is_null(row)).then(|| values.value(row)));
     }
+    if let Some(values) = array.as_any().downcast_ref::<Float64Array>() {
+        if values.is_null(row) {
+            return Ok(None);
+        }
+        let value = values.value(row);
+        if !value.is_finite()
+            || value.fract() != 0.0
+            || value < i64::MIN as f64
+            || value >= -(i64::MIN as f64)
+        {
+            return Err("allowlisted E0 integer field has a non-integer representation");
+        }
+        return Ok(Some(value as i64));
+    }
     Err("allowlisted E0 field has an unsupported integer type")
 }
 
@@ -1089,6 +1103,19 @@ mod tests {
         assert_eq!(
             list_strings_at(&values, 0).unwrap_err(),
             "allowlisted query list has an invalid serialized array"
+        );
+    }
+
+    #[test]
+    fn accepts_only_integral_float_representation_of_registered_integer_csat() {
+        let values = arrow_array::Float64Array::from(vec![Some(1.0), Some(3.0), Some(4.0)]);
+        assert_eq!(integer_at(&values, 0).unwrap(), Some(1));
+        assert_eq!(integer_at(&values, 1).unwrap(), Some(3));
+        assert_eq!(integer_at(&values, 2).unwrap(), Some(4));
+        let non_integer = arrow_array::Float64Array::from(vec![Some(3.5)]);
+        assert_eq!(
+            integer_at(&non_integer, 0).unwrap_err(),
+            "allowlisted E0 integer field has a non-integer representation"
         );
     }
 
