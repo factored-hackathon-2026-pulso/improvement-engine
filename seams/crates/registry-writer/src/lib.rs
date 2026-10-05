@@ -137,7 +137,9 @@ impl Submission {
     pub fn title(&self) -> String {
         let suffix = &self.key()[6..14];
         let fixed = TITLE_PREFIX.chars().count() + suffix.chars().count() + 2;
-        let target = reasoning::dossier::cut_title(&self.target_ref, 120usize.saturating_sub(fixed));
+        // a new agent is named by itself: its target_ref carries the DONOR (`new_agent:consultas`), which would read as a change to the donor
+        let shown = if self.kind == "new_agent" { format!("new_agent:{}", self.agent_id) } else { self.target_ref.clone() };
+        let target = reasoning::dossier::cut_title(&shown, 120usize.saturating_sub(fixed));
         format!("{TITLE_PREFIX} {target} {suffix}")
     }
 }

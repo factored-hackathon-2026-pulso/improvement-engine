@@ -45,18 +45,40 @@ def build(seed: int = 7, plant: int = 1) -> list[dict]:
     return rows
 
 
+REASONS = ("Queja", "Tecnico", "Comercial", "Retencion", "Transaccional", "Producto")
+CHANNELS = ("Phone", "Chat")
+
+
+def build_uncovered(seed: int = 7) -> list[dict]:
+    """AGT1: M1 (unresolved rate) by reason_category x channel; ONE cell, Tecnico/Phone, is planted at about 45% in both halves (baseline
+    about 20%). The mapping table sends M1 x Tecnico to `new_agent:consultas` first: an UNCOVERED topic no agent's scope covers."""
+    rng = random.Random(seed)
+    rows = []
+    for reason in REASONS:
+        for channel in CHANNELS:
+            for half, den in (("discovery", 6000), ("holdout", 4000)):
+                rate = 0.45 if (reason, channel) == ("Tecnico", "Phone") else 0.20
+                num = max(10, min(den - 10, round(den * rate + rng.randint(-40, 40))))
+                rows.append({"metric": "M1", "dims": {"reason_category": reason, "channel": channel}, "half": half, "numerator": num, "denominator": den})
+    return rows
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--plant", type=int, default=1, choices=[1, 2], help="how many categories are planted (default 1)")
+    ap.add_argument("--profile", choices=["m4-template", "uncovered-topic"], default="m4-template", help="uncovered-topic: M1 Tecnico/Phone, the new-agent story (AGT1)")
     a = ap.parse_args(argv)
-    rows = build(a.seed, a.plant)
+    rows = build_uncovered(a.seed) if a.profile == "uncovered-topic" else build(a.seed, a.plant)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n")
-    print(json.dumps({"rows": len(rows), "metric": "M4", "planted": PLANTED, "label": "synthetic"}))
+    if a.profile == "uncovered-topic":
+        print(json.dumps({"rows": len(rows), "metric": "M1", "planted": "Tecnico/Phone", "label": "synthetic"}))
+    else:
+        print(json.dumps({"rows": len(rows), "metric": "M4", "planted": PLANTED, "label": "synthetic"}))
     return 0
 
 

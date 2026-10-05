@@ -179,6 +179,53 @@ def human_progress(state: str, events: list, proposal_id: str) -> dict:
     return {"state": state, "events": types, "done": bool(promoted), "release_id": next(iter(releases), None)}
 
 
+def activation_facts(agent: str, proposal_id: str, aliases: dict, release: dict | None, stages: list) -> dict:
+    """Pure (AGT1): what the registry and the platform say after a person published and activated a NEW agent. `aliases` maps alias name to the
+    registry's AliasState, `release` is the ReleaseDetail of the prod (else staging) release, `stages` are the platform's case-type stages."""
+    rel = release or {}
+    prod = (aliases or {}).get("prod") or {}
+    staging = (aliases or {}).get("staging") or {}
+    shown = prod or staging
+    return {
+        "agent": agent,
+        "published": bool(staging or prod),
+        "staging_release": staging.get("release_id"), "prod_release": prod.get("release_id"),
+        "prod_is_this_proposal": bool(prod) and rel.get("proposal_id") == proposal_id and rel.get("release_id") == prod.get("release_id"),
+        "release_status": rel.get("status") if rel else shown.get("status"),
+        "inherited_settings": {
+            "interrupts": [i.get("id") for i in rel.get("interrupts") or []],
+            "language_detection": (rel.get("language_detection") or {}).get("id"),
+            "injection_ruleset": (rel.get("injection_ruleset") or {}).get("id"),
+            "max_input_chars": rel.get("max_input_chars"),
+        } if rel else {},
+        "serves_case_types": sorted(s.get("caseType") for s in stages or [] if s.get("agentId") == agent),
+    }
+
+
+def cmd_activation(a) -> int:
+    """READ-ONLY (AGT1): prints the facts after the human hops. Decides nothing."""
+    tokens = json.loads(Path(a.tokens).read_text(encoding="utf-8"))
+    _secrets.extend(str(v) for v in tokens.values())
+    aliases = {}
+    for alias in ("staging", "prod"):
+        st, body = call("GET", f"{a.core}/v1/registry/aliases/{a.agent}/{alias}", tokens.get("builder"))
+        if st == 200 and body:
+            aliases[alias] = body
+    rid = (aliases.get("prod") or aliases.get("staging") or {}).get("release_id")
+    release = None
+    if rid:
+        st, release = call("GET", f"{a.core}/v1/registry/releases/{rid}", tokens.get("builder"))
+        release = release if st == 200 else None
+    tok = login(a.platform, "lucia.herrera")
+    stages = []
+    if tok:
+        st, body = call("GET", f"{a.platform}/api/v1/ai/stages", tok)
+        stages = ((body or {}).get("types") or (body or {}).get("items") or []) if st == 200 else []
+    facts = activation_facts(a.agent, a.proposal_id, aliases, release, stages)
+    say("activation facts: " + json.dumps(facts, sort_keys=True))
+    return 0 if facts["prod_is_this_proposal"] else 1
+
+
 def cmd_wait_human(a) -> int:
     """READ-ONLY wait: a person approves, publishes and promotes in the platform; this only watches agent-core (builder token to read the
     proposal, exporter token to read registry events) and prints one line per change. It never decides anything."""
@@ -265,6 +312,12 @@ def main(argv=None) -> int:
     w.add_argument("--proposal-id", required=True)
     w.add_argument("--timeout-min", type=int, default=60)
     w.add_argument("--interval", type=float, default=10.0)
+    t = sub.add_parser("activation")
+    t.add_argument("--platform", required=True)
+    t.add_argument("--core", required=True)
+    t.add_argument("--tokens", required=True)
+    t.add_argument("--proposal-id", required=True)
+    t.add_argument("--agent", required=True)
     v = sub.add_parser("verify")
     v.add_argument("--platform", required=True)
     v.add_argument("--core", required=True)
@@ -273,7 +326,7 @@ def main(argv=None) -> int:
     v.add_argument("--announce", required=True)
     v.add_argument("--out", required=True)
     a = ap.parse_args(argv)
-    return {"cases": cmd_cases, "wait-human": cmd_wait_human, "verify": cmd_verify}[a.cmd](a)
+    return {"cases": cmd_cases, "wait-human": cmd_wait_human, "activation": cmd_activation, "verify": cmd_verify}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,28 @@ class PlantedCells(unittest.TestCase):
         high = sorted(k for k, (n, d) in tot.items() if n / d > 0.55)
         self.assertEqual(high, sorted([pc.PLANTED, pc.SECOND_PLANTED]))
 
+    def test_uncovered_topic_profile_plants_one_m1_cell_no_agent_covers(self):
+        # AGT1: the mapping row M1 x reason_category Tecnico yields `new_agent` first (the topic has no covering agent).
+        rows = pc.build_uncovered(7)
+        self.assertEqual(rows, pc.build_uncovered(7))
+        self.assertTrue(all(r["metric"] == "M1" and set(r["dims"]) == {"reason_category", "channel"} for r in rows))
+        for r in rows:
+            n, d = r["numerator"], r["denominator"]
+            self.assertTrue(d >= 10 and n >= 10 and d - n >= 10, r)
+        by = {}
+        for r in rows:
+            by.setdefault((r["dims"]["reason_category"], r["dims"]["channel"], r["half"]), []).append(r["numerator"] / r["denominator"])
+        for half in ("discovery", "holdout"):
+            self.assertGreater(min(by[("Tecnico", "Phone", half)]), 0.40)
+            others = [v for k, vs in by.items() if k[2] == half and k[:2] != ("Tecnico", "Phone") for v in vs]
+            self.assertLess(max(others), 0.30)
+
+    def test_cli_uncovered_profile(self):
+        with tempfile.TemporaryDirectory() as t:
+            out = Path(t) / "c.ndjson"
+            self.assertEqual(pc.main(["--out", str(out), "--profile", "uncovered-topic"]), 0)
+            self.assertEqual(json.loads(out.read_text(encoding="utf-8").splitlines()[0])["metric"], "M1")
+
     def test_cli_writes_ndjson(self):
         with tempfile.TemporaryDirectory() as t:
             out = Path(t) / "c.ndjson"
