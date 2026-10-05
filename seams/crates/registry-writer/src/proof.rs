@@ -333,6 +333,7 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
         signal["art2"] = json!(p);
     }
     let owner_ack = c.expected_effect["art2"]["owner_ack"] == true;
+    let open_scratch: RefCell<Vec<String>> = RefCell::new(vec![]); // E8: scratch the engine could not close
     let finish = |story: Value, suite: Option<Value>, evals: Vec<String>, extra: Vec<Value>| -> Proof {
         let record = json!({"proposal": c.to_json(), "doubles": inp.doubles, "rubric": inp.rubric});
         let (dossier_v, dossier_err) = match dossier::build(&signal, &record, Some(&story), &inp.labels) {
@@ -343,7 +344,7 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
         let proven = !dossier_err && (dossier_v["announce"].as_bool() == Some(true) || dossier_v["announce_reason"] == "needs_owner_ack") && story["announce"].as_bool() == Some(true);
         // ART2: a human-owned policy draft is proven natively but NEVER announced automatically: it waits for the owner (`needs_owner_ack`).
         let announce = proven && !owner_ack;
-        let p = Proof {
+        let mut p = Proof {
             announce,
             outcome: if announce { "announced".into() } else if proven && owner_ack { "needs_owner_ack".into() } else { format!("not_announced:{verdict}") },
             verdict,
@@ -354,6 +355,7 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
             eval_proposals: evals,
             extra_changes: if announce { extra } else { vec![] },
         };
+        p.story["scratch_open"] = json!(open_scratch.borrow().clone());
         let conclusive = !matches!(p.verdict.as_str(), "infra_failed" | "suite_error" | "not_exercised");
         let _ = store.put(&pkey, Stored { runs: if conclusive { runs } else { runs + 1 }, proof: conclusive.then(|| p.to_stored()) });
         p
@@ -413,6 +415,9 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
         let b = w.evaluate_run(&EvalJob { label: "base", key: &salt, agent_id: agent, suite: &bundle["suite"], agent_entity: agent_entity.as_ref(), changes: &[] }, opts);
         if let Some(id) = b["proposal_id"].as_str() {
             evals.push(id.to_string());
+            if b["scratch_closed"] == false {
+                open_scratch.borrow_mut().push(id.to_string());
+            }
         }
         b
     };
@@ -431,6 +436,9 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
                     let run = w.evaluate_run(&EvalJob { label: "control", key: &salt, agent_id: agent, suite: &bundle["suite"], agent_entity: agent_entity.as_ref(), changes: &ctl }, opts);
                     if let Some(id) = run["proposal_id"].as_str() {
                         evals.push(id.to_string());
+                        if run["scratch_closed"] == false {
+                            open_scratch.borrow_mut().push(id.to_string());
+                        }
                     }
                     Some(run)
                 }
@@ -444,6 +452,9 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
             let mut run = w.evaluate_run(&EvalJob { label, key: &salt, agent_id: agent, suite: &bundle["suite"], agent_entity: agent_entity.as_ref(), changes: &changes }, opts);
             if let Some(id) = run["proposal_id"].as_str() {
                 evals.push(id.to_string());
+                if run["scratch_closed"] == false {
+                    open_scratch.borrow_mut().push(id.to_string());
+                }
             }
             // INH1: a Core that does not take the donor reference. Only an explicit admin credential may fall back to the old way.
             if let Some(code) = run["problem"]["code"].as_str().filter(|c| INHERIT_PROBLEMS.contains(c)) {
@@ -455,6 +466,9 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
                             run = w.evaluate_run(&EvalJob { label, key: &format!("{salt}-assumed"), agent_id: agent, suite: &bundle["suite"], agent_entity: agent_entity.as_ref(), changes: &changes }, opts);
                             if let Some(id) = run["proposal_id"].as_str() {
                                 evals.push(id.to_string());
+                                if run["scratch_closed"] == false {
+                                    open_scratch.borrow_mut().push(id.to_string());
+                                }
                             }
                         }
                         Err(why) => return finish(stub_story(&signal, &c.target_ref, "suite_error", &why), None, evals, vec![]),
