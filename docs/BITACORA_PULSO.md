@@ -230,3 +230,65 @@ platform-contract/ (schemas, event catalog, golden, conformance; 19 tests) and p
 
 - `scripts/triggers/agentcore_poller.py`: pull-only poller of agent-core `/v1/export` (runs, run events, registry events) with persisted cursor; `run.closed` and `release.*` plus `explicit` and `scheduled` become `pulso.trigger.v1` requests keyed by sha256 (also Idempotency-Key). 12 unit tests pass; live run against the local agent-core emitted 6 run.closed with a silent replay (admin token used as exporter; no release.* seen live).
 - Gap: debug-api has no trigger-accepting endpoint; proposed `POST /internal/v1/automation/triggers` (L-CAPI). No agent-core change needed. See scripts/triggers/README.md.
+
+## 2026-10-05T11:19:08Z UTC — CODEX — T1 round-2 real-aggregate reproducibility
+
+- Read the committed `outcome-discovery-v4` preregistration (`49675d46178e7c9291f2cc55b6708c4202b86da3`) before running. Focused T1 tests passed 31/31.
+- Ran `python -m scripts.aggregate.outcome.outcome_estimator --data-root D:\.codex\factored\data --out D:\.codex\factored\outcome-temp\round2-20261005-report-a.json` and repeated with `round2-20261005-report-b.json`. The two aggregate-only outputs are byte-identical, SHA-256 `62F74421668DBB9B9E03EE4EA2837BC1610CAC77B9C02424D73D33B87F967562`; reports remain outside Git. The generator read only `call_center_interactions`, `complaints`, `satisfaction_surveys`; no raw rows or IDs were inspected or committed.
+- Observed 35 complete months, 79 screened cells plus five descriptive M10 cells, all 84 report rows inconclusive, and 20 screened cells below the frozen support floor. Temporal placebo had 0 candidate windows among 29; the finite-window frequency is 0% and below the 5% screen bound, but is not calibrated Type-I error because windows overlap. Only the `<500` support bin (71 cells) was publishable for shifts; its deterministic response was 0% for 2/5/10 pp and threshold `>10 pp`, not statistical power/MDE. Other bins were suppressed.
+- Updated `docs/data/outcome/README.md` with the active run. Round-2 T1 remains partial: no real release history or customer-cluster sufficient statistics exist to support calibrated error/power claims. No causal or business-lift claim is made.
+
+## 2026-10-05T11:33:26Z UTC — CODEX — T1–T5 round-2 validation and reconciliation
+
+- Re-read the complete Codex round-2 brief and the shared journal. The latest Claude response is still CL-0075: its T2 native-evaluation counts refer to the superseded 106-case snapshot; its Agent Core 1.4 export semantics are reflected in T3. No newer Claude response was present at this check.
+- Fixed four T4 Spanish/Portuguese dossier lines that incorrectly said 54.4%; the retained counts 54,418/96,521 imply 56.4%. Added a regression that checks all six golden variants and forbids the wrong value. `python -m unittest scripts.acceptance.tests.test_check_proposal -v`: 31/31 pass.
+- `scripts/verify-local-ci.ps1` completed its selected local gates: formatting, Clippy, Rust unit/integration/doc tests, Python contract and fixture checks, and Pester; final output reported `Local CI preflight passed for the selected gates`. Explicit opt-in destructive Postgres/Podman checks remain excluded by design.
+- Focused suites on this worktree: T1 31/31, T2 16 passed plus one optional pinned-schema skip under Python 3.13, T3 53/53, T4 31/31, T5 scorer 122/122, OPBENCH v2 45/45; scoped `git diff --check` passes. A Python module invocation using a hyphenated directory name failed to import; rerunning with unittest discovery passed (not a product failure). Python 3.12 is installed but lacks PyYAML; no dependencies were installed and the Agent Core clone was not modified.
+- GitHub connector confirms PR #104 open, non-draft, mergeable, base `main` at `953c18f`, head `9fd5571`. Local `HEAD` `49675d4` and that remote head are sibling commits from `6ac4ad3` with differing trees; reconcile by a normal merge before publishing. Shell `gh` cannot authenticate and direct API networking is denied in this environment; use the GitHub connector if publishing becomes possible.
+- The pre-existing dirty `OWNERS.md` mapping for `scripts/acceptance/**` is excluded from Codex staging because `OWNERS.md` is L-GOV-owned. CX-R3-047 asked its owner to confirm the mapping or relocation; no reply is present yet. This affects ownership validation for the T4 regression only and does not block the other T1–T5 work.
+- T1 remains unable to claim calibrated <=5% FPR, empirical power, or per-cell MDE from dependent aggregate windows without release history/customer-cluster statistics. T2 exact 104-case live evaluation is still unverified. T5 current sensor score remains unavailable until the producer emits baseline evidence with a verifiable k-safe count contract; no unsafe signal payload was inspected or scored.
+
+## 2026-10-05T11:43:12Z UTC — CODEX — PR #104 consolidated publication
+
+- Reconciled the local Codex head with the live PR head `9fd5571` through a normal local merge. The six conflicts were resolved in favor of the tested current files where the remote sibling had reverted current T2 coverage disclosure, T1 v4 result, or T4's per-interaction metric wording. The integrated local tree SHA is `5e40f221e8bc14af168c38c72af682e7cb5c8f1e`.
+- Published that exact tree as a fast-forward commit on the existing PR branch via the GitHub connector: new PR head `4254005fc1c45f73fdd52116455219408698faa0`; no force update and no new PR. Replaced the PR body with current T1–T5 results, local validation, and explicit remaining gaps. The separate dirty `OWNERS.md` edit remains excluded.
+- Live GitHub state: PR #104 is open, non-draft, mergeable, based on `main` `953c18f`. The Actions run for head `4254005` reports failure in PostgreSQL artifact migration, Windows verify, and Ubuntu verify. All three log downloads return GitHub `BlobNotFound`; cause is therefore unknown and is not attributed to quota without evidence. Combined commit status has no status entries. Local verification remains the available positive gate; this PR should not be described as having green hosted checks.
+- The updated PR is available for user review, but not represented as fully green/merge-ready while hosted checks are failed and their logs unavailable. T2 current 104-case live evaluation, T5 safe producer baseline proof, and L-GOV ownership confirmation for the acceptance path remain outstanding.
+
+## 2026-10-05T11:45:56Z UTC — CODEX — latest published-head checks
+
+- Published a documentation-only follow-up to PR #104 so the technical journal records the observed host state. Current GitHub head is `85f0601ce5395601a297e2f364487c0cd5da42fa`; its workflow run `37304927162` completed with failure in Ubuntu verify, Windows verify, and PostgreSQL artifact migration. Each job-log request returns `BlobNotFound`; root cause remains unknown. Combined status exposes no status entries.
+- Local branch tree matches the published PR tree (`e620e4b80256e939106fda41f2b09f1d1aed7b7c`) apart from the intentionally excluded dirty L-GOV-owned `OWNERS.md`. The code/test tree was locally validated before the documentation-only follow-up.
+- PR is open and GitHub reports it mergeable, but hosted checks are not green; user review is possible, while merge-readiness is not claimed.
+
+## 2026-10-05T11:53:38Z UTC — CODEX — diagnose hosted workflow gate
+
+- Followed the GitHub Code Review provider guidance and fetched check-run annotations for all three failures on head `0f56399`. Each annotation says the job was **not started** because recent account payments have failed or the spending limit needs to be increased. Ubuntu and PostgreSQL also include an unrelated runner-image notice. This identifies an account billing/spending gate, not a test failure; the annotation does not distinguish payment state from configured spend limit.
+- Job logs remain unavailable (`BlobNotFound`), but the check annotations are direct evidence of why no code verification ran. Local gates remain green. Do not spend time changing product code or rerunning CI until the repository/account billing gate is addressed; no billing setting was changed by Codex.
+
+## 2026-10-05T11:55:53Z UTC — CODEX — recheck after documented billing-gate commit
+
+- PR head `e65ec28` also completed with all three jobs failed before start. Check-run annotations on Windows, Ubuntu, and PostgreSQL repeat the same account payment/spending-limit message. No code-specific CI step ran; this confirms the account-level gate persisted after the documentation-only update.
+- Exact hosted state and diagnosis are recorded in the PR body and shared journal. No billing change, CI rerun request, or deployment was made by Codex.
+
+## 2026-10-05T12:04:14Z UTC — CODEX — current T2 pinned-schema validation availability
+
+- Re-ran `C:\Python313\python.exe -m unittest discover -s agent-core-assets/eval-suites/codex-bank -p 'test_*.py' -v` from the T1–T5 worktree: 17 tests, 16 passed, one skipped. The skip is the pinned Agent Core `EvalSuite` model check because importing the pinned checkout fails with `ModuleNotFoundError: rfc8785`.
+- Directly attempted `EvalSuite.model_validate` against the exact four current YAML suites using the available Python 3.13 + PyYAML and pinned checkout; import stopped at the same missing dependency before parsing any suite. Python 3.12 has neither PyYAML nor rfc8785. No dependency was installed, no live provider/evaluator call was made, and no suite result is represented as runtime evaluation.
+- T2 remains structurally covered by local tests but full pinned-schema validation and exact-current-suite Agent Core live evaluation remain unverified. No files in Claude-owned `seams/**` or `OWNERS.md` were changed.
+
+## 2026-10-05T12:06:25Z UTC — CODEX — local Podman stack availability check
+
+- Read-only `podman machine list` and `podman ps` both failed before reaching a runtime: Podman reports it cannot create `C:\Users\alexg\.config` because a file already exists, and the configured Linux machine identity path is access denied. No machine was initialized, started, modified, or deleted; Codex did not touch another team's Podman resources or change global configuration.
+- Consequently no local Agent Core export, live eval run, proposal lifecycle, or rolling-quota acceptance run can be claimed from this environment. T3 remains fixture-only; T4 remains recorded-response acceptance only until the assigned local stack is accessible.
+
+## 2026-10-05T12:08:49Z UTC — CODEX — complete focused T1–T5 regression rerun
+
+- Re-ran the owned local acceptance suites on the current worktree: T1 outcome estimator 31/31; T2 authored-suite checks 16 passed/1 skipped (pinned `rfc8785` dependency); T3 run-export aggregator 53/53; T4 black-box acceptance harness 31/31; T5 full scoring tests 122/122; OPBENCH v2 45/45. No source files changed during these checks.
+- This verifies the current local unit/contract layer, not the outstanding runtime evidence: T1's placebo/power claims remain uncalibrated, T2 has no exact-current 104-case native evaluation, T3 has no complete real export, T4 has no live lifecycle/quota observation, and T5 cannot score a producer artifact until privacy-safe baseline support is emitted.
+
+## 2026-10-05T11:58:41Z UTC — CODEX — current published-head billing annotation
+
+- The latest PR head `8db5dc2` completed workflow run `37306346034` with all three jobs marked failed before execution. Check-run annotations repeat that recent account payments have failed or the spending limit needs to be increased. No test step ran; logs are unavailable. This is the same account-level gate seen on earlier documentation-only heads.
+- No code change was made; the T1–T5 code/test tree remains the locally validated tree. Hosted verification requires the account owner to resolve the billing/spending condition; no such setting was changed here.
+

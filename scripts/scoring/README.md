@@ -5,9 +5,14 @@ Offline scorers, standard library only. Synthetic fixtures under `tests/`; run
 
 - `score_findings.py --catalog opbench-lite.json --signals cells.json`: scores `steps_cli cells` output
   (`{signals:[{metric,dims,status,direction,discovery.diff}]}`) against the OPBENCH-lite catalog. Match key is
-  metric_id + normalized cell + direction (catalog direction = sign of `effect.difference`). Reports recall,
+  metric_id + versioned normalized cell + direction (catalog direction = sign of `effect.difference`). Only catalog
+  versions `1.0.0` and `2` are accepted; v1 keeps its legacy aliases, while v2 uses OPBENCH v2's frozen vocabularies.
+  In v2, only the registered linked-row metric alias `M6L` maps to M6; `M6R`/`M6U` remain distinct. Unsupported v2
+  reason/channel/PQR labels remain unmatched instead of being coerced through legacy aliases. Reports recall,
   precision (reported non-findings and unknown cells both count against it, listed separately), and Spearman
-  ranking agreement. Reported = `corroborated` (`--include-candidate` adds `candidate`). Catalog status
+  ranking agreement. V2 survey `SMS` maps to
+  the catalog's `other` bucket. Do not maintain a separate alias list in this scorer. Reported = `corroborated`
+  (`--include-candidate` adds `candidate`). Catalog status
   `refuted` entries are non-findings; descriptive corroborated entries are neutral.
 - `score_proposal.py`: 12-criterion rubric. Mechanical: R3, R4, R5, R6 (independence), R7, R11 (gates
   R4/R5/R6/R7/R11). Judged: R1, R2, R8, R9, R10, R12 via an optional hook. Preconditions: anchored patch
@@ -21,6 +26,48 @@ reasoning, and may only score judged criteria. This repo holds no keys; the call
 Input shapes were fixed against the audit and the local, not yet delivered, OPBENCH-lite output; the
 registry export is read generically (any JSON whose objects carry `id`/`kind`). Re-check both when the
 Codex catalog and the real agent-core export land.
+
+For OPBENCH v2, the bank-cell sensor and catalog use the same source snapshot but different customer-hash
+splits and preregistered statistical/support gates. The resulting precision, recall, and ranking values are
+**cross-protocol agreement with the derived catalog**, not independent ground-truth accuracy or out-of-sample
+performance. The scorer returns this limitation in `validation_limitations`; do not tune sensor gates against
+the same catalog after reviewing the result.
+
+## T5 signal-input privacy gate
+
+Before scoring, `score_findings.py` requires the exact `steps_cli cells` report fields (`semantics`, `method`,
+`cells_explored`, `signals`, `discards`) and the complete method envelope. A scorable stage must contain the
+cell evidence (`numerator`, `denominator`, `rate`) and comparison-baseline proof (`baseline_numerator`,
+`baseline_denominator`, `baseline_rate`), plus `diff` and `p`; neither support pair may be omitted. Counts must
+be integers, each denominator at least 10, and both positive and complementary support in each population must
+be either zero or at least 10. Rounded cell rate and baseline rate must agree with their respective counts within
+1e-6; `diff` must agree with rate minus baseline within 2e-6 (Rust rounds these values to six decimals).
+Status/reason combinations must have the matching discovery/holdout/R2 fields.
+The scorer also checks producer semantics: holdout status follows the corrected p-value/effect gate over the
+number of discovery candidates; R2 is `replicated` only when both windows pass, `reversed` if either effect is
+non-positive, and otherwise `not_replicated` (or `not_evaluated` when the pair is unavailable).
+The `no_differential` record is the sole aggregate signal shape: `refuted`, direction `none`, empty dims, and
+no cell-stage fields. Cell signals must be direction `up`, as emitted by this sensor. Current Rust `cells.rs`
+does not publish the comparison-baseline counts, so its stage-bearing outputs intentionally fail this scorer's
+privacy gate until the producer adds k-checked baseline support or a separately reviewed equivalent proof. This
+is a Claude-owned DEP-ASK; do not interpret a missing baseline as zero or score such outputs as if verified.
+
+Metrics and dimension keys are finite and metric-specific; the Rust PQR key is `category` (not `pqr_category`).
+Dimension values are checked against the audited reason, channel, survey-channel and PQR-category vocabularies.
+M7 digital `action`, M8 `campaign_type`, and M9 `customer_segment` have dynamic values without a complete
+checked-in domain contract, so their cell-level signals fail closed; their empty-dimension `no_differential`
+records remain valid. Add a producer-owned complete vocabulary before enabling those cells. Unknown/identifier-like
+values, malformed stage/summary shapes, and sub-k discard counts are rejected. Producer reason codes are limited
+to the six current Rust values (`not_significant_after_correction`, `holdout_unavailable`,
+`holdout_direction_reversed`, `replicated_in_holdout`, `holdout_not_significant`, `no_differential`); discard-kind
+values are also closed to the producer vocabulary. `p_adj`, when present, must be a finite probability. A suppressed discard bucket is represented as
+`{"kind":"<bounded-kind>","count":null,"suppressed":true}`; a numeric discard count is accepted only at 10 or
+above. Zero is permitted for one side of a binary measure, but never for its denominator.
+
+The Rust `steps_cli cells` serializer still emits numeric discard-bucket counts; masking those values below
+10 is a Claude-owned DEP-ASK for `seams/crates/steps/**`. Until that producer change is made, the scorer will
+intentionally refuse exports containing a sub-k discard count. This gate does not alter sensor findings or
+catalog metrics, and no real signal payload is included here.
 
 ## Judge (SC2)
 
