@@ -78,6 +78,13 @@ impl Catalog {
     pub fn get(&self, target_ref: &str) -> Option<&Artifact> {
         self.artifacts.get(target_ref)
     }
+    /// Replaces (or adds) one artifact, e.g. with the text read from the live registry. The caller relabels the catalogue.
+    pub fn put_artifact(&mut self, art: Artifact) {
+        self.artifacts.insert(art.target_ref(), art);
+    }
+    pub fn target_refs(&self) -> Vec<String> {
+        self.artifacts.keys().cloned().collect()
+    }
     pub fn agent(&self, id: &str) -> Option<&Value> {
         self.agents.get(id)
     }
