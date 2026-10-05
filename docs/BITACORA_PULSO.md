@@ -265,3 +265,8 @@ platform-contract/ (schemas, event catalog, golden, conformance; 19 tests) and p
 
 - Followed the GitHub Code Review provider guidance and fetched check-run annotations for all three failures on head `0f56399`. Each annotation says the job was **not started** because recent account payments have failed or the spending limit needs to be increased. Ubuntu and PostgreSQL also include an unrelated runner-image notice. This identifies an account billing/spending gate, not a test failure; the annotation does not distinguish payment state from configured spend limit.
 - Job logs remain unavailable (`BlobNotFound`), but the check annotations are direct evidence of why no code verification ran. Local gates remain green. Do not spend time changing product code or rerunning CI until the repository/account billing gate is addressed; no billing setting was changed by Codex.
+
+## 2026-10-05T11:55:53Z UTC — CODEX — recheck after documented billing-gate commit
+
+- PR head `e65ec28` also completed with all three jobs failed before start. Check-run annotations on Windows, Ubuntu, and PostgreSQL repeat the same account payment/spending-limit message. No code-specific CI step ran; this confirms the account-level gate persisted after the documentation-only update.
+- Exact hosted state and diagnosis are recorded in the PR body and shared journal. No billing change, CI rerun request, or deployment was made by Codex.
