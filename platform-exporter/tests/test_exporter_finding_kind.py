@@ -33,7 +33,7 @@ def _findings(rig, code=None):
 
 
 def test_exporter_declares_the_contract_revision_it_implements():
-    assert catalog.CONTRACT_REVISION == pc.CONTRACT_VERSION == "1.2.0"
+    assert catalog.CONTRACT_REVISION == pc.CONTRACT_VERSION == "1.3.0"
 
 
 def test_unknown_type_finding_uses_exporter_finding_kind_not_the_prefix(rig):

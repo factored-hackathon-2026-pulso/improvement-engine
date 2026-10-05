@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,7 +16,7 @@ SOURCE_NAMESPACE = "platform_live"
 # platform-contract revision implemented here (a conformance test compares it with the contract package): exporter
 # metadata is `source_event.kind = "exporter_finding"`; ExporterConfig.legacy_prefix=True keeps the 1.0.0 `exporter.`
 # event_type prefix shape.
-CONTRACT_REVISION = "1.2.0"
+CONTRACT_REVISION = "1.3.0"
 FINDING_SEVERITY = {"bad_row": "error", "late_event": "info", "capability_profile": "info",
                     "dimension_snapshot": "info"}  # every other finding code defaults to "warning"
 
@@ -36,6 +37,11 @@ KNOWN_EVENT_TYPES = frozenset({
     "escalation.opened", "escalation.withdrawn", "escalation.answered", "escalation.taken", "escalation.reassigned",
     "escalation.closed", "escalation.acknowledged",
     "call.started", "call.answered", "call.held", "call.resumed", "call.mute_changed", "call.ended",
+    # 1.3.0 (platform 5261ecf): copilot suggestions, tool feedback, case type, AI maturity, AI switch. Ids, enums,
+    # counters and flags only (no free-text key); `subject` of `suggestion_decided` is a closed enum, see below.
+    "copilot.suggestion_requested", "copilot.suggestion_ready", "copilot.suggestion_none", "copilot.suggestion_failed",
+    "copilot.suggestion_decided", "copilot.tool_used", "case.type_changed",
+    "ai.stage_advanced", "ai.stage_moved_back", "ai.agent_ready", "ai.agent_activated", "platform.ai_toggled",
 })
 # Payload keys that carry free text for a given type (mirror of `free_text_keys` in the contract catalog, drift-tested).
 # Dropped for that type even when the key name would not trip the generic redaction tokens (`motive`, `reason`,
@@ -47,7 +53,15 @@ FREE_TEXT_PAYLOAD_KEYS = {
     "escalation.answered": frozenset({"note"}),
     "call.started": frozenset({"reason"}),
     "case.closed": frozenset({"note"}),
-    "turn.created": frozenset({"text", "subject"}),
+    "turn.created": frozenset({"text", "subject", "staff_line"}),
+}
+# Top-level payload keys with a closed value set (mirror of `payload_enums` in the contract catalog, drift-tested). Such a
+# key is exempt from the generic name-based redaction (`subject` is a redacted token) but ONLY while its value is in the
+# set; any other value (free text where an enum was promised) is redacted and recorded like any other removed key.
+ENUM_PAYLOAD_KEYS = {
+    "copilot.suggestion_requested": {"trigger": frozenset({"customer_message", "manual", "handover"})},
+    "copilot.suggestion_decided": {"subject": frozenset({"reply", "escalation"}),
+                                   "decision": frozenset({"used", "edited", "discarded", "ignored", "accepted"})},
 }
 # Known security/credential telemetry: never ingested, payload never forwarded (counted as denied_event_type).
 DENIED_EVENT_TYPES = frozenset({"auth.password_accepted", "auth.mfa_challenge_issued", "auth.mfa_failed",
@@ -85,16 +99,23 @@ def is_redacted_key(key: Any) -> bool:
 
 
 def treat_payload(value: Any, redacted: list[str] | None = None, path: str = "",
-                  drop_keys: frozenset[str] = frozenset()) -> Any:
+                  drop_keys: frozenset[str] = frozenset(),
+                  enums: Mapping[str, frozenset[str]] | None = None) -> Any:
     """Copy of `value` without redacted keys (and without `drop_keys`, the free-text keys declared for the event
     type); the removed key paths are appended to `redacted`. Email-looking string values under any other key are
-    masked as well (and recorded)."""
+    masked as well (and recorded). `enums` (top level only) maps a key to its closed value set: such a key is kept when its
+    value is in the set and redacted otherwise, whatever its name."""
     red = redacted if redacted is not None else []
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for k, v in value.items():
             p = f"{path}.{k}" if path else str(k)
-            if is_redacted_key(k) or k in drop_keys:
+            if enums and not path and k in enums:
+                if isinstance(v, str) and v in enums[k]:
+                    out[k] = v
+                else:
+                    red.append(p)
+            elif is_redacted_key(k) or k in drop_keys:
                 red.append(p)
             else:
                 out[k] = treat_payload(v, red, p, drop_keys)

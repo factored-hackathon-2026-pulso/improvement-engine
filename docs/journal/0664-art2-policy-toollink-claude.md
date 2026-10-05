@@ -1,4 +1,4 @@
-# 0662 ART2 read-only tool link and tighten-only policy, end to end and live (UTC 2026-10-05, CLAUDE)
+# 0664 ART2 read-only tool link and tighten-only policy, end to end and live (UTC 2026-10-05, CLAUDE)
 
 Branch `claude/art2-policy-toollink`. `reasoning::art2` (menu, preconditions, pass-through link compiler, monotone policy comparator), mapping rows
 and `human_owned.policy` (hypothesis + deterministic tighten draft), Builder wiring (`edge_id`), suite mechanisms `tool_link` and `policy_threshold`,

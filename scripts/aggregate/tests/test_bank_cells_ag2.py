@@ -62,6 +62,8 @@ class Ag2MetricTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = ag2_root(Path(self.tmp.name))
         self.rows, self.stats = bc.build(self.root, k=1)
+        self.all_rows = self.rows
+        self.rows = [r for r in self.rows if bc.is_month(r["period"])]  # month cells; ALL/W rows: FullPeriodTests
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -106,7 +108,7 @@ class Ag2MetricTests(unittest.TestCase):
 
     def test_output_is_deterministic(self):
         again, _ = bc.build(self.root, k=1)
-        self.assertEqual(bc.to_ndjson(again), bc.to_ndjson(self.rows))
+        self.assertEqual(bc.to_ndjson(again), bc.to_ndjson(self.all_rows))
 
 
 class Ag2PrivacyRuleTests(unittest.TestCase):

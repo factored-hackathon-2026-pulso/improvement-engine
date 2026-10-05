@@ -174,10 +174,10 @@ fn event_identities_of_different_sources_never_collide_through_the_join_separato
 }
 
 #[test]
-fn the_embedded_catalog_is_the_platform_contract_file_at_version_1_2_0() {
+fn the_embedded_catalog_is_the_platform_contract_file_at_version_1_3_0() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../platform-contract/event-catalog.json");
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(v["catalog_version"], "1.2.0");
+    assert_eq!(v["catalog_version"], "1.3.0");
     for e in v["event_types"].as_array().unwrap() {
         let want = match e["status"].as_str().unwrap() {
             "admitted" => control_api::ingest::Class::Admitted,

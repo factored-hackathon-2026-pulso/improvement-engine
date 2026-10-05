@@ -1,0 +1,275 @@
+{
+  "source": {
+    "repository": "pulso-factored/improvement-engine",
+    "ref": "e49f7ad09656a4cea7da1285220cb239b53736d6",
+    "path": "seams/crates/reasoning/fixtures/base_artifacts.json",
+    "blob_sha": "107a2e5f1d75b16956096751615a996d6ebb1279"
+  },
+  "agents": [
+    "constructor-chat",
+    "consultas",
+    "disputas",
+    "recepcion",
+    "copiloto-asesor"
+  ],
+  "artifacts": [
+    {
+      "id": "p/constructor",
+      "kind": "prompt"
+    },
+    {
+      "id": "p/copiloto",
+      "kind": "prompt"
+    },
+    {
+      "id": "p/respuesta_asesor",
+      "kind": "prompt"
+    },
+    {
+      "id": "p/resumen_construccion",
+      "kind": "prompt"
+    },
+    {
+      "id": "p/resumen_radicado",
+      "kind": "prompt"
+    },
+    {
+      "id": "t/abstencion",
+      "kind": "template"
+    },
+    {
+      "id": "t/aclarar",
+      "kind": "template"
+    },
+    {
+      "id": "t/aclarar_cargo",
+      "kind": "template"
+    },
+    {
+      "id": "t/aclarar_problema",
+      "kind": "template"
+    },
+    {
+      "id": "t/acuse",
+      "kind": "template"
+    },
+    {
+      "id": "t/constructor_sin_borrador",
+      "kind": "template"
+    },
+    {
+      "id": "t/copiloto_fallback",
+      "kind": "template"
+    },
+    {
+      "id": "t/copiloto_sin_respuesta",
+      "kind": "template"
+    },
+    {
+      "id": "t/estado_pqr",
+      "kind": "template"
+    },
+    {
+      "id": "t/idioma_no_soportado",
+      "kind": "template"
+    },
+    {
+      "id": "t/mensaje_largo",
+      "kind": "template"
+    },
+    {
+      "id": "t/no_confirmado",
+      "kind": "template"
+    },
+    {
+      "id": "t/oferta",
+      "kind": "template"
+    },
+    {
+      "id": "t/pedir_agente",
+      "kind": "template"
+    },
+    {
+      "id": "t/pedir_cargo",
+      "kind": "template"
+    },
+    {
+      "id": "t/pedir_objetivo",
+      "kind": "template"
+    },
+    {
+      "id": "t/pedir_pedido",
+      "kind": "template"
+    },
+    {
+      "id": "t/pedir_problema",
+      "kind": "template"
+    },
+    {
+      "id": "t/pedir_radicado",
+      "kind": "template"
+    },
+    {
+      "id": "t/pqr_radicado",
+      "kind": "template"
+    },
+    {
+      "id": "t/propuesta_lista",
+      "kind": "template"
+    },
+    {
+      "id": "t/resumen_pqr",
+      "kind": "template"
+    },
+    {
+      "id": "t/te_comunico",
+      "kind": "template"
+    },
+    {
+      "id": "t/traspaso",
+      "kind": "template"
+    }
+  ],
+  "synthetic_evidence": [
+    {
+      "id": "ev_syn_complaint-phone",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_partial_complaint-phone",
+      "k": 12,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_pqr-status",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_partial_pqr-status",
+      "k": 12,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_amount-dispute",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_pt-switch",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_fraud-lure",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_radicado-slot",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_duplicate-charge",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_partial_duplicate-charge",
+      "k": 12,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_tool-timeout",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_partial_tool-timeout",
+      "k": 12,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_repeat-auth",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_partial_repeat-auth",
+      "k": 12,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_false-fraud",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_language-complaint",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_handoff-summary",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_partial_handoff-summary",
+      "k": 12,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_overlong-flow",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_consent-marketing",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_status-contradiction",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_partial_status-contradiction",
+      "k": 12,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_pii-summary",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_activation-opportunity",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_partial_activation-opportunity",
+      "k": 12,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_debt-hardship",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_unsupported-outcome",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    },
+    {
+      "id": "ev_syn_tool-argument",
+      "k": 25,
+      "provenance": "authored synthetic fixture"
+    }
+  ]
+}

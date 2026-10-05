@@ -1,0 +1,266 @@
+{
+  "agent_id": "copiloto-asesor",
+  "id": "copiloto-asesor",
+  "repetitions": 3,
+  "scenarios": [
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": false,
+        "outcome": "completed"
+      },
+      "id": "probe-lookup-movement-01",
+      "principal": {
+        "attrs": {
+          "country": "MX",
+          "role": "advisor"
+        },
+        "id": "syn-advisor-cop-01"
+      },
+      "seed": {
+        "tools": {
+          "leer_movimientos": [
+            {
+              "result": [
+                {
+                  "amount": "120.00",
+                  "currency": "USD",
+                  "status": "posted",
+                  "transaction_id": "syn-mov-601"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "Resume el movimiento ficticio syn-mov-601 y su estado."
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": false,
+        "outcome": "completed"
+      },
+      "id": "probe-lookup-movement-02",
+      "principal": {
+        "attrs": {
+          "country": "CO",
+          "role": "advisor"
+        },
+        "id": "syn-advisor-cop-02"
+      },
+      "seed": {
+        "tools": {
+          "leer_movimientos": [
+            {
+              "result": [
+                {
+                  "amount": "45.50",
+                  "currency": "USD",
+                  "status": "posted",
+                  "transaction_id": "syn-mov-602"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "Ayúdame a ubicar el último movimiento de prueba syn-mov-602."
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": false,
+        "outcome": "completed"
+      },
+      "id": "probe-lookup-movement-03",
+      "principal": {
+        "attrs": {
+          "country": "AR",
+          "role": "advisor"
+        },
+        "id": "syn-advisor-cop-03"
+      },
+      "seed": {
+        "tools": {
+          "leer_movimientos": [
+            {
+              "result": [
+                {
+                  "amount": "76.25",
+                  "currency": "USD",
+                  "status": "posted",
+                  "transaction_id": "syn-mov-603"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "es",
+          "op": "start"
+        },
+        {
+          "lang": "es",
+          "op": "turn",
+          "text": "¿Qué detalle tiene el movimiento sintético syn-mov-603?"
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": false,
+        "outcome": "completed"
+      },
+      "id": "probe-lookup-movement-04",
+      "principal": {
+        "attrs": {
+          "country": "CO",
+          "role": "advisor"
+        },
+        "id": "syn-advisor-cop-04"
+      },
+      "seed": {
+        "tools": {
+          "leer_movimientos": [
+            {
+              "result": [
+                {
+                  "amount": "18.00",
+                  "currency": "USD",
+                  "status": "posted",
+                  "transaction_id": "syn-mov-604"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "pt",
+          "op": "start"
+        },
+        {
+          "lang": "pt",
+          "op": "turn",
+          "text": "Resuma a movimentação fictícia syn-mov-604 e seu estado."
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": false,
+        "outcome": "completed"
+      },
+      "id": "probe-lookup-movement-05",
+      "principal": {
+        "attrs": {
+          "country": "MX",
+          "role": "advisor"
+        },
+        "id": "syn-advisor-cop-05"
+      },
+      "seed": {
+        "tools": {
+          "leer_movimientos": [
+            {
+              "result": [
+                {
+                  "amount": "39.99",
+                  "currency": "USD",
+                  "status": "posted",
+                  "transaction_id": "syn-mov-605"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "pt",
+          "op": "start"
+        },
+        {
+          "lang": "pt",
+          "op": "turn",
+          "text": "Ajude a localizar a movimentação de teste syn-mov-605."
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "expect": {
+        "escalated": false,
+        "outcome": "completed"
+      },
+      "id": "probe-lookup-movement-06",
+      "principal": {
+        "attrs": {
+          "country": "AR",
+          "role": "advisor"
+        },
+        "id": "syn-advisor-cop-06"
+      },
+      "seed": {
+        "tools": {
+          "leer_movimientos": [
+            {
+              "result": [
+                {
+                  "amount": "61.10",
+                  "currency": "USD",
+                  "status": "posted",
+                  "transaction_id": "syn-mov-606"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": "scripted",
+      "steps": [
+        {
+          "lang": "pt",
+          "op": "start"
+        },
+        {
+          "lang": "pt",
+          "op": "turn",
+          "text": "Qual é o detalhe da movimentação sintética syn-mov-606?"
+        }
+      ]
+    }
+  ],
+  "version": "1.1.0"
+}

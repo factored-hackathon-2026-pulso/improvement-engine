@@ -1772,6 +1772,31 @@
  },
  "tool_defs": {
   "buscar_transacciones": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "desde": {
+      "type": "string"
+     },
+     "hasta": {
+      "type": "string"
+     },
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     },
+     "monto_max": {
+      "type": "number"
+     },
+     "monto_min": {
+      "type": "number"
+     },
+     "texto": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
    "id": "buscar_transacciones",
    "idempotent": true,
    "min_auth_level": "session",
@@ -1791,12 +1816,16 @@
     "additionalProperties": false,
     "properties": {
      "limite": {
+      "default": 10,
       "type": "integer"
+     },
+     "product_id": {
+      "type": "string"
      }
     },
     "type": "object"
    },
-   "description": "Lista los últimos movimientos de la tarjeta del cliente atendido (monto, comercio, fecha, estado).",
+   "description": "Lista los Ãºltimos movimientos de la tarjeta del cliente atendido (monto, comercio, fecha, estado).",
    "id": "leer_movimientos",
    "idempotent": true,
    "min_auth_level": "session",
@@ -1807,7 +1836,12 @@
   "leer_pqr_cliente": {
    "args_schema": {
     "additionalProperties": false,
-    "properties": {},
+    "properties": {
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     }
+    },
     "type": "object"
    },
    "description": "Lista las PQR radicadas por el cliente atendido y su estado.",
@@ -1821,10 +1855,15 @@
   "leer_productos": {
    "args_schema": {
     "additionalProperties": false,
-    "properties": {},
+    "properties": {
+     "limite": {
+      "default": 20,
+      "type": "integer"
+     }
+    },
     "type": "object"
    },
-   "description": "Lista los productos del cliente atendido (tarjeta, saldo adeudado, cupo, pago mínimo).",
+   "description": "Lista los productos del cliente atendido (tarjeta, saldo adeudado, cupo, pago mÃ­nimo).",
    "id": "leer_productos",
    "idempotent": true,
    "min_auth_level": "session",
@@ -1842,7 +1881,7 @@
     },
     "type": "object"
    },
-   "description": "Lee la conversación del cliente con el agente de atención (últimos turnos).",
+   "description": "Lee la conversaciÃ³n del cliente con el agente de atenciÃ³n (Ãºltimos turnos).",
    "id": "leer_transcript",
    "idempotent": true,
    "min_auth_level": "session",
@@ -1856,7 +1895,7 @@
     "properties": {},
     "type": "object"
    },
-   "description": "Lee el paquete de traspaso del último run escalado del cliente: motivo, resumen y datos reunidos.",
+   "description": "Lee el paquete de traspaso del Ãºltimo run escalado del cliente: motivo, resumen y datos reunidos.",
    "id": "obtener_handoff",
    "idempotent": true,
    "min_auth_level": "session",
@@ -1865,6 +1904,18 @@
    "version": "1.0.0"
   },
   "obtener_pqr": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "idempotency_key": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "idempotency_key"
+    ],
+    "type": "object"
+   },
    "id": "obtener_pqr",
    "idempotent": true,
    "min_auth_level": "session",
@@ -1873,11 +1924,28 @@
    "version": "1.0.0"
   },
   "radicar_pqr": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "descripcion": {
+      "type": "string"
+     },
+     "transaction_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "transaction_id",
+     "descripcion"
+    ],
+    "type": "object"
+   },
    "id": "radicar_pqr",
    "idempotent": true,
    "min_auth_level": "step_up",
    "readback_by": "idempotency_key",
    "risk_class": "write_reversible",
+   "source": "customer_cases",
    "version": "1.0.0"
   },
   "seleccionar": {
@@ -1890,7 +1958,7 @@
  },
  "tool_defs_label": "registry-e2e with ALIGNED sources (additive engine fixture fix, see export_art2_graph.py)",
  "tool_service": {
-  "label": "snapshot of tool-service registry/tools (GET /v1/tools shape)",
+  "label": "SIG1 snapshot of the tool-service listing (GET /v1/tools shape)",
   "tools": [
    {
     "id": "buscar_transacciones",

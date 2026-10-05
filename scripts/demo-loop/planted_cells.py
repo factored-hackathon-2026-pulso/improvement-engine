@@ -19,6 +19,7 @@ from pathlib import Path
 
 CATEGORIES = ("Cobro indebido", "Cargo no reconocido", "Problema con app", "Calidad de servicio", "Atencion en sucursal")
 PLANTED = "Cobro indebido"
+SECOND_PLANTED = "Problema con app"  # only with --plant 2 (the Langfuse closure wants two stories)
 BASE_RATE = 0.33
 PLANTED_RATE = 0.62
 
@@ -30,14 +31,15 @@ def periods() -> list[str]:
     return out
 
 
-def build(seed: int = 7) -> list[dict]:
+def build(seed: int = 7, plant: int = 1) -> list[dict]:
+    planted = (PLANTED, SECOND_PLANTED)[:max(1, min(plant, 2))]
     rng = random.Random(seed)
     rows = []
     for period in periods():
         for half in ("discovery", "holdout"):
             for cat in CATEGORIES:
                 den = rng.randint(150, 230)
-                rate = PLANTED_RATE if cat == PLANTED else BASE_RATE
+                rate = PLANTED_RATE if cat in planted else BASE_RATE
                 num = max(10, min(den - 10, round(den * rate + rng.randint(-6, 6))))
                 rows.append({"metric": "M4", "dims": {"category": cat}, "half": half, "period": period, "numerator": num, "denominator": den})
     return rows
@@ -47,8 +49,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--plant", type=int, default=1, choices=[1, 2], help="how many categories are planted (default 1)")
     a = ap.parse_args(argv)
-    rows = build(a.seed)
+    rows = build(a.seed, a.plant)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:

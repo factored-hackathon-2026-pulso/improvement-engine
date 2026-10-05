@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "platform_live/1.2.0/exporter_finding.schema.json",
+  "$id": "platform_live/1.3.0/exporter_finding.schema.json",
   "title": "exporter_finding",
   "description": "Exporter metadata (quality/coverage/profile). Identity (tenant_id, source_id, native_event_id) and observed_at live on the observation envelope, outside the digest; never a domain row and never part of source-sequence continuity. `details` is inline and bounded (<= 32768 serialized bytes, checked by conformance).",
   "type": "object",
@@ -70,5 +70,5 @@
     "details"
   ],
   "additionalProperties": false,
-  "x-contract-version": "1.2.0"
+  "x-contract-version": "1.3.0"
 }

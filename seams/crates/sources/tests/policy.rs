@@ -97,3 +97,10 @@ fn contract_1_2_0_rating_columns_are_readable_and_free_text_stays_denied() {
     assert!(assert_table_allowed("assistant_sessions").is_err());
     assert!(assert_table_allowed("builder_proposals").is_err());
 }
+
+#[test]
+fn contract_1_3_0_case_type_is_readable_and_staff_line_is_not() {
+    assert!(assert_columns_allowed("cases", &["id", "case_type"]).is_ok());
+    assert!(assert_columns_allowed("turns", &["staff_line"]).is_err(), "staff names live in staff_line params");
+    assert!(assert_table_allowed("copilot_suggestions").is_err() && assert_table_allowed("case_type_maturity").is_err() && assert_table_allowed("platform_settings").is_err());
+}

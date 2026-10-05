@@ -260,17 +260,18 @@
   "note": "Digests of third-party contract content (CRLF-normalised sha256 tree, see drift_digest.py). Version strings are NOT trusted: agent-core extended ProblemCode without bumping contracts/VERSION. Re-pin only with `drift_digest.py --write` in the same commit as the pin bump.",
   "platform": {
     "pinned": {
-      "captured": "2026-10-04",
-      "digest": "71de0d6c4f08dab4e431f2e79bf5951cec0343ce2fb8065fd3f342798eeca0a1",
+      "captured": "2026-10-05",
+      "digest": "0c91c086c1193393b331d21d6c56283f3717be94dd1d0efa81d2c919518913f1",
       "files": {
-        "backend/openapi.json": "a0b929a608c8c234047586cba7e523a5097b6af67a4116d187cba804907afa05",
-        "backend/src/cc_platform/application/audit/catalog.py": "b9316fe2c302f2050e828a6743f017db3d0f6d43ed79d0413540049e1a78deb2",
-        "backend/src/cc_platform/domain/ai/events.py": "dcbef39487e54282fba99ad2643a1f8a86460e1068c863facf5fc536ebdaa00d",
-        "backend/src/cc_platform/domain/cases/events.py": "3d2eac29f2c15e4a9a8710ccd0fadd5b0243e785eec7d00437f16f63a4b8c6ef",
-        "backend/src/cc_platform/domain/cases/values.py": "6c85dfe406cddc54dd2ed0faf7b3b1d8a3a404131ccf74d84c7907de42528470",
-        "backend/src/cc_platform/infrastructure/persistence/sqlalchemy/tables.py": "79c949b43e99cd0aa327c2332a8cc302c37d6d20901a70e93714225d24aa91f3"
+        "backend/openapi.json": "0d13bcf569452785767b50089fe1b165e366d6584a2a8933032050a7e04fa6b1",
+        "backend/src/cc_platform/application/audit/catalog.py": "0bcbe09845c2a682a67cb99aaa8229a412478065727478f9f9c59ad5c47929a3",
+        "backend/src/cc_platform/domain/ai/events.py": "aaee9c461ffc5810ba316600991a8f431ea275cb2fff3cd767b8448fd68d78a3",
+        "backend/src/cc_platform/domain/cases/events.py": "38cb303440b1115a08d916bba8a727210e43263362db23c6415f8807b836fa80",
+        "backend/src/cc_platform/domain/cases/values.py": "eeff01d2ab80990efb4ec2b13d8814fec60f8d9a72269dd08493843abdd84e57",
+        "backend/src/cc_platform/infrastructure/persistence/sqlalchemy/tables.py": "3f1967a27b26ff3cd2a22de5d21a87fb49362b6108ef8cfae4568268eb61c8bd"
       },
-      "sha": "eeb73a8eaa27d560fec306967f17956e87731557",
+      "note": "Re-pinned deliberately by lane SIG1 (contract 1.3.0) after reading the diff of the six schema-source files against eeb73a8: CaseType + cases.case_type, case.type_changed, ai.* maturity events, platform.ai_toggled, copilot.suggestion_*/tool_used, release/turn_id on AI events, turns.staff_line (staff names; free text for the exporter), copilot_suggestions/case_type_maturity/platform_settings tables (not allow-listed), builder/admin routes (not read). Previous pin: eeb73a8 (digest 71de0d6c...).",
+      "sha": "5261ecfbb2ef1b72d6aca436139bef5791b4345b",
       "source_files": [
         "backend/openapi.json",
         "backend/src/cc_platform/domain/cases/values.py",

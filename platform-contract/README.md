@@ -9,9 +9,9 @@ and the exporter (PL-L1) test against these files.
 
 | Field | Value |
 |---|---|
-| Contract version | 1.2.0 (profile `platform_live.phase1`); additive over 1.1.0 and 1.0.0 |
+| Contract version | 1.3.0 (profile `platform_live.phase1`); additive over 1.2.0, 1.1.0 and 1.0.0 |
 | Source | support-platform CODE at `eeb73a8` (`tables.py`, `domain/cases/values.py`, `application/audit/catalog.py`, domain events, `backend/openapi.json`); the Product team's data-model artifact `BWx4saeWfYsLbQEbkNKMPg` ("Modelo de datos · Plataforma CC") is the 1.0.0/1.1.0 origin and is stale |
-| Platform commit | `eeb73a8` (main, merge of PR #10, 2026-10-04 15:33 UTC-5) |
+| Platform commit | `5261ecf` (main, 2026-10-05, after PRs #27/#28; 1.3.0). 1.2.0 was derived from `eeb73a8`. Previous row: `eeb73a8` (main, merge of PR #10, 2026-10-04 15:33 UTC-5) |
 | Captured | 2026-10-04 |
 | Previous platform commit | `a492bfa` (slices 0-3, cited by 1.0.0/1.1.0): **unreachable**. The platform history was rewritten on 2026-10-04 when it was split out of the data repo (`git cat-file -t a492bfa` fails, the GitHub API answers 422). `7d2ae3a` "Plataforma S3: supervision" (2026-10-03) is the closest old commit by slice naming: **an inference of the engine team, not a statement of the product team**. |
 
@@ -53,6 +53,28 @@ Denied (known, never ingested): `auth.password_accepted`, `auth.mfa_challenge_is
 quarantined with a quality finding; they never fail the batch.
 
 ## Changelog
+
+### 1.3.0 (2026-10-05, platform `5261ecf`), additive (lane SIG1)
+
+- Event catalog 1.3.0 admits 12 more types (53 -> 65 admitted): `copilot.suggestion_requested|ready|none|failed|decided`,
+  `copilot.tool_used` (data class `copilot`), `case.type_changed` (`operational`), `ai.stage_advanced|stage_moved_back|agent_ready|agent_activated`
+  and `platform.ai_toggled` (new data class `maturity`). "ignored" and "shown" are NOT event types: `ignored` is a `decision` value of
+  `copilot.suggestion_decided` (used|edited|discarded|ignored|accepted); the platform emits no "shown" event.
+- Payload keys are ids, enums, counters and flags (see `EVENT_PAYLOAD_KEYS`); no new type has a free-text key. `assistant.turn_answered`
+  gains `release`; `copilot.suggestion_ready|none|decided` carry `release`; `decided` carries `turn_id` (join with `turn.created`) and `agent`.
+  Rows written before the platform carried `release`/`turn_id` lack the key: treat as null, never as drift.
+- `EVENT_PAYLOAD_ENUMS` (new, catalog field `payload_enums`): closed value sets. `copilot.suggestion_decided.subject` (reply|escalation) looks like
+  free text by name (the exporter redacts any `subject`), so it is forwarded only while its value is in the set.
+- `cases.case_type` (optional, closed enum `none|unrecognized_charge|undue_charge|app_issue|branch_service|service_quality|virtual_card`;
+  `virtual_card` is team-generated on the platform). It is the slicing dimension for per-case-type acceptance and maturity.
+- Unchanged: denied tables/columns/events, administration types `staff.*`/`team.*` stay planned. Tables `copilot_suggestions`,
+  `case_type_maturity`, `platform_settings`, `staff_preferences` are not allow-listed (their texts are purged at 24 h; the events carry what is needed).
+  `turns.staff_line` (facts of a staff-only line) is known-unreadable.
+- Privacy: this contract admits event-level ids/enums; the k >= 10 rule is applied downstream by the aggregators and by the platform
+  evidence route (`CC_EVIDENCE_MIN_CELL`). Nothing here widens what leaves the platform database role.
+- Digest re-pin: `scripts/contracts/pinned_digests.json` platform pin moved from `eeb73a8` to `5261ecf` DELIBERATELY after reading the diff of the six
+  schema-source files (openapi.json, values.py, tables.py, audit catalog, cases/events.py, ai/events.py): the changes are the ones listed above plus
+  admin/builder routes and audit catalog entries not read by the engine.
 
 ### 1.2.0 (2026-10-04, platform `eeb73a8`), additive
 

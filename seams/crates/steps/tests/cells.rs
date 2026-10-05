@@ -1,6 +1,6 @@
 //! L1 `cells` sensor: deterministic recurring-problem signals over TREATED cell tables.
 //! Test-first. Tables here are synthetic aggregates (no ids, no free text).
-use steps::cells::{Config, Multiplicity, analyse, run};
+use steps::cells::{Config, Multiplicity, analyse, run, run_exploratory};
 use steps::sensor::json::{Json, parse};
 
 fn row(metric: &str, reason: &str, channel: &str, half: &str, num: i64, den: i64) -> String {
@@ -46,14 +46,18 @@ fn status<'a>(j: &'a Json, reason: &str, channel: &str) -> Option<&'a str> {
     find(j, reason, channel).and_then(|s| s.get("status")).and_then(|v| v.as_str())
 }
 
+fn discard_entries<'a>(j: &'a Json, kind: &str) -> Vec<&'a Json> {
+    j.get("discards").and_then(|d| d.as_arr()).unwrap().iter().filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some(kind)).collect()
+}
+
+/// Published count of a discard kind (0 when absent or when the count is suppressed below k).
 fn discard_count(j: &Json, kind: &str) -> i64 {
-    j.get("discards")
-        .and_then(|d| d.as_arr())
-        .unwrap()
-        .iter()
-        .filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some(kind))
-        .map(|d| d.get("count").and_then(|c| c.as_i64()).unwrap())
-        .sum()
+    discard_entries(j, kind).iter().filter_map(|d| d.get("count").and_then(|c| c.as_i64())).sum()
+}
+
+/// A discard whose count is below k is reported as `{kind, count: null, suppressed: true}`.
+fn discard_suppressed(j: &Json, kind: &str) -> bool {
+    discard_entries(j, kind).iter().any(|d| d.get("suppressed").is_some() && d.get("count") == Some(&Json::Null))
 }
 
 fn planted_queja_phone(r: &str, c: &str, _h: &str) -> Option<i64> {
@@ -178,7 +182,7 @@ fn k_violations_are_named_discards_and_never_tested() {
     rows.push(row("M1", "Leaky", "Chat", "discovery", 4, 200)); // 0 < numerator < k
     rows.push(row("M1", "Leaky2", "Chat", "discovery", 195, 200)); // 0 < complement < k
     let j = out(&rows);
-    assert_eq!(discard_count(&j, "k_violation"), 3);
+    assert!(discard_suppressed(&j, "k_violation"));
     assert_eq!(j.get("cells_explored").and_then(|v| v.as_i64()), Some(10));
     assert!(find(&j, "Tiny", "Phone").is_none());
     assert!(find(&j, "Leaky", "Chat").is_none());
@@ -190,7 +194,7 @@ fn favourable_direction_is_a_named_discard_not_a_problem() {
     let f = |r: &str, c: &str, _h: &str| (r == "Tecnico" && c == "Chat").then_some(100);
     let j = out(&grid("M1", &f));
     assert!(find(&j, "Tecnico", "Chat").is_none());
-    assert!(discard_count(&j, "favourable_direction") >= 1);
+    assert!(discard_count(&j, "favourable_direction") >= 1 || discard_suppressed(&j, "favourable_direction"));
 }
 
 #[test]
@@ -346,8 +350,9 @@ fn dependent_metric_findings_are_flagged_not_dropped() {
     let dep = find_m(&j, "M6", "Queja", "Phone").expect("kept");
     assert_eq!(dep.get("status").and_then(|v| v.as_str()), Some("corroborated"));
     assert_eq!(dep.get("depends_on").and_then(|v| v.as_str()), Some("M1"));
+    // The flag comes from the dependency table, not from a parent finding on the same cell.
     let indep = find_m(&j, "M6", "Tecnico", "Chat").expect("kept");
-    assert!(indep.get("depends_on").is_none());
+    assert_eq!(indep.get("depends_on").and_then(|v| v.as_str()), Some("M1"));
     assert!(find_m(&j, "M1", "Queja", "Phone").unwrap().get("depends_on").is_none());
 }
 
@@ -362,7 +367,7 @@ fn handled_time_share_m10_is_flagged_as_a_re_expression_of_m1() {
     let j = out(&rows);
     let dep = find_m(&j, "M10", "Queja", "Phone").expect("kept");
     assert_eq!(dep.get("depends_on").and_then(|v| v.as_str()), Some("M1"));
-    assert!(find_m(&j, "M10", "Tecnico", "Chat").unwrap().get("depends_on").is_none());
+    assert_eq!(find_m(&j, "M10", "Tecnico", "Chat").unwrap().get("depends_on").and_then(|v| v.as_str()), Some("M1"));
 }
 
 #[test]
@@ -524,9 +529,151 @@ fn level_rows_obey_the_k_rule_and_min_support_with_named_discards() {
     let mut rows = level_grid("M8", &|_, _| 500);
     rows.push(m_row("M8", "Push", "Chat", "discovery", "2024-03", 5, 100)); // k violation
     let j = out(&rows);
-    assert_eq!(discard_count(&j, "k_violation"), 1);
+    assert!(discard_suppressed(&j, "k_violation"));
     let small: Vec<String> = vec![m_row("M8", "Push", "Email", "discovery", "2024-03", 200, 400), m_row("M8", "Push", "Email", "holdout", "2024-03", 200, 400)];
     let j = out(&small);
     assert!(level_of(&j, "M8").is_none());
-    assert_eq!(discard_count(&j, "level_below_min_support"), 1);
+    assert!(discard_suppressed(&j, "level_below_min_support"));
+}
+
+// ---------------------------------------------------------------- DET1: full-period cells, pooled support, exploratory
+
+fn dims1(reason: &str, channel: Option<&str>) -> String {
+    match channel {
+        Some(c) => format!("{{\"reason_category\":\"{reason}\",\"channel\":\"{c}\"}}"),
+        None => format!("{{\"reason_category\":\"{reason}\"}}"),
+    }
+}
+
+fn arow(metric: &str, reason: &str, channel: Option<&str>, half: &str, period: &str, num: i64, den: i64) -> String {
+    format!("{{\"metric\":\"{metric}\",\"dims\":{},\"half\":\"{half}\",\"period\":\"{period}\",\"numerator\":{num},\"denominator\":{den}}}", dims1(reason, channel))
+}
+
+/// Full-period table for one channel: a big filler reason at 20% and a planted reason with the given (disc den, disc num, hold den, hold num).
+fn full_table(planted: (i64, i64, i64, i64)) -> Vec<String> {
+    let mut v = vec![];
+    for (r, d, h) in [("Informativo", (3000, 600, 3000, 600), 0), ("Transaccional", (3000, 600, 3000, 600), 0), ("Comercial", planted, 0)] {
+        let _ = h;
+        v.push(arow("M1", r, Some("WhatsApp"), "discovery", "ALL", d.1, d.0));
+        v.push(arow("M1", r, Some("WhatsApp"), "holdout", "ALL", d.3, d.2));
+    }
+    v
+}
+
+fn dsig<'a>(j: &'a Json, reason: &str) -> Option<&'a Json> {
+    signals(j).into_iter().find(|s| s.get("dims").and_then(|d| d.get("reason_category")).and_then(|v| v.as_str()) == Some(reason))
+}
+
+fn dst<'a>(s: Option<&'a Json>) -> (&'a str, &'a str) {
+    let s = s.expect("signal");
+    (s.get("status").and_then(|v| v.as_str()).unwrap(), s.get("reason").and_then(|v| v.as_str()).unwrap())
+}
+
+#[test]
+fn support_floor_applies_to_the_pooled_period_not_the_discovery_half() {
+    // 240 + 260 = 500 pooled: the old discovery-half floor (500) dropped it; both halves are enough to replicate (>= 250 / 2).
+    let j = out(&full_table((240, 96, 260, 104))); // 40% vs 20%
+    assert_eq!(dst(dsig(&j, "Comercial")), ("corroborated", "replicated_in_holdout"));
+    assert_eq!(discard_count(&j, "below_min_support"), 0);
+    // below the pooled floor it is still a named discard
+    let j = out(&full_table((200, 80, 200, 80)));
+    assert!(dsig(&j, "Comercial").is_none());
+    assert!(discard_suppressed(&j, "below_min_support"));
+}
+
+#[test]
+fn underpowered_holdout_is_uncertain_not_dropped() {
+    let j = out(&full_table((500, 200, 60, 24)));
+    assert_eq!(dst(dsig(&j, "Comercial")), ("uncertain", "replication_underpowered"));
+}
+
+#[test]
+fn full_period_rows_set_the_half_totals_and_month_rows_are_not_double_counted() {
+    let mut rows = full_table((300, 120, 300, 120));
+    for m in ["2024-01", "2024-02", "2025-03"] {
+        rows.push(arow("M1", "Comercial", Some("WhatsApp"), "discovery", m, 40, 100));
+    }
+    let j = out(&rows);
+    let d = dsig(&j, "Comercial").unwrap().get("discovery").unwrap();
+    assert_eq!(d.get("denominator").and_then(|v| v.as_i64()), Some(300));
+    assert_eq!(d.get("baseline_denominator").and_then(|v| v.as_i64()), Some(6000));
+}
+
+#[test]
+fn window_rows_feed_r2() {
+    let mut rows = full_table((300, 120, 300, 120));
+    for (w, h) in [("W1", "discovery"), ("W1", "holdout"), ("W2", "discovery"), ("W2", "holdout")] {
+        rows.push(arow("M1", "Comercial", Some("WhatsApp"), h, w, 60, 150));
+        for r in ["Informativo", "Transaccional"] {
+            rows.push(arow("M1", r, Some("WhatsApp"), h, w, 300, 1500));
+        }
+    }
+    let j = out(&rows);
+    assert_eq!(dsig(&j, "Comercial").unwrap().get("r2").and_then(|r| r.get("status")).and_then(|v| v.as_str()), Some("replicated"));
+}
+
+#[test]
+fn reason_only_cells_are_their_own_family_with_their_own_multiplicity() {
+    let mut rows = full_table((300, 120, 300, 120));
+    for (r, d, h) in [("Informativo", (3000, 600), (3000, 600)), ("Transaccional", (3000, 600), (3000, 600)), ("Comercial", (300, 120), (300, 120))] {
+        rows.push(arow("M1", r, None, "discovery", "ALL", d.1, d.0));
+        rows.push(arow("M1", r, None, "holdout", "ALL", h.1, h.0));
+    }
+    let j = out(&rows);
+    let fam = j.get("method").and_then(|m| m.get("families")).unwrap();
+    assert_eq!(fam.get("main").and_then(|v| v.as_i64()), Some(3));
+    assert_eq!(fam.get("reason_only").and_then(|v| v.as_i64()), Some(3));
+    assert_eq!(j.get("cells_explored").and_then(|v| v.as_i64()), Some(6));
+    assert!(signals(&j).iter().any(|s| s.get("dims").and_then(|d| d.get("channel")).is_none() && s.get("status").and_then(|v| v.as_str()) == Some("corroborated")));
+}
+
+#[test]
+fn exploratory_tier_relaxes_knobs_but_never_k_and_never_corroborates() {
+    // +4 pp (below the 5 pp strict floor), well powered: strict ignores it, exploratory labels it.
+    let rows = full_table((3000, 720, 3000, 720)); // 24% vs 20%
+    let strict = out(&rows);
+    assert!(dsig(&strict, "Comercial").is_none());
+    let j = parse(&run_exploratory(&rows.join("
+")).unwrap()).unwrap();
+    let s = dsig(&j, "Comercial").expect("exploratory candidate");
+    assert_eq!(dst(Some(s)).0, "candidate_exploratory");
+    assert!(s.get("priority").and_then(|v| v.as_f64()).unwrap() > 0.0);
+    assert!(s.get("exploratory_note").and_then(|v| v.as_str()).unwrap().starts_with("exploratory:"));
+    assert_eq!(j.get("method").and_then(|m| m.get("profile")).and_then(|v| v.as_str()), Some("exploratory"));
+    assert!(signals(&j).iter().all(|s| s.get("status").and_then(|v| v.as_str()) != Some("corroborated")));
+    // k stays: a row with a numerator of 5 is still a named discard
+    let mut bad = rows.clone();
+    bad.push(arow("M1", "Queja", Some("WhatsApp"), "discovery", "ALL", 5, 900));
+    let j = parse(&run_exploratory(&bad.join("
+")).unwrap()).unwrap();
+    assert!(discard_suppressed(&j, "k_violation"));
+    assert!(dsig(&j, "Queja").is_none());
+}
+
+#[test]
+fn exploratory_profile_leaves_the_strict_tier_untouched() {
+    let rows = full_table((300, 120, 300, 120));
+    let a = out(&rows);
+    let b = parse(&run_exploratory(&rows.join("
+")).unwrap()).unwrap();
+    assert_eq!(dst(dsig(&a, "Comercial")), dst(dsig(&b, "Comercial")));
+    assert_eq!(analyse(&rows.join("
+"), &Config::default()).unwrap().signals.len(), analyse(&rows.join("
+"), &Config::default()).unwrap().signals.len());
+}
+
+#[test]
+fn discard_counts_below_k_are_suppressed_by_the_sensor_itself() {
+    let mut rows = full_table((300, 120, 300, 120));
+    rows.push(arow("M1", "Queja", Some("WhatsApp"), "discovery", "ALL", 5, 900)); // one k violation
+    let j = out(&rows);
+    let e = discard_entries(&j, "k_violation");
+    assert_eq!(e.len(), 1);
+    assert_eq!(e[0].get("count"), Some(&Json::Null));
+    assert_eq!(e[0].get("suppressed"), Some(&Json::Bool(true)));
+    for d in j.get("discards").and_then(|d| d.as_arr()).unwrap() {
+        if let Some(n) = d.get("count").and_then(|c| c.as_i64()) {
+            assert!(n >= 10, "published discard count {n} is below k");
+        }
+    }
 }

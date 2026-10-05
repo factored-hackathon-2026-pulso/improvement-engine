@@ -16,8 +16,10 @@ from pathlib import Path
 
 import yaml
 
-ALIGNED_SOURCES = {"leer_productos": "customer_products", "leer_movimientos": "customer_transactions", "leer_pqr_cliente": "customer_cases",
-                   "obtener_pqr": "customer_cases", "buscar_transacciones": "customer_transactions"}
+# SIG1 owns the alignment: the aligned ToolDefs and the provider listing come from scripts/contracts/tool_alignment (no duplicate table here).
+ALIGN = Path(__file__).resolve().parents[1] / "contracts" / "tool_alignment"
+ALIGNED = json.loads((ALIGN / "aligned_tool_defs.json").read_text(encoding="utf-8"))["tool_defs"]
+PROVIDER = json.loads((ALIGN / "tool_service_catalog.snapshot.json").read_text(encoding="utf-8"))["tools"]
 
 
 def fix(x):
@@ -36,7 +38,7 @@ def load(p):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--registry-e2e", type=Path, required=True)
-    ap.add_argument("--tool-service", type=Path, required=True)
+    ap.add_argument("--tool-service", type=Path, required=False, help="unused (kept for compatibility)")
     ap.add_argument("--base", type=Path, required=True)
     ap.add_argument("--aligned-out", type=Path)
     a = ap.parse_args()
@@ -47,16 +49,11 @@ def main():
     tools = {}
     for p in sorted((fx / "tools").glob("*.yaml")):
         t = load(p)
-        if t["id"] in ALIGNED_SOURCES:
-            t["source"] = ALIGNED_SOURCES[t["id"]]
-        tools[t["id"]] = t
+        tools[t["id"]] = ALIGNED.get(t["id"], t)
     base["tool_defs"] = tools
     base["tool_defs_label"] = "registry-e2e with ALIGNED sources (additive engine fixture fix, see export_art2_graph.py)"
-    svc = []
-    for p in sorted((a.tool_service / "registry" / "tools").glob("*.yaml")):
-        t = load(p)
-        svc.append({k: t[k] for k in ("id", "version", "risk_class", "min_auth_level", "source") if k in t})
-    base["tool_service"] = {"tools": svc, "label": "snapshot of tool-service registry/tools (GET /v1/tools shape)"}
+    svc = [{k: t[k] for k in ("id", "version", "risk_class", "min_auth_level", "source") if k in t} for t in PROVIDER]
+    base["tool_service"] = {"tools": svc, "label": "SIG1 snapshot of the tool-service listing (GET /v1/tools shape)"}
     a.base.write_text(json.dumps(base, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     if a.aligned_out:
         if a.aligned_out.exists():
@@ -64,8 +61,8 @@ def main():
         shutil.copytree(fx, a.aligned_out)
         for p in (a.aligned_out / "tools").glob("*.yaml"):
             t = load(p)
-            if t["id"] in ALIGNED_SOURCES:
-                t["source"] = ALIGNED_SOURCES[t["id"]]
+            if t["id"] in ALIGNED:
+                t = ALIGNED[t["id"]]
                 p.write_text(yaml.safe_dump(t, allow_unicode=True, sort_keys=False), encoding="utf-8")
     print("ok", len(base["flows"]), len(base["policies"]), len(tools), len(svc))
 

@@ -23,11 +23,11 @@ def _errors(table, row):
     return conformance.validate_rows(table, [row])
 
 
-def test_version_stamp_is_1_2_0_against_a_reachable_platform_sha():
-    assert pc.CONTRACT_VERSION == "1.2.0"
-    assert pc.PREVIOUS_CONTRACT_VERSION == "1.1.0"
-    assert pc.ARTIFACT_STAMP["commit"].startswith("eeb73a8")
-    assert pc.ARTIFACT_STAMP["captured"] == "2026-10-04"
+def test_version_stamp_keeps_the_1_2_0_history_against_a_reachable_platform_sha():
+    # 1.3.0 (SIG1) moved the head to 5261ecf; the 1.2.0 origin stays documented.
+    assert pc.CONTRACT_VERSION == "1.3.0"
+    assert pc.PREVIOUS_CONTRACT_VERSION == "1.2.0"
+    assert pc.ARTIFACT_STAMP["previous_commit"].startswith("eeb73a8")
     assert pc.ARTIFACT_STAMP["unreachable_commits"]["a492bfa"]
     readme = (ROOT / "README.md").read_text("utf-8")
     assert "eeb73a8" in readme and "a492bfa" in readme and "unreachable" in readme.lower()
@@ -164,8 +164,8 @@ def test_new_event_types_are_admitted_with_a_data_class(etype):
 
 def test_catalog_declares_data_classes_and_version():
     cat = _catalog()
-    assert cat["contract_version"] == "1.2.0" and cat["catalog_version"] == "1.2.0"
-    assert set(cat["data_classes"]) == {"operational", "assistant", "copilot", "builder"}
+    assert cat["contract_version"] == "1.3.0" and cat["catalog_version"] == "1.3.0"
+    assert set(cat["data_classes"]) == {"operational", "assistant", "copilot", "builder", "maturity"}
     assert all("data_class" in e for e in cat["event_types"] if e["status"] == "admitted")
 
 
@@ -174,7 +174,7 @@ def test_1_1_0_admitted_and_denied_types_are_unchanged():
            "case.closed", "case.viewed", "turn.created", "staff.availability_changed", "auth.login_failed",
            "auth.account_locked", "auth.session_started", "auth.session_ended"}
     assert old <= set(pc.ADMITTED_EVENT_TYPES)
-    assert set(pc.ADMITTED_EVENT_TYPES) == old | set(NEW_ADMITTED)
+    assert old | set(NEW_ADMITTED) <= set(pc.ADMITTED_EVENT_TYPES)  # 1.3.0 adds more; see test_contract_1_3_0
     for t in ("auth.password_accepted", "auth.mfa_challenge_issued", "auth.mfa_failed", "customer.session_started"):
         assert pc.classify_event_type(t) == "denied"
 
@@ -248,7 +248,7 @@ def test_schemas_are_stamped_1_2_0_and_valid():
     for t in pc.ALLOWED_TABLES:
         s = pc.load_schema(t)
         Draft202012Validator.check_schema(s)
-        assert s["x-contract-version"] == "1.2.0" and "/1.2.0/" in s["$id"]
+        assert s["x-contract-version"] == "1.3.0" and "/1.3.0/" in s["$id"]
 
 
 def test_changelog_documents_the_revision():
@@ -258,7 +258,7 @@ def test_changelog_documents_the_revision():
 
 
 def test_model_exposes_payload_specs_consistently():
-    assert set(model.EVENT_PAYLOAD_KEYS) == set(NEW_ADMITTED)
+    assert set(NEW_ADMITTED) <= set(model.EVENT_PAYLOAD_KEYS)
     for t, keys in model.EVENT_FREE_TEXT_KEYS.items():
         assert set(keys) <= set(model.EVENT_PAYLOAD_KEYS.get(t, keys))
     assert copy.deepcopy(model.EVENT_DATA_CLASSES)

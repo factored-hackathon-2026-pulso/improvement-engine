@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
-/// Admitted event types of platform-contract 1.2.0 (`event-catalog.json`, drift-tested).
+/// Admitted event types of platform-contract 1.3.0 (`event-catalog.json`, drift-tested).
 pub const ADMITTED_EVENT_TYPES: &[&str] = &[
     "case.opened",
     "case.queued",
@@ -71,6 +71,19 @@ pub const ADMITTED_EVENT_TYPES: &[&str] = &[
     "call.resumed",
     "call.mute_changed",
     "call.ended",
+    // 1.3.0 (platform 5261ecf)
+    "copilot.suggestion_requested",
+    "copilot.suggestion_ready",
+    "copilot.suggestion_none",
+    "copilot.suggestion_failed",
+    "copilot.suggestion_decided",
+    "copilot.tool_used",
+    "case.type_changed",
+    "ai.stage_advanced",
+    "ai.stage_moved_back",
+    "ai.agent_ready",
+    "ai.agent_activated",
+    "platform.ai_toggled",
 ];
 /// Known security/credential telemetry: counted, never packaged.
 pub const DENIED_EVENT_TYPES: &[&str] = &["auth.password_accepted", "auth.mfa_challenge_issued", "auth.mfa_failed", "customer.session_started"];

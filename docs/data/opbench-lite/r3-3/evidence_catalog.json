@@ -1,0 +1,46 @@
+{
+  "format": "pulso.opbench-aggregate-excerpt.v1",
+  "source_path": "outcome-temp/opbench-v2-1/v2/opbench-lite.json",
+  "source_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+  "privacy": {
+    "aggregate_only": true,
+    "minimum_count": 10,
+    "row_data_included": false,
+    "customer_identifiers_included": false
+  },
+  "entries": {
+    "M1-01": {
+      "title": "M1 · channel=phone, reason_category=complaint",
+      "type": "problem",
+      "status": "corroborated",
+      "actionability": "candidate",
+      "definition": "Unresolved first-contact flag divided by contacts with a valid resolution flag, compared with other reasons in the same channel.",
+      "cell": {"channel": "phone", "reason_category": "complaint"},
+      "discovery": {"numerator": 27978, "denominator": 49649, "baseline_numerator": 39937, "baseline_denominator": 241862, "effect": {"difference": 0.398393, "ci95_low": 0.393786, "ci95_high": 0.402999}},
+      "replication": {"numerator": 28151, "denominator": 49905, "baseline_numerator": 40253, "baseline_denominator": 241834, "effect": {"difference": 0.397643, "ci95_low": 0.393046, "ci95_high": 0.40224}},
+      "snapshot": {"numerator": 56129, "denominator": 99554, "rate": 0.563805, "suppressed": false, "suppression_reason": null}
+    },
+    "M1-13": {
+      "title": "M1 · channel=phone, reason_category=technical",
+      "type": "problem",
+      "status": "corroborated",
+      "actionability": "candidate",
+      "definition": "Unresolved first-contact flag divided by contacts with a valid resolution flag, compared with other reasons in the same channel.",
+      "cell": {"channel": "phone", "reason_category": "technical"},
+      "discovery": {"numerator": 13004, "denominator": 43586, "baseline_numerator": 54911, "baseline_denominator": 247925, "effect": {"difference": 0.07687, "ci95_low": 0.072274, "ci95_high": 0.081466}},
+      "replication": {"numerator": 13321, "denominator": 43849, "baseline_numerator": 55083, "baseline_denominator": 247890, "effect": {"difference": 0.081585, "ci95_low": 0.07698, "ci95_high": 0.08619}},
+      "snapshot": {"numerator": 26325, "denominator": 87435, "rate": 0.301081, "suppressed": false, "suppression_reason": null}
+    },
+    "E1-01": {
+      "title": "E1 · overall",
+      "type": "descriptive_only",
+      "status": "uncertain",
+      "actionability": "covered_existing_capability",
+      "definition": "Cases with the discovery-selected leading query signature divided by all eligible cases in the discovery or holdout partition.",
+      "cell": {"scope": "overall"},
+      "discovery": {"numerator": 154, "denominator": 200, "adjusted_q": 0.512235, "effect": {"difference": 0.026111, "ci95_low": -0.035111, "ci95_high": 0.087333}},
+      "replication": {"numerator": 1433, "denominator": 1800, "adjusted_q": 1.0, "p_value": 0.38680701284484265, "effect": {"difference": 0.026111, "ci95_low": -0.035111, "ci95_high": 0.087333}},
+      "snapshot": {"numerator": 1587, "denominator": 2000, "rate": 0.7935, "suppressed": false, "suppression_reason": null}
+    }
+  }
+}

@@ -143,6 +143,7 @@ fn value_loop(work: &Path, wire: Arc<dyn Transport + Send + Sync>) -> ValueLoop 
         ports: scripted_ports(),
         model_label: "scripted".into(),
         max_findings: None,
+        max_exploratory: 0,
         proof: None,
         announcer: None,
         caps: Default::default(),

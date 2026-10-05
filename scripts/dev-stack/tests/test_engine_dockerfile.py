@@ -31,6 +31,10 @@ def final_stage():
 
 
 class EngineDockerfileContract(unittest.TestCase):
+    def test_image_ships_steps_cli_for_the_loop_driver(self):
+        self.assertIn("--bin steps_cli", DOCKERFILE)
+        self.assertIn("/out/steps_cli", " ".join(final_stage()))
+
     def test_multi_stage_release_locked_build(self):
         self.assertGreaterEqual(sum(l.upper().startswith("FROM ") for l in LINES), 3)
         build = [l for l in LINES if l.startswith("RUN") and "cargo build" in l]

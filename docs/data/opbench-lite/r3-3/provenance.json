@@ -1,0 +1,519 @@
+{
+  "aggregate_entry_hash_algorithm": "sha256(UTF-8 canonical JSON of row-free entry_id/type/status/actionability/definition/cell/discovery/replication/snapshot; sort_keys=true; separators=(comma,colon); ensure_ascii=false)",
+  "catalog_excerpt_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+  "catalog_path": "outcome-temp/opbench-v2-1/v2/opbench-lite.json",
+  "format": "pulso.opbench-scenario-provenance.v1",
+  "pii_included": false,
+  "pinned_eval_suite_schema_blob": "ba8c609aeb53278420f13d867431bdda1231e5a0",
+  "real_row_data_included": false,
+  "scenario_map": {
+    "probe-amount-boundary-600-es": {
+      "aggregate_entry_sha256": "b48ff5cda2c371fb2d6b3af2e5cbbed0cd8ca162fa802921116bfb278ee53129",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "complaint"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-01",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [
+        "Confirm read/selection/conversion calls may occur; inspect audit events and verify no radicar_pqr or write event."
+      ],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": true,
+        "outcome": "escalated"
+      }
+    },
+    "probe-cargo-no-reconocido-es": {
+      "aggregate_entry_sha256": "b48ff5cda2c371fb2d6b3af2e5cbbed0cd8ca162fa802921116bfb278ee53129",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "complaint"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-01",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "actions_verified": [
+          "radicar_pqr"
+        ],
+        "escalated": false,
+        "outcome": "resolved"
+      }
+    },
+    "probe-cobro-duplicado-cancelado-pt": {
+      "aggregate_entry_sha256": "b48ff5cda2c371fb2d6b3af2e5cbbed0cd8ca162fa802921116bfb278ee53129",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "complaint"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-01",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [
+        "Confirm read/selection/conversion calls may occur; inspect audit events and verify no radicar_pqr or write event."
+      ],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "cancelled"
+      }
+    },
+    "probe-fallo-de-consulta": {
+      "aggregate_entry_sha256": "af07bb0df2c02188dbdd1babdce8951dc08674e7a5a0a89bd119ff9204ac8de1",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "technical"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-13",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": true,
+        "outcome": "escalated"
+      }
+    },
+    "probe-lookup-failure-pt": {
+      "aggregate_entry_sha256": "b48ff5cda2c371fb2d6b3af2e5cbbed0cd8ca162fa802921116bfb278ee53129",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "complaint"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-01",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": true,
+        "outcome": "escalated"
+      }
+    },
+    "probe-lookup-movement-01": {
+      "aggregate_entry_sha256": "8c1c861a312eb231cab9eba2c1abade142da61f52afa8d67949d1f58dc823c27",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "scope": "overall"
+      },
+      "evaluator_status": "not_evaluable",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "E1-01",
+      "probe_rationale": "SYNTHETIC covered-capability regression probe; does not test detector suppression or establish an opportunity.",
+      "probe_status": "covered_capability_negative_control",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "completed"
+      }
+    },
+    "probe-lookup-movement-02": {
+      "aggregate_entry_sha256": "8c1c861a312eb231cab9eba2c1abade142da61f52afa8d67949d1f58dc823c27",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "scope": "overall"
+      },
+      "evaluator_status": "not_evaluable",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "E1-01",
+      "probe_rationale": "SYNTHETIC covered-capability regression probe; does not test detector suppression or establish an opportunity.",
+      "probe_status": "covered_capability_negative_control",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "completed"
+      }
+    },
+    "probe-lookup-movement-03": {
+      "aggregate_entry_sha256": "8c1c861a312eb231cab9eba2c1abade142da61f52afa8d67949d1f58dc823c27",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "scope": "overall"
+      },
+      "evaluator_status": "not_evaluable",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "E1-01",
+      "probe_rationale": "SYNTHETIC covered-capability regression probe; does not test detector suppression or establish an opportunity.",
+      "probe_status": "covered_capability_negative_control",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "completed"
+      }
+    },
+    "probe-lookup-movement-04": {
+      "aggregate_entry_sha256": "8c1c861a312eb231cab9eba2c1abade142da61f52afa8d67949d1f58dc823c27",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "scope": "overall"
+      },
+      "evaluator_status": "not_evaluable",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "E1-01",
+      "probe_rationale": "SYNTHETIC covered-capability regression probe; does not test detector suppression or establish an opportunity.",
+      "probe_status": "covered_capability_negative_control",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "completed"
+      }
+    },
+    "probe-lookup-movement-05": {
+      "aggregate_entry_sha256": "8c1c861a312eb231cab9eba2c1abade142da61f52afa8d67949d1f58dc823c27",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "scope": "overall"
+      },
+      "evaluator_status": "not_evaluable",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "E1-01",
+      "probe_rationale": "SYNTHETIC covered-capability regression probe; does not test detector suppression or establish an opportunity.",
+      "probe_status": "covered_capability_negative_control",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "completed"
+      }
+    },
+    "probe-lookup-movement-06": {
+      "aggregate_entry_sha256": "8c1c861a312eb231cab9eba2c1abade142da61f52afa8d67949d1f58dc823c27",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "scope": "overall"
+      },
+      "evaluator_status": "not_evaluable",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "E1-01",
+      "probe_rationale": "SYNTHETIC covered-capability regression probe; does not test detector suppression or establish an opportunity.",
+      "probe_status": "covered_capability_negative_control",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "completed"
+      }
+    },
+    "probe-missing-radicado": {
+      "aggregate_entry_sha256": "af07bb0df2c02188dbdd1babdce8951dc08674e7a5a0a89bd119ff9204ac8de1",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "technical"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-13",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": true,
+        "outcome": "escalated"
+      }
+    },
+    "probe-motivo-vago-es": {
+      "aggregate_entry_sha256": "b48ff5cda2c371fb2d6b3af2e5cbbed0cd8ca162fa802921116bfb278ee53129",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "complaint"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-01",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": true,
+        "outcome": "escalated"
+      }
+    },
+    "probe-pqr-status-01": {
+      "aggregate_entry_sha256": "af07bb0df2c02188dbdd1babdce8951dc08674e7a5a0a89bd119ff9204ac8de1",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "technical"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-13",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "resolved"
+      }
+    },
+    "probe-pqr-status-02": {
+      "aggregate_entry_sha256": "af07bb0df2c02188dbdd1babdce8951dc08674e7a5a0a89bd119ff9204ac8de1",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "technical"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-13",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "resolved"
+      }
+    },
+    "probe-pqr-status-03": {
+      "aggregate_entry_sha256": "af07bb0df2c02188dbdd1babdce8951dc08674e7a5a0a89bd119ff9204ac8de1",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "technical"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-13",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "resolved"
+      }
+    },
+    "probe-pqr-status-04": {
+      "aggregate_entry_sha256": "af07bb0df2c02188dbdd1babdce8951dc08674e7a5a0a89bd119ff9204ac8de1",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "technical"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-13",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": false,
+        "outcome": "resolved"
+      }
+    },
+    "probe-readback-failure-es": {
+      "aggregate_entry_sha256": "b48ff5cda2c371fb2d6b3af2e5cbbed0cd8ca162fa802921116bfb278ee53129",
+      "catalog_sha256": "e38b4cf0d8abe9fd0c379e6213c1b1e07e306369e66e79b9d47524c0d3056a32",
+      "cell_descriptor": {
+        "channel": "phone",
+        "reason_category": "complaint"
+      },
+      "evaluator_status": "not_run",
+      "evidence_level": "aggregate_snapshot_only",
+      "execution_result": "not_run",
+      "expected_behavior_status": "contract_target_not_observed",
+      "opbench_entry_id": "M1-01",
+      "probe_rationale": "SYNTHETIC authored representative hypothesis; not a cause or subtype established by the aggregate.",
+      "probe_status": "authored_synthetic_hypothesis",
+      "runtime_audit_required": [
+        "Verify radicar_pqr was attempted and read-back failure was surfaced; do not infer a completed case from the seeded response."
+      ],
+      "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+      "target_behavior": {
+        "escalated": true,
+        "outcome": "escalated"
+      }
+    }
+  },
+  "source_artifact_sha256": "1f7ea2738c22ac178d850ea4a80ddcd56b046fab6d71ddd3e06c223205c22381",
+  "source_catalog_format": "pulso.opbench-aggregate-excerpt.v1",
+  "source_findings": {
+    "E1-01": {
+      "actionability": "covered_existing_capability",
+      "cell": {
+        "scope": "overall"
+      },
+      "definition": "Cases with the discovery-selected leading query signature divided by all eligible cases in the discovery or holdout partition.",
+      "discovery": {
+        "adjusted_q": 0.512235,
+        "denominator": 200,
+        "effect": {
+          "ci95_high": 0.087333,
+          "ci95_low": -0.035111,
+          "difference": 0.026111
+        },
+        "numerator": 154
+      },
+      "replication": {
+        "adjusted_q": 1.0,
+        "denominator": 1800,
+        "effect": {
+          "ci95_high": 0.087333,
+          "ci95_low": -0.035111,
+          "difference": 0.026111
+        },
+        "numerator": 1433,
+        "p_value": 0.38680701284484265
+      },
+      "snapshot": {
+        "denominator": 2000,
+        "numerator": 1587,
+        "rate": 0.7935,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "uncertain",
+      "title": "E1 · overall",
+      "type": "descriptive_only"
+    },
+    "M1-01": {
+      "actionability": "candidate",
+      "cell": {
+        "channel": "phone",
+        "reason_category": "complaint"
+      },
+      "definition": "Unresolved first-contact flag divided by contacts with a valid resolution flag, compared with other reasons in the same channel.",
+      "discovery": {
+        "baseline_denominator": 241862,
+        "baseline_numerator": 39937,
+        "denominator": 49649,
+        "effect": {
+          "ci95_high": 0.402999,
+          "ci95_low": 0.393786,
+          "difference": 0.398393
+        },
+        "numerator": 27978
+      },
+      "replication": {
+        "baseline_denominator": 241834,
+        "baseline_numerator": 40253,
+        "denominator": 49905,
+        "effect": {
+          "ci95_high": 0.40224,
+          "ci95_low": 0.393046,
+          "difference": 0.397643
+        },
+        "numerator": 28151
+      },
+      "snapshot": {
+        "denominator": 99554,
+        "numerator": 56129,
+        "rate": 0.563805,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "corroborated",
+      "title": "M1 · channel=phone, reason_category=complaint",
+      "type": "problem"
+    },
+    "M1-13": {
+      "actionability": "candidate",
+      "cell": {
+        "channel": "phone",
+        "reason_category": "technical"
+      },
+      "definition": "Unresolved first-contact flag divided by contacts with a valid resolution flag, compared with other reasons in the same channel.",
+      "discovery": {
+        "baseline_denominator": 247925,
+        "baseline_numerator": 54911,
+        "denominator": 43586,
+        "effect": {
+          "ci95_high": 0.081466,
+          "ci95_low": 0.072274,
+          "difference": 0.07687
+        },
+        "numerator": 13004
+      },
+      "replication": {
+        "baseline_denominator": 247890,
+        "baseline_numerator": 55083,
+        "denominator": 43849,
+        "effect": {
+          "ci95_high": 0.08619,
+          "ci95_low": 0.07698,
+          "difference": 0.081585
+        },
+        "numerator": 13321
+      },
+      "snapshot": {
+        "denominator": 87435,
+        "numerator": 26325,
+        "rate": 0.301081,
+        "suppressed": false,
+        "suppression_reason": null
+      },
+      "status": "corroborated",
+      "title": "M1 · channel=phone, reason_category=technical",
+      "type": "problem"
+    }
+  },
+  "suite_notes": {
+    "consultas": "Inspired only by broad M1-13 phone/technical unresolved-first-contact contrast; PQR lookups and malformed-reference cases are authored capability probes, not demonstrated causes.",
+    "copiloto-asesor": "E1-01 covered-capability negative control; probes existing movement lookup only. Not test detector suppression, not a new opportunity. Pinned evaluator principal is customer-shaped, not an authenticated advisor identity.",
+    "disputas": "Inspired only by broad M1-01 phone/complaint unresolved-first-contact contrast; charge subtype and its cause are authored probes, not source findings."
+  }
+}

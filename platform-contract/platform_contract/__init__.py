@@ -13,6 +13,7 @@ from .model import (
     EVENT_CATALOG_VERSION,
     EVENT_DATA_CLASSES,
     EVENT_FREE_TEXT_KEYS,
+    EVENT_PAYLOAD_ENUMS,
     EVENT_PAYLOAD_KEYS,
     EVENT_TYPES,
     EVIDENCE_KINDS,
@@ -196,6 +197,8 @@ def _event_entry(t: str, f: str, e: str, s: str) -> dict:
         entry["data_class"] = event_data_class(t)
     if t in EVENT_PAYLOAD_KEYS:
         entry["payload_keys"] = list(EVENT_PAYLOAD_KEYS[t])
+    if t in EVENT_PAYLOAD_ENUMS:
+        entry["payload_enums"] = {k: list(v) for k, v in EVENT_PAYLOAD_ENUMS[t].items()}
     if t in EVENT_FREE_TEXT_KEYS:
         entry["free_text_keys"] = list(EVENT_FREE_TEXT_KEYS[t])
     return entry
@@ -273,5 +276,5 @@ __all__ = [
     "assert_table_readable", "build_event_catalog", "build_schema", "classify_event_type",
     "generate_artifacts", "load_schema", "load_source_schema", "build_source_schema", "SOURCE_SCHEMAS",
     "PREVIOUS_CONTRACT_VERSION", "MAX_FINDING_DETAILS_BYTES", "LEGACY_EXPORTER_PREFIX",
-    "EVENT_DATA_CLASSES", "EVENT_FREE_TEXT_KEYS", "EVENT_PAYLOAD_KEYS", "event_data_class",
+    "EVENT_DATA_CLASSES", "EVENT_FREE_TEXT_KEYS", "EVENT_PAYLOAD_ENUMS", "EVENT_PAYLOAD_KEYS", "event_data_class",
 ]
