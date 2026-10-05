@@ -147,9 +147,15 @@ impl Writer<'_> {
         };
         let pid = pid.as_str();
         let base = format!("/v1/registry/proposals/{pid}");
+        // agent-core wants description, rationale and changelog on every change (a 422 otherwise, seen live on the new-agent closure).
         let mut draft: Vec<Value> = job.changes.iter().cloned().map(|mut c| {
             if !c["docs"].is_object() {
-                c["docs"] = json!({"description": "candidate patch", "rationale": "see proposal", "changelog": "patch"});
+                c["docs"] = json!({});
+            }
+            for (k, d) in [("description", "candidate patch"), ("rationale", "see proposal"), ("changelog", "patch")] {
+                if c["docs"][k].as_str().is_none_or(str::is_empty) {
+                    c["docs"][k] = json!(d);
+                }
             }
             c
         }).collect();

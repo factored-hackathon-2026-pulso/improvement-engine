@@ -42,43 +42,43 @@
       "source": "pulso-min"
     },
     "regffbb5234-es-cierre-seguimiento-1": {
-      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (real model samples of the prompt under test)",
-      "check": "native+generated_probe",
+      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (native: the response came from the model path; probe: real model samples of the prompt under test)",
+      "check": "native_generated+generated_probe",
       "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
       "kind": "finding",
       "mechanism": "closing_followup"
     },
     "regffbb5234-es-cierre-seguimiento-2": {
-      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (real model samples of the prompt under test)",
-      "check": "native+generated_probe",
+      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (native: the response came from the model path; probe: real model samples of the prompt under test)",
+      "check": "native_generated+generated_probe",
       "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
       "kind": "finding",
       "mechanism": "closing_followup"
     },
     "regffbb5234-es-cierre-seguimiento-3": {
-      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (real model samples of the prompt under test)",
-      "check": "native+generated_probe",
+      "behaviour": "the closing message of a verified dispute (es) names who follows the case up (native: the response came from the model path; probe: real model samples of the prompt under test)",
+      "check": "native_generated+generated_probe",
       "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
       "kind": "finding",
       "mechanism": "closing_followup"
     },
     "regffbb5234-pt-cierre-seguimiento-1": {
-      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (real model samples of the prompt under test)",
-      "check": "native+generated_probe",
+      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (native: the response came from the model path; probe: real model samples of the prompt under test)",
+      "check": "native_generated+generated_probe",
       "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
       "kind": "finding",
       "mechanism": "closing_followup"
     },
     "regffbb5234-pt-cierre-seguimiento-2": {
-      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (real model samples of the prompt under test)",
-      "check": "native+generated_probe",
+      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (native: the response came from the model path; probe: real model samples of the prompt under test)",
+      "check": "native_generated+generated_probe",
       "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
       "kind": "finding",
       "mechanism": "closing_followup"
     },
     "regffbb5234-pt-cierre-seguimiento-3": {
-      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (real model samples of the prompt under test)",
-      "check": "native+generated_probe",
+      "behaviour": "the closing message of a verified dispute (pt) names who follows the case up (native: the response came from the model path; probe: real model samples of the prompt under test)",
+      "check": "native_generated+generated_probe",
       "finding_key": "M4|category=Queja,channel=Phone,locale=es|96/240|90/236",
       "kind": "finding",
       "mechanism": "closing_followup"
@@ -208,7 +208,19 @@
       {
         "assertions": [
           {
-            "event": "engine.response_emitted"
+            "event": "engine.response_emitted",
+            "where": [
+              {
+                "field": "kind",
+                "op": "eq",
+                "value": "generated"
+              },
+              {
+                "field": "fallback_used",
+                "op": "eq",
+                "value": false
+              }
+            ]
           },
           {
             "event": "engine.response_failed",
@@ -296,7 +308,19 @@
       {
         "assertions": [
           {
-            "event": "engine.response_emitted"
+            "event": "engine.response_emitted",
+            "where": [
+              {
+                "field": "kind",
+                "op": "eq",
+                "value": "generated"
+              },
+              {
+                "field": "fallback_used",
+                "op": "eq",
+                "value": false
+              }
+            ]
           },
           {
             "event": "engine.response_failed",
@@ -385,7 +409,19 @@
       {
         "assertions": [
           {
-            "event": "engine.response_emitted"
+            "event": "engine.response_emitted",
+            "where": [
+              {
+                "field": "kind",
+                "op": "eq",
+                "value": "generated"
+              },
+              {
+                "field": "fallback_used",
+                "op": "eq",
+                "value": false
+              }
+            ]
           },
           {
             "event": "engine.response_failed",
@@ -473,7 +509,19 @@
       {
         "assertions": [
           {
-            "event": "engine.response_emitted"
+            "event": "engine.response_emitted",
+            "where": [
+              {
+                "field": "kind",
+                "op": "eq",
+                "value": "generated"
+              },
+              {
+                "field": "fallback_used",
+                "op": "eq",
+                "value": false
+              }
+            ]
           },
           {
             "event": "engine.response_failed",
@@ -562,7 +610,19 @@
       {
         "assertions": [
           {
-            "event": "engine.response_emitted"
+            "event": "engine.response_emitted",
+            "where": [
+              {
+                "field": "kind",
+                "op": "eq",
+                "value": "generated"
+              },
+              {
+                "field": "fallback_used",
+                "op": "eq",
+                "value": false
+              }
+            ]
           },
           {
             "event": "engine.response_failed",
@@ -650,7 +710,19 @@
       {
         "assertions": [
           {
-            "event": "engine.response_emitted"
+            "event": "engine.response_emitted",
+            "where": [
+              {
+                "field": "kind",
+                "op": "eq",
+                "value": "generated"
+              },
+              {
+                "field": "fallback_used",
+                "op": "eq",
+                "value": false
+              }
+            ]
           },
           {
             "event": "engine.response_failed",

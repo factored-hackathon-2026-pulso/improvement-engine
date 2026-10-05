@@ -303,17 +303,26 @@ fn verdict_text(l: Lang, verdict: Option<&Value>) -> Verdict {
         .map(|(i, a)| {
             let failed = a["failed_cases"].as_array().map_or(0, Vec::len);
             let pass = a["verdict"].as_str() == Some("pass");
-            if pass { l.t(&format!("intento {} pasó", i + 1), &format!("tentativa {} passou", i + 1)).to_string() }
+            if a["verdict"].as_str() == Some("probe_only_pass") { l.t(&format!("intento {} pasó solo por la sonda del arnés", i + 1), &format!("tentativa {} passou só pela sonda do arnês", i + 1)).to_string() }
+            else if pass { l.t(&format!("intento {} pasó", i + 1), &format!("tentativa {} passou", i + 1)).to_string() }
             else { l.t(&format!("intento {} falló ({} casos)", i + 1, failed), &format!("tentativa {} falhou ({} casos)", i + 1, failed)).to_string() }
         })
         .collect();
     let gi = v["gate_items"].as_array().cloned().unwrap_or_default();
     let gi_pass = gi.iter().filter(|g| g["passed"].as_bool() == Some(true)).count();
     let gates = if gi.is_empty() { String::new() } else { l.t(&format!(" GateItems: {gi_pass}/{} aprobados.", gi.len()), &format!(" GateItems: {gi_pass}/{} aprovados.", gi.len())).to_string() };
-    let story = l.t(
-        &format!("La base falla {base_failed} de {finding_cases} casos del hallazgo ({guard_cases} guardas); {}.", if steps.is_empty() { "sin candidato evaluado".to_string() } else { steps.join("; ") }),
-        &format!("A base falha {base_failed} de {finding_cases} casos do achado ({guard_cases} guardas); {}.", if steps.is_empty() { "sem candidato avaliado".to_string() } else { steps.join("; ") }),
-    );
+    let absent = v["base"]["verdict"].as_str() == Some("absent");
+    let story = if absent {
+        l.t(
+            &format!("El agente nuevo no existe en la base: sus {finding_cases} casos del hallazgo fallan por ausencia (no medido, {guard_cases} guardas); {}.", if steps.is_empty() { "sin candidato evaluado".to_string() } else { steps.join("; ") }),
+            &format!("O agente novo não existe na base: seus {finding_cases} casos do achado falham por ausencia (não medido, {guard_cases} guardas); {}.", if steps.is_empty() { "sem candidato avaliado".to_string() } else { steps.join("; ") }),
+        )
+    } else {
+        l.t(
+            &format!("La base falla {base_failed} de {finding_cases} casos del hallazgo ({guard_cases} guardas); {}.", if steps.is_empty() { "sin candidato evaluado".to_string() } else { steps.join("; ") }),
+            &format!("A base falha {base_failed} de {finding_cases} casos do achado ({guard_cases} guardas); {}.", if steps.is_empty() { "sem candidato avaliado".to_string() } else { steps.join("; ") }),
+        )
+    };
     let verdict_line = match outcome.as_str() {
         "regression_suite_proven" => l.t("Suite de regresión probada: falla en la base y pasa con el candidato.", "Suite de regressão comprovada: falha na base e passa com o candidato."),
         "non_discriminating" => l.t("NO DISCRIMINANTE: la base ya pasa todos los casos; la suite no captura el problema y no es una suite de regresión. No se anuncia.", "NÃO DISCRIMINANTE: a base ja passa todos os casos; a suite não captura o problema e não é uma suite de regressão. Não e anunciada."),
@@ -323,9 +332,52 @@ fn verdict_text(l: Lang, verdict: Option<&Value>) -> Verdict {
         "suite_refused" => l.t("SIN SUITE: no se pudo construir una suite de regresión para este hallazgo (evidencia insuficiente o sin mecanismo). No se anuncia.", "SEM SUITE: não foi possivel construir uma suite de regressão para este achado (evidência insuficiente ou sem mecanismo). Não e anunciada."),
         "suite_error" => l.t("NO EVALUADO: la construcción de la suite o el juez fallaron. No se anuncia.", "NÃO AVALIADO: a construção da suite ou o juiz falharam. Não e anunciada."),
         "base_only" => l.t("Solo base: no hay candidato evaluado. No se anuncia.", "Somente base: não ha candidato avaliado. Não e anunciada."),
+        "native_not_candidate_bound" => l.t("SIN VÍNCULO NATIVO: agent-core no ejercitó el prompt candidato (una versión idéntica en texto falla lo que la base pasa); solo la sonda del arnés lo midió. No se anuncia.", "SEM VÍNCULO NATIVO: o agent-core não exercitou o prompt candidato (uma versão idêntica em texto falha o que a base passa); so a sonda do arnês o mediu. Não e anunciada."),
         _ => l.t("Veredicto desconocido: no se anuncia.", "Veredito desconhecido: não e anunciada."),
     };
     Verdict { announce, outcome, text: format!("{verdict_line} {story}{gates}") }
+}
+
+/// What was measured natively (agent-core scorer), by harness probe, and what was NOT measured, from the closed codes of the verdict
+/// story (`coverage`, `native_binding`). Without a story the proposal was not evaluated at all.
+fn coverage_text(l: Lang, verdict: Option<&Value>) -> String {
+    let Some(v) = verdict else {
+        return l.t("Nada medido: no hubo evaluación.", "Nada medido: não houve avaliação.").to_string();
+    };
+    if !v["coverage"].is_object() {
+        return l.t("Cobertura no registrada en este veredicto (anterior a W13): véase el resultado.", "Cobertura não registrada neste veredito (anterior ao W13): veja o resultado.").to_string();
+    }
+    let cov = &v["coverage"];
+    let name = |code: &str| -> String {
+        match code {
+            "flow_outcome_and_placeholder_render" => l.t("flujo resuelto y marcador renderizado en el motor real", "fluxo resolvido e marcador renderizado no motor real"),
+            "flow_outcome" => l.t("flujo verificado y resuelto", "fluxo verificado e resolvido"),
+            "response_from_model_path" => l.t("respuesta generada por el modelo (sin plantilla de respaldo)", "resposta gerada pelo modelo (sem template de reserva)"),
+            "new_agent_intake_and_handoff" => l.t("el agente nuevo toma el tema, avisa y deriva a una persona sin herramientas", "o agente novo assume o tema, avisa e encaminha a uma pessoa sem ferramentas"),
+            "platform_guardrails" => l.t("guardarraíles de plataforma", "guardrails de plataforma"),
+            "guards" => l.t("casos guarda", "casos guarda"),
+            "state_reflected" => l.t("el texto renderizado refleja el estado", "o texto renderizado reflete o estado"),
+            "generated_followup" => l.t("3 muestras reales del modelo nombran el seguimiento y no llevan cifras", "3 amostras reais do modelo citam o acompanhamento e não trazem numeros"),
+            "native_wording" => l.t("el texto (el evaluador nativo no lo lee)", "o texto (o avaliador nativo não o le)"),
+            "real_customer_effect" => l.t("efecto en clientes reales", "efeito em clientes reais"),
+            "candidate_prompt_native" => l.t("el prompt candidato en el evaluador nativo (sin vínculo al candidato)", "o prompt candidato no avaliador nativo (sem vínculo ao candidato)"),
+            "base_by_absence" => l.t("la base (el agente no existe)", "a base (o agente não existe)"),
+            "routing_recepcion_to_new_agent" => l.t("ruteo de recepción al agente nuevo (el arnés no ejercita directorio ni transferencia; entra al directorio solo con promote humano a prod)", "roteamento da recepção ao agente novo (o arnês não exercita diretório nem transferência; entra no diretório so com promote humano para prod)"),
+            "traffic_stealing" => l.t("robo de tráfico a disputas y consultas", "roubo de tráfego de disputas e consultas"),
+            "release_settings_assumed" => l.t("SUPUESTO: se evaluó con los ajustes de release del donante (interrupción fraude, injection-rules, lang-es-pt) que fija un admin humano; sin ellos agent-core no evalúa al agente nuevo", "PRESSUPOSTO: avaliou-se com os ajustes de release do doador (interrupção fraude, injection-rules, lang-es-pt) definidos por um admin humano; sem eles o agent-core não avalia o agente novo"),
+            other => other.to_string(),
+        }
+    };
+    let list = |key: &str| -> String { cov[key].as_array().into_iter().flatten().filter_map(Value::as_str).map(&name).collect::<Vec<_>>().join("; ") };
+    let mut parts = vec![l.t(&format!("Nativo (agent-core): {}.", list("native")), &format!("Nativo (agent-core): {}.", list("native"))).to_string()];
+    if cov["harness_probe"].as_array().is_some_and(|a| !a.is_empty()) {
+        parts.push(l.t(&format!("Sonda del arnés: {}.", list("harness_probe")), &format!("Sonda do arnês: {}.", list("harness_probe"))).to_string());
+    }
+    parts.push(l.t(&format!("NO medido: {}.", list("not_measured")), &format!("NÃO medido: {}.", list("not_measured"))).to_string());
+    if cov["assumptions"].as_array().is_some_and(|a| !a.is_empty()) {
+        parts.push(list("assumptions") + ".");
+    }
+    parts.join(" ")
 }
 
 fn expected_effect(l: Lang, proposal: &Value, level: bool) -> (String, String) {
@@ -384,8 +436,8 @@ fn unchanged(l: Lang, proposal: &Value) -> String {
             "Cláusulas protegidas do texto base intactas (o menú de âncoras as exclui e o compilador verifica os marcadores); nenhum orçamento, modelo ou permissão muda; so os textos nomeados sao tocados.",
         ),
         Some("new_agent") => l.t(
-            "No se reemplaza el agente de origen ni su ruta; sin permisos nuevos ni herramientas mutables; los items de release los fija un admin humano.",
-            "O agente de origem e sua rota não sao substituidos; sem novas permissoes nem ferramentas mutáveis; os itens de release sao definidos por um admin humano.",
+            "Recepción no cambia (solo ruta a disputas y consultas): llega al agente nuevo tras ajustes de release de un admin y promote humano a prod (seguimiento humano). Sin herramientas ni permisos nuevos.",
+            "A recepção não muda (so roteia a disputas e consultas): chega ao agente novo apos ajustes de release de um admin e promote humano para prod (acompanhamento humano). Sem ferramentas nem permissoes novas.",
         ),
         _ => l.t("Nada cambia: no hay cambio propuesto.", "Nada muda: não ha mudanca proposta."),
     }
@@ -478,19 +530,21 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
             "measurement": how,
             "risks": risks(l, proposal, finding),
             "unchanged": unchanged(l, proposal),
+            "coverage": coverage_text(l, verdict),
             "honesty": honesty(l, runtime, rubric, &judge, labels.calibrated, finding["source"].as_str().unwrap_or("")),
         });
         let s = |k: &str| sec[k].as_str().unwrap_or("").to_string();
         let labels_l = [
-            ("problem", l.t("Problema observado", "Problema observado"), 260),
-            ("evidence", l.t("Evidencia y comparación", "Evidência e comparação"), 560),
-            ("diff", l.t("Qué cambiaría", "O que mudaria"), 520),
-            ("result", l.t("Resultado base vs candidato", "Resultado base vs candidato"), 460),
-            ("expected_effect", l.t("Efecto esperado", "Efeito esperado"), 300),
-            ("measurement", l.t("Cómo se evaluará", "Como será avaliado"), 400),
-            ("risks", l.t("Riesgo", "Risco"), 340),
-            ("unchanged", l.t("Qué no cambia", "O que não muda"), 260),
-            ("honesty", l.t("Etiquetas", "Rótulos"), 380),
+            ("problem", l.t("Problema observado", "Problema observado"), 220),
+            ("evidence", l.t("Evidencia y comparación", "Evidência e comparação"), 440),
+            ("diff", l.t("Qué cambiaría", "O que mudaria"), 400),
+            ("result", l.t("Resultado base vs candidato", "Resultado base vs candidato"), 400),
+            ("coverage", l.t("Qué se midió", "O que foi medido"), 560),
+            ("expected_effect", l.t("Efecto esperado", "Efeito esperado"), 240),
+            ("measurement", l.t("Cómo se evaluará", "Como será avaliado"), 260),
+            ("risks", l.t("Riesgo", "Risco"), 300),
+            ("unchanged", l.t("Qué no cambia", "O que não muda"), 200),
+            ("honesty", l.t("Etiquetas", "Rótulos"), 300),
         ];
         let mut description = decision.to_string();
         for (k, label, max) in labels_l {
@@ -536,7 +590,7 @@ pub fn schema() -> Value {
     let lang = json!({"type": "object", "required": ["title", "description", "rationale", "changelog", "sections"], "additionalProperties": false,
         "properties": {"title": {"type": "string", "maxLength": TITLE_MAX}, "description": {"type": "string", "maxLength": DESCRIPTION_MAX},
                        "rationale": {"type": "string", "maxLength": RATIONALE_MAX}, "changelog": {"type": "string", "maxLength": CHANGELOG_MAX},
-                       "sections": {"type": "object", "required": ["problem", "evidence", "diff", "result", "expected_effect", "measurement", "risks", "unchanged", "honesty"],
+                       "sections": {"type": "object", "required": ["problem", "evidence", "diff", "result", "coverage", "expected_effect", "measurement", "risks", "unchanged", "honesty"],
                                     "additionalProperties": {"type": "string"}}}});
     json!({"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "dossier/1", "type": "object",
         "required": ["schema", "announce", "announce_reason", "outcome", "finding_kind", "honesty", "refs", "limits", "es", "pt"],

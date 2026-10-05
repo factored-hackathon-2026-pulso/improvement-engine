@@ -85,9 +85,14 @@ class Build(unittest.TestCase):
             bs.build_suite(FINDING, "flow:consulta-pqr")
         self.assertEqual(cm.exception.code, "no_mechanism")
 
-    def test_no_guards_refused_not_faked(self):
+    def test_new_agent_without_slug_refused_not_faked(self):
         with self.assertRaises(bs.SuiteRefused) as cm:
             bs.build_suite(FINDING, "new_agent:consultas")
+        self.assertEqual(cm.exception.code, "new_agent_missing")
+
+    def test_unknown_agent_without_guards_is_still_refused(self):
+        with self.assertRaises(bs.SuiteRefused) as cm:
+            bs.load_guards("copiloto-asesor")
         self.assertEqual(cm.exception.code, "no_guards_for_agent")
 
     def test_truncation_keeps_both_locales(self):

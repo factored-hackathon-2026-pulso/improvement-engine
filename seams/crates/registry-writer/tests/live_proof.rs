@@ -78,7 +78,7 @@ fn go(name: &str, announce_expected: bool) {
         uncertainty: String::new(),
     };
     let py = std::env::var("PULSO_REGRESSION_PYTHON").unwrap_or_else(|_| "python".into());
-    let scripts = PythonScripts { python: py.split_whitespace().map(str::to_string).collect(), script_dir: root().join("scripts/regression"), work: std::env::temp_dir().join("pulso-w11-live") };
+    let scripts = PythonScripts { python: py.split_whitespace().map(str::to_string).collect(), script_dir: root().join("scripts/regression"), work: std::env::temp_dir().join("pulso-w11-live"), env: vec![] };
     let f = finding();
     let inp = ProofInput { finding: &f, compiled: &compiled, attempts: vec![], base_artifact: Some(&base), labels: Labels { runtime: Runtime::Real, ..Default::default() }, doubles: json!([]), rubric: Value::Null };
     let proofs = FileProofStore::new(std::env::temp_dir().join(format!("pulso-w11-proofs-{name}-{}.json", std::process::id())));

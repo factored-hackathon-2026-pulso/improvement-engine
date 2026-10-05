@@ -65,6 +65,8 @@ struct Core {
     /// Replies injected for a route suffix, consumed in order.
     inject: RefCell<Vec<(String, Reply)>>,
     native: Box<dyn Fn(&[Value]) -> Vec<(String, bool)>>,
+    /// Entity ids the registry answers 404 for (a closure that cannot be read).
+    missing: RefCell<Vec<String>>,
 }
 
 fn reply(status: u16, body: Value) -> Result<Reply, TransportError> {
@@ -73,7 +75,7 @@ fn reply(status: u16, body: Value) -> Result<Reply, TransportError> {
 
 impl Core {
     fn new(native: impl Fn(&[Value]) -> Vec<(String, bool)> + 'static) -> Core {
-        Core { log: Default::default(), drafts: Default::default(), n: Cell::new(0), evals: Cell::new(0), inject: Default::default(), native: Box::new(native) }
+        Core { log: Default::default(), drafts: Default::default(), n: Cell::new(0), evals: Cell::new(0), inject: Default::default(), native: Box::new(native), missing: Default::default() }
     }
     fn inject(&self, suffix: &str, r: Reply) {
         self.inject.borrow_mut().push((suffix.into(), r));
@@ -104,6 +106,18 @@ impl Transport for Core {
         let p = req.path.as_str();
         match (req.method, p) {
             ("GET", "/v1/registry/entities/agent/consultas") => reply(200, json!({"content": {"id": "consultas", "metrics": [{"id": "resolution_rate", "role": "gate"}, {"id": "note", "role": "info"}]}})),
+            ("GET", _) if p.starts_with("/v1/registry/entities/") => {
+                let (kind, id) = p["/v1/registry/entities/".len()..].split_once('/').unwrap();
+                if self.missing.borrow().iter().any(|m| m == id) {
+                    return reply(404, json!({"code": "not_found"}));
+                }
+                let content = match kind {
+                    "agent" => json!({"id": id, "metrics": []}),
+                    "template" => json!({"id": id, "version": "1.0.0", "locales": {"es": "texto del donante", "pt": "texto do doador"}}),
+                    _ => json!({"id": id, "version": "1.0.0"}),
+                };
+                reply(200, json!({"ref": {"kind": kind, "id": id, "version": "1.0.0"}, "content": content}))
+            }
             ("GET", _) if p.starts_with("/v1/registry/proposals?agent_id=") => reply(200, json!({"items": [], "total": 0})),
             ("POST", "/v1/registry/proposals") => {
                 self.n.set(self.n.get() + 1);
@@ -126,7 +140,12 @@ impl Transport for Core {
             ("POST", _) if p.ends_with("/evaluate") => {
                 self.evals.set(self.evals.get() + 1);
                 let id = p.split('/').nth(4).unwrap().to_string();
-                let changes: Vec<Value> = self.drafts.borrow()[&id].iter().filter(|c| c["kind"] != "eval_suite").cloned().collect();
+                let drafted = self.drafts.borrow()[&id].clone();
+                // verified live: a brand-new agent cannot be evaluated in a release without the donor's settings (500)
+                if drafted.iter().any(|c| c["kind"] == "agent") && !drafted.iter().any(|c| c["kind"] == "release_settings") {
+                    return reply(500, json!({"code": "internal_error"}));
+                }
+                let changes: Vec<Value> = drafted.iter().filter(|c| c["kind"] != "eval_suite").cloned().collect();
                 let rep = self.report(&changes);
                 if rep["verdict"] == "pass" { reply(200, rep) } else { reply(409, json!({"code": "gate_failed", "payload": rep})) }
             }
@@ -154,22 +173,36 @@ fn native(break_guard: bool) -> impl Fn(&[Value]) -> Vec<(String, bool)> + 'stat
 struct Fixed {
     py: PythonScripts,
     refuse: Option<(String, String)>,
+    bundle: Value,
+    /// The new agent slug the proof asked the bundle for.
+    asked_agent: RefCell<Option<String>>,
 }
 
 impl Scripts for Fixed {
     fn build_suite(&self, _f: &Value, _t: &str) -> Result<Value, SuiteError> {
         match &self.refuse {
             Some((c, w)) => Err(SuiteError::Refused(c.clone(), w.clone())),
-            None => Ok(bundle()),
+            None => Ok(self.bundle.clone()),
         }
+    }
+    fn build_suite_for(&self, f: &Value, t: &str, new_agent: Option<&str>) -> Result<Value, SuiteError> {
+        *self.asked_agent.borrow_mut() = new_agent.map(str::to_string);
+        self.build_suite(f, t)
     }
     fn judge(&self, input: &Value) -> Result<Value, String> {
         self.py.judge(input)
     }
+    fn sample(&self, input: &Value) -> Result<Value, String> {
+        self.py.sample(input)
+    }
+}
+
+fn scripts_for(bundle: Value, env: Vec<(String, String)>) -> Fixed {
+    Fixed { py: PythonScripts { python: vec!["python".into()], script_dir: root().join("scripts/regression"), work: std::env::temp_dir(), env }, refuse: None, bundle, asked_agent: Default::default() }
 }
 
 fn scripts() -> Fixed {
-    Fixed { py: PythonScripts { python: vec!["python".into()], script_dir: root().join("scripts/regression"), work: std::env::temp_dir() }, refuse: None }
+    scripts_for(bundle(), vec![])
 }
 
 thread_local! {
@@ -421,4 +454,343 @@ fn two_candidates_of_the_same_finding_never_share_an_idempotency_key() {
     let keys: Vec<String> = core.log.borrow().iter().filter(|l| l.method == "POST" && l.path == "/v1/registry/proposals").filter_map(|l| l.idem.clone()).collect();
     let unique: std::collections::BTreeSet<&String> = keys.iter().collect();
     assert_eq!((keys.len(), unique.len()), (4, 4), "{keys:?}");
+}
+
+// ====================================================================================================== W13
+// Prompt targets (native model-path assertion + binding control + harness probe through a LOCAL gateway double) and a new agent
+// (clone-closure, absent base, closure copies, evaluation-only release settings). Real Python judge, real sample_probes.py.
+mod w13 {
+    use super::*;
+    use reasoning::mapping::map_finding;
+    use reasoning::patch::compile;
+    use reasoning::roles::{Alt, Opportunity};
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn prompt_bundle() -> Value {
+        serde_json::from_str(&std::fs::read_to_string(root().join("scripts/regression/results/reg-disputas-ffbb5234.bundle.json")).unwrap()).unwrap()
+    }
+
+    fn agent_bundle() -> Value {
+        serde_json::from_str(&std::fs::read_to_string(root().join("scripts/regression/results/reg-soporte-tecnico-56008268.bundle.json")).unwrap()).unwrap()
+    }
+
+    fn prompt_compiled(changes: Vec<Value>) -> Compiled {
+        let mut c = compiled(changes);
+        c.target_ref = "prompt:p/resumen_radicado".into();
+        c.agent_id = "disputas".into();
+        c.base_digest = Catalog::bundled().get("prompt:p/resumen_radicado").unwrap().digest();
+        c
+    }
+
+    /// A local double of the llm-gateway `/v1/generate`: answers a follow-up sentence iff the prompt text under test names the
+    /// specialist (the probe then passes), otherwise a bare confirmation. Counts the requests it served.
+    fn gateway() -> (String, Arc<AtomicUsize>) {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        let served = Arc::new(AtomicUsize::new(0));
+        let n = served.clone();
+        std::thread::spawn(move || {
+            for stream in l.incoming() {
+                let Ok(mut s) = stream else { continue };
+                let mut buf = vec![];
+                let mut chunk = [0u8; 4096];
+                let (head_end, len) = loop {
+                    let k = s.read(&mut chunk).unwrap_or(0);
+                    if k == 0 {
+                        break (0, 0);
+                    }
+                    buf.extend_from_slice(&chunk[..k]);
+                    if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&buf[..i]).to_lowercase();
+                        let len = head.lines().find_map(|l| l.strip_prefix("content-length:")).and_then(|v| v.trim().parse::<usize>().ok()).unwrap_or(0);
+                        break (i + 4, len);
+                    }
+                };
+                while buf.len() < head_end + len {
+                    let k = s.read(&mut chunk).unwrap_or(0);
+                    if k == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..k]);
+                }
+                let body: Value = serde_json::from_slice(&buf[head_end.min(buf.len())..]).unwrap_or(Value::Null);
+                let prompt = body["prompt"].as_str().unwrap_or("");
+                let pt = prompt.contains("Redija");
+                let out = match (prompt.contains("especialista"), pt) {
+                    (true, false) => "Un especialista le dara seguimiento a su caso.",
+                    (true, true) => "Um especialista fara o acompanhamento do seu caso.",
+                    (false, false) => "Su disputa fue radicada.",
+                    (false, true) => "Sua contestacao foi registrada.",
+                };
+                n.fetch_add(1, Ordering::SeqCst);
+                let payload = json!({"output": out}).to_string();
+                let _ = write!(s, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}", payload.len());
+            }
+        });
+        (url, served)
+    }
+
+    /// Native scorer for the prompt suite. `bound` = agent-core PR 50: a candidate (or control) prompt is exercised, so the native
+    /// assertions pass. Without it every non-base draft that carries a prompt falls back to the template: the finding cases fail.
+    fn native_prompt(bound: bool, break_guard: bool) -> impl Fn(&[Value]) -> Vec<(String, bool)> + 'static {
+        let b = prompt_bundle();
+        let ids = |k: &str| -> Vec<String> { b[k].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect() };
+        let (f_ids, g_ids) = (ids("finding_case_ids"), ids("guard_case_ids"));
+        move |changes| {
+            let has_prompt = changes.iter().any(|c| c["kind"] == "prompt");
+            let mut out: Vec<(String, bool)> = f_ids.iter().map(|c| (c.clone(), bound || !has_prompt)).collect();
+            out.extend(g_ids.iter().enumerate().map(|(i, c)| (c.clone(), !(break_guard && has_prompt && i == 0))));
+            out
+        }
+    }
+
+    fn base_prompt() -> reasoning::catalog::Artifact {
+        Catalog::bundled().get("prompt:p/resumen_radicado").unwrap().clone()
+    }
+
+    fn run_prompt(core: &Core, sc: &Fixed, changes: Vec<Value>) -> registry_writer::proof::Proof {
+        let mem = MemoryStore::new();
+        let w = Writer::new(cfg(Via::RegistryApi), core, &mem);
+        let (fi, comp) = (finding(), prompt_compiled(changes));
+        let sub = registry_writer::Submission::new(&fi, &comp);
+        let base = base_prompt();
+        let mut inp = input(&sub, &fi, &comp);
+        inp.base_artifact = Some(&base);
+        prove(&w, sc, &MemoryProofStore::default(), &opts(), &inp)
+    }
+
+    fn evaluated_prompt_texts(core: &Core) -> Vec<(String, Option<String>)> {
+        core.log
+            .borrow()
+            .iter()
+            .filter(|l| l.method == "PUT")
+            .map(|l| {
+                let ch = l.body.as_ref().unwrap()["changes"].as_array().unwrap().clone();
+                let prompt = ch.iter().find(|c| c["kind"] == "prompt").map(|c| c["content"]["locales"]["es"].as_str().unwrap().to_string());
+                (ch.iter().map(|c| c["kind"].as_str().unwrap()).collect::<Vec<_>>().join("+"), prompt)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn with_pr50_a_followup_prompt_is_proven_natively_and_by_the_probe_and_announced() {
+        let (url, served) = gateway();
+        let core = Core::new(native_prompt(true, false));
+        let sc = scripts_for(prompt_bundle(), vec![("PULSO_PROBE_GATEWAY".into(), url)]);
+        let p = run_prompt(&core, &sc, candidate("resumen_radicado_attempt2"));
+        assert_eq!((p.announce, p.outcome.as_str()), (true, "announced"), "{}", p.story["reason"]);
+        assert_eq!(p.story["native_binding"]["state"], "candidate_bound");
+        assert_eq!(p.story["base"]["failed_cases"].as_array().unwrap().len(), 6, "the base fails by the wording probe only (native passes)");
+        assert_eq!(p.story["base"]["native_verdict"], "pass");
+        assert_eq!(p.story["attempts"][0]["verdict"], "pass");
+        assert!(p.story["coverage"]["native"].as_array().unwrap().iter().any(|c| c == "response_from_model_path"));
+        assert_eq!(served.load(Ordering::SeqCst), 12, "3 samples x (base es,pt + candidate es,pt); the control reuses the base text");
+        // three evaluation drafts: base (suite), control (prompt with the BASE text and the candidate version, suite), candidate
+        let drafts = evaluated_prompt_texts(&core);
+        assert_eq!(drafts.iter().map(|d| d.0.as_str()).collect::<Vec<_>>(), ["eval_suite", "prompt+eval_suite", "prompt+eval_suite"]);
+        assert_eq!(drafts[1].1.as_deref(), Some(base_prompt().locales["es"].as_str()), "the control is a text-identical bump");
+        assert!(drafts[2].1.as_deref().unwrap().contains("especialista"));
+        let put_control = core.log.borrow().iter().filter(|l| l.method == "PUT").nth(1).unwrap().body.clone().unwrap();
+        assert_eq!(put_control["changes"][0]["content"]["version"], "1.0.1");
+        assert_eq!(p.eval_proposals.len(), 3);
+        let text = p.dossier["es"]["sections"]["coverage"].as_str().unwrap();
+        assert!(text.contains("respuesta generada por el modelo") && text.contains("3 muestras reales") && text.contains("NO medido"), "{text}");
+        assert!(p.dossier["pt"]["sections"]["coverage"].as_str().unwrap().contains("NÃO medido"));
+        assert_eq!(p.record()["native_binding"]["state"], "candidate_bound");
+    }
+
+    #[test]
+    fn with_pr50_a_text_identical_prompt_is_not_fixed_and_not_announced() {
+        let (url, _) = gateway();
+        let core = Core::new(native_prompt(true, false));
+        let sc = scripts_for(prompt_bundle(), vec![("PULSO_PROBE_GATEWAY".into(), url)]);
+        let p = run_prompt(&core, &sc, candidate("resumen_radicado_noop"));
+        assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:not_fixed"), "{}", p.story["reason"]);
+        assert_eq!(p.story["native_binding"]["state"], "candidate_bound");
+        assert_eq!(p.story["attempts"][0]["native_verdict"], "pass", "the native assertions cannot tell a no-op: only the probe does");
+        assert_eq!(p.story["attempts"][0]["failed_cases"].as_array().unwrap().len(), 6);
+        assert!(p.suite.is_none() && p.extra_changes.is_empty());
+        assert!(p.dossier["es"]["description"].as_str().unwrap().contains("NO SE ANUNCIA"));
+    }
+
+    #[test]
+    fn without_pr50_the_engine_detects_that_evaluate_ignored_the_candidate_prompt_labels_it_and_does_not_announce() {
+        let (url, _) = gateway();
+        let core = Core::new(native_prompt(false, false));
+        let sc = scripts_for(prompt_bundle(), vec![("PULSO_PROBE_GATEWAY".into(), url)]);
+        let p = run_prompt(&core, &sc, candidate("resumen_radicado_attempt2"));
+        assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:native_not_candidate_bound"), "{}", p.story["reason"]);
+        assert_eq!(p.story["native_binding"]["state"], "native_not_candidate_bound");
+        assert_eq!(p.story["probe_only_proven"], true, "the harness probe alone says it improves: labelled, not enough");
+        assert_eq!(p.story["attempts"][0]["verdict"], "probe_only_pass");
+        assert_eq!(p.story["attempts"][0]["native_verdict"], "fail", "agent-core failed the candidate natively: the template fallback");
+        assert!(p.story["attempts"][0]["per_case"].as_object().unwrap().values().any(|c| c["source"] == "native_ignored"));
+        assert!(p.suite.is_none() && p.extra_changes.is_empty());
+        let d = &p.dossier["es"];
+        assert!(d["sections"]["result"].as_str().unwrap().contains("SIN VÍNCULO NATIVO"), "{}", d["sections"]["result"]);
+        assert!(d["sections"]["coverage"].as_str().unwrap().contains("sin vínculo al candidato"));
+        assert!(!d["sections"]["coverage"].as_str().unwrap().contains("respuesta generada por el modelo"));
+        assert_eq!(p.dossier["announce"], false);
+    }
+
+    #[test]
+    fn without_pr50_a_text_identical_prompt_is_not_fixed_by_the_probe() {
+        let (url, _) = gateway();
+        let core = Core::new(native_prompt(false, false));
+        let sc = scripts_for(prompt_bundle(), vec![("PULSO_PROBE_GATEWAY".into(), url)]);
+        let p = run_prompt(&core, &sc, candidate("resumen_radicado_noop"));
+        assert_eq!(p.outcome, "not_announced:not_fixed", "{}", p.story["reason"]);
+        assert_eq!(p.story["native_binding"]["state"], "native_not_candidate_bound");
+    }
+
+    #[test]
+    fn a_prompt_that_breaks_a_guard_is_guard_regressed_even_when_the_probe_passes() {
+        let (url, _) = gateway();
+        let core = Core::new(native_prompt(true, true));
+        let sc = scripts_for(prompt_bundle(), vec![("PULSO_PROBE_GATEWAY".into(), url)]);
+        let p = run_prompt(&core, &sc, candidate("resumen_radicado_attempt2"));
+        assert_eq!(p.outcome, "not_announced:guard_regressed", "{}", p.story["reason"]);
+    }
+
+    #[test]
+    fn an_unreachable_gateway_means_not_measured_never_announced() {
+        let core = Core::new(native_prompt(true, false));
+        let sc = scripts_for(prompt_bundle(), vec![("PULSO_PROBE_GATEWAY".into(), "http://127.0.0.1:1".into())]);
+        let p = run_prompt(&core, &sc, candidate("resumen_radicado_attempt2"));
+        assert!(!p.announce);
+        let reason = p.story["base"]["per_case"].as_object().unwrap().values().find_map(|c| c["reason"].as_str().filter(|r| r.contains("not measured"))).map(str::to_string);
+        assert!(reason.is_some(), "{}", p.story["base"]["per_case"]);
+    }
+
+    // ---------------------------------------------------------------------------------------------- new agent
+    fn tecnico_compiled() -> Compiled {
+        let f = finding();
+        let row = map_finding(&f).unwrap();
+        let o = Opportunity {
+            id: "h_1".into(),
+            target_ref: "new_agent:consultas".into(),
+            mechanism_class: "uncovered_topic".into(),
+            hypothesis: "h".into(),
+            claimed_rate: 0.9,
+            falsifiers: vec!["f".into()],
+            alternatives: vec![Alt { kind: "do_nothing".into(), why_not: "x".into() }, Alt { kind: "human_owned".into(), why_not: "y".into() }],
+        };
+        let proposal = json!({"kind": "new_agent", "target_ref": "new_agent:consultas", "agent_id": "soporte-tecnico", "rationale": "A narrow intake for the uncovered topic.", "expected_direction": "decrease",
+            "routing": {"summary_es": "Recibe problemas t\u{e9}cnicos de la aplicaci\u{f3}n y los pasa a una persona.", "summary_pt": "Recebe problemas t\u{e9}cnicos do aplicativo e os encaminha a uma pessoa.",
+                        "examples_es": ["la app se cierra sola", "no puedo entrar a la aplicaci\u{f3}n"], "examples_pt": ["o aplicativo fecha sozinho", "n\u{e3}o consigo entrar no aplicativo"]},
+            "intake": {"ask_es": "Cu\u{e9}ntame qu\u{e9} problema tienes con la aplicaci\u{f3}n.", "ask_pt": "Conte qual problema voc\u{ea} tem com o aplicativo.",
+                       "notice_es": "Gracias, una persona del equipo te contactar\u{e1}.", "notice_pt": "Obrigado, uma pessoa da equipe vai falar com voc\u{ea}."},
+            "alternatives": [{"kind": "do_nothing", "why_not": "x"}, {"kind": "human_owned", "why_not": "y"}], "uncertainty": "Where is known, why is not."});
+        compile(&Catalog::bundled(), &f, &row, &o, &proposal).expect("the scripted new-agent proposal compiles")
+    }
+
+    fn native_agent(break_guard: bool) -> impl Fn(&[Value]) -> Vec<(String, bool)> + 'static {
+        let b = agent_bundle();
+        let ids = |k: &str| -> Vec<String> { b[k].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect() };
+        let (f_ids, g_ids) = (ids("finding_case_ids"), ids("guard_case_ids"));
+        move |_| {
+            let mut out: Vec<(String, bool)> = f_ids.iter().map(|c| (c.clone(), true)).collect();
+            out.extend(g_ids.iter().enumerate().map(|(i, c)| (c.clone(), !(break_guard && i == 0))));
+            out
+        }
+    }
+
+    fn run_agent(core: &Core, sc: &Fixed) -> (registry_writer::proof::Proof, Compiled) {
+        let mem = MemoryStore::new();
+        let w = Writer::new(cfg(Via::RegistryApi), core, &mem);
+        let (fi, comp) = (finding(), tecnico_compiled());
+        let sub = registry_writer::Submission::new(&fi, &comp);
+        let inp = input(&sub, &fi, &comp);
+        (prove(&w, sc, &MemoryProofStore::default(), &opts(), &inp), comp)
+    }
+
+    fn put_kinds(core: &Core) -> Vec<Vec<String>> {
+        core.log.borrow().iter().filter(|l| l.method == "PUT").map(|l| l.body.as_ref().unwrap()["changes"].as_array().unwrap().iter().map(|c| c["kind"].as_str().unwrap().to_string()).collect()).collect()
+    }
+
+    #[test]
+    fn a_new_agent_is_proven_on_itself_with_its_closure_and_announced_without_the_release_settings() {
+        let core = Core::new(native_agent(false));
+        let sc = scripts_for(agent_bundle(), vec![]);
+        let (p, comp) = run_agent(&core, &sc);
+        assert_eq!((p.announce, p.outcome.as_str()), (true, "announced"), "{}", p.story["reason"]);
+        assert_eq!(sc.asked_agent.borrow().as_deref(), Some("soporte-tecnico"), "the suite is built for the new agent");
+        // the base does not exist: nothing is evaluated for it, only the candidate draft is opened
+        assert_eq!(p.story["base"]["verdict"], "absent");
+        assert_eq!(p.eval_proposals.len(), 1);
+        assert_eq!(core.count("POST", "/evaluate"), 1);
+        let creates: Vec<Value> = core.log.borrow().iter().filter(|l| l.method == "POST" && l.path == "/v1/registry/proposals").map(|l| l.body.clone().unwrap()).collect();
+        assert_eq!((creates[0]["agent_id"].as_str(), creates[0]["origin"].as_str()), (Some("soporte-tecnico"), Some("manual")));
+        // evaluation draft: proposal + closure copies + evaluation-only ruleset and release settings + the suite
+        let kinds = &put_kinds(&core)[0];
+        for k in ["agent", "flow", "template", "decision_model", "language_detection", "injection_ruleset", "release_settings", "eval_suite"] {
+            assert!(kinds.iter().any(|x| x == k), "{kinds:?} lacks {k}");
+        }
+        assert!(kinds.iter().filter(|k| *k == "template").count() >= 2 + 7, "2 own templates + the donor's template slots: {kinds:?}");
+        // the finding cases fail on the base by absence (not measured), guards are n/a there
+        assert_eq!(p.story["base"]["per_case"].as_object().unwrap().values().filter(|c| c["source"] == "absent_on_base").count(), 9);
+        assert_eq!(p.story["base"]["failed_cases"].as_array().unwrap().len(), 6);
+        assert_eq!(p.story["suite_is_regression_suite"], true);
+        // delivered: the proposal + the closure copies + the suite; never the release settings nor the ruleset
+        let sub = announce_submission(&finding(), &comp, &p);
+        let dk: Vec<&str> = sub.changes.iter().map(|c| c["kind"].as_str().unwrap()).collect();
+        assert_eq!(&dk[..4], ["agent", "flow", "template", "template"]);
+        assert!(dk.contains(&"decision_model") && dk.contains(&"language_detection") && dk.last() == Some(&"eval_suite"));
+        assert!(!dk.contains(&"release_settings") && !dk.contains(&"injection_ruleset"), "{dk:?}");
+        assert_eq!(sub.agent_id, "soporte-tecnico");
+        assert_eq!(sub.changes[0]["docs"]["changelog"], p.dossier["es"]["changelog"], "the proposal's own docs are the dossier's");
+        assert_eq!(sub.changes[4]["docs"]["description"].as_str().map(|d| d.contains("closure copy")), Some(true), "closure copies keep their own docs");
+        // honest dossier
+        let cov = p.dossier["es"]["sections"]["coverage"].as_str().unwrap();
+        for needle in ["ruteo de recepción al agente nuevo", "robo de tráfico", "SUPUESTO", "ajustes de release del donante", "NO medido"] {
+            assert!(cov.contains(needle), "{needle}: {cov}");
+        }
+        assert!(p.dossier["es"]["sections"]["unchanged"].as_str().unwrap().contains("Recepción no cambia"));
+        assert!(p.dossier["es"]["sections"]["result"].as_str().unwrap().contains("por ausencia"));
+        for l in core.log.borrow().iter() {
+            assert!(allowed(&l.method, &l.path), "{} {}", l.method, l.path);
+        }
+    }
+
+    #[test]
+    fn a_new_agent_whose_guard_fails_natively_is_not_announced() {
+        let core = Core::new(native_agent(true));
+        let (p, _) = run_agent(&core, &scripts_for(agent_bundle(), vec![]));
+        assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:guard_regressed"), "{}", p.story["reason"]);
+        assert!(p.extra_changes.is_empty() && p.suite.is_none());
+    }
+
+    #[test]
+    fn a_closure_that_cannot_be_read_is_an_internal_suite_error_and_nothing_is_evaluated() {
+        let core = Core::new(native_agent(false));
+        core.missing.borrow_mut().push("understand-turno".into());
+        let (p, _) = run_agent(&core, &scripts_for(agent_bundle(), vec![]));
+        assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:suite_error"));
+        assert!(p.story["reason"].as_str().unwrap().contains("understand-turno"), "{}", p.story["reason"]);
+        assert_eq!(core.count("POST", "/evaluate"), 0);
+    }
+
+    #[test]
+    fn a_script_set_without_new_agent_support_refuses_on_purpose() {
+        struct Old;
+        impl Scripts for Old {
+            fn build_suite(&self, _: &Value, _: &str) -> Result<Value, SuiteError> {
+                Ok(bundle())
+            }
+            fn judge(&self, _: &Value) -> Result<Value, String> {
+                Err("not reached".into())
+            }
+        }
+        let core = Core::new(native_agent(false));
+        let mem = MemoryStore::new();
+        let w = Writer::new(cfg(Via::RegistryApi), &core, &mem);
+        let (fi, comp) = (finding(), tecnico_compiled());
+        let sub = registry_writer::Submission::new(&fi, &comp);
+        let p = prove(&w, &Old, &MemoryProofStore::default(), &opts(), &input(&sub, &fi, &comp));
+        assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:suite_refused"));
+        assert!(core.log.borrow().is_empty());
+    }
 }
