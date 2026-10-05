@@ -7,7 +7,7 @@
     3. the support-platform API (`uvicorn`, own SQLite recreated, seeded) with CC_AGENT_CORE_URL, CC_AGENT_KEYS_FILE and CC_INTERNAL_SERVICE_TOKEN,
     4. a check that the engine binary resolves. The engine itself (`pulso run`, with the builder identity PULSO_REGISTRY_TOKEN and the
        platform URL/token) lives only as long as one loop job: run_story.ps1 starts and stops it.
-  up.ps1 [-MinFreeMb 1500] [-WaitRamMin 0] [-Force] [-PlatformDir D] [-AgentCoreDir D] [-GatewayDir D] [-PulsoExe F]
+  up.ps1 [-MinFreeMb 1500] [-WaitRamMin 0] [-Force] [-ReuseStack] [-PlatformDir D] [-AgentCoreDir D] [-GatewayDir D] [-PulsoExe F]
 .DESCRIPTION
   Memory gate: starts only when free RAM > -MinFreeMb (default 1500). -WaitRamMin N waits up to N minutes for it. -Force skips the gate.
   Credentials: agent-core.env and llm-gateway.env are read by scripts/demo-loop/run.ps1 and go only into child process environments. The
@@ -16,7 +16,7 @@
 #>
 [CmdletBinding()]
 param(
-    [int]$MinFreeMb = 1500, [int]$WaitRamMin = 0, [switch]$Force,
+    [int]$MinFreeMb = 1500, [int]$WaitRamMin = 0, [switch]$Force, [switch]$ReuseStack,
     [string]$PlatformDir = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$PulsoExe = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -76,16 +76,16 @@ $envUp = [ordered]@{}
 foreach ($kv in (Get-LoopLaneEnvironment -Settings $settings).GetEnumerator()) { $envUp[$kv.Key] = $kv.Value }
 foreach ($kv in (Get-AgentCoreGrantsEnvironment -Settings $settings -ServiceToken $svc).GetEnumerator()) { $envUp[$kv.Key] = $kv.Value }
 Say ("    child environment names: " + ((Get-EnvNames -Env $envUp) -join ', '))
-$r = Invoke-Scrubbed -File $shell -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $root 'scripts\demo-loop\run.ps1'), '-Up',
+if (-not $ReuseStack) { $r = Invoke-Scrubbed -File $shell -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $root 'scripts\demo-loop\run.ps1'), '-Up',
         '-AgentCoreDir', $AgentCoreDir, '-GatewayDir', $GatewayDir) -Env $envUp -Needles $script:Needles -WorkDir $root
-if ($r.ExitCode -ne 0) { Fail "demo-loop -Up exited $($r.ExitCode)" }
+if ($r.ExitCode -ne 0) { Fail "demo-loop -Up exited $($r.ExitCode)" } }
 foreach ($u in @("http://127.0.0.1:$($settings.CorePort)/healthz", "http://127.0.0.1:$($settings.GwPort)/healthz")) { if (-not (Test-Http $u)) { Fail "not answering: $u" } }
 
 # ---- 2. platform signing keys + KEY MERGE ----------------------------------------------------------------------------------------------
-Say '[2] platform agent-core keys (gen_agent_keys, suffix env1) and the merge into the state key files'
+Say '[2] platform agent-core keys (gen_agent_keys, fresh suffix per up) and the merge into the state key files'
 $r = Invoke-Scrubbed -File $uv -Arguments @('sync', '--frozen', '--project', $backend) -Needles $script:Needles -WorkDir $backend -Quiet
-if ($r.ExitCode -ne 0) { Fail ("uv sync (platform) exited $($r.ExitCode): " + ($r.Output | Select-Object -Last 3) -join ' ') }
-$r = Invoke-Scrubbed -File $uv -Arguments @('run', '--frozen', '--project', $backend, 'python', '-m', 'cc_platform.scripts.gen_agent_keys', '--out', $paths.PlatformKeys, '--suffix', 'env1') `
+if ($r.ExitCode -ne 0) { Fail ("uv sync (platform) exited $($r.ExitCode): " + (($r.Output | Select-Object -Last 3) -join ' ')) }
+$r = Invoke-Scrubbed -File $uv -Arguments @('run', '--frozen', '--project', $backend, 'python', '-m', 'cc_platform.scripts.gen_agent_keys', '--out', $paths.PlatformKeys, '--suffix', (Get-Date -Format 'MMddHHmmss')) `
     -Needles $script:Needles -WorkDir $backend -Quiet
 if ($r.ExitCode -ne 0) { Fail 'gen_agent_keys failed' }
 Say '    keys written (private.json stays in the gitignored rig dir; never printed)'
@@ -98,8 +98,9 @@ $penv = Get-PlatformEnvironment -Settings $settings -KeysFile (Join-Path $paths.
 Say ("    child environment names: " + ((Get-EnvNames -Env $penv) -join ', '))
 $psi = New-Object Diagnostics.ProcessStartInfo
 $psi.FileName = $env:ComSpec
-$psi.Arguments = '/c ""' + $uv + '" run --frozen --project "' + $backend + '" python -m uvicorn cc_platform.bootstrap.app:create_app --factory --host 127.0.0.1 --port ' + $settings.PlatformPort + ' --no-access-log >> "' + $paths.PlatformLog + '" 2>&1"'
+$psi.Arguments = '/c ""' + $uv + '" run --frozen --with tzdata --project "' + $backend + '" python -m uvicorn cc_platform.bootstrap.app:create_app --factory --host 127.0.0.1 --port ' + $settings.PlatformPort + ' --no-access-log >> "' + $paths.PlatformLog + '" 2>&1"'
 $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true; $psi.WorkingDirectory = $backend
+$psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true  # the child writes its own log file; no inherited pipe may keep a caller waiting
 foreach ($k in $penv.Keys) { $psi.EnvironmentVariables[[string]$k] = [string]$penv[$k] }
 $proc = [Diagnostics.Process]::Start($psi)
 [IO.File]::WriteAllText($paths.PlatformPid, [string]$proc.Id)
@@ -113,11 +114,7 @@ if (-not $ok) {
     $tail = ''; if (Test-Path $paths.PlatformLog) { $tail = (Get-Content -LiteralPath $paths.PlatformLog -Tail 6) -join "`n" }
     Fail ("the platform did not become healthy. Log tail:`n" + (Protect-Text $tail $script:Needles))
 }
-try {
-    $meta = Invoke-RestMethod -Uri "http://127.0.0.1:$($settings.PlatformPort)/api/v1/meta" -TimeoutSec 8
-    Say ("    /api/v1/meta agentCoreConfigured={0}" -f $meta.agentCoreConfigured)
-    if (-not $meta.agentCoreConfigured) { Fail 'the platform says agent-core is not configured' }
-} catch { Fail ("meta unreadable: " + $_.Exception.Message) }
+Say ('    /api/v1/meta answers: ' + (Test-Http "http://127.0.0.1:$($settings.PlatformPort)/api/v1/meta") + ' (builder availability is checked by story_verify through a supervisor session)')
 
 # ---- 4. the engine ----------------------------------------------------------------------------------------------------------------------
 Say "[4] engine binary: $PulsoExe (started per loop job by run_story.ps1 on :$($settings.EnginePort); PULSO_REGISTRY_TOKEN = builder principal pulso-engine, kid pulso-engine-dev-1)"

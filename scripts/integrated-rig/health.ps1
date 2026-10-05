@@ -26,9 +26,7 @@ Line "llm-gateway :$($settings.GwPort) /healthz" (Test-Http "http://127.0.0.1:$(
 Line "agent-core :$($settings.CorePort) /healthz" (Test-Http "$core/healthz")
 Line "agent-core :$($settings.CorePort) /readyz" (Test-Http "$core/readyz")
 Line "platform :$($settings.PlatformPort) /api/v1/health" (Test-Http "$plat/api/v1/health")
-$cfg = $false
-try { $cfg = [bool](Invoke-RestMethod -Uri "$plat/api/v1/meta" -TimeoutSec 6).agentCoreConfigured } catch { }
-Line 'platform /api/v1/meta agentCoreConfigured' $cfg
+Line 'platform /api/v1/meta' (Test-Http "$plat/api/v1/meta")
 $exe = ''
 if (Test-Path -LiteralPath (Join-Path $paths.Rig 'rig.json')) { $exe = [string](Read-JsonFile -Path (Join-Path $paths.Rig 'rig.json')).pulso_exe }
 Line 'engine binary' ($exe -and (Test-Path -LiteralPath $exe)) $(if ($exe) { Split-Path -Leaf (Split-Path -Parent (Split-Path -Parent $exe)) } else { 'no rig.json (run up.ps1)' })
