@@ -15,6 +15,7 @@
 //! receipt store remembers the proposal of a key, because the registry at main has no list route and no `Idempotency-Key` on HTTP.
 //! No token is ever printed, stored in a receipt or put in an error.
 pub mod baseline;
+pub mod closure;
 pub mod eval;
 pub mod guard;
 pub mod proof;

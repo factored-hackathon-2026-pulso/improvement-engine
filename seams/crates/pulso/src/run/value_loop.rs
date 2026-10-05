@@ -142,7 +142,7 @@ impl ValueLoop {
                 let w11 = work_dir.join("w11");
                 std::fs::create_dir_all(&w11).map_err(|e| format!("work dir for the proof: {e}"))?;
                 Some(ProofConfig {
-                    scripts: Arc::new(PythonScripts { python, script_dir, work: w11 }),
+                    scripts: Arc::new(PythonScripts { python, script_dir, work: w11, env: vec![] }),
                     eval_transport: Arc::new(HttpTransport::new(&addr, Duration::from_secs(secs))),
                     opts: EvalOptions::default(),
                     proofs: work_dir.join("w11-proofs.json"),

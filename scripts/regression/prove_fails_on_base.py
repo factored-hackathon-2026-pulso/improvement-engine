@@ -89,6 +89,11 @@ def run_probe(probe: dict, text: str | None, generate=None, cache: dict | None =
             "rendered": out}
 
 
+def probe_key(text: str, locale: str, inputs: dict, samples: int) -> str:
+    """Stable key of one generation request (judge_story looks the engine-collected samples up by it)."""
+    return hashlib.sha256(json.dumps([text, locale, inputs, samples], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+
+
 def texts_of(changes: list[dict] | None, base_artifacts: dict, artifact_id: str, kind: str = "template") -> dict:
     """Locale texts of a template/prompt: from the candidate changes if it patches it, else the byte-exact base artifact."""
     for c in changes or []:
@@ -102,14 +107,25 @@ def texts_of(changes: list[dict] | None, base_artifacts: dict, artifact_id: str,
 
 
 # ------------------------------------------------------------------------------------------------------------ judging
-def case_results(bundle: dict, native: dict[str, dict], changes: list[dict] | None, base_artifacts: dict, generate=None) -> dict:
-    """Per-case {passed, source, reason}: native scenario result AND (when the case has one) the wording/generation probe."""
+def case_results(bundle: dict, native: dict[str, dict], changes: list[dict] | None, base_artifacts: dict, generate=None,
+                 ignore_native: frozenset = frozenset(), absent: bool = False) -> dict:
+    """Per-case {passed, source, reason}: native scenario result AND (when the case has one) the wording/generation probe.
+    `ignore_native`: case ids whose native result is NOT used (agent-core `evaluate` did not exercise the candidate prompt:
+    `native_not_candidate_bound`); the harness probe alone decides them and the entry is labelled. `absent`: the agent does not
+    exist on this side (new agent on the base): finding cases fail by absence, guards are not applicable."""
     probes = {p["case_id"]: p for p in bundle.get("probes", [])}
     cache: dict = {}
     out = {}
     for cid in bundle["finding_case_ids"] + bundle["guard_case_ids"]:
+        if absent:
+            is_f = cid in bundle["finding_case_ids"]
+            out[cid] = {"passed": not is_f, "source": "absent_on_base",
+                        "reason": "the agent does not exist on the base: not run" if is_f else "not applicable: the agent does not exist on the base"}
+            continue
         n = native.get(cid, {"passed": False, "reason": "not measured"})
         entry = {"passed": bool(n["passed"]), "source": "native", "reason": n.get("reason", "")}
+        if cid in ignore_native:
+            entry = {"passed": True, "source": "native_ignored", "reason": "", "native_ignored": {"passed": bool(n["passed"]), "why": "native_not_candidate_bound"}}
         p = probes.get(cid)
         if p is not None:
             if p["kind"] == "generated_contains":
@@ -119,8 +135,9 @@ def case_results(bundle: dict, native: dict[str, dict], changes: list[dict] | No
             pr = run_probe(p, texts.get(p["locale"]), generate, cache)
             entry["probe"] = {k: pr[k] for k in ("rendered", "samples") if k in pr}
             if not pr["passed"]:
-                entry.update(passed=False, source=name if n["passed"] else "native+" + name,
-                             reason=(n.get("reason") + "; " if n.get("reason") else "") + pr["reason"])
+                ignored = cid in ignore_native
+                entry.update(passed=False, source=name if (n["passed"] or ignored) else "native+" + name,
+                             reason=("" if ignored or not n.get("reason") else n["reason"] + "; ") + pr["reason"])
         out[cid] = entry
     return out
 
@@ -149,8 +166,63 @@ def decide(bundle: dict, base: dict, attempts: list[dict]) -> dict:
     cand_fail_f = failed(last["per_case"], f_ids)
     if cand_fail_f:
         return {"outcome": "not_fixed", "reason": f"finding cases still failing on the candidate: {cand_fail_f}"}
+    if base.get("verdict") == "absent":
+        return {"outcome": "regression_suite_proven",
+                "reason": f"the new agent does not exist on the base (all {len(f_ids)} finding cases fail by absence, not measured) "
+                          "and every finding case and guard passes natively on the candidate"}
     return {"outcome": "regression_suite_proven",
             "reason": f"{len(base_fail_f)}/{len(f_ids)} finding cases fail on the base and all pass on the candidate; guards pass on both"}
+
+
+def has_generated_probes(bundle: dict) -> bool:
+    return any(p["kind"] == "generated_contains" for p in bundle.get("probes", []))
+
+
+def native_binding(bundle: dict, base_native: dict, control: dict | None) -> dict:
+    """Did agent-core's `evaluate` exercise the CANDIDATE prompt? Only prompt bundles ask. The control is a text-identical version
+    bump of the base prompt: with the evaluation bound to the evaluated closure (agent-core PR 50) it passes the same native
+    assertions as the base; without it the bumped ref cannot be resolved, the responder falls back to the template
+    (`fallback_used` true) and the control FAILS what the base passes. Never guessed: `unknown` when the control is missing or
+    infrastructure failed, or when the base itself does not pass the native assertions."""
+    if not has_generated_probes(bundle):
+        return {"state": "not_applicable"}
+    if control is None:
+        return {"state": "unknown", "why": "no control run"}
+    if control.get("verdict") == "failed_infra" or not (control.get("per_case_native") or {}):
+        return {"state": "unknown", "why": "the control run produced no result", "control_proposal_id": control.get("proposal_id")}
+    f_ids = bundle["finding_case_ids"]
+    base_ok = all(base_native.get(i, {}).get("passed") for i in f_ids)
+    ctl_failed = [i for i in f_ids if not (control["per_case_native"].get(i) or {}).get("passed")]
+    out = {"control_proposal_id": control.get("proposal_id"), "control": "text-identical version bump of the base prompt",
+           "control_failed_native": ctl_failed}
+    if not base_ok:
+        return {**out, "state": "unknown", "why": "the base does not pass the native assertions: the control proves nothing"}
+    return {**out, "state": "native_not_candidate_bound" if ctl_failed else "candidate_bound"}
+
+
+def coverage(bundle: dict, binding: dict) -> dict:
+    """What was measured natively (agent-core scorer), by harness probe, and what was NOT measured: closed codes the dossier renders."""
+    mech = bundle["mechanism"]
+    native = ["platform_guardrails", "guards"]
+    probe: list[str] = []
+    not_measured = ["real_customer_effect"]
+    if mech == "status_message_gap":
+        native.insert(0, "flow_outcome_and_placeholder_render")
+        probe.append("state_reflected")
+        not_measured.append("native_wording")
+    elif mech == "closing_followup":
+        native.insert(0, "flow_outcome")
+        probe.append("generated_followup")
+        not_measured.append("native_wording")
+        if binding.get("state") == "candidate_bound":
+            native.insert(1, "response_from_model_path")
+        else:
+            not_measured.append("candidate_prompt_native")
+    elif mech == "uncovered_topic":
+        native.insert(0, "new_agent_intake_and_handoff")
+        not_measured += ["base_by_absence", "routing_recepcion_to_new_agent", "traffic_stealing", "native_wording"]
+    assumptions = ["release_settings_assumed"] if mech == "uncovered_topic" else []
+    return {"native": native, "harness_probe": probe, "not_measured": not_measured, "assumptions": assumptions}
 
 
 def _why(a: dict) -> str:
@@ -171,23 +243,37 @@ def story_text(lang: str, d: dict, n_base_fail: int, n_cases: int, attempts: lis
     return head + "; ".join(seq) + f". [{d['outcome']}]"
 
 
-def verdict_story(bundle: dict, base: dict, attempts: list[dict]) -> dict:
+def verdict_story(bundle: dict, base: dict, attempts: list[dict], binding: dict | None = None) -> dict:
     d = decide(bundle, base, attempts)
+    binding = binding or {"state": "not_applicable"}
     f_ids = bundle["finding_case_ids"]
     n_base_fail = len(failed(base["per_case"], f_ids)) if base["per_case"] else 0
     proven = d["outcome"] == "regression_suite_proven"
     last = attempts[-1] if attempts else None
-    return {
+    announce = bool(proven and last and last["verdict"] == "pass")
+    if proven and binding.get("state") == "native_not_candidate_bound":
+        # Native evidence of the candidate prompt is missing: the harness probe alone is NOT enough to announce.
+        d = {"outcome": "native_not_candidate_bound",
+             "reason": "agent-core `evaluate` did not exercise the candidate prompt (a text-identical version bump failed the native "
+                       "assertions that the base passes): the native result says nothing about the candidate. The harness probe alone "
+                       f"({n_base_fail}/{len(f_ids)} finding cases fail on the base, all pass on the candidate) is labelled and not enough to announce"}
+        announce, proven = False, False
+    story = {
         "schema": STORY_SCHEMA, "finding_key": bundle["finding_key"], "finding_id": bundle.get("finding_id"),
         "target": bundle["target"], "mechanism": bundle["mechanism"], "agent": bundle["agent"],
         "suite_id": bundle["suite"]["id"], "suite_is_regression_suite": proven,
-        "outcome": d["outcome"], "reason": d["reason"],
-        "announce": bool(proven and last and last["verdict"] == "pass"),
+        "outcome": d["outcome"], "reason": d["reason"], "announce": announce,
         "base": base, "attempts": attempts,
         "gate_items": (last or base).get("gate_items", []),
         "story_text": {lang: story_text(lang, d, n_base_fail, len(f_ids), attempts) for lang in ("es", "pt")} if attempts else {},
         "model_policy": MODEL_POLICY,
+        "native_binding": binding, "coverage": coverage(bundle, binding),
     }
+    if binding.get("state") == "native_not_candidate_bound":
+        story["probe_only_proven"] = d["outcome"] == "native_not_candidate_bound"
+    if bundle.get("new_agent"):
+        story["new_agent"] = bundle["new_agent"]
+    return story
 
 
 # ------------------------------------------------------------------------------------------------------------ live
@@ -265,7 +351,31 @@ def run_draft(api, suite: dict, agent_entity: dict | None, changes: list[dict], 
     return res
 
 
-def evaluate_one(label: str, api, bundle, agent_entity, changes, base_artifacts, attach, attempt: int | None, generate=None) -> dict:
+def control_changes(changes: list[dict], base_artifacts: dict) -> list[dict]:
+    """The binding control: the candidate's prompt entities with the BASE texts and the candidate's version (a text-identical bump)."""
+    out = []
+    for c in changes:
+        if c.get("kind") != "prompt":
+            continue
+        content = dict(c["content"])
+        content["locales"] = texts_of([], base_artifacts, content["id"], "prompt") or content.get("locales")
+        out.append({**c, "content": content})
+    return out
+
+
+def run_control(api, bundle, agent_entity, changes, base_artifacts, attach) -> dict:
+    """Raw native run of the control (no probes): used only to decide `native_binding`."""
+    for _try in range(INFRA_RETRIES + 1):
+        run = run_draft(api, bundle["suite"], agent_entity, control_changes(changes, base_artifacts),
+                        f"REG1 control {bundle['suite']['id']}", attach)
+        if run["verdict"] != "failed_infra":
+            break
+        time.sleep(INFRA_BACKOFF_S)
+    return run
+
+
+def evaluate_one(label: str, api, bundle, agent_entity, changes, base_artifacts, attach, attempt: int | None, generate=None,
+                 ignore_native: frozenset = frozenset()) -> dict:
     retries = []
     for _try in range(INFRA_RETRIES + 1):
         run = run_draft(api, bundle["suite"], agent_entity, changes, f"REG1 {label} {bundle['suite']['id']}", attach)
@@ -273,16 +383,18 @@ def evaluate_one(label: str, api, bundle, agent_entity, changes, base_artifacts,
             break
         retries.append({"proposal_id": run.get("proposal_id"), "detail": str(run.get("detail") or run.get("problem"))[:200]})
         time.sleep(INFRA_BACKOFF_S)
-    per_case = (case_results(bundle, run.get("per_case_native", {}), changes, base_artifacts, generate)
+    per_case = (case_results(bundle, run.get("per_case_native", {}), changes, base_artifacts, generate, ignore_native)
                 if run["verdict"] != "failed_infra" else {})
     f_ids, g_ids = bundle["finding_case_ids"], bundle["guard_case_ids"]
     out = {"label": label, "proposal_id": run.get("proposal_id"), "verdict": run["verdict"],
            "native_verdict": run["verdict"], "per_case": per_case,
            "failed_cases": failed(per_case, f_ids) if per_case else [], "guards_failed": failed(per_case, g_ids) if per_case else [],
            "gate_items": run.get("gate_items", []), "problem": run.get("problem"), "detail": run.get("detail"),
-           "infra_retries": retries}
+           "infra_retries": retries, "native": {k: v["passed"] for k, v in (run.get("per_case_native") or {}).items()}}
+    if ignore_native and per_case and not out["failed_cases"] and not out["guards_failed"]:
+        out["verdict"] = "probe_only_pass"
     # the case-level verdict also needs the wording probes: a native pass with a failing probe is a fail
-    if per_case and out["verdict"] == "pass" and (out["failed_cases"] or out["guards_failed"]):
+    elif per_case and out["verdict"] == "pass" and (out["failed_cases"] or out["guards_failed"]):
         out["verdict"] = "fail"
         out["verdict_note"] = "native evaluate passed; wording probe(s) failed"
     if changes:
@@ -292,15 +404,18 @@ def evaluate_one(label: str, api, bundle, agent_entity, changes, base_artifacts,
     return out
 
 
-def make_generator(gateway: str, env_file: Path, model: str, temperature: float = 0.7):
-    """Sample the LOCAL llm-gateway /v1/generate the way agent-core's adapter does. The consumer token is read from the env
-    file into this process only and sent as a bearer header to the local gateway; it is never printed or stored."""
+def make_generator(gateway: str, env_file: Path | None, model: str, temperature: float = 0.7):
+    """Sample the LOCAL llm-gateway /v1/generate the way agent-core's adapter does. The consumer token comes from this process'
+    environment (`GATEWAY_TOKEN_AGENT_CORE`) or, if absent, from the env file, into this process only; it is sent as a bearer
+    header to the local gateway and is never printed or stored."""
+    import os
     import urllib.error
     import urllib.request
-    token = ""
-    for line in env_file.read_text(encoding="utf-8-sig").splitlines():
-        if line.startswith("GATEWAY_TOKEN_AGENT_CORE="):
-            token = line.split("=", 1)[1].strip().strip("\"'")
+    token = os.environ.get("GATEWAY_TOKEN_AGENT_CORE", "")
+    if not token and env_file is not None and env_file.exists():
+        for line in env_file.read_text(encoding="utf-8-sig").splitlines():
+            if line.startswith("GATEWAY_TOKEN_AGENT_CORE="):
+                token = line.split("=", 1)[1].strip().strip("\"'")
 
     def generate(prompt_text: str, inputs: dict, locale: str, n: int) -> list[str]:
         outs = []
@@ -363,14 +478,23 @@ def main(argv: list[str] | None = None) -> int:
     generate = (make_generator(a.gateway, a.env_file, a.probe_model)
                 if any(p["kind"] == "generated_contains" for p in bundle.get("probes", [])) else None)
     base_run = evaluate_one("base", api, bundle, agent_entity, [], base_artifacts, attach, None, generate)
+    binding, ignore = {"state": "not_applicable"}, frozenset()
+    if has_generated_probes(bundle) and a.candidate:
+        control = run_control(api, bundle, agent_entity, load_candidate(a.candidate[0]), base_artifacts, attach)
+        binding = native_binding(bundle, {k: {"passed": v} for k, v in base_run["native"].items()},
+                                 {"verdict": control["verdict"], "proposal_id": control.get("proposal_id"),
+                                  "per_case_native": control.get("per_case_native")})
+        if binding["state"] == "native_not_candidate_bound":
+            ignore = frozenset(p["case_id"] for p in bundle["probes"] if p["kind"] == "generated_contains")
     attempts = []
     if base_run["failed_cases"] and not base_run["guards_failed"]:  # a candidate is only worth evaluating if the base fails
         for n, path in enumerate(a.candidate, 1):
-            att = evaluate_one(f"candidate-{n}", api, bundle, agent_entity, load_candidate(path), base_artifacts, attach, n, generate)
+            att = evaluate_one(f"candidate-{n}", api, bundle, agent_entity, load_candidate(path), base_artifacts, attach, n, generate,
+                               ignore)
             attempts.append(att)
-            if att["verdict"] == "pass":
+            if att["verdict"] in ("pass", "probe_only_pass"):
                 break
-    story = verdict_story(bundle, base_run, attempts)
+    story = verdict_story(bundle, base_run, attempts, binding)
     text = json.dumps(story, indent=2, ensure_ascii=False, default=str)
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
