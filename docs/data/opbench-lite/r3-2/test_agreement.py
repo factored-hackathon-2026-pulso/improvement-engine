@@ -49,6 +49,7 @@ class AgreementTests(unittest.TestCase):
     def test_reports_exact_within_one_zero_gate_and_kappa(self):
         report = compare(self.golden, self.judge)
         self.assertEqual(12, report["n_compared"])
+        self.assertEqual("pass1_unblinded_codex_labels", report["label_source"])
         self.assertEqual(1.0, report["exact_agreement"])
         self.assertEqual(1.0, report["within_one_agreement"])
         self.assertEqual(1.0, report["hard_gate_agreement"])
