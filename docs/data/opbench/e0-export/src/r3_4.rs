@@ -146,9 +146,6 @@ pub fn aggregate(input: &Input, k: u64) -> Result<Value, &'static str> {
     let mut complaints_by_id = HashMap::new();
     for complaint in &input.complaints {
         validate_key(&complaint.complaint_id)?;
-        if complaint.category.trim().is_empty() || complaint.subcategory.trim().is_empty() {
-            return Err("bank complaint has an unknown category");
-        }
         if complaints_by_id
             .insert(complaint.complaint_id.as_str(), complaint)
             .is_some()
@@ -164,6 +161,7 @@ pub fn aggregate(input: &Input, k: u64) -> Result<Value, &'static str> {
     let mut case_categories: HashMap<&str, CategoryKey> = HashMap::new();
     let mut null_link_count = 0_u64;
     let mut orphan_link_count = 0_u64;
+    let mut unknown_category_or_subcategory_cases = 0_u64;
     for case in &input.cases {
         let Some(complaint_id) = case.complaint_id.as_deref() else {
             null_link_count += 1;
@@ -178,6 +176,10 @@ pub fn aggregate(input: &Input, k: u64) -> Result<Value, &'static str> {
             return Err("complaint linked to multiple E0 cases");
         }
         linked_case_ids.insert(case.case_id.as_str());
+        if complaint.category.trim().is_empty() || complaint.subcategory.trim().is_empty() {
+            unknown_category_or_subcategory_cases += 1;
+            continue;
+        }
         let key = (complaint.category.clone(), complaint.subcategory.clone());
         categories.entry(key.clone()).or_default().cases += 1;
         case_categories.insert(case.case_id.as_str(), key);
@@ -363,10 +365,17 @@ pub fn aggregate(input: &Input, k: u64) -> Result<Value, &'static str> {
     let (bank_outcomes, bank_coverage) = bank_complaint_tables(&categories, k);
     let query_family_table = query_family_table(&categories, k);
     let query_repeat_table = query_repeat_table(&categories, k);
+    let bank_category_coverage = table_envelope(
+        vec![json!({
+            "unknown_category_or_subcategory_cases": unknown_category_or_subcategory_cases
+        })],
+        &[unknown_category_or_subcategory_cases],
+        k,
+    );
 
     Ok(json!({
         "benchmark": "OPBENCH-lite-R3-4",
-        "version": "1",
+        "version": "2",
         "privacy": {"minimum_count": k, "aggregate_only": true, "row_data_included": false},
         "evidence": {
             "source_link_grade": "linked",
@@ -382,7 +391,8 @@ pub fn aggregate(input: &Input, k: u64) -> Result<Value, &'static str> {
             "e0_close_outcomes_by_category": e0_close_outcomes,
             "e0_close_coverage_by_category": e0_close_coverage,
             "bank_complaint_outcomes_by_category": bank_outcomes,
-            "bank_complaint_coverage_by_category": bank_coverage
+            "bank_complaint_coverage_by_category": bank_coverage,
+            "bank_category_coverage": bank_category_coverage
         }
     }))
 }
@@ -1139,6 +1149,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn missing_category_is_reported_only_as_a_k_safe_coverage_count() {
+        for (missing, should_suppress) in [(9, true), (10, false)] {
+            let mut input = fixture();
+            for complaint in input.complaints.iter_mut().take(missing) {
+                complaint.category.clear();
+            }
+            let output = aggregate(&input, 10).expect("unknown category coverage is aggregated");
+            let coverage = &output["tables"]["bank_category_coverage"];
+            assert_eq!(coverage["suppressed"], should_suppress);
+            if should_suppress {
+                assert_eq!(coverage["rows"], Value::Array(vec![]));
+            } else {
+                assert_eq!(
+                    coverage["rows"][0]["unknown_category_or_subcategory_cases"],
+                    10
+                );
+            }
+        }
+    }
+
     fn fixture() -> Input {
         let complaints = (0..60)
             .map(|i| BankComplaint {
@@ -1214,6 +1245,7 @@ mod tests {
         ] {
             assert!(!encoded.contains(forbidden), "output exposed {forbidden}");
         }
+        assert_eq!(output["version"], "2");
         assert_eq!(output["evidence"]["source_link_grade"], "linked");
         assert_eq!(output["evidence"]["workflow_link_grade"], "not_evaluable");
         assert_eq!(output["evidence"]["generated_process_data"], true);
