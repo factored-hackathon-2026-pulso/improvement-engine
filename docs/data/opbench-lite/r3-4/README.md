@@ -18,9 +18,14 @@ counts are held only in an external local run manifest.
 The runner refuses a pre-existing output directory, output inside the working
 repository or either input root, E0 samples other than the preregistered 2,000
 cases, and E0 cases with no exact complaint key. Duplicate keys, many-to-one
-links, invalid event ordering, schema drift, or unsafe cells fail closed or
-produce an explicitly suppressed aggregate table; they are not repaired after
-observing results. Minimum support is fixed at `k=10`.
+links, invalid event ordering, unsupported source schema, or unsafe cells fail
+closed or produce an explicitly suppressed aggregate table. Complaint-status
+handling is governed by
+[`PREREGISTRATION_AMENDMENT_2.md`](PREREGISTRATION_AMENDMENT_2.md): blank and
+unmapped non-empty values contribute only to `status_unknown`; source strings
+are never exposed. This amendment follows an earlier failed schema check, so
+the resulting analysis remains exploratory/descriptive, not confirmatory.
+Minimum support is fixed at `k=10`.
 
 ## Local command (PowerShell)
 
@@ -52,7 +57,10 @@ creates only:
 The R3-4 schema-v2 envelope includes the preregistered category coverage table:
 cases missing either complaint category field are excluded from category
 cuts and contribute only to one global `bank_category_coverage` count, which is
-suppressed below `k=10`. See the immutable [`PREREGISTRATION_AMENDMENT_1.md`](PREREGISTRATION_AMENDMENT_1.md).
+suppressed below `k=10`. See the immutable
+[`PREREGISTRATION_AMENDMENT_1.md`](PREREGISTRATION_AMENDMENT_1.md). Status
+domain handling is governed by the separate
+[`PREREGISTRATION_AMENDMENT_2.md`](PREREGISTRATION_AMENDMENT_2.md).
 
 The manifest records that no temporal cutoff is applied (the full registered
 snapshot is used), deterministic partition/aggregate ordering, and fingerprints
@@ -72,4 +80,24 @@ cargo clippy --offline --manifest-path docs/data/opbench/e0-export/Cargo.toml --
 CI Actions are not treated as the first test environment. This repository's
 Actions spending gate has previously prevented jobs from starting; report the
 live gate separately from these local results.
+
+## First local data run
+
+The first successful local execution completed on 2026-10-05 against the
+registered bank snapshot and E0 sample, after amendment 2 handled unmapped
+complaint statuses as unknown coverage. The runner completed twice with the
+same code, preregistration, and input bytes. Both aggregate `results.json`
+files had SHA-256
+`cbfb1bc2876480efc5cba2790e51dce93e53b24718a2311865f34c02354b5426`.
+The result files and run manifests remain outside Git.
+
+All eight result tables were safely suppressed by the registered `k=10` and
+joint-complement rules. No category-level counts, outcomes, query patterns, or
+link coverage can be published from this run. Therefore R3-4 yields **zero
+publishable “why” statements**: there is no evidential basis here to rank
+categories, attribute causes, estimate agent performance, or claim lift or
+savings. We do not relax suppression or merge categories after seeing this
+result. The implementation and reproducible execution are complete; the
+cross-source analytical objective remains inconclusive under this snapshot
+and disclosure policy.
 

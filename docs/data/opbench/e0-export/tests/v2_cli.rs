@@ -414,4 +414,3 @@ fn v2_binary_fails_closed_on_missing_and_malformed_source_files() {
     fs::write(malformed.data().join("case.parquet"), b"not parquet").unwrap();
     assert_sanitized_failure(run_cli(&malformed), &malformed);
 }
-
