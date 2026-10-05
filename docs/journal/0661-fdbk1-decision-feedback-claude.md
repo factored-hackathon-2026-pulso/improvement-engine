@@ -1,0 +1,7 @@
+# 0661 FDBK1 decision feedback reader [DONE] (UTC 2026-10-05T14:15Z, CLAUDE)
+
+Lane FDBK1 (plan MEM1 / learning loop), branch `claude/fdbk1-decision-feedback` off origin/main e49f7ad0 (engine PR 104 only; additive).
+Facts (agent-core 630a4a7, support-platform a451001): reject needs a mandatory free-text reason stored in `reg_approvals` and NOT readable over HTTP; the `rejected` registry event and the platform audit carry no reason (only `reason_length`); no `rejected` or `expired` state exists (reject returns the proposal to draft). Gaps and the Spanish ask for a closed-vocabulary `reason_code`: `docs/dev/DECISION_FEEDBACK.md`, `docs/reports-claude/ASKS/ASK_decision_reason.md`.
+Delivered: `scripts/feedback/decision_feedback.py` (reader with persisted cursor, loopback guard, idempotent JSONL `pulso.decision/1`; closed-vocabulary reason mapping, free text dropped; `aggregate`, `suppress`, `history`/`history_line`), 36 unit tests, `live_stack.py` (own stack by PULSO_STACK_PREFIX), `live_drive.py`, OWNERS glob under L-MEM.
+Live (own stack pulso-fdbk1, 5 manual proposals, real evaluate x3): 5 records, replay 0 new; approval 1/3, median 5 s; all reasons unknown (agent-core exposes none); expire-days 0 gives 2 expired; what-if with structured reasons: suppress true for duplicate, false for insufficient_evidence.
+Limits: dossier crate not on main (history line is a function plus documented integration point); nothing in the engine calls the reader yet. Team: CL
