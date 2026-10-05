@@ -30,7 +30,8 @@ COPY bridge-contract ./bridge-contract
 COPY platform-contract ./platform-contract
 RUN cargo build --release --locked --manifest-path seams/Cargo.toml -p pulso --bins \
     && install -D seams/target/release/pulso /out/pulso \
-    && install -D seams/target/release/pulso-synth-runner /out/pulso-synth-runner
+    && install -D seams/target/release/pulso-synth-runner /out/pulso-synth-runner     && cargo build --release --locked --manifest-path seams/Cargo.toml -p steps --bin steps_cli     && install -D seams/target/release/steps_cli /out/steps_cli
+# steps_cli (last build above): the sensor of the improvement loop that the loop driver runs on the engine host.
 
 # --- stage 3: minimal runtime, non-root ---
 FROM ${RUNTIME_IMAGE}
@@ -39,7 +40,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin pulso \
     && install -d -o 10001 -g 10001 /var/lib/pulso /var/lib/pulso/work /var/lib/pulso/store
-COPY --from=build /out/pulso /out/pulso-synth-runner /usr/local/bin/
+COPY --from=build /out/pulso /out/pulso-synth-runner /out/steps_cli /usr/local/bin/
 COPY --from=console /app/dist /opt/pulso/console
 USER 10001:10001
 # Non-secret defaults only. A non-loopback bind makes `pulso run` demand PULSO_DEBUG_TOKEN and PULSO_ADMIN_TOKEN (>= 24 chars,
