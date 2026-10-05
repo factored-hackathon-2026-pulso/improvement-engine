@@ -10,6 +10,19 @@ Producer: `scripts/aggregate/bank_cells.py` (stdlib only; pyarrow is cached offl
 - Reference files (`customers.csv`, `marketing_campaigns.csv`) are read through a column allowlist (`REF_COLUMNS`); PII columns are never indexed.
 - Customer attributes (segment, consent) are the extract's CURRENT values, not as-of the event. No timezone claim.
 
+## Finding types of the sensor (W1-4)
+
+- `contrast` (default, M1-M10): a cell against the rest of its metric (same channel, excluding its own reason); BH over all explored cells; holdout; R2 windows.
+- `level_risk` (`type: "level_risk"`, `class: "risk"`): a metric whose VALUE is the risk, judged against an explicit threshold registered in `Config::level_risks` BEFORE looking at data (analyst policy parameter, not a legal threshold). Registered today: M8, threshold 0.10, minimum excess 0.05. Test: pooled rate of the metric's valid cells, one-sided z against the threshold, Wilson 95% interval, excess floor, holdout confirmation (half of the floor), R2 windows, count of months above the threshold, count of cells above the threshold (descriptive). Statuses `candidate | corroborated | refuted | uncertain`; `claim: association`; no cause, no legal conclusion, no consent-at-send-time claim.
+- Multiplicity: level tests are a separate pre-registered family, Bonferroni over `level_risks.len()` (the registered count, fixed in advance, whether or not the metric is present in the table), reported as `level_tests`. They are NOT added to `cells_explored` (the contrast BH family), so neither family dilutes the other; a metric registered as a level test still also runs the contrast test (M8 stays `refuted / no_differential` there, which is correct).
+- Discards and k: the same k rule and `k_violation` discard apply to the rows; a pooled discovery support below `min_support` is the named discard `level_below_min_support`.
+- Metrics that are NOT registered (M7, M9, ...) never get a level verdict: M7 (6.0% vs 4.5%, under the 5 pp effect floor) stays descriptive and M9 stays refuted.
+- Scoring: `scripts/scoring/score_findings.py` matches `level_risk` signals only to catalog entries of type `risk` (reported under `risk`, outside problem recall/precision).
+
+## Segment cells (language x channel): not built
+
+Checked in the real tables 2026-10-05: `customers.csv` has no language or locale column (only `country` and `detected_accent`, the latter 29.9% null and an accent label, not a language); `call_transcripts.detected_language` is `es` in 100% of rows (no variation, 25% of contacts only). Language (es 95% / pt 5%) exists only in the E0 dispute cases, a different source and not the bank. So language x channel cells would be a constant in the bank data and are skipped; revisit if a customer language column appears.
+
 ## M7 `digital_error_rate` (descriptive)
 
 - Table `digital_events`. Numerator: events with `event_type = 'Error'`. Denominator: events with that action and channel. Dims: `action` x `channel` (accent-folded). Period: `event_date` month.

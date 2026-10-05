@@ -376,3 +376,157 @@ fn ag2_dimensions_are_accepted_and_unknown_ones_still_rejected() {
     let bad = r#"{"metric":"M7","dims":{"customer_id":"x"},"half":"discovery","numerator":1,"denominator":600}"#;
     assert!(analyse(bad, &Config::default()).is_err());
 }
+
+// ---- W1-4: `level_risk` finding type (a level against a pre-registered threshold, not a vs-rest contrast) ----
+
+fn m_row(metric: &str, ctype: &str, channel: &str, half: &str, period: &str, num: i64, den: i64) -> String {
+    format!(
+        "{{\"metric\":\"{metric}\",\"dims\":{{\"campaign_type\":\"{ctype}\",\"channel\":\"{channel}\"}},\"half\":\"{half}\",\"period\":\"{period}\",\"numerator\":{num},\"denominator\":{den}}}"
+    )
+}
+
+/// 3 campaign types x 2 channels x 2 halves x 4 periods (two per R2 window); `permille(half)` is the level.
+fn level_grid(metric: &str, permille: &dyn Fn(&str, &str) -> i64) -> Vec<String> {
+    let mut rows = vec![];
+    for t in ["Push", "Promo", "Alert"] {
+        for c in ["Email", "Sms"] {
+            for half in ["discovery", "holdout"] {
+                for p in ["2023-08", "2024-03", "2025-02", "2026-02"] {
+                    let den = 400;
+                    rows.push(m_row(metric, t, c, half, p, den * permille(half, p) / 1000, den));
+                }
+            }
+        }
+    }
+    rows
+}
+
+fn level_signals(j: &Json) -> Vec<&Json> {
+    signals(j).into_iter().filter(|s| s.get("type").and_then(|v| v.as_str()) == Some("level_risk")).collect()
+}
+
+fn level_of<'a>(j: &'a Json, metric: &str) -> Option<&'a Json> {
+    level_signals(j).into_iter().find(|s| s.get("metric").and_then(|v| v.as_str()) == Some(metric))
+}
+
+fn st<'a>(s: &'a Json) -> &'a str {
+    s.get("status").and_then(|v| v.as_str()).unwrap()
+}
+
+#[test]
+fn level_risk_surfaces_m8_style_level_with_interval_support_and_replication() {
+    let j = out(&level_grid("M8", &|_, _| 500));
+    let s = level_of(&j, "M8").expect("level risk signal");
+    assert_eq!(st(s), "corroborated");
+    assert_eq!(s.get("class").and_then(|v| v.as_str()), Some("risk"));
+    assert_eq!(s.get("claim").and_then(|v| v.as_str()), Some("association"));
+    assert!(s.get("cause").is_none() && s.get("mechanism").is_none());
+    let d = s.get("discovery").unwrap();
+    assert_eq!(d.get("denominator").and_then(|v| v.as_i64()), Some(3 * 2 * 4 * 400));
+    assert!((d.get("rate").and_then(|v| v.as_f64()).unwrap() - 0.5).abs() < 1e-9);
+    assert!((d.get("baseline_rate").and_then(|v| v.as_f64()).unwrap() - 0.10).abs() < 1e-9, "threshold is the baseline");
+    let (lo, hi) = (d.get("ci95_low").and_then(|v| v.as_f64()).unwrap(), d.get("ci95_high").and_then(|v| v.as_f64()).unwrap());
+    assert!(lo < 0.5 && 0.5 < hi && lo > 0.10);
+    assert!(s.get("holdout").is_some());
+    assert_eq!(s.get("r2").and_then(|r| r.get("status")).and_then(|v| v.as_str()), Some("replicated"));
+    let per = s.get("periods").unwrap();
+    assert_eq!(per.get("total").and_then(|v| v.as_i64()), Some(4));
+    assert_eq!(per.get("above_threshold").and_then(|v| v.as_i64()), Some(4));
+    assert_eq!(s.get("level_cells").and_then(|c| c.get("above_threshold")).and_then(|v| v.as_i64()), Some(6));
+}
+
+#[test]
+fn level_risk_does_not_replace_the_vs_rest_verdict_flat_m8_stays_no_differential() {
+    let j = out(&level_grid("M8", &|_, _| 500));
+    let contrast: Vec<&Json> = signals(&j).into_iter().filter(|s| s.get("type").is_none() && s.get("metric").and_then(|v| v.as_str()) == Some("M8")).collect();
+    assert_eq!(contrast.len(), 1);
+    assert_eq!(st(contrast[0]), "refuted");
+    assert_eq!(contrast[0].get("reason").and_then(|v| v.as_str()), Some("no_differential"));
+}
+
+#[test]
+fn level_at_or_below_the_threshold_is_refuted_not_a_risk() {
+    let j = out(&level_grid("M8", &|_, _| 60));
+    assert_eq!(st(level_of(&j, "M8").unwrap()), "refuted");
+}
+
+#[test]
+fn level_above_threshold_but_under_the_excess_floor_is_not_a_risk() {
+    // 12% vs the 10% threshold: significant on this support, but under the 5 pp excess floor.
+    let j = out(&level_grid("M8", &|_, _| 120));
+    let s = level_of(&j, "M8").unwrap();
+    assert_eq!(st(s), "refuted");
+    assert_eq!(s.get("reason").and_then(|v| v.as_str()), Some("excess_below_floor"));
+}
+
+#[test]
+fn level_not_confirmed_in_the_holdout_half_is_refuted_or_uncertain_never_corroborated() {
+    let j = out(&level_grid("M8", &|h, _| if h == "discovery" { 500 } else { 50 }));
+    assert_eq!(st(level_of(&j, "M8").unwrap()), "refuted");
+    let j = out(&level_grid("M8", &|h, _| if h == "discovery" { 500 } else { 110 }));
+    assert_ne!(st(level_of(&j, "M8").unwrap()), "corroborated");
+}
+
+#[test]
+fn level_without_holdout_is_candidate() {
+    let rows: Vec<String> = level_grid("M8", &|_, _| 500).into_iter().filter(|r| r.contains("\"discovery\"")).collect();
+    assert_eq!(st(level_of(&out(&rows), "M8").unwrap()), "candidate");
+}
+
+#[test]
+fn level_in_one_window_only_is_flagged_by_r2_and_periods() {
+    let j = out(&level_grid("M8", &|_, p| if p < "2025" { 500 } else { 40 }));
+    let s = level_of(&j, "M8").unwrap();
+    assert_eq!(s.get("periods").and_then(|p| p.get("above_threshold")).and_then(|v| v.as_i64()), Some(2));
+    assert_eq!(s.get("r2").and_then(|r| r.get("status")).and_then(|v| v.as_str()), Some("reversed"));
+}
+
+#[test]
+fn only_pre_registered_metrics_get_level_tests_m7_stays_descriptive_and_m9_refuted() {
+    // M7 6.0% (above 4.5%) is a descriptive gap: never a level risk, never a contrast finding at the 5 pp floor.
+    let mut rows = level_grid("M7", &|_, _| 60);
+    rows.extend(level_grid("M9", &|_, _| 50));
+    let j = out(&rows);
+    assert!(level_signals(&j).is_empty());
+    assert!(signals(&j).iter().all(|s| matches!(st(s), "refuted")));
+    assert_eq!(j.get("level_tests").and_then(|v| v.as_i64()), Some(1), "the registered family size, fixed in advance");
+}
+
+#[test]
+fn level_tests_are_a_separate_pre_registered_family_with_their_own_bonferroni() {
+    let rows = level_grid("M8", &|_, _| 500);
+    let r = analyse(&rows.join("
+"), &Config::default()).unwrap();
+    assert_eq!(r.level_tests, 1);
+    assert_eq!(r.cells_explored, 6, "level tests do not dilute or inflate the contrast family");
+    // A weak level (11.5% vs 10% on n = 800) so p is not saturated; two registered specs double the adjusted p.
+    let weak: Vec<String> = ["2024-03", "2024-04"].iter().map(|p| m_row("M8", "Push", "Email", "discovery", p, 46, 400)).collect();
+    let mut one = Config::default();
+    one.alpha = 0.5;
+    one.level_risks[0].min_excess = 0.0;
+    let mut two = one.clone();
+    let spec = two.level_risks[0].clone();
+    two.level_risks.push(steps::cells::LevelSpec { metric: "M8B".into(), ..spec });
+    let (a, b) = (analyse(&weak.join("
+"), &one).unwrap(), analyse(&weak.join("
+"), &two).unwrap());
+    assert_eq!((a.level_tests, b.level_tests), (1, 2));
+    let (p1, p2) = (a.level_signals[0].p_adj, b.level_signals.iter().find(|s| s.metric == "M8").unwrap().p_adj);
+    assert!(p1 > 0.0 && p1 < 0.5);
+    assert!((p2 - (p1 * 2.0).min(1.0)).abs() < 1e-12);
+    let j = parse(&run(&rows.join("
+")).unwrap()).unwrap();
+    assert!(j.get("method").and_then(|m| m.get("level_risk")).is_some());
+}
+
+#[test]
+fn level_rows_obey_the_k_rule_and_min_support_with_named_discards() {
+    let mut rows = level_grid("M8", &|_, _| 500);
+    rows.push(m_row("M8", "Push", "Chat", "discovery", "2024-03", 5, 100)); // k violation
+    let j = out(&rows);
+    assert_eq!(discard_count(&j, "k_violation"), 1);
+    let small: Vec<String> = vec![m_row("M8", "Push", "Email", "discovery", "2024-03", 200, 400), m_row("M8", "Push", "Email", "holdout", "2024-03", 200, 400)];
+    let j = out(&small);
+    assert!(level_of(&j, "M8").is_none());
+    assert_eq!(discard_count(&j, "level_below_min_support"), 1);
+}

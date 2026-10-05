@@ -89,6 +89,11 @@ impl Finding {
         for (i, s) in signals.iter().enumerate() {
             let status = s["status"].as_str().unwrap_or("").to_string();
             let metric = s["metric"].as_str().unwrap_or("").to_string();
+            // A `level_risk` signal is a risk LEVEL against a threshold, not a vs-rest contrast: the contrast roles never see it.
+            if s["type"].as_str() == Some("level_risk") {
+                skipped.push(Skipped { index: i, metric, status: "level_risk".to_string(), reason: s["reason"].as_str().unwrap_or("").to_string() });
+                continue;
+            }
             if status != "corroborated" {
                 skipped.push(Skipped { index: i, metric, status, reason: s["reason"].as_str().unwrap_or("").to_string() });
                 continue;
