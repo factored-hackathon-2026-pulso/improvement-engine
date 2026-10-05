@@ -125,3 +125,50 @@ summary under the git-ignored `output/`; no fixture from it is committed. Respon
 
 Mapping: E0 categories are hashed query-signature groups that no catalogue entry declares, so `smap.e0_mapping` ends `unlinked`
 (valid honest ending); steps 5-10 report `not_exercised` with that reason. G1 rule H5 accepts a null `candidate_created_at` when the compile step is not exercised, so no reserved timestamp is reported.
+
+## Q1 slice: the thread on the Rust shell, host=rust, OFFLINE (2026-10-04)
+
+Code: `seams/crates/thread10` (lane L-E2E) and its Python twin `claude_standin/thread01_rust.py`; tests
+`seams/crates/thread10/tests/{ten_steps,successor,resume}.rs` and `e2e-core/tests/unit/test_thread01_rust.py`.
+Commands run (no containers, no network, `CARGO_TARGET_DIR=D:/cargo-targets/claude-w4f-q1`, `-j 1`):
+
+    cargo test --offline -j 1 -p thread10
+    THREAD10_EXE=<target>/debug/thread10.exe uv run ... pytest tests/unit/test_thread01_rust.py
+
+What runs: the engine executor (`engine::executor`, FileStore) drives the nine handlers (sensors, recompute, validation,
+compile, arms, gate, native_eval, authority, publish) over `thread10::double::DoublePort`, an OFFLINE Core double behind
+`engine::live::CorePort`. The ten report steps are derived from what the job COMMITTED, not from configuration.
+
+| # | Step | Status on host=rust (offline) | Why |
+|---|---|---|---|
+| 1 | trigger | stand-in | started by hand (ratchet step 1 stays stand-in) |
+| 2 | signals | stand-in | the sensor runner is `synth_runner`, a fixed-output binary that reads no data |
+| 3 | scout / recompute | stand-in / real-narrow | claim is a scripted value; the recompute is the Rust step over a synthetic lab row |
+| 4 | opportunity / validation | stand-in / real-narrow | change spec is a fixed value; validation is the Rust `intent` step |
+| 5 | compile | stand-in | Rust compile step, but the dry-run digest comes from the double, not the Core |
+| 6 | gate | stand-in | GSIpy-equivalent Rust gate over double arm reports; arms complete identically, verdict `fail` |
+| 7 | revision | not_exercised | V3r is a library hook, not wired into the job |
+| 8 | approval | simulated, or blocked(gate) | labelled human override of the failed gate, else blocked |
+| 9 | publish | stand-in, or blocked(gate) | registry is a double; effectful handler, never re-run after commit |
+| 10 | observation | simulated | platform-sim window; the successor correlation below is real control-api code |
+
+No step is labelled `real`. G1 `check()` passes for the three shapes (completed with override, blocked without override,
+denied kind) and rejects a tampered copy (H1, G1).
+
+Negatives (Rust tests): denied kind -> `blocked(kind_not_supported)`, steps 6-10 not_exercised, no candidate timestamp;
+failed gate without a labelled override -> steps 8-9 `blocked(gate)`, 10 not_exercised; refuted claim -> compile
+`blocked(validation)`; unmatched release -> 503 and no successor (retryable once recorded); replayed event (same id) and a
+second delivery -> exactly one successor `successor:<release id>`.
+
+Resume: `kill -9` of the `thread10` process after handler 2, 7 (before the effectful publish) and 8 (right after it), then a
+second process with a later lease clock: identical committed event sequence, attempt 2, one publish event, one successor. The successor platform is in-process per process, so "one successor" is per run, not across the kill (the correlation runs after the job commits).
+
+A `kill -9` INSIDE the publish effect (after the effect, before its commit) is not resumed: the executor stops with `NeedsReconciliation(8)`, the effect ledger keeps one line, no publish event, no successor (a reconciler is out of scope).
+
+Post-run note: a MEM1 `demo1_thin` note (durable=false, dies with the process) whose evidence refs are the committed events.
+
+NOT achieved: not on the real Core (the Core is a double; INT0 evidence stays the Python host's), no model-driven scout,
+verifier or builder in Rust (steps 3-4 scripted), no real sensor (synth_runner), no gate that passes (a scripted
+improvement in the double would be circular), V3r revision not wired, memory not durable (DMEMC), no Pg store conformance
+(needs a live database; only the FileStore was exercised), no live Podman pass, `host=rust` carries label DEMO-0 only.
+`seams/Cargo.lock` gained the `thread10` member (L-CLIENT integrator to acknowledge).

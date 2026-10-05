@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "platform_live/1.1.0/assignments.schema.json",
+  "$id": "platform_live/1.2.0/assignments.schema.json",
   "title": "assignments",
   "description": "platform_live row from source table `assignments` (append-only).",
   "type": "object",
@@ -22,7 +22,9 @@
       "enum": [
         "language_least_loaded",
         "queue_drained",
-        "manual"
+        "manual",
+        "outbound_call",
+        "assistant_handoff"
       ]
     },
     "policy_rule_id": {
@@ -95,5 +97,5 @@
     "id"
   ],
   "x-denied-columns": [],
-  "x-contract-version": "1.1.0"
+  "x-contract-version": "1.2.0"
 }

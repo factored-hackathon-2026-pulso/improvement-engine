@@ -1,0 +1,18 @@
+[package]
+name = "thread10"
+description = "Q1: E2E-THREAD-01 ten-step report on the Rust shell (host=rust), OFFLINE: engine executor + steps stand-ins + a labelled Core double, memory note, control-api successor correlation."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+abi = { path = "../abi" }
+authority = { path = "../authority" }
+base64 = "0.22"
+control-api = { path = "../control-api" }
+core-client = { path = "../core-client" }
+debug-api = { path = "../debug-api" }
+ed25519-dalek = "2"
+engine = { path = "../engine" }
+memory = { path = "../memory" }
+serde_json = "1"

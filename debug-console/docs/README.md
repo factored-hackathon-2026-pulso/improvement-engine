@@ -43,6 +43,8 @@ The e2e run starts the fixture API/SSE (:4010) and Vite (:5173, same-origin prox
   `simulated`, fed by `demo/` output.
 - Origin of the Sources and demo data: [`journal-pl-0005.md`](journal-pl-0005.md), [`journal-c-0001.md`](journal-c-0001.md).
 
+- Live side-panels: `doubles_declared` refetches the profile (mode banner) and `gates_set` refetches the run's gates, also when caught up after a reconnect; debounced 150 ms (`src/state/sideRefresh.ts`), latest response wins, the Gates panel is not blanked during a refetch and focus never moves (`tests/component/RunLiveRefresh.test.tsx`). Closes the stale-banner/Gates gap noted in `docs/reports/demo-magic/README.md`.
+
 ## Review-defect closure
 
 - Single rate-limited live region (`src/a11y`), only changed nodes are announced; no other `role=status/alert/aria-live`.
@@ -73,3 +75,17 @@ so the Rust CI job is unaffected by this directory. The console is verified loca
 then `podman --connection pulso-dev build --format docker -t pulso-debug-console debug-console`.
 No CI job runs these yet; wiring one is a Codex-owned workflow change, tracked as a row in
 [`../../docs/gaps/OPEN_GAPS.md`](../../docs/gaps/OPEN_GAPS.md).
+
+## Automatizacion (`#/automatizacion`, replica of the platform screens)
+
+Case-type maturity (stage 0..3, "Con agente"), the drawer "Como maduro", the banner "El sistema propone un agente para <tipo>" and the
+proposal view with a SIMULATED approve and publish-to-staging. Read model: `GET /internal/v1/automation/case-types[/{id}]`,
+`PUT /internal/v1/automation/config` (admin token; audited in run `automation-audit`), `POST .../proposal/{approve|publish-staging}`
+(CSRF; simulated). Payloads are keyed on the agent-core proposal id and target `agent_id@alias`, so the same API can feed the platform's own screens.
+Every number carries `source` (`e0_treated` | `sim_draft_stream` | `platform_events`) and `simulated`; what cannot be computed says `not_computable`.
+
+- Without Rust: `npm run fixture` + `npm run dev`, open `/#/automatizacion` (golden payloads in `fixtures/automation/`).
+- With Rust: `python -m platform_live.automation_scenario output/sim_draft_stream.json` (from `platform-sim/`), optional
+  `uv run python scripts/e0/treated_aggregates.py` (needs pyarrow, local only), then
+  `debug-api --automation-sim output/sim_draft_stream.json [--automation-e0 output/e0_treated_aggregates.json] --automation-proposals P.json --static-dir debug-console/dist`
+  (`DEBUG_API_ADMIN_TOKEN` enables the PUT). Contract: `CONTRACT_TARGET=real CONTRACT_BASE_URL=... npx vitest run --config vitest.contract.config.ts`.

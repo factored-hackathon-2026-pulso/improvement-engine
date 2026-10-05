@@ -1,5 +1,9 @@
 # demo/ - the 'demo magica' on our side (Codex stand-in, honestly labelled)
 
+> **Magic demo (live, in the console): `scripts/demo-magic.ps1`.** One command builds `pulso` (and the console when node exists), starts
+> `pulso serve` (loopback, console + debug-api on one origin), runs `pulso demo` (the ten-step offline thread, DEMO-0, streamed live into
+> the console at `-PaceMs`), prints doubles[] first then the steps, and stops everything it started. See `docs/reports/demo-magic/README.md`.
+>
 > **DEMO-0 is `demo/run-demo0.ps1`** (replay of the ten-step E2E-THREAD-01, no containers, writes the engine-run report and prints the
 > doubles[] first, then the steps; `-Live` and `-RealCore` document the live roleplay window and the real-Core steps).
 > Everything below describes the **legacy planted-mechanism demo** (`demo/run.ps1`, planted judge/effect/revision wiring), kept for the

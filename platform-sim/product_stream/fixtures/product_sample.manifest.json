@@ -1,0 +1,69 @@
+{
+  "data_origin": "synthetic product-sim",
+  "horizon_events": 300,
+  "manifest_version": 1,
+  "planted": {
+    "baseline": 0.05,
+    "cell": {
+      "channel": "web_chat",
+      "language": "pt"
+    },
+    "effect": "reassignment_rate_rise",
+    "elevated": 0.32,
+    "metric": "manual case.assigned (previous_staff_id set) per case opened",
+    "onset_sequence": 90,
+    "present_in": [
+      "discovery",
+      "holdout"
+    ]
+  },
+  "realised": {
+    "by_window": {
+      "discovery": {
+        "cases": 20,
+        "reassigns": 1,
+        "reopens": 1
+      },
+      "holdout": {
+        "cases": 12,
+        "reassigns": 0,
+        "reopens": 3
+      }
+    },
+    "cases": 32,
+    "last_sequence": 300,
+    "note": "realised rates are below the nominal planted probabilities (ineligible or closed cases)",
+    "reassigns": 1,
+    "reopens": 4,
+    "target_cell": {
+      "post_onset": {
+        "cases": 3,
+        "reassign_rate": 0.3333333333333333,
+        "reassigns": 1,
+        "reopen_rate": 0.0,
+        "reopens": 0
+      },
+      "pre_onset": {
+        "cases": 1,
+        "reassign_rate": 0.0,
+        "reassigns": 0,
+        "reopen_rate": 0.0,
+        "reopens": 0
+      }
+    }
+  },
+  "scenario": "escalation_rise",
+  "seed": 7,
+  "start": "2026-09-01T08:00:00Z",
+  "tenant_id": "ten-product-sim",
+  "windows": {
+    "discovery": [
+      0,
+      180
+    ],
+    "holdout": [
+      180,
+      300
+    ]
+  }
+}

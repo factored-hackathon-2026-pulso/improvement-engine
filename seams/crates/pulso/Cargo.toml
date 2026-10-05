@@ -1,0 +1,29 @@
+[package]
+name = "pulso"
+description = "One runnable: `pulso demo` streams the ten-step offline thread live into the debug-api run-event store; `pulso serve` embeds debug-api (loopback) and serves the built debug-console."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "pulso"
+path = "src/main.rs"
+
+# The same fixed-output sensor stand-in as thread10 (one file, reused; no copy), built next to `pulso` so one `cargo build -p pulso` is enough.
+[[bin]]
+name = "pulso-synth-runner"
+path = "../thread10/src/bin/synth_runner.rs"
+
+[dependencies]
+debug-api = { path = "../debug-api" }
+engine = { path = "../engine" }
+pg = { path = "../pg" }
+postgres = "0.19"
+tiny_http = "0.12"
+serde_json = "1"
+sources = { path = "../sources" }
+thread10 = { path = "../thread10" }
+
+[dev-dependencies]
+rusqlite = { version = "0.39.0", features = ["bundled"] }

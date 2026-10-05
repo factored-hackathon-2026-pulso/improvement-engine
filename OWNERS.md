@@ -44,16 +44,16 @@ X-LEARN: crates/core/src/{memory_store,governed_memory_use,memory_temporal_proto
 X-SCEN: crates/core/src/{value_model}.rs ; crates/core/src/scenario_*.rs ; crates/core/tests/{value_model}.rs ; crates/core/tests/scenario_*.rs ; migrations/004[7-9]_* ; docs/adr/037[2-9]-* ; docs/journal/(054[4-9]|055[0-9])-*
 X-DOC: docs/IMPLEMENTATION_STATUS.md ; docs/architecture/** ; docs/data/** ; docs/gaps/** ; docs/platform-observations.md ; docs/local-e0-e2e-runner.md ; docs/spec-amendments/codex/** ; docs/adr/(032[4-9]|033[0-1])-* ; docs/journal/(044[8-9]|045[0-9]|046[0-3])-*
 X-REV: docs/reviews/codex/** ; docs/adr/(036[4-9]|037[0-1])-* ; docs/journal/(052[8-9]|053[0-9]|054[0-3])-*
-L-GOV: AGENTS.md ; docs/reports/w4a-live/** ; CLAUDE.md ; CONTEXT.md ; README.md ; OWNERS.md ; .gitattributes ; .gitignore ; docs/BITACORA_PULSO.md ; docs/agents/** ; docs/adr/** ; docs/journal/00[0-9][0-9]-* ; docs/spec-amendments/claude/** ; docs/reports/gates/** ; docs/reviews/claude/** ; docs/lanes/** ; contracts/engine-run/** ; contracts/engine-steps/** ; scripts/gov/** ; contracts/artifact-kinds/** ; migrations/009[5-9]_* ; docs/adr/020[0-9]-* ; docs/journal/(026[0-9]|027[0-5])-*
+L-GOV: AGENTS.md ; docs/plan-real/r1-* ; docs/reports/w4a-live/** ; CLAUDE.md ; CONTEXT.md ; README.md ; OWNERS.md ; .gitattributes ; .gitignore ; docs/BITACORA_PULSO.md ; docs/agents/** ; docs/adr/** ; docs/journal/00[0-9][0-9]-* ; docs/spec-amendments/claude/** ; docs/reports/gates/** ; docs/reviews/claude/** ; docs/lanes/** ; contracts/engine-run/** ; contracts/engine-steps/** ; scripts/gov/** ; contracts/artifact-kinds/** ; migrations/009[5-9]_* ; docs/adr/020[0-9]-* ; docs/journal/(026[0-9]|027[0-5])-*
 L-ENV: local/compose.yaml ; scripts/env/** ; scripts/verify-local-all.ps1 ; scripts/verify-local-fast.ps1 ; scripts/dev.ps1 ; tests/test_local_compose_contract.py ; seams/xtask/** ; local/.env.example ; local/.secrets/** ; tests/verify-local-*.Tests.ps1 ; local/compose.d/** ; docs/adr/018[0-9]-* ; docs/journal/(022[8-9]|023[0-9]|024[0-3])-*
 L-MODEL: roleplay-llm/** ; local/core/gateway/** ; scripts/dc/** ; agent-core-assets/worlds/** ; agent-core-assets/corpus/** ; core-bridge/src/pulso_core_runtime/llm/** ; core-bridge/src/pulso_core_runtime/stages/** ; core-bridge/tests/llm/** ; core-bridge/tests/runtime/test_stages* ; docs/adr/023[0-9]-* ; docs/journal/(030[8-9]|031[0-9]|032[0-3])-* ; local/compose.d/l-model.yaml
-L-BRIDGE: core-bridge/** ; bridge-contract/** ; agent-core-assets/** ; local/core/** ; scripts/core/** ; docs/adr/012[0-9]-* ; docs/journal/(013[2-9]|014[0-7])-* ; local/compose.d/l-bridge.yaml
-L-E2E: e2e-core/** ; demo/** ; docs/reports/e2e/** ; docs/adr/016[0-9]-* ; docs/journal/(019[6-9]|020[0-9]|021[0-1])-* ; local/compose.d/l-e2e.yaml
+L-BRIDGE: core-bridge/** ; bridge-contract/** ; agent-core-assets/** ; local/core/** ; scripts/core/** ; scripts/contracts/** ; docs/reports/contracts/** ; docs/adr/012[0-9]-* ; docs/journal/(013[2-9]|014[0-7])-* ; local/compose.d/l-bridge.yaml
+L-E2E: e2e-core/** ; demo/** ; scripts/e0/** ; docs/reports/demo-quejas/** ; seams/crates/thread10/** ; seams/crates/pulso/** ; scripts/demo-magic* ; scripts/demo-platform* ; docs/reports/demo-magic/** ; docs/reports/demo-platform/** ; docs/reports/e2e/** ; docs/adr/016[0-9]-* ; docs/journal/(019[6-9]|020[0-9]|021[0-1])-* ; local/compose.d/l-e2e.yaml
 L-PLAT: platform-contract/** ; platform-exporter/** ; platform-sim/** ; contracts/product/** ; seams/crates/control-api/src/correlation/** ; migrations/007[0-4]_* ; docs/adr/026[0-9]-* ; docs/journal/(035[6-9]|036[0-9]|037[0-1])-* ; local/compose.d/l-plat.yaml
 L-CLIENT: seams/scripts/** ; seams/Cargo.toml ; seams/Cargo.lock ; seams/README.md ; seams/crates/core-client/** ; seams/crates/model-client/** ; docs/adr/014[0-9]-* ; docs/journal/(016[4-9]|017[0-9])-* ; local/compose.d/l-client.yaml
 L-ENGINE: seams/crates/abi/** ; seams/crates/engine/** ; contracts/engine-handlers/** ; seams/crates/steps/** ; seams/crates/swap/** ; docs/adr/017[0-9]-* ; docs/journal/(021[2-9]|022[0-7])-* ; local/compose.d/l-engine.yaml
-L-CAPI: seams/crates/control-api/** ; contracts/control-api/** ; migrations/008[5-9]_* ; docs/adr/013[0-9]-* ; docs/journal/(014[8-9]|015[0-9]|016[0-3])-* ; local/compose.d/l-capi.yaml
-L-PG: seams/crates/pg/** ; seams/crates/worker/** ; local/pg/** ; migrations/00[56][0-9]_* ; docs/adr/025[0-9]-* ; docs/journal/(034[0-9]|035[0-5])-* ; local/compose.d/l-pg.yaml
+L-CAPI: seams/crates/control-api/** ; seams/crates/debug-api/** ; seams/crates/maturity/** ; contracts/control-api/** ; migrations/008[5-9]_* ; docs/adr/013[0-9]-* ; docs/journal/(014[8-9]|015[0-9]|016[0-3])-* ; local/compose.d/l-capi.yaml
+L-PG: docs/reports/pglive/** ; seams/crates/pg/** ; seams/crates/sources/** ; db/** ; seams/crates/worker/** ; local/pg/** ; migrations/00[56][0-9]_* ; docs/adr/025[0-9]-* ; docs/journal/(034[0-9]|035[0-5])-* ; local/compose.d/l-pg.yaml
 L-EVAL: seams/crates/eval/** ; agent-core-assets/eval-suites/** ; migrations/009[0-4]_* ; docs/adr/019[0-9]-* ; docs/journal/(024[4-9]|025[0-9])-* ; local/compose.d/l-eval.yaml
 L-AUTH: seams/crates/authority/** ; local-identity/** ; migrations/008[0-4]_* ; docs/adr/010[0-9]-* ; docs/journal/(010[0-9]|011[0-5])-* ; local/compose.d/l-auth.yaml
 L-MEM: seams/crates/memory/** ; migrations/007[5-9]_* ; docs/adr/022[0-9]-* ; docs/journal/(029[2-9]|030[0-7])-* ; local/compose.d/l-mem.yaml
@@ -88,6 +88,15 @@ contracts/engine-handlers/abi.md -> L-ENGINE
 roleplay-llm/server.py -> L-MODEL
 roleplay-llm/tests/test_scanner.py -> L-MODEL
 local/pg/init.sql -> L-PG
+seams/crates/pulso/build.rs -> L-E2E
+seams/crates/pulso/README.md -> L-E2E
+seams/crates/pulso/src/config.rs -> L-E2E
+seams/crates/pulso/src/health.rs -> L-E2E
+seams/crates/pulso/src/healthcheck.rs -> L-E2E
+seams/crates/pulso/src/run/supervisor.rs -> L-E2E
+seams/crates/pulso/src/run/tasks.rs -> L-E2E
+seams/crates/pulso/src/run/db.rs -> L-E2E
+seams/crates/pulso/tests/run_process.rs -> L-E2E
 local/observability/alerts.yaml -> L-OPS
 local/compose.d/l-pg.yaml -> L-PG
 local/compose.d/l-model.yaml -> L-MODEL
@@ -96,6 +105,13 @@ seams/Cargo.toml -> L-CLIENT
 seams/crates/abi/src/lib.rs -> L-ENGINE
 seams/crates/steps/src/lib.rs -> L-ENGINE
 seams/crates/swap/src/lib.rs -> L-ENGINE
+seams/crates/engine/src/models/mod.rs -> L-ENGINE
+seams/crates/engine/src/models/gateway.rs -> L-ENGINE
+seams/crates/engine/src/ledger.rs -> L-ENGINE
+seams/crates/engine/src/real_core.rs -> L-ENGINE
+seams/crates/thread10/src/pipeline.rs -> L-E2E
+seams/crates/thread10/src/requests.rs -> L-E2E
+docs/journal/0220-r1e-model-port-and-viability-ledger.md -> L-ENGINE
 seams/crates/pg/src/lib.rs -> L-PG
 seams/xtask/src/main.rs -> L-ENV
 docs/reviews/codex/rev1.md -> X-REV

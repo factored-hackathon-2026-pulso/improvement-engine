@@ -340,6 +340,9 @@ fn n(v: &Json, k: &str) -> Result<i64, StepError> {
 /// snapshot package from STEPS_SNAPSHOT_ROOT/<snapshot id>; optional STEPS_ARRANQUE (default 30)
 /// and STEPS_MIN_SUPPORT (default 5) tune the sensor.
 pub fn run(input: &str) -> Result<String, StepError> {
+    if std::env::var("STEPS_SENSOR").is_ok_and(|v| v == "rust-events") {
+        return crate::events_sensor::run_env(input); // R1G: real sensor over event packages
+    }
     let v = json::parse(input)?;
     let (run_id, data_class) = envelope(&v, "sensors")?;
     let inv = |m: &str| StepError::Invalid(m.to_string());

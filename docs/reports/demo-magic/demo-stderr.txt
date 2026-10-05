@@ -1,0 +1,1 @@
+pulso: streaming run run-demo0-evidence into http://127.0.0.1:4021 (DEMO-0: offline Core double; every stand-in is labelled)

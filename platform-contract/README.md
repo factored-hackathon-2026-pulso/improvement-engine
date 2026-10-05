@@ -9,10 +9,14 @@ and the exporter (PL-L1) test against these files.
 
 | Field | Value |
 |---|---|
-| Contract version | 1.1.0 (profile `platform_live.phase1`); additive over 1.0.0 |
-| Source artifact | Product team, "Modelo de datos · Plataforma CC", id `BWx4saeWfYsLbQEbkNKMPg` |
-| Platform commit | `a492bfa` (slices 0-3) |
-| Captured | 2026-10-03 |
+| Contract version | 1.2.0 (profile `platform_live.phase1`); additive over 1.1.0 and 1.0.0 |
+| Source | support-platform CODE at `eeb73a8` (`tables.py`, `domain/cases/values.py`, `application/audit/catalog.py`, domain events, `backend/openapi.json`); the Product team's data-model artifact `BWx4saeWfYsLbQEbkNKMPg` ("Modelo de datos · Plataforma CC") is the 1.0.0/1.1.0 origin and is stale |
+| Platform commit | `eeb73a8` (main, merge of PR #10, 2026-10-04 15:33 UTC-5) |
+| Captured | 2026-10-04 |
+| Previous platform commit | `a492bfa` (slices 0-3, cited by 1.0.0/1.1.0): **unreachable**. The platform history was rewritten on 2026-10-04 when it was split out of the data repo (`git cat-file -t a492bfa` fails, the GitHub API answers 422). `7d2ae3a` "Plataforma S3: supervision" (2026-10-03) is the closest old commit by slice naming: **an inference of the engine team, not a statement of the product team**. |
+
+Digest pin: `scripts/contracts/pinned_digests.json` records the digest of the platform schema sources at `eeb73a8`;
+`python scripts/contracts/drift_digest.py --platform <checkout>` fails when they change.
 
 The artifact is third-party data. Anything it does not state (payload shapes per event type,
 sequence contiguity after rollbacks, meaning of `ingested_at`) is an open question for Product
@@ -42,11 +46,39 @@ announced `teams`, `admin_roster` and `analyst_availability`) is refused by defa
 
 ## Event catalog
 
-Admitted: `case.*` (opened, queued, assigned, status_changed, read, first_responded, closed, viewed),
+Admitted (1.1.0): `case.*` (opened, queued, assigned, status_changed, read, first_responded, closed, viewed),
 `turn.created`, `staff.availability_changed`, and `auth.login_failed|account_locked|session_started|session_ended`.
 Denied (known, never ingested): `auth.password_accepted`, `auth.mfa_challenge_issued`, `auth.mfa_failed`,
 `customer.session_started`. Planned (announced prefixes `staff.`, `team.`) and unknown types are counted and
 quarantined with a quality finding; they never fail the batch.
+
+## Changelog
+
+### 1.2.0 (2026-10-04, platform `eeb73a8`), additive
+
+- Enums extended (1.1.0 values stay valid): `cases.status` + `with_assistant`; `cases.channel` + `chat_app`, `chat_web`,
+  `phone_inbound`, `phone_outbound`, `email` (the platform renamed the chat channels; `app_chat`/`web_chat` stay readable);
+  `cases.priority` + `none`, `critical`; `turns.kind` + `transcript`, `note`, `email`; `turns.author_role`, every
+  `*_author_role`/`*_by_role`/`actor_role` + `assistant`; `assignments.reason` + `outbound_call`, `assistant_handoff`.
+- New optional `cases` columns: `rating_score` (1-4), `rated_at`, `open_escalation_id`, `active_call_id`.
+  Never read, denied: `cases.rating_comment`, `cases.rating_key`, `turns.subject`.
+- Event catalog 1.2.0 admits 39 types, each with a data class (`operational`, `assistant`, `copilot`, `builder`), the
+  payload keys the platform emits and the keys that carry free text (`free_text_keys`, never forwarded):
+  `case.priority_changed|rated|assistant_started|assistant_released`, `assistant.*` (6), `copilot.*` (2),
+  `builder.*` (14), `escalation.*` (7), `call.*` (6). AI payloads carry ids, enums and counters only (platform
+  `domain/ai/events.py`); free text exists only in `case.rated.comment`, `assistant.input_queued.answer`,
+  `escalation.opened.motive`, `escalation.answered.note`, `call.started.reason` (plus the 1.1.0 `case.closed.note`,
+  `turn.created.text|subject`).
+- Unchanged: denied tables (`login_accounts`, `mfa_challenges`, `staff_sessions`), denied columns, denied events
+  (`auth.password_accepted`, `auth.mfa_*`, `customer.session_started`). Administration types (`staff.created`,
+  `staff.invitation_*`, `team.*`, ...) stay `planned` (quarantined): their payloads carry names and e-mails.
+  Tables `assistant_sessions`, `copilot_threads`, `builder_*`, `escalations`, `calls`, `notifications`,
+  `bank_customer_links` stay refused (not allow-listed).
+- Platform `DATA_MODEL.md` is stale (says slices 0-12, three author roles); code and `backend/openapi.json` are truth.
+
+### 1.1.0 (2026-10-03, platform `a492bfa`, unreachable)
+
+Exporter metadata discriminator (below).
 
 ## Revision 1.1.0: exporter metadata discriminator
 

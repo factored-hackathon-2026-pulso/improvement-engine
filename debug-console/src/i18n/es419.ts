@@ -1,7 +1,9 @@
 // UI strings: es-419. Machine codes (status, reason_code, scenario ids) are shown verbatim, never translated.
 import { SOURCES_ES } from './sources';
+import { AUTOMATION_ES } from '../features/automation/strings';
 export const ES_419 = {
   ...SOURCES_ES,
+  ...AUTOMATION_ES,
   'decl.label': 'Declaración del origen de datos',
   'decl.text': 'Origen: {provider} · objetivo: {target} · perfil: {profile} · dobles: {doubles}',
   'decl.partial': 'Esta pantalla usa el cliente heredado, no el origen {provider}: sus datos NO provienen de ese origen',
@@ -46,7 +48,7 @@ export const ES_419 = {
   'diff.noProposal': 'Esta ejecución no produjo una propuesta: no hay diff.',
   'hyp.title': 'Hipótesis y veredictos',
   'hyp.main': 'Hipótesis principal',
-  'hyp.competing': 'Hipótesis competidora {id}',
+  'hyp.competing': 'Hipótesis secundaria {id}',
   'hyp.verdict': 'Veredicto: ',
   'hyp.counter': 'Contraevidencia',
   'hyp.supports': 'A favor',
@@ -77,7 +79,7 @@ export const ES_419 = {
   'announce.nodes': '{n} nodos cambiaron de estado',
   'trace.title': 'Trazas',
   'trace.ok': 'Todos los nodos tienen trace_id ({n}).',
-  'trace.degraded': 'Trazas degradadas: unknown · {n} de {total} nodos sin trace_id (¿colector de trazas caído?). La línea de tiempo durable sigue siendo la fuente de verdad; no se infiere ausencia de eventos.',
+  'trace.degraded': 'Trazas degradadas: unknown · {n} de {total} nodos sin trace_id: faltan los spans (colector caído o ejecución sin instrumentación de trazas, como la demostración local); no se inventó ningún trace_id ni span. La línea de tiempo durable sigue siendo la fuente de verdad; no se infiere ausencia de eventos.',
   'drawer.node':'Nodo {label}',
   'drawer.close': 'Cerrar',
   'drawer.status': 'Estado: {value}',
@@ -125,6 +127,15 @@ export const ES_419 = {
   'dec.stepUpFailed': 'No se pudo completar la reautenticación; la aprobación no se envió.',
   'dec.sessionLost': 'No se pudo enviar: sin sesión válida.',
   'dec.unknown':'Desconocido: sin confirmación',
+  'dec.card.title': 'Decisión registrada por el motor',
+  'dec.card.simulated': 'SIMULADA: ningún humano tomó esta decisión; el emisor, el actor y el override los simula la demostración (sin afirmación de calidad).',
+  'dec.card.state': 'Estado: {state} · propuesta: {proposal}',
+  'dec.card.issuer': 'Emisor: {issuer} · actor: {actor}',
+  'dec.card.gate': 'Gates al decidir: veredicto {verdict} · seguridad {safety} · mejora {improvement}',
+  'dec.card.override': 'Override humano (SIMULADO): {label} por {by} ({actor}) sobre el veredicto {gate}. Motivo: {reason}',
+  'dec.card.noOverride': 'Sin override: ambos gates pasaron o la aprobación no se dio.',
+  'dec.card.reasons': 'Razones',
+  'dec.card.noActions': 'Sin acciones disponibles: la decisión ya la registró el emisor simulado; esta consola no la reemplaza.',
 } as const;
 
 export type I18nKey = keyof typeof ES_419;

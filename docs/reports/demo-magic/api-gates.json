@@ -1,0 +1,42 @@
+{
+ "as_of": "2026-10-04T15:48:01Z",
+ "attempts": [],
+ "available_commands": [],
+ "blocking_reasons": [],
+ "combined": {
+  "decision": "hold",
+  "reason_code": "improvement_gate_not_in_report"
+ },
+ "coverage": {
+  "expected_count": null,
+  "observed_count": null,
+  "reason_code": null,
+  "status": "complete"
+ },
+ "entity_ref": {
+  "id": "run-demo0-evidence",
+  "kind": "run"
+ },
+ "environment": "sandbox",
+ "improvement": {
+  "checked_at": null,
+  "reason_code": "not_in_engine_run_report",
+  "receipt_refs": [],
+  "status": "not_evaluable"
+ },
+ "links": [],
+ "native": {
+  "checked_at": null,
+  "reason_code": null,
+  "report_ref": null,
+  "status": "fail"
+ },
+ "next_automatic_action": null,
+ "projection_revision": 43,
+ "proposal_id": null,
+ "schema_version": "1",
+ "source_kind": "engine_event",
+ "status": "ok",
+ "tenant_id": "tenant-local",
+ "validation": "unverified"
+}

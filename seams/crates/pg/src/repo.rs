@@ -37,6 +37,21 @@ pub trait JobRepository: Send + Sync {
     /// Commit out/`step` iff `fence` is current and the lease unexpired at `now`; one winner per step.
     fn commit_output(&self, tenant: &str, job: &str, step: u32, worker: &str, fence: u64, now: u64, record: &str) -> Result<(), RepoError>;
     fn output(&self, tenant: &str, job: &str, step: u32) -> Result<Option<String>, RepoError>;
+    /// Terminal transition: the current unexpired holder marks the job `complete`. A complete job is never claimed again
+    /// (not even after its lease lapses) and takes no further holder operation. Its outputs stay readable.
+    fn complete(&self, tenant: &str, job: &str, worker: &str, fence: u64, now: u64) -> Result<(), RepoError>;
+    /// Like `admit`, but idempotent on `key` (per tenant): admitting the same key again returns the same job id and queues
+    /// nothing. The key is how a producer names the work (for example the id of a monitor package).
+    fn admit_keyed(&self, tenant: &str, key: &str) -> Result<String, RepoError>;
+    /// The key a job was admitted with (`None` for an unkeyed job or a job of another tenant).
+    fn job_key(&self, tenant: &str, job: &str) -> Result<Option<String>, RepoError>;
+}
+
+pub fn check_key(key: &str) -> Result<(), RepoError> {
+    if key.is_empty() || key.len() > 256 || key.chars().any(char::is_control) {
+        return Err(RepoError::InvalidId(format!("job key {:?}", key.chars().take(40).collect::<String>())));
+    }
+    Ok(())
 }
 
 pub fn check_ids(tenant: &str, worker: &str) -> Result<(), RepoError> {
@@ -60,6 +75,8 @@ struct Job {
     attempt: u64,
     expires: u64,
     effect: bool,
+    complete: bool,
+    key: Option<String>,
     outputs: BTreeMap<u32, String>,
 }
 
@@ -98,11 +115,24 @@ pub enum Fault {
     OverwriteOutput,
     /// touch_lease reports success but does not move the expiry
     TouchNoExtend,
+    /// claim also takes jobs that are `complete`
+    ClaimIgnoresComplete,
+    /// `complete` returns Ok but records nothing
+    CompleteNotRecorded,
+    /// `complete` accepts any worker, fence or expired lease
+    CompleteAnyHolder,
+    /// a complete job still accepts holder operations
+    CompleteStillHeld,
+    /// `admit_keyed` queues a new job every time
+    KeyedAdmitDuplicates,
+    /// `admit_keyed` ignores the tenant when looking for the key
+    KeyedIgnoresTenant,
 }
 
 impl Job {
     fn holds(&self, f: Fault, worker: &str, fence: u64, now: u64) -> bool {
         self.leased
+            && (f == Fault::CompleteStillHeld || !self.complete)
             && (f == Fault::IgnoreWorker || self.worker == worker)
             && (f == Fault::IgnoreFence || self.fence == fence)
             && (f == Fault::IgnoreExpiry || now < self.expires)
@@ -113,7 +143,7 @@ impl Job {
             Fault::ReclaimLiveLease => true,
             _ => now >= self.expires,
         };
-        (f == Fault::ClaimIgnoresEffect || !self.effect) && (!self.leased || expired)
+        (f == Fault::ClaimIgnoresEffect || !self.effect) && (f == Fault::ClaimIgnoresComplete || !self.complete) && (!self.leased || expired)
     }
 }
 
@@ -187,6 +217,8 @@ impl JobRepository for MemRepo {
             attempt: 0,
             expires: 0,
             effect: false,
+            complete: false,
+            key: None,
             outputs: BTreeMap::new(),
         });
         Ok(id)
@@ -232,5 +264,53 @@ impl JobRepository for MemRepo {
     fn output(&self, tenant: &str, job: &str, step: u32) -> Result<Option<String>, RepoError> {
         let jobs = self.jobs.lock().unwrap();
         Ok(jobs.iter().find(|j| j.tenant == tenant && j.id == job).and_then(|j| j.outputs.get(&step).cloned()))
+    }
+    fn complete(&self, tenant: &str, job: &str, worker: &str, fence: u64, now: u64) -> Result<(), RepoError> {
+        check_ids(tenant, worker)?;
+        let fault = self.fault;
+        if fault == Fault::CompleteAnyHolder {
+            let mut jobs = self.jobs.lock().unwrap();
+            return match jobs.iter_mut().find(|j| j.tenant == tenant && j.id == job) {
+                Some(j) => {
+                    j.complete = true;
+                    Ok(())
+                }
+                None => Err(RepoError::StaleFence),
+            };
+        }
+        self.with_holder(tenant, job, worker, fence, now, |j, f| {
+            j.complete = f != Fault::CompleteNotRecorded;
+            Ok(())
+        })
+    }
+    fn admit_keyed(&self, tenant: &str, key: &str) -> Result<String, RepoError> {
+        check_ids(tenant, "w")?;
+        check_key(key)?;
+        let mut jobs = self.jobs.lock().unwrap();
+        let fault = self.fault;
+        if fault != Fault::KeyedAdmitDuplicates {
+            if let Some(j) = jobs.iter().find(|j| (fault == Fault::KeyedIgnoresTenant || j.tenant == tenant) && j.key.as_deref() == Some(key)) {
+                return Ok(j.id.clone());
+            }
+        }
+        let id = format!("job-{}", jobs.len());
+        jobs.push(Job {
+            tenant: tenant.into(),
+            id: id.clone(),
+            leased: false,
+            worker: String::new(),
+            fence: 0,
+            attempt: 0,
+            expires: 0,
+            effect: false,
+            complete: false,
+            key: Some(key.into()),
+            outputs: BTreeMap::new(),
+        });
+        Ok(id)
+    }
+    fn job_key(&self, tenant: &str, job: &str) -> Result<Option<String>, RepoError> {
+        let jobs = self.jobs.lock().unwrap();
+        Ok(jobs.iter().find(|j| j.tenant == tenant && j.id == job).and_then(|j| j.key.clone()))
     }
 }

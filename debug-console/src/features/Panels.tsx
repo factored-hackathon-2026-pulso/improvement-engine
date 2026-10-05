@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { z } from 'zod';
 import { api } from '../api/client';
 import type * as S from '../api/schemas';
@@ -15,17 +15,24 @@ type AltsT = z.infer<typeof S.Alternatives>;
 const KNOWN_GATE = ['pending', 'pass', 'fail', 'unknown', 'not_evaluable', 'insufficient_power', 'dependency_blocked', 'unsupported', 'failed_infra', 'unsafe'];
 export const label = (v: string, known: string[]) => (known.includes(v) ? v : t('enum.unrecognised', { code: v }));
 
-function useLoad<T>(fn: () => Promise<T>, dep: string) {
+function useLoad<T>(fn: () => Promise<T>, dep: string, refresh = 0) {
   const [v, setV] = useState<T | null>(null);
   const [err, setErr] = useState(false);
-  useEffect(() => { setV(null); setErr(false); fn().then(setV).catch(() => setErr(true)); }, [dep]); // eslint-disable-line react-hooks/exhaustive-deps
+  const seq = useRef(0);
+  const lastDep = useRef<string | null>(null);
+  useEffect(() => {
+    // A new dep resets the panel; a refresh keeps the current value (no blanking, no focus loss) and only the latest response wins.
+    const mine = ++seq.current;
+    if (lastDep.current !== dep) { setV(null); setErr(false); lastDep.current = dep; }
+    fn().then((x) => { if (seq.current === mine) { setV(x); setErr(false); } }).catch(() => { if (seq.current === mine) setErr(true); });
+  }, [dep, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
   return { v, err };
 }
 
 const RELATIONS: [string, 'inv.contradicts' | 'inv.supports' | 'inv.limits'][] = [['contradicts', 'inv.contradicts'], ['supports', 'inv.supports'], ['limits', 'inv.limits']];
 
-export function Investigation({ runId }: { runId: string }) {
-  const { v, err } = useLoad<Inv>(() => api.investigation(runId), runId);
+export function Investigation({ runId, refresh = 0 }: { runId: string; refresh?: number }) {
+  const { v, err } = useLoad<Inv>(() => api.investigation(runId), runId, refresh);
   if (err) return <p>{t('inv.unavailable')}</p>;
   if (!v) return <p>{t('inv.loading')}</p>;
   return (
@@ -49,14 +56,14 @@ export function Investigation({ runId }: { runId: string }) {
 }
 
 /** Alternatives, gates (with per-attempt history) and the diff of the proposal that THIS run produced. */
-export function RunOutcome({ runId }: { runId: string }) {
-  const { v, err } = useLoad<GatesT>(() => api.gates(runId), runId);
-  const alts = useLoad<AltsT | null>(() => api.alternatives(runId).catch(() => null), runId);
+export function RunOutcome({ runId, refresh = 0 }: { runId: string; refresh?: number }) {
+  const { v, err } = useLoad<GatesT>(() => api.gates(runId), runId, refresh);
+  const alts = useLoad<AltsT | null>(() => api.alternatives(runId).catch(() => null), runId, refresh);
   return (
     <>
       {alts.v && <AlternativesPanel items={alts.v.items} />}
       {err ? <p>{t('gates.unavailable')}</p> : !v ? <p>{t('gates.loading')}</p> : <Gates v={v} />}
-      {err ? <p>{t('diff.unavailable')}</p> : !v ? <p>{t('diff.loading')}</p> : <DiffView proposalId={v.proposal_id ?? null} />}
+      {err ? <p>{t('diff.unavailable')}</p> : !v ? <p>{t('diff.loading')}</p> : <DiffView proposalId={v.proposal_id ?? null} refresh={refresh} />}
     </>
   );
 }
@@ -80,15 +87,15 @@ export function Gates({ v }: { v: GatesT }) {
   );
 }
 
-export function DiffView({ proposalId }: { proposalId: string | null }) {
+export function DiffView({ proposalId, refresh = 0 }: { proposalId: string | null; refresh?: number }) {
   if (!proposalId) {
     return <section aria-label={t('diff.section')} data-testid="diff"><h2>{t('diff.title')}</h2><p>{t('diff.noProposal')}</p></section>;
   }
-  return <DiffFor id={proposalId} />;
+  return <DiffFor id={proposalId} refresh={refresh} />;
 }
 
-function DiffFor({ id }: { id: string }) {
-  const { v, err } = useLoad<DiffT>(() => api.diff(id), id);
+function DiffFor({ id, refresh }: { id: string; refresh: number }) {
+  const { v, err } = useLoad<DiffT>(() => api.diff(id), id, refresh);
   if (err) return <p>{t('diff.unavailable')}</p>;
   if (!v) return <p>{t('diff.loading')}</p>;
   return (

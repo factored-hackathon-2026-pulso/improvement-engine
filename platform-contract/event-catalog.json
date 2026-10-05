@@ -1,6 +1,6 @@
 {
-  "catalog_version": "1.1.0",
-  "contract_version": "1.1.0",
+  "catalog_version": "1.2.0",
+  "contract_version": "1.2.0",
   "profile": "platform_live.phase1",
   "statuses": {
     "admitted": "ingest",
@@ -47,90 +47,117 @@
     "staff.",
     "team."
   ],
+  "data_classes": {
+    "operational": "case workflow facts: ids, enums, counters, timestamps (free-text keys listed per type are dropped)",
+    "assistant": "agent-core assistant runtime metadata: session/run/trace ids, agent id@version, enums, counters",
+    "copilot": "analyst copilot metadata: question id and size, agent id, run/trace ids, status, counters (no text)",
+    "builder": "agent-builder audit: proposal/agent/release ids, alias, hashes, verdict enums, counters (no draft content)"
+  },
   "event_types": [
     {
       "event_type": "case.opened",
       "family": "cases",
       "entity": "case",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "case.queued",
       "family": "cases",
       "entity": "case",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "case.assigned",
       "family": "cases",
       "entity": "case",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "case.status_changed",
       "family": "cases",
       "entity": "case",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "case.read",
       "family": "cases",
       "entity": "case",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "case.first_responded",
       "family": "cases",
       "entity": "case",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "case.closed",
       "family": "cases",
       "entity": "case",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational",
+      "free_text_keys": [
+        "note"
+      ]
     },
     {
       "event_type": "case.viewed",
       "family": "cases",
       "entity": "case",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "turn.created",
       "family": "messages",
       "entity": "turn",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational",
+      "free_text_keys": [
+        "text",
+        "subject"
+      ]
     },
     {
       "event_type": "staff.availability_changed",
       "family": "team",
       "entity": "staff",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "auth.login_failed",
       "family": "access",
       "entity": "staff",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "auth.account_locked",
       "family": "access",
       "entity": "staff",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "auth.session_started",
       "family": "access",
       "entity": "staff",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "auth.session_ended",
       "family": "access",
       "entity": "staff",
-      "status": "admitted"
+      "status": "admitted",
+      "data_class": "operational"
     },
     {
       "event_type": "auth.password_accepted",
@@ -155,6 +182,483 @@
       "family": "access",
       "entity": "customer",
       "status": "denied"
+    },
+    {
+      "event_type": "case.priority_changed",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "from_priority",
+        "to_priority"
+      ]
+    },
+    {
+      "event_type": "case.rated",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "score",
+        "comment",
+        "analyst_id"
+      ],
+      "free_text_keys": [
+        "comment"
+      ]
+    },
+    {
+      "event_type": "case.assistant_started",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted",
+      "data_class": "assistant",
+      "payload_keys": [
+        "assistant_session_id",
+        "agent"
+      ]
+    },
+    {
+      "event_type": "case.assistant_released",
+      "family": "assignment",
+      "entity": "case",
+      "status": "admitted",
+      "data_class": "assistant",
+      "payload_keys": [
+        "reason",
+        "handoff_ref",
+        "sla_due_at"
+      ]
+    },
+    {
+      "event_type": "assistant.session_started",
+      "family": "assistant",
+      "entity": "assistant",
+      "status": "admitted",
+      "data_class": "assistant",
+      "payload_keys": [
+        "customer_id",
+        "agent"
+      ]
+    },
+    {
+      "event_type": "assistant.input_queued",
+      "family": "assistant",
+      "entity": "assistant",
+      "status": "admitted",
+      "data_class": "assistant",
+      "payload_keys": [
+        "kind",
+        "answer"
+      ],
+      "free_text_keys": [
+        "answer"
+      ]
+    },
+    {
+      "event_type": "assistant.turn_answered",
+      "family": "assistant",
+      "entity": "assistant",
+      "status": "admitted",
+      "data_class": "assistant",
+      "payload_keys": [
+        "agent",
+        "run_id",
+        "awaiting",
+        "status",
+        "outcome",
+        "trace_id",
+        "messages"
+      ]
+    },
+    {
+      "event_type": "assistant.step_up_verified",
+      "family": "assistant",
+      "entity": "assistant",
+      "status": "admitted",
+      "data_class": "assistant",
+      "payload_keys": [
+        "simulated"
+      ]
+    },
+    {
+      "event_type": "assistant.step_up_rejected",
+      "family": "assistant",
+      "entity": "assistant",
+      "status": "admitted",
+      "data_class": "assistant",
+      "payload_keys": [
+        "attempts"
+      ]
+    },
+    {
+      "event_type": "assistant.ended",
+      "family": "assistant",
+      "entity": "assistant",
+      "status": "admitted",
+      "data_class": "assistant",
+      "payload_keys": [
+        "result",
+        "handoff_ref",
+        "code"
+      ]
+    },
+    {
+      "event_type": "copilot.query_asked",
+      "family": "copilot",
+      "entity": "copilot",
+      "status": "admitted",
+      "data_class": "copilot",
+      "payload_keys": [
+        "question_id",
+        "question_length"
+      ]
+    },
+    {
+      "event_type": "copilot.answered",
+      "family": "copilot",
+      "entity": "copilot",
+      "status": "admitted",
+      "data_class": "copilot",
+      "payload_keys": [
+        "question_id",
+        "agent",
+        "run_id",
+        "trace_id",
+        "status",
+        "messages"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_created",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "origin",
+        "base_release_id"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_tracked",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "source"
+      ]
+    },
+    {
+      "event_type": "builder.draft_saved",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "rev",
+        "changes",
+        "kinds"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_validated",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "violations",
+        "candidate_hash"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_frozen",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "candidate_hash",
+        "new_versions"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_reopened",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "rev"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_evaluated",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "suite_id",
+        "verdict",
+        "items",
+        "items_failed"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_approved",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "candidate_hash",
+        "yardstick_loosened",
+        "step_up"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_rejected",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "reason_length",
+        "step_up"
+      ]
+    },
+    {
+      "event_type": "builder.proposal_published",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "release_id",
+        "step_up"
+      ]
+    },
+    {
+      "event_type": "builder.alias_promoted",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "alias",
+        "release_id",
+        "before",
+        "reason_length",
+        "step_up"
+      ]
+    },
+    {
+      "event_type": "builder.release_revoked",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "agent_id",
+        "reason_length",
+        "step_up"
+      ]
+    },
+    {
+      "event_type": "builder.question_asked",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "question_id",
+        "question_length"
+      ]
+    },
+    {
+      "event_type": "builder.answered",
+      "family": "agents",
+      "entity": "builder",
+      "status": "admitted",
+      "data_class": "builder",
+      "payload_keys": [
+        "question_id",
+        "agent",
+        "run_id",
+        "trace_id",
+        "status",
+        "messages"
+      ]
+    },
+    {
+      "event_type": "escalation.opened",
+      "family": "escalation",
+      "entity": "escalation",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "motive",
+        "analyst_id"
+      ],
+      "free_text_keys": [
+        "motive"
+      ]
+    },
+    {
+      "event_type": "escalation.withdrawn",
+      "family": "escalation",
+      "entity": "escalation",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "analyst_id"
+      ]
+    },
+    {
+      "event_type": "escalation.answered",
+      "family": "escalation",
+      "entity": "escalation",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "note",
+        "analyst_id"
+      ],
+      "free_text_keys": [
+        "note"
+      ]
+    },
+    {
+      "event_type": "escalation.taken",
+      "family": "escalation",
+      "entity": "escalation",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "previous_analyst_id",
+        "analyst_id"
+      ]
+    },
+    {
+      "event_type": "escalation.reassigned",
+      "family": "escalation",
+      "entity": "escalation",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "previous_analyst_id",
+        "analyst_id"
+      ]
+    },
+    {
+      "event_type": "escalation.closed",
+      "family": "escalation",
+      "entity": "escalation",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "analyst_id"
+      ]
+    },
+    {
+      "event_type": "escalation.acknowledged",
+      "family": "escalation",
+      "entity": "escalation",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "analyst_id"
+      ]
+    },
+    {
+      "event_type": "call.started",
+      "family": "conversation",
+      "entity": "call",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "direction",
+        "customer_id",
+        "analyst_id",
+        "reason"
+      ],
+      "free_text_keys": [
+        "reason"
+      ]
+    },
+    {
+      "event_type": "call.answered",
+      "family": "conversation",
+      "entity": "call",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "answered_by_role",
+        "analyst_id",
+        "ring_seconds"
+      ]
+    },
+    {
+      "event_type": "call.held",
+      "family": "conversation",
+      "entity": "call",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "analyst_id"
+      ]
+    },
+    {
+      "event_type": "call.resumed",
+      "family": "conversation",
+      "entity": "call",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "analyst_id",
+        "hold_seconds"
+      ]
+    },
+    {
+      "event_type": "call.mute_changed",
+      "family": "conversation",
+      "entity": "call",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "muted",
+        "analyst_id"
+      ]
+    },
+    {
+      "event_type": "call.ended",
+      "family": "conversation",
+      "entity": "call",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "end_reason",
+        "ended_by_role",
+        "analyst_id",
+        "answered",
+        "duration_seconds",
+        "hold_seconds"
+      ]
     }
   ]
 }

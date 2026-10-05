@@ -15,7 +15,7 @@ SOURCE_NAMESPACE = "platform_live"
 # platform-contract revision implemented here (a conformance test compares it with the contract package): exporter
 # metadata is `source_event.kind = "exporter_finding"`; ExporterConfig.legacy_prefix=True keeps the 1.0.0 `exporter.`
 # event_type prefix shape.
-CONTRACT_REVISION = "1.1.0"
+CONTRACT_REVISION = "1.2.0"
 FINDING_SEVERITY = {"bad_row": "error", "late_event": "info", "capability_profile": "info",
                     "dimension_snapshot": "info"}  # every other finding code defaults to "warning"
 
@@ -25,7 +25,30 @@ KNOWN_EVENT_TYPES = frozenset({
     "case.opened", "case.queued", "case.assigned", "case.status_changed", "case.read", "case.first_responded",
     "case.closed", "case.viewed", "turn.created", "staff.availability_changed",
     "auth.login_failed", "auth.account_locked", "auth.session_started", "auth.session_ended",
+    # 1.2.0 (platform eeb73a8): ids, enums and counters only; free-text keys are in FREE_TEXT_PAYLOAD_KEYS.
+    "case.priority_changed", "case.rated", "case.assistant_started", "case.assistant_released",
+    "assistant.session_started", "assistant.input_queued", "assistant.turn_answered", "assistant.step_up_verified",
+    "assistant.step_up_rejected", "assistant.ended", "copilot.query_asked", "copilot.answered",
+    "builder.proposal_created", "builder.proposal_tracked", "builder.draft_saved", "builder.proposal_validated",
+    "builder.proposal_frozen", "builder.proposal_reopened", "builder.proposal_evaluated",
+    "builder.proposal_approved", "builder.proposal_rejected", "builder.proposal_published", "builder.alias_promoted",
+    "builder.release_revoked", "builder.question_asked", "builder.answered",
+    "escalation.opened", "escalation.withdrawn", "escalation.answered", "escalation.taken", "escalation.reassigned",
+    "escalation.closed", "escalation.acknowledged",
+    "call.started", "call.answered", "call.held", "call.resumed", "call.mute_changed", "call.ended",
 })
+# Payload keys that carry free text for a given type (mirror of `free_text_keys` in the contract catalog, drift-tested).
+# Dropped for that type even when the key name would not trip the generic redaction tokens (`motive`, `reason`,
+# `answer`): the platform puts a customer's/analyst's words there.
+FREE_TEXT_PAYLOAD_KEYS = {
+    "case.rated": frozenset({"comment"}),
+    "assistant.input_queued": frozenset({"answer"}),
+    "escalation.opened": frozenset({"motive"}),
+    "escalation.answered": frozenset({"note"}),
+    "call.started": frozenset({"reason"}),
+    "case.closed": frozenset({"note"}),
+    "turn.created": frozenset({"text", "subject"}),
+}
 # Known security/credential telemetry: never ingested, payload never forwarded (counted as denied_event_type).
 DENIED_EVENT_TYPES = frozenset({"auth.password_accepted", "auth.mfa_challenge_issued", "auth.mfa_failed",
                                 "customer.session_started"})
@@ -61,21 +84,23 @@ def is_redacted_key(key: Any) -> bool:
     return any(t in REDACTED_TOKENS for t in tokens)
 
 
-def treat_payload(value: Any, redacted: list[str] | None = None, path: str = "") -> Any:
-    """Copy of `value` without redacted keys; the removed key paths are appended to `redacted`. Email-looking string
-    values under any other key are masked as well (and recorded)."""
+def treat_payload(value: Any, redacted: list[str] | None = None, path: str = "",
+                  drop_keys: frozenset[str] = frozenset()) -> Any:
+    """Copy of `value` without redacted keys (and without `drop_keys`, the free-text keys declared for the event
+    type); the removed key paths are appended to `redacted`. Email-looking string values under any other key are
+    masked as well (and recorded)."""
     red = redacted if redacted is not None else []
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for k, v in value.items():
             p = f"{path}.{k}" if path else str(k)
-            if is_redacted_key(k):
+            if is_redacted_key(k) or k in drop_keys:
                 red.append(p)
             else:
-                out[k] = treat_payload(v, red, p)
+                out[k] = treat_payload(v, red, p, drop_keys)
         return out
     if isinstance(value, list):
-        return [treat_payload(v, red, path) for v in value]
+        return [treat_payload(v, red, path, drop_keys) for v in value]
     if isinstance(value, str) and "@" in value and _EMAIL_VALUE.search(value):
         red.append(path or "$")
         return _EMAIL_VALUE.sub(EMAIL_PLACEHOLDER, value)

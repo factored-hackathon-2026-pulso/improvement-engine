@@ -420,3 +420,15 @@ fn put_doc_new_has_one_winner_under_8_threads() {
         assert!(store.put_doc_new("successor_run", "t2", "successor:rel-1", json!({})), "tenant-scoped key: {}", fx.name);
     });
 }
+
+#[test]
+fn every_namespace_the_server_writes_is_accepted_on_every_store() {
+    // found live: 0052's closed namespace set lacked these four, so PgStore panicked on the first write (fixed by 0054)
+    each(|fx| {
+        let store = fx.open();
+        for ns in [control_api::correlation::SUCCESSOR_NS, control_api::correlation::CORRELATION_NS, control_api::correlation::EVENT_NS, control_api::correlation::PUBLISHED_NS] {
+            assert!(store.put_doc_new(ns, "t1", "k", json!({"ns": ns})), "{}: {ns}", fx.name);
+            assert_eq!(store.get_doc(ns, "t1", "k"), Some(json!({"ns": ns})), "{}: {ns}", fx.name);
+        }
+    });
+}

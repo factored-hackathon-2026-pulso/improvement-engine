@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { z } from 'zod';
 import { api, ApiError, loadConfig, onSessionExpired, reportSessionExpired, setCsrf } from '../api/client';
 import { bootDebugApi, type DebugApi } from '../api/debug';
@@ -9,6 +9,7 @@ import type * as S from '../api/schemas';
 import { RunView } from '../features/RunView';
 import { MemoryView } from '../features/Panels';
 import { SourcesView } from '../features/SourcesView';
+import { AutomationView } from '../features/automation/AutomationView';
 import { ModeBanner } from './ModeBanner';
 import { LiveRegionProvider, useAnnounce } from '../a11y/AnnounceContext';
 import { t } from '../i18n/es419';
@@ -35,6 +36,16 @@ function Shell() {
   const [session, setSession] = useState<SessionState>('loading');
   const [debugApi, setDebugApi] = useState<DebugApi | null>(null);
   const [dataProvider, setDataProvider] = useState<string>('http');
+  const portRef = useRef<{ port: DebugApi; dataProvider: string } | null>(null);
+  const refreshSeq = useRef(0);
+  /** Re-read the profile mid-run (doubles_declared): only the latest response wins; a failure keeps the last known profile. */
+  const refreshProfile = useCallback(() => {
+    const cur = portRef.current; if (!cur) return;
+    const mine = ++refreshSeq.current;
+    const apply = (p: Profile) => { if (refreshSeq.current === mine) setProfile(p); };
+    if (cur.dataProvider === 'http') api.profile().then(apply).catch(() => {});
+    else cur.port.mode().then((m) => apply({ target: m.target, runtime_profile: m.runtime_profile, doubles: m.doubles, pin: null, ...(m.provider === 'stand-in' ? { mode: 'stand_in' } : {}) })).catch(() => {});
+  }, []);
   useEffect(() => {
     // public/config.json is the only source of the client provider (read at runtime, not baked into the bundle).
     let live = true;
@@ -46,6 +57,7 @@ function Shell() {
       if (!live) return;
       setDebugApi(port);
       setDataProvider(c.dataProvider);
+      portRef.current = { port, dataProvider: c.dataProvider };
       if (c.dataProvider === 'http') {
         // Legacy client path (other screens still use it): unchanged behaviour.
         api.session()
@@ -77,17 +89,17 @@ function Shell() {
           {t(session === 'expired' ? 'session.expired' : 'session.unavailable')}
         </div>
       )}
-      <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a> · <a href="#/sources">{t('sources.nav')}</a></nav>
+      <nav aria-label={t('nav.label')}><a href="#/">{t('nav.runs')}</a> · <a href="#/memory">{t('nav.memory')}</a> · <a href="#/sources">{t('sources.nav')}</a> · <a href="#/automatizacion">{t('auto.nav')}</a></nav>
       {dataProvider !== 'http' && (run || path === '/sources' || path === '/memory') && (
         <div className="banner bad" role="note" data-testid="provider-partial">{t('decl.partial', { provider: dataProvider })}</div>
       )}
       <main>
         {run?.[1]
           ? <RunView
-              runId={run[1]} nodeId={node}
+              runId={run[1]} nodeId={node} onProfileChanged={refreshProfile}
               onNode={(id) => { window.location.hash = id ? `#/run/${run[1]}?node=${id}` : `#/run/${run[1]}`; }}
             />
-          : path === '/sources' ? <SourcesView /> : path === '/memory' ? <MemoryView /> : <><h1>{t('app.title')}</h1>{debugApi ? <DebugApiProvider api={debugApi}><RunList /></DebugApiProvider> : <p>{t('runs.loading')}</p>}</>}
+          : path === '/automatizacion' ? <AutomationView /> : path === '/sources' ? <SourcesView /> : path === '/memory' ? <MemoryView /> : <><h1>{t('app.title')}</h1>{debugApi ? <DebugApiProvider api={debugApi}><RunList /></DebugApiProvider> : <p>{t('runs.loading')}</p>}</>}
       </main>
     </>
   );

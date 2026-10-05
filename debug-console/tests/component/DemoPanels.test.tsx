@@ -97,3 +97,16 @@ describe('ModeBanner stand-in', () => {
     expect(screen.getByTestId('mode-banner').textContent).toContain('decisión humana: gancho pendiente');
   });
 });
+
+describe('HypothesesList statements', () => {
+  it('shows the statement of every hypothesis, not only the main one, and does not repeat an id used as its own statement', () => {
+    render(<HypothesesList hypotheses={[
+      { id: 'main', statement: 'Scripted scout claims X', verdict: 'corroborated', supports: [], counter: [] },
+      { id: 'change', statement: 'Applying the change improves the cases', verdict: 'not_supported', supports: [], counter: ['gate said no'] },
+      { id: 'decoy', statement: 'decoy', verdict: 'refuted', supports: [], counter: [] },
+    ]} />);
+    expect(screen.getByTestId('hyp-change').textContent).toContain('Applying the change improves the cases');
+    expect(screen.getByTestId('hyp-main').textContent).toContain('Scripted scout claims X');
+    expect(screen.getByTestId('hyp-decoy').textContent?.match(/decoy/g)).toHaveLength(1);
+  });
+});

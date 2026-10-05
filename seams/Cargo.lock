@@ -234,6 +234,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "debug-api"
+version = "0.0.0"
+dependencies = [
+ "maturity",
+ "serde_json",
+ "sha2 0.10.9",
+ "tiny_http",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -295,7 +305,9 @@ version = "0.0.0"
 dependencies = [
  "abi",
  "authority",
+ "base64",
  "core-client",
+ "ed25519-dalek",
  "eval",
  "serde_json",
  "steps",
@@ -521,6 +533,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
+name = "maturity"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "md-5"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -710,6 +729,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "pulso"
+version = "0.0.0"
+dependencies = [
+ "debug-api",
+ "engine",
+ "pg",
+ "postgres",
+ "rusqlite",
+ "serde_json",
+ "sources",
+ "thread10",
+ "tiny_http",
 ]
 
 [[package]]
@@ -922,6 +956,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sources"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "engine",
+ "postgres",
+ "rusqlite",
+ "serde_json",
+ "sha2 0.10.9",
+ "steps",
+]
+
+[[package]]
 name = "spki"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1004,6 +1051,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.6",
+]
+
+[[package]]
+name = "thread10"
+version = "0.0.0"
+dependencies = [
+ "abi",
+ "authority",
+ "base64",
+ "control-api",
+ "core-client",
+ "debug-api",
+ "ed25519-dalek",
+ "engine",
+ "memory",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,0 +1,296 @@
+//! `pulso run` configuration: environment only (twelve-factor), validated up front, refusing with a named reason.
+//! Nothing here ever prints a secret: `Secret` redacts in Debug and errors name the variable, never its value.
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::time::Duration;
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn new(s: impl Into<String>) -> Secret {
+        Secret(s.into())
+    }
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<redacted>")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataMode {
+    Dataset,
+    Platform,
+}
+
+/// Which `ModelPort` answers scout, verifier and builder. `Scripted` is the honest default (labelled `scripted`, never real).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelPortKind {
+    Scripted,
+    Roleplay,
+    Gateway,
+}
+
+/// What the operator says the source data is. `pulso` cannot verify it; the label only travels with the run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    Unspecified,
+    Simulated,
+    Real,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Storage {
+    Postgres,
+    Memory,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigError {
+    Missing(&'static str),
+    Invalid { var: &'static str, reason: String },
+    Conflict(String),
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfigError::Missing(v) => write!(f, "config_missing: {v} is required"),
+            ConfigError::Invalid { var, reason } => write!(f, "config_invalid: {var}: {reason}"),
+            ConfigError::Conflict(r) => write!(f, "config_conflict: {r}"),
+        }
+    }
+}
+impl std::error::Error for ConfigError {}
+
+#[derive(Debug, Clone)]
+pub struct RunConfig {
+    pub storage: Storage,
+    pub database_url: Option<Secret>,
+    pub data_mode: DataMode,
+    pub adapter: String,
+    pub poll_interval: Duration,
+    pub batch_cap: u32,
+    pub listen_addr: SocketAddr,
+    pub debug_token: Option<Secret>,
+    pub admin_token: Option<Secret>,
+    pub storage_prefix: Option<String>,
+    pub store_dir: Option<PathBuf>,
+    pub console_dir: Option<PathBuf>,
+    /// Path prefix the console and API are served under behind a reverse proxy ("" or "/pulso").
+    pub base_path: String,
+    pub grace: Duration,
+    pub tenant: String,
+    pub worker_id: String,
+    pub exit_on_stdin_eof: bool,
+    /// Where the monitor writes packages, run records and watermarks (`PULSO_WORK_DIR`); required for any adapter but `stub`.
+    pub work_dir: Option<PathBuf>,
+    /// `<data_mode>:<name>` (`PULSO_SOURCE_ID`, default `<data_mode>:local`).
+    pub source_id: String,
+    pub source_sqlite: Option<PathBuf>,
+    pub source_schema: Option<String>,
+    /// Events per source read (`PULSO_READ_BATCH`, 1..=10000, default 1000).
+    pub read_batch: usize,
+    pub provenance: Provenance,
+    pub model_port: ModelPortKind,
+    pub roleplay_queue: Option<PathBuf>,
+    /// `PULSO_CORE_PORT=live`: the real Core port (`engine::real_core`); anything else is the labelled offline double.
+    pub core_live: bool,
+}
+
+impl RunConfig {
+    /// What a real (non-stub) source needs on top of a well-formed configuration. `pulso run` refuses to start (exit 2) without it;
+    /// it is separate from parsing so a deployment can still describe an adapter it does not start here.
+    pub fn check_source(&self) -> Result<(), ConfigError> {
+        if self.adapter != "stub" && self.work_dir.is_none() {
+            return Err(ConfigError::Missing("PULSO_WORK_DIR (packages, run records and watermarks of the monitor)"));
+        }
+        if self.adapter == "product-sqlite" && self.source_sqlite.is_none() {
+            return Err(ConfigError::Missing("PULSO_SOURCE_SQLITE (the product SQLite file, opened read-only)"));
+        }
+        Ok(())
+    }
+
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_lookup(&|k| std::env::var(k).ok())
+    }
+
+    pub fn from_lookup(get: &dyn Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        let var = |k: &str| get(k).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+        let invalid = |var: &'static str, reason: &str| ConfigError::Invalid { var, reason: reason.into() };
+        let flag = |k: &str| matches!(var(k).as_deref(), Some("1" | "true" | "yes"));
+
+        let data_mode = match var("PULSO_DATA_MODE").as_deref() {
+            None => return Err(ConfigError::Missing("PULSO_DATA_MODE")),
+            Some("dataset") => DataMode::Dataset,
+            Some("platform") => DataMode::Platform,
+            Some(_) => return Err(invalid("PULSO_DATA_MODE", "must be dataset or platform")),
+        };
+
+        let url = var("PULSO_DATABASE_URL");
+        let storage = match (var("PULSO_STORAGE").as_deref(), &url) {
+            (None, Some(_)) | (Some("postgres"), Some(_)) => Storage::Postgres,
+            (Some("memory"), None) => Storage::Memory,
+            (Some("memory"), Some(_)) => return Err(ConfigError::Conflict("PULSO_STORAGE=memory with PULSO_DATABASE_URL set: pick one".into())),
+            (None, None) | (Some("postgres"), None) => {
+                return Err(ConfigError::Missing("PULSO_DATABASE_URL (or PULSO_STORAGE=memory for an ephemeral local run)"));
+            }
+            (Some(_), _) => return Err(invalid("PULSO_STORAGE", "must be postgres or memory")),
+        };
+        if let Some(u) = &url
+            && !(u.starts_with("postgres://") || u.starts_with("postgresql://"))
+        {
+            return Err(invalid("PULSO_DATABASE_URL", "must be a postgres:// or postgresql:// URL (value not shown)"));
+        }
+
+        let adapter = var("PULSO_SOURCE_ADAPTER").unwrap_or_else(|| "stub".into());
+        let (allowed, other): (&[&str], &[&str]) = match data_mode {
+            DataMode::Dataset => (&["stub", "dataset-pg", "dataset-raw", "dataset-augmented"], &["product-sqlite", "product-postgres"]),
+            DataMode::Platform => (&["stub", "product-sqlite", "product-postgres"], &["dataset-pg", "dataset-raw", "dataset-augmented"]),
+        };
+        if other.contains(&adapter.as_str()) {
+            let mode = if data_mode == DataMode::Dataset { "dataset" } else { "platform" };
+            return Err(ConfigError::Conflict(format!("PULSO_DATA_MODE={mode} cannot use PULSO_SOURCE_ADAPTER={adapter}")));
+        }
+        if !allowed.contains(&adapter.as_str()) {
+            return Err(invalid("PULSO_SOURCE_ADAPTER", &format!("unknown adapter; one of {}", allowed.join(", "))));
+        }
+
+        let num = |k: &'static str, default: u64, min: u64, max: u64| -> Result<u64, ConfigError> {
+            match var(k) {
+                None => Ok(default),
+                Some(v) => match v.parse::<u64>() {
+                    Ok(n) if (min..=max).contains(&n) => Ok(n),
+                    _ => Err(invalid(k, &format!("must be a whole number in {min}..={max}"))),
+                },
+            }
+        };
+        let poll_interval = Duration::from_millis(num("PULSO_POLL_INTERVAL_MS", 30_000, 1, 86_400_000)?);
+        let batch_cap = num("PULSO_BATCH_CAP", 100, 1, 100_000)? as u32;
+        let grace = Duration::from_secs(num("PULSO_SHUTDOWN_GRACE_SECS", 25, 1, 3_600)?);
+
+        let listen_addr: SocketAddr = var("PULSO_LISTEN_ADDR")
+            .unwrap_or_else(|| "127.0.0.1:8080".into())
+            .parse()
+            .map_err(|_| invalid("PULSO_LISTEN_ADDR", "must be ip:port"))?;
+        let debug_token = var("PULSO_DEBUG_TOKEN").map(Secret);
+        let admin_token = var("PULSO_ADMIN_TOKEN").map(Secret);
+        if !listen_addr.ip().is_loopback() {
+            if !flag("PULSO_ALLOW_NON_LOOPBACK") {
+                return Err(invalid("PULSO_LISTEN_ADDR", "non-loopback bind requires PULSO_ALLOW_NON_LOOPBACK=1"));
+            }
+            match &debug_token {
+                Some(t) if t.expose().len() >= MIN_TOKEN => {}
+                _ => return Err(invalid("PULSO_DEBUG_TOKEN", &format!("a token of at least {MIN_TOKEN} characters is mandatory on a non-loopback bind"))),
+            }
+            if let Some(a) = &admin_token
+                && (a.expose().len() < MIN_TOKEN || Some(a) == debug_token.as_ref())
+            {
+                return Err(invalid("PULSO_ADMIN_TOKEN", &format!("on a non-loopback bind it must be at least {MIN_TOKEN} characters and differ from PULSO_DEBUG_TOKEN")));
+            }
+        }
+
+        let storage_prefix = match var("PULSO_STORAGE_PREFIX") {
+            None => None,
+            Some(p) => {
+                let ok = !p.starts_with('/')
+                    && p.len() <= 256
+                    && p.split('/').all(|s| s != "..")
+                    && p.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '.'));
+                if !ok {
+                    return Err(invalid("PULSO_STORAGE_PREFIX", "relative key prefix of [A-Za-z0-9/_.-] without .."));
+                }
+                Some(p)
+            }
+        };
+
+        let base_path = match var("PULSO_BASE_PATH") {
+            None => String::new(),
+            Some(b) => normalize_base_path(&b).map_err(|r| invalid("PULSO_BASE_PATH", &r))?,
+        };
+
+        let work_dir = var("PULSO_WORK_DIR").map(PathBuf::from);
+        let source_sqlite = var("PULSO_SOURCE_SQLITE").map(PathBuf::from);
+        let mode_name = if data_mode == DataMode::Dataset { "dataset" } else { "platform" };
+        let source_id = var("PULSO_SOURCE_ID").unwrap_or_else(|| format!("{mode_name}:local"));
+        if let Some(rest) = source_id.strip_prefix(&format!("{mode_name}:")) {
+            let ok = !rest.is_empty() && source_id.len() <= 96 && rest.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'_' | b'-' | b':'));
+            if !ok {
+                return Err(invalid("PULSO_SOURCE_ID", "lowercase [a-z0-9._:-] after the data mode prefix, at most 96 characters"));
+            }
+        } else {
+            return Err(invalid("PULSO_SOURCE_ID", &format!("must start with {mode_name}: for PULSO_DATA_MODE={mode_name}")));
+        }
+        let read_batch = num("PULSO_READ_BATCH", 1000, 1, 10_000)? as usize;
+        let provenance = match var("PULSO_SOURCE_PROVENANCE").as_deref() {
+            None => Provenance::Unspecified,
+            Some("simulated") => Provenance::Simulated,
+            Some("real") => Provenance::Real,
+            Some(_) => return Err(invalid("PULSO_SOURCE_PROVENANCE", "must be simulated or real")),
+        };
+        let model_port = match var("PULSO_MODEL_PORT").as_deref() {
+            None | Some("scripted") => ModelPortKind::Scripted,
+            Some("roleplay") => ModelPortKind::Roleplay,
+            Some("gateway") => ModelPortKind::Gateway,
+            Some(_) => return Err(invalid("PULSO_MODEL_PORT", "must be scripted, roleplay or gateway")),
+        };
+        let roleplay_queue = var("PULSO_ROLEPLAY_QUEUE").map(PathBuf::from);
+        if model_port == ModelPortKind::Roleplay && roleplay_queue.is_none() {
+            return Err(ConfigError::Missing("PULSO_ROLEPLAY_QUEUE (PULSO_MODEL_PORT=roleplay replays that queue)"));
+        }
+        let core_live = match var("PULSO_CORE_PORT").as_deref() {
+            None | Some("offline") | Some("double") => false,
+            Some("live") => true,
+            Some(_) => return Err(invalid("PULSO_CORE_PORT", "must be offline (alias double) or live")),
+        };
+
+        Ok(RunConfig {
+            work_dir,
+            source_id,
+            source_sqlite,
+            source_schema: var("PULSO_SOURCE_SCHEMA"),
+            read_batch,
+            provenance,
+            model_port,
+            roleplay_queue,
+            core_live,
+            storage,
+            database_url: url.map(Secret),
+            data_mode,
+            adapter,
+            poll_interval,
+            batch_cap,
+            listen_addr,
+            debug_token,
+            admin_token,
+            storage_prefix,
+            store_dir: var("PULSO_STORE_DIR").map(PathBuf::from),
+            console_dir: var("PULSO_CONSOLE_DIR").map(PathBuf::from),
+            base_path,
+            grace,
+            tenant: var("PULSO_TENANT").unwrap_or_else(|| "tenant-local".into()),
+            worker_id: var("PULSO_WORKER_ID").unwrap_or_else(|| format!("pulso-{}", std::process::id())),
+            exit_on_stdin_eof: flag("PULSO_EXIT_ON_STDIN_EOF"),
+        })
+    }
+}
+
+/// Minimum length of a bearer token accepted on a non-loopback bind.
+pub const MIN_TOKEN: usize = 16;
+
+/// "" or "/" -> ""; "/pulso/" -> "/pulso". Rejects relative paths, empty/dot segments and anything but [A-Za-z0-9._-].
+pub fn normalize_base_path(p: &str) -> Result<String, String> {
+    let p = p.trim();
+    if p.is_empty() || p == "/" {
+        return Ok(String::new());
+    }
+    let p = p.strip_suffix('/').unwrap_or(p);
+    let ok = p.starts_with('/')
+        && p.len() <= 128
+        && p[1..].split('/').all(|s| !s.is_empty() && s != "." && s != ".." && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')));
+    if ok { Ok(p.to_string()) } else { Err("must look like /prefix or /a/b: segments of [A-Za-z0-9._-], no empty or dot segments".into()) }
+}

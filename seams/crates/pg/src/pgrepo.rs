@@ -5,7 +5,7 @@
 //!   lease_until > $now`; `commit_output` runs it and the `pulso_job_outputs` INSERT in ONE transaction, so a
 //!   superseded worker (older fence) cannot commit however late or clock-skewed it reaches the database.
 //! Time is the caller's injected unix-second clock, not the database clock (tests and kill/resume drive it).
-use crate::repo::{check_ids, Claimed, JobRepository, RepoError};
+use crate::repo::{check_ids, check_key, Claimed, JobRepository, RepoError};
 use postgres::error::SqlState;
 use postgres::{Client, Config, NoTls};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -46,6 +46,11 @@ impl PgRepo {
     pub fn new(cfg: Config) -> Self {
         let ns = format!("ns{}x{}-", std::process::id(), NS.fetch_add(1, Ordering::SeqCst));
         Self { cfg, ns }
+    }
+    /// A repository over the REAL tenant ids (no per-instance namespace): every process and instance pointed at the
+    /// same database sees and claims the same jobs. This is what a deployed worker uses; `new` is for isolated tests.
+    pub fn shared(cfg: Config) -> Self {
+        Self { cfg, ns: String::new() }
     }
     fn client(&self) -> Result<Client, RepoError> {
         self.cfg.connect(NoTls).map_err(db)
@@ -177,6 +182,51 @@ impl JobRepository for PgRepo {
                 "SELECT record FROM pulso_job_outputs WHERE tenant_id = $1 AND job_id = $2::text::uuid AND step_index = $3",
                 &[&self.tenant(tenant), &id, &(step as i32)],
             )
+            .map_err(db)?;
+        Ok(row.map(|r| r.get(0)))
+    }
+
+    fn complete(&self, tenant: &str, job: &str, worker: &str, fence: u64, now: u64) -> Result<(), RepoError> {
+        check_ids(tenant, worker)?;
+        let id = Self::uuid(job)?.0;
+        let n = self
+            .client()?
+            .execute(
+                "UPDATE pulso_jobs SET status = 'complete', updated_at = CURRENT_TIMESTAMP \
+                 WHERE tenant_id = $1 AND id = $2::text::uuid AND status = 'leased' AND lease_owner = $3 \
+                   AND lease_version = $4 AND lease_until > to_timestamp($5::bigint)",
+                &[&self.tenant(tenant), &id, &worker, &(fence as i64), &(now as i64)],
+            )
+            .map_err(db)?;
+        if n == 1 { Ok(()) } else { Err(RepoError::StaleFence) }
+    }
+
+    fn admit_keyed(&self, tenant: &str, key: &str) -> Result<String, RepoError> {
+        check_ids(tenant, "w")?;
+        check_key(key)?;
+        let t = self.tenant(tenant);
+        let mut c = self.client()?;
+        let id = next_uuid7();
+        // The unique (tenant, kind, logical_key, generation) constraint is the idempotency: a second admission of the key inserts
+        // nothing and reads the first job back.
+        c.execute(
+            "INSERT INTO pulso_jobs (id, tenant_id, run_ref, kind, logical_key, generation, parent_job_id, status, lane, due_at, input_ref, config_ref) \
+             VALUES ($1::text::uuid, $2, $1::text::uuid, 'pulso_run', $3, 0, $1::text::uuid, 'queued', 'default', CURRENT_TIMESTAMP, $3, 'cfg') \
+             ON CONFLICT (tenant_id, kind, logical_key, generation) DO NOTHING",
+            &[&id, &t, &key],
+        )
+        .map_err(db)?;
+        let row = c
+            .query_one("SELECT id::text FROM pulso_jobs WHERE tenant_id = $1 AND kind = 'pulso_run' AND logical_key = $2 AND generation = 0", &[&t, &key])
+            .map_err(db)?;
+        Ok(row.get(0))
+    }
+
+    fn job_key(&self, tenant: &str, job: &str) -> Result<Option<String>, RepoError> {
+        let id = Self::uuid(job)?.0;
+        let row = self
+            .client()?
+            .query_opt("SELECT logical_key FROM pulso_jobs WHERE tenant_id = $1 AND id = $2::text::uuid AND kind = 'pulso_run'", &[&self.tenant(tenant), &id])
             .map_err(db)?;
         Ok(row.map(|r| r.get(0)))
     }

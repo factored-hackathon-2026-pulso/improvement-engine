@@ -19,6 +19,12 @@ const MUTANTS: &[(Fault, &str)] = &[
     (Fault::ForeignTenantOps, "tenant leak on holder ops"),
     (Fault::OverwriteOutput, "out/N overwritten"),
     (Fault::TouchNoExtend, "lease renewal is a no-op"),
+    (Fault::ClaimIgnoresComplete, "complete job reclaimed"),
+    (Fault::CompleteNotRecorded, "complete not recorded"),
+    (Fault::CompleteAnyHolder, "anyone completes"),
+    (Fault::CompleteStillHeld, "complete job still takes holder operations"),
+    (Fault::KeyedAdmitDuplicates, "keyed admission duplicates"),
+    (Fault::KeyedIgnoresTenant, "keyed admission leaks across tenants"),
 ];
 
 #[test]
