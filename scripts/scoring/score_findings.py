@@ -27,6 +27,7 @@ Python standard library only; no network, no environment access.
 """
 import argparse
 import json
+import math
 from pathlib import Path
 import sys
 import unicodedata
@@ -39,13 +40,60 @@ _OPBENCH_DIR = str(_REPO_ROOT / "docs" / "data" / "opbench")
 if _OPBENCH_DIR not in sys.path:
     sys.path.insert(0, _OPBENCH_DIR)
 from opbench_v2 import (  # noqa: E402
+    CHANNELS_V2,
+    PQR_CATEGORIES_V2,
+    REASONS_V2,
+    SURVEY_CHANNELS_V2,
     normalize_channel_v2,
     normalize_pqr_category_v2,
     normalize_reason_v2,
     normalize_survey_channel_v2,
 )
+from opbench import validate_safe_pack  # noqa: E402
 
 DIRECTION_EPS = 0.005
+K_MIN = 10
+SIGNAL_FIELDS = {
+    "metric", "dims", "status", "reason", "direction", "claim", "discovery", "holdout",
+    "r2", "depends_on", "p_adj",
+}
+SIGNAL_DIMS = {
+    "reason_category", "channel", "category", "case_type", "priority", "survey_type",
+    "action", "campaign_type", "customer_segment",
+}
+STAGE_FIELDS = {
+    "numerator", "denominator", "rate", "baseline_numerator", "baseline_denominator",
+    "baseline_rate", "diff", "p",
+}
+SIGNAL_REASONS = {
+    "not_significant_after_correction", "holdout_unavailable", "holdout_direction_reversed",
+    "replicated_in_holdout", "holdout_not_significant", "no_differential",
+}
+DISCARD_KINDS = {
+    "k_violation", "holdout_without_discovery", "no_baseline", "below_min_support",
+    "favourable_direction",
+}
+SUMMARY_FIELDS = {"semantics", "method", "cells_explored", "signals", "discards"}
+METHOD_FIELDS = {
+    "test", "multiplicity", "min_ratio", "replication", "secondary_replication", "alpha",
+    "min_effect", "min_support", "k_min",
+}
+METRICS = {"M1", "M2", "M3", "M4", "M5", "M6", "M6L", "M6R", "M6U", "M7", "M8", "M9", "M10"}
+METRIC_DIMS = {
+    "M1": {"reason_category", "channel"}, "M2": {"channel"}, "M3": {"channel"},
+    "M4": {"category"}, "M5": {"category"}, "M6": {"reason_category", "channel"},
+    "M6L": {"reason_category", "channel"}, "M6R": {"reason_category", "channel"},
+    "M6U": {"reason_category", "channel"}, "M7": {"action", "channel"},
+    "M8": {"campaign_type", "channel"}, "M9": {"channel", "customer_segment"},
+    "M10": {"reason_category", "channel"},
+}
+KNOWN_SURVEY_CHANNELS = {"email", "phone", "telefono", "ivr", "llamada", "app", "mobile app",
+                         "mobile_app", "mobileapp", "web", "sms", "other"}
+METHOD_STRING_VALUES = {
+    "test": "two_proportion_z_pooled_vs_same_channel_excluding_own_reason",
+    "replication": "discovery_holdout_hash_split",
+    "secondary_replication": "r2_windows_2023-07..2024-12_vs_2025-01..2026-05",
+}
 
 # Normalized vocabulary shared with the catalog (OPBENCH-lite): channel and reason_category values.
 ALIASES = {
@@ -170,6 +218,263 @@ def _engine_effect(s):
     return None
 
 
+def _validate_signal_stage(stage, label):
+    if not isinstance(stage, dict):
+        raise ScoringError(f"{label} must be a valid aggregate stage summary")
+    if set(stage) != STAGE_FIELDS:
+        raise ScoringError(f"{label} must include all producer stage fields")
+    for numerator_key, denominator_key in (
+        ("numerator", "denominator"), ("baseline_numerator", "baseline_denominator"),
+    ):
+        numerator, denominator = stage[numerator_key], stage[denominator_key]
+        if (isinstance(numerator, bool) or not isinstance(numerator, int)
+                or isinstance(denominator, bool) or not isinstance(denominator, int)
+                or denominator < K_MIN or numerator < 0 or numerator > denominator
+                or numerator not in {0, denominator} and min(numerator, denominator - numerator) < K_MIN):
+            raise ScoringError(f"{label} violates the binary privacy floor")
+    for field in {"rate", "baseline_rate"} & set(stage):
+        value = stage[field]
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value) or not 0 <= value <= 1):
+            raise ScoringError(f"{label}.{field} must be a finite rate between zero and one")
+    rounded_rate = round(stage["numerator"] / stage["denominator"], 6)
+    if abs(stage["rate"] - rounded_rate) > 1e-6:
+        raise ScoringError(f"{label}.rate does not match counts")
+    rounded_baseline_rate = round(stage["baseline_numerator"] / stage["baseline_denominator"], 6)
+    if abs(stage["baseline_rate"] - rounded_baseline_rate) > 1e-6:
+        raise ScoringError(f"{label}.baseline_rate does not match counts")
+    for field in {"diff", "p"} & set(stage):
+        value = stage[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ScoringError(f"{label}.{field} must be finite numeric evidence")
+        if field == "p" and not 0 <= value <= 1:
+            raise ScoringError(f"{label}.p must be between zero and one")
+    if abs(stage["diff"] - (stage["rate"] - stage["baseline_rate"])) > 2e-6:
+        raise ScoringError(f"{label}.diff does not match rounded rates")
+
+
+def _validate_signal_summary(signals):
+    if set(signals) != SUMMARY_FIELDS:
+        raise ScoringError("signal summary must contain exactly the producer summary fields")
+    if signals["semantics"] != "claude-standin":
+        raise ScoringError("signal semantics is unsupported")
+    explored = signals["cells_explored"]
+    if isinstance(explored, bool) or not isinstance(explored, int) or explored < 0:
+        raise ScoringError("cells_explored must be a non-negative integer")
+    method = signals["method"]
+    if not isinstance(method, dict) or set(method) != METHOD_FIELDS:
+        raise ScoringError("signal method must match the producer method envelope")
+    for key, expected in METHOD_STRING_VALUES.items():
+        if method[key] != expected:
+            raise ScoringError(f"signal method.{key} is unsupported")
+    if not isinstance(method["multiplicity"], str) or method["multiplicity"] not in {
+        "benjamini_hochberg_all_explored_cells", "bonferroni_all_explored_cells",
+    }:
+        raise ScoringError("signal method multiplicity is unsupported")
+    for field in ("min_ratio", "alpha", "min_effect"):
+        value = method[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ScoringError(f"signal method.{field} must be finite")
+    if method["min_ratio"] <= 0 or not 0 < method["alpha"] < 1 or method["min_effect"] <= 0:
+        raise ScoringError("signal method thresholds are invalid")
+    for field in ("min_support", "k_min"):
+        value = method[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value < K_MIN:
+            raise ScoringError(f"signal method.{field} is below the supported minimum")
+    try:
+        validate_safe_pack({"method": method})
+    except ValueError as error:
+        raise ScoringError(f"signal method failed privacy validation: {error}") from error
+    if "discards" in signals:
+        if not isinstance(signals["discards"], list):
+            raise ScoringError("signal discards must be a list")
+        for discard in signals["discards"]:
+            if not isinstance(discard, dict) or not isinstance(discard.get("kind"), str):
+                raise ScoringError("each discard must have a named kind")
+            if discard["kind"] not in DISCARD_KINDS:
+                raise ScoringError("discard kind is unsupported")
+            keys = set(discard)
+            if keys == {"kind", "count"}:
+                count = discard["count"]
+                if isinstance(count, bool) or not isinstance(count, int) or count < K_MIN:
+                    raise ScoringError("discard count below the privacy floor must be suppressed")
+            elif keys == {"kind", "count", "suppressed"}:
+                if discard["count"] is not None or discard["suppressed"] is not True:
+                    raise ScoringError("suppressed discard count must be null with suppressed=true")
+            else:
+                raise ScoringError("discard summary has an invalid shape")
+            try:
+                validate_safe_pack(discard)
+            except ValueError as error:
+                raise ScoringError(f"discard summary failed privacy validation: {error}") from error
+
+    holdout_candidates = sum(
+        isinstance(signal.get("reason"), str) and signal.get("reason") in {
+            "holdout_unavailable", "holdout_direction_reversed", "replicated_in_holdout",
+            "holdout_not_significant",
+        }
+        for signal in signals["signals"] if isinstance(signal, dict)
+    )
+    holdout_candidates = max(1, holdout_candidates)
+    for signal in signals["signals"]:
+        if not isinstance(signal, dict) or "metric" not in signal or not isinstance(signal.get("dims"), dict):
+            raise ScoringError("signal needs metric and dims")
+        required_signal_fields = {"metric", "dims", "status", "reason", "direction", "claim"}
+        if required_signal_fields - set(signal):
+            raise ScoringError("signal is missing required producer fields")
+        if set(signal) - SIGNAL_FIELDS:
+            raise ScoringError("signal contains unknown signal field")
+        if not isinstance(signal["metric"], str) or not signal["metric"].strip():
+            raise ScoringError("signal metric must be a non-empty string")
+        if signal["metric"] not in METRICS:
+            raise ScoringError("signal metric is unsupported")
+        try:
+            validate_safe_pack({
+                key: signal[key] for key in ("metric", "dims", "reason", "claim", "depends_on")
+                if key in signal
+            })
+        except ValueError as error:
+            raise ScoringError(f"signal failed privacy validation: {error}") from error
+        if any(not isinstance(key, str) or key not in SIGNAL_DIMS or not isinstance(value, str)
+               for key, value in signal["dims"].items()):
+            raise ScoringError("signal dimensions must use closed aggregate keys and string values")
+        metric, dims = signal["metric"], signal["dims"]
+        if not dims:
+            if (signal.get("status") != "refuted" or signal.get("reason") != "no_differential"
+                    or signal.get("direction") != "none"
+                    or signal.get("claim") != "association"
+                    or set(signal) != {"metric", "dims", "status", "reason", "direction", "claim"}):
+                raise ScoringError("no_differential aggregate shape is invalid")
+            continue
+        if set(dims) != METRIC_DIMS[metric]:
+            raise ScoringError("signal dimensions do not match metric")
+        for key, value in dims.items():
+            folded = _strip(value)
+            if key == "reason_category":
+                try:
+                    normalized = normalize_reason_v2(folded)
+                except ValueError as error:
+                    raise ScoringError("dimension value is unsupported") from error
+                valid_values = set(REASONS_V2)
+            elif key == "channel":
+                if metric in {"M6", "M6L", "M6R", "M6U"}:
+                    if folded not in KNOWN_SURVEY_CHANNELS:
+                        raise ScoringError("dimension value is unsupported")
+                    normalized = folded if folded in SURVEY_CHANNELS_V2 else normalize_survey_channel_v2(folded)
+                    valid_values = set(SURVEY_CHANNELS_V2)
+                else:
+                    canonical = norm_value(folded).replace(" ", "_")
+                    if canonical in CHANNELS_V2:
+                        normalized = canonical
+                    else:
+                        try:
+                            normalized = normalize_channel_v2(canonical)
+                        except ValueError as error:
+                            raise ScoringError("dimension value is unsupported") from error
+                    valid_values = set(CHANNELS_V2)
+            elif key == "category":
+                try:
+                    normalized = normalize_pqr_category_v2(folded)
+                except ValueError as error:
+                    raise ScoringError("dimension value is unsupported") from error
+                valid_values = set(PQR_CATEGORIES_V2)
+            else:
+                raise ScoringError(f"{metric} dimension vocabulary is not documented")
+            if normalized not in valid_values:
+                raise ScoringError("dimension value is unsupported")
+        if "status" in signal and (
+            not isinstance(signal["status"], str)
+            or signal["status"] not in {"candidate", "corroborated", "refuted", "uncertain"}
+        ):
+            raise ScoringError("signal status is unsupported")
+        if "direction" in signal and (
+            not isinstance(signal["direction"], str)
+            or signal["direction"] not in {"up", "down", "none"}
+        ):
+            raise ScoringError("signal direction is unsupported")
+        if "claim" in signal and signal["claim"] != "association":
+            raise ScoringError("signal claim must remain an association")
+        if "reason" in signal and not isinstance(signal["reason"], str):
+            raise ScoringError("signal reason must be a string")
+        if "reason" in signal and signal["reason"] not in SIGNAL_REASONS:
+            raise ScoringError("signal reason is unsupported")
+        if "p_adj" in signal:
+            p_adj = signal["p_adj"]
+            if (isinstance(p_adj, bool) or not isinstance(p_adj, (int, float))
+                    or not math.isfinite(p_adj) or not 0 <= p_adj <= 1):
+                raise ScoringError("signal p_adj must be a probability between zero and one")
+        signal_keys = set(signal)
+        base_keys = {"metric", "dims", "status", "reason", "direction", "claim"}
+        if signal["direction"] != "up":
+            raise ScoringError("cell signal direction is unsupported")
+        if signal["reason"] == "not_significant_after_correction":
+            if signal["status"] != "uncertain" or signal_keys != base_keys | {"discovery"}:
+                raise ScoringError("signal status requires discovery-only evidence")
+        else:
+            status_by_reason = {
+                "holdout_unavailable": "candidate",
+                "holdout_direction_reversed": "refuted",
+                "replicated_in_holdout": "corroborated",
+                "holdout_not_significant": "uncertain",
+            }
+            expected_status = status_by_reason.get(signal["reason"])
+            if (expected_status is None or signal["status"] != expected_status
+                    or not {"discovery", "p_adj", "r2"}.issubset(signal_keys)):
+                raise ScoringError("signal status requires holdout evidence")
+            if signal["reason"] == "holdout_unavailable":
+                if "holdout" in signal:
+                    raise ScoringError("candidate without holdout has an invalid shape")
+            elif "holdout" not in signal:
+                raise ScoringError("signal status requires holdout evidence")
+            if signal_keys - (base_keys | {"discovery", "holdout", "p_adj", "r2", "depends_on"}):
+                raise ScoringError("signal status has an invalid producer shape")
+        for stage_name in ("discovery", "holdout"):
+            if stage_name in signal:
+                _validate_signal_stage(signal[stage_name], f"signal.{stage_name}")
+        if signal["reason"] in {
+            "holdout_direction_reversed", "replicated_in_holdout", "holdout_not_significant",
+        }:
+            holdout = signal["holdout"]
+            replicates = (holdout["p"] * holdout_candidates < 0.05
+                          and holdout["diff"] >= method["min_effect"] / 2.0)
+            expected_reason = (
+                "holdout_direction_reversed" if holdout["diff"] <= 0.0 else
+                "replicated_in_holdout" if replicates else "holdout_not_significant"
+            )
+            if signal["reason"] != expected_reason:
+                raise ScoringError("holdout reason contradicts evidence")
+        if "r2" in signal:
+            r2 = signal["r2"]
+            if not isinstance(r2, dict) or set(r2) - {"status", "w1", "w2"}:
+                raise ScoringError("signal.r2 must be a valid two-window summary")
+            if (not isinstance(r2.get("status"), str)
+                    or r2["status"] not in {"replicated", "not_replicated", "reversed", "not_evaluated"}):
+                raise ScoringError("signal.r2 status is unsupported")
+            for window in ("w1", "w2"):
+                if window in r2:
+                    _validate_signal_stage(r2[window], f"signal.r2.{window}")
+            has_windows = "w1" in r2 and "w2" in r2
+            if (r2["status"] == "not_evaluated" and ("w1" in r2 or "w2" in r2)
+                    or r2["status"] != "not_evaluated" and not has_windows):
+                raise ScoringError("signal.r2 windows do not match producer status")
+            if has_windows:
+                w1, w2 = r2["w1"], r2["w2"]
+                both_replicate = all(
+                    window["diff"] >= method["min_effect"] / 2.0 and window["p"] < 0.05
+                    for window in (w1, w2)
+                )
+                expected_r2 = (
+                    "replicated" if both_replicate else
+                    "reversed" if w1["diff"] <= 0.0 or w2["diff"] <= 0.0 else "not_replicated"
+                )
+                if r2["status"] != expected_r2:
+                    raise ScoringError("R2 status contradicts windows")
+        if "depends_on" in signal and (
+            not isinstance(signal["depends_on"], str) or signal["depends_on"] not in METRICS
+        ):
+            raise ScoringError("signal dependency metric is unsupported")
+
+
 def _validate(catalog, signals):
     if not isinstance(catalog, dict) or not isinstance(catalog.get("entries"), list):
         raise ScoringError("catalog must be an object with an `entries` list")
@@ -177,12 +482,10 @@ def _validate(catalog, signals):
         raise ScoringError("unsupported catalog version")
     if not isinstance(signals, dict) or not isinstance(signals.get("signals"), list):
         raise ScoringError("signals must be an object with a `signals` list")
+    _validate_signal_summary(signals)
     for e in catalog["entries"]:
         if not isinstance(e, dict) or "metric_id" not in e or not isinstance(e.get("cell"), dict):
             raise ScoringError("catalog entry needs metric_id and cell")
-    for s in signals["signals"]:
-        if not isinstance(s, dict) or "metric" not in s or not isinstance(s.get("dims"), dict):
-            raise ScoringError("signal needs metric and dims")
 
 
 def score(catalog, signals, include_candidate=False, effect_tolerance=0.05, acceptable=None):

@@ -33,6 +33,42 @@ splits and preregistered statistical/support gates. The resulting precision, rec
 performance. The scorer returns this limitation in `validation_limitations`; do not tune sensor gates against
 the same catalog after reviewing the result.
 
+## T5 signal-input privacy gate
+
+Before scoring, `score_findings.py` requires the exact `steps_cli cells` report fields (`semantics`, `method`,
+`cells_explored`, `signals`, `discards`) and the complete method envelope. A scorable stage must contain the
+cell evidence (`numerator`, `denominator`, `rate`) and comparison-baseline proof (`baseline_numerator`,
+`baseline_denominator`, `baseline_rate`), plus `diff` and `p`; neither support pair may be omitted. Counts must
+be integers, each denominator at least 10, and both positive and complementary support in each population must
+be either zero or at least 10. Rounded cell rate and baseline rate must agree with their respective counts within
+1e-6; `diff` must agree with rate minus baseline within 2e-6 (Rust rounds these values to six decimals).
+Status/reason combinations must have the matching discovery/holdout/R2 fields.
+The scorer also checks producer semantics: holdout status follows the corrected p-value/effect gate over the
+number of discovery candidates; R2 is `replicated` only when both windows pass, `reversed` if either effect is
+non-positive, and otherwise `not_replicated` (or `not_evaluated` when the pair is unavailable).
+The `no_differential` record is the sole aggregate signal shape: `refuted`, direction `none`, empty dims, and
+no cell-stage fields. Cell signals must be direction `up`, as emitted by this sensor. Current Rust `cells.rs`
+does not publish the comparison-baseline counts, so its stage-bearing outputs intentionally fail this scorer's
+privacy gate until the producer adds k-checked baseline support or a separately reviewed equivalent proof. This
+is a Claude-owned DEP-ASK; do not interpret a missing baseline as zero or score such outputs as if verified.
+
+Metrics and dimension keys are finite and metric-specific; the Rust PQR key is `category` (not `pqr_category`).
+Dimension values are checked against the audited reason, channel, survey-channel and PQR-category vocabularies.
+M7 digital `action`, M8 `campaign_type`, and M9 `customer_segment` have dynamic values without a complete
+checked-in domain contract, so their cell-level signals fail closed; their empty-dimension `no_differential`
+records remain valid. Add a producer-owned complete vocabulary before enabling those cells. Unknown/identifier-like
+values, malformed stage/summary shapes, and sub-k discard counts are rejected. Producer reason codes are limited
+to the six current Rust values (`not_significant_after_correction`, `holdout_unavailable`,
+`holdout_direction_reversed`, `replicated_in_holdout`, `holdout_not_significant`, `no_differential`); discard-kind
+values are also closed to the producer vocabulary. `p_adj`, when present, must be a finite probability. A suppressed discard bucket is represented as
+`{"kind":"<bounded-kind>","count":null,"suppressed":true}`; a numeric discard count is accepted only at 10 or
+above. Zero is permitted for one side of a binary measure, but never for its denominator.
+
+The Rust `steps_cli cells` serializer still emits numeric discard-bucket counts; masking those values below
+10 is a Claude-owned DEP-ASK for `seams/crates/steps/**`. Until that producer change is made, the scorer will
+intentionally refuse exports containing a sub-k discard count. This gate does not alter sensor findings or
+catalog metrics, and no real signal payload is included here.
+
 ## Judge (SC2)
 
 - `judges/gateway_judge.py` (`--judge judges.gateway_judge:judge`): calls the local llm-gateway `POST /v1/generate`

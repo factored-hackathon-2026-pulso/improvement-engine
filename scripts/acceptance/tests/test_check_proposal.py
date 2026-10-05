@@ -168,6 +168,25 @@ class ProposalAcceptanceTests(unittest.TestCase):
             with self.subTest(required=required):
                 self.assertIn(required, document)
 
+    def test_dossier_describes_m1_as_per_interaction_not_first_contact(self) -> None:
+        document = (Path(__file__).resolve().parents[3] / "docs/data/dossier/DOSSIER_SPEC.md").read_text(
+            encoding="utf-8"
+        ).casefold()
+        self.assertIn("per-interaction unresolved rate", document)
+        self.assertIn("eligible calls with a known resolution value", document)
+        self.assertNotIn("first-contact unresolved", document)
+
+    def test_golden_dossier_variants_do_not_relabel_m1_as_first_contact_resolution(self) -> None:
+        document = (Path(__file__).resolve().parents[3] / "docs/data/dossier/DOSSIER_SPEC.md").read_text(
+            encoding="utf-8"
+        ).casefold()
+        self.assertNotIn("primer contacto", document)
+        self.assertNotIn("primer intento", document)
+        self.assertNotIn("primeiro contato", document)
+        self.assertNotIn("primeira tentativa", document)
+        self.assertEqual(document.count("56,4%"), 6)
+        self.assertNotIn("54,4%", document)
+
     def test_agent_core_proposal_detail_envelope_keeps_sibling_changes_and_pii_scan(self) -> None:
         import copy
 

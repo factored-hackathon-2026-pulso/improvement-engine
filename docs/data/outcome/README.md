@@ -99,6 +99,33 @@ withheld together (`summary_suppressed=true`); publishing the rate or threshold
 decision alone could reveal a small count. Zero and counts of at least ten are
 publishable, subject to the stated non-independence limitation.
 
+## Current preregistered v4 run (2026-10-05)
+
+The active protocol was committed in `49675d46178e7c9291f2cc55b6708c4202b86da3`
+before this run. Two fresh executions over the registered source tables
+(`call_center_interactions`, `complaints`, `satisfaction_surveys`) produced
+byte-identical aggregate JSON with SHA-256
+`62F74421668DBB9B9E03EE4EA2837BC1610CAC77B9C02424D73D33B87F967562`.
+Both report files are outside Git. The build used 35 complete month labels;
+the raw extract's two partial boundary months are excluded upstream. The report
+contains 84 registered rows: 79 screened cells and five descriptive-only M10
+cells. All 84 remain `inconclusive`; the primary screen supports no claim of
+improvement or worsening. Twenty screened cells are explicitly recorded as
+below the preregistered support floor.
+
+| Diagnostic | Current result | Correct interpretation |
+| --- | --- | --- |
+| Temporal placebo | 0 candidate-signal windows / 29 eligible windows; empirical finite-window frequency 0%, at/below the 5% screen bound | This passes only the finite overlapping-window screen. The windows are dependent; this is not calibrated Type-I error or a general false-positive guarantee. |
+| Aggregate-shift response | Only `<500` mean monthly observations has at least ten cells (71); observed response is 0% at 2, 5, and 10 pp; algorithmic threshold `>10 pp` | Deterministic response to arithmetic perturbations, not statistical power or an MDE. The other support bins are suppressed. |
+| Outcome verdicts | 84/84 registered rows are `inconclusive` | Missing complete treated/control windows, minimum support, or the non-Bernoulli M10 exception prevent classification. No release effect is established. |
+
+This is the current real-aggregate reproducibility result, not completion of
+the round-2 statistical-validation DoD: the data contain no customer-cluster
+sufficient statistics or actual release history, so these aggregates cannot
+calibrate a general false-positive rate or real-world power. Keep that
+limitation explicit rather than relabelling the algorithmic shift response as
+power.
+
 ## Earlier preregistered v3 run (2026-10-05)
 
 The protocol was committed as `df40b514` before this report was generated.

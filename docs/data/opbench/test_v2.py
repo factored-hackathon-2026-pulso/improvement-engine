@@ -406,18 +406,35 @@ class V2DescriptiveAggregateTests(unittest.TestCase):
         from scripts.scoring.score_findings import score
 
         source_entry = next(entry for entry in payload["entries"] if entry["metric_id"] == "M1")
-        difference = (source_entry.get("effect") or {}).get("difference")
-        direction = "up" if difference is not None and difference > 0.005 else (
-            "down" if difference is not None and difference < -0.005 else "none"
-        )
         sensor_signal = {
             "metric": source_entry["metric_id"],
             "dims": source_entry["cell"],
-            "status": source_entry["status"],
-            "direction": direction,
-            "discovery": {"diff": difference},
+            "status": "uncertain",
+            "reason": "not_significant_after_correction",
+            "direction": "up",
+            "claim": "association",
+            "discovery": {"numerator": 50, "denominator": 100, "rate": 0.5,
+                          "baseline_numerator": 38, "baseline_denominator": 100,
+                          "baseline_rate": 0.38, "diff": 0.12, "p": 0.01},
         }
-        scored = score(payload, {"cells_explored": 1, "signals": [sensor_signal]})
+        sensor_output = {
+            "semantics": "claude-standin",
+            "method": {
+                "test": "two_proportion_z_pooled_vs_same_channel_excluding_own_reason",
+                "multiplicity": "benjamini_hochberg_all_explored_cells",
+                "min_ratio": 1.25,
+                "replication": "discovery_holdout_hash_split",
+                "secondary_replication": "r2_windows_2023-07..2024-12_vs_2025-01..2026-05",
+                "alpha": 0.01,
+                "min_effect": 0.05,
+                "min_support": 500,
+                "k_min": 10,
+            },
+            "cells_explored": 1,
+            "signals": [sensor_signal],
+            "discards": [],
+        }
+        scored = score(payload, sensor_output)
         self.assertEqual(set(scored["scores"]), {"recall", "precision", "ranking_agreement_spearman"})
         self.assertEqual(scored["benchmark"], "OPBENCH-lite")
         self.assertEqual(payload["negative_controls"]["agent_outliers"]["individuals_emitted"], False)

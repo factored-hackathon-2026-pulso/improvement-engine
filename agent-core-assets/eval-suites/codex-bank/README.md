@@ -69,7 +69,30 @@ to the deterministic scorer. Outcomes not supported by the
 evaluator remain unasserted hypotheses for manual review, not measured
 behavior or an authoritative policy oracle.
 
-## Latest native-evaluation baseline and coverage caveat
+## Current 104-scenario authored snapshot: assertion coverage
+
+The following are static assertion-coverage counts derived from the four
+current authored YAML files. “Prompt-only” means a scenario has neither a
+non-empty `expect` object nor any event assertions. A scenario with an explicit
+outcome or event assertion is counted as having an explicit check; this count
+does not assess whether that check is semantically sufficient.
+
+| Suite | Authored scenarios | Prompt-only | With an explicit check |
+| --- | ---: | ---: | ---: |
+| `disputas` | 28 | 17 | 11 |
+| `consultas` | 26 | 14 | 12 |
+| `recepcion` | 28 | 20 | 8 |
+| `copiloto-asesor` | 22 | 18 | 4 |
+| **Total** | **104** | **69/104** | **35/104** |
+
+These counts describe the current authored snapshot only. They are not runtime
+`evaluate` outcomes, not a semantic pass rate, and not proof that an asserted
+behavior is correctly tested. Prompt-only cases remain useful as authored
+examples or manual prompts, but are not automated scenario assertions. In
+particular, the 69 prompt-only cases must not be described as passing or
+failing runtime tests.
+
+### Historical CL-0075 runtime results (superseded 106-scenario snapshot)
 
 Claude reported the following pinned `EvalSuite` validation and native
 `evaluate` counts for the exact 106-scenario suite snapshot in shared journal

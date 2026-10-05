@@ -175,7 +175,7 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
         self.assertIn("cannot bind a knowledge source", readme)
         self.assertIn("transfer directory", readme)
 
-    def test_readme_reports_live_eval_counts_and_vacuous_passes_honestly(self) -> None:
+    def test_readme_keeps_historical_live_eval_counts_separate_and_honest(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
         for observed in (
             "`disputas` | 28 | 26 / 2 / 0",
@@ -188,6 +188,39 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
             with self.subTest(observed=observed):
                 self.assertIn(observed, readme)
         self.assertIn("it is not evidence", readme)
+
+    def test_current_authored_snapshot_assertion_coverage_is_derived_and_documented(self) -> None:
+        prompt_only_by_suite = {}
+        total_scenarios = 0
+        for suite_id in SUITE_IDS:
+            scenarios = read_suite(suite_id)["scenarios"]
+            total_scenarios += len(scenarios)
+            prompt_only_by_suite[suite_id] = sum(
+                not scenario.get("expect") and not scenario.get("assertions")
+                for scenario in scenarios
+            )
+
+        self.assertEqual(
+            prompt_only_by_suite,
+            {"disputas": 17, "consultas": 14, "recepcion": 20, "copiloto-asesor": 18},
+        )
+        self.assertEqual(total_scenarios, 104)
+        self.assertEqual(sum(prompt_only_by_suite.values()), 69)
+        self.assertEqual(total_scenarios - sum(prompt_only_by_suite.values()), 35)
+
+        readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").lower().split())
+        for statement in (
+            "current 104-scenario authored snapshot",
+            "static assertion-coverage counts",
+            "69/104",
+            "35/104",
+            "not runtime `evaluate` outcomes",
+            "not a semantic pass rate",
+            "cl-0075",
+            "106-scenario",
+        ):
+            with self.subTest(statement=statement):
+                self.assertIn(statement, readme)
 
     def test_unverified_sensitive_reference_cases_do_not_assume_escalation(self) -> None:
         for suite_id in ("disputas", "consultas"):
@@ -468,7 +501,7 @@ class SyntheticEvalSuiteContractTests(unittest.TestCase):
         sys.path.insert(0, str(AGENT_CORE))
         try:
             from agent_core.registry.suite import EvalSuite
-        except Exception as error:  # Optional environment dependency; never install implicitly.
+        except (ImportError, ModuleNotFoundError) as error:  # Optional dependency; never install implicitly.
             self.skipTest(f"pinned Agent Core validator unavailable: {type(error).__name__}: {error}")
         for suite_id in SUITE_IDS:
             with self.subTest(suite=suite_id):

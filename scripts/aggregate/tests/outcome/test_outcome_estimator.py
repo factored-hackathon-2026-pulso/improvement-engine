@@ -154,6 +154,64 @@ class OutcomeEstimatorContractTests(unittest.TestCase):
                 report_bytes.append(serialized)
             self.assertEqual(report_bytes[0], report_bytes[1])
 
+    def test_bank_cells_ndjson_round_trip_is_consumed_with_stable_v4_semantics(self):
+        import json
+        import tempfile
+
+        from scripts.aggregate import bank_cells
+        from scripts.aggregate.outcome.outcome_estimator import (
+            T1_SOURCE_TABLES,
+            estimate_outcomes,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            data_root = Path(temporary) / "synthetic-data"
+            self._write_synthetic_cli_dataset(data_root)
+            source_rows, stats = bank_cells.build(data_root, k=10, tables=T1_SOURCE_TABLES)
+            regenerated_rows, _ = bank_cells.build(data_root, k=10, tables=T1_SOURCE_TABLES)
+
+        self.assertEqual(stats["k"], 10)
+        self.assertEqual(set(stats["metrics"]), {"M1", "M2", "M3", "M4", "M5", "M6", "M6R", "M6U", "M10"})
+
+        ndjson = bank_cells.to_ndjson(source_rows)
+        regenerated_ndjson = bank_cells.to_ndjson(regenerated_rows)
+        self.assertEqual(ndjson.encode("utf-8"), regenerated_ndjson.encode("utf-8"))
+        self.assertNotIn(b"synthetic-", ndjson.encode("utf-8"))
+        self.assertNotIn(b"synthetic-2024-07-discovery-Queja-0", ndjson.encode("utf-8"))
+        parsed_rows = [json.loads(line) for line in ndjson.splitlines()]
+        self.assertTrue(parsed_rows)
+        self.assertTrue(all(set(row) == {
+            "metric", "dims", "half", "period", "numerator", "denominator",
+        } for row in parsed_rows))
+
+        first = estimate_outcomes(parsed_rows, "2025-01")
+        second = estimate_outcomes([json.loads(line) for line in ndjson.splitlines()], "2025-01")
+        self.assertEqual(first, second)
+        self.assertEqual(
+            json.dumps(first, sort_keys=True, separators=(",", ":")),
+            json.dumps(second, sort_keys=True, separators=(",", ":")),
+        )
+        self.assertNotIn(b"synthetic-2024-07-discovery-Queja-0", json.dumps(
+            first, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8"))
+        self.assertNotIn(b"synthetic-", json.dumps(
+            first, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8"))
+
+        m10_cells = [cell for cell in first["cells"] if cell["metric"] == "M10"]
+        self.assertTrue(m10_cells)
+        for cell in m10_cells:
+            self.assertEqual(cell["inference_scope"], "descriptive_only")
+            self.assertEqual(cell["status"], "inconclusive")
+            self.assertEqual(cell["reason"], "non_bernoulli_metric_descriptive_only")
+            self.assertIsNone(cell["effect_pp"])
+            self.assertIsNone(cell["interval_family_adjusted_pp"])
+            self.assertIsNone(cell["n_pre"])
+            self.assertIsNone(cell["n_post"])
+            self.assertIsNone(cell["control"])
+            self.assertIsNone(cell["control_dimension"])
+            self.assertEqual(cell["control_siblings"], [])
+
     def test_legacy_import_is_the_canonical_v4_module(self):
         import scripts.aggregate.outcome_estimator as legacy
         import scripts.aggregate.outcome.outcome_estimator as canonical
