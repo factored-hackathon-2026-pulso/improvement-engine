@@ -67,3 +67,22 @@ prompt `p/pulso-builder@1.0.0`, model profile `pulso-mimo-flash@1.0.0` (prices f
    is acceptable locally and must never reach production.
 9. Podman rootful and rootless on this machine reject containers without `--pids-limit=0` (cgroup `pids`
    controller missing): the script passes it.
+
+## A second stack beside another lane's (BLD1)
+
+`stack.py` accepts `PULSO_STACK_PREFIX` (container, volume and gateway-image names), `PULSO_PG_PORT`, `PULSO_GW_PORT`, `PULSO_CORE_PORT`,
+`PULSO_REGISTRY_DIR` (import another registry directory), `PULSO_SERVE_AGENTS` and `PULSO_SERVE_E2E=1` (agent-core's e2e demo doubles). Defaults are
+unchanged. With a non-default prefix the gateway image is also prefixed: lanes that shared the image name `pulso-l3-llm-gateway` lost every gateway
+container when one lane ran `down --purge` (`rmi -f`).
+
+Real agent artifacts in the local registry (so patch proposals read a LIVE base, baseline label `live-registry` instead of `fixture-baseline`):
+
+```
+export PULSO_STACK_PREFIX=pulso-bld1 PULSO_PG_PORT=55480 PULSO_GW_PORT=8110 PULSO_CORE_PORT=8041
+export PULSO_AGENT_CORE_DIR=<agent-core checkout> PULSO_LLM_GATEWAY_DIR=<llm-gateway checkout>
+export PULSO_REGISTRY_DIR=<agent-core>/tests/fixtures/registry-e2e PULSO_SERVE_E2E=1 PULSO_SERVE_AGENTS=disputas,consultas
+python scripts/dev-stack/stack.py up
+```
+
+`agentcore registry import` of `registry-e2e` loads the real agents (`disputas`, `consultas`, `recepcion`, `copiloto-asesor`, `constructor-chat`) with their
+prompts and templates; the registry writer reads `GET /v1/registry/entities/{kind}/{id}` for every target of the catalogue.

@@ -26,11 +26,18 @@ REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 STATE = REPO / ".dev-stack"
 CONN = os.environ.get("PULSO_PODMAN_CONNECTION", "pulso-dev-root")
-PG, GW, GW_IMAGE, PG_VOL = "pulso-l3-postgres", "pulso-l3-llm-gateway", "pulso-l3-llm-gateway", "pulso-l3-pgdata"
-PG_PORT, GW_PORT, CORE_PORT = 55432, 8080, 8001
+# PULSO_STACK_PREFIX (+ PULSO_PG_PORT / PULSO_GW_PORT / PULSO_CORE_PORT): a second stack beside another lane's one (REG1).
+# Defaults are unchanged. With a non-default prefix the gateway image is ALSO prefixed: a shared image name lets another lane's
+# `down --purge` (`rmi -f`) kill every lane's gateway container (BLD1 lost its gateway that way).
+_PFX = os.environ.get("PULSO_STACK_PREFIX", "pulso-l3")
+PG, GW, GW_IMAGE, PG_VOL = f"{_PFX}-postgres", f"{_PFX}-llm-gateway", f"{_PFX}-llm-gateway", f"{_PFX}-pgdata"
+PG_PORT = int(os.environ.get("PULSO_PG_PORT", 55432))
+GW_PORT = int(os.environ.get("PULSO_GW_PORT", 8080))
+CORE_PORT = int(os.environ.get("PULSO_CORE_PORT", 8001))
 AGENT_CORE_REPO = "https://github.com/pulso-factored/agent-core.git"
 GATEWAY_REPO = "https://github.com/pulso-factored/llm-gateway.git"
-REGISTRY_DIR = HERE / "registry-pulso-builder"
+# PULSO_REGISTRY_DIR: import another registry directory instead (EV1: agent-core tests/fixtures/registry-e2e).
+REGISTRY_DIR = Path(os.environ.get("PULSO_REGISTRY_DIR") or (HERE / "registry-pulso-builder"))
 
 
 def env_path(var: str, default: str) -> Path:
@@ -99,6 +106,15 @@ def stop_core() -> None:
         pidf.unlink()
 
 
+def serve_ports() -> list[str]:
+    """Port flags for `agentcore serve`. PULSO_SERVE_E2E=1 uses agent-core's e2e demo doubles (tools, classifier,
+    calibration with the thresholds the registry-e2e agents reference), as scripts/e2e/serve.ps1 does."""
+    if os.environ.get("PULSO_SERVE_E2E") == "1":
+        return ["--tools", "testing.e2e_demo:tools", "--classifier", "testing.e2e_demo:classifier_provider",
+                "--field-classifier", "testing.e2e_demo:field_classifier", "--calibration", "testing.e2e_demo:calibration"]
+    return ["--field-classifier", os.environ.get("PULSO_FIELD_CLASSIFIER", "agent_core.adapters.classification:field_classifier")]
+
+
 def up(args) -> None:
     ac_env = load_env(env_path("PULSO_AGENT_CORE_ENV", "agent-core.env"))
     gw_env = load_env(env_path("PULSO_LLM_GATEWAY_ENV", "llm-gateway.env"))
@@ -107,6 +123,9 @@ def up(args) -> None:
         if k not in gw_env and k in ac_env:
             gw_env[k] = ac_env[k]
     STATE.mkdir(exist_ok=True)
+    for k in ("AGENTCORE_REGISTRY_DSN", "AGENTCORE_EVAL_DSN"):  # follow a non-default PULSO_PG_PORT
+        if k in ac_env and PG_PORT != 55432:
+            ac_env[k] = ac_env[k].replace(":55432", f":{PG_PORT}")
     # 1. Postgres 16 (credentials from the DSN in the env file, passed by inheritance, never by argv)
     dsn = urlparse(ac_env["AGENTCORE_REGISTRY_DSN"])
     user = dsn.username or "agentcore"
@@ -166,8 +185,8 @@ def up(args) -> None:
     proc = subprocess.Popen(
         ["uv", "run", "agentcore", "serve", "--port", str(CORE_PORT), "--registry-api",
          "--identity-keys", str(STATE / "identity-keys.json"), "--staff-keys", str(STATE / "staff-keys.json"),
-         "--lang-thresholds", str(ac / "scripts" / "e2e" / "lang-thresholds.json"), "--agents", "pulso-builder",
-         "--field-classifier", "agent_core.composition.classification:field_classifier"],
+         "--lang-thresholds", str(ac / "scripts" / "e2e" / "lang-thresholds.json"), "--agents", os.environ.get("PULSO_SERVE_AGENTS", "pulso-builder"),
+         *serve_ports()],
         cwd=ac, env={**os.environ, **env}, stdout=log, stderr=log, creationflags=flags)
     (STATE / "serve.pid").write_text(str(proc.pid))
     wait(lambda: http_ok(f"http://127.0.0.1:{CORE_PORT}/healthz"), "agent-core serve", tries=60)

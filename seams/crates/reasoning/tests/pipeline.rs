@@ -140,7 +140,8 @@ fn invalid_scout_answers_are_typed_stops_never_a_fallback() {
         Box::new(move |_| Ok(json!({"opportunity": {"id": "h_1", "target_ref": t, "mechanism_class": "uncovered_topic", "claimed_rate": 0.45, "hypothesis": "x y z", "falsifiers": ["f"], "alternatives": alts()}})))
     };
     for t in ["policy:escalamiento-disputa-monto", "agent:constructor-chat", "template:t/estado_pqr", "tool:radicar_pqr"] {
-        assert_eq!(stop(bad_target(t)), ("blocked".into(), "model_invalid".into(), "scout".into(), 1), "{t}");
+        // a rejected answer is retried twice with the problem fed back (3 calls), then it is a typed stop
+        assert_eq!(stop(bad_target(t)), ("blocked".into(), "model_invalid".into(), "scout".into(), 3), "{t}");
     }
     assert_eq!(stop(Box::new(|_| Err(ModelError::Unavailable("gateway_unreachable".into())))).1, "model_unavailable");
     assert_eq!(stop(Box::new(|_| Err(ModelError::Refused("tps".into())))).1, "model_refused");
@@ -164,7 +165,8 @@ fn a_denied_compile_is_a_typed_stop_with_the_compiler_reason() {
 fn a_finding_without_a_mapping_is_unlinked_and_makes_no_model_call() {
     let f = finding_of(signal("M6", json!({"channel": "Phone"}), stage(300, 1000, 0.1), stage(200, 700, 0.1)), Source::Synthetic);
     let r = reason(&cat(), &f, &happy_ports(&f), &opts());
-    assert_eq!((r.status.as_str(), r.reason.as_str(), r.calls.len()), ("unlinked", "no_mapping", 0));
+    assert_eq!((r.status.as_str(), r.reason.as_str(), r.calls.len()), ("unlinked", "dependency_metric", 0));
+    assert!(r.detail.contains("M6") && r.detail.contains("M1"), "{}", r.detail);
 }
 
 #[test]
@@ -261,4 +263,131 @@ fn a_cell_below_its_reference_is_not_an_opportunity_and_no_model_is_called() {
     let r = reason(&cat(), &f, &p, &opts());
     assert_eq!((r.status.as_str(), r.reason.as_str(), r.stage.as_str()), ("no_change", "better_than_reference", "direction"));
     assert_eq!(calls.get(), 0);
+}
+
+
+fn lookup_scripted(f: &Finding) -> FnPort {
+    FnPort::scripted("scripted-scout", scout_ok(f, "new_agent:consultas", "uncovered_topic"))
+}
+
+#[test]
+fn an_unlinked_finding_names_its_reason_and_is_not_a_failure() {
+    use reasoning::mapping::unlinked_reason;
+    let m = |metric: &str| finding_of(signal(metric, json!({"channel": "Phone"}), stage(300, 1000, 0.1), stage(200, 700, 0.1)), Source::Synthetic);
+    for (metric, code) in [("M6", "dependency_metric"), ("M6L", "dependency_metric"), ("M10", "dependent_on_m1"), ("M8", "level_risk_human_owned"), ("M99", "no_mapping")] {
+        assert_eq!(unlinked_reason(&m(metric)).0, code, "{metric}");
+    }
+    let sensor = synthetic_cells_report();
+    let f = tecnico_finding();
+    let rep = reason_report(&cat(), &sensor, Source::Synthetic, &happy_ports(&f), &opts()).unwrap();
+    assert!(rep["summary"]["unlinked_by_reason"].is_object());
+    assert_eq!(rep["summary"]["failed"], rep["summary"]["blocked"], "an unlinked or no_change finding is never counted as a failure");
+}
+
+#[test]
+fn a_rejected_answer_is_retried_with_the_problem_fed_back_and_the_second_answer_wins() {
+    let f = tecnico_finding();
+    let seen: Rc<std::cell::RefCell<Vec<Option<String>>>> = Rc::new(std::cell::RefCell::new(vec![]));
+    let n = Rc::new(Cell::new(0u32));
+    let (seen2, n2) = (seen.clone(), n.clone());
+    let good = scout_ok(&f, "new_agent:consultas", "uncovered_topic");
+    let scout = FnPort::scripted("scripted-scout", move |req| {
+        n2.set(n2.get() + 1);
+        seen2.borrow_mut().push(req.payload["feedback"].as_str().map(str::to_string));
+        if n2.get() == 1 { Ok(json!({"opportunity": {"id": "h_1"}})) } else { good(req) }
+    });
+    let p = ports(scout, FnPort::scripted("v", verifier_ok("supported")), FnPort::scripted("b", tecnico_builder("soporte-tecnico")));
+    let r = reason(&cat(), &f, &p, &opts());
+    assert_eq!((r.status.as_str(), n.get()), ("proposed", 2), "{}", r.detail);
+    let seen = seen.borrow();
+    assert!(seen[0].is_none(), "the first attempt has no feedback");
+    let fb = seen[1].as_ref().expect("the retry carries the problem");
+    assert!(fb.contains("rejected") && fb.contains("ONE JSON object"), "{fb}");
+    assert_eq!(r.metering["attempts"]["scout"], 2);
+    // a third failure is final: bounded retries, never a loop
+    let always_bad = FnPort::scripted("scripted-scout", |_| Ok(json!({"opportunity": {"id": "h_1"}})));
+    let p = ports(always_bad, FnPort::scripted("v", verifier_ok("supported")), FnPort::scripted("b", tecnico_builder("soporte-tecnico")));
+    let r = reason(&cat(), &f, &p, &opts());
+    assert_eq!((r.status.as_str(), r.reason.as_str(), r.calls.len()), ("blocked", "model_invalid", 3));
+}
+
+#[test]
+fn the_builders_direction_wording_target_ref_and_missing_direction_never_block_a_proposal() {
+    let f = tecnico_finding();
+    for patch in [json!({"expected_direction": "increase"}), json!({"expected_direction": "banana", "target_ref": "new_agent:soporte-tecnico"}), json!({"remove": "expected_direction"})] {
+        let b = move |req: &engine::models::ModelRequest| {
+            let mut a = tecnico_builder("soporte-tecnico")(req)?;
+            for (k, v) in patch.as_object().unwrap() {
+                if k == "remove" {
+                    a["proposal"].as_object_mut().unwrap().remove(v.as_str().unwrap());
+                } else {
+                    a["proposal"][k] = v.clone();
+                }
+            }
+            Ok(a)
+        };
+        let p = ports(lookup_scripted(&f), FnPort::scripted("v", verifier_ok("supported")), FnPort::scripted("b", b));
+        let r = reason(&cat(), &f, &p, &opts());
+        assert_eq!((r.status.as_str(), r.reason.as_str()), ("proposed", "compiled"), "{}", r.detail);
+        assert_eq!(r.compiled.as_ref().unwrap()["expected_effect"]["direction"], "decrease");
+        assert_eq!(r.metering["attempts"]["builder"], 1, "no retry is spent on wording the engine derives itself");
+    }
+}
+
+#[test]
+fn a_compile_denial_is_fed_back_to_the_builder_and_a_corrected_answer_compiles() {
+    let f = tecnico_finding();
+    let n = Rc::new(Cell::new(0u32));
+    let n2 = n.clone();
+    let b = move |req: &engine::models::ModelRequest| {
+        n2.set(n2.get() + 1);
+        if n2.get() == 1 {
+            tecnico_builder("soporte-pagos")(req) // slug not allowed -> compile_denied:slug_not_allowed
+        } else {
+            let fb = req.payload["feedback"].as_str().unwrap_or("");
+            assert!(fb.contains("compile") || fb.contains("slug"), "{fb}");
+            tecnico_builder("soporte-tecnico")(req)
+        }
+    };
+    let p = ports(lookup_scripted(&f), FnPort::scripted("v", verifier_ok("supported")), FnPort::scripted("b", b));
+    let r = reason(&cat(), &f, &p, &opts());
+    assert_eq!((r.status.as_str(), n.get()), ("proposed", 2), "{}", r.detail);
+}
+
+#[test]
+fn the_stronger_builder_tier_is_tried_only_after_the_primary_fails_and_is_named_in_the_outcome() {
+    let f = tecnico_finding();
+    let mk = |primary: FnPort, esc: Option<FnPort>| {
+        let mut p = ports(lookup_scripted(&f), FnPort::scripted("v", verifier_ok("supported")), primary);
+        p.builder_escalation = esc.map(|e| Rc::new(e) as Rc<dyn engine::models::ModelPort>);
+        p
+    };
+    // the primary (flash) succeeds: the escalation is never called
+    let esc_calls = Rc::new(Cell::new(0u32));
+    let ec = esc_calls.clone();
+    let esc = FnPort::scripted("xiaomi/mimo-v2.6-pro", move |r| {
+        ec.set(ec.get() + 1);
+        tecnico_builder("soporte-tecnico")(r)
+    });
+    let r = reason(&cat(), &f, &mk(FnPort::scripted("xiaomi/mimo-v2.6-flash", tecnico_builder("soporte-tecnico")), Some(esc)), &opts());
+    assert_eq!((r.status.as_str(), esc_calls.get()), ("proposed", 0));
+    assert_eq!((r.metering["builder"]["tier"].as_str(), r.metering["builder"]["escalated"].as_bool()), (Some("flash"), Some(false)));
+    // the primary keeps failing (3 attempts): the pro tier answers and the outcome says so
+    let esc = FnPort::scripted("xiaomi/mimo-v2.6-pro", tecnico_builder("soporte-tecnico"));
+    let r = reason(&cat(), &f, &mk(FnPort::scripted("xiaomi/mimo-v2.6-flash", tecnico_builder("soporte-pagos")), Some(esc)), &opts());
+    assert_eq!((r.status.as_str(), r.reason.as_str()), ("proposed", "compiled"), "{}", r.detail);
+    assert_eq!((r.metering["builder"]["tier"].as_str(), r.metering["builder"]["escalated"].as_bool()), (Some("pro"), Some(true)));
+    assert_eq!((r.metering["attempts"]["builder"].as_u64(), r.metering["attempts"]["builder_escalation"].as_u64()), (Some(3), Some(1)));
+    let models: Vec<&str> = r.calls.iter().map(|c| c["model_id"].as_str().unwrap()).collect();
+    assert_eq!(models.iter().filter(|m| m.ends_with("-pro")).count(), 1, "{models:?}");
+    // no escalation configured: the failure is final and typed
+    let r = reason(&cat(), &f, &mk(FnPort::scripted("xiaomi/mimo-v2.6-flash", tecnico_builder("soporte-pagos")), None), &opts());
+    assert_eq!((r.status.as_str(), r.reason.as_str()), ("blocked", "compile_denied:slug_not_allowed"));
+    assert_eq!(r.metering["builder"]["tier"], "flash");
+}
+
+#[test]
+fn tier_labels_come_from_the_model_id() {
+    use reasoning::pipeline::tier_of;
+    assert_eq!((tier_of("xiaomi/mimo-v2.6-flash"), tier_of("xiaomi/mimo-v2.6-pro"), tier_of("deepseek/deepseek-v4.1-flash"), tier_of("z-ai/glm-5.3-flash"), tier_of("scripted-v1")), ("flash", "pro", "flash", "flash", "other"));
 }

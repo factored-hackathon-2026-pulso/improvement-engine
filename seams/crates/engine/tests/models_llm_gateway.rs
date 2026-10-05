@@ -162,3 +162,51 @@ fn failures_map_to_typed_errors_and_never_to_real() {
     assert!(matches!(on(&f.addr, &[]).call(&req()), Err(ModelError::Invalid(_))));
     assert!(matches!(on("127.0.0.1:1", &[]).call(&req()), Err(ModelError::Unavailable(w)) if w.contains("unreachable")));
 }
+
+#[test]
+fn text_mode_sends_no_schema_and_extracts_one_object_from_whatever_the_model_wrapped_it_in() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wrapped = "<think>maybe</think>Sure! Here you go:\n```json\n{\"verdict\": \"agree\",}\n```\nAnything else?";
+    let f = fake(200, generated(json!(wrapped), "xiaomi/mimo-v2.6-flash"));
+    let gw = on(&f.addr, &[("PULSO_LLM_GATEWAY_STRUCTURED", "text")]);
+    let a = gw.call(&req()).unwrap();
+    assert_eq!(a.content, json!({"verdict": "agree"}));
+    let seen = f.seen.lock().unwrap();
+    assert!(seen[0].2.get("schema").is_none(), "text mode asks the gateway for plain text: no schema is sent");
+    drop(seen);
+    // the typed failure modes keep their cause in the error (the report says WHY the answer was unusable)
+    for (text, code) in [("I cannot help with that.", "no_json"), ("{\"verdict\": \"agree\", \"x\": {\"y\": \"cut o", "truncated"), ("", "empty"), ("[1, 2]", "not_object")] {
+        let f = fake(200, generated(json!(text), "m"));
+        let gw = on(&f.addr, &[("PULSO_LLM_GATEWAY_STRUCTURED", "text")]);
+        assert!(matches!(gw.call(&req()), Err(ModelError::Invalid(w)) if w == format!("answer_not_json:{code}")), "{text}");
+    }
+}
+
+#[test]
+fn native_mode_sends_the_schema_as_a_provider_response_format_and_the_default_stays_prompted() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let f = fake(200, generated(json!({"verdict": "agree"}), "m"));
+    on(&f.addr, &[("PULSO_LLM_GATEWAY_STRUCTURED", "native")]).call(&req()).unwrap();
+    on(&f.addr, &[]).call(&req()).unwrap();
+    let seen = f.seen.lock().unwrap();
+    assert_eq!((seen[0].2["profile"]["structured"].as_str(), seen[0].2["schema"].is_object()), (Some("native"), true));
+    assert_eq!(seen[1].2["profile"]["structured"], "prompted");
+    assert!(LlmGateway::from_env(&env(&[("PULSO_LLM_GATEWAY", "enabled"), ("PULSO_LLM_GATEWAY_ADDR", "127.0.0.1:1"), ("PULSO_LLM_GATEWAY_KEY", "k"), ("PULSO_LLM_GATEWAY_STRUCTURED", "magic")])).is_err());
+}
+
+#[test]
+fn every_call_keeps_its_usage_even_when_the_gateway_rejected_the_answer() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let f = fake(200, generated(json!({"verdict": "agree"}), "xiaomi/mimo-v2.6-flash"));
+    let rec = Recording::new(Rc::new(on(&f.addr, &[])));
+    rec.call(&req()).unwrap();
+    let c = &rec.calls()[0];
+    let u = c.usage.as_ref().expect("usage of an answered call");
+    assert_eq!((u.tokens_in, u.tokens_out, u.cost_usd.as_str()), (100, 20, "0.000100"));
+    assert_eq!(c.to_json()["cost_usd"], "0.000100");
+    let f = fake(502, json!({"error": {"kind": "invalid_output", "message": "x", "model": "m", "tokens_in": 300, "tokens_out": 50, "cost_usd": "0.000250"}}));
+    let rec = Recording::new(Rc::new(on(&f.addr, &[])));
+    assert!(rec.call(&req()).is_err());
+    let u = rec.calls()[0].usage.clone().expect("the provider charged for the rejected answer too");
+    assert_eq!((u.tokens_in, u.tokens_out, u.cost_usd.as_str()), (300, 50, "0.000250"));
+}

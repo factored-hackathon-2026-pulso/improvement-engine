@@ -121,6 +121,7 @@ fn scripted_ports() -> PortsFactory {
             scout: Rc::new(FnPort::scripted("scripted-scout", s)),
             verifier: Rc::new(FnPort::scripted("scripted-verifier", v)),
             builder: Rc::new(FnPort::scripted("scripted-builder", b)),
+            builder_escalation: None,
         })
     })
 }

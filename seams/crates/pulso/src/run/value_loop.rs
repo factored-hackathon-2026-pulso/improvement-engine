@@ -91,7 +91,10 @@ impl ValueLoop {
             .ok_or("PULSO_RECEIPTS or PULSO_WORK_DIR is required (the idempotency receipts of the writer)")?;
         let model_label = get("PULSO_LLM_GATEWAY_MODEL").unwrap_or_else(|| engine::models::llm_gateway::DEFAULT_MODEL.to_string());
         let envs: std::collections::HashMap<String, String> =
-            ["PULSO_LLM_GATEWAY", "PULSO_LLM_GATEWAY_ADDR", "PULSO_LLM_GATEWAY_KEY", "PULSO_LLM_GATEWAY_MODEL", "PULSO_LLM_GATEWAY_VERIFIER_MODEL", "PULSO_LLM_GATEWAY_ALIAS", "PULSO_LLM_GATEWAY_MAX_TOKENS"]
+            [
+                "PULSO_LLM_GATEWAY", "PULSO_LLM_GATEWAY_ADDR", "PULSO_LLM_GATEWAY_KEY", "PULSO_LLM_GATEWAY_MODEL", "PULSO_LLM_GATEWAY_VERIFIER_MODEL", "PULSO_LLM_GATEWAY_ALIAS",
+                "PULSO_LLM_GATEWAY_MAX_TOKENS", "PULSO_LLM_GATEWAY_TIMEOUT_S", "PULSO_LLM_GATEWAY_STRUCTURED", "PULSO_LLM_GATEWAY_BUILDER_MODEL", "PULSO_LLM_GATEWAY_BUILDER_ESCALATION_MODEL",
+            ]
                 .iter()
                 .filter_map(|k| get(k).map(|v| (k.to_string(), v)))
                 .collect();
@@ -152,7 +155,7 @@ impl ValueLoop {
             let r = reason(&refreshed.catalog, f, ports.as_ref().expect("just built"), &opts);
             let mut rec = json!({
                 "finding_id": f.id, "evidence_ref": f.evidence_ref(), "metric": f.metric, "status": r.status, "reason": r.reason, "stage": r.stage, "mapping_row": r.mapping_row,
-                "rubric": r.rubric.as_ref().map(|x| json!({"total": x["total"], "band": x["band"]})), "independence": r.independence,
+                "rubric": r.rubric.as_ref().map(|x| json!({"total": x["total"], "band": x["band"]})), "independence": r.independence, "metering": r.metering, "builder_tier": r.metering["builder"]["tier"],
                 "models": r.calls.iter().map(|c| c["model_id"].clone()).collect::<Vec<_>>(), "doubles": r.doubles.len(), "delivery": null,
             });
             if let Some(c) = &r.compiled_raw {
@@ -167,6 +170,19 @@ impl ValueLoop {
             records.push(rec);
         }
         let n = |s: &str| records.iter().filter(|r| r["status"] == s).count();
+        let mut by_reason = serde_json::Map::new();
+        let mut tiers = serde_json::Map::new();
+        for r in &records {
+            if r["status"] == "unlinked" {
+                let k = r["reason"].as_str().unwrap_or("no_mapping").to_string();
+                let c = by_reason.get(&k).and_then(Value::as_u64).unwrap_or(0) + 1;
+                by_reason.insert(k, json!(c));
+            }
+            if let Some(t) = r["builder_tier"].as_str().filter(|_| r["status"] == "proposed") {
+                let c = tiers.get(t).and_then(Value::as_u64).unwrap_or(0) + 1;
+                tiers.insert(t.to_string(), json!(c));
+            }
+        }
         let delivered = records.iter().filter(|r| r["delivery"]["status"] == "delivered").count();
         let denied = records.iter().filter(|r| r["delivery"]["status"] == "denied").count();
         Ok(json!({
@@ -174,7 +190,11 @@ impl ValueLoop {
             "baseline": {"label": refreshed.catalog.label, "live": refreshed.live.len(), "fixture": refreshed.fixture.len()},
             "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
             "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "blocked": n("blocked"),
-                        "delivered": delivered, "denied": denied},
+                        "delivered": delivered, "denied": denied,
+                        // unlinked findings are descriptive with an explicit reason, never a failure; only `blocked` counts against the roles
+                        "unlinked_by_reason": by_reason, "failed": n("blocked"),
+                        "cost_usd": (records.iter().map(|r| r["metering"]["cost_usd"].as_f64().unwrap_or(0.0)).sum::<f64>() * 1e6).round() / 1e6,
+                        "builder_tiers": tiers},
             "findings": records,
             "engine_never_approves_publishes_or_promotes": true,
         }))
