@@ -1,0 +1,24 @@
+{
+ "label": "Known upstream drift recorded 2026-10-05 (agent-core 2ad5d08 vs tool-service 64c36bc). Each entry names the ask in docs/reports-claude/ASKS/ASK_tool-alignment.md; remove an entry when upstream fixes it (the checker reports stale entries).",
+ "entries": {
+  "buscar_transacciones:args_additional_properties_mismatch": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "buscar_transacciones:args_property_missing": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "buscar_transacciones:source_missing": "ASK-A1 agent-core: registry-e2e ToolDef lacks `source`; engine and FieldClassifier need the provider's table name",
+  "leer_movimientos:args_property_changed": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "leer_movimientos:args_property_missing": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "leer_movimientos:source_mismatch": "ASK-A1 agent-core: registry-e2e `source` differs from tool-service GET /v1/tools",
+  "leer_perfil:not_in_fixture": "ASK-A3 agent-core: tool served by tool-service but absent from the registry-e2e fixtures (no flow can use it)",
+  "leer_pqr_cliente:args_property_missing": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "leer_pqr_cliente:source_mismatch": "ASK-A1 agent-core: registry-e2e `source` differs from tool-service GET /v1/tools",
+  "leer_productos:args_property_missing": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "leer_productos:source_mismatch": "ASK-A1 agent-core: registry-e2e `source` differs from tool-service GET /v1/tools",
+  "obtener_pqr:args_additional_properties_mismatch": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "obtener_pqr:args_property_missing": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "obtener_pqr:args_required_mismatch": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "obtener_pqr:source_missing": "ASK-A1 agent-core: registry-e2e ToolDef lacks `source`; engine and FieldClassifier need the provider's table name",
+  "radicar_pqr:args_additional_properties_mismatch": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "radicar_pqr:args_property_missing": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "radicar_pqr:args_required_mismatch": "ASK-A2 agent-core: registry-e2e ToolDef args_schema does not declare what tool-service accepts",
+  "radicar_pqr:source_missing": "ASK-A1 agent-core: registry-e2e ToolDef lacks `source`; engine and FieldClassifier need the provider's table name"
+ }
+}

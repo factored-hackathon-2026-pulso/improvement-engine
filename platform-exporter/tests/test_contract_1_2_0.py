@@ -43,13 +43,13 @@ CREATE TABLE event_log(sequence INTEGER PRIMARY KEY, event_id TEXT, event_type T
 """
 
 
-def test_exporter_declares_revision_1_2_0():
-    assert catalog.CONTRACT_REVISION == pc.CONTRACT_VERSION == "1.2.0"
+def test_exporter_revision_follows_the_contract_package():
+    assert catalog.CONTRACT_REVISION == pc.CONTRACT_VERSION == "1.3.0"  # 1.3.0: see test_contract_1_3_0
 
 
 def test_known_event_types_mirror_the_contract_catalog():
     assert catalog.KNOWN_EVENT_TYPES == frozenset(pc.ADMITTED_EVENT_TYPES)
-    assert len(NEW) == 39 and set(NEW) <= catalog.KNOWN_EVENT_TYPES
+    assert len(NEW) == 51 and set(NEW) <= catalog.KNOWN_EVENT_TYPES  # 39 (1.2.0) + 12 (1.3.0)
 
 
 def test_free_text_keys_mirror_the_contract_catalog():

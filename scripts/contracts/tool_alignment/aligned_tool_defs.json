@@ -1,0 +1,229 @@
+{
+ "inputs": {
+  "fixtures": {
+   "captured": "2026-10-05",
+   "from": "tests/fixtures/registry-e2e/tools",
+   "repo": "pulso-factored/agent-core",
+   "sha": "2ad5d08fe331efcbbc4cfc23f7f202362644446c"
+  },
+  "provider": {
+   "captured": "2026-10-05",
+   "from": "registry/tools (generated from CATALOG and checked against it by the service's own test_registry_export), shaped as GET /v1/tools",
+   "repo": "pulso-factored/tool-service",
+   "sha": "64c36bc7a5f6ce620e715b28b4efc729694c489b"
+  }
+ },
+ "label": "agent-core registry-e2e ToolDefs aligned to the tool-service listing (additive ENGINE fixture data; nothing upstream is changed). Source of truth for the served tools: tool-service GET /v1/tools.",
+ "provenance": {
+  "buscar_transacciones": "aligned_to_provider",
+  "convertir_moneda": "agent_owned",
+  "leer_movimientos": "aligned_to_provider",
+  "leer_perfil": "provider_only",
+  "leer_pqr_cliente": "aligned_to_provider",
+  "leer_productos": "aligned_to_provider",
+  "leer_transcript": "agent_owned",
+  "obtener_handoff": "agent_owned",
+  "obtener_pqr": "aligned_to_provider",
+  "radicar_pqr": "aligned_to_provider",
+  "seleccionar": "agent_owned"
+ },
+ "tool_defs": {
+  "buscar_transacciones": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "desde": {
+      "type": "string"
+     },
+     "hasta": {
+      "type": "string"
+     },
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     },
+     "monto_max": {
+      "type": "number"
+     },
+     "monto_min": {
+      "type": "number"
+     },
+     "texto": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "id": "buscar_transacciones",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_transactions",
+   "version": "1.0.0"
+  },
+  "convertir_moneda": {
+   "id": "convertir_moneda",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "compute",
+   "version": "1.0.0"
+  },
+  "leer_movimientos": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     },
+     "product_id": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "description": "Lista los Ãºltimos movimientos de la tarjeta del cliente atendido (monto, comercio, fecha, estado).",
+   "id": "leer_movimientos",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_transactions",
+   "version": "1.0.0"
+  },
+  "leer_perfil": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "id": "leer_perfil",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_profile",
+   "version": "1.0.0"
+  },
+  "leer_pqr_cliente": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "description": "Lista las PQR radicadas por el cliente atendido y su estado.",
+   "id": "leer_pqr_cliente",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  },
+  "leer_productos": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 20,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "description": "Lista los productos del cliente atendido (tarjeta, saldo adeudado, cupo, pago mÃ­nimo).",
+   "id": "leer_productos",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_products",
+   "version": "1.0.0"
+  },
+  "leer_transcript": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "description": "Lee la conversaciÃ³n del cliente con el agente de atenciÃ³n (Ãºltimos turnos).",
+   "id": "leer_transcript",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "transcript",
+   "version": "1.0.0"
+  },
+  "obtener_handoff": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "description": "Lee el paquete de traspaso del Ãºltimo run escalado del cliente: motivo, resumen y datos reunidos.",
+   "id": "obtener_handoff",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "handoff",
+   "version": "1.0.0"
+  },
+  "obtener_pqr": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "idempotency_key": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "idempotency_key"
+    ],
+    "type": "object"
+   },
+   "id": "obtener_pqr",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  },
+  "radicar_pqr": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "descripcion": {
+      "type": "string"
+     },
+     "transaction_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "transaction_id",
+     "descripcion"
+    ],
+    "type": "object"
+   },
+   "id": "radicar_pqr",
+   "idempotent": true,
+   "min_auth_level": "step_up",
+   "readback_by": "idempotency_key",
+   "risk_class": "write_reversible",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  },
+  "seleccionar": {
+   "id": "seleccionar",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "compute",
+   "version": "1.0.0"
+  }
+ }
+}

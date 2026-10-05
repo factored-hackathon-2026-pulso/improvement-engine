@@ -1,6 +1,6 @@
 {
-  "catalog_version": "1.2.0",
-  "contract_version": "1.2.0",
+  "catalog_version": "1.3.0",
+  "contract_version": "1.3.0",
   "profile": "platform_live.phase1",
   "statuses": {
     "admitted": "ingest",
@@ -51,7 +51,8 @@
     "operational": "case workflow facts: ids, enums, counters, timestamps (free-text keys listed per type are dropped)",
     "assistant": "agent-core assistant runtime metadata: session/run/trace ids, agent id@version, enums, counters",
     "copilot": "analyst copilot metadata: question id and size, agent id, run/trace ids, status, counters (no text)",
-    "builder": "agent-builder audit: proposal/agent/release ids, alias, hashes, verdict enums, counters (no draft content)"
+    "builder": "agent-builder audit: proposal/agent/release ids, alias, hashes, verdict enums, counters (no draft content)",
+    "maturity": "AI maturity per case type and the platform AI switch: case type enum, stage numbers, agent id, flags (1.3.0; no text, no case id)"
   },
   "event_types": [
     {
@@ -121,7 +122,8 @@
       "data_class": "operational",
       "free_text_keys": [
         "text",
-        "subject"
+        "subject",
+        "staff_line"
       ]
     },
     {
@@ -270,7 +272,8 @@
         "status",
         "outcome",
         "trace_id",
-        "messages"
+        "messages",
+        "release"
       ]
     },
     {
@@ -658,6 +661,172 @@
         "answered",
         "duration_seconds",
         "hold_seconds"
+      ]
+    },
+    {
+      "event_type": "copilot.suggestion_requested",
+      "family": "copilot",
+      "entity": "copilot",
+      "status": "admitted",
+      "data_class": "copilot",
+      "payload_keys": [
+        "analyst_id",
+        "trigger",
+        "based_on_sequence"
+      ],
+      "payload_enums": {
+        "trigger": [
+          "customer_message",
+          "manual",
+          "handover"
+        ]
+      }
+    },
+    {
+      "event_type": "copilot.suggestion_ready",
+      "family": "copilot",
+      "entity": "copilot",
+      "status": "admitted",
+      "data_class": "copilot",
+      "payload_keys": [
+        "analyst_id",
+        "agent",
+        "kinds",
+        "count",
+        "truncated",
+        "run_id",
+        "trace_id",
+        "release"
+      ]
+    },
+    {
+      "event_type": "copilot.suggestion_none",
+      "family": "copilot",
+      "entity": "copilot",
+      "status": "admitted",
+      "data_class": "copilot",
+      "payload_keys": [
+        "analyst_id",
+        "agent",
+        "run_id",
+        "trace_id",
+        "release"
+      ]
+    },
+    {
+      "event_type": "copilot.suggestion_failed",
+      "family": "copilot",
+      "entity": "copilot",
+      "status": "admitted",
+      "data_class": "copilot",
+      "payload_keys": [
+        "analyst_id",
+        "failure_code"
+      ]
+    },
+    {
+      "event_type": "copilot.suggestion_decided",
+      "family": "copilot",
+      "entity": "copilot",
+      "status": "admitted",
+      "data_class": "copilot",
+      "payload_keys": [
+        "subject",
+        "decision",
+        "edit_distance_permille",
+        "turn_id",
+        "agent",
+        "release"
+      ],
+      "payload_enums": {
+        "subject": [
+          "reply",
+          "escalation"
+        ],
+        "decision": [
+          "used",
+          "edited",
+          "discarded",
+          "ignored",
+          "accepted"
+        ]
+      }
+    },
+    {
+      "event_type": "copilot.tool_used",
+      "family": "copilot",
+      "entity": "copilot",
+      "status": "admitted",
+      "data_class": "copilot",
+      "payload_keys": [
+        "tool"
+      ]
+    },
+    {
+      "event_type": "case.type_changed",
+      "family": "cases",
+      "entity": "case",
+      "status": "admitted",
+      "data_class": "operational",
+      "payload_keys": [
+        "from",
+        "to"
+      ]
+    },
+    {
+      "event_type": "ai.stage_advanced",
+      "family": "maturity",
+      "entity": "case_type",
+      "status": "admitted",
+      "data_class": "maturity",
+      "payload_keys": [
+        "case_type",
+        "from_stage",
+        "to_stage"
+      ]
+    },
+    {
+      "event_type": "ai.stage_moved_back",
+      "family": "maturity",
+      "entity": "case_type",
+      "status": "admitted",
+      "data_class": "maturity",
+      "payload_keys": [
+        "case_type",
+        "from_stage",
+        "to_stage",
+        "agent_cleared"
+      ]
+    },
+    {
+      "event_type": "ai.agent_ready",
+      "family": "maturity",
+      "entity": "case_type",
+      "status": "admitted",
+      "data_class": "maturity",
+      "payload_keys": [
+        "case_type"
+      ]
+    },
+    {
+      "event_type": "ai.agent_activated",
+      "family": "maturity",
+      "entity": "case_type",
+      "status": "admitted",
+      "data_class": "maturity",
+      "payload_keys": [
+        "case_type",
+        "agent_id"
+      ]
+    },
+    {
+      "event_type": "platform.ai_toggled",
+      "family": "platform",
+      "entity": "platform",
+      "status": "admitted",
+      "data_class": "maturity",
+      "payload_keys": [
+        "enabled"
       ]
     }
   ]

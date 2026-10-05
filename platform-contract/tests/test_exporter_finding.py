@@ -18,11 +18,11 @@ def _load(p):
     return json.loads(p.read_text(encoding="utf-8"))
 
 
-def test_revision_is_1_2_0_and_1_1_0_discriminator_stays():
-    assert pc.CONTRACT_VERSION == "1.2.0"
-    assert pc.PREVIOUS_CONTRACT_VERSION == "1.1.0"
+def test_revision_is_1_3_0_and_1_1_0_discriminator_stays():
+    assert pc.CONTRACT_VERSION == "1.3.0"
+    assert pc.PREVIOUS_CONTRACT_VERSION == "1.2.0"
     cat = json.loads((ROOT / "event-catalog.json").read_text("utf-8"))
-    assert cat["contract_version"] == "1.2.0" and cat["catalog_version"] == "1.2.0"
+    assert cat["contract_version"] == "1.3.0" and cat["catalog_version"] == "1.3.0"
     assert set(cat["source_event_kinds"]) == {"domain_event", "exporter_finding"}
     legacy = cat["legacy_exporter_prefix"]
     assert legacy["prefix"] == "exporter." and legacy["valid_for_contract_versions"] == ["1.0.0"]
@@ -34,7 +34,7 @@ def test_revision_is_1_2_0_and_1_1_0_discriminator_stays():
 def test_new_schemas_exist_and_are_valid(name):
     schema = json.loads((ROOT / "schemas" / f"{name}.schema.json").read_text("utf-8"))
     Draft202012Validator.check_schema(schema)
-    assert schema["$id"] == f"platform_live/1.2.0/{name}.schema.json"
+    assert schema["$id"] == f"platform_live/1.3.0/{name}.schema.json"
 
 
 def test_exporter_finding_schema_envelope_fields():

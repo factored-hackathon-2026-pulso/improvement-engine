@@ -19,7 +19,7 @@ import httpx
 import rfc8785
 
 from .asof import CaseState, reconstruct_cases
-from .catalog import (CATALOG_VERSION, FINDING_SEVERITY, FREE_TEXT_PAYLOAD_KEYS, DENIED_EVENT_TYPES, KNOWN_EVENT_TYPES, PLANNED_PREFIXES, SOURCE_NAMESPACE,
+from .catalog import (CATALOG_VERSION, FINDING_SEVERITY, ENUM_PAYLOAD_KEYS, FREE_TEXT_PAYLOAD_KEYS, DENIED_EVENT_TYPES, KNOWN_EVENT_TYPES, PLANNED_PREFIXES, SOURCE_NAMESPACE,
                       fmt_ts, jcs_digest, parse_ts, treat_payload)
 from .config import ARTIFACTS_PATH, CONTRACT, OBSERVATIONS_PATH, ExporterConfig
 from .profile import build_profile
@@ -259,7 +259,8 @@ class Exporter:
               "event_id": ev.event_id, "event_time": fmt_ts(ev.event_time),
               "ingested_at": fmt_ts(ev.ingested_at), "available_at": fmt_ts(ev.ingested_at), "case_id": ev.case_id,
               "entity": ev.entity, "entity_id": ev.entity_id, "actor_role": ev.actor_role, "actor_ref": ev.actor_id,
-              "payload": treat_payload(ev.payload, redacted, drop_keys=FREE_TEXT_PAYLOAD_KEYS.get(ev.event_type, frozenset())),
+              "payload": treat_payload(ev.payload, redacted, drop_keys=FREE_TEXT_PAYLOAD_KEYS.get(ev.event_type, frozenset()),
+                                     enums=ENUM_PAYLOAD_KEYS.get(ev.event_type)),
               "redacted_fields": sorted(redacted),
               "evidence_kind": "team_generated" if sim else "observed", "population_excluded": sim, "late": late}
         out = [self._obs(ev.event_id, se, ev.sequence, "late" if (late or force_late) else None,

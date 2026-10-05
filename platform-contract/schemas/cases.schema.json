@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "platform_live/1.2.0/cases.schema.json",
+  "$id": "platform_live/1.3.0/cases.schema.json",
   "title": "cases",
   "description": "platform_live row from source table `cases` (mutable, optimistic version).",
   "type": "object",
@@ -242,6 +242,18 @@
         "null"
       ]
     },
+    "case_type": {
+      "type": "string",
+      "enum": [
+        "none",
+        "unrecognized_charge",
+        "undue_charge",
+        "app_issue",
+        "branch_service",
+        "service_quality",
+        "virtual_card"
+      ]
+    },
     "version": {
       "type": "integer",
       "minimum": 1
@@ -287,5 +299,5 @@
     "rating_comment",
     "rating_key"
   ],
-  "x-contract-version": "1.2.0"
+  "x-contract-version": "1.3.0"
 }

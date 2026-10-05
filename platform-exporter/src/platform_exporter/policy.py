@@ -20,7 +20,7 @@ ALLOWED_COLUMNS: dict[str, tuple[str, ...]] = {
     "event_log": ("sequence", "event_id", "event_type", "entity", "entity_id", "case_id", "actor_role", "actor_id",
                   "event_time", "ingested_at", "payload", "tenant_id"),
     "cases": ("id", "customer_id", "channel", "language", "priority", "opened_at", "sla_due_at", "previous_case_id",
-              "rating_score", "rated_at", "tenant_id"),
+              "rating_score", "rated_at", "case_type", "tenant_id"),
     "customers": ("id", "simulator"),
     "staff": ("id", "roles", "languages", "team", "team_id", "active"),
     "turns": ("id", "case_id", "sequence", "kind", "audience", "author_role", "created_at"),
@@ -28,6 +28,7 @@ ALLOWED_COLUMNS: dict[str, tuple[str, ...]] = {
                     "waited_seconds", "previous_staff_id", "paused_override", "assigned_at"),
     "customer_case_slots": ("customer_id", "open_case_id"),
 }
+# 1.3.0: `cases.case_type` (closed enum, contract CASE_TYPES) is the slicing dimension for per-case-type signals.
 ALLOWED_TABLES = tuple(ALLOWED_COLUMNS)
 
 # Columns known from the Product artifact that are deliberately not readable (mutable state, PII, free text, demo
@@ -43,7 +44,8 @@ KNOWN_UNREADABLE: dict[str, frozenset[str]] = {
         "rating_comment", "rating_key", "open_escalation_id", "active_call_id"}),
     "customers": frozenset({"display_name", "country", "city", "locale", "suggestions"}),
     "staff": frozenset({"name", "email", "version", "created_at", "creation_key", "setup"}),
-    "turns": frozenset({"author_id", "text", "language", "client_message_id", "subject"}),
+    # 1.3.0: staff_line = the facts of a staff-only line (`{kind, params}`): never read.
+    "turns": frozenset({"author_id", "text", "language", "client_message_id", "subject", "staff_line"}),
     "assignments": frozenset({"assigned_by_role", "assigned_by_id"}),
     "customer_case_slots": frozenset({"version"}),
     "event_log": frozenset(),

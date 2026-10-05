@@ -353,7 +353,11 @@ impl ValueLoop {
                                 rec["delivery"] = o.to_json();
                                 // ANN1: only an announced proposal that agent-core accepted; the outcome is a record, never a failure of the delivery.
                                 if let (true, Some(a), Some(id)) = (o.delivered(), &self.announcer, o.proposal_id.as_deref()) {
-                                    rec["platform_announce"] = json!(a.announce(f, id, &proof.dossier).record());
+                                    let outcome = a.announce(f, id, &proof.dossier);
+                                    rec["platform_announce"] = json!(outcome.record());
+                                    if let Some(e) = &outcome.evidence {
+                                        rec["platform_evidence"] = json!(e);
+                                    }
                                 }
                             }
                         }

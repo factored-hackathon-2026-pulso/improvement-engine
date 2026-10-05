@@ -1,0 +1,157 @@
+{
+ "snapshot": {
+  "captured": "2026-10-05",
+  "from": "registry/tools (generated from CATALOG and checked against it by the service's own test_registry_export), shaped as GET /v1/tools",
+  "repo": "pulso-factored/tool-service",
+  "sha": "64c36bc7a5f6ce620e715b28b4efc729694c489b"
+ },
+ "tools": [
+  {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "desde": {
+      "type": "string"
+     },
+     "hasta": {
+      "type": "string"
+     },
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     },
+     "monto_max": {
+      "type": "number"
+     },
+     "monto_min": {
+      "type": "number"
+     },
+     "texto": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "id": "buscar_transacciones",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_transactions",
+   "version": "1.0.0"
+  },
+  {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     },
+     "product_id": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "id": "leer_movimientos",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_transactions",
+   "version": "1.0.0"
+  },
+  {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "id": "leer_perfil",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_profile",
+   "version": "1.0.0"
+  },
+  {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "id": "leer_pqr_cliente",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  },
+  {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 20,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "id": "leer_productos",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_products",
+   "version": "1.0.0"
+  },
+  {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "idempotency_key": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "idempotency_key"
+    ],
+    "type": "object"
+   },
+   "id": "obtener_pqr",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  },
+  {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "descripcion": {
+      "type": "string"
+     },
+     "transaction_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "transaction_id",
+     "descripcion"
+    ],
+    "type": "object"
+   },
+   "id": "radicar_pqr",
+   "idempotent": true,
+   "min_auth_level": "step_up",
+   "risk_class": "write_reversible",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  }
+ ]
+}

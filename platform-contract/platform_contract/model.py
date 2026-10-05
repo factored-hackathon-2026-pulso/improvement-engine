@@ -7,18 +7,21 @@ fails when the committed files differ from what this module generates.
 
 from __future__ import annotations
 
-CONTRACT_VERSION = "1.2.0"
-PREVIOUS_CONTRACT_VERSION = "1.1.0"
+CONTRACT_VERSION = "1.3.0"
+PREVIOUS_CONTRACT_VERSION = "1.2.0"
 PROFILE = "platform_live.phase1"
 
 ARTIFACT_STAMP = {
     "artifact_id": "BWx4saeWfYsLbQEbkNKMPg",
     "title": "Modelo de datos · Plataforma CC",
-    # 1.2.0 is derived from the platform CODE at eeb73a8 (tables.py, domain/cases/values.py, application/audit/catalog.py,
-    # domain events, backend/openapi.json). The platform's DATA_MODEL.md is stale (says "slices 0 to 12, people only").
-    "commit": "eeb73a8",
-    "slices": "0-17 (assistant S13/S14, copilot S15, agent builder S16, hardening S17)",
-    "captured": "2026-10-04",
+    # 1.2.0 was derived from the platform CODE at eeb73a8; 1.3.0 (additive) from main 5261ecf (2026-10-05: the AI
+    # maturity slices 18-23, the copilot suggestions of ADR 0005, `release`/`turn_id` on the AI events, PRs #27/#28).
+    # Both read tables.py, domain/cases/values.py, application/audit/catalog.py, the domain events and backend/openapi.json.
+    # The platform's DATA_MODEL.md is stale (says "slices 0 to 12, people only").
+    "commit": "5261ecf",
+    "previous_commit": "eeb73a8",
+    "slices": "0-23 (assistant S13/S14, copilot S15, builder S16, hardening S17, maturity S18-S23, engine signals)",
+    "captured": "2026-10-05",
     # 1.1.0 cited a492bfa. The platform history was rewritten on 2026-10-04 (split out of the data repo): that sha
     # no longer resolves anywhere. 7d2ae3a ("Plataforma S3: supervision", 2026-10-03) is the closest old commit by
     # slice naming: an INFERENCE of the engine team, not a statement of the product team.
@@ -46,6 +49,10 @@ ID_PATTERNS = {
     "actor": r"^((CUS|STF)-.+|[A-Za-z0-9_.-]+@[A-Za-z0-9_.^~-]+)$",
     "event": r"^EVT-.+$",
 }
+
+# 1.3.0: `cases.case_type` (platform `domain/cases/values.py::CaseType`; `virtual_card` is team-generated).
+CASE_TYPES = ["none", "unrecognized_charge", "undue_charge", "app_issue", "branch_service", "service_quality",
+              "virtual_card"]
 
 # 1.2.0: `assistant` (agent-core, ADR 0003) is an actor and an author role.
 ROLES = ["customer", "analyst", "supervisor", "admin", "system", "assistant"]
@@ -98,9 +105,12 @@ TABLES: dict[str, dict] = {
             _c("rated_at", "datetime", True),
             _c("open_escalation_id", "string", True),
             _c("active_call_id", "string", True),
+            # 1.3.0 (additive, optional so 1.2.0 rows stay valid): what the case is about (platform slice 18, ADR 0006).
+            # A closed enum of dataset complaint subcategories + `none`; the platform column is NOT NULL.
+            _c("case_type", "string", enum=CASE_TYPES),
             _c("version", "integer", minimum=1),
         ],
-        "optional": ["rating_score", "rated_at", "open_escalation_id", "active_call_id"],
+        "optional": ["rating_score", "rated_at", "open_escalation_id", "active_call_id", "case_type"],
     },
     "turns": {
         "source_table": "turns",
@@ -203,7 +213,7 @@ TABLES: dict[str, dict] = {
 
 # Event catalog. status: admitted (ingest), denied (known, never ingest), planned (announced,
 # not yet admitted: quarantined like unknown until the versioned allow-list admits it).
-EVENT_CATALOG_VERSION = "1.2.0"
+EVENT_CATALOG_VERSION = "1.3.0"
 EVENT_TYPES = [
     ("case.opened", "cases", "case", "admitted"),
     ("case.queued", "cases", "case", "admitted"),
@@ -263,6 +273,19 @@ EVENT_TYPES = [
     ("call.resumed", "conversation", "call", "admitted"),
     ("call.mute_changed", "conversation", "call", "admitted"),
     ("call.ended", "conversation", "call", "admitted"),
+    # --- 1.3.0 (platform 5261ecf): copilot suggestions (ADR 0005), tool feedback, case type, AI maturity, AI switch ---
+    ("copilot.suggestion_requested", "copilot", "copilot", "admitted"),
+    ("copilot.suggestion_ready", "copilot", "copilot", "admitted"),
+    ("copilot.suggestion_none", "copilot", "copilot", "admitted"),
+    ("copilot.suggestion_failed", "copilot", "copilot", "admitted"),
+    ("copilot.suggestion_decided", "copilot", "copilot", "admitted"),
+    ("copilot.tool_used", "copilot", "copilot", "admitted"),
+    ("case.type_changed", "cases", "case", "admitted"),
+    ("ai.stage_advanced", "maturity", "case_type", "admitted"),
+    ("ai.stage_moved_back", "maturity", "case_type", "admitted"),
+    ("ai.agent_ready", "maturity", "case_type", "admitted"),
+    ("ai.agent_activated", "maturity", "case_type", "admitted"),
+    ("platform.ai_toggled", "platform", "platform", "admitted"),
 ]
 
 # Data class of every admitted type (what its payload may carry). The platform states in its domain events that the
@@ -275,6 +298,8 @@ EVENT_DATA_CLASSES = {
     "assistant": "agent-core assistant runtime metadata: session/run/trace ids, agent id@version, enums, counters",
     "copilot": "analyst copilot metadata: question id and size, agent id, run/trace ids, status, counters (no text)",
     "builder": "agent-builder audit: proposal/agent/release ids, alias, hashes, verdict enums, counters (no draft content)",
+    "maturity": "AI maturity per case type and the platform AI switch: case type enum, stage numbers, agent id, flags "
+                "(1.3.0; no text, no case id)",
 }
 _ASSISTANT_TYPES = frozenset({
     "assistant.session_started", "assistant.input_queued", "assistant.turn_answered", "assistant.step_up_verified",
@@ -289,7 +314,8 @@ def event_data_class(event_type: str) -> str | None:
                 return None
             if event_type in _ASSISTANT_TYPES:
                 return "assistant"
-            return {"copilot": "copilot", "builder": "builder"}.get(event_type.split(".", 1)[0], "operational")
+            return {"copilot": "copilot", "builder": "builder", "ai": "maturity", "platform": "maturity"}.get(
+                event_type.split(".", 1)[0], "operational")
     return None
 
 
@@ -302,7 +328,8 @@ EVENT_PAYLOAD_KEYS = {
     "case.assistant_released": ("reason", "handoff_ref", "sla_due_at"),
     "assistant.session_started": ("customer_id", "agent"),
     "assistant.input_queued": ("kind", "answer"),
-    "assistant.turn_answered": ("agent", "run_id", "awaiting", "status", "outcome", "trace_id", "messages"),
+    # 1.3.0: + release (the registry release id the run started on; absent on rows written before platform 2d868a2)
+    "assistant.turn_answered": ("agent", "run_id", "awaiting", "status", "outcome", "trace_id", "messages", "release"),
     "assistant.step_up_verified": ("simulated",),
     "assistant.step_up_rejected": ("attempts",),
     "assistant.ended": ("result", "handoff_ref", "code"),
@@ -335,6 +362,28 @@ EVENT_PAYLOAD_KEYS = {
     "call.resumed": ("analyst_id", "hold_seconds"),
     "call.mute_changed": ("muted", "analyst_id"),
     "call.ended": ("end_reason", "ended_by_role", "analyst_id", "answered", "duration_seconds", "hold_seconds"),
+    # --- 1.3.0 (platform domain/ai/events.py, maturity_events.py, domain/cases/events.py, domain/platform/events.py).
+    # `release`/`turn_id` may be absent on rows written before the platform carried them: null, never drift.
+    "copilot.suggestion_requested": ("analyst_id", "trigger", "based_on_sequence"),
+    "copilot.suggestion_ready": ("analyst_id", "agent", "kinds", "count", "truncated", "run_id", "trace_id",
+                                 "release"),
+    "copilot.suggestion_none": ("analyst_id", "agent", "run_id", "trace_id", "release"),
+    "copilot.suggestion_failed": ("analyst_id", "failure_code"),
+    "copilot.suggestion_decided": ("subject", "decision", "edit_distance_permille", "turn_id", "agent", "release"),
+    "copilot.tool_used": ("tool",),
+    "case.type_changed": ("from", "to"),
+    "ai.stage_advanced": ("case_type", "from_stage", "to_stage"),
+    "ai.stage_moved_back": ("case_type", "from_stage", "to_stage", "agent_cleared"),
+    "ai.agent_ready": ("case_type",),
+    "ai.agent_activated": ("case_type", "agent_id"),
+    "platform.ai_toggled": ("enabled",),
+}
+# Closed value sets (1.3.0). A key listed here is forwarded only while its value is in the set (the exporter redacts
+# it otherwise): `subject` looks like free text by name but is the two-value enum reply|escalation on this type.
+EVENT_PAYLOAD_ENUMS = {
+    "copilot.suggestion_requested": {"trigger": ("customer_message", "manual", "handover")},
+    "copilot.suggestion_decided": {"subject": ("reply", "escalation"),
+                                   "decision": ("used", "edited", "discarded", "ignored", "accepted")},
 }
 # Keys that carry free text (a customer's words, an analyst's note, a motive). Never forwarded for that type.
 EVENT_FREE_TEXT_KEYS = {
@@ -345,7 +394,8 @@ EVENT_FREE_TEXT_KEYS = {
     "call.started": ("reason",),
     # older admitted types whose payload the platform also fills with text
     "case.closed": ("note",),
-    "turn.created": ("text", "subject"),
+    # 1.3.0: staff_line = facts of a staff-only line; its params hold staff names "as they were then" (slice 23c)
+    "turn.created": ("text", "subject", "staff_line"),
 }
 
 # Announced by Product (administration slice, uncommitted at capture): staff.* and team.*.

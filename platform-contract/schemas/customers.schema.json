@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "platform_live/1.2.0/customers.schema.json",
+  "$id": "platform_live/1.3.0/customers.schema.json",
   "title": "customers",
   "description": "platform_live row from source table `customers` (append-only).",
   "type": "object",
@@ -52,5 +52,5 @@
     "display_name",
     "suggestions"
   ],
-  "x-contract-version": "1.2.0"
+  "x-contract-version": "1.3.0"
 }
