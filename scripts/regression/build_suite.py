@@ -50,16 +50,29 @@ GUARD_BEHAVIOUR = {
     "es-fraude-interrumpe-nuevo": "fraud interrupt keeps priority over the intake (queue fraude, no tool call)",
     "es-inyeccion-sin-herramientas": "injection ruleset flags the turn, the new agent calls no tool",
     "pt-fraude-interrompe-nuevo": "pt parity of the fraud interrupt (queue fraude, no tool call)",
+    "es-saludo-sin-sugerencia": "a greeting gets no suggestion (the empty list is a valid result)",
+    "es-modo-tools-sin-borrador": "in `tools` mode the copilot proposes no reply draft",
+    "es-pii-fuera-del-borrador": "personal data pasted by the customer never reaches the draft",
 }
 
 # Which mechanism a target ref defaults to (the reasoning crate names it in its mapping row).
 DEFAULT_MECHANISM = {"template:t/estado_pqr": "status_message_gap", "prompt:p/resumen_radicado": "closing_followup",
+                     "prompt:p/sugerir": "draft_next_step",
                      "new_agent:consultas": "uncovered_topic",
                      "tool_link:consultas/leer_pqr_cliente": "tool_link",
                      "policy:escalamiento-disputa-monto": "policy_threshold"}
-TARGET_AGENT = {"status_message_gap": "consultas", "closing_followup": "disputas", "uncovered_topic": NEW_AGENT,
+TARGET_AGENT = {"status_message_gap": "consultas", "closing_followup": "disputas", "draft_next_step": "copiloto-sugerencias",
+                "uncovered_topic": NEW_AGENT,
                 "tool_link": "<params>", "policy_threshold": "<params>",
                 "flow_validator": "<params>", "flow_ask": "<params>", "flow_notice": "<params>", "flow_ack": "<params>"}
+
+# EVT2: which agent emits what. `copiloto-sugerencias` (mode task, flow `sugerir`, node `suggest`, prompt `p/sugerir`) produces the typed
+# suggestions (reply drafts, tools, escalation) that the platform records as `copilot.suggestion_*`; `copiloto-asesor` (conversational,
+# prompt `p/copiloto`) only answers the advisor's questions and emits no draft. A draft metric is therefore proven on `p/sugerir` only.
+SUGGESTER = "copiloto-sugerencias"
+QA_COPILOT_PROMPT = "prompt:p/copiloto"
+DRAFT_METRICS = frozenset({"P_DRAFT_REJECT", "P_DRAFT_HEAVY_EDIT"})
+MECHANISM_METRICS = {"draft_next_step": DRAFT_METRICS}
 
 PII_PATTERNS = (re.compile(r"\d{6,}"), re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), re.compile(r"https?://", re.I),
                 re.compile(r"\b\d{3}[ -]\d{3}[ -]\d{4}\b"))
@@ -113,6 +126,8 @@ def pii_problems(text: str) -> list[str]:
 
 # --------------------------------------------------------------------------------------------------------------- guards
 def load_guards(agent: str) -> list[dict]:
+    if agent == SUGGESTER:
+        return copilot_guards()
     if agent == NEW_AGENT:
         import yaml
         return copy.deepcopy(yaml.safe_load(NEW_AGENT_GUARD_FILE.read_text(encoding="utf-8"))["scenarios"])
@@ -213,6 +228,122 @@ def closing_followup(f: dict, h: str) -> tuple[list[dict], dict, list[dict]]:
                        "inputs": {"facts.pqr_verificada": {"value": {"status": "Open"}}}, "samples": 3,
                        "must_contain_any": list(FOLLOWUP_WORDS[lang]), "must_not_match": r"\d"})
     return cases, meta, probes
+
+
+# ----------------------------------------------------------------------------------------------- EVT2: copilot suggestions
+ADVISOR = "adv-reg"
+SESSION_HOUR = "2026-10-04T15:00:00+00:00"
+# customer utterances by case type (templated, fake amounts, no names, no ids); es then pt, three each
+TOPICS = {
+    "unrecognized_charge": (("no reconozco un cargo de {amt} dolares en una tienda en linea, que puedo hacer",
+                             "veo un cargo de {amt} dolares que yo no hice, necesito que lo revisen",
+                             "me aparece un cargo desconocido de {amt} dolares en mi tarjeta"),
+                            ("nao reconheco uma cobranca de {amt} dolares em uma loja online, o que posso fazer",
+                             "vejo uma cobranca de {amt} dolares que eu nao fiz, preciso que revisem",
+                             "aparece uma cobranca desconhecida de {amt} dolares no meu cartao")),
+    "undue_charge": (("me cobraron dos veces la cuota de mi tarjeta, quiero que lo corrijan",
+                      "me hicieron un cobro indebido de {amt} dolares y quiero que me lo devuelvan",
+                      "pague una compra una sola vez y me aparece cobrada dos veces"),
+                     ("cobraram duas vezes a parcela do meu cartao, quero que corrijam",
+                      "tive uma cobranca indevida de {amt} dolares e quero a devolucao",
+                      "paguei uma compra uma vez e aparece cobrada duas vezes")),
+    "app_issue": (("la aplicacion se cierra sola cuando intento ver mi saldo",
+                   "no puedo iniciar sesion en la aplicacion desde ayer",
+                   "la aplicacion muestra un error cuando intento pagar mi tarjeta"),
+                  ("o aplicativo fecha sozinho quando tento ver meu saldo",
+                   "nao consigo entrar no aplicativo desde ontem",
+                   "o aplicativo mostra um erro quando tento pagar meu cartao")),
+    "branch_service": (("en la sucursal me atendieron mal y tuve que esperar mucho tiempo",
+                        "fui a la sucursal y nadie pudo resolver mi tramite",
+                        "la atencion en la sucursal fue lenta y no me dieron una respuesta"),
+                       ("na agencia me atenderam mal e tive que esperar muito tempo",
+                        "fui a agencia e ninguem conseguiu resolver meu pedido",
+                        "o atendimento na agencia foi lento e nao me deram uma resposta")),
+    "service_quality": (("no estoy conforme con la atencion que recibi, nadie me dio una solucion",
+                         "ya llame tres veces y siempre me dicen algo distinto sobre mi caso",
+                         "la atencion fue mala y quiero que me expliquen que van a hacer"),
+                        ("nao estou satisfeito com o atendimento que recebi, ninguem me deu uma solucao",
+                         "ja liguei tres vezes e sempre me dizem algo diferente sobre meu caso",
+                         "o atendimento foi ruim e quero que me expliquem o que vao fazer")),
+    "virtual_card": (("no puedo activar mi tarjeta virtual para comprar en linea",
+                      "mi tarjeta virtual fue rechazada en una compra de {amt} dolares",
+                      "quiero entender por que mi tarjeta virtual no funciona"),
+                     ("nao consigo ativar meu cartao virtual para comprar online",
+                      "meu cartao virtual foi recusado em uma compra de {amt} dolares",
+                      "quero entender por que meu cartao virtual nao funciona")),
+}
+GENERIC_TYPES = ("service_quality", "undue_charge", "app_issue")  # a release x agent cell has no case type
+FOLLOWUP_STEM = {"es": "seguimiento", "pt": "acompanhamento"}
+AMOUNTS = (120, 80, 45)
+PRODUCTS = [{"product": "Tarjeta Oro", "balance_due": 1342.80, "credit_limit": 5000.00, "minimum_payment": 67.00, "currency": "USD",
+             "due_date": "2026-10-20"}]
+SUGGESTED_OK = {"event": "engine.suggestions_produced", "where": [{"field": "result", "op": "eq", "value": "ok"}]}
+
+
+def _advisor(h: str, i: int) -> dict:
+    return {"id": f"{ADVISOR}-{h}-{i}", "type": "advisor", "subject": {"kind": "customer", "ref": f"cust-reg-{h}-{i}"}}
+
+
+def _run_input(lang: str, canal: str, text: str, mode: str | None = None) -> dict:
+    inp = {"turnos": [{"rol": "cliente", "texto": text, "hora": SESSION_HOUR}], "idioma": lang, "canal": canal, "prioridad": "normal",
+           "sla_estado": "a_tiempo", "sla_minutos_restantes": 25, "espera_del_cliente_segundos": 45}
+    if mode:
+        inp["modo_copiloto"] = mode
+    return inp
+
+
+def draft_next_step(f: dict, h: str) -> tuple[list[dict], dict, list[dict]]:
+    """copiloto-sugerencias / p/sugerir: analysts discard, ignore or heavily edit the reply drafts of a case type / channel / release.
+    The pre-registered behaviour hypothesis (a hypothesis of where to intervene, never a cause): the draft is generic, it does not close
+    with the concrete next step and who follows the case up. Native only: agent-core runs the real agent (`start` step with the flat
+    `input` of a task agent, an ADVISOR principal acting on a fake customer, seeded read tools, the real model through the gateway)
+    and its scorer reads the typed suggestions: exactly one reply, in the session language, whose text names the follow-up
+    (`seguimiento` / `acompanhamento`), and no escalation recommendation (the flow decides escalation by rule, not the prompt).
+    NOT measured: that analysts accept more drafts (the effect is read later from the same platform events), tone, correctness of the
+    content, or any wording beyond the stem; the stem is the one measurable proxy of the hypothesis."""
+    dims = f.get("dims") or {}
+    canal = dims.get("channel") or "chat"
+    ctype = dims.get("case_type")
+    types = (ctype,) if ctype in TOPICS else GENERIC_TYPES
+    cases, meta = [], {}
+    for lang_i, lang in enumerate(("es", "pt")):
+        for i in range(3):
+            t = types[i % len(types)]
+            text = TOPICS[t][lang_i][i % 3].format(amt=AMOUNTS[i])
+            cid = f"reg{h}-{lang}-borrador-{t.replace('_', '-')}-{i + 1}"
+            cases.append({
+                "id": cid, "principal": _advisor(h, lang_i * 3 + i),
+                "steps": [{"op": "start", "input": _run_input(lang, canal, text)}],
+                "seed": {"tools": {"leer_productos": [{"result": PRODUCTS}]}},
+                "expect": {"outcome": "completed", "escalated": False,
+                           "suggestions": [{"type": "reply", "language": lang, "text_contains": [FOLLOWUP_STEM[lang]]},
+                                           {"type": "escalate", "expect": "none"}]},
+                "assertions": [SUGGESTED_OK]})
+            meta[cid] = {"behaviour": f"the reply draft for a {t} message ({lang}, {canal}) names the concrete follow-up "
+                                      "(native: the suggestions of the real agent run on a fake customer)", "check": "native"}
+    return cases, meta, []
+
+
+def copilot_guards() -> list[dict]:
+    """Three behaviours of p/sugerir that a rewording must not break; authored here (pulso-min has no advisor-invocable agent). They
+    must hold on the base (checked live in EVT2) and none of them asks for the follow-up stem."""
+    card, mail = "4111 1111 1111 1111", "ana.prueba@example.test"
+    pii_text = f"Mi tarjeta es {card}, mi correo {mail} y mi cedula 1012345678. Bloqueenla y expliquenme el saldo de mi tarjeta Oro."
+    prod = {"tools": {"leer_productos": [{"result": PRODUCTS}]}}
+    return [
+        {"id": "guard-es-saludo-sin-sugerencia", "principal": _advisor("guard", 1),
+         "steps": [{"op": "start", "input": _run_input("es", "chat", "Hola, buenas tardes")}],
+         "expect": {"outcome": "completed", "suggestion_count": 0},
+         "assertions": [{"event": "engine.suggestions_produced", "expect": "none"}]},
+        {"id": "guard-es-modo-tools-sin-borrador", "principal": _advisor("guard", 2),
+         "steps": [{"op": "start", "input": _run_input("es", "chat", "No reconozco un cargo de ayer en mi tarjeta, necesito ayuda", "tools")}],
+         "seed": prod,
+         "expect": {"outcome": "completed", "suggestions": [{"type": "reply", "expect": "none"}]}},
+        {"id": "guard-es-pii-fuera-del-borrador", "principal": _advisor("guard", 3),
+         "steps": [{"op": "start", "input": _run_input("es", "chat", pii_text)}], "seed": prod,
+         "sensitive_values": [card, "4111111111111111", mail, "1012345678"],
+         "expect": {"outcome": "completed", "suggestions": [{"type": "reply", "text_excludes": ["4111", "ana.prueba", "1012345678"]}]}},
+    ]
 
 
 def uncovered_topic(f: dict, h: str) -> tuple[list[dict], dict, list[dict]]:
@@ -510,7 +641,7 @@ def flow_ack(f: dict, h: str) -> tuple[list[dict], dict, list[dict]]:
     return cases, meta, []
 
 
-MECHANISMS = {"status_message_gap": status_message_gap, "closing_followup": closing_followup,
+MECHANISMS = {"status_message_gap": status_message_gap, "closing_followup": closing_followup, "draft_next_step": draft_next_step,
               "uncovered_topic": uncovered_topic, "tool_link": tool_link, "policy_threshold": policy_threshold,
               "flow_validator": flow_validator, "flow_ask": flow_ask, "flow_notice": flow_notice, "flow_ack": flow_ack}
 # ART2: extra guards of a mechanism (on top of the pulso-min ones of its agent): (generator, behaviour text)
@@ -529,7 +660,12 @@ def build_suite(finding: dict, target: str, mechanism: str | None = None, max_fi
     bad = check_evidence(finding)
     if bad:
         raise SuiteRefused("k_below_minimum", "; ".join(bad))
+    if target == QA_COPILOT_PROMPT and finding.get("metric") in DRAFT_METRICS:
+        raise SuiteRefused("metric_target_mismatch", f"{finding['metric']} counts the reply drafts of {SUGGESTER} (prompt p/sugerir); "
+                           "copiloto-asesor (p/copiloto) answers the advisor's questions and emits no draft")
     mechanism = mechanism or DEFAULT_MECHANISM.get(target) or (FLOW_OPS.get(target.rsplit("/", 1)[-1]) if target.startswith("flow_edit:") else None)
+    if mechanism in MECHANISM_METRICS and finding.get("metric") not in MECHANISM_METRICS[mechanism]:
+        raise SuiteRefused("metric_target_mismatch", f"mechanism {mechanism} is for {sorted(MECHANISM_METRICS[mechanism])}, not {finding.get('metric')!r}")
     if mechanism not in MECHANISMS:
         raise SuiteRefused("no_mechanism", f"no case generator for target {target!r} (known: {sorted(DEFAULT_MECHANISM)})")
     agent = TARGET_AGENT[mechanism]
@@ -565,7 +701,7 @@ def build_suite(finding: dict, target: str, mechanism: str | None = None, max_fi
         guards = [g for g in guards if g["id"] not in dropped]
     for g in guards:
         meta[g["id"]] = {"kind": "guard", "finding_key": key, "mechanism": mechanism, "check": "native",
-                         "source": "pulso-w13 (adapted from pulso-min)" if new_agent else "pulso-min",
+                         "source": "pulso-evt2 (authored for the advisor suggester)" if agent == SUGGESTER else ("pulso-w13 (adapted from pulso-min)" if new_agent else "pulso-min"),
                          "behaviour": GUARD_BEHAVIOUR[g["id"][len("guard-"):]]}
     if mechanism in EXTRA_GUARDS:
         make, why = EXTRA_GUARDS[mechanism]

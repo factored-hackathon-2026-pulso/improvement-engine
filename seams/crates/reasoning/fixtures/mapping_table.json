@@ -44,12 +44,12 @@
       "evidence": "ANATOMY P1 and Example 1"
     },
     "copilot_draft_quality": {
-      "covered_by": ["copiloto-asesor"],
+      "covered_by": ["copiloto-sugerencias"],
       "why": "The advisor copilot already drafts replies for analysts; whether the drafts are used, edited, discarded or ignored is the analysts own verdict on its prompt, by case type and by release.",
       "evidence": "PLATFORM_SIGNALS 2026-10-05 section 4(a) and (e); platform docs/platform/api/engine-signals.md (copilot.suggestion_decided)"
     },
     "copilot_coverage": {
-      "covered_by": ["copiloto-asesor"],
+      "covered_by": ["copiloto-sugerencias"],
       "why": "The copilot returned nothing for these cases (copilot.suggestion_none): a topic it was not given material for, or a tool it does not have. Which of the two is a human decision.",
       "evidence": "PLATFORM_SIGNALS 2026-10-05 section 4(a); DETECTION_GAP section 3 (platform events)"
     },
@@ -279,14 +279,14 @@
       "match": {"metric": ["P_DRAFT_REJECT"], "dims_present": ["case_type"]},
       "link_grade": "mechanism_proxy",
       "guardrail": "draft_acceptance_and_escalation_rate_not_worse",
-      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "the_suite_tests_a_next_step_hypothesis_not_draft_acceptance", "mapping_is_a_hypothesis_of_where_to_intervene"],
       "candidates": [
         {
-          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
-          "placeholders": [], "mechanisms": ["wording"],
+          "rank": 1, "target_ref": "prompt:p/sugerir", "kind": "patch", "agent": "copiloto-sugerencias",
+          "placeholders": [], "mechanisms": ["draft_next_step", "wording"],
           "justification": "Analysts discard or ignore the copilot drafts far more often for this case type than for the others in the same channel; the copilot prompt is the existing artifact that shapes those drafts.",
           "evidence": "PLATFORM_SIGNALS section 4(e): draft acceptance by case type is the highest-value advisor signal",
-          "proof_support": "none", "announceable_now": false
+          "proof_support": "suite:draft_next_step", "announceable_now": true
         }
       ]
     },
@@ -296,14 +296,14 @@
       "match": {"metric": ["P_DRAFT_REJECT"], "dims_present": ["release"]},
       "link_grade": "mechanism_proxy",
       "guardrail": "draft_acceptance_by_other_releases_not_worse",
-      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene", "a_release_is_compared_with_the_other_releases_of_the_same_agent"],
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "the_suite_tests_a_next_step_hypothesis_not_draft_acceptance", "mapping_is_a_hypothesis_of_where_to_intervene", "a_release_is_compared_with_the_other_releases_of_the_same_agent"],
       "candidates": [
         {
-          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
-          "placeholders": [], "mechanisms": ["wording"],
+          "rank": 1, "target_ref": "prompt:p/sugerir", "kind": "patch", "agent": "copiloto-sugerencias",
+          "placeholders": [], "mechanisms": ["draft_next_step", "wording"],
           "justification": "Drafts of one release are rejected more often than those of the other releases of the same agent: a candidate regression of the prompt that release carries.",
           "evidence": "PLATFORM_SIGNALS section 4(b): release on copilot.suggestion_decided removes the staging/prod mixing of a timestamp cut",
-          "proof_support": "none", "announceable_now": false
+          "proof_support": "suite:draft_next_step", "announceable_now": true
         }
       ]
     },
@@ -313,14 +313,14 @@
       "match": {"metric": ["P_DRAFT_HEAVY_EDIT"], "dims_present": ["case_type"]},
       "link_grade": "mechanism_proxy",
       "guardrail": "draft_acceptance_rate_not_worse",
-      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene"],
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "the_suite_tests_a_next_step_hypothesis_not_draft_acceptance", "mapping_is_a_hypothesis_of_where_to_intervene"],
       "candidates": [
         {
-          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
-          "placeholders": [], "mechanisms": ["wording"],
+          "rank": 1, "target_ref": "prompt:p/sugerir", "kind": "patch", "agent": "copiloto-sugerencias",
+          "placeholders": [], "mechanisms": ["draft_next_step", "wording"],
           "justification": "When analysts do send the draft they rewrite most of it for this case type (aggregate edit-distance bucket, no text): the draft wording or structure misses what the analysts need.",
           "evidence": "PLATFORM_SIGNALS section 4(e): edit distance by case type; texts never leave the platform",
-          "proof_support": "none", "announceable_now": false
+          "proof_support": "suite:draft_next_step", "announceable_now": true
         }
       ]
     },
@@ -330,20 +330,20 @@
       "match": {"metric": ["P_SUGG_NONE"], "dims_present": ["case_type"]},
       "link_grade": "mechanism_proxy",
       "guardrail": "suggestion_failed_rate_and_draft_acceptance_not_worse",
-      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_the_copilot_prompt", "mapping_is_a_hypothesis_of_where_to_intervene", "tool_link_or_knowledge_source_is_a_human_decision"],
+      "caveats": ["synthetic_or_aggregate_association_not_a_cause", "where_not_why", "no_regression_suite_generator_for_this_finding", "mapping_is_a_hypothesis_of_where_to_intervene", "tool_link_or_knowledge_source_is_a_human_decision"],
       "candidates": [
         {
-          "rank": 1, "target_ref": "prompt:p/copiloto", "kind": "patch", "agent": "copiloto-asesor",
+          "rank": 1, "target_ref": "prompt:p/sugerir", "kind": "patch", "agent": "copiloto-sugerencias",
           "placeholders": [], "mechanisms": ["uncovered_topic"],
           "justification": "The copilot has nothing to say for this case type and channel: a knowledge gap in its prompt is the hypothesis the engine can test; a missing tool link is a human decision (tools are not an engine target).",
           "evidence": "PLATFORM_SIGNALS section 2 (copilot.suggestion_none) and DETECTION_GAP section 3",
-          "proof_support": "none", "announceable_now": false
+          "proof_support": "suite:draft_next_step", "announceable_now": false
         }
       ]
     },
     {
       "id": "copilot_tool_mix",
-      "topic": "copilot_draft_quality",
+      "topic": "advisor_repeated_lookup",
       "match": {"metric": ["P_TOOL_USE"], "dims_present": ["case_type", "tool"]},
       "link_grade": "mechanism_proxy",
       "guardrail": "tool_failure_and_fallback_rate_not_worse",

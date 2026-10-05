@@ -408,6 +408,8 @@ fn coverage_text(l: Lang, verdict: Option<&Value>) -> String {
             "answer_uses_tool_data" => l.t("que la respuesta use el dato de la herramienta (el enlace solo lo deja disponible al flujo)", "que a resposta use o dado da ferramenta (o vínculo so o deixa disponível ao fluxo)"),
             "policy_boundary_escalation" => l.t("escalamiento en los límites del umbral viejo y del nuevo (casos en la ventana fallan en la base y pasan con el candidato)", "escalonamento nos limites do limiar antigo e do novo (casos na janela falham na base e passam com o candidato)"),
             "owner_decision" => l.t("la decisión del responsable de la política", "a decisão do responsável pela política"),
+            "advisor_suggestions_native" => l.t("sugerencias tipadas del agente real (copiloto-sugerencias) con asesor y cliente ficticio: un borrador que nombra el seguimiento y sin recomendacion de escalar", "sugestoes tipadas do agente real (copiloto-sugerencias) com assessor e cliente ficticio: um rascunho que cita o acompanhamento e sem recomendacao de escalar"),
+            "draft_acceptance_effect" => l.t("que los analistas acepten mas borradores (se lee despues en los mismos eventos de la plataforma)", "que os analistas aceitem mais rascunhos (le-se depois nos mesmos eventos da plataforma)"),
             "platform_guardrails" => l.t("guardarraíles de plataforma", "guardrails de plataforma"),
             "guards" => l.t("casos guarda", "casos guarda"),
             "state_reflected" => l.t("el texto renderizado refleja el estado", "o texto renderizado reflete o estado"),

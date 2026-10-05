@@ -39,7 +39,9 @@ CHANNELS = ["app_chat", "web_chat", "phone_inbound", "email"]
 CASE_TYPES = ["unrecognized_charge", "undue_charge", "app_issue", "branch_service", "service_quality", "virtual_card"]
 TYPE_WEIGHTS = [22, 20, 18, 12, 14, 14]
 TOOLS = ["consultar_cargos", "estado_pqr", "buscar_politica"]
-COPILOT = "copiloto-asesor@1.0.0"
+# The suggestions (ready / none / decided) are produced by the task agent `copiloto-sugerencias` (flow `sugerir`, prompt `p/sugerir`);
+# `copiloto-asesor` (prompt `p/copiloto`) only answers the advisor's questions and emits no draft (EVT2: the mapping target follows this).
+COPILOT = "copiloto-sugerencias@1.0.0"
 ASSISTANT = "recepcion@1.0.0"
 
 
@@ -52,7 +54,7 @@ def _pick(rng, pairs):
     return pairs[-1][0]
 
 
-def generate(seed=7, n_cases=3000, days=28):
+def generate(seed=7, n_cases=3000, days=28, sqlite_out=None):
     """Returns (events, cases, labels). `events`/`cases` are exporter-shaped dicts; `labels` documents the plant."""
     sim = PlatformLiveSim(seed=seed, n_customers=300)
     rng = sim.rng
@@ -140,6 +142,8 @@ def generate(seed=7, n_cases=3000, days=28):
         sim.advance(rng.randint(30, 600))
         sim.close_case(cid, "resolved")
     sim.conn.commit()
+    if sqlite_out is not None:
+        _write_product_sqlite(sim, case_type, sqlite_out)
     # --- export through the exporter's allow-list (engine-level guard), exactly the columns the real exporter may read
     policy.install_sqlite_guard(sim.conn)
     ev_cols = ["sequence", "event_type", "case_id", "event_time", "payload"]
@@ -160,8 +164,29 @@ def generate(seed=7, n_cases=3000, days=28):
     return events, cases, labels
 
 
-def write(out_dir, seed=7, n_cases=3000):
-    events, cases, labels = generate(seed=seed, n_cases=n_cases)
+def _write_product_sqlite(sim, case_type, path):
+    """A PRODUCT SQLite file in the shape the engine monitor reads (`product-sqlite`): the simulator tables plus `cases.case_type`
+    (contract 1.3.0). Synthetic; the file is a scratch artifact, never committed."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.unlink()
+    sim.conn.execute("ALTER TABLE cases ADD COLUMN case_type TEXT")
+    sim.conn.executemany("UPDATE cases SET case_type=? WHERE id=?", [(t, c) for c, t in case_type.items()])
+    sim.conn.commit()
+    dest = sqlite3.connect(path)
+    with dest:
+        sim.conn.backup(dest)
+    dest.close()
+
+
+def write_sqlite(path, seed=7, n_cases=3000):
+    """Same history as `write`, also persisted as a product SQLite file. Returns (events, cases, labels)."""
+    return generate(seed=seed, n_cases=n_cases, sqlite_out=path)
+
+
+def write(out_dir, seed=7, n_cases=3000, sqlite_out=None):
+    events, cases, labels = generate(seed=seed, n_cases=n_cases, sqlite_out=sqlite_out)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     for name, rows in (("events.ndjson", events), ("cases.ndjson", cases)):
@@ -176,6 +201,7 @@ if __name__ == "__main__":
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--cases", type=int, default=3000)
+    ap.add_argument("--sqlite", help="also write the history as a product SQLite file (adapter product-sqlite of the monitor)")
     a = ap.parse_args()
-    ev, cs, lb = write(a.out, a.seed, a.cases)
+    ev, cs, lb = write(a.out, a.seed, a.cases, sqlite_out=a.sqlite)
     print(json.dumps({"events": len(ev), "cases": len(cs), "synthetic": True}))
