@@ -110,3 +110,11 @@ The finding is synthetic (invented counts, same shape as a corroborated cells si
 mapping (`closing_followup`, `status_message_gap`) is a harness-side mechanism spec, not something the cells data proves. The
 prompt probe is a 3-sample model check (a stricter candidate may need more samples); the `uncovered_topic` generator and its
 recepcion guards are not exercised. A proven suite is evidence that the suite discriminates, not that the change helps customers.
+
+## W13: prompt patches and new agents (see `W13_PROMPT_AND_AGENT_ANNOUNCE.md`)
+
+`build_suite.py` also generates the suite of a `new_agent:<x>` target (cases run on the new agent; closure and donor release settings in
+the draft, the latter evaluation-only and labelled). `sample_probes.py` collects real model samples for `generated_contains` probes;
+`judge_story.py` adds `native_binding` (control run) and `coverage` (native / harness_probe / not_measured / assumptions) to
+`reg1.verdict_story/1`. Live: prompt patch announced, text-identical prompt `not_fixed`, new agent announced (evaluation drafts with an admin
+stand-in: the builder cannot draft release interrupts).
