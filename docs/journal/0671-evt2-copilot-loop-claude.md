@@ -1,4 +1,4 @@
-# 0670 EVT2 copilot findings through the loop (UTC 2026-10-05, CLAUDE) [PARTIAL: split]
+# 0671 EVT2 copilot findings through the loop (UTC 2026-10-05, CLAUDE) [PARTIAL: split]
 
 Lane EVT2, branch `claude/evt2-copilot-loop`. Status: partial; PR 126 carries the mapping and suite generator only (reasoning crate 11 test binaries green, regression 103 + new, aggregate feed tests green). The feed writer (sources) and the pulso platform profile were written, saved as a patch, and moved to a second PR.
 
