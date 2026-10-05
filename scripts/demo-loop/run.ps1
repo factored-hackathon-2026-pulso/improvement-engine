@@ -354,6 +354,9 @@ foreach ($step in $plan.Steps) {
                 $benv = [ordered]@{ PULSO_STACK_PREFIX = $settings.BatteryPrefix; PULSO_STACK_PORT_CORE = "$($settings.BatteryCore)"; PULSO_STACK_PORT_PG = "$($settings.BatteryPg)"; PULSO_STACK_PORT_GW = "$($settings.BatteryGw)" }
                 $ba = @((Join-Path $root 'scripts\battery\demo_core.py'), 'down'); if ($Purge) { $ba += '--purge' }
                 [void](Invoke-Scrubbed -File $python -Arguments $ba -Env $benv -Needles $script:Needles -WorkDir $root -LogPath $logPath)
+                # the battery core's own containers (only the ones this script named)
+                [void](Invoke-Podman -PodmanArgs @('rm', '-f', "$($settings.BatteryPrefix)-postgres", "$($settings.BatteryPrefix)-llm-gateway"))
+                Say "stopped: $($settings.Prefix)-* and $($settings.BatteryPrefix)-* containers and serve processes (volumes kept unless -Purge; other lanes untouched)"
             }
         }
         $results.Add(("{0,-9} ok     {1,7:N1} s" -f $step, $sw.Elapsed.TotalSeconds))

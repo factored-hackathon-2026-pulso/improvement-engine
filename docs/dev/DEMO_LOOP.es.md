@@ -7,6 +7,6 @@
 5. Antes de avisar a nadie, el motor demuestra el cambio: una suite de regresión debe fallar con la base y pasar con el candidato; si no, la propuesta queda interna con su motivo (`not_announced:...`).
 6. Solo lo demostrado se entrega a agent-core como borrador (origen `auto_detect`, estado `draft`) con un dossier en español que explica problema, evidencia, qué cambia y qué no se midió.
 7. Después se avisa a la plataforma de soporte: una notificación por supervisor. El motor propone; aprobar, publicar y promover sigue siendo decisión humana.
-8. Lo que es real: modelos, gateway, agent-core local con agentes reales y la evaluación. Lo que es grabado o simulado: el origen sintético cuando se usa, y los resultados de resultado (outcome), casi siempre `inconclusive` porque los datos son estacionarios.
+8. Lo que es real: modelos, gateway, agent-core local con agentes reales y la evaluación. Lo que es grabado o simulado: el origen sintético cuando se usa, y los veredictos de resultado (outcome), casi siempre `inconclusive` porque los datos son estacionarios.
 9. Lo que no se ejerció: agentes nuevos en producción (falta una credencial admin para los ajustes de release), el enrutamiento desde recepción (seguimiento humano) y los enlaces de evidencia de la plataforma, que son ids opacos y no casos reales.
 10. Por qué importa: pasamos de "el tablero muestra un número feo" a "hay un cambio probado, explicado y reversible esperando a una persona", con costo en centavos y sin que el motor apruebe nada.
