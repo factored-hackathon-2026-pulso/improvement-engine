@@ -1,0 +1,15 @@
+[package]
+name = "opbench-e0-export"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+arrow-array = "57.0.0"
+arrow-schema = "57.0.0"
+parquet = { version = "57.0.0", features = ["arrow"] }
+sha2 = "0.10"
+serde_json = "1.0"
+improvement-engine-source-adapters = { path = "../../../../crates/source-adapters", features = ["local-simulation"] }

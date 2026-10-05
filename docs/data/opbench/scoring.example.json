@@ -1,0 +1,16 @@
+{
+  "benchmark": "OPBENCH-lite",
+  "engine_run_ref": "replace-with-anonymous-run-reference",
+  "scored_at": "example-only-not-a-measured-result",
+  "scores": {
+    "recall": null,
+    "precision": null,
+    "ranking_agreement_spearman": null,
+    "coverage": null
+  },
+  "matched_findings": [],
+  "acceptable_disagreements": [],
+  "unmatched_engine_findings": [],
+  "unmatched_benchmark_findings": [],
+  "interpretation": "Example only; contains no measured benchmark output."
+}
