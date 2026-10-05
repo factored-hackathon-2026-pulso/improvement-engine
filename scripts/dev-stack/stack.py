@@ -26,8 +26,13 @@ REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 STATE = REPO / ".dev-stack"
 CONN = os.environ.get("PULSO_PODMAN_CONNECTION", "pulso-dev-root")
-PG, GW, GW_IMAGE, PG_VOL = "pulso-l3-postgres", "pulso-l3-llm-gateway", "pulso-l3-llm-gateway", "pulso-l3-pgdata"
-PG_PORT, GW_PORT, CORE_PORT = 55432, 8080, 8001
+# PULSO_STACK_PREFIX (+ PULSO_PG_PORT / PULSO_GW_PORT / PULSO_CORE_PORT): a second stack beside another lane's one (REG1).
+# Defaults are unchanged. The gateway image is shared (built once); only containers, volume and ports are renamed.
+_PFX = os.environ.get("PULSO_STACK_PREFIX", "pulso-l3")
+PG, GW, GW_IMAGE, PG_VOL = f"{_PFX}-postgres", f"{_PFX}-llm-gateway", "pulso-l3-llm-gateway", f"{_PFX}-pgdata"
+PG_PORT = int(os.environ.get("PULSO_PG_PORT", 55432))
+GW_PORT = int(os.environ.get("PULSO_GW_PORT", 8080))
+CORE_PORT = int(os.environ.get("PULSO_CORE_PORT", 8001))
 AGENT_CORE_REPO = "https://github.com/pulso-factored/agent-core.git"
 GATEWAY_REPO = "https://github.com/pulso-factored/llm-gateway.git"
 # PULSO_REGISTRY_DIR: import another registry directory instead (EV1: agent-core tests/fixtures/registry-e2e).
@@ -117,6 +122,9 @@ def up(args) -> None:
         if k not in gw_env and k in ac_env:
             gw_env[k] = ac_env[k]
     STATE.mkdir(exist_ok=True)
+    for k in ("AGENTCORE_REGISTRY_DSN", "AGENTCORE_EVAL_DSN"):  # follow a non-default PULSO_PG_PORT
+        if k in ac_env and PG_PORT != 55432:
+            ac_env[k] = ac_env[k].replace(":55432", f":{PG_PORT}")
     # 1. Postgres 16 (credentials from the DSN in the env file, passed by inheritance, never by argv)
     dsn = urlparse(ac_env["AGENTCORE_REGISTRY_DSN"])
     user = dsn.username or "agentcore"

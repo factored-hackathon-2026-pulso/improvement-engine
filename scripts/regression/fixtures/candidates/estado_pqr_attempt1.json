@@ -1,0 +1,8 @@
+{"note": "compiled-patch shape of the reasoning crate (changes = [{kind, content, docs}]); attempt 1 of the template patch",
+ "changes": [{"kind": "template",
+   "content": {"id": "t/estado_pqr", "version": "1.0.1", "locales": {
+     "es": "Ya consulté tu PQR. Su estado actual es: {{ facts.pqr.value.status }}. Si necesitas algo más, dímelo.",
+     "pt": "Já consultei sua solicitação. O estado atual é: {{ facts.pqr.value.status }}. Se precisar de algo mais, me avise."}},
+   "docs": {"description": "[regression-demo] t/estado_pqr status_message_gap: the state sentence names the PQR state",
+            "rationale": "The base sentence is static; the customer cannot tell the state of the PQR.",
+            "changelog": "Adds the status placeholder to both locales."}}]}
