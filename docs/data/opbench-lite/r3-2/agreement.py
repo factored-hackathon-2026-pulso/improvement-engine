@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare blinded human rubric labels with row-level judge scores. Stdlib only."""
+"""Compare pass-1 rubric labels with row-level judge scores. Stdlib only."""
 
 import argparse
 import json
@@ -155,7 +155,7 @@ def compare(golden, judge_output):
                 "proposal_gate_agreement": proposal_gate,
                 "per_criterion": judge_output.get("per_criterion"),
                 "cohen_kappa_unweighted": None,
-                "cohen_kappa_note": "Aggregate-only output omits agreeing rows; kappa cannot be reconstructed and these values are not comparable to the current human labels.",
+                "cohen_kappa_note": "Aggregate-only output omits agreeing rows; kappa cannot be reconstructed and these values are not comparable to the current pass-1 labels.",
                 "not_comparable_to_current_golden": True,
             }
         raise ValueError("row-level judge output or a recognized legacy aggregate summary is required")
@@ -212,7 +212,7 @@ def compare(golden, judge_output):
                              "judge_order": judge_order, "agree": human_order == judge_order})
     return {
         "status": "exercised" if n else "not_exercised",
-        "label_source": "blind_manual_labels",
+        "label_source": "pass1_unblinded_codex_labels",
         "judge_rows_format": judge_output["format"],
         "n_expected": n_expected,
         "n_compared": n,
