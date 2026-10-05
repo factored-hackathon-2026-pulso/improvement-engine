@@ -198,3 +198,83 @@ fn candidate_lists_say_why_a_candidate_was_not_tried() {
     assert_eq!((list[2]["proof_support"].as_str(), list[2]["announceable_now"].as_bool()), (Some("none"), Some(false)));
     assert!(list.iter().all(|c| c["justification"].as_str().is_some_and(|s| !s.is_empty()) && c["evidence"].as_str().is_some()));
 }
+
+// ---- EVT1: platform event families (P_* metrics) --------------------------------------------------------------------------------
+
+fn pcell(metric: &str, dims: Value) -> reasoning::Finding {
+    finding_of(signal(metric, dims, stage(750, 1000, 0.40), stage(3000, 4000, 0.40)), Source::Synthetic)
+}
+
+#[test]
+fn copilot_low_acceptance_by_case_type_maps_to_a_prompt_patch_of_copiloto_asesor() {
+    let f = pcell("P_DRAFT_REJECT", json!({"case_type": "service_quality", "channel": "app_chat"}));
+    let row = map_finding(&f).expect("a row for low draft acceptance");
+    assert_eq!(row.id, "copilot_low_acceptance");
+    assert_eq!(row.link_grade, "mechanism_proxy");
+    assert_eq!(row.targets[0].target_ref, "prompt:p/copiloto");
+    assert_eq!((row.targets[0].kind, row.targets[0].agent), ("patch", "copiloto-asesor"));
+    assert!(row.caveats.contains(&"mapping_is_a_hypothesis_of_where_to_intervene") && row.caveats.contains(&"synthetic_or_aggregate_association_not_a_cause"));
+    assert!(row.targets.iter().all(|t| t.proof_support == "none" && !t.announceable_now), "no suite generator exists for the copilot prompt");
+}
+
+#[test]
+fn a_release_level_acceptance_drop_is_a_release_regression_row_on_the_same_prompt() {
+    let f = pcell("P_DRAFT_REJECT", json!({"release": "rel-b", "agent": "copiloto-asesor@1.0.0"}));
+    let row = map_finding(&f).expect("row");
+    assert_eq!(row.id, "copilot_release_regression");
+    assert_eq!(row.targets[0].target_ref, "prompt:p/copiloto");
+}
+
+#[test]
+fn heavy_edits_none_suggestions_and_tool_mix_each_have_a_row_with_their_own_mechanism() {
+    let cases = [
+        ("P_DRAFT_HEAVY_EDIT", json!({"case_type": "unrecognized_charge", "channel": "phone_inbound"}), "copilot_heavy_edits", "wording"),
+        ("P_SUGG_NONE", json!({"case_type": "app_issue", "channel": "web_chat"}), "copilot_suggestion_none", "uncovered_topic"),
+        ("P_TOOL_USE", json!({"case_type": "undue_charge", "tool": "consultar_cargos"}), "copilot_tool_mix", "repeated_lookup"),
+    ];
+    for (metric, dims, id, mech) in cases {
+        let row = map_finding(&pcell(metric, dims)).unwrap_or_else(|| panic!("{metric}"));
+        assert_eq!(row.id, id);
+        assert_eq!(row.targets[0].target_ref, "prompt:p/copiloto");
+        assert!(row.targets[0].mechanisms.contains(&mech), "{metric}: {:?}", row.targets[0].mechanisms);
+    }
+    // suggestion none says so: the alternative (a tool link or a knowledge source) is a human decision, not an engine target
+    let none = map_finding(&pcell("P_SUGG_NONE", json!({"case_type": "app_issue", "channel": "web_chat"}))).unwrap();
+    assert!(none.caveats.contains(&"tool_link_or_knowledge_source_is_a_human_decision"));
+}
+
+#[test]
+fn reassigned_case_types_and_copilot_failures_are_human_owned_the_engine_never_acts() {
+    let r = pcell("P_TYPE_REASSIGN", json!({"case_type": "undue_charge", "channel": "app_chat"}));
+    let h = human_owned(&r).expect("human owned");
+    assert_eq!((h.id, h.owner), ("case_type_taxonomy", "supervision"));
+    assert!(map_finding(&r).is_none() && candidate_plan(&r, Caps::default()).is_empty());
+    assert!(h.note_es.contains("persona") && h.note_pt.contains("pessoa"));
+    let f = pcell("P_SUGG_FAILED", json!({"channel": "app_chat", "language": "es"}));
+    assert_eq!(human_owned(&f).unwrap().id, "copilot_failures_platform");
+}
+
+#[test]
+fn assistant_escalation_on_charge_case_types_points_at_the_dispute_clarify_template_other_types_stay_descriptive() {
+    let charge = pcell("P_ASSIST_ESCALATION", json!({"case_type": "undue_charge", "channel": "web_chat"}));
+    let row = map_finding(&charge).expect("row");
+    assert_eq!(row.id, "assistant_escalation_dispute");
+    assert_eq!((row.targets[0].target_ref.as_str(), row.targets[0].agent), ("template:t/aclarar_cargo", "disputas"));
+    let card = pcell("P_ASSIST_ESCALATION", json!({"case_type": "virtual_card", "channel": "web_chat"}));
+    assert!(map_finding(&card).is_none() && human_owned(&card).is_none(), "no existing agent covers virtual cards: descriptive, no proposal");
+}
+
+#[test]
+fn bank_and_e0_rows_are_unchanged_by_the_platform_rows() {
+    assert_eq!(map_finding(&cell("M1", "Queja", "Phone")).unwrap().id, "complaint_unresolved");
+    let e1 = finding_of(signal("E1", json!({"case_type": "dispute"}), stage(560, 1000, 0.17), stage(2800, 5000, 0.17)), Source::E0Treated);
+    assert_eq!(map_finding(&e1).unwrap().id, "copilot_repeated_lookup");
+}
+
+#[test]
+fn platform_aggregates_are_a_derived_source_with_their_own_label_synthetic_stays_synthetic() {
+    assert_eq!(Source::parse("platform_treated"), Some(Source::PlatformTreated));
+    assert_eq!(Source::parse("platform"), Some(Source::PlatformTreated));
+    assert!(Source::PlatformTreated.derived() && !Source::Synthetic.derived());
+    assert_eq!(Source::PlatformTreated.as_str(), "platform_treated");
+}

@@ -20,6 +20,8 @@ const TABLE: &[(&str, StepFn)] = &[
     // --- L1 ---
     ("cells", steps::cells::run),
     ("cells_exploratory", steps::cells::run_exploratory),
+    // --- EVT1: platform event cells (P_* metrics, platform profile) ---
+    ("cells_platform", steps::cells::run_platform),
     // --- GSI ---
     ("gate", gate_step),
 ];

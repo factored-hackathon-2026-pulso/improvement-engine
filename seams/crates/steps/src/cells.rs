@@ -24,11 +24,21 @@ use crate::StepError;
 use crate::sensor::json::{Json, parse};
 
 /// Dimension keys a treated cell table may carry. Anything else (ids, free text) is rejected.
-pub const ALLOWED_DIMS: [&str; 9] = [
+pub const ALLOWED_DIMS: [&str; 13] = [
     "reason_category", "channel", "category", "case_type", "priority", "survey_type",
     // AG2: digital action, campaign type, customer segment (closed vocabularies, aggregates only).
     "action", "campaign_type", "customer_segment",
+    // EVT1: platform event cells. `agent` is the AI agent (copiloto-asesor, recepcion), never a person; `release` and `tool` are
+    // registry / tool ids of the platform, bounded tokens (the aggregator rejects free text and platform ids before this table).
+    "language", "release", "agent", "tool",
 ];
+
+/// Platform profile: the dimension a cell is contrasted ON, in priority order. A multi-dimension cell drops its first present
+/// contrast dimension to form the comparison stratum (case_type x channel is compared with the same channel, excluding its own
+/// case type; release x agent with the other releases of the same agent; case_type x tool with the same tool in other types;
+/// channel x tool with the same tool in other channels). `tool` is never a contrast dimension: a tool is a stratum (comparing
+/// one tool with the others of the same group would only measure how popular a tool is).
+const PLATFORM_CONTRAST: [&str; 5] = ["case_type", "release", "agent", "language", "channel"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Multiplicity {
@@ -59,6 +69,10 @@ pub struct Config {
     /// `None` = the strict profile (default). `Some` = the exploratory profile: the strict tier runs unchanged and an
     /// additional, visibly tagged `candidate_exploratory` tier is produced with relaxed knobs (see [`Exploratory`]).
     pub exploratory: Option<Exploratory>,
+    /// EVT1 platform profile: contrast dimension by priority (see `PLATFORM_CONTRAST`), one comparison group per dimension
+    /// signature (a metric published under several signatures describes the same population more than once and the signatures
+    /// never mix), lower pooled support floor. `false` for every bank / E0 configuration (their output is unchanged).
+    pub platform: bool,
 }
 
 /// Relaxed knobs of the exploratory tier. It adds VOLUME of candidates for downstream agents (Scout, Verifier, Builder,
@@ -89,6 +103,27 @@ impl Config {
     }
 }
 
+impl Config {
+    /// EVT1 platform profile for the `P_*` metrics of `scripts/aggregate/platform_event_cells.py`: same strict tests as the default
+    /// (BH q 0.01, 5 pp effect floor, ratio 1.25, k 10, discovery/holdout replication, R2 windows), pooled support floor 200 (a
+    /// platform has far fewer decisions than a bank has contacts; the floor applies to the pooled full period, as in DET1), and ONE
+    /// pre-registered level risk: the copilot suggestion failure rate above 5% (analyst policy parameter, set before looking at data).
+    pub fn platform() -> Self {
+        Config {
+            dependencies: vec![],
+            min_support: 200,
+            level_risks: vec![LevelSpec { metric: "P_SUGG_FAILED".to_string(), threshold: 0.05, min_excess: 0.03 }],
+            platform: true,
+            ..Config::default()
+        }
+    }
+}
+
+/// Step entry point for platform event cells (`P_*` metrics): same as `run` with [`Config::platform`].
+pub fn run_platform(input: &str) -> Result<String, StepError> {
+    Ok(analyse(input, &Config::platform())?.to_json().write())
+}
+
 /// Note carried by every exploratory signal so the dossier and the Verifier see the weaker evidence.
 pub const EXPLORATORY_NOTE: &str = "exploratory: weaker statistical evidence; the regression proof is the quality gate";
 
@@ -113,6 +148,7 @@ impl Default for Config {
             // M8: more than 10% of sends to customers flagged as not accepting marketing is a compliance risk.
             level_risks: vec![LevelSpec { metric: "M8".to_string(), threshold: 0.10, min_excess: 0.05 }],
             exploratory: None,
+            platform: false,
         }
     }
 }
@@ -357,12 +393,23 @@ type Slots = [Option<Cell>; 4];
 /// Comparison group of a cell: the same metric and the same non-reason dimensions (same channel),
 /// excluding the cell's own reason. Cells without a reason or with only a reason dimension compare
 /// against the rest of the metric.
-fn stratum(dims: &[(String, String)]) -> Vec<(String, String)> {
+fn stratum(dims: &[(String, String)], platform: bool) -> Vec<(String, String)> {
     if dims.len() > 1 && dims.iter().any(|(k, _)| k == "reason_category") {
         dims.iter().filter(|(k, _)| k != "reason_category").cloned().collect()
+    } else if platform && dims.len() > 1 {
+        match PLATFORM_CONTRAST.iter().find(|c| dims.iter().any(|(k, _)| k == **c)) {
+            Some(c) => dims.iter().filter(|(k, _)| k != *c).cloned().collect(),
+            None => vec![],
+        }
     } else {
         vec![]
     }
+}
+
+/// Dimension-name signature that keeps the comparison groups of one metric apart (platform profile only; empty otherwise, so bank
+/// and E0 tables compare exactly as before).
+fn signature(dims: &[(String, String)], platform: bool) -> Vec<String> {
+    if platform { dims.iter().map(|(k, _)| k.clone()).collect() } else { vec![] }
 }
 
 fn stage(cell: &Cell, rest_num: i64, rest_den: i64) -> (Stage, bool) {
@@ -590,19 +637,20 @@ pub fn analyse(input: &str, cfg: &Config) -> Result<Report, StepError> {
     // Baseline = the same-channel stratum total (all PUBLISHED full-period cells of the metric/stratum in this slot) minus the
     // cell itself. Cells suppressed by k are absent from both sides; the aggregator publishes the full-period cells so the
     // share of the stratum that survives is high (see docs/data/bank-cells-metrics.md).
-    let mut totals: BTreeMap<(String, Vec<(String, String)>, usize), (i64, i64)> = BTreeMap::new();
+    let mut totals: BTreeMap<(String, Vec<String>, Vec<(String, String)>, usize), (i64, i64)> = BTreeMap::new();
     for ((metric, dims), slots) in &valid {
-        let st = stratum(dims);
+        let st = stratum(dims, cfg.platform);
+        let sg = signature(dims, cfg.platform);
         for (i, c) in slots.iter().enumerate() {
             if let Some(c) = c {
-                let t = totals.entry((metric.clone(), st.clone(), i)).or_insert((0, 0));
+                let t = totals.entry((metric.clone(), sg.clone(), st.clone(), i)).or_insert((0, 0));
                 t.0 += c.num;
                 t.1 += c.den;
             }
         }
     }
     let rest = |key: &Key, slot: usize, c: &Cell| -> Option<(i64, i64)> {
-        let t = totals.get(&(key.0.clone(), stratum(&key.1), slot))?;
+        let t = totals.get(&(key.0.clone(), signature(&key.1, cfg.platform), stratum(&key.1, cfg.platform), slot))?;
         let (rn, rd) = (t.0 - c.num, t.1 - c.den);
         k_ok(&Cell { num: rn, den: rd }, cfg.k_min).then_some((rn, rd))
     };
@@ -951,16 +999,16 @@ impl Report {
             (
                 "method",
                 Json::obj(vec![
-                    ("test", Json::s("two_proportion_z_pooled_vs_same_channel_excluding_own_reason")),
+                    ("test", Json::s(if c.platform { "two_proportion_z_pooled_vs_same_stratum_excluding_own_contrast_dimension" } else { "two_proportion_z_pooled_vs_same_channel_excluding_own_reason" })),
                     ("multiplicity", Json::s(match c.multiplicity { Multiplicity::Bh => "benjamini_hochberg_all_explored_cells", Multiplicity::Bonferroni => "bonferroni_all_explored_cells" })),
                     ("min_ratio", Json::Float(c.min_ratio)),
                     ("replication", Json::s("discovery_holdout_hash_split")),
-                    ("secondary_replication", Json::s("r2_windows_2023-07..2024-12_vs_2025-01..2026-05")),
+                    ("secondary_replication", Json::s(if c.platform { "r2_windows_first_vs_second_half_of_the_export_span" } else { "r2_windows_2023-07..2024-12_vs_2025-01..2026-05" })),
                     ("alpha", Json::Float(c.alpha)),
                     ("min_effect", Json::Float(c.min_effect)),
                     ("min_support", Json::Int(c.min_support)),
                     ("k_min", Json::Int(c.k_min)),
-                    ("profile", Json::s(if c.exploratory.is_some() { "exploratory" } else { "strict" })),
+                    ("profile", Json::s(if c.platform { "platform" } else if c.exploratory.is_some() { "exploratory" } else { "strict" })),
                     ("support_basis", Json::s("pooled_discovery_plus_holdout")),
                     ("baseline", Json::s("same_channel_full_period_published_cells_minus_own_cell")),
                     ("families", Json::Obj(self.families.iter().map(|(f, n)| (f.to_string(), Json::Int(*n as i64))).collect())),
