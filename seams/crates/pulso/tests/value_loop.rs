@@ -729,7 +729,12 @@ fn every_model_call_of_a_trigger_job_is_recorded_with_content_and_served_at_the_
     let run = pulso::run::engine_job::loop_run_id(&job);
     let calls = store.model_calls(&run);
     let roles: Vec<&str> = calls.iter().map(|c| c["role"].as_str().unwrap()).collect();
-    assert_eq!(roles, ["scout", "verifier", "builder"], "one call per role for the one finding");
+    // MAP1 tries more than one candidate: the first attempt is scout, verifier, builder; later attempts add calls whose numbers continue per role
+    assert_eq!(&roles[..3], ["scout", "verifier", "builder"], "one call per role for the first attempt");
+    let keys: std::collections::HashSet<(String, u64)> = calls.iter().map(|c| (c["role"].as_str().unwrap().to_string(), c["n"].as_u64().unwrap())).collect();
+    assert_eq!(keys.len(), calls.len(), "(role, n) is unique across the attempts of a finding: none is dropped by the store");
+    let spans: std::collections::HashSet<&str> = calls.iter().map(|c| c["span_id"].as_str().unwrap()).collect();
+    assert_eq!(spans.len(), calls.len(), "one generation span per call");
     let f = tecnico();
     for (c, stage) in calls.iter().zip(["scout", "verifier", "builder"]) {
         assert_eq!(c["schema"], "pulso.model_call/1");
@@ -744,15 +749,16 @@ fn every_model_call_of_a_trigger_job_is_recorded_with_content_and_served_at_the_
     assert!(calls[0]["response"].as_str().unwrap().contains("hypothesis"), "the scout answer text");
     // the job store keeps the calls apart from the finding record, which stays free of model text
     let rec = repo.output(T, &job, 1).unwrap().unwrap();
-    assert!(!rec.contains("hypothesis") && !rec.contains("output_schema"));
+    // ("hypothesis" alone is also the fixed MAP1 claim wording of the mapping row, so the check is against the recorded model text itself)
+    assert!(!rec.contains("output_schema") && calls.iter().all(|c| !rec.contains(c["response"].as_str().unwrap())), "{rec}");
     let kept: Value = serde_json::from_str(&repo.output(T, &job, pulso::run::value_loop::CALLS_STEP_BASE + 1).unwrap().expect("calls of finding 1")).unwrap();
-    assert_eq!(kept.as_array().unwrap().len(), 3);
+    assert_eq!(kept.as_array().unwrap().len(), calls.len());
     // and next to the outcome file
     let nd = std::fs::read_to_string(work.join("value-loop").join(format!("{job}.calls.ndjson"))).unwrap();
-    assert_eq!(nd.lines().count(), 3);
+    assert_eq!(nd.lines().count(), calls.len());
     // the debug-api route serves them
     let app = debug_api::App::new(store.clone(), debug_api::Config::default());
     let resp = app.handle(&debug_api::Req { method: "GET".into(), path: format!("/internal/v1/debug/runs/{run}/model-calls"), query: String::new(), headers: HashMap::new(), body: vec![] });
     let body: Value = serde_json::from_slice(&resp.body).unwrap();
-    assert_eq!((resp.status, body["items"].as_array().map(Vec::len)), (200, Some(3)));
+    assert_eq!((resp.status, body["items"].as_array().map(Vec::len)), (200, Some(calls.len())));
 }

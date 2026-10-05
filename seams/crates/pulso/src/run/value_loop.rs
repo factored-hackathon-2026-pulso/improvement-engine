@@ -243,7 +243,7 @@ impl ValueLoop {
             let (mut recs, mut attempts, mut tried, mut cost) = (vec![], vec![], vec![], 0.0f64);
             for cand in &tries {
                 let (r_rec, r) = self.attempt(&w, ew.as_ref(), proofs.as_ref(), &refreshed, f, ports.as_ref().expect("just built"), &opts, cand.as_deref());
-                call_records.extend(r.call_records.iter().cloned());
+                append_calls(&mut call_records, &r.call_records);
                 cost += r_rec["metering"]["cost_usd"].as_f64().unwrap_or(0.0);
                 if let Some(t) = cand {
                     tried.push(t.clone());
@@ -360,6 +360,27 @@ impl ValueLoop {
         (rec, r)
     }
 
+}
+
+/// Appends the call records of one candidate attempt to the finding's. Each attempt numbers its calls from 1 per role; the store keys a call by
+/// (evidence_ref, role, n), so the numbers (and the generation span ids derived from them) continue across the attempts of one finding.
+fn append_calls(all: &mut Vec<Value>, fresh: &[Value]) {
+    let mut next: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for c in all.iter() {
+        let e = next.entry(c["role"].as_str().unwrap_or("").to_string()).or_insert(0);
+        *e = (*e).max(c["n"].as_u64().unwrap_or(0));
+    }
+    for c in fresh {
+        let mut c = c.clone();
+        let role = c["role"].as_str().unwrap_or("").to_string();
+        let n = next.get(&role).copied().unwrap_or(0) + 1;
+        next.insert(role.clone(), n);
+        c["n"] = json!(n);
+        if let Some(t) = c["trace_id"].as_str().map(str::to_string) {
+            c["span_id"] = json!(core_client::trace::generation_span_id(&t, &role, u32::try_from(n).unwrap_or(u32::MAX)));
+        }
+        all.push(c);
+    }
 }
 
 /// Every model call recorded for the first `findings` findings of a job, in finding order (what `run_as` persisted, also by an earlier attempt).
