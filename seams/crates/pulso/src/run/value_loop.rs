@@ -81,6 +81,9 @@ pub struct ValueLoop {
     pub model_label: String,
     /// `PULSO_LOOP_MAX_FINDINGS`: cost bound per run (the first N corroborated findings in sensor order); the rest are counted, not silently dropped.
     pub max_findings: Option<usize>,
+    /// `PULSO_LOOP_MAX_EXPLORATORY` (default 2): how many `candidate_exploratory` findings (labelled, never corroborated) join the loop per
+    /// run, after the corroborated ones. 0 = strict sensor only.
+    pub max_exploratory: usize,
     pub proof: Option<ProofConfig>,
     /// ANN1: tells the support platform about an `announced` proposal AFTER agent-core accepted it (best effort, never fails the delivery).
     /// `PULSO_ANNOUNCE_TO_PLATFORM` / `PULSO_PLATFORM_URL` / `PULSO_PLATFORM_SERVICE_TOKEN`; default OFF.
@@ -175,6 +178,7 @@ impl ValueLoop {
             ports,
             model_label,
             max_findings: get("PULSO_LOOP_MAX_FINDINGS").and_then(|v| v.parse().ok()),
+            max_exploratory: get("PULSO_LOOP_MAX_EXPLORATORY").and_then(|v| v.parse().ok()).unwrap_or(2),
             proof,
             announcer: registry_writer::announce::Announcer::from_lookup(get)?,
             caps: Caps { new_agent_admin: truthy(get("PULSO_NEW_AGENT_ADMIN")) },
@@ -197,11 +201,14 @@ impl ValueLoop {
     /// As `run`; `run_id` is the debug-api run id of this job (`value-loop-<job>`): the session and the trace key of every story.
     pub fn run_as(&self, persist: &dyn Persist, run_id: &str) -> Result<Value, String> {
         let ndjson = std::fs::read_to_string(&self.cells).map_err(|e| format!("cells package: {e}"))?;
-        let report: Value = serde_json::from_str(&steps::cells::run(&ndjson).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        let (mut findings, skipped) = Finding::from_report(&report, self.source)?;
-        let total_corroborated = findings.len();
+        let sensor = if self.max_exploratory > 0 { steps::cells::run_exploratory(&ndjson) } else { steps::cells::run(&ndjson) };
+        let report: Value = serde_json::from_str(&sensor.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        let (mut findings, skipped) = Finding::from_report_with(&report, self.source, self.max_exploratory)?;
+        let total_corroborated = findings.iter().filter(|f| !f.is_exploratory()).count();
         if let Some(n) = self.max_findings {
-            findings.truncate(n);
+            // the cap bounds the corroborated findings; the exploratory ones follow within their own cap
+            let mut kept = 0usize;
+            findings.retain(|f| f.is_exploratory() || { kept += 1; kept <= n });
         }
         let mut ports: Option<Ports> = None; // built on the first finding that needs a model: a full replay calls none
         let store = FileStore::new(&self.receipts);

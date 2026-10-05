@@ -11,12 +11,13 @@ campaign_type) and emits ndjson cells for the Rust `cells` sensor (steps::cells)
 
 Guarantees: no identifiers, no free text, no row-level output. Every emitted count (numerator,
 complement, denominator) is 0 or >= k (k = 10); violating cells are suppressed and only counted.
-Cells carry a `period` (YYYY-MM, contact month); the partial months 2023-06 and 2026-06 are excluded.
+Cells carry a `period`: YYYY-MM (contact month), `ALL` (full period) or `W1`/`W2` (R2 windows). Full-period and window cells are
+derived from the month cells and k-checked on the pooled cell; suppression is applied consistently across the hierarchy. The partial months 2023-06 and 2026-06 are excluded.
 Replication design: deterministic customer-hash split A/B 50/50 (A = discovery, B = confirmation) (cross-sectional,
 because interaction timestamps are naive, without timezone).
 
 Metrics (all "higher is worse"):
-  M1  contact_unresolved_rate        calls with known resolution; by reason_category x channel
+  M1  contact_unresolved_rate        calls with known resolution; by reason_category x channel, and by reason_category alone
   M2  complaint_share_of_contacts    Queja contacts / all contacts; by channel
   M3  complaint_share_of_unresolved  Queja among unresolved contacts; by channel
   M4  pqr_open_rate                  PQR not Resolved/Closed/Rejected / all PQR; by category
@@ -127,6 +128,119 @@ def k_ok(num, den, k):
     return den >= k and (num == 0 or num >= k) and (den - num == 0 or den - num >= k)
 
 
+LEVEL_RISK_METRICS = {"M8"}  # level-risk metrics keep the monthly-only contract (the sensor tests their pooled level)
+WINDOWS = {"W1": ("2023-07", "2024-12"), "W2": ("2025-01", "2026-05")}  # R2 windows, same as steps::cells::window_of
+
+
+def window_of(period):
+    for w, (lo, hi) in WINDOWS.items():
+        if lo <= period <= hi:
+            return w
+    return None
+
+
+def is_month(period):
+    return period not in ("ALL", "W1", "W2")
+
+
+def _sum_ok(keys, cells, k):
+    """The sum of the suppressed siblings is what a reader recovers by differencing: it must itself pass k, and it must
+    not be a single suppressed cell (which would be recovered exactly)."""
+    if len(keys) < 2:
+        return False
+    return k_ok(sum(cells[x][0] for x in keys), sum(cells[x][1] for x in keys), k)
+
+
+def publish(raw, k):
+    """Raw per-month cells -> published rows. Adds FULL-PERIOD (`ALL`) and R2 window (`W1`/`W2`) cells per half (k checked on
+    the pooled cell: numerator, complement, denominator), then applies suppression consistently across the hierarchy
+    ALL > W1/W2 > months and across the M1 reason-only parent > reason x channel children, so no published margin lets a
+    reader difference out a suppressed cell. Returns (rows, suppressed_by_metric, derived_stats)."""
+    cells = {}
+    for (metric, dims, half, period), (num, den) in raw.items():
+        cells[(metric, dims, half, period)] = [num, den]
+        if metric in LEVEL_RISK_METRICS or not is_month(period):
+            continue
+        for lvl in ("ALL", window_of(period)):
+            if lvl is None:
+                continue
+            c = cells.setdefault((metric, dims, half, lvl), [0, 0])
+            c[0] += num
+            c[1] += den
+    # M10 is accumulated in seconds (M10S) and emitted in whole hours (conservative effective n).
+    out = {}
+    for (metric, dims, half, period), (num, den) in cells.items():
+        if metric == "M10S":
+            metric, num, den = "M10", num // HANDLE_TIME_UNIT_SECONDS, den // HANDLE_TIME_UNIT_SECONDS
+        out[(metric, dims, half, period)] = [num, den]
+    cells = out
+    pub = {key for key, (num, den) in cells.items() if k_ok(num, den, k)}
+
+    # Complementary suppression of margins (any level): a published M3 / M6 must not let a reader subtract a suppressed cell.
+    #  - M3 denominator = sum of M1 numerators of the channel: hide M3 when an M1 cell of that channel/half/period
+    #    with a positive numerator is suppressed.
+    #  - M6 = M6R + M6U (+ unknown resolution): hide the partner when M6R or M6U is suppressed.
+    for (metric, dims, half, period), (num, den) in cells.items():
+        if (metric, dims, half, period) in pub:
+            continue
+        d = dict(dims)
+        if metric == "M1" and num > 0 and "channel" in d and "reason_category" in d:
+            pub.discard(("M3", (("channel", d["channel"]),), half, period))
+        elif metric in ("M6R", "M6U"):
+            pub.discard(("M6U" if metric == "M6R" else "M6R", dims, half, period))
+
+    groups = {}
+    for key in cells:
+        if key[0] not in LEVEL_RISK_METRICS:
+            groups.setdefault(key[:3], []).append(key[3])
+    changed = True
+    while changed:
+        before = len(pub)
+        for (metric, dims, half), periods in groups.items():
+            if "ALL" not in periods:
+                continue
+            kk = lambda p: (metric, dims, half, p)  # noqa: E731
+            wins = [p for p in ("W1", "W2") if p in periods]
+            if kk("ALL") not in pub:
+                for p in periods:
+                    pub.discard(kk(p))
+                continue
+            if any(kk(w) not in pub for w in wins):
+                for w in wins:
+                    pub.discard(kk(w))
+            for w in wins:
+                months = [p for p in periods if is_month(p) and window_of(p) == w]
+                sup = [kk(p) for p in months if kk(p) not in pub]
+                if kk(w) not in pub or (sup and not _sum_ok(sup, cells, k)):
+                    for p in months:
+                        pub.discard(kk(p))
+        # M1 reason-only parent = sum over channels of its reason x channel children (same half, same period level).
+        children = {}
+        for key in cells:
+            d = dict(key[1])
+            if key[0] == "M1" and "channel" in d and "reason_category" in d:
+                children.setdefault((d["reason_category"], key[2], key[3]), []).append(key)
+        for (reason, half, period), kids in children.items():
+            parent = ("M1", (("reason_category", reason),), half, period)
+            if parent not in pub:
+                continue
+            sup = [x for x in kids if x not in pub]
+            if sup and not _sum_ok(sup, cells, k):
+                pub.discard(parent)
+        changed = len(pub) != before
+
+    rows, suppressed = [], {}
+    for (metric, dims, half, period), (num, den) in cells.items():
+        if (metric, dims, half, period) in pub:
+            rows.append({"metric": metric, "dims": dict(dims), "half": half, "period": period, "numerator": num, "denominator": den})
+        else:
+            suppressed[metric] = suppressed.get(metric, 0) + 1
+    derived = {"cells_published": sum(1 for r in rows if r["period"] == "ALL"),
+               "cells_suppressed": sum(1 for key in cells if key[3] == "ALL" and key not in pub),
+               "window_rows_published": sum(1 for r in rows if r["period"] in ("W1", "W2"))}
+    return rows, suppressed, derived
+
+
 def build(root, k=10, tables=ALLOWED_TABLES):
     root = Path(root)
     for t in tables:
@@ -158,6 +272,7 @@ def build(root, k=10, tables=ALLOWED_TABLES):
             if res in ("True", "False"):
                 unresolved = int(res == "False")
                 acc.add("M1", {"reason_category": reason, "channel": chan}, half, period, unresolved)
+                acc.add("M1", {"reason_category": reason}, half, period, unresolved)  # reason-only family
                 if unresolved:
                     acc.add("M3", {"channel": chan}, half, period, queja)
                 dur = (r.get("duration_seconds") or "").strip()
@@ -296,33 +411,8 @@ def build(root, k=10, tables=ALLOWED_TABLES):
         stats["partial_month_rows_excluded"]["transactions"] = skipped
         stats["transactions"] = {"segment_or_status_unknown_excluded": unk}
 
-    # M10 is accumulated in seconds (M10S) and emitted in whole hours (conservative effective n).
-    cells = {}
-    for (metric, dims, half, period), (num, den) in acc.cells.items():
-        if metric == "M10S":
-            metric, num, den = "M10", num // HANDLE_TIME_UNIT_SECONDS, den // HANDLE_TIME_UNIT_SECONDS
-        cells[(metric, dims, half, period)] = [num, den]
-
-    # Complementary suppression: a published margin must not let a reader subtract a suppressed cell.
-    #  - M3 denominator = sum of M1 numerators of the channel: hide M3 when an M1 cell of that channel/half/period
-    #    with a positive numerator is suppressed.
-    #  - M6 = M6R + M6U (+ unknown resolution): hide the partner when M6R or M6U is suppressed.
-    hide = set()
-    for (metric, dims, half, period), (num, den) in cells.items():
-        if k_ok(num, den, k):
-            continue
-        d = dict(dims)
-        if metric == "M1" and num > 0:
-            hide.add(("M3", (("channel", d["channel"]),), half, period))
-        elif metric in ("M6R", "M6U"):
-            hide.add(("M6U" if metric == "M6R" else "M6R", dims, half, period))
-
-    rows, suppressed = [], {}
-    for (metric, dims, half, period), (num, den) in cells.items():
-        if k_ok(num, den, k) and (metric, dims, half, period) not in hide:
-            rows.append({"metric": metric, "dims": dict(dims), "half": half, "period": period, "numerator": num, "denominator": den})
-        else:
-            suppressed[metric] = suppressed.get(metric, 0) + 1
+    rows, suppressed, derived = publish(acc.cells, k)
+    stats["full_period"] = derived
     rows.sort(key=row_key)
     stats["suppressed_cells"] = sum(suppressed.values())
     stats["suppressed_by_metric"] = dict(sorted(suppressed.items()))

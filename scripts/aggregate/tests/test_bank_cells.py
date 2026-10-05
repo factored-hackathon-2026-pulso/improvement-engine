@@ -97,6 +97,7 @@ class BuildTests(unittest.TestCase):
 
     def test_metric_definitions(self):
         rows, _ = bc.build(self.root, k=1)  # k=1 so the tiny synthetic table is not suppressed
+        rows = [r for r in rows if bc.is_month(r["period"])]  # full-period / window rows: FullPeriodTests
         m1 = [r for r in rows if r["metric"] == "M1" and r["dims"] == {"reason_category": "Queja", "channel": "Phone"}]
         self.assertEqual(sum(r["denominator"] for r in m1), sum(1 for i in range(400) if i % 3 == 0 and i % 2 == 0 and i % 50 != 7))
         self.assertEqual(sum(r["numerator"] for r in m1), sum(1 for i in range(400) if i % 3 == 0 and i % 2 == 0 and i % 4 == 0 and i % 50 != 7))
@@ -114,6 +115,8 @@ class BuildTests(unittest.TestCase):
 
     def test_rows_carry_a_period_and_partial_months_are_excluded(self):
         rows, stats = bc.build(self.root, k=1)
+        self.assertTrue({"ALL", "W1"} <= {r["period"] for r in rows})
+        rows = [r for r in rows if bc.is_month(r["period"])]
         for r in rows:
             self.assertRegex(r["period"], r"^\d{4}-\d{2}$")
             self.assertNotIn(r["period"], ("2023-06", "2026-06"))
@@ -174,7 +177,8 @@ class MarginDifferencingTests(unittest.TestCase):
             rows, _ = bc.build(self.make(Path(t)))
         for r3 in (r for r in rows if r["metric"] == "M3"):
             hidden_free = sum(r["numerator"] for r in rows if r["metric"] == "M1" and r["half"] == r3["half"]
-                              and r["period"] == r3["period"] and r["dims"]["channel"] == r3["dims"]["channel"])
+                              and r["period"] == r3["period"] and "reason_category" in r["dims"]
+                              and r["dims"].get("channel") == r3["dims"]["channel"])
             self.assertEqual(hidden_free, r3["denominator"], f"M3 minus published M1 reveals a suppressed cell: {r3}")
 
     def test_suppressed_m6r_or_m6u_hides_its_partner(self):
@@ -186,6 +190,121 @@ class MarginDifferencingTests(unittest.TestCase):
                 keyed.setdefault((r["half"], r["period"], tuple(sorted(r["dims"].items()))), set()).add(r["metric"])
         for key, present in keyed.items():
             self.assertFalse("M6" in present and len(present & {"M6R", "M6U"}) == 1, f"M6 minus one partner reveals the other: {key} {present}")
+
+
+class FullPeriodTests(unittest.TestCase):
+    """DET1: full-period (ALL) and window (W1/W2) cells, k on the pooled cell, no differencing leaks across levels."""
+
+    @staticmethod
+    def raw(spec):
+        """spec: {(reason, channel|None, half, period): (num, den)} for metric M1."""
+        out = {}
+        for (reason, chan, half, period), v in spec.items():
+            dims = {"reason_category": reason, **({"channel": chan} if chan else {})}
+            out[("M1", tuple(sorted(dims.items())), half, period)] = list(v)
+        return out
+
+    @staticmethod
+    def find(rows, reason, chan, half, period):
+        want = {"reason_category": reason, **({"channel": chan} if chan else {})}
+        for r in rows:
+            if r["metric"] == "M1" and r["dims"] == want and r["half"] == half and r["period"] == period:
+                return r
+        return None
+
+    def test_pooled_cell_is_published_even_when_every_month_is_below_k(self):
+        months = [f"2024-{m:02d}" for m in range(1, 13)]
+        spec = {("Retencion", "Web", "discovery", m): (4, 9) for m in months}  # 4/9 per month: all suppressed
+        rows, _, _ = bc.publish(self.raw(spec), 10)
+        all_row = self.find(rows, "Retencion", "Web", "discovery", "ALL")
+        self.assertEqual((all_row["numerator"], all_row["denominator"]), (48, 108))
+        self.assertEqual([r for r in rows if bc.is_month(r["period"])], [])
+
+    def test_full_period_cell_still_obeys_k_on_numerator_complement_and_denominator(self):
+        spec = {("Retencion", "Web", "discovery", "2024-01"): (4, 200)}  # numerator 4 < k even pooled
+        self.assertEqual(bc.publish(self.raw(spec), 10)[0], [])
+        spec = {("Retencion", "Web", "discovery", "2024-01"): (198, 200)}  # complement 2 < k
+        self.assertEqual(bc.publish(self.raw(spec), 10)[0], [])
+
+    def test_window_rows_are_withheld_when_a_sibling_window_is_suppressed(self):
+        spec = {("Tecnico", "App", "discovery", "2024-01"): (50, 200), ("Tecnico", "App", "discovery", "2025-02"): (4, 200)}
+        rows, _, _ = bc.publish(self.raw(spec), 10)
+        # ALL = W1 + W2 and W2 (4/200) is suppressed: W1 would reveal it by differencing, so W1 and the months are withheld
+        periods = {r["period"] for r in rows if r["dims"].get("channel") == "App"}
+        self.assertEqual(periods, {"ALL"})
+
+    def test_months_withheld_when_one_suppressed_month_would_be_recovered_from_the_window(self):
+        spec = {("Tecnico", "App", "discovery", "2024-01"): (50, 200), ("Tecnico", "App", "discovery", "2024-02"): (4, 200),
+                ("Tecnico", "App", "discovery", "2025-01"): (50, 200)}
+        rows, _, _ = bc.publish(self.raw(spec), 10)
+        got = {r["period"] for r in rows if r["dims"].get("channel") == "App"}
+        self.assertEqual(got, {"ALL", "W1", "W2", "2025-01"})  # W1 months withheld, W2 month fine
+
+    def test_reason_only_parent_is_hidden_when_a_single_child_is_suppressed(self):
+        spec = {("Retencion", "Web", "discovery", "2024-01"): (4, 200), ("Retencion", "App", "discovery", "2024-01"): (60, 200),
+                ("Retencion", None, "discovery", "2024-01"): (64, 400)}
+        rows, _, _ = bc.publish(self.raw(spec), 10)
+        self.assertIsNone(self.find(rows, "Retencion", None, "discovery", "ALL"))
+        self.assertIsNotNone(self.find(rows, "Retencion", "App", "discovery", "ALL"))
+
+    def test_reason_only_parent_is_published_when_children_are_all_published(self):
+        spec = {("Retencion", "Web", "discovery", "2024-01"): (40, 200), ("Retencion", "App", "discovery", "2024-01"): (60, 200),
+                ("Retencion", None, "discovery", "2024-01"): (100, 400)}
+        rows, _, _ = bc.publish(self.raw(spec), 10)
+        self.assertIsNotNone(self.find(rows, "Retencion", None, "discovery", "ALL"))
+
+    def test_published_levels_are_consistent_randomised(self):
+        import random
+        rnd = random.Random(7)
+        spec = {}
+        for reason in ("A", "B", "C"):
+            for chan in ("X", "Y"):
+                for m in [f"2024-{i:02d}" for i in range(1, 13)] + ["2025-01", "2025-02"]:
+                    den = rnd.choice([8, 30, 200])
+                    spec[(reason, chan, "discovery", m)] = (min(den, rnd.choice([0, 2, 9, 15, den // 2])), den)
+        raw = self.raw(spec)
+        for (metric, d, h, p), (n, dn) in list(raw.items()):
+            parent = ("M1", (("reason_category", dict(d)["reason_category"]),), h, p)
+            c = raw.setdefault(parent, [0, 0])
+            c[0] += n
+            c[1] += dn
+        rows, _, _ = bc.publish(raw, 10)
+        pub = {(tuple(sorted(r["dims"].items())), r["half"], r["period"]): (r["numerator"], r["denominator"]) for r in rows}
+
+        def ok(n, dn):
+            return dn >= 10 and (n == 0 or n >= 10) and (dn - n == 0 or dn - n >= 10)
+
+        for (dims, half, period), (n, dn) in pub.items():
+            self.assertTrue(ok(n, dn))
+        # parent minus its published children: nothing, or a residual that itself passes k
+        for (dims, half, period), (n, dn) in pub.items():
+            dd = dict(dims)
+            if "channel" in dd:
+                continue
+            kids = [v for (d2, h2, p2), v in pub.items()
+                    if h2 == half and p2 == period and dict(d2).get("reason_category") == dd["reason_category"] and "channel" in dict(d2)]
+            rn, rd = n - sum(v[0] for v in kids), dn - sum(v[1] for v in kids)
+            self.assertTrue(rd == 0 or ok(rn, rd), (dims, period, rn, rd))
+        # ALL minus published windows / windows minus published months: nothing, or a residual that passes k
+        for (dims, half, period), (n, dn) in pub.items():
+            if period not in ("ALL", "W1", "W2"):
+                continue
+            kids = [v for (d2, h2, p2), v in pub.items() if d2 == dims and h2 == half and
+                    ((period == "ALL" and p2 in ("W1", "W2")) or (period != "ALL" and bc.is_month(p2) and bc.window_of(p2) == period))]
+            rn, rd = n - sum(v[0] for v in kids), dn - sum(v[1] for v in kids)
+            self.assertTrue(rd == 0 or ok(rn, rd), (dims, period, rn, rd))
+
+    def test_level_risk_metric_gets_no_full_period_rows(self):
+        raw = {("M8", (("campaign_type", "X"), ("channel", "Email")), "discovery", "2024-01"): [40, 200]}
+        rows, _, _ = bc.publish(raw, 10)
+        self.assertEqual({r["period"] for r in rows}, {"2024-01"})
+
+    def test_build_emits_reason_only_m1_and_full_period_cells(self):
+        with tempfile.TemporaryDirectory() as t:
+            rows, stats = bc.build(synthetic_root(Path(t)), k=1)
+        self.assertTrue(any(r["metric"] == "M1" and set(r["dims"]) == {"reason_category"} for r in rows))
+        self.assertIn("ALL", {r["period"] for r in rows})
+        self.assertIn("full_period", stats)
 
 
 if __name__ == "__main__":
