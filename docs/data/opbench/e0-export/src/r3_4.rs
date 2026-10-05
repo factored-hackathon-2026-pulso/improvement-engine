@@ -942,13 +942,22 @@ fn parse_optional_bool(value: &str) -> Result<Option<bool>, &'static str> {
 fn parse_optional_integer(value: &str) -> Result<Option<i64>, &'static str> {
     let value = value.trim();
     if value.is_empty() || value.eq_ignore_ascii_case("null") || value.eq_ignore_ascii_case("na") {
-        Ok(None)
-    } else {
-        value
+        return Ok(None);
+    }
+    if let Ok(integer) = value.parse() {
+        return Ok(Some(integer));
+    }
+    if let Some((whole, fraction)) = value.split_once('.')
+        && !whole.is_empty()
+        && !fraction.is_empty()
+        && fraction.bytes().all(|byte| byte == b'0')
+    {
+        return whole
             .parse()
             .map(Some)
-            .map_err(|_| "bank complaint integer schema drift")
+            .map_err(|_| "bank complaint integer schema drift");
     }
+    Err("bank complaint integer schema drift")
 }
 
 pub fn digest_inputs(data_root: &Path, e0_data_dir: &Path) -> Result<Value, &'static str> {
@@ -1116,6 +1125,17 @@ mod tests {
         assert_eq!(
             integer_at(&non_integer, 0).unwrap_err(),
             "allowlisted E0 integer field has a non-integer representation"
+        );
+    }
+
+    #[test]
+    fn accepts_exact_decimal_csv_encoding_for_integer_bank_days_only() {
+        assert_eq!(parse_optional_integer(" 4.000 ").unwrap(), Some(4));
+        assert_eq!(parse_optional_integer("-0.0").unwrap(), Some(0));
+        assert_eq!(parse_optional_integer("").unwrap(), None);
+        assert_eq!(
+            parse_optional_integer("4.25").unwrap_err(),
+            "bank complaint integer schema drift"
         );
     }
 
