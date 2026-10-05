@@ -77,6 +77,9 @@ pub struct ValueLoop {
     /// `PULSO_LOOP_MAX_FINDINGS`: cost bound per run (the first N corroborated findings in sensor order); the rest are counted, not silently dropped.
     pub max_findings: Option<usize>,
     pub proof: Option<ProofConfig>,
+    /// ANN1: tells the support platform about an `announced` proposal AFTER agent-core accepted it (best effort, never fails the delivery).
+    /// `PULSO_ANNOUNCE_TO_PLATFORM` / `PULSO_PLATFORM_URL` / `PULSO_PLATFORM_SERVICE_TOKEN`; default OFF.
+    pub announcer: Option<registry_writer::announce::Announcer>,
 }
 
 /// `scripts/regression` of the working directory, else of the checkout the binary was built from.
@@ -165,6 +168,7 @@ impl ValueLoop {
             model_label,
             max_findings: get("PULSO_LOOP_MAX_FINDINGS").and_then(|v| v.parse().ok()),
             proof,
+            announcer: registry_writer::announce::Announcer::from_lookup(get)?,
         }))
     }
 
@@ -238,6 +242,10 @@ impl ValueLoop {
                                     rec["outcome"] = json!(format!("proven_not_delivered:{}", o.reason.map_or("unknown", registry_writer::Reason::code)));
                                 }
                                 rec["delivery"] = o.to_json();
+                                // ANN1: only an announced proposal that agent-core accepted; the outcome is a record, never a failure of the delivery.
+                                if let (true, Some(a), Some(id)) = (o.delivered(), &self.announcer, o.proposal_id.as_deref()) {
+                                    rec["platform_announce"] = json!(a.announce(f, id, &proof.dossier).record());
+                                }
                             }
                         }
                         _ => {

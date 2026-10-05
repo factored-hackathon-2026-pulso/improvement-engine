@@ -144,6 +144,7 @@ fn value_loop(work: &Path, wire: Arc<dyn Transport + Send + Sync>) -> ValueLoop 
         model_label: "scripted".into(),
         max_findings: None,
         proof: None,
+        announcer: None,
     }
 }
 
@@ -458,6 +459,59 @@ mod w11 {
         let paths = core.paths.lock().unwrap().join("\n");
         assert!(!paths.contains("approve") && !paths.contains("publish") && !paths.contains("promote") && !paths.contains("reject"), "{paths}");
         assert!(!out.to_string().contains(TOKEN));
+    }
+
+    /// Platform double: answers a fixed status for every announce and remembers what it was sent.
+    struct Platform {
+        status: u16,
+        sent: Mutex<Vec<(String, Value)>>,
+    }
+    impl Transport for Platform {
+        fn send(&self, req: &Request) -> Result<Reply, TransportError> {
+            assert_eq!(req.bearer.reveal(), "platform-throwaway");
+            self.sent.lock().unwrap().push((format!("{} {}", req.method, req.path), req.body.clone().unwrap()));
+            Ok(Reply { status: self.status, body: json!({"proposalId": req.body.as_ref().unwrap()["proposalId"]}) })
+        }
+    }
+    fn announcing(work: &Path, core: Arc<Core>, fake: Fake, p: Arc<Platform>) -> ValueLoop {
+        let mut v = with_proof(work, core, fake);
+        let mut a = registry_writer::announce::Announcer::new(p, Jws::new("platform-throwaway".into()));
+        a.sleep = |_| {};
+        v.announcer = Some(a);
+        v
+    }
+
+    #[test]
+    fn an_announced_proposal_is_relayed_to_the_platform_after_agent_core_accepted_it() {
+        let work = temp("ann1-ok");
+        let p = Arc::new(Platform { status: 201, sent: Mutex::new(vec![]) });
+        let out = announcing(&work, Arc::new(Core::default()), Fake { refuse: false, story_outcome: "regression_suite_proven" }, p.clone()).run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!((rec["outcome"].as_str(), rec["delivery"]["status"].as_str(), rec["platform_announce"].as_str()), (Some("announced"), Some("delivered"), Some("platform_announced")), "{rec}");
+        let sent = p.sent.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].0, "POST /api/v1/internal/builder/proposals/announce");
+        assert_eq!(sent[0].1["proposalId"], rec["delivery"]["proposal_id"]);
+        assert!(!out.to_string().contains("platform-throwaway"));
+    }
+
+    #[test]
+    fn a_failing_platform_never_fails_the_agent_core_delivery() {
+        let work = temp("ann1-down");
+        let p = Arc::new(Platform { status: 503, sent: Mutex::new(vec![]) });
+        let out = announcing(&work, Arc::new(Core::default()), Fake { refuse: false, story_outcome: "regression_suite_proven" }, p.clone()).run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!((rec["outcome"].as_str(), rec["delivery"]["status"].as_str(), rec["platform_announce"].as_str()), (Some("announced"), Some("delivered"), Some("platform_announce_failed:unavailable")), "{rec}");
+        assert_eq!(p.sent.lock().unwrap().len(), 3, "bounded retries");
+    }
+
+    #[test]
+    fn a_not_announced_finding_never_calls_the_platform() {
+        let work = temp("ann1-none");
+        let p = Arc::new(Platform { status: 201, sent: Mutex::new(vec![]) });
+        let out = announcing(&work, Arc::new(Core::default()), Fake { refuse: false, story_outcome: "not_fixed" }, p.clone()).run(&pulso::run::value_loop::NoPersist).unwrap();
+        assert!(out["findings"][0]["platform_announce"].is_null());
+        assert!(p.sent.lock().unwrap().is_empty());
     }
 
     #[test]
