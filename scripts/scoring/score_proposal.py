@@ -50,7 +50,8 @@ PII_PATTERNS = (
 FAMILIES = (("deepseek", "deepseek"), ("anthropic", "anthropic"), ("claude", "anthropic"), ("openai", "openai"),
             ("gpt", "openai"), ("google", "google"), ("gemini", "google"), ("meta", "meta"),
             ("llama", "meta"), ("mistral", "mistral"), ("qwen", "qwen"), ("cohere", "cohere"), ("xai", "xai"),
-            ("grok", "xai"))
+            ("grok", "xai"), ("z-ai", "zhipu"), ("zhipu", "zhipu"), ("glm", "zhipu"),
+            ("xiaomi", "xiaomi"), ("mimo", "xiaomi"))
 REASONING_KEYS = {"reasoning", "builder_reasoning", "chain_of_thought", "scratchpad"}
 
 

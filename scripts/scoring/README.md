@@ -21,3 +21,21 @@ reasoning, and may only score judged criteria. This repo holds no keys; the call
 Input shapes were fixed against the audit and the local, not yet delivered, OPBENCH-lite output; the
 registry export is read generically (any JSON whose objects carry `id`/`kind`). Re-check both when the
 Codex catalog and the real agent-core export land.
+
+## Judge (SC2)
+
+- `judges/gateway_judge.py` (`--judge judges.gateway_judge:judge`): calls the local llm-gateway `POST /v1/generate`
+  (`{prompt, inputs, schema, profile, labels}` -> `{output,...}`, same contract as the engine's `LlmGateway`).
+  Output schema per criterion: `{"score": 0|1|2, "justification": "<one line>"}`. Malformed output is re-asked once,
+  then denied (`JudgeError`); HTTP errors deny. Builder reasoning keys are stripped before the prompt; the proposal
+  text is framed as data. Refuses when judge family == builder family or the gateway is not loopback/private.
+- Environment only (never printed, never in argv or files): `PULSO_LLM_GATEWAY_ADDR`, `PULSO_LLM_GATEWAY_KEY`
+  (fallback `GATEWAY_TOKEN_AGENT_CORE`), `PULSO_JUDGE_MODEL` (default `z-ai/glm-5.3-flash`),
+  `PULSO_JUDGE_BUILDER_MODEL` (default `xiaomi/mimo-v2.6-flash`; Verifier is `xiaomi/mimo-v2.6-pro`),
+  `PULSO_LLM_GATEWAY_ALIAS`, `PULSO_LLM_GATEWAY_TIMEOUT_S`. `model_family` now knows zhipu (glm, z-ai) and xiaomi (mimo).
+- Double sampling, min and the gap > 1 escalation stay in `run_judge`; the callable is one sample.
+- `judge_calibration.py [--golden f.json] [--live] [--limit N]`: agreement of the judge with a golden set
+  (`golden/synthetic_golden_12.json`: 12 synthetic proposals, expected scores derived from the rubric anchors, NOT human
+  labels; a Codex set may replace it, same shape). Reports exact, within-1, hard-gate agreement (a 0 is a rejection
+  gate: judge-zero == expected-zero) per criterion and per proposal; escalated items are listed, not scored. Without
+  `--live` or gateway env the status is `not_exercised`. Offline tests use a scripted transport.
