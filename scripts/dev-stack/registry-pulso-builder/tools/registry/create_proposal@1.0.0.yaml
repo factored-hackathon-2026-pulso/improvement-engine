@@ -1,0 +1,25 @@
+id: registry/create_proposal
+version: 1.0.0
+risk_class: write_draft
+min_auth_level: session
+idempotent: true
+readback_by: idempotency_key
+confirmation_ttl: PT5M
+description: Crea una propuesta de cambio en el registry (borrador).
+args_schema:
+  type: object
+  additionalProperties: false
+  required:
+  - agent_id
+  - origin
+  - title
+  properties:
+    agent_id:
+      type: string
+    title:
+      type: string
+    origin:
+      type: string
+      enum:
+      - builder_chat
+      - auto_detect

@@ -17,6 +17,8 @@ const TABLE: &[(&str, StepFn)] = &[
     ("intent", steps::intent::run),
     // --- CMP ---
     ("compile", compile_step),
+    // --- L1 ---
+    ("cells", steps::cells::run),
     // --- GSI ---
     ("gate", gate_step),
 ];

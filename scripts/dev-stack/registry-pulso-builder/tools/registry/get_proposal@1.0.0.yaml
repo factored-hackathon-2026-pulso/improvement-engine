@@ -1,0 +1,15 @@
+id: registry/get_proposal
+version: 1.0.0
+risk_class: read
+min_auth_level: session
+idempotent: true
+confirmation_ttl: PT5M
+description: Lee una propuesta, sus cambios y su última evaluación.
+args_schema:
+  type: object
+  additionalProperties: false
+  required:
+  - proposal_id
+  properties:
+    proposal_id:
+      type: string

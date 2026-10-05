@@ -1,0 +1,15 @@
+id: registry/get_write
+version: 1.0.0
+risk_class: read
+min_auth_level: session
+idempotent: true
+confirmation_ttl: PT5M
+description: Consulta una escritura del constructor por su clave de idempotencia.
+args_schema:
+  type: object
+  additionalProperties: false
+  required:
+  - idempotency_key
+  properties:
+    idempotency_key:
+      type: string

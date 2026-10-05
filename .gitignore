@@ -15,3 +15,4 @@ output/
 *.tfstate*
 .nexus-outbox/
 /seams/target/
+/.dev-stack/
