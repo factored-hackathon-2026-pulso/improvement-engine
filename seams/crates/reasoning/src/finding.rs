@@ -89,6 +89,11 @@ impl Finding {
         for (i, s) in signals.iter().enumerate() {
             let status = s["status"].as_str().unwrap_or("").to_string();
             let metric = s["metric"].as_str().unwrap_or("").to_string();
+            // A `level_risk` signal is a risk LEVEL against a threshold, not a vs-rest contrast: the contrast roles never see it.
+            if s["type"].as_str() == Some("level_risk") {
+                skipped.push(Skipped { index: i, metric, status: "level_risk".to_string(), reason: s["reason"].as_str().unwrap_or("").to_string() });
+                continue;
+            }
             if status != "corroborated" {
                 skipped.push(Skipped { index: i, metric, status, reason: s["reason"].as_str().unwrap_or("").to_string() });
                 continue;
@@ -111,6 +116,14 @@ impl Finding {
             });
         }
         Ok((found, skipped))
+    }
+
+    /// The sensor-shaped signal of this finding (what the decision dossier reads).
+    pub fn to_signal_json(&self) -> Value {
+        let st = |s: &Stage| json!({"numerator": s.numerator, "denominator": s.denominator, "rate": s.rate, "baseline_rate": s.baseline_rate, "diff": s.diff});
+        let dims: serde_json::Map<String, Value> = self.dims.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
+        json!({"finding_id": self.id, "metric": self.metric, "dims": dims, "status": "corroborated", "direction": self.direction, "claim": "association",
+               "discovery": st(&self.discovery), "holdout": st(&self.holdout), "r2": {"status": self.r2}, "p_adj": self.p_adj})
     }
 
     pub fn metric_token(&self) -> String {

@@ -142,7 +142,7 @@ class BuildTests(unittest.TestCase):
 
     def test_refuses_tables_outside_the_allowlist(self):
         with self.assertRaises(ValueError):
-            bc.build(self.root, tables=("transactions",))
+            bc.build(self.root, tables=("service_agents",))
 
 
 class MarginDifferencingTests(unittest.TestCase):

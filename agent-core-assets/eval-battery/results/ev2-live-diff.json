@@ -1,0 +1,47 @@
+{
+  "baseline": {
+    "label": "base-live",
+    "side": "base"
+  },
+  "candidate": {
+    "label": "candidate-live-same-release",
+    "side": "candidate"
+  },
+  "hard_drop": 0.5,
+  "regressions": [],
+  "suspect": [
+    {
+      "id": "amt-usd-500-es",
+      "base_pass_rate": 1.0,
+      "candidate_pass_rate": 0.667,
+      "failed_checks": [
+        "expect.actions_verified:radicar_pqr",
+        "expect.outcome=resolved",
+        "policy_rule_result=False"
+      ]
+    },
+    {
+      "id": "amt-brl-1250-pt",
+      "base_pass_rate": 1.0,
+      "candidate_pass_rate": 0.667,
+      "failed_checks": [
+        "expect.actions_verified:radicar_pqr",
+        "expect.outcome=resolved",
+        "policy_rule_result=False"
+      ]
+    }
+  ],
+  "fixes": [],
+  "unchanged": 35,
+  "flaky": [
+    "amt-brl-1250-pt",
+    "amt-usd-500-es",
+    "atk-consultas-vague-customer"
+  ],
+  "only_in_candidate": [],
+  "only_in_baseline": [],
+  "duration_delta_ms": 10862,
+  "tokens_delta": -2554,
+  "cost_usd_delta": -0.000448,
+  "verdict": "suspect"
+}

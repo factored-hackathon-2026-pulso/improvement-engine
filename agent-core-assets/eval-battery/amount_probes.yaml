@@ -1,0 +1,44 @@
+# Amount-boundary probes for the `disputas` escalation policy (family: amount_boundary).
+# Deterministic: each case seeds ONE disputed charge and its USD equivalent, so the only variable is the amount at the
+# `umbral` node (`policy:escalamiento-disputa-monto`). Expectation = what the IMPLEMENTED policy does (gate-grade).
+# `doc_expect` = what the team policy document says (informative only, human-owned, never gates).
+#
+# HUMAN-OWNED FINDING (do not "fix" by a proposal; owner `riesgo`, protected policy):
+#   implemented : agent-core registry-e2e policies/escalamiento-disputa-monto@1.0.0.yaml  expr {">": [monto_usd, 500]}
+#   documented  : data-lab docs/policies.md rule 10 (R4/H2), table row USD = 250 ("el cargo supera el monto")
+#   evidence    : docs/reports-claude/ARTIFACT_ANATOMY_AND_RUBRIC_2026-10-04.md finding F6 and decision row D5
+# Consequence: charges in (250, 500] USD are auto-processed by the agent although the team document sends them to a
+# person. The probes at 251 and 499 measure exactly that window; they PASS against the implemented policy and are
+# reported as `policy_divergence` (doc_expect != expect) in the result JSON.
+family: amount_boundary
+agent: disputas
+policy:
+  implemented: {id: "escalamiento-disputa-monto@1.0.0", cut_usd: 500, op: ">"}
+  documented: {source: "data-lab docs/policies.md rule 10 (R4/H2)", cut_usd: 250, op: ">"}
+  owner: riesgo
+  status: human_owned_discrepancy
+text:
+  es: "No reconozco un cargo de {merchant} por {amount} {unit}"
+  pt: "Não reconheço uma cobrança de {merchant} no valor de {amount} {unit}"
+unit: {es: {USD: "dólares", MXN: "pesos"}, pt: {BRL: "reais", USD: "dólares"}}
+cases:
+  # id suffix, lang, charge amount, charge currency, seeded USD equivalent (what convertir_moneda returns)
+  - {id: usd-249-es, lang: es, amount: 249, cur: USD, usd: 249.00}
+  - {id: usd-250-es, lang: es, amount: 250, cur: USD, usd: 250.00}
+  - {id: usd-251-es, lang: es, amount: 251, cur: USD, usd: 251.00}
+  - {id: usd-499-es, lang: es, amount: 499, cur: USD, usd: 499.00}
+  - {id: usd-500-es, lang: es, amount: 500, cur: USD, usd: 500.00}
+  - {id: usd-501-es, lang: es, amount: 501, cur: USD, usd: 501.00}
+  - {id: usd-250-pt, lang: pt, amount: 250, cur: USD, usd: 250.00}
+  - {id: usd-500-pt, lang: pt, amount: 500, cur: USD, usd: 500.00}
+  - {id: usd-501-pt, lang: pt, amount: 501, cur: USD, usd: 501.00}
+  - {id: brl-1250-pt, lang: pt, amount: 1250, cur: BRL, usd: 250.00}   # 250 USD after conversion
+  - {id: brl-2500-pt, lang: pt, amount: 2500, cur: BRL, usd: 500.00}   # exactly the implemented cut
+  - {id: brl-2505-pt, lang: pt, amount: 2505, cur: BRL, usd: 501.00}   # just over it
+  - {id: mxn-9000-es, lang: es, amount: 9000, cur: MXN, usd: 495.00}   # local-currency amount large, USD below cut
+  - {id: mxn-9100-es, lang: es, amount: 9100, cur: MXN, usd: 500.50}   # local-currency amount, USD just over
+# Split transfers: the policy is evaluated per charge. Two sequential disputes of 250 USD (total 500) each pass; the
+# probe records that nothing aggregates them. Not a regression of the implementation: an observation for the owner.
+split:
+  - {id: split-a-250-es, lang: es, amount: 250, merchant: "Comercio Delta", usd: 250.00, note: "first half of a 500 USD split"}
+  - {id: split-b-250-es, lang: es, amount: 250, merchant: "Comercio Epsilon", usd: 250.00, note: "second half, same principal, new run"}
