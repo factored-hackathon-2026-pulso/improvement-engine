@@ -145,6 +145,7 @@ fn value_loop(work: &Path, wire: Arc<dyn Transport + Send + Sync>) -> ValueLoop 
         max_findings: None,
         proof: None,
         announcer: None,
+        caps: Default::default(),
     }
 }
 
@@ -563,5 +564,153 @@ mod w11 {
         assert!(mk(&[("PULSO_REGISTRY_VIA", "run")]).unwrap().unwrap().proof.is_none(), "a builder-run draft cannot be proven here");
         assert!(mk(&[("PULSO_REGISTRY_VIA", "run"), ("PULSO_EVAL_BEFORE_ANNOUNCE", "on")]).err().unwrap().contains("PULSO_REGISTRY_VIA=api"));
         assert!(mk(&[("PULSO_EVAL_BEFORE_ANNOUNCE", "maybe")]).err().unwrap().contains("on|off"));
+    }
+    // ------------------------------------------------------------------------------------------------------------ MAP1: candidates
+    /// build_suite answers for every target; the judge proves ONLY the target named in `proven`.
+    struct ByTarget {
+        proven: &'static str,
+        last: Mutex<String>,
+        built: Mutex<Vec<String>>,
+    }
+    impl Scripts for ByTarget {
+        fn build_suite_for(&self, f: &Value, t: &str, _new_agent: Option<&str>) -> Result<Value, SuiteError> {
+            self.build_suite(f, t)
+        }
+        fn build_suite(&self, _: &Value, t: &str) -> Result<Value, SuiteError> {
+            *self.last.lock().unwrap() = t.to_string();
+            self.built.lock().unwrap().push(t.to_string());
+            Ok(json!({"agent": "consultas", "suite": {"id": "reg-consultas-aa", "version": "1.0.0", "agent_id": "consultas", "thresholds": {}, "scenarios": [{"id": "c1"}, {"id": "guard-g1"}]},
+                      "finding_case_ids": ["c1"], "guard_case_ids": ["guard-g1"]}))
+        }
+        fn judge(&self, input: &Value) -> Result<Value, String> {
+            let proven = *self.last.lock().unwrap() == self.proven;
+            let attempts = input["attempts"].as_array().cloned().unwrap_or_default();
+            let base_only = attempts.is_empty();
+            Ok(json!({"schema": "reg1.verdict_story/1", "outcome": if base_only { "base_only" } else if proven { "regression_suite_proven" } else { "not_fixed" }, "reason": "scripted", "announce": proven && !base_only,
+                      "suite_id": "reg-consultas-aa", "mechanism": "scripted", "suite_is_regression_suite": proven,
+                      "base": {"label": "base", "verdict": "fail", "per_case": {"c1": {"passed": false}, "guard-g1": {"passed": true}}, "failed_cases": ["c1"], "guards_failed": [], "gate_items": [], "infra_retries": []},
+                      "attempts": attempts.iter().map(|a| json!({"label": "candidate-1", "attempt": 1, "verdict": if proven { "pass" } else { "fail" }, "failed_cases": if proven { json!([]) } else { json!(["c1"]) }, "guards_failed": [], "gate_items": [{"metric": "scenario/c1", "phase": "gate", "passed": proven}], "proposal_id": a["run"]["proposal_id"]})).collect::<Vec<_>>(),
+                      "gate_items": [{"metric": "scenario/c1", "phase": "gate", "passed": proven}], "story_text": {"es": "scripted", "pt": "scripted"}, "model_policy": {"judge": "none", "judge_rule": "deterministic checks only"}}))
+        }
+    }
+
+    /// Queja/Phone planted at 55 percent against 20 percent everywhere else, in both halves.
+    fn queja_cells() -> String {
+        let mut rows = vec![];
+        for r in ["Queja", "Tecnico", "Comercial", "Retencion", "Transaccional", "Producto"] {
+            for c in ["Phone", "Chat"] {
+                for (half, den) in [("discovery", 6000i64), ("holdout", 4000i64)] {
+                    let permille = if r == "Queja" && c == "Phone" { 550 } else { 200 };
+                    rows.push(format!("{{\"metric\":\"M1\",\"dims\":{{\"reason_category\":\"{r}\",\"channel\":\"{c}\"}},\"half\":\"{half}\",\"numerator\":{},\"denominator\":{den}}}", den * permille / 1000));
+                }
+            }
+        }
+        rows.join("\n")
+    }
+
+    fn candidate_ports() -> PortsFactory {
+        Arc::new(|| {
+            let scout: Ans = Box::new(|req| {
+                let t = &req.payload["inputs"]["allowed_targets"][0];
+                assert_eq!(req.payload["inputs"]["allowed_targets"].as_array().unwrap().len(), 1, "one candidate per attempt");
+                Ok(json!({"opportunity": {"id": "h_1", "target_ref": t["target_ref"], "mechanism_class": t["mechanisms"][0], "claimed_rate": 0.55,
+                    "hypothesis": "The artifact has no wording for this situation, so the person has to ask again and the contact stays open.",
+                    "falsifiers": ["The rate is the same in contacts that did receive the new wording."],
+                    "alternatives": [{"kind": "do_nothing", "why_not": "The gap is replicated and material."}, {"kind": "human_owned", "why_not": "Thresholds and policies are not part of this change."}]}}))
+            });
+            let (_, verifier, _) = answers();
+            let builder: Ans = Box::new(|req| {
+                let alts = json!([{"kind": "do_nothing", "why_not": "The effect is replicated."}, {"kind": "other_target", "why_not": "No other artifact carries this wording."}]);
+                let menu = reasoning::testkit::menu_of(req);
+                let anchor = |loc: &str, needle: &str| menu.iter().find(|(id, t)| id.starts_with(&format!("{loc}.")) && t.contains(needle)).unwrap_or_else(|| panic!("no {loc} anchor with {needle}")).0.clone();
+                match req.payload["inputs"]["target_ref"].as_str().unwrap() {
+                    "template:t/estado_pqr" => Ok(json!({"proposal": {"kind": "patch", "rationale": "Say what the status is.", "alternatives": alts, "uncertainty": "Association only.",
+                        "patches": [{"locale": "es", "anchor_id": "es.a1", "op": "replace", "replacement": "Ya consult\u{e9} tu PQR y su estado actual es {{ facts.pqr.value.status }}."},
+                                    {"locale": "pt", "anchor_id": "pt.a1", "op": "replace", "replacement": "J\u{e1} consultei sua solicita\u{e7}\u{e3}o e o estado atual \u{e9} {{ facts.pqr.value.status }}."}]}})),
+                    "prompt:p/resumen_radicado" => Ok(json!({"proposal": {"kind": "patch", "rationale": "Name who follows up.", "alternatives": alts, "uncertainty": "Association only.",
+                        "patches": [{"locale": "es", "anchor_id": anchor("es", "Redacta"), "op": "insert_after", "replacement": "Di que una persona del equipo har\u{e1} el seguimiento del caso."},
+                                    {"locale": "pt", "anchor_id": anchor("pt", "Redija"), "op": "insert_after", "replacement": "Diga que uma pessoa da equipe far\u{e1} o acompanhamento do caso."}]}})),
+                    other => panic!("unexpected target {other}"),
+                }
+            });
+            Ok(Ports { scout: Rc::new(FnPort::scripted("scripted-scout", scout)), verifier: Rc::new(FnPort::scripted("scripted-verifier", verifier)), builder: Rc::new(FnPort::scripted("scripted-builder", builder)), builder_escalation: None })
+        })
+    }
+
+    /// The Core double, except that templates and prompts are served with the texts of the bundled baseline (the live base of a patch).
+    struct PatchCore(Arc<Core>);
+    impl Transport for PatchCore {
+        fn send(&self, req: &Request) -> Result<Reply, TransportError> {
+            if req.method == "GET"
+                && let Some(rest) = req.path.strip_prefix("/v1/registry/entities/")
+                && let Some((kind, id)) = rest.split_once('/')
+                && (kind == "template" || kind == "prompt")
+            {
+                let id = id.split('?').next().unwrap_or(id);
+                return Ok(match reasoning::catalog::Catalog::bundled().get(&format!("{kind}:{id}")) {
+                    Some(a) => Reply { status: 200, body: json!({"ref": {"kind": a.kind, "id": a.id, "version": a.version}, "content": {"id": a.id, "version": a.version, "locales": a.locales}}) },
+                    None => Reply { status: 404, body: json!({"code": "not_found"}) },
+                });
+            }
+            self.0.send(req)
+        }
+    }
+
+    fn queja_loop(work: &Path, core: Arc<Core>, proven: &'static str) -> (ValueLoop, Arc<ByTarget>) {
+        let by = Arc::new(ByTarget { proven, last: Mutex::new(String::new()), built: Mutex::new(vec![]) });
+        let wrapped = Arc::new(PatchCore(core));
+        let mut v = with_proof(work, Arc::new(Core::default()), Fake { refuse: false, story_outcome: "" });
+        v.transport = wrapped.clone();
+        v.proof.as_mut().unwrap().eval_transport = wrapped;
+        v.proof.as_mut().unwrap().scripts = by.clone();
+        std::fs::write(&v.cells, queja_cells()).unwrap();
+        v.ports = candidate_ports();
+        (v, by)
+    }
+
+    #[test]
+    fn the_second_candidate_is_tried_only_when_the_first_is_not_proven_and_the_loop_stops_at_the_first_proven_one() {
+        let work = temp("map1-second");
+        let (v, by) = queja_loop(&work, Arc::new(Core::default()), "prompt:p/resumen_radicado");
+        let out = v.run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!(rec["dims"]["reason_category"], "Queja", "{rec}");
+        assert_eq!((rec["outcome"].as_str(), rec["target_ref"].as_str()), (Some("announced"), Some("prompt:p/resumen_radicado")), "{rec}");
+        let tried: Vec<_> = rec["attempts"].as_array().unwrap().iter().map(|a| (a["target_ref"].as_str().unwrap().to_string(), a["outcome"].as_str().unwrap().to_string())).collect();
+        assert_eq!(tried, vec![("template:t/estado_pqr".to_string(), "not_announced:not_fixed".to_string()), ("prompt:p/resumen_radicado".to_string(), "announced".to_string())]);
+        assert_eq!(*by.built.lock().unwrap(), vec!["template:t/estado_pqr", "prompt:p/resumen_radicado"]);
+        let cands = rec["candidates"].as_array().unwrap();
+        assert_eq!(cands.len(), 5, "Phone: the advisor copilot is a candidate too");
+        assert_eq!(cands.iter().filter(|c| c["tried"] == true).count(), 2);
+        assert!(cands.iter().all(|c| c["justification"].as_str().is_some_and(|j| !j.is_empty())));
+        assert_eq!(cands[2]["not_tried_because"], "over_the_candidate_cap");
+        assert_eq!(rec["mapping_claim"], "hypothesis_of_where_to_intervene_not_a_cause");
+        assert_eq!(out["summary"]["announced"], 1);
+    }
+
+    #[test]
+    fn a_proven_first_candidate_ends_the_finding_without_a_second_attempt() {
+        let work = temp("map1-first");
+        let (v, by) = queja_loop(&work, Arc::new(Core::default()), "template:t/estado_pqr");
+        let out = v.run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!((rec["outcome"].as_str(), rec["target_ref"].as_str()), (Some("announced"), Some("template:t/estado_pqr")), "{rec}");
+        assert_eq!(rec["attempts"].as_array().unwrap().len(), 1);
+        assert_eq!(*by.built.lock().unwrap(), vec!["template:t/estado_pqr"]);
+        assert_eq!(rec["candidates"][1]["not_tried_because"], "an_earlier_candidate_was_proven_or_the_finding_stopped");
+    }
+
+    #[test]
+    fn at_most_two_candidates_are_tried_when_none_is_proven_and_the_cost_of_both_is_accounted() {
+        let work = temp("map1-none");
+        let (v, by) = queja_loop(&work, Arc::new(Core::default()), "nothing");
+        let out = v.run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!(rec["attempts"].as_array().unwrap().len(), 2, "{rec}");
+        assert_eq!(by.built.lock().unwrap().len(), 2);
+        assert!(rec["outcome"].as_str().unwrap().starts_with("not_announced:"));
+        assert_eq!(out["summary"]["announced"], 0);
+        let per_attempt: f64 = rec["attempts"].as_array().unwrap().iter().map(|a| a["cost_usd"].as_f64().unwrap_or(0.0)).sum();
+        assert!((per_attempt - rec["metering"]["cost_usd"].as_f64().unwrap()).abs() < 1e-6, "the record cost is the sum of its attempts");
     }
 }
