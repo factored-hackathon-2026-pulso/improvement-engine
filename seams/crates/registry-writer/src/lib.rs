@@ -132,10 +132,12 @@ impl Submission {
         format!("pulso-{}", steps::compile::sha256_hex_calm(raw.as_bytes(), 24))
     }
 
-    /// Deterministic proposal title (`<= 200` chars, the registry limit).
+    /// Deterministic proposal title (`<= 120` chars, the platform announce limit; the target is cut at a word boundary, the key suffix stays).
     pub fn title(&self) -> String {
-        let t = format!("{TITLE_PREFIX} {} {}", self.target_ref, &self.key()[6..14]);
-        t.chars().take(200).collect()
+        let suffix = &self.key()[6..14];
+        let fixed = TITLE_PREFIX.chars().count() + suffix.chars().count() + 2;
+        let target = reasoning::dossier::cut_title(&self.target_ref, 120usize.saturating_sub(fixed));
+        format!("{TITLE_PREFIX} {target} {suffix}")
     }
 }
 

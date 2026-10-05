@@ -25,7 +25,11 @@ pub const SCHEMA: &str = "dossier/1";
 pub const DESCRIPTION_MAX: usize = 3800;
 pub const RATIONALE_MAX: usize = 1500;
 pub const CHANGELOG_MAX: usize = 1500;
-pub const TITLE_MAX: usize = 200;
+/// The platform announce route (`ImprovementDossier.title`) rejects titles over 120 characters and never truncates: the engine cuts.
+pub const TITLE_MAX: usize = 120;
+/// The human end step of a proposal: it patches an EXISTING agent, so the supervisor publishes to staging and then promotes to
+/// production from the agent page ("Pasar a producción"). It is never "Activar", which is the first activation of a new type.
+pub const END_STEP: &str = "Pasar a producción";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lang {
@@ -123,6 +127,26 @@ fn cap(s: &str, n: usize) -> String {
         t.push('\u{2026}');
         t
     }
+}
+
+/// Cuts `s` to at most `n` characters at a word boundary and marks the cut with an ellipsis (counted inside `n`). A text that fits is
+/// returned as is; a single word longer than `n` is cut hard.
+pub fn cut_title(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        return s.to_string();
+    }
+    let head: Vec<char> = s.chars().take(n.saturating_sub(1)).collect();
+    // the cut is on a boundary when the char after the head is a space; otherwise back up to the last space inside the head
+    let boundary = if s.chars().nth(head.len()).is_some_and(char::is_whitespace) { Some(head.len()) } else { head.iter().rposition(|c| c.is_whitespace()) };
+    let mut stem: String = match boundary {
+        Some(i) if i > 0 => head[..i].iter().collect(),
+        _ => head.iter().collect(),
+    };
+    while stem.ends_with(|c: char| c.is_whitespace() || "-:,;.(".contains(c)) {
+        stem.pop();
+    }
+    stem.push('\u{2026}');
+    stem
 }
 
 /// Wilson 95% interval of a proportion (deterministic, closed form).
@@ -273,7 +297,7 @@ fn diff_text(l: Lang, proposal: &Value) -> String {
         l.t(&format!("Parche anclado sobre {target} ({} caracteres editados de {}): ", proposal["edit_chars"], proposal["edit_budget"]),
             &format!("Patch ancorado em {target} ({} caracteres editados de {}): ", proposal["edit_chars"], proposal["edit_budget"])).to_string()
     };
-    format!("{head}{}", lines.join(" | "))
+    format!("{head}{}", lines.join("; "))
 }
 
 struct Verdict {
@@ -521,7 +545,7 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
         } else {
             l.t("DECISIÓN: NO SE ANUNCIA; queda como borrador interno.", "DECISÃO: NÃO E ANUNCIADA; fica como rascunho interno.")
         };
-        let sec = json!({
+        let mut sec = json!({
             "problem": problem(l, finding, level),
             "evidence": evidence(l, finding, level),
             "diff": diff_text(l, proposal),
@@ -533,6 +557,12 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
             "coverage": coverage_text(l, verdict),
             "honesty": honesty(l, runtime, rubric, &judge, labels.calibrated, finding["source"].as_str().unwrap_or("")),
         });
+        if announce {
+            sec["next_step"] = json!(l.t(
+                &format!("{END_STEP}: tras aprobar y publicar en staging, la persona de supervisión lo promueve a producción desde la página del agente. No es una activación inicial."),
+                "Passar para produção: após aprovar e publicar em staging, a pessoa de supervisão promove para produção na página do agente. Não é uma ativação inicial.",
+            ));
+        }
         let s = |k: &str| sec[k].as_str().unwrap_or("").to_string();
         let labels_l = [
             ("problem", l.t("Problema observado", "Problema observado"), 220),
@@ -545,19 +575,33 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
             ("risks", l.t("Riesgo", "Risco"), 300),
             ("unchanged", l.t("Qué no cambia", "O que não muda"), 200),
             ("honesty", l.t("Etiquetas", "Rótulos"), 300),
+            ("next_step", l.t("Siguiente paso humano", "Próximo passo humano"), 220),
         ];
+        let metric = finding["metric"].as_str().unwrap_or("?");
+        let full_title = format!("{} - {}{}: {}", proposal["target_ref"].as_str().unwrap_or("?"), metric, if level { l.t(" (nivel)", " (nível)") } else { String::new() }, l.t("propuesta de cambio", "proposta de mudança"));
+        let title = cut_title(&full_title, TITLE_MAX);
+        let title_cut = title != full_title;
+        // Plain text for the SPA (`whitespace-pre-line`): the decision line first, then one short `Label: text` line per section, no markdown.
         let mut description = decision.to_string();
+        if title_cut {
+            description.push_str(&format!("\n\nTítulo completo: {}", cap(&full_title, 300)));
+        }
         for (k, label, max) in labels_l {
-            description.push_str(&format!("\n\n**{label}.** {}", cap(&s(k), max)));
+            if k == "next_step" && !announce {
+                continue;
+            }
+            description.push_str(&format!("\n\n{label}: {}", cap(&s(k), max)));
         }
         if description.chars().count() > DESCRIPTION_MAX {
             return Err(format!("the description is longer than {DESCRIPTION_MAX} characters"));
         }
         let rationale = cap(&format!("{} {}", proposal["rationale"].as_str().unwrap_or(""), l.t("Hipótesis de intervención sobre una asociación; debe superar la evaluación antes de cualquier aprobación.", "Hipótese de intervenção sobre uma associação; deve passar na avaliação antes de qualquer aprovação.")).trim().to_string(), RATIONALE_MAX);
         let changelog = cap(&l.t(&format!("Solo propuesta, no aprobada ni publicada. {}", cap(&s("diff"), 600)), &format!("Somente proposta, não aprovada nem publicada. {}", cap(&s("diff"), 600))), CHANGELOG_MAX);
-        let metric = finding["metric"].as_str().unwrap_or("?");
-        let title = cap(&format!("{} - {}{}: {}", proposal["target_ref"].as_str().unwrap_or("?"), metric, if level { l.t(" (nivel)", " (nível)") } else { String::new() }, l.t("propuesta de cambio", "proposta de mudança")), TITLE_MAX);
-        out.insert(l.key().to_string(), json!({"title": title, "description": description, "rationale": rationale, "changelog": changelog, "sections": sec}));
+        let mut lang_out = json!({"title": title, "description": description, "rationale": rationale, "changelog": changelog, "sections": sec});
+        if title_cut {
+            lang_out["title_full"] = json!(cap(&full_title, 300));
+        }
+        out.insert(l.key().to_string(), lang_out);
     }
 
     let mut strings = vec![];
@@ -574,6 +618,7 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
         "announce": announce,
         "announce_reason": reason_key,
         "outcome": vd_es.outcome,
+        "end_step": if announce { json!(END_STEP) } else { Value::Null },
         "finding_kind": if level { "level_risk" } else { "contrast" },
         "honesty": {"runtime": runtime.as_str(), "rubric": rubric.map(|(t, m)| json!({"total": t, "max": m, "scope": "structural self-score, not the judge"})),
                     "judge_family": judge, "calibration": if labels.calibrated { "calibrated" } else { "uncalibrated" },
@@ -588,7 +633,7 @@ pub fn build(finding: &Value, proposal: &Value, verdict: Option<&Value>, labels:
 /// JSON Schema of the dossier object (the contract the registry-writer integration consumes).
 pub fn schema() -> Value {
     let lang = json!({"type": "object", "required": ["title", "description", "rationale", "changelog", "sections"], "additionalProperties": false,
-        "properties": {"title": {"type": "string", "maxLength": TITLE_MAX}, "description": {"type": "string", "maxLength": DESCRIPTION_MAX},
+        "properties": {"title": {"type": "string", "maxLength": TITLE_MAX}, "title_full": {"type": "string", "maxLength": 300}, "description": {"type": "string", "maxLength": DESCRIPTION_MAX},
                        "rationale": {"type": "string", "maxLength": RATIONALE_MAX}, "changelog": {"type": "string", "maxLength": CHANGELOG_MAX},
                        "sections": {"type": "object", "required": ["problem", "evidence", "diff", "result", "coverage", "expected_effect", "measurement", "risks", "unchanged", "honesty"],
                                     "additionalProperties": {"type": "string"}}}});

@@ -201,3 +201,83 @@ fn the_expected_effect_is_never_stated_as_a_prediction_or_a_cause() {
     }
     assert!(es(&d).contains("No es una predicción de efecto"));
 }
+
+const PLATFORM_TITLE_MAX: usize = 120;
+
+fn long_target(p: &mut Value) {
+    p["target_ref"] = json!("template:t/estado_pqr_con_un_nombre_extraordinariamente_largo_para_la_plantilla_de_estado_de_solicitudes_del_cliente");
+}
+
+#[test]
+fn a_long_title_is_cut_at_a_word_boundary_to_the_platform_cap_and_the_full_text_stays_in_the_description() {
+    let mut finding = queja_phone();
+    finding["metric"] = json!("M4 tasa de escalamiento a humano en consultas de estado de solicitud con demora prolongada");
+    let mut p = patch_proposal();
+    long_target(&mut p);
+    let d = build(&finding, &p, Some(&story("story_template_estado_pqr")), &labels()).unwrap();
+    for l in ["es", "pt"] {
+        let title = d[l]["title"].as_str().unwrap();
+        assert!(title.chars().count() <= PLATFORM_TITLE_MAX, "{title}");
+        assert!(title.ends_with('\u{2026}'), "a cut title says so: {title}");
+        let stem = title.trim_end_matches('\u{2026}');
+        assert!(!stem.ends_with(' ') && !stem.ends_with('-') && !stem.ends_with(':'), "{title}");
+        let full = d[l]["title_full"].as_str().unwrap();
+        assert!(full.chars().count() > PLATFORM_TITLE_MAX && full.starts_with(stem), "{full}");
+        assert!(full[stem.len()..].starts_with(' '), "not a word boundary: {title:?} / {full:?}");
+        let desc = d[l]["description"].as_str().unwrap();
+        assert!(desc.lines().next().unwrap().starts_with("DECIS"), "the first line is kept: {desc}");
+        assert!(desc.contains(full), "the full title stays in the description");
+    }
+    assert!(d["es"]["title_full"].as_str().unwrap().contains("propuesta"));
+    assert!(d["pt"]["title_full"].as_str().unwrap().contains("proposta"));
+}
+
+#[test]
+fn a_short_title_is_untouched_and_has_no_full_title() {
+    let d = build(&queja_phone(), &patch_proposal(), Some(&story("story_template_estado_pqr")), &labels()).unwrap();
+    for l in ["es", "pt"] {
+        assert!(d[l]["title"].as_str().unwrap().chars().count() <= PLATFORM_TITLE_MAX);
+        assert!(!d[l]["title"].as_str().unwrap().ends_with('\u{2026}'));
+        assert!(d[l]["title_full"].is_null());
+    }
+}
+
+#[test]
+fn a_single_huge_word_title_is_still_capped() {
+    let mut p = patch_proposal();
+    p["target_ref"] = json!(format!("template:t/{}", "x".repeat(300)));
+    let d = build(&queja_phone(), &p, None, &labels()).unwrap();
+    assert!(d["es"]["title"].as_str().unwrap().chars().count() <= PLATFORM_TITLE_MAX);
+}
+
+#[test]
+fn description_reads_as_plain_labelled_lines_without_markdown_for_the_spa() {
+    let d = build(&queja_phone(), &patch_proposal(), Some(&story("story_template_estado_pqr")), &labels()).unwrap();
+    for l in ["es", "pt"] {
+        for k in ["description", "rationale", "changelog", "title"] {
+            let t = d[l][k].as_str().unwrap();
+            for md in ["**", "__", "##", "```", "\n|", "| --"] {
+                assert!(!t.contains(md), "{l}.{k} has markdown {md:?}:\n{t}");
+            }
+        }
+        let desc = d[l]["description"].as_str().unwrap();
+        let lines: Vec<&str> = desc.lines().filter(|x| !x.is_empty()).collect();
+        assert!(lines.len() >= 11, "decision line plus one labelled line per section: {}", lines.len());
+        for line in &lines[1..] {
+            let (label, rest) = line.split_once(": ").unwrap_or_else(|| panic!("not a labelled line: {line}"));
+            assert!(label.chars().count() <= 30 && !rest.is_empty(), "{line}");
+        }
+    }
+    assert!(es(&d).contains("\nProblema observado: "));
+}
+
+#[test]
+fn the_end_step_is_pasar_a_produccion_not_activar() {
+    let d = build(&queja_phone(), &patch_proposal(), Some(&story("story_template_estado_pqr")), &labels()).unwrap();
+    assert!(es(&d).contains("Siguiente paso humano: Pasar a producción"), "{}", es(&d));
+    assert!(!es(&d).contains("Activar"));
+    assert!(d["pt"]["description"].as_str().unwrap().contains("Passar para produção"));
+    assert_eq!(d["end_step"], "Pasar a producción");
+    let na = build(&queja_phone(), &patch_proposal(), None, &labels()).unwrap();
+    assert!(!es(&na).contains("Pasar a producción"), "an unannounced draft proposes no step");
+}

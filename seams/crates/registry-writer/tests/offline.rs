@@ -340,7 +340,18 @@ fn the_key_is_stable_per_finding_and_target() {
     let mut other = compiled_patch();
     other.target_ref = "prompt:p/otro".into();
     assert_ne!(Submission::new(&finding(), &other).key(), a.key());
-    assert!(a.title().len() <= 200);
+    assert!(a.title().len() <= 120);
+}
+
+#[test]
+fn the_registry_title_is_capped_at_the_platform_120_keeping_the_key_suffix() {
+    let mut c = compiled_patch();
+    c.target_ref = format!("prompt:p/{}", "nombre_largo ".repeat(30));
+    let s = Submission::new(&finding(), &c);
+    let t = s.title();
+    assert!(t.chars().count() <= 120, "{t}");
+    assert!(t.starts_with("[improvement-engine] ") && t.ends_with(&s.key()[6..14]), "{t}");
+    assert_eq!(t, Submission::new(&finding(), &c).title(), "deterministic, so the title lookup still finds it");
 }
 
 use registry_writer::Submission;
