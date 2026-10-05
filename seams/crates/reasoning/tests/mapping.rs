@@ -219,41 +219,67 @@ fn pcell(metric: &str, dims: Value) -> reasoning::Finding {
 }
 
 #[test]
-fn copilot_low_acceptance_by_case_type_maps_to_a_prompt_patch_of_copiloto_asesor() {
+fn copilot_low_acceptance_by_case_type_maps_to_the_prompt_of_the_agent_that_emits_the_drafts() {
     let f = pcell("P_DRAFT_REJECT", json!({"case_type": "service_quality", "channel": "app_chat"}));
     let row = map_finding(&f).expect("a row for low draft acceptance");
     assert_eq!(row.id, "copilot_low_acceptance");
     assert_eq!(row.link_grade, "mechanism_proxy");
-    assert_eq!(row.targets[0].target_ref, "prompt:p/copiloto");
-    assert_eq!((row.targets[0].kind, row.targets[0].agent), ("patch", "copiloto-asesor"));
+    // EVT2: the reply drafts (copilot.suggestion_decided) are produced by copiloto-sugerencias (prompt p/sugerir); copiloto-asesor
+    // (p/copiloto) only answers the advisor's questions and emits no draft
+    assert_eq!(row.targets[0].target_ref, "prompt:p/sugerir");
+    assert_eq!((row.targets[0].kind, row.targets[0].agent), ("patch", "copiloto-sugerencias"));
+    assert!(row.targets[0].mechanisms.contains(&"draft_next_step"));
+    assert_eq!((row.targets[0].proof_support, row.targets[0].announceable_now), ("suite:draft_next_step", true), "build_suite.py has the generator");
     assert!(row.caveats.contains(&"mapping_is_a_hypothesis_of_where_to_intervene") && row.caveats.contains(&"synthetic_or_aggregate_association_not_a_cause"));
-    assert!(row.targets.iter().all(|t| t.proof_support == "none" && !t.announceable_now), "no suite generator exists for the copilot prompt");
+    assert!(!row.caveats.iter().any(|c| c.starts_with("no_regression_suite")), "the generator exists now: {:?}", row.caveats);
+    assert!(row.caveats.contains(&"the_suite_tests_a_next_step_hypothesis_not_draft_acceptance"));
 }
 
 #[test]
 fn a_release_level_acceptance_drop_is_a_release_regression_row_on_the_same_prompt() {
-    let f = pcell("P_DRAFT_REJECT", json!({"release": "rel-b", "agent": "copiloto-asesor@1.0.0"}));
+    let f = pcell("P_DRAFT_REJECT", json!({"release": "rel-b", "agent": "copiloto-sugerencias@1.0.0"}));
     let row = map_finding(&f).expect("row");
     assert_eq!(row.id, "copilot_release_regression");
-    assert_eq!(row.targets[0].target_ref, "prompt:p/copiloto");
+    assert_eq!((row.targets[0].target_ref.as_str(), row.targets[0].agent, row.targets[0].announceable_now), ("prompt:p/sugerir", "copiloto-sugerencias", true));
+}
+
+#[test]
+fn no_draft_metric_ever_targets_the_question_answering_copilot() {
+    let t = Table::bundled();
+    for row in ["copilot_low_acceptance", "copilot_release_regression", "copilot_heavy_edits", "copilot_suggestion_none"] {
+        let raw = bundled_json();
+        let r = raw["rows"].as_array().unwrap().iter().find(|r| r["id"] == row).unwrap_or_else(|| panic!("{row}"));
+        assert!(r["candidates"].as_array().unwrap().iter().all(|c| c["agent"] == "copiloto-sugerencias" && c["target_ref"] == "prompt:p/sugerir"), "{row}");
+    }
+    assert!(t.all_targets().iter().any(|c| c.target_ref == "prompt:p/copiloto"), "the Q&A prompt stays a target of the tool-use rows");
 }
 
 #[test]
 fn heavy_edits_none_suggestions_and_tool_mix_each_have_a_row_with_their_own_mechanism() {
     let cases = [
-        ("P_DRAFT_HEAVY_EDIT", json!({"case_type": "unrecognized_charge", "channel": "phone_inbound"}), "copilot_heavy_edits", "wording"),
-        ("P_SUGG_NONE", json!({"case_type": "app_issue", "channel": "web_chat"}), "copilot_suggestion_none", "uncovered_topic"),
-        ("P_TOOL_USE", json!({"case_type": "undue_charge", "tool": "consultar_cargos"}), "copilot_tool_mix", "repeated_lookup"),
+        ("P_DRAFT_HEAVY_EDIT", json!({"case_type": "unrecognized_charge", "channel": "phone_inbound"}), "copilot_heavy_edits", "prompt:p/sugerir", "draft_next_step", true),
+        ("P_SUGG_NONE", json!({"case_type": "app_issue", "channel": "web_chat"}), "copilot_suggestion_none", "prompt:p/sugerir", "uncovered_topic", false),
+        ("P_TOOL_USE", json!({"case_type": "undue_charge", "tool": "consultar_cargos"}), "copilot_tool_mix", "prompt:p/copiloto", "repeated_lookup", false),
     ];
-    for (metric, dims, id, mech) in cases {
+    for (metric, dims, id, target, mech, announceable) in cases {
         let row = map_finding(&pcell(metric, dims)).unwrap_or_else(|| panic!("{metric}"));
         assert_eq!(row.id, id);
-        assert_eq!(row.targets[0].target_ref, "prompt:p/copiloto");
+        assert_eq!(row.targets[0].target_ref, target);
+        assert_eq!(row.targets[0].announceable_now, announceable, "{metric}");
         assert!(row.targets[0].mechanisms.contains(&mech), "{metric}: {:?}", row.targets[0].mechanisms);
     }
     // suggestion none says so: the alternative (a tool link or a knowledge source) is a human decision, not an engine target
     let none = map_finding(&pcell("P_SUGG_NONE", json!({"case_type": "app_issue", "channel": "web_chat"}))).unwrap();
     assert!(none.caveats.contains(&"tool_link_or_knowledge_source_is_a_human_decision"));
+    assert!(none.caveats.contains(&"no_regression_suite_generator_for_this_finding"), "still not announceable");
+}
+
+#[test]
+fn announceable_draft_findings_are_planned_first_and_a_finding_that_cannot_be_proven_is_still_planned() {
+    let reject = pcell("P_DRAFT_REJECT", json!({"case_type": "service_quality", "channel": "app_chat"}));
+    assert_eq!(candidate_plan(&reject, Caps::default()), vec!["prompt:p/sugerir".to_string()]);
+    let none = pcell("P_SUGG_NONE", json!({"case_type": "app_issue", "channel": "web_chat"}));
+    assert_eq!(candidate_plan(&none, Caps::default()), vec!["prompt:p/sugerir".to_string()]);
 }
 
 #[test]
