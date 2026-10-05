@@ -54,7 +54,7 @@ L-CLIENT: seams/scripts/** ; seams/Cargo.toml ; seams/Cargo.lock ; seams/README.
 L-ENGINE: seams/crates/abi/** ; seams/crates/engine/** ; contracts/engine-handlers/** ; seams/crates/steps/** ; seams/crates/swap/** ; docs/adr/017[0-9]-* ; docs/journal/(021[2-9]|022[0-7])-* ; local/compose.d/l-engine.yaml
 L-CAPI: seams/crates/control-api/** ; seams/crates/debug-api/** ; seams/crates/maturity/** ; contracts/control-api/** ; migrations/008[5-9]_* ; docs/adr/013[0-9]-* ; docs/journal/(014[8-9]|015[0-9]|016[0-3])-* ; local/compose.d/l-capi.yaml
 L-PG: docs/reports/pglive/** ; seams/crates/pg/** ; seams/crates/sources/** ; db/** ; seams/crates/worker/** ; local/pg/** ; migrations/00[56][0-9]_* ; docs/adr/025[0-9]-* ; docs/journal/(034[0-9]|035[0-5])-* ; local/compose.d/l-pg.yaml
-L-EVAL: seams/crates/eval/** ; agent-core-assets/eval-suites/** ; migrations/009[0-4]_* ; docs/adr/019[0-9]-* ; docs/journal/(024[4-9]|025[0-9])-* ; local/compose.d/l-eval.yaml
+L-EVAL: seams/crates/eval/** ; agent-core-assets/eval-suites/** ; migrations/009[0-4]_* ; docs/adr/019[0-9]-* ; docs/journal/(024[4-9]|025[0-9])-* ; local/compose.d/l-eval.yaml ; scripts/scoring/**
 L-AUTH: seams/crates/authority/** ; local-identity/** ; migrations/008[0-4]_* ; docs/adr/010[0-9]-* ; docs/journal/(010[0-9]|011[0-5])-* ; local/compose.d/l-auth.yaml
 L-MEM: seams/crates/memory/** ; migrations/007[5-9]_* ; docs/adr/022[0-9]-* ; docs/journal/(029[2-9]|030[0-7])-* ; local/compose.d/l-mem.yaml
 L-CONSOLE: debug-console/** ; docs/adr/015[0-9]-* ; docs/journal/(018[0-9]|019[0-5])-* ; local/compose.d/l-console.yaml
