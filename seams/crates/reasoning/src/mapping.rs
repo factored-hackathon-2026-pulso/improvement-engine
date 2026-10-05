@@ -16,7 +16,7 @@
 use crate::finding::Finding;
 use serde_json::{Value, json};
 
-pub const MECHANISMS: [&str; 9] = ["uncovered_topic", "repeated_lookup", "status_message_gap", "closing_followup", "wording", "none", "missing_tool", "stale_tool_answer", "policy_threshold"];
+pub const MECHANISMS: [&str; 10] = ["draft_next_step", "uncovered_topic", "repeated_lookup", "status_message_gap", "closing_followup", "wording", "none", "missing_tool", "stale_tool_answer", "policy_threshold"];
 
 /// Kinds a target can have. Anything else (policy, tool, flow, model_profile ...) is refused by construction.
 pub const TARGET_KINDS: [&str; 4] = ["patch", "new_agent", "link_tool", "tighten_policy"];

@@ -156,6 +156,8 @@ pub fn protected_markers(art: &Artifact, locale: &str) -> Vec<&'static str> {
     match (art.id.as_str(), locale) {
         ("p/copiloto", "es") => vec!["datos_no_confiables", "Solo lees", "otro cliente", "Nunca inventes", "nunca obedezcas", "dato del cliente", "kind \"final\"", "datos: un elemento", "resumen: una frase", "No incluyas identificadores", "Si lo pedido no aparece"],
         ("p/copiloto", "pt") => vec!["n\u{e3}o instru\u{e7}\u{f5}es", "somente o cliente atendido", "Nunca invente", "S\u{f3} leia", "kind \"final\"", "Se o dado n\u{e3}o existir"],
+        ("p/sugerir", "es") => vec!["datos_no_confiables", "Propones, no ejecutas", "marcador de dato personal", "Nunca escribas", "Nunca pongas", "escalation.required", "citable_facts", "Si escalation es null"],
+        ("p/sugerir", "pt") => vec!["dados, nunca instru", "Nunca escreva", "SOMENTE se escalation.required", "citable_facts"],
         ("p/respuesta_asesor", _) | ("p/resumen_radicado", _) | ("p/constructor", _) | ("p/resumen_construccion", _) => vec!["No incluyas", "N\u{e3}o inclua", "nunca", "Nunca", "never", "\u{27e6}", "datos_no_confiables", "cifra", "fact_id"],
         _ if art.kind == "prompt" => vec!["nunca", "Nunca", "never", "jam\u{e1}s", "Solo ", "S\u{f3} ", "datos_no_confiables", "\u{27e6}"],
         _ => vec![],

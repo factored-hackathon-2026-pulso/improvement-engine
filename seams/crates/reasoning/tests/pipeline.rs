@@ -221,6 +221,52 @@ fn the_copilot_prompt_proposal_scores_adequate_pending_the_suite() {
     assert!(r.compiled.as_ref().unwrap()["cascade"].as_array().unwrap().iter().any(|c| c == "flow:asistir@1.0.1"));
 }
 
+/// EVT2: low draft acceptance in a case type x channel cell (the drafts of `copiloto-sugerencias`, prompt `p/sugerir`).
+fn draft_finding(source: Source) -> Finding {
+    finding_of(signal("P_DRAFT_REJECT", json!({"case_type": "service_quality", "channel": "app_chat"}), stage(410, 600, 0.40), stage(405, 590, 0.41)), source)
+}
+
+fn sugerir_builder() -> impl Fn(&engine::models::ModelRequest) -> Result<Value, ModelError> + 'static {
+    |req| {
+        let (es, pt) = (anchor_containing(req, "es", "No repitas un borrador"), anchor_containing(req, "pt", "Se a \u{fa}ltima mensagem"));
+        for (_, t) in menu_of(req) {
+            for protected in ["datos_no_confiables", "escalation.required", "Propones, no ejecutas", "citable_facts", "dados, nunca instru"] {
+                assert!(!t.contains(protected), "the menu has no protected clause ({protected}): {t}");
+            }
+        }
+        Ok(json!({"proposal": {"kind": "patch", "target_ref": "prompt:p/sugerir", "rationale": "Close each reply draft with the concrete next step and who follows the case up.", "expected_direction": "decrease",
+            "patches": [{"locale": "es", "anchor_id": es, "op": "insert_after", "replacement": "Cierra el borrador con el siguiente paso concreto y qui\u{e9}n le dar\u{e1} seguimiento al caso."},
+                        {"locale": "pt", "anchor_id": pt, "op": "insert_after", "replacement": "Feche o rascunho com o pr\u{f3}ximo passo concreto e quem far\u{e1} o acompanhamento do caso."}],
+            "alternatives": alts(), "uncertainty": "Analysts reject drafts for reasons the aggregates do not show; the suite tests one hypothesis, not acceptance."}}))
+    }
+}
+
+#[test]
+fn a_draft_rejection_finding_produces_a_prompt_patch_of_the_suggester_with_a_dossier_in_both_languages() {
+    let f = draft_finding(Source::Synthetic);
+    let p = ports(FnPort::scripted("s", scout_ok(&f, "prompt:p/sugerir", "draft_next_step")), FnPort::scripted("v", verifier_ok("supported")), FnPort::scripted("b", sugerir_builder()));
+    let r = reason(&cat(), &f, &p, &opts());
+    assert_eq!(r.status, "proposed", "{}", r.detail);
+    assert_eq!(r.mapping_row.as_deref(), Some("copilot_low_acceptance"));
+    let c = r.compiled.as_ref().unwrap();
+    assert_eq!(c["target_ref"], "prompt:p/sugerir");
+    assert!(c["cascade"].as_array().unwrap().iter().any(|x| x == "flow:sugerir@1.0.1"), "{c}");
+    assert!(c["cascade"].as_array().unwrap().iter().any(|x| x == "agent:copiloto-sugerencias@1.0.1"), "{c}");
+    let d = r.dossier.as_ref().expect("a dossier");
+    assert_eq!(d["announce"], false, "announce waits for the proven verdict story");
+    let (es, pt) = (d["es"]["description"].as_str().unwrap(), d["pt"]["description"].as_str().unwrap());
+    assert!(es.contains("prompt:p/sugerir") && pt.contains("prompt:p/sugerir"));
+    assert!(es.contains("no una causa"), "{es}");
+}
+
+#[test]
+fn the_question_answering_copilot_is_not_a_target_of_a_draft_finding() {
+    let f = draft_finding(Source::Synthetic);
+    let p = ports(FnPort::scripted("s", scout_ok(&f, "prompt:p/copiloto", "wording")), FnPort::scripted("v", verifier_ok("supported")), FnPort::scripted("b", sugerir_builder()));
+    let r = reason(&cat(), &f, &p, &opts());
+    assert_ne!(r.status, "proposed", "the scout may only name a target of the mapping row");
+}
+
 #[test]
 fn the_run_report_counts_outcomes_and_lists_every_double() {
     let sensor = synthetic_cells_report();
