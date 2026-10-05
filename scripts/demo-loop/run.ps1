@@ -29,6 +29,7 @@ param(
     [string]$CellsFile = '', [string]$PulsoExe = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$DataRoot = ''
 )
 $ErrorActionPreference = 'Stop'
+try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = (Resolve-Path (Join-Path $here '..\..')).Path
 . (Join-Path $here 'run.lib.ps1')
@@ -71,8 +72,8 @@ function Say {
     try { [IO.File]::AppendAllText($logPath, $safe + "`n") } catch { }
 }
 function Add-Needles { param([string[]]$Values) $script:Needles = @($script:Needles + @($Values | Where-Object { $_ -and $_.Length -ge 6 })) | Sort-Object { $_.Length } -Descending }
-function Read-State { if (Test-Path -LiteralPath $statePath) { return (Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json) }; [pscustomobject]@{} }
-function Save-State { param($Obj) ($Obj | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $statePath -Encoding UTF8 }
+function Read-State { if (Test-Path -LiteralPath $statePath) { return (Read-JsonFile -Path $statePath) }; [pscustomobject]@{} }
+function Save-State { param($Obj) [IO.File]::WriteAllText($statePath, ($Obj | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding($false))) }
 function Set-StateField {
     param([string]$Name, $Value)
     $s = Read-State
@@ -84,7 +85,7 @@ function Get-Tokens {
     if ($script:Tokens) { return $script:Tokens }
     $p = Join-Path $root '.dev-stack\tokens.json'
     if (-not (Test-Path -LiteralPath $p)) { throw "no .dev-stack/tokens.json: run -Up first" }
-    $script:Tokens = Get-Content -Raw -LiteralPath $p | ConvertFrom-Json
+    $script:Tokens = Read-JsonFile -Path $p
     Add-Needles @([string]$script:Tokens.admin, [string]$script:Tokens.builder)
     $script:Tokens
 }
@@ -123,7 +124,7 @@ function Find-PulsoExe {
 function Find-StepsCli {
     $c = @()
     if ($env:PULSO_STEPS_CLI) { $c += $env:PULSO_STEPS_CLI }
-    foreach ($lane in 'claude-demo1', 'claude-ann1', 'claude-cons', 'claude-b3') { $c += (Join-Path "D:\cargo-targets\$lane" 'debug\steps_cli.exe') }
+    foreach ($lane in 'claude-demo1', 'claude-ann1') { $c += (Join-Path "D:\cargo-targets\$lane" 'debug\steps_cli.exe') }
     foreach ($x in $c) { if ($x -and (Test-Path -LiteralPath $x)) { return $x } }
     $null
 }
@@ -161,8 +162,8 @@ foreach ($step in $plan.Steps) {
                 if (-not $acEnv.Count) { throw "no values read from $acEnvPath (names only are ever shown)" }
                 Initialize-GatewayImage -ImageName "$($settings.Prefix)-llm-gateway"
                 $e = Get-StackEnvironment -Settings $settings -AgentCoreDir $AgentCoreDir -GatewayDir $GatewayDir
-                $all = @{}; foreach ($k in $secretEnv.Keys) { $all[$k] = $secretEnv[$k] }; foreach ($k in $e.Keys) { $all[$k] = $e[$k] }
-                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\dev-stack\stack.py'), 'up') -Env $all -Needles $script:Needles -WorkDir $root -LogPath $logPath
+                $envAll = @{}; foreach ($k in $secretEnv.Keys) { $envAll[$k] = $secretEnv[$k] }; foreach ($k in $e.Keys) { $envAll[$k] = $e[$k] }
+                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\dev-stack\stack.py'), 'up') -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0) { throw "stack.py up failed (exit $($r.ExitCode))" }
                 $null = Get-Tokens
                 Say ("stack up. registry http://127.0.0.1:{0}  gateway http://127.0.0.1:{1}  (agents: disputas, consultas, real registry-e2e artifacts)" -f $settings.CorePort, $settings.GwPort)
@@ -188,7 +189,7 @@ foreach ($step in $plan.Steps) {
                         $mode = 'bank-aggregated'
                         if (-not (Test-Path -LiteralPath $DataRoot)) { throw "bank data root not found at $DataRoot (-DataRoot) and no cached cells at $path" }
                         Say "no cache: running scripts/aggregate/bank_cells.py over $DataRoot (aggregates only leave it)"
-                        $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\aggregate\bank_cells.py'), '--data-root', $DataRoot, '--out', $path) -Needles $script:Needles -WorkDir $root
+                        $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\aggregate\bank_cells.py'), '--data-root', $DataRoot, '--out', $path) -Needles $script:Needles -WorkDir $root -Quiet -LogPath $logPath
                         if ($r.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $path)) { throw 'bank_cells.py failed' }
                     }
                 }
@@ -261,20 +262,20 @@ foreach ($step in $plan.Steps) {
                     Start-Sleep -Seconds 3
                 }
                 if (-not $resultFile) { throw "no job result within $($plan.TimeoutMin) min (engine log: $elog)" }
-                $loop = Get-Content -Raw -LiteralPath $resultFile | ConvertFrom-Json
+                $lres = Read-JsonFile -Path $resultFile
                 $signals = $null
                 $cli = Find-StepsCli
                 if ($cli) {
                     $sensorOut = Join-Path $work 'sensor.json'
                     & $env:ComSpec /c ('""' + $cli + '" cells < "' + $cellsPath + '" > "' + $sensorOut + '" 2>nul"')
                     if (Test-Path -LiteralPath $sensorOut) {
-                        $sj = Get-Content -Raw -LiteralPath $sensorOut | ConvertFrom-Json
+                        $sj = Read-JsonFile -Path $sensorOut
                         $nc = @($sj.signals | Where-Object { $_.status -eq 'corroborated' -and $_.type -ne 'level_risk' }).Count
-                        if ($nc -eq [int]$loop.summary.corroborated) { $signals = @($sj.signals) } else { Say "(sensor preview shows $nc corroborated, the engine $($loop.summary.corroborated): cells not labelled)" }
+                        if ($nc -eq [int]$lres.summary.corroborated) { $signals = @($sj.signals) } else { Say "(sensor preview shows $nc corroborated, the engine $($lres.summary.corroborated): cells not labelled)" }
                     }
                 }
                 Say ''
-                foreach ($line in (Format-LoopReport -Loop $loop -Signals $signals -Mode $mode -CellsLabel (Split-Path -Leaf $cellsPath))) { Say $line }
+                foreach ($line in (Format-LoopReport -Loop $lres -Signals $signals -Mode $mode -CellsLabel (Split-Path -Leaf $cellsPath))) { Say $line }
                 Set-StateField 'result_path' $resultFile; Set-StateField 'result_mode' $mode; Set-StateField 'result_seconds' ([math]::Round($sw.Elapsed.TotalSeconds, 1))
                 if ($signals) { Set-StateField 'sensor_path' (Join-Path $work 'sensor.json') }
             }
@@ -282,24 +283,24 @@ foreach ($step in $plan.Steps) {
                 Step-Header 'Probes' 'agent battery + scheduled probes, once (own battery core; synthetic scenarios, never customers)'
                 $benv = [ordered]@{ PULSO_STACK_PREFIX = $settings.BatteryPrefix; PULSO_STACK_PORT_CORE = "$($settings.BatteryCore)"; PULSO_STACK_PORT_PG = "$($settings.BatteryPg)"
                     PULSO_STACK_PORT_GW = "$($settings.BatteryGw)"; PULSO_AGENT_CORE_DIR = $AgentCoreDir; PULSO_LLM_GATEWAY_DIR = $GatewayDir }
-                $all = @{}; foreach ($k in $secretEnv.Keys) { $all[$k] = $secretEnv[$k] }; foreach ($k in $benv.Keys) { $all[$k] = $benv[$k] }
+                $envAll = @{}; foreach ($k in $secretEnv.Keys) { $envAll[$k] = $secretEnv[$k] }; foreach ($k in $benv.Keys) { $envAll[$k] = $benv[$k] }
                 Initialize-GatewayImage -ImageName "$($settings.BatteryPrefix)-llm-gateway"
-                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\battery\demo_core.py'), 'up') -Env $all -Needles $script:Needles -WorkDir $root -LogPath $logPath
+                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\battery\demo_core.py'), 'up') -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0) { throw 'battery core did not start' }
                 $rep = Join-Path $demoDir 'probes-report.json'
                 $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\battery\schedule_probes.py'), '--run', '--base-url', "http://127.0.0.1:$($settings.BatteryCore)",
                         '--reps', "$($plan.ProbeReps)", '--state', (Join-Path $demoDir 'probes-state.json'), '--out-jsonl', (Join-Path $demoDir 'probe-trigger.jsonl'),
-                        '--report-out', $rep, '--cells-out', (Join-Path $demoDir 'probe-cells.ndjson'), '--once') -Env $all -Needles $script:Needles -WorkDir $root -LogPath $logPath
+                        '--report-out', $rep, '--cells-out', (Join-Path $demoDir 'probe-cells.ndjson'), '--once') -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $rep)) { throw 'schedule_probes.py failed' }
-                $report = Get-Content -Raw -LiteralPath $rep | ConvertFrom-Json
+                $report = Read-JsonFile -Path $rep
                 foreach ($line in (Format-ProbeReport -Report $report)) { Say $line }
             }
             'Show' {
                 Step-Header 'Show' 'dossier ES of every announced proposal + registry state read back (nothing is approved)'
                 $st = Read-State
                 if (-not $st.PSObject.Properties['result_path'] -or -not (Test-Path -LiteralPath $st.result_path)) { throw 'no loop result yet: run -Loop first' }
-                $loop = Get-Content -Raw -LiteralPath $st.result_path | ConvertFrom-Json
-                $ann = @(Get-AnnouncedRecords -Loop $loop)
+                $lres = Read-JsonFile -Path $st.result_path
+                $ann = @(Get-AnnouncedRecords -Loop $lres)
                 if ($ann.Count -eq 0) { Say ("no announced proposal in the last run (mode: {0}). Unlinked or not-announced findings stay internal." -f $st.result_mode) }
                 $tok = Get-Tokens
                 foreach ($rec in $ann) {
@@ -309,7 +310,7 @@ foreach ($step in $plan.Steps) {
                         $reg = Invoke-RestMethod -Uri ("http://127.0.0.1:{0}/v1/registry/proposals/{1}" -f $settings.CorePort, $pid2) -Headers @{ Authorization = "Bearer $($tok.builder)" } -TimeoutSec 20
                     } catch { Say ("(registry read-back failed: {0})" -f (Protect-Text $_.Exception.Message $script:Needles)) }
                     $view = $null
-                    if ($reg) { $view = [pscustomobject]@{ state = $reg.state; origin = $reg.origin } }
+                    if ($reg -and $reg.proposal) { $view = [pscustomobject]@{ state = $reg.proposal.state; origin = $reg.proposal.origin; agent = $reg.proposal.agent_id; rev = $reg.proposal.rev; created_by = $reg.proposal.created_by; changes = @($reg.changes).Count } }
                     foreach ($line in (Format-DossierView -Record $rec -Registry $view)) { Say $line }
                     Say ''
                 }
@@ -319,15 +320,15 @@ foreach ($step in $plan.Steps) {
                 Step-Header 'Announce' 'support platform: one notification per announced proposal'
                 $st = Read-State
                 if (-not $st.PSObject.Properties['result_path'] -or -not (Test-Path -LiteralPath $st.result_path)) { throw 'no loop result yet: run -Loop first' }
-                $loop = Get-Content -Raw -LiteralPath $st.result_path | ConvertFrom-Json
-                $ann = @(Get-AnnouncedRecords -Loop $loop)
+                $lres = Read-JsonFile -Path $st.result_path
+                $ann = @(Get-AnnouncedRecords -Loop $lres)
                 $url = [string]$env:PULSO_PLATFORM_URL
                 $tokP = $(if ($env:PULSO_PLATFORM_SERVICE_TOKEN) { $env:PULSO_PLATFORM_SERVICE_TOKEN } else { [string]$env:PULSO_PLATFORM_TOKEN })
                 Add-Needles @($tokP)
                 if ($ann.Count -eq 0) { Say 'no announced proposal in the last run: nothing to announce.' }
                 foreach ($rec in $ann) {
                     $payload = New-AnnouncePayload -Record $rec
-                    $json = $payload | ConvertTo-Json -Depth 5
+                    $json = ($payload | ConvertTo-Json -Depth 5) -replace '\u003c', '<' -replace '\u003e', '>' -replace '\u0026', '&' -replace '\u0027', "'"
                     if ($rec.platform_announce) { Say ("engine already told the platform during the loop: {0}" -f $rec.platform_announce); continue }
                     if ($url -and $tokP) {
                         $uri = $url.TrimEnd('/') + '/api/v1/internal/builder/proposals/announce'

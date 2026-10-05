@@ -12,6 +12,12 @@ $script:MetricNames = @{
 
 $script:StepOrder = @('Up', 'Cells', 'Loop', 'Probes', 'Show', 'Announce', 'Down')
 
+# UTF-8 JSON file (Windows PowerShell 5.1 would read it as ANSI and mangle accents).
+function Read-JsonFile {
+    param([Parameter(Mandatory)][string]$Path)
+    [IO.File]::ReadAllText($Path, (New-Object Text.UTF8Encoding($false))) | ConvertFrom-Json
+}
+
 # ---- argument handling --------------------------------------------------------------------------------------------------------------
 
 # Validates the command line BEFORE anything is started and returns the plan. Every refusal names the parameter.
@@ -142,6 +148,8 @@ function Invoke-Scrubbed {
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [Text.Encoding]::UTF8
     $psi.CreateNoWindow = $true
     if ($WorkDir) { $psi.WorkingDirectory = $WorkDir }
     foreach ($k in $Env.Keys) { $psi.EnvironmentVariables[[string]$k] = [string]$Env[$k] }
@@ -218,18 +226,24 @@ function Get-ProposalSlug {
     $t
 }
 
-# The regression verdict story in ONE line (Spanish text of the judge, else the verdict code).
+# The regression verdict story in ONE line. A proof that could not run says why (the step and the code of the first problem), not a story.
 function Get-ProofLine {
     param($Record)
     $ev = $Record.evaluation
     if (-not $ev) { return '-' }
+    if ($ev.verdict -eq 'infra_failed') {
+        $why = ''
+        foreach ($a in @($ev.attempts)) { if (-not $why -and $a.problem) { $why = " ($($a.problem.step) $($a.problem.code) HTTP $($a.problem.http))" } }
+        if (-not $why -and $ev.base -and $ev.base.problem) { $why = " ($($ev.base.problem.step) $($ev.base.problem.code) HTTP $($ev.base.problem.http))" }
+        return ("infra_failed: {0}{1}" -f $ev.reason, $why)
+    }
     $st = $null
     if ($ev.story_text) { $st = $ev.story_text.es }
     if ($st) { return ("{0}: {1}" -f $ev.verdict, $st) }
     "$($ev.verdict) ($($ev.reason))"
 }
 
-function Format-Cost { param($Record) $c = 0.0; if ($Record.metering -and $null -ne $Record.metering.cost_usd) { $c = [double]$Record.metering.cost_usd }; '$' + $c.ToString('0.0000', $script:Inv) }
+function Format-Cost { param($Record) $c = 0.0; if ($Record.metering -and $null -ne $Record.metering.cost_usd) { $c = [double]$Record.metering.cost_usd }; if ($c -le 0) { $c = 0.0 }; '$' + $c.ToString('0.0000', $script:Inv) }
 
 # Lines for the -Loop step. $Signals is the sensor output signals array (index i <-> finding_{i+1}) or $null when the sensor binary is unavailable.
 function Format-LoopReport {
@@ -281,7 +295,8 @@ function Format-DossierView {
     foreach ($line in ([string]$es.description -split "`r?`n")) { $l.Add($line) }
     if ($Registry) {
         $l.Add('')
-        $l.Add("REGISTRY (read back from agent-core): state=$($Registry.state) origin=$($Registry.origin)")
+        $l.Add("REGISTRY (read back from agent-core): state=$($Registry.state) origin=$($Registry.origin) agent=$($Registry.agent) rev=$($Registry.rev) changes=$($Registry.changes) created_by=$($Registry.created_by)")
+        $l.Add('  never approved, published or promoted by the engine; a person decides in the platform')
     }
     $l.ToArray()
 }

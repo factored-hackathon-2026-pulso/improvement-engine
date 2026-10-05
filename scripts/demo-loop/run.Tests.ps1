@@ -171,8 +171,13 @@ Describe 'Formatting the loop report' {
         (Get-ProofLine $loop.findings[1]) | Should Be 'not_fixed (candidate still fails)'
         (Get-ProofLine $loop.findings[2]) | Should Be '-'
     }
+    It 'explains an infrastructure failure by step and code instead of telling a story' {
+        $r = '{"evaluation":{"verdict":"infra_failed","reason":"evaluate returned no verdict","story_text":{"es":"intento 1 paso"},"attempts":[{"problem":{"step":"put_draft","code":"forbidden_role","http":403}}]}}' | ConvertFrom-Json
+        Get-ProofLine $r | Should Be 'infra_failed: evaluate returned no verdict (put_draft forbidden_role HTTP 403)'
+    }
     It 'prints cost with a dot decimal separator' {
         Format-Cost $loop.findings[0] | Should Be '$0.0012'
+        Format-Cost ('{"metering":{"cost_usd":-0.0}}' | ConvertFrom-Json) | Should Be '$0.0000'
     }
     It 'renders one block per finding with all the asked fields' {
         $lines = Format-LoopReport -Loop $loop -Signals @($sig, $sig, $sig) -Mode 'synthetic-planted' -CellsLabel 'planted.ndjson'
@@ -191,9 +196,9 @@ Describe 'Formatting the loop report' {
         ((Format-LoopReport -Loop $loop) -join "`n") | Should Match 'sensor binary not found'
     }
     It 'prints the dossier ES and the registry read-back, and a line when there is none' {
-        $v = Format-DossierView -Record $loop.findings[0] -Registry ([pscustomobject]@{ state = 'draft'; origin = 'auto_detect' })
+        $v = Format-DossierView -Record $loop.findings[0] -Registry ([pscustomobject]@{ state = 'draft'; origin = 'auto_detect'; agent = 'consultas'; rev = 1; changes = 2; created_by = 'pulso-engine' })
         ($v -join "`n") | Should Match 'TITLE: template:t/estado_pqr'
-        ($v -join "`n") | Should Match 'state=draft origin=auto_detect'
+        ($v -join "`n") | Should Match 'state=draft origin=auto_detect agent=consultas rev=1 changes=2'
         ((Format-DossierView -Record $loop.findings[2]) -join "`n") | Should Match 'no dossier'
     }
     It 'lists only announced records' {
@@ -227,6 +232,16 @@ Describe 'New-AnnouncePayload' {
         $r.findings[0].evaluation.dossier.es.sections.problem = 'id 123 456 789 012'
         { New-AnnouncePayload -Record $r.findings[0] } | Should Throw 'personal-data'
         { New-AnnouncePayload -Record $loop.findings[1] } | Should Throw 'dossier'
+    }
+}
+
+Describe 'Read-JsonFile' {
+    It 'reads UTF-8 without a BOM keeping the accents (Windows PowerShell would otherwise read it as ANSI)' {
+        $f = Join-Path ([IO.Path]::GetTempPath()) ('dl-' + [guid]::NewGuid().ToString('N') + '.json')
+        $text = '{"t":"estado ' + [char]0x00F3 + ' ' + [char]0x00F1 + '"}'
+        [IO.File]::WriteAllText($f, $text, (New-Object Text.UTF8Encoding($false)))
+        (Read-JsonFile -Path $f).t | Should Be ('estado ' + [char]0x00F3 + ' ' + [char]0x00F1)
+        Remove-Item -LiteralPath $f -Force
     }
 }
 
