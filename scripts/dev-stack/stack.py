@@ -111,7 +111,7 @@ def serve_ports() -> list[str]:
     if os.environ.get("PULSO_SERVE_E2E") == "1":
         return ["--tools", "testing.e2e_demo:tools", "--classifier", "testing.e2e_demo:classifier_provider",
                 "--field-classifier", "testing.e2e_demo:field_classifier", "--calibration", "testing.e2e_demo:calibration"]
-    return ["--field-classifier", os.environ.get("PULSO_FIELD_CLASSIFIER", "agent_core.adapters.classification:field_classifier")]
+    return ["--field-classifier", os.environ.get("PULSO_FIELD_CLASSIFIER", "agent_core.composition.classification:field_classifier")]
 
 
 def up(args) -> None:
