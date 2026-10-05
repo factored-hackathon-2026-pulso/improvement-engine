@@ -927,6 +927,398 @@
   "language_detection": "lang-es-pt@1"
  },
  "flows": {
+  "asistir": {
+   "id": "asistir",
+   "nodes": [
+    {
+     "config": {
+      "max_attempts": 3,
+      "prompt_ref": "t/pedir_pedido",
+      "slot": "pedido"
+     },
+     "id": "pedir",
+     "next": {
+      "max_attempts": "fin_sin_pedido",
+      "ok": "investigar"
+     },
+     "type": "collect"
+    },
+    {
+     "config": {
+      "goal": "Responder al asesor el pedido sobre el cliente que atiende, usando solo lo que leas con las tools.",
+      "input_view": [
+       "slots.pedido"
+      ],
+      "max_steps": 6,
+      "output_schema": {
+       "additionalProperties": false,
+       "properties": {
+        "datos": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "concepto": {
+            "type": "string"
+           },
+           "detalle": {
+            "type": "string"
+           },
+           "fecha": {
+            "type": "string"
+           },
+           "fuente": {
+            "enum": [
+             "productos",
+             "movimientos",
+             "pqr",
+             "traspaso",
+             "conversacion"
+            ],
+            "type": "string"
+           },
+           "moneda": {
+            "enum": [
+             "USD",
+             "COP",
+             "MXN",
+             "ARS"
+            ],
+            "type": "string"
+           },
+           "valor": {
+            "type": "number"
+           }
+          },
+          "required": [
+           "concepto",
+           "fuente"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "resumen": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "resumen",
+        "datos"
+       ],
+       "type": "object"
+      },
+      "prompt_ref": "p/copiloto@1",
+      "save_as": "hallazgo",
+      "tools_allowed": [
+       "leer_movimientos@1",
+       "leer_productos@1",
+       "leer_pqr_cliente@1",
+       "obtener_handoff@1",
+       "leer_transcript@1"
+      ]
+     },
+     "id": "investigar",
+     "next": {
+      "answered": "responder",
+      "gave_up": "no_pude"
+     },
+     "type": "agent"
+    },
+    {
+     "config": {
+      "generate": {
+       "allowed_facts": [
+        "facts.hallazgo"
+       ],
+       "fallback_template_ref": "t/copiloto_fallback@1",
+       "prompt_ref": "p/respuesta_asesor@1",
+       "purpose": "advisor_view"
+      }
+     },
+     "id": "responder",
+     "next": {
+      "next": "pedir"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "template_ref": "t/copiloto_sin_respuesta"
+     },
+     "id": "no_pude",
+     "next": {
+      "next": "pedir"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "outcome": "abstained"
+     },
+     "id": "fin_sin_pedido",
+     "type": "end"
+    }
+   ],
+   "priority": 50,
+   "version": "1.0.0"
+  },
+  "construir": {
+   "id": "construir",
+   "nodes": [
+    {
+     "config": {
+      "max_attempts": 3,
+      "prompt_ref": "t/pedir_agente",
+      "slot": "agente"
+     },
+     "id": "pedir_agente",
+     "next": {
+      "max_attempts": "fin_sin_datos",
+      "ok": "pedir_objetivo"
+     },
+     "type": "collect"
+    },
+    {
+     "config": {
+      "max_attempts": 3,
+      "prompt_ref": "t/pedir_objetivo",
+      "slot": "objetivo"
+     },
+     "id": "pedir_objetivo",
+     "next": {
+      "max_attempts": "fin_sin_datos",
+      "ok": "redactar"
+     },
+     "type": "collect"
+    },
+    {
+     "config": {
+      "goal": "Producir el borrador de cambios del registry que cumple el objetivo del supervisor sobre el agente indicado, cambiando lo mínimo.",
+      "input_view": [
+       "slots.agente",
+       "slots.objetivo"
+      ],
+      "max_steps": 6,
+      "output_schema": {
+       "additionalProperties": false,
+       "properties": {
+        "changes": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "content": {
+            "type": "object"
+           },
+           "docs": {
+            "additionalProperties": false,
+            "properties": {
+             "changelog": {
+              "type": "string"
+             },
+             "description": {
+              "type": "string"
+             },
+             "rationale": {
+              "type": "string"
+             }
+            },
+            "required": [
+             "description",
+             "rationale",
+             "changelog"
+            ],
+            "type": "object"
+           },
+           "kind": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "kind",
+           "content",
+           "docs"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        }
+       },
+       "required": [
+        "changes"
+       ],
+       "type": "object"
+      },
+      "prompt_ref": "p/constructor@1",
+      "save_as": "borrador",
+      "tools_allowed": [
+       "registry/get_entity@1",
+       "registry/list_versions@1"
+      ]
+     },
+     "id": "redactar",
+     "next": {
+      "answered": "crear",
+      "gave_up": "no_pude"
+     },
+     "type": "agent"
+    },
+    {
+     "config": {
+      "args": {
+       "agent_id": "slots.agente",
+       "origin": "builder_chat",
+       "title": "slots.objetivo"
+      },
+      "draft": true,
+      "save_as": "propuesta",
+      "tool": "registry/create_proposal@1"
+     },
+     "id": "crear",
+     "next": {
+      "denied": "esc",
+      "ok": "verificar_crear",
+      "uncertain": "verificar_crear"
+     },
+     "type": "tool"
+    },
+    {
+     "config": {
+      "by": "idempotency_key",
+      "predicate": {
+       "==": [
+        {
+         "var": "readback.op"
+        },
+        "create_proposal"
+       ]
+      },
+      "readback": "registry/get_write@1",
+      "save_as": "crear_ok"
+     },
+     "id": "verificar_crear",
+     "next": {
+      "failed": "esc",
+      "verified": "guardar"
+     },
+     "type": "verify"
+    },
+    {
+     "config": {
+      "args": {
+       "changes": "facts.borrador.value.changes",
+       "expected_rev": "facts.propuesta.value.rev",
+       "proposal_id": "facts.propuesta.value.proposal_id"
+      },
+      "draft": true,
+      "save_as": "guardado",
+      "tool": "registry/put_draft@1"
+     },
+     "id": "guardar",
+     "next": {
+      "denied": "esc",
+      "ok": "verificar_guardar",
+      "uncertain": "verificar_guardar"
+     },
+     "type": "tool"
+    },
+    {
+     "config": {
+      "by": "idempotency_key",
+      "predicate": {
+       "==": [
+        {
+         "var": "readback.op"
+        },
+        "put_draft"
+       ]
+      },
+      "readback": "registry/get_write@1",
+      "save_as": "guardar_ok"
+     },
+     "id": "verificar_guardar",
+     "next": {
+      "failed": "esc",
+      "verified": "validar"
+     },
+     "type": "verify"
+    },
+    {
+     "config": {
+      "args": {
+       "proposal_id": "facts.propuesta.value.proposal_id"
+      },
+      "save_as": "validacion",
+      "tool": "registry/validate@1"
+     },
+     "id": "validar",
+     "next": {
+      "denied": "esc",
+      "error": "esc",
+      "ok": "responder",
+      "timeout": "esc"
+     },
+     "type": "tool"
+    },
+    {
+     "config": {
+      "generate": {
+       "allowed_facts": [
+        "facts.propuesta",
+        "facts.validacion"
+       ],
+       "fallback_template_ref": "t/propuesta_lista@1",
+       "prompt_ref": "p/resumen_construccion@1",
+       "purpose": "agent_guidance"
+      }
+     },
+     "id": "responder",
+     "next": {
+      "next": "fin"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "outcome": "resolved"
+     },
+     "id": "fin",
+     "type": "end"
+    },
+    {
+     "config": {
+      "template_ref": "t/constructor_sin_borrador"
+     },
+     "id": "no_pude",
+     "next": {
+      "next": "fin_abstenido"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "outcome": "abstained"
+     },
+     "id": "fin_abstenido",
+     "type": "end"
+    },
+    {
+     "config": {
+      "outcome": "abstained"
+     },
+     "id": "fin_sin_datos",
+     "type": "end"
+    },
+    {
+     "config": {
+      "reason_code": "tool_failure"
+     },
+     "id": "esc",
+     "type": "escalate"
+    }
+   ],
+   "priority": 50,
+   "version": "1.0.0"
+  },
   "consulta-pqr": {
    "id": "consulta-pqr",
    "nodes": [
@@ -994,12 +1386,629 @@
    ],
    "priority": 50,
    "version": "1.0.0"
+  },
+  "disputa-cargo": {
+   "id": "disputa-cargo",
+   "nodes": [
+    {
+     "config": {
+      "max_attempts": 2,
+      "prompt_ref": "t/pedir_cargo",
+      "slot": "descripcion_cargo"
+     },
+     "id": "pedir_cargo",
+     "next": {
+      "max_attempts": "esc_sin_datos",
+      "ok": "buscar_tx"
+     },
+     "type": "collect"
+    },
+    {
+     "config": {
+      "args": {
+       "texto": "slots.descripcion_cargo"
+      },
+      "save_as": "candidatas",
+      "tool": "buscar_transacciones@1"
+     },
+     "id": "buscar_tx",
+     "next": {
+      "denied": "esc_tool",
+      "error": "esc_tool",
+      "ok": "coincide",
+      "timeout": "esc_tool"
+     },
+     "type": "tool"
+    },
+    {
+     "config": {
+      "branch_on": "match",
+      "model": "match-cargo@2",
+      "save_as": "coincide"
+     },
+     "id": "coincide",
+     "next": {
+      "low_confidence": "aclarar",
+      "ninguna": "aclarar",
+      "unica": "elegir",
+      "varias": "aclarar"
+     },
+     "type": "decide"
+    },
+    {
+     "config": {
+      "args": {
+       "id": "decisions.coincide.transaction",
+       "lista": "facts.candidatas.value"
+      },
+      "save_as": "transaccion_elegida",
+      "tool": "seleccionar@1"
+     },
+     "id": "elegir",
+     "next": {
+      "denied": "esc_tool",
+      "error": "esc_tool",
+      "ok": "a_usd",
+      "timeout": "esc_tool"
+     },
+     "type": "tool"
+    },
+    {
+     "config": {
+      "args": {
+       "destino": "USD",
+       "moneda": "facts.transaccion_elegida.value.currency",
+       "monto": "facts.transaccion_elegida.value.amount"
+      },
+      "save_as": "monto_usd",
+      "tool": "convertir_moneda@1"
+     },
+     "id": "a_usd",
+     "next": {
+      "denied": "esc_tool",
+      "error": "esc_tool",
+      "ok": "umbral",
+      "timeout": "esc_tool"
+     },
+     "type": "tool"
+    },
+    {
+     "config": {
+      "policy": "escalamiento-disputa-monto@1"
+     },
+     "id": "umbral",
+     "next": {
+      "false": "confirmar",
+      "true": "esc_monto"
+     },
+     "type": "rule"
+    },
+    {
+     "config": {
+      "action": {
+       "args": {
+        "descripcion": "slots.descripcion_cargo",
+        "transaction_id": "facts.transaccion_elegida.value.transaction_id"
+       },
+       "tool": "radicar_pqr@1"
+      },
+      "summary_template": "t/resumen_pqr"
+     },
+     "id": "confirmar",
+     "next": {
+      "false": "fin_cancelado",
+      "max_attempts": "no_confirmado",
+      "true": "radicar",
+      "unclear": "confirmar"
+     },
+     "type": "confirm"
+    },
+    {
+     "config": {
+      "action_from": "confirmar",
+      "save_as": "pqr"
+     },
+     "id": "radicar",
+     "next": {
+      "denied": "esc_tool",
+      "ok": "verificar",
+      "uncertain": "verificar"
+     },
+     "type": "tool"
+    },
+    {
+     "config": {
+      "by": "idempotency_key",
+      "predicate": {
+       "==": [
+        {
+         "var": "readback.status"
+        },
+        "Open"
+       ]
+      },
+      "readback": "obtener_pqr@1",
+      "save_as": "pqr_verificada"
+     },
+     "id": "verificar",
+     "next": {
+      "failed": "esc_verif",
+      "verified": "responder_ok"
+     },
+     "type": "verify"
+    },
+    {
+     "config": {
+      "claims": [
+       "confirmar"
+      ],
+      "generate": {
+       "allowed_facts": [
+        "facts.pqr_verificada"
+       ],
+       "fallback_template_ref": "t/pqr_radicado@1",
+       "prompt_ref": "p/resumen_radicado@1"
+      }
+     },
+     "id": "responder_ok",
+     "next": {
+      "next": "fin"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "outcome": "resolved"
+     },
+     "id": "fin",
+     "type": "end"
+    },
+    {
+     "config": {
+      "await": true,
+      "template_ref": "t/aclarar_cargo"
+     },
+     "id": "aclarar",
+     "next": {
+      "next": "pedir_cargo"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "template_ref": "t/no_confirmado"
+     },
+     "id": "no_confirmado",
+     "next": {
+      "next": "fin_abstenido"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "outcome": "abstained"
+     },
+     "id": "fin_abstenido",
+     "type": "end"
+    },
+    {
+     "config": {
+      "outcome": "cancelled"
+     },
+     "id": "fin_cancelado",
+     "type": "end"
+    },
+    {
+     "config": {
+      "reason_code": "low_confidence"
+     },
+     "id": "esc_sin_datos",
+     "type": "escalate"
+    },
+    {
+     "config": {
+      "reason_code": "tool_failure"
+     },
+     "id": "esc_tool",
+     "type": "escalate"
+    },
+    {
+     "config": {
+      "reason_code": "policy:escalamiento-disputa-monto",
+      "target_queue": "disputas"
+     },
+     "id": "esc_monto",
+     "type": "escalate"
+    },
+    {
+     "config": {
+      "reason_code": "verification_failed"
+     },
+     "id": "esc_verif",
+     "type": "escalate"
+    }
+   ],
+   "priority": 50,
+   "version": "1.0.0"
+  },
+  "recepcion": {
+   "id": "recepcion",
+   "nodes": [
+    {
+     "config": {
+      "max_attempts": 2,
+      "prompt_ref": "t/pedir_problema",
+      "slot": "problema"
+     },
+     "id": "entender",
+     "next": {
+      "max_attempts": "esc_sin_datos",
+      "ok": "listar"
+     },
+     "type": "collect"
+    },
+    {
+     "config": {
+      "args": {
+       "directory": "atencion-cliente",
+       "locale": "es"
+      },
+      "save_as": "directorio",
+      "tool": "directory/list@1"
+     },
+     "id": "listar",
+     "next": {
+      "denied": "esc_directorio",
+      "error": "esc_directorio",
+      "ok": "elegir",
+      "timeout": "esc_directorio"
+     },
+     "type": "tool"
+    },
+    {
+     "config": {
+      "branch_on": "choice",
+      "choices_from": "facts.directorio.value.choices",
+      "input_view": [
+       "slots.problema",
+       "facts.directorio.value.entries"
+      ],
+      "model": "elegir-especialista@1",
+      "save_as": "ruta"
+     },
+     "id": "elegir",
+     "next": {
+      "chosen": "avisar",
+      "low_confidence": "aclarar",
+      "none": "aclarar"
+     },
+     "type": "decide"
+    },
+    {
+     "config": {
+      "template_ref": "t/te_comunico"
+     },
+     "id": "avisar",
+     "next": {
+      "next": "transferir"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "directory_from": "directorio",
+      "packet": {
+       "reason": "routed",
+       "slots": [
+        "problema"
+       ]
+      },
+      "target_from": "decisions.ruta.choice"
+     },
+     "id": "transferir",
+     "next": {
+      "rejected": "esc_rechazo"
+     },
+     "type": "transfer"
+    },
+    {
+     "config": {
+      "await": true,
+      "template_ref": "t/aclarar_problema"
+     },
+     "id": "aclarar",
+     "next": {
+      "next": "entender"
+     },
+     "type": "respond"
+    },
+    {
+     "config": {
+      "reason_code": "low_confidence"
+     },
+     "id": "esc_sin_datos",
+     "type": "escalate"
+    },
+    {
+     "config": {
+      "reason_code": "tool_failure"
+     },
+     "id": "esc_directorio",
+     "type": "escalate"
+    },
+    {
+     "config": {
+      "reason_code": "policy:transfer_rejected"
+     },
+     "id": "esc_rechazo",
+     "type": "escalate"
+    }
+   ],
+   "priority": 50,
+   "version": "1.0.0"
   }
  },
  "label": "fixture-baseline",
+ "policies": {
+  "escalamiento-disputa-monto": {
+   "expr": {
+    ">": [
+     {
+      "var": "facts.monto_usd.value"
+     },
+     500
+    ]
+   },
+   "id": "escalamiento-disputa-monto",
+   "owner": "riesgo",
+   "rationale": "Disputas sobre montos altos requieren revisión humana (política sintética).",
+   "version": "1.0.0"
+  }
+ },
  "source": {
   "commit": "f91ac44",
   "path": "tests/fixtures/registry-e2e",
   "repo": "agent-core"
+ },
+ "tool_defs": {
+  "buscar_transacciones": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "desde": {
+      "type": "string"
+     },
+     "hasta": {
+      "type": "string"
+     },
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     },
+     "monto_max": {
+      "type": "number"
+     },
+     "monto_min": {
+      "type": "number"
+     },
+     "texto": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "id": "buscar_transacciones",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_transactions",
+   "version": "1.0.0"
+  },
+  "convertir_moneda": {
+   "id": "convertir_moneda",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "compute",
+   "version": "1.0.0"
+  },
+  "leer_movimientos": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     },
+     "product_id": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "description": "Lista los Ãºltimos movimientos de la tarjeta del cliente atendido (monto, comercio, fecha, estado).",
+   "id": "leer_movimientos",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_transactions",
+   "version": "1.0.0"
+  },
+  "leer_pqr_cliente": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 10,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "description": "Lista las PQR radicadas por el cliente atendido y su estado.",
+   "id": "leer_pqr_cliente",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  },
+  "leer_productos": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "default": 20,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "description": "Lista los productos del cliente atendido (tarjeta, saldo adeudado, cupo, pago mÃ­nimo).",
+   "id": "leer_productos",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_products",
+   "version": "1.0.0"
+  },
+  "leer_transcript": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "limite": {
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "description": "Lee la conversaciÃ³n del cliente con el agente de atenciÃ³n (Ãºltimos turnos).",
+   "id": "leer_transcript",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "transcript",
+   "version": "1.0.0"
+  },
+  "obtener_handoff": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "description": "Lee el paquete de traspaso del Ãºltimo run escalado del cliente: motivo, resumen y datos reunidos.",
+   "id": "obtener_handoff",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "handoff",
+   "version": "1.0.0"
+  },
+  "obtener_pqr": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "idempotency_key": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "idempotency_key"
+    ],
+    "type": "object"
+   },
+   "id": "obtener_pqr",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "read",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  },
+  "radicar_pqr": {
+   "args_schema": {
+    "additionalProperties": false,
+    "properties": {
+     "descripcion": {
+      "type": "string"
+     },
+     "transaction_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "transaction_id",
+     "descripcion"
+    ],
+    "type": "object"
+   },
+   "id": "radicar_pqr",
+   "idempotent": true,
+   "min_auth_level": "step_up",
+   "readback_by": "idempotency_key",
+   "risk_class": "write_reversible",
+   "source": "customer_cases",
+   "version": "1.0.0"
+  },
+  "seleccionar": {
+   "id": "seleccionar",
+   "idempotent": true,
+   "min_auth_level": "session",
+   "risk_class": "compute",
+   "version": "1.0.0"
+  }
+ },
+ "tool_defs_label": "registry-e2e with ALIGNED sources (additive engine fixture fix, see export_art2_graph.py)",
+ "tool_service": {
+  "label": "SIG1 snapshot of the tool-service listing (GET /v1/tools shape)",
+  "tools": [
+   {
+    "id": "buscar_transacciones",
+    "min_auth_level": "session",
+    "risk_class": "read",
+    "source": "customer_transactions",
+    "version": "1.0.0"
+   },
+   {
+    "id": "leer_movimientos",
+    "min_auth_level": "session",
+    "risk_class": "read",
+    "source": "customer_transactions",
+    "version": "1.0.0"
+   },
+   {
+    "id": "leer_perfil",
+    "min_auth_level": "session",
+    "risk_class": "read",
+    "source": "customer_profile",
+    "version": "1.0.0"
+   },
+   {
+    "id": "leer_pqr_cliente",
+    "min_auth_level": "session",
+    "risk_class": "read",
+    "source": "customer_cases",
+    "version": "1.0.0"
+   },
+   {
+    "id": "leer_productos",
+    "min_auth_level": "session",
+    "risk_class": "read",
+    "source": "customer_products",
+    "version": "1.0.0"
+   },
+   {
+    "id": "obtener_pqr",
+    "min_auth_level": "session",
+    "risk_class": "read",
+    "source": "customer_cases",
+    "version": "1.0.0"
+   },
+   {
+    "id": "radicar_pqr",
+    "min_auth_level": "step_up",
+    "risk_class": "write_reversible",
+    "source": "customer_cases",
+    "version": "1.0.0"
+   }
+  ]
  }
 }

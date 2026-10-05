@@ -328,6 +328,11 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
     let runs = prev.map_or(0, |s| s.runs);
     let mut signal = inp.finding.to_signal_json();
     signal["source"] = json!(inp.finding.source.as_str());
+    // ART2: the structured params of a tool link or policy draft travel in the finding file (build_suite.py reads `art2`); never model text.
+    if let Some(p) = c.expected_effect["art2"]["suite_params"].as_object() {
+        signal["art2"] = json!(p);
+    }
+    let owner_ack = c.expected_effect["art2"]["owner_ack"] == true;
     let finish = |story: Value, suite: Option<Value>, evals: Vec<String>, extra: Vec<Value>| -> Proof {
         let record = json!({"proposal": c.to_json(), "doubles": inp.doubles, "rubric": inp.rubric});
         let (dossier_v, dossier_err) = match dossier::build(&signal, &record, Some(&story), &inp.labels) {
@@ -335,10 +340,12 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
             Err(e) => (json!({"schema": dossier::SCHEMA, "announce": false, "announce_reason": "dossier_error", "error": e}), true),
         };
         let verdict = if dossier_err { "dossier_error".to_string() } else { story["outcome"].as_str().unwrap_or("unknown").to_string() };
-        let announce = !dossier_err && dossier_v["announce"].as_bool() == Some(true) && story["announce"].as_bool() == Some(true);
+        let proven = !dossier_err && (dossier_v["announce"].as_bool() == Some(true) || dossier_v["announce_reason"] == "needs_owner_ack") && story["announce"].as_bool() == Some(true);
+        // ART2: a human-owned policy draft is proven natively but NEVER announced automatically: it waits for the owner (`needs_owner_ack`).
+        let announce = proven && !owner_ack;
         let p = Proof {
             announce,
-            outcome: if announce { "announced".into() } else { format!("not_announced:{verdict}") },
+            outcome: if announce { "announced".into() } else if proven && owner_ack { "needs_owner_ack".into() } else { format!("not_announced:{verdict}") },
             verdict,
             replayed: false,
             suite: if announce { suite } else { None },

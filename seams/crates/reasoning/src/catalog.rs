@@ -42,6 +42,15 @@ pub struct Catalog {
     pub donor: String,
     pub donor_flow: Value,
     pub donor_release: Value,
+    /// ART2: every flow graph, policy and ToolDef of the baseline (entity JSON, as the registry serves it) and the tool-service listing.
+    pub flows: BTreeMap<String, Value>,
+    pub policies: BTreeMap<String, Value>,
+    pub tool_defs: BTreeMap<String, Value>,
+    pub tool_service: Option<crate::art2::ToolService>,
+}
+
+fn entity_map(v: &Value) -> BTreeMap<String, Value> {
+    v.as_object().into_iter().flatten().map(|(k, x)| (k.clone(), x.clone())).collect()
 }
 
 impl Catalog {
@@ -72,6 +81,10 @@ impl Catalog {
             donor: v["donor"].as_str().unwrap_or("consultas").into(),
             donor_flow: v["flows"]["consulta-pqr"].clone(),
             donor_release: v["donor_release"].clone(),
+            flows: entity_map(&v["flows"]),
+            policies: entity_map(&v["policies"]),
+            tool_defs: entity_map(&v["tool_defs"]),
+            tool_service: crate::art2::ToolService::from_json(&v["tool_service"]),
         })
     }
 
@@ -87,6 +100,24 @@ impl Catalog {
     }
     pub fn agent(&self, id: &str) -> Option<&Value> {
         self.agents.get(id)
+    }
+    /// Replaces entities read from the live registry (ART2 kinds): the caller relabels the catalogue.
+    pub fn put_entity(&mut self, kind: &str, id: &str, content: Value) {
+        match kind {
+            "flow" => self.flows.insert(id.into(), content),
+            "policy" => self.policies.insert(id.into(), content),
+            "tool" => self.tool_defs.insert(id.into(), content),
+            _ => self.agents.insert(id.into(), content),
+        };
+    }
+    pub fn flow(&self, id: &str) -> Option<&Value> {
+        self.flows.get(id)
+    }
+    pub fn policy(&self, id: &str) -> Option<&Value> {
+        self.policies.get(id)
+    }
+    pub fn tool_def(&self, id: &str) -> Option<&Value> {
+        self.tool_defs.get(id)
     }
     pub fn agent_ids(&self) -> Vec<String> {
         self.agents.keys().cloned().collect()

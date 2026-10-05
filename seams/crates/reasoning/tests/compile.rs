@@ -277,3 +277,26 @@ fn a_single_brace_placeholder_is_denied_with_a_problem_the_builder_can_act_on() 
     assert_eq!(e.code, "placeholder_not_allowed");
     assert!(e.why.contains("curly braces"), "{}", e.why);
 }
+
+fn tool_finding() -> reasoning::finding::Finding {
+    finding_of(signal("A5", json!({"agent": "copiloto-asesor", "tool": "leer_pqr_cliente"}), stage(150, 200, 0.40), stage(120, 160, 0.40)), Source::Synthetic)
+}
+
+#[test]
+fn link_tool_compiles_a_pass_through_read_link_from_an_edge_menu_choice() {
+    let f = tool_finding();
+    let row = map_finding(&f).expect("A5 on leer_pqr_cliente maps");
+    assert_eq!(row.targets[0].kind, "link_tool");
+    let o = opp("tool_link:consultas/leer_pqr_cliente", "missing_tool");
+    let ok = |edge: &str| compile(&cat(), &f, &row, &o, &json!({"kind": "link_tool", "edge_id": edge, "rationale": "Add the read.", "alternatives": alts(), "uncertainty": "Association only."}));
+    let c = ok("consultar.ok").expect("compiles");
+    assert_eq!((c.kind.as_str(), c.agent_id.as_str(), c.changes.len()), ("link_tool", "consultas", 3));
+    let flow = &c.changes[0]["content"];
+    assert_eq!(flow["version"], "1.1.0");
+    let n = flow["nodes"].as_array().unwrap().iter().find(|n| n["id"] == "eng_link_leer_pqr_cliente").unwrap();
+    assert_eq!((n["next"]["ok"].as_str(), n["next"]["error"].as_str()), (Some("responder"), Some("esc_tool")));
+    assert_eq!(c.changes[1]["content"]["tools_allowed"], json!(["obtener_pqr@1", "leer_pqr_cliente@1"]));
+    assert_eq!(c.changes[2]["content"], cat().tool_def("leer_pqr_cliente").unwrap().clone()); // unchanged ToolDef copy
+    assert!(c.human_items.iter().any(|h| h.contains("read-only")));
+    assert_eq!(denied(ok("consultar.error")), "edge_unknown");
+}

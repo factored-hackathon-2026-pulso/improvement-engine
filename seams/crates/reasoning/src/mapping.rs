@@ -16,10 +16,10 @@
 use crate::finding::Finding;
 use serde_json::{Value, json};
 
-pub const MECHANISMS: [&str; 6] = ["uncovered_topic", "repeated_lookup", "status_message_gap", "closing_followup", "wording", "none"];
+pub const MECHANISMS: [&str; 9] = ["uncovered_topic", "repeated_lookup", "status_message_gap", "closing_followup", "wording", "none", "missing_tool", "stale_tool_answer", "policy_threshold"];
 
 /// Kinds a target can have. Anything else (policy, tool, flow, model_profile ...) is refused by construction.
-pub const TARGET_KINDS: [&str; 2] = ["patch", "new_agent"];
+pub const TARGET_KINDS: [&str; 4] = ["patch", "new_agent", "link_tool", "tighten_policy"];
 
 /// At most this many candidates of one finding are tried (in rank order, stopping at the first proven one).
 pub const MAX_CANDIDATES: usize = 2;
@@ -56,6 +56,8 @@ pub struct Target {
     /// `suite:<mechanism>` (a regression suite generator exists, `scripts/regression/build_suite.py`) or `none`.
     pub proof_support: &'static str,
     pub announceable_now: bool,
+    /// ART2 structured params (`link_tool`: `{tool}`; `tighten_policy`: `{tighten_to, source}`), never free text.
+    pub params: Value,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,6 +87,9 @@ pub struct HumanOwned {
     pub evidence: &'static str,
     pub note_es: &'static str,
     pub note_pt: &'static str,
+    /// ART2: a policy finding: `{policy, registry_threshold, document_threshold, tighten_to?}`. Present: outcome `policy_hypothesis`
+    /// (and `needs_owner_ack` when a tighten-only draft compiles from `tighten_to`); the engine never picks the value.
+    pub policy: Value,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -201,7 +206,12 @@ impl Table {
                 let target_ref = need(c, "target_ref", &cw)?;
                 let (prefix, tid) = target_ref.split_once(':').ok_or_else(|| format!("{cw}: target_ref without kind prefix"))?;
                 let denied_ids = ["constructor-chat", "release_settings", "interrupt", "injection", "language_detection", "model_profile", "perfil-generacion", "policy"];
-                let prefix_ok = if kind == "patch" { prefix == "template" || prefix == "prompt" } else { prefix == "new_agent" };
+                let prefix_ok = match kind {
+                    "patch" => prefix == "template" || prefix == "prompt",
+                    "link_tool" => prefix == "tool_link" && tid.split_once('/').is_some_and(|(a, t)| !a.is_empty() && !t.is_empty()),
+                    "tighten_policy" => prefix == "policy" && c["params"]["tighten_to"].is_number(),
+                    _ => prefix == "new_agent",
+                };
                 if !prefix_ok {
                     return Err(format!("{cw}: target_ref {target_ref} does not match kind {kind}"));
                 }
@@ -222,7 +232,12 @@ impl Table {
                 }
                 targets.push(Target {
                     target_ref: target_ref.to_string(),
-                    kind: if kind == "patch" { "patch" } else { "new_agent" },
+                    kind: match kind {
+                        "patch" => "patch",
+                        "link_tool" => "link_tool",
+                        "tighten_policy" => "tighten_policy",
+                        _ => "new_agent",
+                    },
                     agent: leak(need(c, "agent", &cw)?),
                     placeholders: strs(&c["placeholders"]).iter().map(|m| leak(m)).collect(),
                     slugs,
@@ -232,6 +247,7 @@ impl Table {
                     evidence: leak(need(c, "evidence", &cw)?),
                     proof_support: leak(proof_support),
                     announceable_now: c["announceable_now"].as_bool().ok_or_else(|| format!("{cw}: announceable_now missing"))?,
+                    params: c["params"].clone(),
                 });
                 when.push(dim_cond(&c["when_dims"]));
             }
@@ -262,6 +278,7 @@ impl Table {
                     evidence: leak(need(h, "evidence", id)?),
                     note_es: leak(need(&h["note"], "es", id)?),
                     note_pt: leak(need(&h["note"], "pt", id)?),
+                    policy: h["policy"].clone(),
                 },
                 matcher: Matcher::parse(&h["match"], id)?,
             });
