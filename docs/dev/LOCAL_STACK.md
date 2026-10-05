@@ -2,7 +2,7 @@
 
 A LOCAL, non-shared instance of agent-core (head `f91ac44`, includes PR 34) plus llm-gateway, used to prove the
 Builder path end to end: engine-signed `builder` principal -> `POST /v1/runs` -> task agent `pulso-builder` (ReAct
-`agent` node on `deepseek/deepseek-v4.1-flash`) -> in-process registry tools as `constructor-bot` -> a validated
+`agent` node on `xiaomi/mimo-v2.6-flash`) -> in-process registry tools as `constructor-bot` -> a validated
 draft proposal. Only SYNTHETIC input is used. This is our own instance, not the shared Core.
 
 ## Prerequisites
@@ -41,7 +41,7 @@ file-driven field classifier (`field-overlay.json`, pulso fields public) as a de
 `registry-pulso-builder/`: agent `pulso-builder@1.0.0` (`mode: task`, `invocable_by: [builder]`, inputs `agente`,
 `objetivo`, `evidencia`), flow `pulso-construir@1.0.0` (agent node reading `registry/get_entity` and
 `registry/list_versions` -> `create_proposal` -> verify -> `put_draft` -> verify -> `validate` -> `end completed`),
-prompt `p/pulso-builder@1.0.0`, model profile `pulso-deepseek@1.0.0` (the input price in it is an estimate).
+prompt `p/pulso-builder@1.0.0`, model profile `pulso-mimo-flash@1.0.0` (prices from the OpenRouter list).
 `end.output_map` returns only `proposal_id`, `rev` (rev at creation, the stored draft is rev 1) and `valid`.
 
 ## Findings (all verified live on this stack)
@@ -74,3 +74,22 @@ prompt `p/pulso-builder@1.0.0`, model profile `pulso-deepseek@1.0.0` (the input 
 data). Two agents or lanes running it at the same time destroy each other's runs. Each lane must either use its own
 ports and its own container-name prefix, or use `scripts/battery/demo_core.py`, which starts an isolated demo core
 that does not touch the singleton stack.
+
+## A second stack beside another lane's (BLD1)
+
+`stack.py` accepts `PULSO_STACK_PREFIX` (container, volume and gateway-image names), `PULSO_PG_PORT`, `PULSO_GW_PORT`, `PULSO_CORE_PORT`,
+`PULSO_REGISTRY_DIR` (import another registry directory), `PULSO_SERVE_AGENTS` and `PULSO_SERVE_E2E=1` (agent-core's e2e demo doubles). Defaults are
+unchanged. With a non-default prefix the gateway image is also prefixed: lanes that shared the image name `pulso-l3-llm-gateway` lost every gateway
+container when one lane ran `down --purge` (`rmi -f`).
+
+Real agent artifacts in the local registry (so patch proposals read a LIVE base, baseline label `live-registry` instead of `fixture-baseline`):
+
+```
+export PULSO_STACK_PREFIX=pulso-bld1 PULSO_PG_PORT=55480 PULSO_GW_PORT=8110 PULSO_CORE_PORT=8041
+export PULSO_AGENT_CORE_DIR=<agent-core checkout> PULSO_LLM_GATEWAY_DIR=<llm-gateway checkout>
+export PULSO_REGISTRY_DIR=<agent-core>/tests/fixtures/registry-e2e PULSO_SERVE_E2E=1 PULSO_SERVE_AGENTS=disputas,consultas
+python scripts/dev-stack/stack.py up
+```
+
+`agentcore registry import` of `registry-e2e` loads the real agents (`disputas`, `consultas`, `recepcion`, `copiloto-asesor`, `constructor-chat`) with their
+prompts and templates; the registry writer reads `GET /v1/registry/entities/{kind}/{id}` for every target of the catalogue.

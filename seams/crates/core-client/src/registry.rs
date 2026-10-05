@@ -104,6 +104,7 @@ impl RegistryClient {
     fn send(&self, method: &str, path: &str, bearer: &Jws, extra: &[(&str, String)], body: Option<&Value>) -> Result<(u16, Vec<u8>), RegistryError> {
         let mut headers = vec![("Authorization", format!("Bearer {}", bearer.reveal()))];
         headers.extend(extra.iter().map(|(k, v)| (*k, v.clone())));
+        headers.extend(crate::trace::headers());
         let bytes = body.map(|b| serde_json::to_vec(b).expect("json"));
         let full = format!("/v1/registry{path}");
         match http::request(&self.addr, method, &full, &headers, bytes.as_deref(), self.timeout) {

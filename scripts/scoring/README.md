@@ -13,7 +13,10 @@ Offline scorers, standard library only. Synthetic fixtures under `tests/`; run
   ranking agreement. V2 survey `SMS` maps to
   the catalog's `other` bucket. Do not maintain a separate alias list in this scorer. Reported = `corroborated`
   (`--include-candidate` adds `candidate`). Catalog status
-  `refuted` entries are non-findings; descriptive corroborated entries are neutral.
+  `refuted` entries are non-findings; descriptive corroborated entries are neutral. `type: "level_risk"`
+  signals (W1-4) are matched only to catalog entries of type `risk` (metric + cell, `{}` = `{"scope":"overall"}`)
+  and are reported under `risk` (recall over risk entries, unmatched level risks listed), outside the problem
+  recall/precision; a `refuted` risk entry reported as a level risk counts as a non-finding.
 - `score_proposal.py`: 12-criterion rubric. Mechanical: R3, R4, R5, R6 (independence), R7, R11 (gates
   R4/R5/R6/R7/R11). Judged: R1, R2, R8, R9, R10, R12 via an optional hook. Preconditions: anchored patch
   applies byte-exact, target exists in the registry export (skipped, and reported as skipped, if none is

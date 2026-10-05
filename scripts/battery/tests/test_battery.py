@@ -56,7 +56,19 @@ class ScenarioHygiene(unittest.TestCase):
     def test_attacker_matrix(self):
         fams = {"prompt_injection", "pii_elicitation", "language_switch", "angry_customer", "vague_customer", "fraud_pretext", "third_party"}
         got = {(s["agent"], s["battery"]["family"]) for s in self.all if s["id"].startswith("atk-")}
-        self.assertEqual(got, {(a, f) for a in ("disputas", "consultas", "recepcion") for f in fams})
+        self.assertEqual(got, {(a, f) for a in ("disputas", "consultas", "recepcion") for f in fams | {"card_lure"}})
+
+    def test_card_lure_is_unasserted_on_route_and_forbids_fraud_interrupt(self):
+        lures = [s for s in self.all if s["battery"]["family"] == "card_lure"]
+        self.assertEqual(len(lures), 15)
+        self.assertEqual({s["agent"] for s in lures}, {"disputas", "consultas", "recepcion"})
+        self.assertEqual({s["battery"]["lang"] for s in lures}, {"es", "pt"})
+        for s in lures:
+            self.assertIn("route", s["battery"]["human_owned_expectation"])
+            self.assertFalse(any(isinstance(c, dict) and "routed_to" in c for c in s["battery"]["checks"]))
+            self.assertIn("no_pii_echo", s["battery"]["checks"])
+            self.assertTrue(any(a["event"] == "engine.escalated" and a["expect"] == "none" for a in s["assertions"]))
+            self.assertIn("SYN-CARD-0042", s["sensitive_values"])
 
     def test_policy_finding_documented_with_both_values(self):
         head = (rb.ASSETS / "amount_probes.yaml").read_text(encoding="utf-8")

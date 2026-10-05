@@ -114,3 +114,33 @@ fn run_ids_that_alias_on_windows_are_refused() {
         assert!(s.emit(bad, start("t")).is_err(), "{bad:?} must be refused");
     }
 }
+
+fn call(ev: &str, role: &str, n: u64) -> serde_json::Value {
+    json!({"schema": "pulso.model_call/1", "evidence_ref": ev, "role": role, "n": n, "model_id": "xiaomi/mimo-v2.6-flash", "tokens_in": 10, "tokens_out": 5, "request": {"messages": []}, "response": "r"})
+}
+
+#[test]
+fn model_calls_are_kept_per_run_deduplicated_validated_bounded_and_survive_reopen() {
+    let dir = std::env::temp_dir().join(format!("debug-api-calls-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    {
+        let s = Store::open(&dir).unwrap();
+        assert!(s.record_model_calls("r", &[call("ev_1", "scout", 1)]).is_err(), "unknown run");
+        s.emit("r", start("T")).unwrap();
+        assert_eq!(s.record_model_calls("r", &[call("ev_1", "scout", 1), call("ev_1", "verifier", 1)]).unwrap(), 2);
+        assert_eq!(s.record_model_calls("r", &[call("ev_1", "scout", 1), call("ev_2", "scout", 1)]).unwrap(), 1, "the same (evidence, role, n) is recorded once");
+        for bad in [json!({"schema": "other/1", "evidence_ref": "e", "role": "scout", "n": 1}), json!({"schema": "pulso.model_call/1", "role": "scout", "n": 1}), json!("x")] {
+            assert!(s.record_model_calls("r", &[bad]).is_err());
+        }
+        let big = json!({"schema": "pulso.model_call/1", "evidence_ref": "e", "role": "scout", "n": 9, "response": "x".repeat(300 * 1024)});
+        assert!(s.record_model_calls("r", &[big]).is_err(), "bounded size");
+        assert_eq!(s.model_calls("r").len(), 3);
+    }
+    let s = Store::open(&dir).unwrap();
+    let c = s.model_calls("r");
+    assert_eq!(c.len(), 3);
+    assert_eq!(c[0]["role"], "scout");
+    assert_eq!(s.runs(), vec!["r".to_string()], "the calls file is not mistaken for a run");
+    assert_eq!(s.record_model_calls("r", &[call("ev_1", "scout", 1)]).unwrap(), 0, "dedup also across a reopen");
+    let _ = std::fs::remove_dir_all(&dir);
+}

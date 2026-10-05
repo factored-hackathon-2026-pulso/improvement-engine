@@ -1,0 +1,9 @@
+# 0656 ALIGN1 dossier for the SPA proposal screen and platform_aligned maturity (UTC 2026-10-05T08:50Z, CLAUDE) [DONE]
+
+Lane ALIGN1, branch `claude/align1-s22` (from `origin/claude/w15-full-loop`; no PR, no merge dependency). Source: `docs/reports-claude/SPA_S22_ALIGNMENT_2026-10-05.md`.
+- Title: `dossier::TITLE_MAX` 200 -> 120 (the platform announce route rejects longer and never truncates). `cut_title` cuts at a word boundary with an ellipsis (ES and PT), the full text goes to `title_full` and, only when cut, to the second description line; the decision line stays first. The registry draft title (`Submission::title`) obeys the same cap, keeping the key suffix.
+- Description is plain text for `whitespace-pre-line`: `Label: text` lines, no markdown, diff entries joined with `; `, section caps unchanged. New `Siguiente paso humano` line and `end_step` field on announced dossiers: `Pasar a producción` (proposals patch existing agents; never `Activar`).
+- Maturity: new `Thresholds::platform_aligned()` (0->1 on 10 resolved cases, 1->2 on cases with questions, `edited` drafts read as `discarded`), `platform_stage()` / `platform_agent_status()`, JSON `profile`. Default profile and its JSON shape unchanged.
+- Docs: `docs/dev/DOSSIER_EXAMPLES.md` regenerated with `reason_cli dossier`; `docs/dev/MATURITY_ALIGNMENT.md` (differences, profile use, platform case-type ids).
+- Validation: `cargo test -j 1 -p reasoning -p registry-writer -p maturity` (target dir `D:/cargo-targets/claude-align1`), plus the repo unit tests, owners test and the dataclass push-scan listed in the commit.
+- Limits: the live SPA rendering needs platform PR 17 (`whitespace-pre-line`); the dossier does not yet fill the platform `ImprovementDossier` payload (`announce_payload`, C2 of the report); the platform signals feed (`resolved_cases`, `copilot_cases`) is still to be exposed by the platform.

@@ -166,6 +166,7 @@ impl CoreClient {
         if let Some(k) = idempotency_key {
             headers.push(("Idempotency-Key", k.to_string()));
         }
+        headers.extend(crate::trace::headers());
         let bytes = body.map(|b| serde_json::to_vec(b).expect("json"));
         let raw = http::request(&self.cfg.addr, route.method, &path, &headers, bytes.as_deref(), self.cfg.timeout)
             .map_err(|e| match e {

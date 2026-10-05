@@ -735,13 +735,17 @@ dependencies = [
 name = "pulso"
 version = "0.0.0"
 dependencies = [
+ "core-client",
  "debug-api",
  "engine",
  "pg",
  "postgres",
+ "reasoning",
+ "registry-writer",
  "rusqlite",
  "serde_json",
  "sources",
+ "steps",
  "thread10",
  "tiny_http",
 ]
@@ -803,6 +807,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "registry-writer"
+version = "0.0.0"
+dependencies = [
+ "core-client",
+ "reasoning",
+ "serde_json",
+ "steps",
 ]
 
 [[package]]

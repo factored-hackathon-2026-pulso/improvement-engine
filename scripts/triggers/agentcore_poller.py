@@ -33,7 +33,8 @@ from pathlib import Path
 
 SCHEMA = "pulso.trigger.v1"
 RELEASE_TYPES = {"published": "release.published", "promoted": "release.promoted", "revoked": "release.revoked"}
-TRIGGERS_PATH = "/internal/v1/automation/triggers"  # PROPOSED engine endpoint, see README (does not exist on main yet)
+SESSION_PATH = "/api/v1/auth/session"
+TRIGGERS_PATH = "/internal/v1/automation/triggers"  # served by debug-api (TR2) and by `pulso run`
 SEEN_CAP = 5000
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
@@ -104,18 +105,47 @@ class JsonlSink:
 
 
 class HttpSink:
-    """POST to the engine debug-api; Idempotency-Key = trigger_key. 409 means already accepted."""
+    """POST to the engine debug-api; Idempotency-Key = trigger_key. 409 means already accepted.
+
+    The engine requires `X-CSRF-Token`: it is read from `GET /api/v1/auth/session` (same bearer) once, kept in memory (never
+    logged) and re-read once when the engine answers 403 (a restarted engine has a new token)."""
 
     def __init__(self, base_url: str, token: str | None = None):
-        self.url, self.token = require_loopback(base_url).rstrip("/") + TRIGGERS_PATH, token
+        self.base = require_loopback(base_url).rstrip("/")
+        self.url, self.token, self._csrf = self.base + TRIGGERS_PATH, token, None
+
+    def _auth(self) -> dict:
+        return {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
+    def _fetch_csrf(self) -> str:
+        r = urllib.request.Request(self.base + SESSION_PATH, headers=self._auth(), method="GET")
+        try:
+            with urllib.request.urlopen(r, timeout=15) as resp:  # noqa: S310 (loopback enforced)
+                tok = json.loads(resp.read()).get("csrf_token")
+        except urllib.error.HTTPError as e:
+            raise SinkError(f"engine session HTTP {e.code}") from None
+        except (OSError, ValueError) as e:
+            raise SinkError(redact(f"engine session unavailable: {type(e).__name__}", [self.token or ""])) from None
+        if not isinstance(tok, str) or not tok:
+            raise SinkError("engine session carries no csrf_token")
+        return tok
+
+    def _post(self, req: dict) -> None:
+        h = {"Content-Type": "application/json", "Idempotency-Key": req["trigger_key"], "X-CSRF-Token": self._csrf, **self._auth()}
+        r = urllib.request.Request(self.url, data=json.dumps(req).encode(), headers=h, method="POST")
+        urllib.request.urlopen(r, timeout=15).close()  # noqa: S310 (loopback enforced)
 
     def send(self, req: dict) -> None:
-        h = {"Content-Type": "application/json", "Idempotency-Key": req["trigger_key"]}
-        if self.token:
-            h["Authorization"] = f"Bearer {self.token}"
-        r = urllib.request.Request(self.url, data=json.dumps(req).encode(), headers=h, method="POST")
         try:
-            urllib.request.urlopen(r, timeout=15).close()  # noqa: S310 (loopback enforced)
+            if self._csrf is None:
+                self._csrf = self._fetch_csrf()
+            try:
+                self._post(req)
+            except urllib.error.HTTPError as e:
+                if e.code != 403:
+                    raise
+                self._csrf = self._fetch_csrf()  # the engine restarted: one refresh, one retry
+                self._post(req)
         except urllib.error.HTTPError as e:
             if e.code != 409:
                 raise SinkError(f"engine HTTP {e.code}") from None

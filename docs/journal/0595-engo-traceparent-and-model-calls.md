@@ -1,0 +1,8 @@
+# 0595 ENGO [DONE] traceparent on every call, pulso.model_call/1 recorded and served (UTC 2026-10-05T07:15Z, CL)
+
+Lane ENGO, branch `claude/engo-traceparent-modelcalls` (bld1-builder a44a7d33 + o11y3 merged). Tests added: 5 core-client, 2 engine, 1 registry-writer, 1 reasoning, 2 debug-api, 1 pulso, 2 python; gate minutes about 25.
+- `core_client::trace`: `traceparent_for` byte-identical to `trace_id.py` (test reads `traceparent_vectors.json`), baggage `session.id`/`release`/`langfuse.trace.tags` (the names llm-gateway reads); headers added in llm_gateway, registry-writer HttpTransport, CoreClient and RegistryClient; `http::request` refuses CR/LF/control bytes in headers, method and path (nothing sent); writer allow-list untouched.
+- `pulso.model_call/1` (content scrubbed and bounded, tokens, price-table USD, ids) from `Recording`; job store step `1_000_000 + finding` (memory and postgres, no migration), debug-api store and `/runs/{id}/model-calls`, `<work>/value-loop/<job>.calls.ndjson`; `engine_trace.py` reads it unchanged except retried stages (stage span per attempt).
+- LIVE (own stack pulso-engo, gateway PR 4 image, 2 findings x 3 jobs): the route served 7 real calls with content, tokens and cost; 7 of 7 gateway `chat` spans (Go protobuf, captured in the gateway netns) carried the engine trace id, the engine stage span as parent, equal tokens, session and release. Agent-core deliveries were denied `REG-PIN` (not investigated; other lane); `stack.py` now passes `OTEL_*` to the gateway.
+- Limits: stage timing is still inferred; agent-core spans not checked; Langfuse not sent; REG-PIN denial open.
+Team: CL

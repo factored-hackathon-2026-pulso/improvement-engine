@@ -185,5 +185,81 @@ class RecordedFixtureTest(unittest.TestCase):
         self.assertEqual({r["event"]["type"] for r in sink.got}, {"run.closed"})  # no release.* in the recording
 
 
+class EngineStub:
+    """A loopback engine: session route with a csrf token, trigger route that requires it and the bearer."""
+
+    def __init__(self, rotate_after=None):
+        import http.server
+        import threading
+        outer = self
+        self.posts, self.session_reads, self.csrf, self.rotate_after = [], 0, "csrf-A", rotate_after
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _send(self, code, body=b"{}"):
+                self.send_response(code)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                if self.headers.get("Authorization") != "Bearer tok":
+                    return self._send(401)
+                outer.session_reads += 1
+                self._send(200, json.dumps({"csrf_token": outer.csrf}).encode())
+
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(n)
+                if self.headers.get("Authorization") != "Bearer tok":
+                    return self._send(401)
+                if self.headers.get("X-CSRF-Token") != outer.csrf:
+                    return self._send(403)
+                outer.posts.append((self.headers.get("Idempotency-Key"), json.loads(body)))
+                self._send(202)
+
+        self.srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        self.url = f"http://127.0.0.1:{self.srv.server_port}"
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+
+
+class HttpSinkTests(unittest.TestCase):
+    REQ = {"trigger_key": "sha256:" + "a" * 64, "kind": "explicit"}
+
+    def test_sends_the_csrf_token_read_from_the_session_and_reads_it_once(self):
+        e = EngineStub()
+        self.addCleanup(e.close)
+        s = ap.HttpSink(e.url, "tok")
+        s.send(self.REQ)
+        s.send(dict(self.REQ, trigger_key="sha256:" + "b" * 64))
+        self.assertEqual(len(e.posts), 2)
+        self.assertEqual(e.session_reads, 1)
+        self.assertEqual(e.posts[0][0], self.REQ["trigger_key"])
+
+    def test_a_rotated_csrf_token_is_refreshed_once_and_retried(self):
+        e = EngineStub()
+        self.addCleanup(e.close)
+        s = ap.HttpSink(e.url, "tok")
+        s.send(self.REQ)
+        e.csrf = "csrf-B"  # engine restarted
+        s.send(dict(self.REQ, trigger_key="sha256:" + "c" * 64))
+        self.assertEqual(len(e.posts), 2)
+        self.assertEqual(e.session_reads, 2)
+
+    def test_a_bad_bearer_is_a_sink_error_that_does_not_echo_the_token(self):
+        e = EngineStub()
+        self.addCleanup(e.close)
+        with self.assertRaises(ap.SinkError) as c:
+            ap.HttpSink(e.url, "wrong-token").send(self.REQ)
+        self.assertNotIn("wrong-token", str(c.exception))
+        self.assertEqual(e.posts, [])
+
+
 if __name__ == "__main__":
     unittest.main()

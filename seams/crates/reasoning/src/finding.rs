@@ -66,6 +66,20 @@ pub struct Skipped {
     pub reason: String,
 }
 
+/// Every character outside `[A-Za-z0-9._:/-]` becomes `_` (runs collapse), so a label is a TPS-opaque id.
+pub fn opaque_slug(v: &str) -> String {
+    let mut out = String::with_capacity(v.len());
+    for c in v.chars() {
+        let ok = c.is_ascii_alphanumeric() || matches!(c, '.' | ':' | '/' | '-' | '_');
+        if ok {
+            out.push(c);
+        } else if !out.ends_with('_') {
+            out.push('_');
+        }
+    }
+    out.trim_matches('_').chars().take(64).collect()
+}
+
 pub fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
@@ -89,6 +103,11 @@ impl Finding {
         for (i, s) in signals.iter().enumerate() {
             let status = s["status"].as_str().unwrap_or("").to_string();
             let metric = s["metric"].as_str().unwrap_or("").to_string();
+            // A `level_risk` signal is a risk LEVEL against a threshold, not a vs-rest contrast: the contrast roles never see it.
+            if s["type"].as_str() == Some("level_risk") {
+                skipped.push(Skipped { index: i, metric, status: "level_risk".to_string(), reason: s["reason"].as_str().unwrap_or("").to_string() });
+                continue;
+            }
             if status != "corroborated" {
                 skipped.push(Skipped { index: i, metric, status, reason: s["reason"].as_str().unwrap_or("").to_string() });
                 continue;
@@ -113,6 +132,14 @@ impl Finding {
         Ok((found, skipped))
     }
 
+    /// The sensor-shaped signal of this finding (what the decision dossier reads).
+    pub fn to_signal_json(&self) -> Value {
+        let st = |s: &Stage| json!({"numerator": s.numerator, "denominator": s.denominator, "rate": s.rate, "baseline_rate": s.baseline_rate, "diff": s.diff});
+        let dims: serde_json::Map<String, Value> = self.dims.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
+        json!({"finding_id": self.id, "metric": self.metric, "dims": dims, "status": "corroborated", "direction": self.direction, "claim": "association",
+               "discovery": st(&self.discovery), "holdout": st(&self.holdout), "r2": {"status": self.r2}, "p_adj": self.p_adj})
+    }
+
     pub fn metric_token(&self) -> String {
         self.metric.to_ascii_lowercase()
     }
@@ -121,7 +148,7 @@ impl Finding {
     pub fn evidence_ref(&self) -> String {
         let dims: Vec<String> = self.dims.iter().map(|(k, v)| format!("{k}={v}")).collect();
         let raw = format!("{}|{}|{}/{}|{}/{}", self.metric, dims.join(","), self.discovery.numerator, self.discovery.denominator, self.holdout.numerator, self.holdout.denominator);
-        format!("ev_{}", &steps::compile::sha256_hex(raw.as_bytes())[..16])
+        format!("ev_{}", steps::compile::sha256_hex_calm(raw.as_bytes(), 16))
     }
 
     /// The TPS observation: the two cell rows (`w1` discovery, `w2` holdout) as k-anonymous aggregate rows.
@@ -133,8 +160,10 @@ impl Finding {
     }
 
     /// Treated, opaque description of the finding (every string is an enum, a closed-vocabulary label or an id).
+    /// Dimension values become opaque slugs (`Web Chat` -> `Web_Chat`): the TPS scan accepts only `[A-Za-z0-9_.:/-]`, and a value with a
+    /// space made the whole finding unreachable (`model_refused`, BLD1).
     pub fn inputs(&self) -> Value {
-        let dims: serde_json::Map<String, Value> = self.dims.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
+        let dims: serde_json::Map<String, Value> = self.dims.iter().map(|(k, v)| (k.clone(), json!(opaque_slug(v)))).collect();
         json!({
             "finding_id": self.id, "metric_id": self.metric_token(), "dims": dims, "direction": self.direction, "claim_kind": "association",
             "source": self.source.as_str(),
@@ -166,4 +195,16 @@ pub fn deterministic_checks(f: &Finding, claimed_rate: f64) -> Vec<Check> {
         Check { id: "dependency", result: ok(f.depends_on.is_none()) },
         Check { id: "r2_windows", result: match f.r2.as_deref() { Some("replicated") => "pass", Some("not_evaluated") | None => "na", _ => "fail" } },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dimension_labels_with_spaces_become_tps_opaque_slugs() {
+        assert_eq!(opaque_slug("Web Chat"), "Web_Chat");
+        assert_eq!(opaque_slug("Phone"), "Phone");
+        assert_eq!(opaque_slug("  a  b/c "), "a_b/c");
+    }
 }

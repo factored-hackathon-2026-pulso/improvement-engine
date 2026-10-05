@@ -187,14 +187,14 @@ class SuiteIndependenceTests(unittest.TestCase):
 
 class JudgeHookTests(unittest.TestCase):
     def test_family_detection(self):
-        self.assertEqual(sp.model_family("deepseek/deepseek-v4.1-flash"), "deepseek")
+        self.assertEqual(sp.model_family("xiaomi/mimo-v2.6-flash"), "xiaomi")
         self.assertEqual(sp.model_family("anthropic/claude-sonnet"), "anthropic")
         self.assertEqual(sp.model_family("claude-opus"), "anthropic")
         self.assertEqual(sp.model_family("openai/gpt-5"), "openai")
 
     def test_same_family_refused(self):
         with self.assertRaises(sp.JudgeError):
-            sp.run_judge(good_judge, {}, builder_model="deepseek/a", judge_model="deepseek/b")
+            sp.run_judge(good_judge, {}, builder_model="xiaomi/a", judge_model="xiaomi/b")
 
     def test_unknown_family_refused(self):
         with self.assertRaises(sp.JudgeError):
@@ -206,14 +206,14 @@ class JudgeHookTests(unittest.TestCase):
         def judge(req):
             calls.append(req)
             return {c: (2 if len(calls) == 1 else 1) for c in JUDGED}
-        out = sp.run_judge(judge, {"finding": "f"}, "deepseek/a", "anthropic/claude")
+        out = sp.run_judge(judge, {"finding": "f"}, "xiaomi/a", "anthropic/claude")
         self.assertEqual(len(calls), 2)
         self.assertEqual(out["scores"]["R1"], 1)
         self.assertEqual(out["escalate_human"], [])
 
     def test_disagreement_over_one_escalates(self):
         seq = iter([{c: 2 for c in JUDGED}, {c: 0 for c in JUDGED}])
-        out = sp.run_judge(lambda r: next(seq), {}, "deepseek/a", "anthropic/claude")
+        out = sp.run_judge(lambda r: next(seq), {}, "xiaomi/a", "anthropic/claude")
         self.assertEqual(sorted(out["escalate_human"]), sorted(JUDGED))
 
     def test_builder_reasoning_is_stripped_from_the_request(self):
@@ -223,18 +223,18 @@ class JudgeHookTests(unittest.TestCase):
             seen.update(req)
             return {c: 2 for c in JUDGED}
         sp.run_judge(judge, {"finding": "f", "builder_reasoning": "secret chain", "nested": {"reasoning": "x", "ok": 1}},
-                     "deepseek/a", "anthropic/claude")
+                     "xiaomi/a", "anthropic/claude")
         self.assertNotIn("builder_reasoning", seen)
         self.assertNotIn("reasoning", seen["nested"])
         self.assertEqual(seen["nested"]["ok"], 1)
 
     def test_out_of_range_score_rejected(self):
         with self.assertRaises(sp.JudgeError):
-            sp.run_judge(lambda r: {"R1": 3}, {}, "deepseek/a", "anthropic/claude")
+            sp.run_judge(lambda r: {"R1": 3}, {}, "xiaomi/a", "anthropic/claude")
 
     def test_judge_cannot_set_mechanical_criteria(self):
         with self.assertRaises(sp.JudgeError):
-            sp.run_judge(lambda r: {"R4": 2}, {}, "deepseek/a", "anthropic/claude")
+            sp.run_judge(lambda r: {"R4": 2}, {}, "xiaomi/a", "anthropic/claude")
 
 
 class ScoreTests(unittest.TestCase):
@@ -333,6 +333,28 @@ class ScoreTests(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stderr)
             with open(out) as f:
                 self.assertEqual(json.load(f)["verdict"], "needs_judge")
+
+
+class GatewayJudgeTests(unittest.TestCase):
+    def test_other_family_judge_scores_through_run_judge_and_never_leaks_the_key(self):
+        import gateway_judge as gj
+        seen = []
+
+        def send(addr, key, body):
+            seen.append((addr, key, body))
+            return {"output": {c: 2 for c in JUDGED}}
+
+        j = gj.make_judge(send, {"PULSO_LLM_GATEWAY_ADDR": "127.0.0.1:8080", "PULSO_LLM_GATEWAY_KEY": "k"})
+        out = sp.run_judge(j, {"proposal": {"x": 1}, "base": {}, "builder_reasoning": "hidden"}, "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash")
+        self.assertEqual(out["scores"], {c: 2 for c in JUDGED})
+        self.assertEqual((out["builder_family"], out["judge_family"]), ("xiaomi", "z-ai"))
+        self.assertEqual(seen[0][2]["profile"]["model"], "z-ai/glm-5.3-flash")
+        self.assertNotIn("hidden", json.dumps(seen[0][2]))
+        self.assertNotIn("\"k\"", json.dumps(seen[0][2]))
+
+    def test_same_vendor_tier_is_still_refused(self):
+        with self.assertRaises(sp.JudgeError):
+            sp.run_judge(good_judge, {}, "xiaomi/mimo-v2.6-flash", "xiaomi/mimo-v2.6-pro")
 
 
 if __name__ == "__main__":

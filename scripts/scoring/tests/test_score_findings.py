@@ -582,5 +582,62 @@ class ScoringTests(unittest.TestCase):
             self.assertIn("privacy floor", p.stderr)
 
 
+class LevelRiskScoringTests(unittest.TestCase):
+    def cat(self, *entries):
+        c = fx.catalog()
+        c["entries"].extend(entries)
+        return c
+
+    def sigs(self, *extra):
+        s = fx.signals_perfect()
+        s["signals"].extend(extra)
+        return s
+
+    def test_level_risk_matches_a_risk_catalog_entry(self):
+        r = sf.score(self.cat(fx.risk_entry()), self.sigs(fx.level_sig()))
+        self.assertEqual(r["scores"]["recall"], 1.0)
+        self.assertEqual(r["scores"]["precision"], 1.0)
+        self.assertEqual(r["risk"]["positives"], 1)
+        self.assertEqual(r["risk"]["matched"], 1)
+        self.assertEqual(r["risk"]["recall"], 1.0)
+        self.assertEqual(r["counts"]["nonfinding_reports"], 0)
+
+    def test_missing_level_risk_lowers_only_risk_recall(self):
+        r = sf.score(self.cat(fx.risk_entry()), fx.signals_perfect())
+        self.assertEqual(r["scores"]["recall"], 1.0)
+        self.assertEqual(r["risk"]["recall"], 0.0)
+        self.assertEqual([e["id"] for e in r["risk"]["unmatched_benchmark_risks"]], ["T-R1"])
+
+    def test_level_risk_without_a_catalog_entry_is_listed_not_penalised(self):
+        r = sf.score(fx.catalog(), self.sigs(fx.level_sig()))
+        self.assertEqual(r["scores"]["precision"], 1.0)
+        self.assertEqual(r["scores"]["recall"], 1.0)
+        self.assertEqual(r["counts"]["reported"], 3)
+        self.assertEqual(len(r["risk"]["unmatched_level_risks"]), 1)
+        self.assertIsNone(r["risk"]["recall"])
+
+    def test_level_risk_is_never_matched_to_a_problem_entry(self):
+        c = self.cat()
+        c["entries"].append({"id": "T-P", "type": "problem", "status": "corroborated", "metric_id": "M8",
+                             "cell": {}, "effect": {"difference": 0.4}})
+        r = sf.score(c, self.sigs(fx.level_sig()))
+        self.assertAlmostEqual(r["scores"]["recall"], 3 / 4, places=5)
+        self.assertEqual(r["risk"]["positives"], 0)
+
+    def test_contrast_signal_is_never_matched_to_a_risk_entry(self):
+        r = sf.score(self.cat(fx.risk_entry()), self.sigs(fx.sig("M1", {"reason_category": "Comercial", "channel": "Phone"})))
+        self.assertEqual(r["risk"]["matched"], 0)
+
+    def test_refuted_risk_entry_is_a_nonfinding_for_a_level_risk(self):
+        r = sf.score(self.cat(fx.risk_entry(status="refuted")), self.sigs(fx.level_sig()))
+        self.assertEqual(r["counts"]["nonfinding_reports"], 1)
+        self.assertEqual(r["nonfinding_reports"][0]["id"], "T-R1")
+
+    def test_non_corroborated_level_risk_is_not_reported(self):
+        r = sf.score(self.cat(fx.risk_entry()), self.sigs(fx.level_sig(status="refuted")))
+        self.assertEqual(r["risk"]["matched"], 0)
+        self.assertEqual(r["risk"]["unmatched_level_risks"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

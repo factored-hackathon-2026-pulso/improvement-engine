@@ -77,7 +77,7 @@ pub fn alts() -> Value {
 }
 
 pub fn ports(scout: FnPort, verifier: FnPort, builder: FnPort) -> Ports {
-    Ports { scout: Rc::new(scout), verifier: Rc::new(verifier), builder: Rc::new(builder) }
+    Ports::new(Rc::new(scout), Rc::new(verifier), Rc::new(builder))
 }
 
 pub fn count_calls(counter: Rc<Cell<u32>>, inner: impl Fn(&engine::models::ModelRequest) -> Result<Value, ModelError> + 'static) -> impl Fn(&engine::models::ModelRequest) -> Result<Value, ModelError> + 'static {

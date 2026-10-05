@@ -1,0 +1,9 @@
+id: pulso-mimo-flash
+version: 1.0.0
+endpoint_alias: openrouter
+model: xiaomi/mimo-v2.6-flash
+temperature: 0
+max_tokens: 4000
+timeout_s: 60
+structured: prompted
+price: {input_per_mtok: 0.14, output_per_mtok: 0.28, source: "OpenRouter list (1.4e-7 in / 2.8e-7 out USD per token)", as_of: 2026-10-04}

@@ -1,0 +1,5 @@
+{"finding_id": "finding_w13_m1_tecnico", "metric": "M1", "direction": "up",
+ "dims": {"reason_category": "Tecnico", "channel": "Phone"},
+ "discovery": {"numerator": 2700, "denominator": 6000, "rate": 0.45, "baseline_rate": 0.2, "diff": 0.25},
+ "holdout": {"numerator": 1800, "denominator": 4000, "rate": 0.45, "baseline_rate": 0.2, "diff": 0.25},
+ "source": "synthetic", "note": "the planted Tecnico/Phone cell of reasoning::testkit::synthetic_cells_ndjson (invented counts); uncovered reason, no specialist in the directory"}

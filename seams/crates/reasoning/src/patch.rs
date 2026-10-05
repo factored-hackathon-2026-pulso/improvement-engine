@@ -28,6 +28,8 @@ pub struct Compiled {
     /// `patch | new_agent | no_change`
     pub kind: String,
     pub target_ref: String,
+    /// The agent the registry proposal is opened for: the agent whose behaviour the target changes, or the slug of a new agent.
+    pub agent_id: String,
     /// Agent-core draft changes: `{kind, content, docs}` (empty for `no_change`).
     pub changes: Vec<Value>,
     /// Human-readable diff: one entry per patch (anchor id, exact anchor text, op, replacement) or one per new entity.
@@ -48,7 +50,7 @@ pub struct Compiled {
 
 impl Compiled {
     pub fn to_json(&self) -> Value {
-        json!({"kind": self.kind, "target_ref": self.target_ref, "changes": self.changes, "diff": self.diff, "base_digest": self.base_digest, "cascade": self.cascade,
+        json!({"kind": self.kind, "target_ref": self.target_ref, "agent_id": self.agent_id, "changes": self.changes, "diff": self.diff, "base_digest": self.base_digest, "cascade": self.cascade,
                "edit_chars": self.edit_chars, "edit_budget": self.edit_budget, "human_items": self.human_items, "expected_effect": self.expected_effect,
                "rationale": self.rationale, "uncertainty": self.uncertainty,
                "rollback": {"how": "revert to the base release; staging only, no release_settings change", "base_digest": self.base_digest}})
@@ -65,6 +67,11 @@ fn placeholders(t: &str) -> Result<Vec<String>, String> {
     let mut out = vec![];
     let mut rest = t;
     while let Some(i) = rest.find("{{") {
+        // MAP1: a single curly brace outside a double-brace span is a broken placeholder (the engine renders it literally; the regression
+        // proof refused such texts after a full evaluation). Refused here so the Builder gets the problem fed back.
+        if rest[..i].contains(['{', '}']) {
+            return Err("a placeholder needs two opening and two closing curly braces, one brace renders as literal text".into());
+        }
         let after = &rest[i + 2..];
         let j = after.find("}}").ok_or("unclosed {{")?;
         if after[..j].contains("{{") {
@@ -76,42 +83,51 @@ fn placeholders(t: &str) -> Result<Vec<String>, String> {
     if rest.contains("}}") {
         return Err("stray }}".into());
     }
+    if rest.contains(['{', '}']) {
+        return Err("a placeholder needs two opening and two closing curly braces, one brace renders as literal text".into());
+    }
     Ok(out)
 }
 
-fn expected_effect(f: &Finding, row: &Row, direction: &str) -> Value {
-    json!({"metric_id": f.metric_token(), "population": f.dims, "direction": direction, "current_cell_rate": round2(f.discovery.rate),
+fn expected_effect(f: &Finding, row: &Row, target: &Target, direction: &str) -> Value {
+    json!({"mapping": {"claim": "hypothesis_of_where_to_intervene_not_a_cause", "row": row.id, "topic": row.topic, "rank": target.rank, "candidates_total": row.candidates_total,
+                       "justification": target.justification, "evidence": target.evidence},
+           "metric_id": f.metric_token(), "population": f.dims, "direction": direction, "current_cell_rate": round2(f.discovery.rate),
            "reference_rate": round2(f.discovery.baseline_rate), "min_detectable_gap": round2(f.discovery.diff / 2.0),
            "success_if": "the cell rate falls by at least min_detectable_gap toward the reference rate over a new window with the same k-anonymity",
            "guardrail": row.guardrail, "link_grade": row.link_grade, "evidence_ref": f.evidence_ref()})
 }
 
-fn docs(f: &Finding, row: &Row, opp: &Opportunity, rationale: &str) -> Value {
-    let text = format!("[improvement-engine] {} {} {}; finding {} evidence {} link {}; hypothesis: {}; rationale: {}", opp.target_ref, opp.mechanism_class, row.id, f.id, f.evidence_ref(), row.link_grade, opp.hypothesis, rationale);
-    json!({"description": text.chars().take(4000).collect::<String>(), "rationale": rationale.chars().take(4000).collect::<String>()})
+/// The proposal `docs` text. Rubric R11 (hard): no run of 6 or more digits anywhere (the PII wrapper tokenises it), so the model's own
+/// hypothesis and rationale are defused too; ids built by the engine (`evidence_ref`) are digit-run free by construction.
+pub fn docs(f: &Finding, row: &Row, opp: &Opportunity, rationale: &str) -> Value {
+    use steps::compile::defuse_digit_runs as calm;
+    let text = format!("[improvement-engine] {} {} {}; finding {} evidence {} link {}; mapping: a hypothesis of where to intervene, not a cause; hypothesis: {}; rationale: {}", opp.target_ref, opp.mechanism_class, row.id, f.id, f.evidence_ref(), row.link_grade, opp.hypothesis, rationale);
+    json!({"description": calm(&text).chars().take(4000).collect::<String>(), "rationale": calm(rationale).chars().take(4000).collect::<String>()})
 }
 
 pub fn compile(catalog: &Catalog, f: &Finding, row: &Row, opp: &Opportunity, proposal: &Value) -> Result<Compiled, Denied> {
     let kind = proposal["kind"].as_str().unwrap_or("");
     let rationale = proposal["rationale"].as_str().unwrap_or("").to_string();
     let uncertainty = proposal["uncertainty"].as_str().unwrap_or("").to_string();
-    let direction = proposal["expected_direction"].as_str().unwrap_or("decrease");
     let target = row.target(&opp.target_ref).ok_or_else(|| Denied { code: "target_mismatch", why: "the opportunity target is not in the mapping row".into() })?;
     if kind == "no_change" {
-        return Ok(Compiled { kind: "no_change".into(), target_ref: opp.target_ref.clone(), changes: vec![], diff: vec![], base_digest: String::new(), cascade: vec![], edit_chars: 0, edit_budget: 0,
+        return Ok(Compiled { kind: "no_change".into(), target_ref: opp.target_ref.clone(), agent_id: target.agent.to_string(), changes: vec![], diff: vec![], base_digest: String::new(), cascade: vec![], edit_chars: 0, edit_budget: 0,
                              human_items: vec![], expected_effect: Value::Null, rationale, uncertainty });
-    }
-    if proposal.get("target_ref").and_then(Value::as_str).is_some_and(|t| t != opp.target_ref) {
-        return deny("target_mismatch", "the proposal targets another artifact than the verified opportunity");
     }
     if kind != target.kind {
         return deny("kind_mismatch", format!("the target {} takes kind {}, the proposal is {kind}", opp.target_ref, target.kind));
     }
-    if f.direction != "up" || direction != "decrease" {
-        return deny("direction_mismatch", "every cells metric is higher-is-worse: the finding must be up and the expected direction decrease");
+    // The direction is DETERMINISTIC (every cells metric is higher-is-worse: a finding that is up asks for a decrease). It is derived
+    // here, never read from the model, and so are the target (the verified opportunity's) and the kind (the mapping row's): a model
+    // that words the direction differently, omits it or names another target ref cannot fail a proposal over it (BLD1: flash wrote
+    // `increase` for 5 of 10 findings and the slug where the target ref belongs). Only a finding that is NOT up is refused.
+    if f.direction != "up" {
+        return deny("direction_mismatch", "every cells metric is higher-is-worse: only a finding that is up has a decrease to ask for");
     }
+    let direction = "decrease";
     let docs = docs(f, row, opp, &rationale);
-    let effect = expected_effect(f, row, direction);
+    let effect = expected_effect(f, row, target, direction);
     match kind {
         "patch" => compile_patch(catalog, target, proposal, docs, effect, rationale, uncertainty),
         "new_agent" => compile_new_agent(catalog, target, proposal, docs, effect, rationale, uncertainty),
@@ -207,6 +223,7 @@ fn compile_patch(catalog: &Catalog, target: &Target, p: &Value, docs: Value, eff
     Ok(Compiled {
         kind: "patch".into(),
         target_ref: target.target_ref.clone(),
+        agent_id: target.agent.to_string(),
         changes: vec![json!({"kind": art.kind, "content": content, "docs": docs})],
         diff,
         base_digest: art.digest(),
@@ -305,6 +322,7 @@ fn compile_new_agent(catalog: &Catalog, target: &Target, p: &Value, docs: Value,
     Ok(Compiled {
         kind: "new_agent".into(),
         target_ref: target.target_ref.clone(),
+        agent_id: slug.to_string(),
         changes,
         diff,
         base_digest: format!("donor:{}", catalog.donor),
@@ -316,8 +334,8 @@ fn compile_new_agent(catalog: &Catalog, target: &Target, p: &Value, docs: Value,
             "admin release settings before prod: injection_ruleset injection-rules@1 and language_detection lang-es-pt@1 (a clone silently loses them)".into(),
             "human approver reads the routing card against the sibling cards (traffic stealing)".into(),
             "separate human promote to prod; first publish lands in staging".into(),
-            format!("reused unchanged from the donor: {}", reused.join(", ")),
-            "eval_suite (customer principal) to be authored from the donor behaviour before approval: collect then escalate, pt parity, injection, unsupported language".into(),
+            format!("closure reused unchanged from the donor (the proof copies these live entities into the draft: agent-core needs the full closure of a brand-new agent): {}", reused.join(", ")),
+            "eval_suite generated by the engine from the finding (templated es/pt cases plus guards adapted from pulso-min) and proven on the new agent; the human approver reads it. Routing from recepcion to the new agent is NOT proven: the evaluation harness cannot exercise the directory, the agent joins it only with a human promote to prod".into(),
         ],
         expected_effect: effect,
         rationale,

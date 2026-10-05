@@ -6,11 +6,11 @@
 //! label and model id of the port that handled it; `doubles[]` lists every call that was not an answered gateway call.
 use crate::catalog::Catalog;
 use crate::finding::{Finding, Source, deterministic_checks};
-use crate::mapping::{Row, map_finding};
+use crate::mapping::{Caps, Mapped, Row, Table};
 use crate::patch::compile;
 use crate::roles::{self, ModelVerdict, Opportunity};
 use crate::rubric;
-use engine::models::{DataClass, Label, ModelError, ModelPort, Recording, Role};
+use engine::models::{DataClass, Label, ModelError, ModelPort, ModelRequest, Recording, Role};
 use serde_json::{Value, json};
 use std::rc::Rc;
 
@@ -18,6 +18,75 @@ pub struct Ports {
     pub scout: Rc<dyn ModelPort>,
     pub verifier: Rc<dyn ModelPort>,
     pub builder: Rc<dyn ModelPort>,
+    /// Stronger Builder tier (user policy: pro for tasks that need more reasoning). Used ONLY when the primary Builder could not
+    /// produce a compiled proposal after its bounded retries; the tier that answered is named in the outcome.
+    pub builder_escalation: Option<Rc<dyn ModelPort>>,
+}
+
+impl Ports {
+    pub fn new(scout: Rc<dyn ModelPort>, verifier: Rc<dyn ModelPort>, builder: Rc<dyn ModelPort>) -> Ports {
+        Ports { scout, verifier, builder, builder_escalation: None }
+    }
+}
+
+/// Retries after a first answer that does not parse or compile, each with the problem fed back (bounded: never more than 2).
+pub const MAX_RETRIES: usize = 2;
+
+/// `flash | pro | other` from the model id (the tier label that travels in every outcome).
+pub fn tier_of(model_id: &str) -> &'static str {
+    engine::models::record::tier_of(model_id)
+}
+
+/// A rejected answer: (stage, closed reason code, why).
+type Reject = (&'static str, String, String);
+
+/// ASCII-only, short, no model free text beyond ids: what is fed back must itself pass the treated-payload scan.
+fn feedback_text(problem: &str) -> String {
+    let clean: String = problem.chars().map(|c| if c.is_ascii_alphanumeric() || " _.,:;/'()-".contains(c) { c } else { '?' }).take(380).collect();
+    clean.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// `answer_not_json:<code>` (the extractor's typed failure) as a sentence the model can act on.
+fn packaging_hint(w: &str) -> String {
+    match w.strip_prefix("answer_not_json:") {
+        Some("empty") => "the answer was empty".into(),
+        Some("no_json") => "the answer had no JSON object".into(),
+        Some("truncated") => "the answer was cut off before the JSON object closed: write shorter texts".into(),
+        Some("unparseable") => "the JSON is malformed: every key and every string needs double quotes and items need commas".into(),
+        Some("not_object") => "the answer is JSON but not an object".into(),
+        _ => w.to_string(),
+    }
+}
+
+enum Asked<T> {
+    Done(T),
+    /// The port refused or was unavailable: final, typed, no retry.
+    Stopped(ModelError),
+    /// Every attempt produced an answer that did not survive `check`: the last rejection.
+    Rejected(Reject),
+}
+
+/// One role call with up to `MAX_RETRIES` retries. A retry is the SAME request plus the previous problem as `feedback`. Returns how
+/// many calls were made.
+fn ask<T>(port: &Recording, req: &ModelRequest, stage: &'static str, base_attempt: usize, check: &dyn Fn(&Value) -> Result<T, Reject>) -> (Asked<T>, usize) {
+    let mut last: Option<Reject> = None;
+    for attempt in 0..=MAX_RETRIES {
+        let mut r = req.clone();
+        if let Some((_, _, why)) = &last {
+            r.payload["feedback"] = json!(format!("Attempt {attempt} was rejected: {}. Answer again with ONE JSON object that follows output_schema exactly.", feedback_text(why)));
+        }
+        // the story span of this attempt: gateway calls made from here carry `traceparent` with the stage span as parent
+        engine::trace::set_stage(stage, u32::try_from(base_attempt + attempt + 1).unwrap_or(u32::MAX));
+        match port.call(&r) {
+            Err(ModelError::Invalid(w)) => last = Some((stage, "model_invalid".into(), packaging_hint(&w))),
+            Err(e) => return (Asked::Stopped(e), attempt + 1),
+            Ok(a) => match check(&a.content) {
+                Ok(t) => return (Asked::Done(t), attempt + 1),
+                Err(rej) => last = Some(rej),
+            },
+        }
+    }
+    (Asked::Rejected(last.expect("at least one attempt")), MAX_RETRIES + 1)
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -39,18 +108,33 @@ pub struct Reasoned {
     pub opportunity: Option<Value>,
     pub verification: Option<Value>,
     pub compiled: Option<Value>,
+    /// The typed compile result (what a writer delivers); `compiled` is its JSON.
+    pub compiled_raw: Option<crate::patch::Compiled>,
     pub rubric: Option<Value>,
     pub calls: Vec<Value>,
+    /// One `pulso.model_call/1` per call (content, tokens, USD from the price table, ids): kept OUT of `to_json` (the report and the
+    /// job record carry no model free text); the value loop persists them apart.
+    pub call_records: Vec<Value>,
     pub doubles: Vec<Value>,
     pub independence: Value,
     pub source: &'static str,
+    /// Decision dossier (W1-2) of a proposed finding, built without a regression verdict: `announce` stays false until the REG1
+    /// verdict story is supplied (`reason_cli dossier --verdict`), the dossier says so. `{"error": ..}` if its PII guard refused.
+    pub dossier: Option<Value>,
+    /// Cost, tokens, latency and attempts of every model call of this finding, and the Builder tier that answered.
+    pub metering: Value,
+    /// MAP1: the candidate this attempt tried (`rank`, `target_ref`, `justification`, `evidence`, `candidates_total`) and the honest label of the mapping.
+    pub candidate: Option<Value>,
+    /// MAP1: set when a person owns the finding (`owner`, `evidence`, `note {es, pt}`); no model was called.
+    pub human_owned: Option<Value>,
 }
 
 impl Reasoned {
     pub fn to_json(&self) -> Value {
         json!({"finding_id": self.finding_id, "status": self.status, "reason": self.reason, "stage": self.stage, "detail": self.detail, "mapping_row": self.mapping_row,
                "source": self.source, "opportunity": self.opportunity, "verification": self.verification, "proposal": self.compiled, "rubric": self.rubric,
-               "model_calls": self.calls, "doubles": self.doubles, "independence": self.independence})
+               "model_calls": self.calls, "doubles": self.doubles, "independence": self.independence, "dossier": self.dossier, "metering": self.metering,
+               "candidate": self.candidate, "human_owned": self.human_owned})
     }
 }
 
@@ -94,28 +178,119 @@ pub fn combine(det: &[crate::finding::Check], m: &ModelVerdict) -> (&'static str
     (status, notes)
 }
 
+/// `other_family` (different vendor), `same_family_other_tier` (same vendor prefix, other model), else prompt and context only.
+pub fn independence_level(scout: &str, verifier: &str) -> &'static str {
+    if scout == verifier {
+        "separate_prompt_and_context_only"
+    } else if scout.split('/').next() == verifier.split('/').next() {
+        "same_family_other_tier"
+    } else {
+        "other_family"
+    }
+}
+
+/// The whole row: the Scout chooses among every target of the mapping row (kept for callers that do not iterate candidates).
 pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Reasoned {
+    reason_candidate(catalog, f, ports, opts, None)
+}
+
+/// The label every candidate attempt carries: a mapping is a hypothesis of where to intervene, never a cause.
+pub fn mapping_label(row: &Row, t: &crate::mapping::Target) -> Value {
+    let table = Table::bundled();
+    json!({"claim": "hypothesis_of_where_to_intervene_not_a_cause", "notice": {"en": table.notice_en, "es": table.notice_es, "pt": table.notice_pt}, "row": row.id, "topic": row.topic,
+           "rank": t.rank, "candidates_total": row.candidates_total, "target_ref": t.target_ref, "agent": t.agent, "justification": t.justification, "evidence": t.evidence,
+           "proof_support": t.proof_support, "announceable_now": t.announceable_now})
+}
+
+/// One attempt of the finding. `only = Some(target_ref)` restricts the mapping row to that ONE candidate (the loop tries candidates in
+/// rank order); `None` leaves the whole row to the Scout.
+pub fn reason_candidate(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts, only: Option<&str>) -> Reasoned {
     let (rs, rv, rb) = (Rc::new(Recording::new(ports.scout.clone())), Rc::new(Recording::new(ports.verifier.clone())), Rc::new(Recording::new(ports.builder.clone())));
+    let rbe = ports.builder_escalation.as_ref().map(|p| Rc::new(Recording::new(p.clone())));
     let mut r = Reasoned {
         finding_id: f.id.clone(), status: "blocked".into(), reason: String::new(), stage: String::new(), detail: String::new(), mapping_row: None, opportunity: None, verification: None,
-        compiled: None, rubric: None, calls: vec![], doubles: vec![], source: f.source.as_str(),
+        compiled: None, compiled_raw: None, rubric: None, calls: vec![], call_records: vec![], doubles: vec![], source: f.source.as_str(), dossier: None, metering: Value::Null, candidate: None, human_owned: None,
         independence: json!({"scout_model": ports.scout.model_id(), "verifier_model": ports.verifier.model_id(), "builder_model": ports.builder.model_id(),
+                             "builder_escalation_model": ports.builder_escalation.as_ref().map(|p| p.model_id()),
                              "verifier_separate_port": !Rc::ptr_eq(&ports.scout, &ports.verifier),
-                             "level": if ports.scout.model_id() != ports.verifier.model_id() { "other_model" } else { "separate_prompt_and_context_only" }}),
+                             "level": independence_level(&ports.scout.model_id(), &ports.verifier.model_id())}),
     };
+    let attempts = std::cell::RefCell::new(json!({"scout": 0, "verifier": 0, "builder": 0, "builder_escalation": 0}));
+    let tier_used: std::cell::RefCell<Option<(String, String, bool)>> = std::cell::RefCell::new(None);
     let finish = |mut r: Reasoned| {
-        r.calls = [&rs, &rv, &rb].iter().flat_map(|x| x.calls().iter().map(|c| c.to_json()).collect::<Vec<_>>()).collect();
-        r.doubles = [&rs, &rv, &rb].iter().flat_map(|x| x.doubles()).collect();
+        let all: Vec<&Rc<Recording>> = [Some(&rs), Some(&rv), Some(&rb), rbe.as_ref()].into_iter().flatten().collect();
+        r.calls = all.iter().flat_map(|x| x.calls().iter().map(|c| c.to_json()).collect::<Vec<_>>()).collect();
+        r.doubles = all.iter().flat_map(|x| x.doubles()).collect();
+        let recs: Vec<engine::models::CallRecord> = all.iter().flat_map(|x| x.calls()).collect();
+        let story = engine::trace::current();
+        let mut per_role: std::collections::HashMap<&'static str, u32> = std::collections::HashMap::new();
+        r.call_records = recs
+            .iter()
+            .map(|c| {
+                let n = per_role.entry(c.role.as_str()).or_insert(0);
+                *n += 1;
+                let mut v = engine::models::record::call_record(c, *n, story.as_ref());
+                if v["evidence_ref"].is_null() {
+                    v["evidence_ref"] = json!(f.evidence_ref());
+                }
+                v
+            })
+            .collect();
+        let usage = |f: &dyn Fn(&engine::models::Usage) -> f64| recs.iter().filter_map(|c| c.usage.as_ref()).map(f).sum::<f64>();
+        let tu = tier_used.borrow().clone();
+        r.metering = json!({
+            "calls": recs.len(), "attempts": attempts.borrow().clone(),
+            "tokens_in": usage(&|u| u.tokens_in as f64) as u64, "tokens_out": usage(&|u| u.tokens_out as f64) as u64,
+            "cost_usd": (usage(&|u| u.cost_f64()) * 1e6).round() / 1e6,
+            "latency_ms": recs.iter().map(|c| c.wall_ms).sum::<u64>(),
+            "builder": tu.map(|(tier, model, escalated)| json!({"tier": tier, "model": model, "escalated": escalated})),
+        });
+        if r.status == "proposed" {
+            let real = [&ports.scout, &ports.verifier, &ports.builder].iter().all(|p| p.label() == Label::Gateway);
+            let labels = crate::dossier::Labels { runtime: if real { crate::dossier::Runtime::Real } else { crate::dossier::Runtime::Doubles }, ..Default::default() };
+            let record = json!({"proposal": r.compiled, "doubles": r.doubles, "rubric": r.rubric});
+            r.dossier = Some(crate::dossier::build(&f.to_signal_json(), &record, None, &labels).unwrap_or_else(|e| json!({"error": e})));
+        }
         r
     };
-    let Some(row) = map_finding(f) else {
-        r.status = "unlinked".into();
-        r.reason = "no_mapping".into();
-        r.stage = "mapping".into();
-        r.detail = format!("metric {} with these dimensions maps to no agent-core artifact: descriptive finding, no proposal", f.metric);
+    if f.direction != "up" {
+        // Every cells metric is higher-is-worse: a cell BELOW its reference is a good result, not an opportunity. No model is called.
+        r.status = "no_change".into();
+        r.reason = "better_than_reference".into();
+        r.stage = "direction".into();
+        r.detail = format!("metric {} is {} against the reference in this cell: nothing to improve", f.metric, f.direction);
         return finish(r);
+    }
+    let row = match Table::bundled().classify(f) {
+        Mapped::HumanOwned(h) => {
+            // A person owns this finding: no model is called and no proposal exists.
+            r.status = "human_owned".into();
+            r.reason = h.id.into();
+            r.stage = "mapping".into();
+            r.detail = h.note_es.chars().take(300).collect();
+            r.human_owned = Some(json!({"id": h.id, "owner": h.owner, "evidence": h.evidence, "note": {"es": h.note_es, "pt": h.note_pt}, "builder_proposal": false}));
+            return finish(r);
+        }
+        Mapped::Unmapped => {
+            let (code, why) = crate::mapping::unlinked_reason(f);
+            r.status = "unlinked".into();
+            r.reason = code.into();
+            r.stage = "mapping".into();
+            r.detail = why;
+            return finish(r);
+        }
+        Mapped::Row(row) => match only {
+            None => row,
+            Some(t) => match row.only(t) {
+                Some(one) => one,
+                None => return finish(blocked(r, "precondition_missing", "mapping", format!("{t} is not a candidate of the mapping row"))),
+            },
+        },
     };
     r.mapping_row = Some(row.id.into());
+    if let Some(t) = row.targets.first().filter(|_| only.is_some()) {
+        r.candidate = Some(mapping_label(&row, t));
+    }
     let hosted = [&ports.scout, &ports.verifier, &ports.builder].iter().any(|p| p.label() == Label::Gateway);
     if f.source.derived() && hosted && !opts.allow_derived_aggregates {
         return finish(blocked(r, "derived_data_opt_in_required", "policy", format!("{} aggregates reach a real hosted model only with the explicit opt-in flag", f.source.as_str())));
@@ -123,13 +298,13 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
     // After the opt-in (or for synthetic data) the payload is a treated aggregate: the scanner of each port is the gate.
     let dc = if f.source == Source::Synthetic { DataClass::Synthetic } else { DataClass::Treated };
 
-    // 1. Scout
-    let opp: Opportunity = match rs.call(&roles::scout_request(f, &row, dc)) {
-        Err(e) => return finish(model_stop(r, "scout", e)),
-        Ok(a) => match roles::parse_scout(&row, &a.content) {
-            Ok(o) => o,
-            Err(e) => return finish(blocked(r, "model_invalid", "scout", e)),
-        },
+    // 1. Scout (bounded retries with the parse problem fed back)
+    let (got, n) = ask(&rs, &roles::scout_request(f, &row, dc), "scout", 0, &|a| roles::parse_scout(&row, a).map_err(|e| ("scout", "model_invalid".to_string(), e)));
+    attempts.borrow_mut()["scout"] = json!(n);
+    let opp: Opportunity = match got {
+        Asked::Done(o) => o,
+        Asked::Stopped(e) => return finish(model_stop(r, "scout", e)),
+        Asked::Rejected((st, code, why)) => return finish(blocked(r, &code, st, why)),
     };
     r.opportunity = Some(opp.to_json());
 
@@ -142,12 +317,12 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
     }
 
     // 3. independent Verifier
-    let mv = match rv.call(&roles::verifier_request(f, &opp, dc)) {
-        Err(e) => return finish(model_stop(r, "verifier", e)),
-        Ok(a) => match roles::parse_verifier(&a.content) {
-            Ok(v) => v,
-            Err(e) => return finish(blocked(r, "model_invalid", "verifier", e)),
-        },
+    let (got, n) = ask(&rv, &roles::verifier_request(f, &opp, dc), "verifier", 0, &|a| roles::parse_verifier(a).map_err(|e| ("verifier", "model_invalid".to_string(), e)));
+    attempts.borrow_mut()["verifier"] = json!(n);
+    let mv = match got {
+        Asked::Done(v) => v,
+        Asked::Stopped(e) => return finish(model_stop(r, "verifier", e)),
+        Asked::Rejected((st, code, why)) => return finish(blocked(r, &code, st, why)),
     };
     let (status, notes) = combine(&det, &mv);
     r.verification = Some(json!({"status": status, "deterministic": det_json, "model": {"verdict": mv.verdict, "checks": mv.checks.iter().map(|c| json!({"id": c.0, "result": c.1})).collect::<Vec<_>>(), "rationale": mv.rationale},
@@ -156,27 +331,41 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
         return finish(blocked(r, "verifier_refuted", "verifier", mv.rationale));
     }
 
-    // 4. Builder + byte-exact compile
+    // 4. Builder + byte-exact compile. The parse AND the compile are the check: a denial is fed back like a parse problem. When the
+    // primary tier cannot produce a compiled proposal after its retries and an escalation tier is configured, that tier tries once
+    // more (same bounded retries) and the outcome names the tier that answered.
     let req = match roles::builder_request(f, &opp, &row, catalog, dc) {
         Ok(q) => q,
         Err(e) => return finish(blocked(r, "precondition_missing", "builder", e)),
     };
-    let proposal = match rb.call(&req) {
-        Err(e) => return finish(model_stop(r, "builder", e)),
-        Ok(a) => match roles::parse_builder(&a.content) {
-            Ok(p) => p,
-            Err(e) => return finish(blocked(r, "model_invalid", "builder", e)),
-        },
+    let check = |a: &Value| -> Result<crate::patch::Compiled, Reject> {
+        let p = roles::parse_builder(a).map_err(|e| ("builder", "model_invalid".to_string(), e))?;
+        compile(catalog, f, &row, &opp, &p).map_err(|d| ("compile", format!("compile_denied:{}", d.code), d.why))
     };
-    match compile(catalog, f, &row, &opp, &proposal) {
-        Err(d) => finish(blocked(r, &format!("compile_denied:{}", d.code), "compile", d.why)),
-        Ok(c) => {
+    let (got, n) = ask(&rb, &req, "builder", 0, &check);
+    attempts.borrow_mut()["builder"] = json!(n);
+    *tier_used.borrow_mut() = Some((tier_of(&ports.builder.model_id()).into(), ports.builder.model_id(), false));
+    let got = match (got, &rbe) {
+        (Asked::Rejected(_), Some(esc)) => {
+            let (g2, n2) = ask(esc, &req, "builder", n, &check);
+            attempts.borrow_mut()["builder_escalation"] = json!(n2);
+            let em = ports.builder_escalation.as_ref().map(|p| p.model_id()).unwrap_or_default();
+            *tier_used.borrow_mut() = Some((tier_of(&em).into(), em, true));
+            g2
+        }
+        (g, _) => g,
+    };
+    match got {
+        Asked::Stopped(e) => finish(model_stop(r, "builder", e)),
+        Asked::Rejected((st, code, why)) => finish(blocked(r, &code, st, why)),
+        Asked::Done(c) => {
             r.rubric = (c.kind != "no_change").then(|| rubric::score(f, &row, &opp, &c, catalog));
             r.status = if c.kind == "no_change" { "no_change" } else { "proposed" }.into();
             r.reason = if c.kind == "no_change" { "builder_no_safe_change" } else { "compiled" }.into();
             r.stage = "compile".into();
             r.detail = c.rationale.chars().take(300).collect();
             r.compiled = Some(c.to_json());
+            r.compiled_raw = Some(c);
             finish(r)
         }
     }
@@ -191,11 +380,19 @@ pub fn reason_report(catalog: &Catalog, report: &Value, source: Source, ports: &
         doubles.extend(r.doubles.clone());
     }
     let n = |s: &str| results.iter().filter(|r| r.status == s).count();
+    let mut by_reason: serde_json::Map<String, Value> = serde_json::Map::new();
+    for r in results.iter().filter(|r| r.status == "unlinked") {
+        let c = by_reason.get(&r.reason).and_then(Value::as_u64).unwrap_or(0) + 1;
+        by_reason.insert(r.reason.clone(), json!(c));
+    }
     let _ = Role::Scout;
     Ok(json!({
         "contract": "reasoning-run/l2-0", "baseline": {"label": catalog.label, "source": catalog.source}, "sensor_semantics": report["semantics"], "data_source": source.as_str(),
         "quality_claims": "forbidden", "opt_in_derived_aggregates": opts.allow_derived_aggregates,
-        "summary": {"corroborated": findings.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "blocked": n("blocked"), "skipped_not_corroborated": skipped.len()},
+        "summary": {"corroborated": findings.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "human_owned": n("human_owned"), "blocked": n("blocked"), "skipped_not_corroborated": skipped.len(),
+                    // an unlinked finding is descriptive (explicit reason), never a failure: only `blocked` counts against the roles
+                    "unlinked_by_reason": by_reason, "failed": n("blocked"), "linked": findings.len() - n("unlinked") - n("no_change") - n("human_owned"),
+                    "cost_usd": (results.iter().map(|r| r.metering["cost_usd"].as_f64().unwrap_or(0.0)).sum::<f64>() * 1e6).round() / 1e6},
         "skipped": skipped.iter().map(|s| json!({"index": s.index, "metric": s.metric, "status": s.status, "reason": s.reason})).collect::<Vec<_>>(),
         "findings": results.iter().map(Reasoned::to_json).collect::<Vec<_>>(),
         "doubles": doubles,
@@ -203,5 +400,14 @@ pub fn reason_report(catalog: &Catalog, report: &Value, source: Source, ports: &
 }
 
 pub fn row_of(f: &Finding) -> Option<Row> {
-    map_finding(f)
+    crate::mapping::map_finding(f)
+}
+
+/// The candidate targets of a finding in the order the loop tries them (at most `MAX_CANDIDATES`), or empty when the finding has no
+/// row (unlinked, human owned, direction not up).
+pub fn candidate_plan(f: &Finding, caps: Caps) -> Vec<String> {
+    if f.direction != "up" {
+        return vec![];
+    }
+    row_of(f).map(|r| r.ordered(caps).iter().map(|t| t.target_ref.clone()).collect()).unwrap_or_default()
 }
