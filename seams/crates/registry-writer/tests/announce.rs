@@ -28,13 +28,20 @@ fn dossier() -> Value {
     d
 }
 
+/// The shared fixture is a Tecnico cell (which now carries a hint); this one sends none.
+fn plain() -> reasoning::finding::Finding {
+    let mut f = finding();
+    f.dims.insert("reason_category".into(), "Comercial".into());
+    f
+}
+
 fn chars(v: &Value) -> usize {
     v.as_str().unwrap().chars().count()
 }
 
 #[test]
 fn the_payload_is_the_exact_platform_body_within_every_bound() {
-    let f = finding();
+    let f = plain();
     let b = announce_payload(&f, "prp_1", &dossier()).unwrap();
     let keys: Vec<&str> = b.as_object().unwrap().keys().map(String::as_str).collect();
     let mut want = vec!["proposalId", "title", "problem", "evidence", "expectedEffect", "evidenceLinks"];
@@ -158,7 +165,7 @@ fn retries_are_bounded_and_only_for_transient_failures() {
 
     for (code, class) in [(401, "unauthorized"), (404, "not_found"), (422, "rejected"), (409, "unexpected_status")] {
         let t = Scripted::new(vec![reply(code)]);
-        let o = announcer(t.clone(), TOKEN).announce(&finding(), "prp_1", &dossier());
+        let o = announcer(t.clone(), TOKEN).announce(&plain(), "prp_1", &dossier());
         assert_eq!(o.record(), format!("platform_announce_failed:{class}"));
         assert_eq!(t.seen.lock().unwrap().len(), 1, "{code} is not retried");
     }
@@ -427,4 +434,47 @@ fn over_a_real_socket_a_404_route_degrades_to_the_labelled_opaque_link() {
     let seen = h.join().unwrap();
     let body: Value = serde_json::from_str(&seen[2]).unwrap();
     assert!(body["evidence"].as_str().unwrap().ends_with(OPAQUE_LABEL));
+}
+
+// ---- FIXAGT B3: the optional caseTypeHint ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_tecnico_topic_carries_the_case_type_hint_and_other_topics_none() {
+    let mut f = plain();
+    assert!(!announce_payload(&f, "prp_1", &dossier()).unwrap().as_object().unwrap().contains_key("caseTypeHint"), "no mapped topic, no hint");
+    f.dims.insert("reason_category".into(), "Tecnico".into());
+    assert_eq!(case_type_hint(&f), Some("app_issue"));
+    assert_eq!(announce_payload(&f, "prp_1", &dossier()).unwrap()["caseTypeHint"], "app_issue");
+    f.dims.insert("reason_category".into(), "Comercial".into());
+    assert_eq!(case_type_hint(&f), None);
+    f.dims.clear();
+    f.dims.insert("case_type".into(), "undue_charge".into());
+    assert_eq!(case_type_hint(&f), Some("undue_charge"), "a platform case type dimension wins");
+    f.dims.insert("case_type".into(), "none".into());
+    assert_eq!(case_type_hint(&f), None);
+}
+
+#[test]
+fn a_platform_without_the_hint_field_is_announced_again_without_it() {
+    struct OldPlatform(Mutex<Vec<Value>>);
+    impl Transport for OldPlatform {
+        fn send(&self, req: &Request) -> Result<Reply, TransportError> {
+            let body = req.body.clone().unwrap_or(Value::Null);
+            self.0.lock().unwrap().push(body.clone());
+            if req.path == EVIDENCE_ROUTE || req.path.starts_with(&format!("{EVIDENCE_ROUTE}?")) {
+                return Ok(Reply { status: 404, body: Value::Null });
+            }
+            if body.get("caseTypeHint").is_some() { Ok(Reply { status: 422, body: Value::Null }) } else { Ok(Reply { status: 200, body: json!({"proposalId": "prp_1"}) }) }
+        }
+    }
+    let t = Arc::new(OldPlatform(Mutex::new(vec![])));
+    let a = Announcer::new(t.clone(), Jws::new(TOKEN.to_string()));
+    let mut f = finding();
+    f.dims.insert("reason_category".into(), "Tecnico".into());
+    let o = a.announce(&f, "prp_1", &dossier());
+    assert!(o.announced(), "{o:?}");
+    let seen = t.0.lock().unwrap();
+    assert_eq!(seen.len(), 2);
+    assert_eq!(seen[0]["caseTypeHint"], "app_issue");
+    assert!(seen[1].get("caseTypeHint").is_none());
 }

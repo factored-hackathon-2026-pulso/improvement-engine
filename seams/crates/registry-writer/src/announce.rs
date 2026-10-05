@@ -172,6 +172,22 @@ pub fn evidence_query(finding: &Finding) -> Result<String, &'static str> {
     Ok(format!("{EVIDENCE_ROUTE}?{}&limit={MAX_LINKS}", q.join("&")))
 }
 
+/// FIXAGT B3: the platform case type the finding's TOPIC points at, sent as the optional `caseTypeHint` of the announcement (the platform
+/// resolves it against its case-type catalogue and ignores an unknown value). A hint, never a claim: a `case_type` dimension that already is
+/// a platform enum wins; the bank reason category `Tecnico` (technical support) is the one explicit topic mapping (`app_issue`, "Problema con
+/// la app"); every other topic sends no hint (the person chooses the type, as before).
+pub fn case_type_hint(finding: &Finding) -> Option<&'static str> {
+    if let Some(v) = finding.dims.get("case_type").map(|v| v.trim())
+        && let Some(t) = PLATFORM_CASE_TYPES.iter().find(|t| **t == v && **t != "none")
+    {
+        return Some(t);
+    }
+    match finding.dims.get("reason_category").map(|v| v.trim()) {
+        Some("Tecnico") => Some("app_issue"),
+        _ => None,
+    }
+}
+
 /// Asks the platform which real cases sit in the finding's cell. One attempt, never an error: the closed reason says why not.
 pub fn resolve_links(transport: &dyn Transport, token: &Jws, finding: &Finding) -> Links {
     let Ok(path) = evidence_query(finding) else { return Links::Opaque("unmappable_dimension") };
@@ -233,14 +249,18 @@ fn announce_payload_inner(finding: &Finding, proposal_ref: &str, dossier: &Value
     if links.len() > MAX_LINKS || links.iter().any(|l| !valid_case_id(l)) {
         return Err(Invalid { field: "evidenceLinks", why: "case ids only, at most 8" });
     }
-    Ok(json!({
+    let mut body = json!({
         "proposalId": id,
         "title": text("title", &s(&es["title"]), MAX_TITLE)?,
         "problem": text("problem", &s(&sec["problem"]), MAX_PROBLEM)?,
         "evidence": format!("{}{label}", text("evidence", &s(&sec["evidence"]), MAX_EVIDENCE - label.chars().count())?),
         "expectedEffect": text("expectedEffect", &s(&sec["expected_effect"]), MAX_EFFECT)?,
         "evidenceLinks": links,
-    }))
+    });
+    if let Some(h) = case_type_hint(finding) {
+        body["caseTypeHint"] = json!(h);
+    }
+    Ok(body)
 }
 
 /// `PULSO_PLATFORM_URL` -> `host:port`: plain http, a loopback or private (RFC 1918 / ULA / link-local) IP literal or `localhost`,
@@ -360,6 +380,7 @@ impl Announcer {
         }
         let key = format!("announce:{proposal_id}");
         let tries = self.max_attempts.max(1);
+        let mut body = body;
         for attempt in 1..=tries {
             let req = Request { method: "POST", path: ROUTE.into(), bearer: &self.token, idempotency_key: Some(&key), body: Some(body.clone()) };
             match self.transport.send(&req) {
@@ -371,6 +392,11 @@ impl Announcer {
                 }
                 Ok(Reply { status: 401, .. }) => return fail("unauthorized", attempt),
                 Ok(Reply { status: 404, .. }) => return fail("not_found", attempt),
+                // a platform that predates `caseTypeHint` rejects the unknown field: the hint is optional, so announce once more without it
+                Ok(Reply { status: 422, .. }) if body.get("caseTypeHint").is_some() && attempt < tries => {
+                    body.as_object_mut().map(|o| o.remove("caseTypeHint"));
+                    continue;
+                }
                 Ok(Reply { status: 422, .. }) => return fail("rejected", attempt),
                 Ok(Reply { status, .. }) if status < 500 => return fail("unexpected_status", attempt),
                 Ok(_) | Err(TransportError::NotSent(_) | TransportError::Unknown(_)) => {}

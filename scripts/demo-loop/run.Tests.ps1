@@ -175,6 +175,15 @@ Describe 'Formatting the loop report' {
         (Get-ProofLine $loop.findings[1]) | Should Be 'not_fixed (candidate still fails)'
         (Get-ProofLine $loop.findings[2]) | Should Be '-'
     }
+    It 'shows the slug of a NEW agent apart from its donor' {
+        $na = '{"status":"proposed","target_ref":"new_agent:consultas","proposal_kind":"new_agent","agent_id":"soporte-tecnico","donor":"consultas"}' | ConvertFrom-Json
+        Get-ProposalSlug $na | Should Be 'soporte-tecnico'
+        $l3 = '{"models":"m","baseline":{"label":"x","live":1},"evaluate_before_announce":"on","summary":{"cost_usd":0.0},"findings":[]}' | ConvertFrom-Json
+        $na | Add-Member -NotePropertyName finding_id -NotePropertyValue 'finding_1' -Force
+        $l3.findings = @($na)
+        $t3 = (Format-LoopReport -Loop $l3) -join "`n"
+        ($t3 -match 'slug    : soporte-tecnico   \(new_agent of new_agent:consultas, donor consultas\)') | Should Be $true
+    }
     It 'explains an infrastructure failure by step and code instead of telling a story' {
         $r = '{"evaluation":{"verdict":"infra_failed","reason":"evaluate returned no verdict","story_text":{"es":"intento 1 paso"},"attempts":[{"problem":{"step":"put_draft","code":"forbidden_role","http":403}}]}}' | ConvertFrom-Json
         Get-ProofLine $r | Should Be 'infra_failed: evaluate returned no verdict (put_draft forbidden_role HTTP 403)'

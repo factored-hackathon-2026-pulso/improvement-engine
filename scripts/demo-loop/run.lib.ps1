@@ -221,6 +221,8 @@ function Get-FindingOutcome {
 function Get-ProposalSlug {
     param($Record)
     if (-not $Record.target_ref) { return '-' }
+    # a NEW agent shows its own slug; the donor it is cloned from is named apart (Get-DonorNote)
+    if ($Record.proposal_kind -eq 'new_agent' -and $Record.agent_id) { return [string]$Record.agent_id }
     $t = [string]$Record.target_ref
     $i = $t.IndexOf(':')
     if ($i -ge 0) { $t = $t.Substring($i + 1) }
@@ -279,7 +281,10 @@ function Format-LoopReport {
         $id = ''
         if ($r.delivery -and $r.delivery.proposal_id) { $id = "  proposal $($r.delivery.proposal_id)" }
         $l.Add("  outcome : $oc$id")
-        if ($r.target_ref) { $l.Add("  slug    : $(Get-ProposalSlug $r)   ($($r.proposal_kind) of $($r.target_ref))") }
+        if ($r.target_ref) {
+            $donorNote = $(if ($r.proposal_kind -eq 'new_agent' -and $r.donor) { ", donor $($r.donor)" } else { '' })
+            $l.Add("  slug    : $(Get-ProposalSlug $r)   ($($r.proposal_kind) of $($r.target_ref)$donorNote)")
+        }
         if ($r.evaluation) { $l.Add("  proof   : $(Get-ProofLine $r)") }
         if ($r.platform_announce) { $l.Add("  platform: $($r.platform_announce)") }
         $l.Add("  cost    : $(Format-Cost $r)")

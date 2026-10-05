@@ -1,4 +1,4 @@
-# 0669 EVT2 copilot findings through the loop (UTC 2026-10-05, CLAUDE) [PARTIAL]
+# 0670 EVT2 copilot findings through the loop (UTC 2026-10-05, CLAUDE) [PARTIAL]
 
 Lane EVT2, branch `claude/evt2-copilot-loop`. Status: partial; the PR is a DRAFT because the Rust slice was not compiled (RAM below 2.5 GB all session).
 
