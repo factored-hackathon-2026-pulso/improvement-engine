@@ -45,4 +45,16 @@ machine `pulso-dev`).
 
 ## Status
 
-Image build: `not_exercised` when this file was authored (a cargo process was running on the author machine, so the heavy release build was skipped). Build it before the first release.
+Image build: `exercised` on Podman machine `pulso-dev` (4 GiB), `--format docker`, `--build-arg CARGO_BUILD_JOBS=1`
+(the Dockerfile `build` stage now has `ARG CARGO_BUILD_JOBS=1`; raise it on bigger machines).
+
+- Build: succeeded first try, 353 s wall (cold layers for console + cargo), no OOM. The sibling dirs copied for
+  `include_str!` (`migrations`, `contracts`, `bridge-contract`, `platform-contract`) were sufficient.
+- Size: 98.1 MB.
+- `podman run --rm IMG --help`: prints the `pulso` usage (exit 0). Runs as uid 10001.
+- `pulso run` with no env: refuses to start, `config_missing: PULSO_DATA_MODE is required`, exit 2.
+- `pulso healthcheck` with nothing listening: exit 1 (`cannot reach readyz: ConnectionRefused`).
+- With `PULSO_STORAGE=memory`, `PULSO_DATA_MODE=dataset` and test tokens (no database): the engine starts
+  (monitor + worker tasks, stub adapter) and `pulso healthcheck` exits 0. Not exercised: Postgres-backed mode.
+- On the pulso-dev rootless runtime, `podman run` needs `--pids-limit=0` (cgroup `pids` controller unavailable);
+  `podman build` does not take that flag.

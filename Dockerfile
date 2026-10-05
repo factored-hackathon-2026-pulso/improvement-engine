@@ -20,6 +20,8 @@ RUN npx tsc --noEmit && npx vite build
 # --- stage 2: engine binaries (release profile, locked). seams/crates/pulso/build.rs embeds ../../../migrations ---
 FROM ${RUST_IMAGE} AS build
 WORKDIR /src
+ARG CARGO_BUILD_JOBS=1
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 # Engine crates include_str! files from sibling top-level dirs (../../../<dir>), so those dirs travel with seams/.
 COPY seams ./seams
 COPY migrations ./migrations
