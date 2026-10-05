@@ -59,6 +59,9 @@ pub fn check_link(tool_def: &Value, svc: &ToolService, agent: &Value) -> Result<
     if s["source"].as_str() != Some(src) {
         return deny("source_mismatch", format!("{id}: registry source {src:?} differs from the service source {:?}", s["source"]));
     }
+    if tool_def["args_schema"]["required"].as_array().is_some_and(|r| !r.is_empty()) {
+        return deny("args_required", format!("{id} has required args: the engine links only tools it can call without arguments"));
+    }
     let inv: Vec<&str> = agent["invocable_by"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
     if inv.is_empty() || !inv.iter().all(|p| SERVED_PRINCIPALS.contains(p)) {
         return deny("principal_not_served", format!("agent invocable_by {inv:?} is not within {SERVED_PRINCIPALS:?}"));

@@ -35,13 +35,17 @@ fn the_bundled_table_is_valid_and_every_candidate_is_grounded() {
                 assert!(!art.locales.is_empty(), "{}", c.target_ref);
                 assert!(catalog.agent(c.agent).is_some(), "{}: unknown agent {}", c.target_ref, c.agent);
             }
+            "link_tool" => {
+                let tool = c.params["tool"].as_str().expect("link_tool carries params.tool");
+                assert!(c.target_ref.ends_with(&format!("/{tool}")) && catalog.tool_def(tool).is_some() && catalog.agent(c.agent).is_some(), "{}", c.target_ref);
+            }
             _ => assert!(!c.slugs.is_empty() && catalog.agent(c.agent).is_some()),
         }
         // `proof_support` and `announceable_now` must agree with the real suite generator
         let has_generator = suite_py.contains(&format!("\"{}\":", c.target_ref));
         assert_eq!(c.proof_support != "none", has_generator, "{}: proof_support disagrees with scripts/regression/build_suite.py", c.target_ref);
         if c.announceable_now {
-            assert!(has_generator && c.kind == "patch", "{} claims announceable_now without a generator", c.target_ref);
+            assert!(has_generator && (c.kind == "patch" || c.kind == "link_tool"), "{} claims announceable_now without a generator", c.target_ref);
         }
     }
 }
@@ -141,11 +145,20 @@ fn a_human_owned_finding_ends_human_owned_with_a_note_and_calls_no_model() {
     let any = |c: Rc<Cell<u32>>| FnPort::scripted("x", count_calls(c, |_| panic!("no model may be called for a human-owned finding")));
     let p = ports(any(n.clone()), any(n.clone()), any(n.clone()));
     let r = reason(&cat(), &amount, &p, &opts());
-    assert_eq!((r.status.as_str(), r.reason.as_str(), r.stage.as_str()), ("human_owned", "policy_dispute_amount", "mapping"));
+    assert_eq!((r.status.as_str(), r.reason.as_str(), r.stage.as_str()), ("needs_owner_ack", "needs_owner_ack", "compile"));
     assert_eq!(n.get(), 0);
     let h = r.human_owned.as_ref().unwrap();
     assert_eq!((h["owner"].as_str(), h["builder_proposal"].as_bool()), (Some("riesgo"), Some(false)));
-    assert!(h["note"]["es"].as_str().unwrap().len() < 400 && r.compiled.is_none() && r.dossier.is_none());
+    assert!(h["note"]["es"].as_str().unwrap().len() < 400 && r.dossier.is_none());
+    // ART2: a policy finding is a hypothesis with the boundary evidence; the tighten-only draft is compiled deterministically and waits for the owner
+    assert_eq!(h["policy_hypothesis"]["boundary_guards"], json!([249.0, 250.0, 251.0, 499.0, 500.0, 501.0]));
+    assert!(h["policy_hypothesis"]["draft"].is_null());
+    let c = r.compiled_raw.as_ref().expect("a tighten-only draft");
+    assert_eq!((c.kind.as_str(), c.target_ref.as_str(), c.agent_id.as_str()), ("tighten_policy", "policy:escalamiento-disputa-monto", "disputas"));
+    assert_eq!(c.changes[0]["content"]["expr"], json!({">": [{"var": "facts.monto_usd.value"}, 250.0]}));
+    assert_eq!(c.changes[0]["content"]["owner"], "riesgo");
+    assert_eq!(c.changes[0]["docs"]["owner_ack"]["required"], true);
+    assert_eq!(c.cascade, vec!["flow:disputa-cargo@1.0.1", "agent:disputas@1.0.1"]);
 }
 
 fn estado_builder() -> impl Fn(&engine::models::ModelRequest) -> Result<Value, engine::models::ModelError> + 'static {

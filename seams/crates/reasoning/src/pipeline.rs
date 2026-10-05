@@ -269,6 +269,31 @@ pub fn reason_candidate(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Op
             r.stage = "mapping".into();
             r.detail = h.note_es.chars().take(300).collect();
             r.human_owned = Some(json!({"id": h.id, "owner": h.owner, "evidence": h.evidence, "note": {"es": h.note_es, "pt": h.note_pt}, "builder_proposal": false}));
+            if h.policy.is_object() {
+                // ART2: a policy finding is a HYPOTHESIS for a person (boundary evidence, no draft chosen by a model). When the table carries a
+                // structured `tighten_to`, a tighten-only draft is compiled DETERMINISTICALLY (no model call) and waits for the owner.
+                let pid = h.policy["policy"].as_str().unwrap_or("");
+                let pol = catalog.policy(pid).cloned().unwrap_or_else(|| json!({"id": pid, "owner": h.owner}));
+                let hyp = crate::art2::policy_hypothesis(&pol, h.policy["registry_threshold"].as_f64().unwrap_or(0.0), h.policy["document_threshold"].as_f64().unwrap_or(0.0));
+                r.status = "policy_hypothesis".into();
+                r.reason = "policy_hypothesis".into();
+                r.stage = "mapping".into();
+                if let Some(ho) = r.human_owned.as_mut() {
+                    ho["policy_hypothesis"] = hyp;
+                }
+                if h.policy["tighten_to"].is_number() {
+                    match crate::patch::compile_policy_tighten(catalog, &h.policy) {
+                        Ok(c) => {
+                            r.status = "needs_owner_ack".into();
+                            r.reason = "needs_owner_ack".into();
+                            r.stage = "compile".into();
+                            r.compiled = Some(c.to_json());
+                            r.compiled_raw = Some(c);
+                        }
+                        Err(d) => r.detail = format!("tighten draft refused: {}: {}", d.code, d.why).chars().take(300).collect(),
+                    }
+                }
+            }
             return finish(r);
         }
         Mapped::Unmapped => {

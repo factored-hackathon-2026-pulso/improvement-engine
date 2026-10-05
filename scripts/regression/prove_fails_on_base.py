@@ -229,6 +229,12 @@ def coverage(bundle: dict, binding: dict, settings: str | None = None) -> dict:
     elif mech == "uncovered_topic":
         native.insert(0, "new_agent_intake_and_handoff")
         not_measured += ["base_by_absence", "routing_recepcion_to_new_agent", "traffic_stealing", "native_wording"]
+    elif mech == "tool_link":
+        native.insert(0, "link_tool_failure_exits")
+        not_measured += ["tool_identity", "answer_uses_tool_data", "native_wording"]
+    elif mech == "policy_threshold":
+        native.insert(0, "policy_boundary_escalation")
+        not_measured += ["owner_decision", "native_wording"]
     # INH1: a clone that inherits the donor release settings by server-side reference (`release_settings.inherit_from`) is evaluated AND
     # announced with them; `release_settings_assumed` stays as the fallback label (explicit admin settings, evaluation only).
     assumptions = [] if mech != "uncovered_topic" else ["settings_inherited" if settings == "inherit_from" else "release_settings_assumed"]

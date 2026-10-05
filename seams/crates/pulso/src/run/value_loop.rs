@@ -259,7 +259,7 @@ impl ValueLoop {
             }
             // The record of the finding is the proven attempt; else the first attempt that produced a proposal (the most informative
             // non-proven one); else the first. `attempts` lists every one.
-            let pick = recs.iter().position(|r| r["outcome"] == "announced").or_else(|| recs.iter().position(|r| r["status"] == "proposed")).unwrap_or(0);
+            let pick = recs.iter().position(|r| r["outcome"] == "announced").or_else(|| recs.iter().position(|r| r["status"] == "proposed" || r["status"] == "needs_owner_ack")).unwrap_or(0);
             let mut rec = recs.swap_remove(pick);
             rec["candidates"] = row.as_ref().map_or(Value::Null, |r| json!(r.candidate_list(self.caps, &tried)));
             rec["attempts"] = json!(attempts);
@@ -294,7 +294,7 @@ impl ValueLoop {
             "contract": "value-loop/b3-0", "sensor": "claude-standin (steps::cells, real code, labelled stand-in)", "data_source": self.source.as_str(),
             "baseline": {"label": refreshed.catalog.label, "live": refreshed.live.len(), "fixture": refreshed.fixture.len()},
             "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
-            "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "human_owned": n("human_owned"), "blocked": n("blocked"),
+            "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "human_owned": n("human_owned"), "policy_hypothesis": n("policy_hypothesis"), "needs_owner_ack": n("needs_owner_ack"), "blocked": n("blocked"),
                         "delivered": delivered, "denied": denied, "announced": announced, "not_announced": not_announced,
                         // unlinked findings are descriptive with an explicit reason, never a failure; only `blocked` counts against the roles
                         "unlinked_by_reason": by_reason, "failed": n("blocked"),
@@ -322,7 +322,7 @@ impl ValueLoop {
             if let Some(c) = &r.compiled_raw {
                 rec["target_ref"] = json!(c.target_ref);
                 rec["proposal_kind"] = json!(c.kind);
-                if r.status == "proposed" {
+                if r.status == "proposed" || r.status == "needs_owner_ack" {
                     engine::trace::set_stage("deliver", 1);
                     match (&self.proof, ew, proofs) {
                         (Some(pc), Some(ew), Some(ps)) => {
@@ -350,10 +350,12 @@ impl ValueLoop {
                                 }
                             }
                         }
-                        _ => {
+                        // ART2: a draft that waits for its owner is never delivered without a proof
+                        _ if r.status == "proposed" => {
                             let o = w.deliver(&Submission::new(f, c));
                             rec["delivery"] = o.to_json();
                         }
+                        _ => {}
                     }
                 }
             }

@@ -131,6 +131,7 @@ pub fn compile(catalog: &Catalog, f: &Finding, row: &Row, opp: &Opportunity, pro
     match kind {
         "patch" => compile_patch(catalog, target, proposal, docs, effect, rationale, uncertainty),
         "new_agent" => compile_new_agent(catalog, target, proposal, docs, effect, rationale, uncertainty),
+        "link_tool" => compile_link(catalog, target, proposal, effect, rationale, uncertainty),
         other => deny("kind_mismatch", format!("unknown kind {other:?}")),
     }
 }
@@ -340,5 +341,83 @@ fn compile_new_agent(catalog: &Catalog, target: &Target, p: &Value, docs: Value,
         expected_effect: effect,
         rationale,
         uncertainty,
+    })
+}
+
+fn from_art2(d: crate::art2::Denied) -> Denied {
+    Denied { code: d.code, why: d.why }
+}
+
+fn entity_digest(parts: &[&Value]) -> String {
+    steps::compile::sha256_hex_calm(parts.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("|").as_bytes(), 16)
+}
+
+/// ART2 `link_tool`: a read-only tool added to an existing agent. The Builder names only an edge of the menu; tool, version, args and the
+/// ToolDef copy come from the catalogue (live registry) and the tool-service snapshot.
+fn compile_link(catalog: &Catalog, target: &Target, p: &Value, mut effect: Value, rationale: String, uncertainty: String) -> Result<Compiled, Denied> {
+    let miss = |what: &str| Denied { code: "target_mismatch", why: format!("{what} is not in the baseline catalogue") };
+    let tool = target.params["tool"].as_str().ok_or_else(|| miss("params.tool"))?;
+    let agent = catalog.agent(target.agent).ok_or_else(|| miss(target.agent))?;
+    let flow_id = agent["entry_flow"].as_str().unwrap_or("").split('@').next().unwrap_or("");
+    let flow = catalog.flow(flow_id).ok_or_else(|| miss(flow_id))?;
+    let tool_def = catalog.tool_def(tool).ok_or_else(|| miss(tool))?;
+    let svc = catalog.tool_service.as_ref().ok_or_else(|| Denied { code: "tool_not_in_service", why: "no tool-service listing in the catalogue".into() })?;
+    let edge_id = p["edge_id"].as_str().unwrap_or("");
+    let changes = crate::art2::compile_link_tool(flow, agent, tool_def, svc, edge_id).map_err(from_art2)?;
+    let diff = changes.iter().map(|c| json!({"kind": c["kind"], "id": c["content"]["id"], "version": c["content"]["version"], "edge_id": edge_id})).collect();
+    effect["art2"] = json!({"mode": "tool_node", "suite_params": {"agent": target.agent, "tool": tool, "flow": flow_id, "edge_id": edge_id, "statuses": ["error", "timeout", "denied"]}});
+    Ok(Compiled {
+        kind: "link_tool".into(),
+        target_ref: target.target_ref.clone(),
+        agent_id: target.agent.to_string(),
+        changes,
+        diff,
+        base_digest: entity_digest(&[flow, agent, tool_def]),
+        cascade: vec![],
+        edit_chars: 0,
+        edit_budget: 0,
+        human_items: vec![
+            "link to an existing tool, read-only (no new tool, no write tool, no registry grant)".into(),
+            "deployment authorisation is outside the registry: field classifier by source, field grants, tool-service principal rule (checked against the tool-service listing)".into(),
+            "the link makes the tool data available to the flow; wording of the answer is unchanged until a template or prompt uses it".into(),
+        ],
+        expected_effect: effect,
+        rationale,
+        uncertainty,
+    })
+}
+
+/// ART2 `tighten_policy` from STRUCTURED params of a human-owned finding (`tighten_to`): no model call, no free text. The result is a draft
+/// that needs the owner's acknowledgement (`needs_owner_ack`) and is never announced automatically.
+pub fn compile_policy_tighten(catalog: &Catalog, policy: &Value) -> Result<Compiled, Denied> {
+    let miss = |what: &str| Denied { code: "target_mismatch", why: format!("{what} is not in the baseline catalogue") };
+    let id = policy["policy"].as_str().unwrap_or("");
+    let pol = catalog.policy(id).ok_or_else(|| miss(id))?;
+    let flow = catalog.flows.values().find(|f| crate::art2::true_branch_escalates(f, id)).ok_or(Denied { code: "direction_unknown", why: "no flow consumes the policy with a true branch to an escalate node".into() })?;
+    let new_value = policy["tighten_to"].as_f64().ok_or(Denied { code: "target_mismatch", why: "no structured tighten_to value".into() })?;
+    let d = crate::art2::tighten_policy(pol, flow, new_value).map_err(from_art2)?;
+    let fid = flow["id"].as_str().unwrap_or("");
+    let agent = catalog.agent_ids().into_iter().find(|a| catalog.agent(a).is_some_and(|x| x["entry_flow"].as_str().is_some_and(|e| e.split('@').next() == Some(fid)))).unwrap_or_default();
+    let bump = |v: &str| bump_patch(v);
+    let cascade = vec![format!("flow:{fid}@{}", bump(flow["version"].as_str().unwrap_or(""))), format!("agent:{agent}@{}", bump(catalog.agent(&agent).and_then(|a| a["version"].as_str()).unwrap_or("")))];
+    let diff = d.changes.iter().map(|c| json!({"kind": c["kind"], "id": c["content"]["id"], "version": c["content"]["version"], "threshold": {"from": d.old_value, "to": d.new_value}})).collect();
+    Ok(Compiled {
+        kind: "tighten_policy".into(),
+        target_ref: format!("policy:{id}"),
+        agent_id: agent.clone(),
+        changes: d.changes,
+        diff,
+        base_digest: entity_digest(&[pol, flow]),
+        cascade,
+        edit_chars: 0,
+        edit_budget: 0,
+        human_items: vec![
+            format!("owner_ack required: owner {} must acknowledge; the engine never announces this automatically (needs_owner_ack)", pol["owner"].as_str().unwrap_or("?")),
+            "tighten-only: every value the old expression escalates is still escalated (monotone comparator)".into(),
+            "evaluate the boundary scenarios on the old and the new threshold; the base suite is expected to differ on the window between them".into(),
+        ],
+        expected_effect: json!({"art2": {"owner_ack": true, "suite_params": {"agent": agent, "policy": id, "old": d.old_value, "new": d.new_value, "boundaries": crate::art2::boundary_values(d.old_value, d.new_value)}}}),
+        rationale: "tighten-only change of a human-owned policy threshold towards the documented value; a person decides".into(),
+        uncertainty: "the owner may prefer another value or keep the registry one".into(),
     })
 }
