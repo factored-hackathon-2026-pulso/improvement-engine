@@ -160,6 +160,9 @@ def up(args) -> None:
         if k.startswith(("OTEL_", "LLM_GATEWAY_TRACE_")):
             gw_env[k] = os.environ[k]
             names.append(k)
+    if os.environ.get("PULSO_GW_OTEL_SERVICE_NAME"):  # one OTLP endpoint, one service name per component (Langfuse closure)
+        gw_env["OTEL_SERVICE_NAME"] = os.environ["PULSO_GW_OTEL_SERVICE_NAME"]
+        names.append("OTEL_SERVICE_NAME") if "OTEL_SERVICE_NAME" not in names else None
     pm("run", "-d", "--pids-limit=0", "--name", GW, "-p", f"127.0.0.1:{GW_PORT}:8080", *[a for k in names for a in ("-e", k)],
        GW_IMAGE, env=gw_env)
     wait(lambda: http_ok(f"http://127.0.0.1:{GW_PORT}/healthz"), "llm-gateway")
@@ -172,6 +175,8 @@ def up(args) -> None:
     if "GATEWAY_TOKEN_AGENT_CORE" in gw_env:
         ac_env["AGENTCORE_LLM_GATEWAY_TOKEN"] = gw_env["GATEWAY_TOKEN_AGENT_CORE"]
     env = {**ac_env, "AGENTCORE_FIELD_CLASSIFICATION_FILES": str(HERE / "field-overlay.json")}
+    if os.environ.get("PULSO_CORE_OTEL_SERVICE_NAME"):
+        env["OTEL_SERVICE_NAME"] = os.environ["PULSO_CORE_OTEL_SERVICE_NAME"]
     sh(["uv", "sync", "--locked"], cwd=ac)
     sh(["uv", "run", "agentcore", "migrate"], env=env, cwd=ac)
     ident = ["uv", "run", "--project", str(ac), "python", str(HERE / "identity.py")]

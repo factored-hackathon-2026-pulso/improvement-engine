@@ -27,7 +27,10 @@ param(
     [switch]$Up, [switch]$Cells, [switch]$Loop, [switch]$Probes, [switch]$Show, [switch]$Announce, [switch]$Down, [switch]$All,
     [switch]$Synthetic, [switch]$Purge,
     [int]$MaxFindings = 4, [int]$TimeoutMin = 45, [int]$ProbeReps = 3,
-    [string]$CellsFile = '', [string]$BuilderModel = '', [string]$PulsoExe = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$DataRoot = ''
+    [string]$CellsFile = '', [string]$BuilderModel = '', [string]$PulsoExe = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$DataRoot = '',
+    # own stack and state (the Langfuse closure runs a second one beside the demo's): prefix, ports, state folder, gateway built from -GatewayDir
+    [string]$StackPrefix = 'pulso-demo', [int]$PgPort = 55490, [int]$GwPort = 8190, [int]$CorePort = 8191, [int]$EnginePort = 4190,
+    [string]$StateName = 'demo-loop', [switch]$FreshGateway
 )
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
@@ -44,8 +47,8 @@ try {
 }
 
 $factored = Split-Path -Parent (Split-Path -Parent $root)
-$settings = Get-DemoStackSettings
-$demoDir = Join-Path $root '.dev-stack\demo-loop'
+$settings = Get-DemoStackSettings -Prefix $StackPrefix -PgPort $PgPort -GwPort $GwPort -CorePort $CorePort -EnginePort $EnginePort
+$demoDir = Join-Path $root (Join-Path '.dev-stack' $StateName)
 $null = New-Item -ItemType Directory -Force -Path $demoDir
 $statePath = Join-Path $demoDir 'state.json'
 $logPath = Join-Path $demoDir ("run-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -102,6 +105,7 @@ function Invoke-Podman {
 function Initialize-GatewayImage {
     # stack.py builds the gateway image on the first `up` (heavy). Another lane's image of the same sources is re-tagged instead.
     param([string]$ImageName)
+    if ($FreshGateway) { Say "gateway image: built from $GatewayDir (not re-tagged from another lane)"; return }
     $have = Invoke-Podman -PodmanArgs @('image', 'exists', $ImageName)
     if ($have.ExitCode -eq 0) { return }
     foreach ($src in @('pulso-w15-llm-gateway', 'pulso-bld1-llm-gateway', 'pulso-l3-llm-gateway')) {
@@ -164,7 +168,8 @@ foreach ($step in $plan.Steps) {
                 Initialize-GatewayImage -ImageName "$($settings.Prefix)-llm-gateway"
                 $e = Get-StackEnvironment -Settings $settings -AgentCoreDir $AgentCoreDir -GatewayDir $GatewayDir
                 $envAll = @{}; foreach ($k in $secretEnv.Keys) { $envAll[$k] = $secretEnv[$k] }; foreach ($k in $e.Keys) { $envAll[$k] = $e[$k] }
-                $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts\dev-stack\stack.py'), 'up') -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
+                $upArgs = @((Join-Path $root 'scripts\dev-stack\stack.py'), 'up'); if ($FreshGateway) { $upArgs += '--rebuild-gateway' }
+                $r = Invoke-Scrubbed -File $python -Arguments $upArgs -Env $envAll -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0) { throw "stack.py up failed (exit $($r.ExitCode))" }
                 $null = Get-Tokens
                 Say ("stack up. registry http://127.0.0.1:{0}  gateway http://127.0.0.1:{1}  (agents: disputas, consultas, real registry-e2e artifacts)" -f $settings.CorePort, $settings.GwPort)
@@ -264,6 +269,26 @@ foreach ($step in $plan.Steps) {
                 }
                 if (-not $resultFile) { throw "no job result within $($plan.TimeoutMin) min (engine log: $elog)" }
                 $lres = Read-JsonFile -Path $resultFile
+                # the engine is stopped when this step ends: keep its debug events and model calls (content) next to the result
+                $jobId = [IO.Path]::GetFileNameWithoutExtension($resultFile)
+                $loopRun = "value-loop-$jobId"
+                try {
+                    $snap = Join-Path $work 'snapshot'
+                    $null = New-Item -ItemType Directory -Force -Path $snap
+                    $evs = @(); $after = 0
+                    while ($true) {
+                        $pg = Invoke-RestMethod -Uri "$base/internal/v1/debug/runs/$loopRun/events?after_sequence=$after" -TimeoutSec 20
+                        $its = @($pg.items)
+                        if ($its.Count -eq 0) { break }
+                        $evs += $its
+                        $after = ($its | ForEach-Object { [int]$_.sequence } | Measure-Object -Maximum).Maximum
+                    }
+                    $cl = Invoke-RestMethod -Uri "$base/internal/v1/debug/runs/$loopRun/model-calls" -TimeoutSec 20
+                    [IO.File]::WriteAllText((Join-Path $snap 'events.json'), (ConvertTo-Json -InputObject @($evs) -Depth 30), (New-Object Text.UTF8Encoding($false)))
+                    [IO.File]::WriteAllText((Join-Path $snap 'model-calls.json'), (ConvertTo-Json -InputObject @($cl.items) -Depth 30), (New-Object Text.UTF8Encoding($false)))
+                    Set-StateField 'events_path' (Join-Path $snap 'events.json'); Set-StateField 'calls_path' (Join-Path $snap 'model-calls.json'); Set-StateField 'run_id' $loopRun
+                    Say ("engine snapshot: {0} events, {1} model calls (run {2})" -f $evs.Count, @($cl.items).Count, $loopRun)
+                } catch { Say ("(engine snapshot failed: {0})" -f (Protect-Text $_.Exception.Message $script:Needles)) }
                 $signals = $null
                 $cli = Find-StepsCli
                 if ($cli) {
