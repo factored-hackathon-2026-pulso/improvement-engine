@@ -39,3 +39,27 @@ Codex catalog and the real agent-core export land.
   labels; a Codex set may replace it, same shape). Reports exact, within-1, hard-gate agreement (a 0 is a rejection
   gate: judge-zero == expected-zero) per criterion and per proposal; escalated items are listed, not scored. Without
   `--live` or gateway env the status is `not_exercised`. Offline tests use a scripted transport.
+
+### Live run (local stack, real gateway, `z-ai/glm-5.3-flash`, builder family xiaomi -> other_family)
+
+Credentials: the local gateway accepts the consumer token it was started with (`GATEWAY_TOKEN_AGENT_CORE`, same wiring as
+`scripts/dev-stack/stack.py`); a throwaway wrapper loaded it into the child process environment only (nothing printed,
+written or in argv). The gateway container already had the `openrouter` endpoint alias (`LLM_ENDPOINTS`), so no dev-stack
+change was needed. Full 12 golden proposals, 2 samples each (25 gateway calls):
+
+- Agreement vs the synthetic expected scores (66 scored pairs; syn-06 denied, see below): exact 0.909, within-1 1.000,
+  hard-gate (zero == zero) 0.955, proposal-level gate agreement 0.818. Per criterion exact: R1 0.64, R12 0.82, R2/R8/R9/R10 1.00.
+  No sample gap > 1, so nothing escalated. The disagreement is concentrated in R1 and R12 (judge more lenient/strict by one).
+- Latency per call: min 13 s, mean 61 s, max 240 s (glm is a reasoning model; 1-8k output tokens per call).
+  Cost from gateway usage: about USD 0.030 for the run (27k tokens in, 67k out); `profile.price` is a declared estimate
+  (0.1 / 0.4 USD per Mtok, env-overridable), not the provider price.
+- Real defects found and fixed (tests first): (1) the gateway requires `profile.price` as decimal strings (HTTP 400);
+  (2) it rejects the `maxLength` schema keyword; (3) glm answers multi-line / long justifications, which the strict
+  one-line check denied: now normalised (scores stay strictly validated); (4) glm sometimes exhausts `max_tokens` and the
+  gateway answers 502 `invalid_output`: treated as malformed (one re-ask), `max_tokens` 8000, timeout 240 s;
+  (5) a dropped connection is retried once; (6) calibration now counts a proposal whose judge is denied (`denied`) instead of
+  aborting the whole run, while family refusal and an unreachable gateway stay fatal.
+- Residual: ~1 in 12 proposals is denied because glm runs away or times out (syn-06: 504 after 240 s); the judge fails
+  closed. A quicker model or a reasoning-effort knob in the gateway profile would fix the latency and the denials.
+- Environment note: the dev-stack gateway container was removed twice during the session by other activity on the
+  `pulso-dev` podman machine; it was recreated with the stack's own wiring.
