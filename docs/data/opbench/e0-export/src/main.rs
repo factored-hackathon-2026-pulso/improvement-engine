@@ -929,4 +929,3 @@ mod tests {
         fs::remove_dir_all(directory).expect("remove synthetic test directory");
     }
 }
-

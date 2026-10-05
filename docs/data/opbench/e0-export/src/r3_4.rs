@@ -450,7 +450,10 @@ fn complaint_status_bucket(value: &str) -> Result<Option<&'static str>, &'static
     match value.trim().to_ascii_lowercase().as_str() {
         "open" | "in process" | "escalated" => Ok(Some("open_like")),
         "resolved" | "closed" => Ok(Some("resolved_or_closed")),
-        _ => Err("unknown bank complaint status"),
+        // The R3-4 amendment classifies values outside the frozen semantic
+        // buckets as unknown coverage. Never echo or derive a new label from
+        // an observed source value.
+        _ => Ok(None),
     }
 }
 
@@ -1179,7 +1182,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_status_values_outside_the_exact_linked_analysis_population() {
+    fn reports_unmapped_linked_status_only_as_suppressed_unknown_coverage() {
         let mut input = fixture();
         input.complaints.push(BankComplaint {
             complaint_id: "SYN-UNLINKED-COMPLAINT".into(),
@@ -1196,9 +1199,16 @@ mod tests {
 
         let mut linked_unknown = fixture();
         linked_unknown.complaints[0].status = "outside-registered-domain".into();
+        let output = aggregate(&linked_unknown, 10)
+            .expect("unmapped non-empty values remain unknown instead of leaking or aborting");
         assert_eq!(
-            aggregate(&linked_unknown, 10).unwrap_err(),
-            "unknown bank complaint status"
+            output["tables"]["bank_complaint_coverage_by_category"]["suppressed"],
+            true
+        );
+        assert!(!output.to_string().contains("outside-registered-domain"));
+        assert_eq!(
+            complaint_status_bucket("outside-registered-domain").unwrap(),
+            None
         );
 
         let mut linked_missing = fixture();
@@ -1465,4 +1475,3 @@ mod tests {
         assert_ne!(digest(&[(b"a", b"bc")]), digest(&[(b"ab", b"c")]));
     }
 }
-
