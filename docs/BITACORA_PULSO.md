@@ -270,3 +270,25 @@ platform-contract/ (schemas, event catalog, golden, conformance; 19 tests) and p
 
 - PR head `e65ec28` also completed with all three jobs failed before start. Check-run annotations on Windows, Ubuntu, and PostgreSQL repeat the same account payment/spending-limit message. No code-specific CI step ran; this confirms the account-level gate persisted after the documentation-only update.
 - Exact hosted state and diagnosis are recorded in the PR body and shared journal. No billing change, CI rerun request, or deployment was made by Codex.
+
+## 2026-10-05T12:04:14Z UTC — CODEX — current T2 pinned-schema validation availability
+
+- Re-ran `C:\Python313\python.exe -m unittest discover -s agent-core-assets/eval-suites/codex-bank -p 'test_*.py' -v` from the T1–T5 worktree: 17 tests, 16 passed, one skipped. The skip is the pinned Agent Core `EvalSuite` model check because importing the pinned checkout fails with `ModuleNotFoundError: rfc8785`.
+- Directly attempted `EvalSuite.model_validate` against the exact four current YAML suites using the available Python 3.13 + PyYAML and pinned checkout; import stopped at the same missing dependency before parsing any suite. Python 3.12 has neither PyYAML nor rfc8785. No dependency was installed, no live provider/evaluator call was made, and no suite result is represented as runtime evaluation.
+- T2 remains structurally covered by local tests but full pinned-schema validation and exact-current-suite Agent Core live evaluation remain unverified. No files in Claude-owned `seams/**` or `OWNERS.md` were changed.
+
+## 2026-10-05T12:06:25Z UTC — CODEX — local Podman stack availability check
+
+- Read-only `podman machine list` and `podman ps` both failed before reaching a runtime: Podman reports it cannot create `C:\Users\alexg\.config` because a file already exists, and the configured Linux machine identity path is access denied. No machine was initialized, started, modified, or deleted; Codex did not touch another team's Podman resources or change global configuration.
+- Consequently no local Agent Core export, live eval run, proposal lifecycle, or rolling-quota acceptance run can be claimed from this environment. T3 remains fixture-only; T4 remains recorded-response acceptance only until the assigned local stack is accessible.
+
+## 2026-10-05T12:08:49Z UTC — CODEX — complete focused T1–T5 regression rerun
+
+- Re-ran the owned local acceptance suites on the current worktree: T1 outcome estimator 31/31; T2 authored-suite checks 16 passed/1 skipped (pinned `rfc8785` dependency); T3 run-export aggregator 53/53; T4 black-box acceptance harness 31/31; T5 full scoring tests 122/122; OPBENCH v2 45/45. No source files changed during these checks.
+- This verifies the current local unit/contract layer, not the outstanding runtime evidence: T1's placebo/power claims remain uncalibrated, T2 has no exact-current 104-case native evaluation, T3 has no complete real export, T4 has no live lifecycle/quota observation, and T5 cannot score a producer artifact until privacy-safe baseline support is emitted.
+
+## 2026-10-05T11:58:41Z UTC — CODEX — current published-head billing annotation
+
+- The latest PR head `8db5dc2` completed workflow run `37306346034` with all three jobs marked failed before execution. Check-run annotations repeat that recent account payments have failed or the spending limit needs to be increased. No test step ran; logs are unavailable. This is the same account-level gate seen on earlier documentation-only heads.
+- No code change was made; the T1–T5 code/test tree remains the locally validated tree. Hosted verification requires the account owner to resolve the billing/spending condition; no such setting was changed here.
+
