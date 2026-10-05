@@ -198,4 +198,3 @@ fn candidate_lists_say_why_a_candidate_was_not_tried() {
     assert_eq!((list[2]["proof_support"].as_str(), list[2]["announceable_now"].as_bool()), (Some("none"), Some(false)));
     assert!(list.iter().all(|c| c["justification"].as_str().is_some_and(|s| !s.is_empty()) && c["evidence"].as_str().is_some()));
 }
-
