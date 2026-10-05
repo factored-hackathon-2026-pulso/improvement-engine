@@ -388,6 +388,7 @@ fn coverage_text(l: Lang, verdict: Option<&Value>) -> String {
             "base_by_absence" => l.t("la base (el agente no existe)", "a base (o agente não existe)"),
             "routing_recepcion_to_new_agent" => l.t("ruteo de recepción al agente nuevo (el arnés no ejercita directorio ni transferencia; entra al directorio solo con promote humano a prod)", "roteamento da recepção ao agente novo (o arnês não exercita diretório nem transferência; entra no diretório so com promote humano para prod)"),
             "traffic_stealing" => l.t("robo de tráfico a disputas y consultas", "roubo de tráfego de disputas e consultas"),
+            "settings_inherited" => l.t("Los ajustes de seguridad del release (interrupción fraude, injection-rules, lang-es-pt, límite de entrada) los hereda el clon del release donante por referencia en el servidor (inherit_from); el motor no escribe interrupciones. Lo evaluado es exactamente lo anunciado. La aprobación y la publicación siguen exigiendo al humano de plataforma con step-up", "As configurações de segurança do release (interrupção fraude, injection-rules, lang-es-pt, limite de entrada) são herdadas pelo clone do release doador por referência no servidor (inherit_from); o motor não escreve interrupções. O avaliado é exatamente o anunciado. A aprovação e a publicação continuam exigindo o humano da plataforma com step-up"),
             "release_settings_assumed" => l.t("SUPUESTO: se evaluó con los ajustes de release del donante (interrupción fraude, injection-rules, lang-es-pt) que fija un admin humano; sin ellos agent-core no evalúa al agente nuevo", "PRESSUPOSTO: avaliou-se com os ajustes de release do doador (interrupção fraude, injection-rules, lang-es-pt) definidos por um admin humano; sem eles o agent-core não avalia o agente novo"),
             other => other.to_string(),
         }
@@ -460,8 +461,8 @@ fn unchanged(l: Lang, proposal: &Value) -> String {
             "Cláusulas protegidas do texto base intactas (o menú de âncoras as exclui e o compilador verifica os marcadores); nenhum orçamento, modelo ou permissão muda; so os textos nomeados sao tocados.",
         ),
         Some("new_agent") => l.t(
-            "Recepción no cambia (solo ruta a disputas y consultas): llega al agente nuevo tras ajustes de release de un admin y promote humano a prod (seguimiento humano). Sin herramientas ni permisos nuevos.",
-            "A recepção não muda (so roteia a disputas e consultas): chega ao agente novo apos ajustes de release de um admin e promote humano para prod (acompanhamento humano). Sem ferramentas nem permissoes novas.",
+            "Recepción no cambia (solo ruta a disputas y consultas): llega al agente nuevo solo tras la aprobación y publicación del humano de plataforma (con step-up) y el promote humano a prod (seguimiento humano). Sin herramientas ni permisos nuevos.",
+            "A recepção não muda (so roteia a disputas e consultas): chega ao agente novo somente apos a aprovação e publicação do humano da plataforma (com step-up) e o promote humano para prod (acompanhamento humano). Sem ferramentas nem permissoes novas.",
         ),
         _ => l.t("Nada cambia: no hay cambio propuesto.", "Nada muda: não ha mudanca proposta."),
     }

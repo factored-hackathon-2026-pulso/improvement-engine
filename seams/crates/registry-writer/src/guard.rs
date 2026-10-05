@@ -35,6 +35,9 @@ pub fn allowed(method: &str, path: &str) -> bool {
         ("POST", ["proposals", id, "validate"]) => ok_seg(id),
         ("POST", ["proposals", id, "freeze"]) => ok_seg(id),
         ("POST", ["proposals", id, "evaluate"]) => ok_seg(id),
+        // INH1: the donor's published release (alias -> release id, then the release itself); read-only, nothing else of releases.
+        ("GET", ["aliases", agent, alias]) => ok_seg(agent) && ok_seg(alias),
+        ("GET", ["releases", rid]) => ok_seg(rid),
         ("GET", ["entities", kind, tail @ ..]) => ok_seg(kind) && !tail.is_empty() && tail.iter().all(|s| ok_seg(s)),
         _ => false,
     }

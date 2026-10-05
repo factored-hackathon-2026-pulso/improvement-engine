@@ -67,6 +67,10 @@ struct Core {
     native: Box<dyn Fn(&[Value]) -> Vec<(String, bool)>>,
     /// Entity ids the registry answers 404 for (a closure that cannot be read).
     missing: RefCell<Vec<String>>,
+    /// An older Core: `release_settings` takes no `inherit_from` (REG-SCHEMA at validate) and explicit interrupts are admin-gated.
+    old_core: Cell<bool>,
+    /// The bearer acts as admin (an explicit stand-in credential).
+    admin: Cell<bool>,
 }
 
 fn reply(status: u16, body: Value) -> Result<Reply, TransportError> {
@@ -75,7 +79,7 @@ fn reply(status: u16, body: Value) -> Result<Reply, TransportError> {
 
 impl Core {
     fn new(native: impl Fn(&[Value]) -> Vec<(String, bool)> + 'static) -> Core {
-        Core { log: Default::default(), drafts: Default::default(), n: Cell::new(0), evals: Cell::new(0), inject: Default::default(), native: Box::new(native), missing: Default::default() }
+        Core { log: Default::default(), drafts: Default::default(), n: Cell::new(0), evals: Cell::new(0), inject: Default::default(), native: Box::new(native), missing: Default::default(), old_core: Cell::new(false), admin: Cell::new(false) }
     }
     fn inject(&self, suffix: &str, r: Reply) {
         self.inject.borrow_mut().push((suffix.into(), r));
@@ -105,6 +109,9 @@ impl Transport for Core {
         }
         let p = req.path.as_str();
         match (req.method, p) {
+            ("GET", "/v1/registry/aliases/consultas/prod") => reply(200, json!({"agent_id": "consultas", "alias": "prod", "release_id": "consultas-demo", "status": "active"})),
+            ("GET", "/v1/registry/aliases/consultas/prod") => reply(200, json!({"agent_id": "consultas", "alias": "prod", "release_id": "consultas-demo", "status": "active"})),
+            ("GET", "/v1/registry/aliases/consultas/staging") => reply(404, json!({"code": "not_found"})),
             ("GET", "/v1/registry/entities/agent/consultas") => reply(200, json!({"content": {"id": "consultas", "metrics": [{"id": "resolution_rate", "role": "gate"}, {"id": "note", "role": "info"}]}})),
             ("GET", _) if p.starts_with("/v1/registry/entities/") => {
                 let (kind, id) = p["/v1/registry/entities/".len()..].split_once('/').unwrap();
@@ -127,6 +134,14 @@ impl Transport for Core {
             }
             ("PUT", _) if p.ends_with("/draft") => {
                 let id = p.split('/').nth(4).unwrap().to_string();
+                // an explicit interrupts list needs the admin role (D-17): the engine builder is refused
+                if req.body.as_ref().unwrap()["changes"].as_array().unwrap().iter().any(|c| c["kind"] == "release_settings" && c["content"]["interrupts"].is_array()) && !self.admin.get() {
+                    return reply(403, json!({"code": "forbidden_role"}));
+                }
+                // an explicit interrupts list needs the admin role (D-17): the engine builder is refused
+                if req.body.as_ref().unwrap()["changes"].as_array().unwrap().iter().any(|c| c["kind"] == "release_settings" && c["content"]["interrupts"].is_array()) && !self.admin.get() {
+                    return reply(403, json!({"code": "forbidden_role"}));
+                }
                 self.drafts.borrow_mut().insert(id, req.body.as_ref().unwrap()["changes"].as_array().unwrap().clone());
                 reply(200, json!({"rev": 1}))
             }
@@ -135,7 +150,14 @@ impl Transport for Core {
                 let n = self.drafts.borrow().get(id).map_or(0, Vec::len);
                 reply(200, json!({"proposal": {"proposal_id": id, "rev": 1, "state": "draft"}, "changes": (0..n).map(|_| json!({})).collect::<Vec<_>>()}))
             }
-            ("POST", _) if p.ends_with("/validate") => reply(200, json!({"violations": [], "candidate_hash": "h"})),
+            ("POST", _) if p.ends_with("/validate") => {
+                let id = p.split('/').nth(4).unwrap();
+                let inherits = self.drafts.borrow().get(id).is_some_and(|d| d.iter().any(|c| c["kind"] == "release_settings" && c["content"]["inherit_from"].is_string()));
+                if inherits && self.old_core.get() {
+                    return reply(200, json!({"violations": [{"rule": "REG-SCHEMA", "message": "el contenido no cumple el esquema: inherit_from: Extra inputs are not permitted"}], "candidate_hash": null}));
+                }
+                reply(200, json!({"violations": [], "candidate_hash": "h"}))
+            }
             ("POST", _) if p.ends_with("/freeze") => reply(200, json!({"candidate_hash": "h"})),
             ("POST", _) if p.ends_with("/evaluate") => {
                 self.evals.set(self.evals.get() + 1);
@@ -699,8 +721,15 @@ mod w13 {
     }
 
     fn run_agent(core: &Core, sc: &Fixed) -> (registry_writer::proof::Proof, Compiled) {
+        run_agent_with(core, sc, false)
+    }
+
+    /// `fallback`: the operator configured an explicit admin credential (the old way is then allowed for a Core without inherit_from).
+    fn run_agent_with(core: &Core, sc: &Fixed, fallback: bool) -> (registry_writer::proof::Proof, Compiled) {
         let mem = MemoryStore::new();
-        let w = Writer::new(cfg(Via::RegistryApi), core, &mem);
+        let mut c = cfg(Via::RegistryApi);
+        c.admin_settings_fallback = fallback;
+        let w = Writer::new(c, core, &mem);
         let (fi, comp) = (finding(), tecnico_compiled());
         let sub = registry_writer::Submission::new(&fi, &comp);
         let inp = input(&sub, &fi, &comp);
@@ -712,7 +741,7 @@ mod w13 {
     }
 
     #[test]
-    fn a_new_agent_is_proven_on_itself_with_its_closure_and_announced_without_the_release_settings() {
+    fn a_new_agent_is_proven_on_itself_with_its_closure_and_announced_inheriting_the_donor_settings_by_reference() {
         let core = Core::new(native_agent(false));
         let sc = scripts_for(agent_bundle(), vec![]);
         let (p, comp) = run_agent(&core, &sc);
@@ -739,7 +768,8 @@ mod w13 {
         let dk: Vec<&str> = sub.changes.iter().map(|c| c["kind"].as_str().unwrap()).collect();
         assert_eq!(&dk[..4], ["agent", "flow", "template", "template"]);
         assert!(dk.contains(&"decision_model") && dk.contains(&"language_detection") && dk.last() == Some(&"eval_suite"));
-        assert!(!dk.contains(&"release_settings") && !dk.contains(&"injection_ruleset"), "{dk:?}");
+        // INH1: what is announced is what was evaluated: the donor reference (never values) and the unchanged ruleset copy
+        assert!(dk.contains(&"release_settings") && dk.contains(&"injection_ruleset"), "{dk:?}");
         // BLD1(a): what the value loop delivers carries the donor's entities, so Core never answers REG-PIN for the new agent
         let ids: Vec<&str> = sub.changes.iter().filter_map(|c| c["content"]["id"].as_str()).collect();
         assert!(ids.contains(&"understand-turno"), "the donor decision model travels: {ids:?}");
@@ -747,15 +777,101 @@ mod w13 {
         assert_eq!(sub.agent_id, "soporte-tecnico");
         assert_eq!(sub.changes[0]["docs"]["changelog"], p.dossier["es"]["changelog"], "the proposal's own docs are the dossier's");
         assert_eq!(sub.changes[4]["docs"]["description"].as_str().map(|d| d.contains("closure copy")), Some(true), "closure copies keep their own docs");
-        // honest dossier
+        let rs = sub.changes.iter().find(|c| c["kind"] == "release_settings").unwrap();
+        assert_eq!(rs["content"], json!({"inherit_from": "consultas-demo"}), "only the donor reference, no value");
+        let evaluated = core.log.borrow().iter().filter(|l| l.method == "PUT").map(|l| l.body.clone().unwrap()).next().unwrap();
+        assert_eq!(evaluated["changes"].as_array().unwrap().iter().find(|c| c["kind"] == "release_settings").unwrap()["content"], rs["content"], "evaluated == announced");
+        assert!(evaluated["changes"].as_array().unwrap().iter().all(|c| c["content"].get("interrupts").is_none() || c["kind"] == "agent"), "the engine never writes interrupts");
+        // honest dossier: inherited by reference, human approval still needed; the old assumed label is gone
         let cov = p.dossier["es"]["sections"]["coverage"].as_str().unwrap();
-        for needle in ["ruteo de recepción al agente nuevo", "robo de tráfico", "SUPUESTO", "ajustes de release del donante", "NO medido"] {
+        for needle in ["ruteo de recepción al agente nuevo", "robo de tráfico", "hereda el clon del release donante por referencia", "inherit_from", "step-up", "NO medido"] {
             assert!(cov.contains(needle), "{needle}: {cov}");
         }
+        assert!(!cov.contains("SUPUESTO"), "{cov}");
+        assert!(p.dossier["pt"]["sections"]["coverage"].as_str().unwrap().contains("herdadas pelo clone"));
+        assert_eq!(p.story["coverage"]["assumptions"], json!(["settings_inherited"]));
+        // the builder delivers it, release_settings included (the shape check lets only the reference through)
+        let mem = MemoryStore::new();
+        let mut dc = cfg(Via::RegistryApi);
+        dc.check_base = false;
+        let o = Writer::new(dc, &core, &mem).deliver(&sub);
+        assert!(o.delivered(), "{}", o.to_json());
         assert!(p.dossier["es"]["sections"]["unchanged"].as_str().unwrap().contains("Recepción no cambia"));
         assert!(p.dossier["es"]["sections"]["result"].as_str().unwrap().contains("por ausencia"));
         for l in core.log.borrow().iter() {
             assert!(allowed(&l.method, &l.path), "{} {}", l.method, l.path);
+        }
+    }
+
+    fn draft_has_interrupts(core: &Core) -> bool {
+        core.log.borrow().iter().any(|l| l.method == "PUT" && l.body.as_ref().unwrap()["changes"].as_array().unwrap().iter().any(|c| c["kind"] == "release_settings" && c["content"].get("interrupts").is_some()))
+    }
+
+    #[test]
+    fn an_older_core_without_inherit_from_is_reported_and_the_builder_never_falls_back_to_explicit_interrupts() {
+        let core = Core::new(native_agent(false));
+        core.old_core.set(true);
+        let (p, _) = run_agent(&core, &scripts_for(agent_bundle(), vec![]));
+        assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:suite_error"));
+        assert!(p.story["reason"].as_str().unwrap().starts_with("core_without_inherit_from"), "{}", p.story["reason"]);
+        assert_eq!(core.count("POST", "/evaluate"), 0);
+        assert!(!draft_has_interrupts(&core));
+        assert!(p.extra_changes.is_empty() && p.suite.is_none());
+    }
+
+    #[test]
+    fn an_older_core_is_served_the_old_way_only_with_an_explicit_admin_credential_and_keeps_the_assumed_label() {
+        let core = Core::new(native_agent(false));
+        core.old_core.set(true);
+        core.admin.set(true);
+        let (p, comp) = run_agent_with(&core, &scripts_for(agent_bundle(), vec![]), true);
+        assert_eq!((p.announce, p.outcome.as_str()), (true, "announced"), "{}", p.story["reason"]);
+        assert_eq!(p.story["coverage"]["assumptions"], json!(["release_settings_assumed"]));
+        assert!(p.dossier["es"]["sections"]["coverage"].as_str().unwrap().contains("SUPUESTO"));
+        assert!(draft_has_interrupts(&core), "the evaluation-only explicit settings of the admin fallback");
+        let sub = announce_submission(&finding(), &comp, &p);
+        assert!(!sub.changes.iter().any(|c| c["kind"] == "release_settings" || c["kind"] == "injection_ruleset"), "the fallback delivers no settings");
+        assert_eq!(core.count("POST", "/evaluate"), 1);
+    }
+
+    #[test]
+    fn an_older_core_stays_blocked_when_the_operator_did_not_configure_the_fallback_even_with_an_admin_bearer() {
+        let core = Core::new(native_agent(false));
+        core.old_core.set(true);
+        core.admin.set(true);
+        let (p, _) = run_agent_with(&core, &scripts_for(agent_bundle(), vec![]), false);
+        assert!(p.story["reason"].as_str().unwrap().starts_with("core_without_inherit_from"));
+        assert!(!draft_has_interrupts(&core));
+    }
+
+    #[test]
+    fn a_core_that_rejects_inherit_from_for_an_agent_with_a_base_is_reported() {
+        let core = Core::new(native_agent(false));
+        core.inject("/validate", Reply { status: 200, body: json!({"violations": [{"rule": "REG-SCHEMA", "message": "inherit_from solo vale para un agente nuevo (sin base)"}], "candidate_hash": null}) });
+        let (p, _) = run_agent(&core, &scripts_for(agent_bundle(), vec![]));
+        assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:suite_error"));
+        assert!(p.story["reason"].as_str().unwrap().starts_with("inherit_from_rejected"), "{}", p.story["reason"]);
+        assert_eq!(core.count("POST", "/evaluate"), 0);
+    }
+
+    #[test]
+    fn a_donor_release_that_core_does_not_know_is_reported() {
+        let core = Core::new(native_agent(false));
+        core.inject("/validate", Reply { status: 404, body: json!({"code": "not_found"}) });
+        let (p, _) = run_agent(&core, &scripts_for(agent_bundle(), vec![]));
+        assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:suite_error"));
+        assert!(p.story["reason"].as_str().unwrap().starts_with("donor_release_unknown"), "{}", p.story["reason"]);
+    }
+
+    #[test]
+    fn a_donor_without_a_published_active_release_fails_closed_before_any_draft() {
+        for first in [Reply { status: 404, body: json!({"code": "not_found"}) }, Reply { status: 200, body: json!({"release_id": "consultas-old", "status": "revoked"}) }] {
+            let core = Core::new(native_agent(false));
+            core.inject("/aliases/consultas/prod", first);
+            let (p, _) = run_agent(&core, &scripts_for(agent_bundle(), vec![]));
+            assert_eq!((p.announce, p.outcome.as_str()), (false, "not_announced:suite_error"));
+            assert!(p.story["reason"].as_str().unwrap().starts_with("donor_without_published_release"), "{}", p.story["reason"]);
+            assert_eq!((core.count("POST", "/evaluate"), core.count("PUT", "/draft"), core.count("POST", "/v1/registry/proposals")), (0, 0, 0));
         }
     }
 

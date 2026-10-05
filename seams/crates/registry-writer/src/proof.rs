@@ -47,6 +47,8 @@ use std::process::{Command, Stdio};
 
 pub const PROOF_CONTRACT: &str = "w11.proof/1";
 pub const JUDGE_INPUT: &str = "w11.judge_input/1";
+/// INH1: closed problem codes of an evaluation draft that carried `release_settings.inherit_from` and was refused (see `eval`).
+const INHERIT_PROBLEMS: [&str; 3] = ["core_without_inherit_from", "inherit_from_rejected", "donor_release_unknown"];
 
 // ------------------------------------------------------------------------------------------------------------------ scripts
 
@@ -369,9 +371,10 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
         },
         None => None,
     };
-    let eval_attempts: Vec<Vec<Value>> = attempts.iter().map(|a| closure.as_ref().map_or_else(|| a.clone(), |cl| closure::eval_changes(a, cl))).collect();
-    let judge_attempts: Vec<Vec<Value>> = attempts.iter().map(|a| closure.as_ref().map_or_else(|| a.clone(), |cl| closure::delivered_changes(a, cl))).collect();
-    let extra = closure.as_ref().map(|cl| cl.copies.clone()).unwrap_or_default();
+    // INH1: the closure (and with it the settings mode) can switch ONCE to the explicit-admin fallback, so it lives in a cell.
+    let closure = RefCell::new(closure);
+    let eval_changes_of = |a: &Vec<Value>| closure.borrow().as_ref().map_or_else(|| a.clone(), |cl| closure::eval_changes(a, cl));
+    let judge_changes_of = |a: &Vec<Value>| closure.borrow().as_ref().map_or_else(|| a.clone(), |cl| closure::delivered_changes(a, cl));
     let base_artifacts = inp.base_artifact.map(|a| json!({"artifacts": [{"kind": a.kind, "id": a.id, "version": a.version, "locales": a.locales}]}));
     let is_prompt = has_generated_probes(&bundle);
     let generated = RefCell::new(json!({}));
@@ -382,6 +385,9 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
         }
         if let Some(ctl) = control {
             doc["control"] = ctl.clone();
+        }
+        if let Some(cl) = closure.borrow().as_ref() {
+            doc["settings"] = json!(cl.settings.code()); // the dossier says HOW the clone got its safety settings
         }
         if is_prompt {
             // The model samples of the wording probes (the judge itself has no network); a failure leaves them uncollected: not measured.
@@ -425,13 +431,38 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
             _ => None,
         };
         let mut done: Vec<Value> = vec![];
-        for (n, changes) in eval_attempts.iter().enumerate() {
+        for (n, attempt) in attempts.iter().enumerate() {
             let label: &'static str = ["candidate-1", "candidate-2", "candidate-3"][n.min(2)];
-            let run = w.evaluate_run(&EvalJob { label, key: &salt, agent_id: agent, suite: &bundle["suite"], agent_entity: agent_entity.as_ref(), changes }, opts);
+            let mut changes = eval_changes_of(attempt);
+            let mut run = w.evaluate_run(&EvalJob { label, key: &salt, agent_id: agent, suite: &bundle["suite"], agent_entity: agent_entity.as_ref(), changes: &changes }, opts);
             if let Some(id) = run["proposal_id"].as_str() {
                 evals.push(id.to_string());
             }
-            done.push(json!({"attempt": n + 1, "changes": judge_attempts[n], "run": run}));
+            // INH1: a Core that does not take the donor reference. Only an explicit admin credential may fall back to the old way.
+            if let Some(code) = run["problem"]["code"].as_str().filter(|c| INHERIT_PROBLEMS.contains(c)) {
+                if code == "core_without_inherit_from" && w.admin_settings_fallback() && closure.borrow().as_ref().is_some_and(|cl| matches!(cl.settings, closure::Settings::Inherit { .. })) {
+                    match closure::donor_closure_with(w, &c.changes, true) {
+                        Ok(cl) => {
+                            *closure.borrow_mut() = Some(cl);
+                            changes = eval_changes_of(attempt);
+                            run = w.evaluate_run(&EvalJob { label, key: &format!("{salt}-assumed"), agent_id: agent, suite: &bundle["suite"], agent_entity: agent_entity.as_ref(), changes: &changes }, opts);
+                            if let Some(id) = run["proposal_id"].as_str() {
+                                evals.push(id.to_string());
+                            }
+                        }
+                        Err(why) => return finish(stub_story(&signal, &c.target_ref, "suite_error", &why), None, evals, vec![]),
+                    }
+                }
+                if let Some(code) = run["problem"]["code"].as_str().filter(|c| INHERIT_PROBLEMS.contains(c)) {
+                    let why = match code {
+                        "core_without_inherit_from" => "core_without_inherit_from: this agent-core does not know release_settings.inherit_from (older Core); the clone cannot be evaluated without an admin credential",
+                        "donor_release_unknown" => "donor_release_unknown: agent-core does not know the donor release named by inherit_from",
+                        _ => "inherit_from_rejected: agent-core rejected the donor reference",
+                    };
+                    return finish(stub_story(&signal, &c.target_ref, "suite_error", why), None, evals, vec![]);
+                }
+            }
+            done.push(json!({"attempt": n + 1, "changes": judge_changes_of(attempt), "run": run}));
             story = match judge(&base, &done, control.as_ref()) {
                 Ok(s) => s,
                 Err(e) => return finish(stub_story(&signal, &c.target_ref, "suite_error", &format!("judge: {e}")), None, evals, vec![]),
@@ -441,6 +472,7 @@ pub fn prove(w: &Writer, scripts: &dyn Scripts, store: &dyn ProofStore, opts: &E
             }
         }
     }
+    let extra = closure.borrow().as_ref().map(closure::delivered_extra).unwrap_or_default();
     finish(story, Some(suite), evals, extra)
 }
 

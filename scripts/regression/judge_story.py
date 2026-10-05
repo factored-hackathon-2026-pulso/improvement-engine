@@ -94,7 +94,7 @@ def judge(doc: dict) -> dict:
                                    generate, ignore))
             if attempts[-1]["verdict"] in ("pass", "probe_only_pass"):
                 break
-    story = prove.verdict_story(bundle, base, attempts, binding)
+    story = prove.verdict_story(bundle, base, attempts, binding, doc.get("settings"))
     story["judge"] = JUDGE_SCHEMA
     return story
 
