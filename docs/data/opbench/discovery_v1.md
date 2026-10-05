@@ -185,3 +185,13 @@ increase with adjusted q<=0.05; `corroborated_descriptive` records adequate
 support with a rate difference smaller than 5pp; a significant >=5pp decrease
 is `refuted`; other insufficiency/disagreement is `uncertain`. A top-signature
 digest remains local-only.
+
+### Preregistration clarification (v1.5, before result artifacts enter Git)
+
+For M1–M6 cell-versus-complement effects and E1 split differences, report a
+two-sided 95% normal-approximation Wald confidence interval using the
+unpooled standard error of the two independent proportions. The hypothesis
+test remains the two-sided pooled-null two-proportion z test; interval method
+and test method are intentionally distinct. Overall snapshot rates are
+descriptive and do not receive a between-group interval. This interval method
+is fixed for reproducibility and was not selected by inspecting result values.
