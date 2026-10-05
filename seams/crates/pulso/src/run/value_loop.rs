@@ -273,7 +273,10 @@ impl ValueLoop {
                 attempts.push(json!({"rank": r.candidate.as_ref().map(|c| c["rank"].clone()), "target_ref": cand, "status": r_rec["status"], "reason": r_rec["reason"], "outcome": r_rec["outcome"],
                                      "proof": r_rec["evaluation"]["verdict"].clone(), "delivery": r_rec["delivery"]["status"].clone(), "cost_usd": r_rec["metering"]["cost_usd"]}));
                 let proven = r_rec["outcome"] == "announced";
-                let ended = !matches!(r_rec["status"].as_str(), Some("proposed" | "blocked"));
+                // a transient cause (the gateway stayed unavailable after its bounded retries) says nothing about this candidate: the next one would meet
+                // the same outage and a different mapping would silently replace the real cause, so the finding ends here with it recorded
+                let infra = r_rec["status"] == "blocked" && r_rec["reason"] == "model_unavailable";
+                let ended = infra || !matches!(r_rec["status"].as_str(), Some("proposed" | "blocked"));
                 recs.push(r_rec);
                 if proven || ended {
                     break;
@@ -344,6 +347,11 @@ impl ValueLoop {
             if let Some(c) = &r.compiled_raw {
                 rec["target_ref"] = json!(c.target_ref);
                 rec["proposal_kind"] = json!(c.kind);
+                if c.kind == "new_agent" {
+                    // the NEW agent's slug and the donor it is cloned from, apart: `target_ref` names the mapping target (the donor side)
+                    rec["agent_id"] = json!(c.agent_id);
+                    rec["donor"] = json!(refreshed.catalog.donor);
+                }
                 if r.status == "proposed" || r.status == "needs_owner_ack" {
                     engine::trace::set_stage("deliver", 1);
                     match (&self.proof, ew, proofs) {

@@ -188,6 +188,8 @@ fn a_trigger_job_runs_the_loop_delivers_one_proposal_and_records_the_outcome_in_
     let rec: Value = serde_json::from_str(&repo.output(T, &job, 1).unwrap().expect("finding record at step 1")).unwrap();
     assert_eq!((rec["status"].as_str(), rec["delivery"]["status"].as_str(), rec["delivery"]["proposal_id"].as_str()), (Some("proposed"), Some("delivered"), Some("prp_1")));
     assert_eq!(rec["independence"]["level"], "other_family", "scripted ids differ and have no common vendor");
+    // FIXAGT A2: the NEW agent's slug and the donor it is cloned from, apart (target_ref names the mapping target, the donor side)
+    assert_eq!((rec["proposal_kind"].as_str(), rec["agent_id"].as_str(), rec["donor"].as_str()), (Some("new_agent"), Some("soporte-tecnico"), Some("consultas")), "{rec}");
     assert_eq!(summary["value_loop"]["engine_never_approves_publishes_or_promotes"], true);
     assert!(!summary.to_string().contains(TOKEN));
     // honest labels: fixture baseline (the wire serves no entity), claude-standin sensor
@@ -692,6 +694,26 @@ mod w11 {
         assert_eq!(cands[2]["not_tried_because"], "over_the_candidate_cap");
         assert_eq!(rec["mapping_claim"], "hypothesis_of_where_to_intervene_not_a_cause");
         assert_eq!(out["summary"]["announced"], 1);
+    }
+
+    #[test]
+    fn a_transient_gateway_outage_of_the_builder_ends_the_finding_with_the_real_cause_and_tries_no_other_candidate() {
+        reasoning::pipeline::set_transient_backoff_ms(1);
+        let work = temp("fixagt-transient");
+        let (mut v, by) = queja_loop(&work, Arc::new(Core::default()), "nothing");
+        let inner = v.ports.clone();
+        v.ports = Arc::new(move || {
+            let mut p = inner()?;
+            p.builder = Rc::new(FnPort::scripted("scripted-builder", |_| Err(engine::models::ModelError::Unavailable("gateway_http_504: upstream_timeout".into()))));
+            Ok(p)
+        });
+        let out = v.run(&pulso::run::value_loop::NoPersist).unwrap();
+        let rec = &out["findings"][0];
+        assert_eq!((rec["status"].as_str(), rec["reason"].as_str()), (Some("blocked"), Some("model_unavailable")), "{rec}");
+        assert_eq!(rec["attempts"].as_array().unwrap().len(), 1, "no fallback to the next mapping candidate: {rec}");
+        assert!(by.built.lock().unwrap().is_empty());
+        assert_eq!(rec["metering"]["transient_retries"], 2);
+        assert_eq!(rec["candidates"].as_array().unwrap().iter().filter(|c| c["tried"] == true).count(), 1);
     }
 
     #[test]
