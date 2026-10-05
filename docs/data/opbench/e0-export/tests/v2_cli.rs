@@ -61,7 +61,11 @@ impl Drop for FixtureRoot {
     }
 }
 
-fn table_fields(table: &str, include_complaint_id: bool, timestamp_unit: TimeUnit) -> Vec<(String, DataType, bool)> {
+fn table_fields(
+    table: &str,
+    include_complaint_id: bool,
+    timestamp_unit: TimeUnit,
+) -> Vec<(String, DataType, bool)> {
     let mut fields = Vec::new();
     let id = match table {
         "case" | "case_close" => "case_id",
@@ -99,7 +103,9 @@ fn table_fields(table: &str, include_complaint_id: bool, timestamp_unit: TimeUni
             fields.push(("event_time".into(), timestamp(TimeUnit::Microsecond), false));
             fields.push(("evidence_ids".into(), DataType::Utf8, true));
         }
-        "routing_step" => fields.push(("event_time".into(), timestamp(TimeUnit::Microsecond), false)),
+        "routing_step" => {
+            fields.push(("event_time".into(), timestamp(TimeUnit::Microsecond), false))
+        }
         "copilot_query" => {
             fields.push(("event_time".into(), timestamp(TimeUnit::Microsecond), false));
             fields.push(("query_signature".into(), DataType::Utf8, false));
@@ -118,7 +124,11 @@ fn table_fields(table: &str, include_complaint_id: bool, timestamp_unit: TimeUni
             fields.push(("approval_id".into(), DataType::Utf8, true));
         }
         "approval" => {
-            fields.push(("requested_at".into(), timestamp(TimeUnit::Microsecond), false));
+            fields.push((
+                "requested_at".into(),
+                timestamp(TimeUnit::Microsecond),
+                false,
+            ));
             fields.push(("decided_at".into(), timestamp(TimeUnit::Microsecond), true));
             fields.push(("executed_call_id".into(), DataType::Utf8, true));
         }
@@ -127,7 +137,11 @@ fn table_fields(table: &str, include_complaint_id: bool, timestamp_unit: TimeUni
             fields.push(("resolved".into(), DataType::Boolean, false));
         }
         "signal" => {
-            fields.push(("window_start".into(), timestamp(TimeUnit::Microsecond), false));
+            fields.push((
+                "window_start".into(),
+                timestamp(TimeUnit::Microsecond),
+                false,
+            ));
             fields.push(("window_end".into(), timestamp(TimeUnit::Microsecond), false));
             fields.push(("support_cases".into(), DataType::Int32, false));
             fields.push(("evidence_case_ids".into(), DataType::Utf8, false));
@@ -151,8 +165,12 @@ fn contract(include_complaint_id: bool, timestamp_unit: TimeUnit) -> Value {
     let mut entities = Map::new();
     for table in TABLES {
         let mut columns = Map::new();
-        for (name, data_type, nullable) in table_fields(table, include_complaint_id, timestamp_unit) {
-            columns.insert(name, json!({"type": parquet_type(&data_type), "required": !nullable}));
+        for (name, data_type, nullable) in table_fields(table, include_complaint_id, timestamp_unit)
+        {
+            columns.insert(
+                name,
+                json!({"type": parquet_type(&data_type), "required": !nullable}),
+            );
         }
         entities.insert(table.into(), json!({"fields": columns}));
     }
@@ -188,11 +206,12 @@ fn write_table(
                 } else {
                     let values = (0..row_count)
                         .map(|i| {
-                            let effective = if duplicate_last_case && table == "case" && i + 1 == row_count {
-                                0
-                            } else {
-                                i
-                            };
+                            let effective =
+                                if duplicate_last_case && table == "case" && i + 1 == row_count {
+                                    0
+                                } else {
+                                    i
+                                };
                             match name.as_str() {
                                 "case_id" => format!("SYNTH-PRIVATE-CASE-{effective:04}"),
                                 "complaint_id" => format!("SYNTH-PRIVATE-COMPLAINT-{effective:04}"),
@@ -249,7 +268,8 @@ fn write_table(
         };
         arrays.push(array);
     }
-    let batch = RecordBatch::try_new(schema.clone(), arrays).expect("valid synthetic package batch");
+    let batch =
+        RecordBatch::try_new(schema.clone(), arrays).expect("valid synthetic package batch");
     let file = File::create(data.join(format!("{table}.parquet"))).expect("create table file");
     let mut writer = ArrowWriter::try_new(file, schema, None).expect("create parquet writer");
     writer.write(&batch).expect("write table batch");
@@ -271,7 +291,11 @@ fn fixture(
     )
     .expect("write synthetic platform contract");
     for table in TABLES {
-        let rows = if table == "case" || table == "copilot_query" { CASES } else { 0 };
+        let rows = if table == "case" || table == "copilot_query" {
+            CASES
+        } else {
+            0
+        };
         write_table(
             &root.data(),
             table,
@@ -308,7 +332,11 @@ fn assert_sanitized_failure(output: Output, root: &FixtureRoot) {
     let stderr = String::from_utf8(output.stderr).expect("stderr is UTF-8");
     assert!(stderr.contains("OPBENCH E0 v2 failed safely"));
     assert!(!stderr.contains(&root.0.to_string_lossy().to_string()));
-    for private in ["SYNTH-PRIVATE-CASE", "SYNTH-PRIVATE-COMPLAINT", "SYNTH-PRIVATE-SIGNATURE"] {
+    for private in [
+        "SYNTH-PRIVATE-CASE",
+        "SYNTH-PRIVATE-COMPLAINT",
+        "SYNTH-PRIVATE-SIGNATURE",
+    ] {
         assert!(!stderr.contains(private));
     }
 }
@@ -317,15 +345,39 @@ fn assert_sanitized_failure(output: Output, root: &FixtureRoot) {
 fn v2_binary_emits_only_four_aggregates_and_includes_exact_cutoff_case() {
     let root = fixture(true, TimeUnit::Microsecond, false, false);
     let output = run_cli(&root);
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(output.stderr.is_empty());
     let stdout = String::from_utf8(output.stdout).expect("stdout is UTF-8 JSON");
-    for private in ["SYNTH-PRIVATE-CASE", "SYNTH-PRIVATE-COMPLAINT", "SYNTH-PRIVATE-CUSTOMER", "SYNTH-PRIVATE-SIGNATURE"] {
+    for private in [
+        "SYNTH-PRIVATE-CASE",
+        "SYNTH-PRIVATE-COMPLAINT",
+        "SYNTH-PRIVATE-CUSTOMER",
+        "SYNTH-PRIVATE-SIGNATURE",
+    ] {
         assert!(!stdout.contains(private));
     }
     let result: Value = serde_json::from_str(&stdout).expect("parse aggregate stdout");
-    let keys = result.as_object().unwrap().keys().map(String::as_str).collect::<std::collections::HashSet<_>>();
-    assert_eq!(keys, ["discovery", "replication", "complaint_ids_matched", "eligible_cases"].into_iter().collect());
+    let keys = result
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(
+        keys,
+        [
+            "discovery",
+            "replication",
+            "complaint_ids_matched",
+            "eligible_cases"
+        ]
+        .into_iter()
+        .collect()
+    );
     assert_eq!(result["discovery"]["selected"], 200);
     assert_eq!(result["discovery"]["total"], 200);
     assert_eq!(result["replication"]["selected"], 1_800);
@@ -362,3 +414,4 @@ fn v2_binary_fails_closed_on_missing_and_malformed_source_files() {
     fs::write(malformed.data().join("case.parquet"), b"not parquet").unwrap();
     assert_sanitized_failure(run_cli(&malformed), &malformed);
 }
+
