@@ -34,14 +34,7 @@ pub const MAX_RETRIES: usize = 2;
 
 /// `flash | pro | other` from the model id (the tier label that travels in every outcome).
 pub fn tier_of(model_id: &str) -> &'static str {
-    let m = model_id.rsplit('/').next().unwrap_or(model_id);
-    if m.ends_with("-flash") || m.contains("flash") {
-        "flash"
-    } else if m.ends_with("-pro") || m.contains("-pro") {
-        "pro"
-    } else {
-        "other"
-    }
+    engine::models::record::tier_of(model_id)
 }
 
 /// A rejected answer: (stage, closed reason code, why).
@@ -119,6 +112,9 @@ pub struct Reasoned {
     pub compiled_raw: Option<crate::patch::Compiled>,
     pub rubric: Option<Value>,
     pub calls: Vec<Value>,
+    /// One `pulso.model_call/1` per call (content, tokens, USD from the price table, ids): kept OUT of `to_json` (the report and the
+    /// job record carry no model free text); the value loop persists them apart.
+    pub call_records: Vec<Value>,
     pub doubles: Vec<Value>,
     pub independence: Value,
     pub source: &'static str,
@@ -190,7 +186,7 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
     let rbe = ports.builder_escalation.as_ref().map(|p| Rc::new(Recording::new(p.clone())));
     let mut r = Reasoned {
         finding_id: f.id.clone(), status: "blocked".into(), reason: String::new(), stage: String::new(), detail: String::new(), mapping_row: None, opportunity: None, verification: None,
-        compiled: None, compiled_raw: None, rubric: None, calls: vec![], doubles: vec![], source: f.source.as_str(), metering: Value::Null,
+        compiled: None, compiled_raw: None, rubric: None, calls: vec![], call_records: vec![], doubles: vec![], source: f.source.as_str(), metering: Value::Null,
         independence: json!({"scout_model": ports.scout.model_id(), "verifier_model": ports.verifier.model_id(), "builder_model": ports.builder.model_id(),
                              "builder_escalation_model": ports.builder_escalation.as_ref().map(|p| p.model_id()),
                              "verifier_separate_port": !Rc::ptr_eq(&ports.scout, &ports.verifier),
@@ -203,6 +199,20 @@ pub fn reason(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Opts) -> Rea
         r.calls = all.iter().flat_map(|x| x.calls().iter().map(|c| c.to_json()).collect::<Vec<_>>()).collect();
         r.doubles = all.iter().flat_map(|x| x.doubles()).collect();
         let recs: Vec<engine::models::CallRecord> = all.iter().flat_map(|x| x.calls()).collect();
+        let story = engine::trace::current();
+        let mut per_role: std::collections::HashMap<&'static str, u32> = std::collections::HashMap::new();
+        r.call_records = recs
+            .iter()
+            .map(|c| {
+                let n = per_role.entry(c.role.as_str()).or_insert(0);
+                *n += 1;
+                let mut v = engine::models::record::call_record(c, *n, story.as_ref());
+                if v["evidence_ref"].is_null() {
+                    v["evidence_ref"] = json!(f.evidence_ref());
+                }
+                v
+            })
+            .collect();
         let usage = |f: &dyn Fn(&engine::models::Usage) -> f64| recs.iter().filter_map(|c| c.usage.as_ref()).map(f).sum::<f64>();
         let tu = tier_used.borrow().clone();
         r.metering = json!({

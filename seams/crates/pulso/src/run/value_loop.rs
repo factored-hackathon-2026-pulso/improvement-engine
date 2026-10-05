@@ -31,6 +31,10 @@ pub trait Persist {
     fn put(&self, step: u32, record: &str) -> Result<(), String>;
 }
 
+/// The `pulso.model_call/1` records of finding `step` live in the same job store under `CALLS_STEP_BASE + step` (a JSON array; kept apart from the
+/// finding record, which carries no model free text). Works for every `Persist` (memory, file, postgres) without a table of its own.
+pub const CALLS_STEP_BASE: u32 = 1_000_000;
+
 pub struct NoPersist;
 impl Persist for NoPersist {
     fn get(&self, _: u32) -> Option<String> {
@@ -166,6 +170,10 @@ impl ValueLoop {
                 ..Default::default()
             });
             let r = reason(&refreshed.catalog, f, ports.as_ref().expect("just built"), &opts);
+            if !r.call_records.is_empty() {
+                // before the finding record: a replayed finding either has both or is reasoned again
+                persist.put(CALLS_STEP_BASE.saturating_add(step), &Value::Array(r.call_records.clone()).to_string())?;
+            }
             let mut rec = json!({
                 "finding_id": f.id, "evidence_ref": f.evidence_ref(), "metric": f.metric, "status": r.status, "reason": r.reason, "stage": r.stage, "mapping_row": r.mapping_row,
                 "rubric": r.rubric.as_ref().map(|x| json!({"total": x["total"], "band": x["band"]})), "independence": r.independence, "metering": r.metering, "builder_tier": r.metering["builder"]["tier"],
@@ -213,4 +221,13 @@ impl ValueLoop {
             "engine_never_approves_publishes_or_promotes": true,
         }))
     }
+}
+
+/// Every model call recorded for the first `findings` findings of a job, in finding order (what `run_as` persisted, also by an earlier attempt).
+pub fn recorded_calls(persist: &dyn Persist, findings: usize) -> Vec<Value> {
+    (1..=u32::try_from(findings).unwrap_or(0))
+        .filter_map(|step| persist.get(CALLS_STEP_BASE.saturating_add(step)))
+        .filter_map(|t| serde_json::from_str::<Value>(&t).ok())
+        .flat_map(|v| v.as_array().cloned().unwrap_or_default())
+        .collect()
 }

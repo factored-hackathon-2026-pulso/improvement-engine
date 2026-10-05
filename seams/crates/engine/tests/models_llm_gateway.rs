@@ -237,3 +237,35 @@ fn every_gateway_call_of_a_finding_carries_the_story_traceparent_and_baggage_and
         assert_eq!(s.1["authorization"], "Bearer k-test-secret");
     }
 }
+
+#[test]
+fn a_recorded_call_becomes_a_model_call_record_with_content_tokens_price_table_cost_and_story_ids_and_no_credential() {
+    use core_client::trace::{self, TraceCtx};
+    use engine::models::record::call_record;
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let leak = "answer with Bearer abcDEF123456 and sk-live1234567890 inside";
+    let f = fake(200, generated(json!(leak), "xiaomi/mimo-v2.6-flash"));
+    let rec = Recording::new(Rc::new(on(&f.addr, &[("PULSO_LLM_GATEWAY_STRUCTURED", "text")])));
+    let _s = trace::enter(TraceCtx { finding_key: "ev_3f9a1c07d2b84e51".into(), run_id: "value-loop-trg-20261005-0001".into(), ..Default::default() });
+    trace::set_stage("scout", 1);
+    let r = rec.call(&req());
+    assert!(r.is_err(), "the text is not JSON: the call is invalid but its content is still recorded");
+    let c = &rec.calls()[0];
+    let ctx = trace::current();
+    let v = call_record(c, 1, ctx.as_ref());
+    assert_eq!(v["schema"], "pulso.model_call/1");
+    assert_eq!((v["role"].as_str(), v["model_id"].as_str(), v["tier"].as_str(), v["stage"].as_str(), v["attempt"].as_u64(), v["retries"].as_u64()), (Some("scout"), Some("xiaomi/mimo-v2.6-flash"), Some("flash"), Some("scout"), Some(1), Some(0)));
+    assert_eq!((v["tokens_in"].as_u64(), v["tokens_out"].as_u64()), (Some(100), Some(20)));
+    assert_eq!((v["cost_usd"].as_f64(), v["cost_source"].as_str()), (Some(1.96e-5), Some("price_table")));
+    assert_eq!(v["outcome"], "invalid");
+    assert_eq!(v["request"]["messages"][0], json!({"role": "system", "content": "stage prompt"}));
+    assert!(v["request"]["messages"][1]["content"].as_str().unwrap().contains("output_schema"), "the treated payload is the user message");
+    let resp = v["response"].as_str().unwrap();
+    assert!(resp.contains("answer with") && !resp.contains("abcDEF123456") && !resp.contains("sk-live"), "{resp}");
+    assert!(!v.to_string().contains("k-test-secret"), "the gateway key is never part of a record");
+    assert_eq!(v["trace_id"], "7e1ffba44834058839ef1a914c474128");
+    assert_eq!(v["parent_span_id"], "69dba9a106f229ee", "the scout stage span of the python vectors");
+    assert_eq!(v["span_id"], trace::generation_span_id("7e1ffba44834058839ef1a914c474128", "scout", 1));
+    assert!(v["started_at"].as_str().unwrap().ends_with('Z') && v["duration_ms"].is_u64());
+    assert_eq!(v["truncated"], false);
+}

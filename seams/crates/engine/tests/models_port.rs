@@ -79,7 +79,7 @@ fn a_failed_call_is_recorded_and_blocks_instead_of_falling_back() {
 }
 
 fn rec(label: Label, outcome: Outcome) -> CallRecord {
-    CallRecord { role: Role::Scout, label, model_id: "m1".into(), data_class: DataClass::Treated, outcome, usage: None, wall_ms: 0 }
+    CallRecord { role: Role::Scout, label, model_id: "m1".into(), data_class: DataClass::Treated, outcome, usage: None, wall_ms: 0, started_at: String::new(), stage: None, attempt: 1, request: None, response: None }
 }
 
 #[test]

@@ -5,6 +5,7 @@
 pub mod extract;
 pub mod gateway;
 pub mod llm_gateway;
+pub mod record;
 pub mod roleplay;
 pub mod scripted;
 pub mod tps;
@@ -126,6 +127,10 @@ pub trait ModelPort {
     fn last_usage(&self) -> Option<Usage> {
         None
     }
+    /// The raw text the model returned for the most recent `call` (`None` when the port keeps none or the call failed before an answer).
+    fn last_response(&self) -> Option<String> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,6 +151,14 @@ pub struct CallRecord {
     pub usage: Option<Usage>,
     /// Wall time of the call as the caller saw it (retries are separate records).
     pub wall_ms: u64,
+    /// RFC 3339 UTC (ms) at which the call started.
+    pub started_at: String,
+    /// The story stage and attempt (1-based) the call ran in; `None` outside a story scope (`core_client::trace`).
+    pub stage: Option<String>,
+    pub attempt: u32,
+    /// What was sent (system prompt and treated payload) and the raw answer text: the content of `record::call_record` (never in `to_json`).
+    pub request: Option<(String, Value)>,
+    pub response: Option<String>,
 }
 
 impl CallRecord {
@@ -220,7 +233,12 @@ impl ModelPort for Recording {
     fn last_usage(&self) -> Option<Usage> {
         self.inner.last_usage()
     }
+    fn last_response(&self) -> Option<String> {
+        self.inner.last_response()
+    }
     fn call(&self, req: &ModelRequest) -> Result<ModelAnswer, ModelError> {
+        let started_at = record::now_rfc3339();
+        let story = core_client::trace::current();
         let t0 = std::time::Instant::now();
         let r = self.inner.call(req);
         let wall_ms = u64::try_from(t0.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -230,7 +248,21 @@ impl ModelPort for Recording {
             Err(ModelError::Unavailable(w)) => (self.inner.label(), self.inner.model_id(), Outcome::Unavailable(w.clone())),
             Err(ModelError::Invalid(w)) => (self.inner.label(), self.inner.model_id(), Outcome::Invalid(w.clone())),
         };
-        self.calls.borrow_mut().push(CallRecord { role: req.role, label, model_id, data_class: req.data_class, outcome, usage: self.inner.last_usage(), wall_ms });
+        self.calls.borrow_mut().push(CallRecord {
+            role: req.role,
+            label,
+            model_id,
+            data_class: req.data_class,
+            outcome,
+            usage: self.inner.last_usage(),
+            wall_ms,
+            started_at,
+            stage: story.as_ref().and_then(|s| s.stage.clone()),
+            attempt: story.as_ref().map_or(1, |s| s.attempt),
+            request: Some((req.system.clone(), req.payload.clone())),
+            // ports that keep no raw text (scripted, replay) are recorded by the normalized answer they gave
+            response: self.inner.last_response().or_else(|| r.as_ref().ok().map(|a| a.content.to_string())),
+        });
         r
     }
 }
