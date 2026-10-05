@@ -145,5 +145,48 @@ class BuildTests(unittest.TestCase):
             bc.build(self.root, tables=("transactions",))
 
 
+class MarginDifferencingTests(unittest.TestCase):
+    """A suppressed small cell must not be recoverable by subtracting published margins."""
+
+    def make(self, tmp):
+        calls, srvs = [], []
+        n = 0
+        # (reason, resolved flag, contacts, unresolved-or-low count) in one channel and one month
+        plan = [("Queja", 200, 100), ("Tecnico", 200, 3), ("Comercial", 200, 100)]
+        for reason, total, unres in plan:
+            for j in range(total):
+                n += 1
+                res = "False" if j < unres else "True"
+                calls.append(["2024-01-10 09:00:00", f"INT-{n:05d}", f"CLI-{n:05d}", "Phone", reason, res])
+        # surveys: linked to Comercial contacts; resolved ones have only 3 low scores, unresolved 50 of 100
+        k = 0
+        for j, c in enumerate(r for r in calls if r[4] == "Comercial"):
+            k += 1
+            low = (c[5] == "True" and j % 70 == 0 and j >= 100) or (c[5] == "False" and j % 2 == 0)
+            srvs.append(["2024-01-12 09:00:00", f"SRV-{k:05d}", c[1], c[2], "CSAT", "Email", "1" if low else "5"])
+        write_table(tmp, "call_center_interactions", CALL_COLS, calls)
+        write_table(tmp, "complaints", CMP_COLS, [])
+        write_table(tmp, "satisfaction_surveys", SRV_COLS, srvs)
+        return tmp
+
+    def test_m3_denominator_is_not_a_difference_of_published_m1_cells(self):
+        with tempfile.TemporaryDirectory() as t:
+            rows, _ = bc.build(self.make(Path(t)))
+        for r3 in (r for r in rows if r["metric"] == "M3"):
+            hidden_free = sum(r["numerator"] for r in rows if r["metric"] == "M1" and r["half"] == r3["half"]
+                              and r["period"] == r3["period"] and r["dims"]["channel"] == r3["dims"]["channel"])
+            self.assertEqual(hidden_free, r3["denominator"], f"M3 minus published M1 reveals a suppressed cell: {r3}")
+
+    def test_suppressed_m6r_or_m6u_hides_its_partner(self):
+        with tempfile.TemporaryDirectory() as t:
+            rows, _ = bc.build(self.make(Path(t)))
+        keyed = {}
+        for r in rows:
+            if r["metric"] in ("M6", "M6R", "M6U"):
+                keyed.setdefault((r["half"], r["period"], tuple(sorted(r["dims"].items()))), set()).add(r["metric"])
+        for key, present in keyed.items():
+            self.assertFalse("M6" in present and len(present & {"M6R", "M6U"}) == 1, f"M6 minus one partner reveals the other: {key} {present}")
+
+
 if __name__ == "__main__":
     unittest.main()

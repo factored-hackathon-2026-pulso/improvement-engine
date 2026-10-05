@@ -154,9 +154,23 @@ def build(root, k=10, tables=ALLOWED_TABLES):
         stats["surveys"] = {"total": n, "scored_csat": scored, "linked_scored": linked,
                             "linked_share": round(linked / scored, 4) if scored else 0.0}
 
-    rows, suppressed = [], {}
+    # Complementary suppression: a published margin must not let a reader subtract a suppressed cell.
+    #  - M3 denominator = sum of M1 numerators of the channel: hide M3 when an M1 cell of that channel/half/period
+    #    with a positive numerator is suppressed.
+    #  - M6 = M6R + M6U (+ unknown resolution): hide the partner when M6R or M6U is suppressed.
+    hide = set()
     for (metric, dims, half, period), (num, den) in acc.cells.items():
         if k_ok(num, den, k):
+            continue
+        d = dict(dims)
+        if metric == "M1" and num > 0:
+            hide.add(("M3", (("channel", d["channel"]),), half, period))
+        elif metric in ("M6R", "M6U"):
+            hide.add(("M6U" if metric == "M6R" else "M6R", dims, half, period))
+
+    rows, suppressed = [], {}
+    for (metric, dims, half, period), (num, den) in acc.cells.items():
+        if k_ok(num, den, k) and (metric, dims, half, period) not in hide:
             rows.append({"metric": metric, "dims": dict(dims), "half": half, "period": period, "numerator": num, "denominator": den})
         else:
             suppressed[metric] = suppressed.get(metric, 0) + 1
