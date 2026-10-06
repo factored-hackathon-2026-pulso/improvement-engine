@@ -95,6 +95,7 @@ fn run_live(f: Finding, target: &str, tag: &str) {
     let p = prove(&w, &scripts(), &proofs, &EvalOptions::default(), &inp);
     story(&p);
     println!("coverage: {}", p.story["coverage"]);
+    println!("base problem: {} ; attempt: {}", p.story["base"]["problem"], p.story["attempts"][0]["problem"]);
     if !p.announce {
         panic!("not announced: {} / {}", p.outcome, p.story["reason"]);
     }
