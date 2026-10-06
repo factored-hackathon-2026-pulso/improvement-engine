@@ -12,6 +12,30 @@ use steps::cells::{Config, K_FLOOR};
 pub const DEMO_MAX_EXPLORATORY: usize = 5;
 pub const STANDARD_MAX_EXPLORATORY: usize = 2;
 
+/// Which cells table the loop reads: the bank/E0 metrics (M*, E*) or the platform event families (P_*, EVT1/EVT2).
+/// PULSO_CELLS_FAMILY=platform selects the platform sensor profile (steps::cells::Config::platform).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Family {
+    Bank,
+    Platform,
+}
+
+impl Family {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Family::Bank => "bank",
+            Family::Platform => "platform",
+        }
+    }
+    pub fn from_lookup(get: &dyn Fn(&str) -> Option<String>) -> Result<Family, String> {
+        match get("PULSO_CELLS_FAMILY").unwrap_or_default().trim() {
+            "" | "bank" => Ok(Family::Bank),
+            "platform" => Ok(Family::Platform),
+            _ => Err("PULSO_CELLS_FAMILY is not bank|platform".into()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Profile {
     Standard,
@@ -45,6 +69,25 @@ impl Profile {
         };
         assert!(cfg.k_min >= K_FLOOR, "no profile may lower the privacy floor");
         cfg
+    }
+
+    /// The platform-event sensor: pooled support 200, the registered level risk, same-channel baselines. Demo lowers the support floor
+    /// to the demo one (synthetic data only, enforced by from_lookup); the privacy floor and the statistical levels never change.
+    pub fn platform_config(self) -> Config {
+        let mut cfg = Config::platform();
+        if self == Profile::Demo {
+            cfg.min_support = steps::cells::DEMO_MIN_SUPPORT;
+            cfg.support_profile = "demo";
+        }
+        assert!(cfg.k_min >= K_FLOOR, "no profile may lower the privacy floor");
+        cfg
+    }
+
+    pub fn sensor_config_for(self, family: Family, exploratory_findings: usize) -> Config {
+        match family {
+            Family::Bank => self.sensor_config(exploratory_findings),
+            Family::Platform => self.platform_config(),
+        }
     }
 
     pub fn default_max_exploratory(self) -> usize {
@@ -96,6 +139,18 @@ mod tests {
         assert_eq!((d.alpha, d.min_effect, d.min_ratio), (s.alpha, s.min_effect, s.min_ratio));
         assert_eq!(d.support_profile, "demo");
         assert_eq!(s.support_profile, "standard");
+    }
+
+    #[test]
+    fn the_platform_family_selects_the_platform_sensor_and_keeps_the_floors() {
+        assert_eq!(Family::from_lookup(&lk(&[])), Ok(Family::Bank));
+        assert_eq!(Family::from_lookup(&lk(&[("PULSO_CELLS_FAMILY", "platform")])), Ok(Family::Platform));
+        assert!(Family::from_lookup(&lk(&[("PULSO_CELLS_FAMILY", "plat")])).is_err());
+        let (p, d) = (Profile::Standard.sensor_config_for(Family::Platform, 2), Profile::Demo.sensor_config_for(Family::Platform, 5));
+        assert!(p.platform && d.platform && p.level_risks.len() == 1);
+        assert_eq!((p.min_support, d.min_support), (200, 100));
+        assert_eq!((p.k_min, p.alpha), (d.k_min, d.alpha));
+        assert!(!Profile::Standard.sensor_config_for(Family::Bank, 0).platform);
     }
 
     #[test]

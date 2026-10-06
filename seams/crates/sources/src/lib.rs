@@ -6,6 +6,7 @@ pub mod monitor;
 pub mod pg_dataset;
 pub mod pg_product;
 pub mod pg_store;
+pub mod payload;
 pub mod policy;
 pub mod sqlite;
 pub mod store;
@@ -181,4 +182,16 @@ pub trait SourceAdapter {
     fn read_events(&self, after: &Watermark, limit: usize) -> Result<Batch, SourceError>;
     /// Allow-listed columns of up to `limit` rows of an allow-listed dimension table (never `event_log`).
     fn read_dimension(&self, table: &str, limit: usize) -> Result<Vec<Row>, SourceError>;
+    /// Raw `event_log.payload` text of the given sequences (allow-listed column, read only for the platform-cells feed). Default: none.
+    fn read_event_payloads(&self, _sequences: &[i64]) -> Result<std::collections::BTreeMap<i64, String>, SourceError> {
+        Ok(std::collections::BTreeMap::new())
+    }
+    /// Allow-listed columns of the rows of a dimension table whose `id` is in `ids`. Default: the capped `read_dimension` filtered
+    /// (loses rows beyond the cap); the adapters override it with a keyed read.
+    fn read_dimension_by_ids(&self, table: &str, ids: &[String]) -> Result<Vec<Row>, SourceError> {
+        let want: std::collections::BTreeSet<&str> = ids.iter().map(String::as_str).collect();
+        let mut rows = self.read_dimension(table, crate::policy::HARD_CAP)?;
+        rows.retain(|r| r.get("id").and_then(Option::as_deref).is_some_and(|i| want.contains(i)));
+        Ok(rows)
+    }
 }

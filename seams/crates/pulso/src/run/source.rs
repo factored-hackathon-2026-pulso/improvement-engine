@@ -51,7 +51,16 @@ pub fn source_config(c: &RunConfig, runner: &Path) -> Result<Config, String> {
     let mode = if c.data_mode == RunMode::Dataset { "dataset" } else { "platform" };
     let adapter = if c.adapter.starts_with("dataset-") { "dataset-pg" } else { c.adapter.as_str() };
     let (work, runner, batch) = (work.display().to_string(), runner.display().to_string(), c.read_batch.to_string());
-    Config::from_pairs(&[("data_mode", mode), ("adapter", adapter), ("source_id", &c.source_id), ("work_dir", &work), ("runner_exe", &runner), ("batch_cap", &batch)]).map_err(|e| e.to_string())
+    let mut pairs: Vec<(&str, &str)> = vec![("data_mode", mode), ("adapter", adapter), ("source_id", &c.source_id), ("work_dir", &work), ("runner_exe", &runner), ("batch_cap", &batch)];
+    // EVT2: platform cells feed (payload keys, case_type, opened_at, salted customer key). The salt is a secret: environment only.
+    let salt = std::env::var("PULSO_CUSTOMER_KEY_SALT").ok().filter(|v| !v.is_empty());
+    if std::env::var("PULSO_PLATFORM_CELLS").is_ok_and(|v| v == "on") {
+        pairs.push(("platform_cells", "on"));
+        if let Some(s) = salt.as_deref() {
+            pairs.push(("customer_key_salt", s));
+        }
+    }
+    Config::from_pairs(&pairs).map_err(|e| e.to_string())
 }
 
 /// The tick `pulso run` registers for this configuration: `StubTick` for the `stub` adapter, `SourceTick` otherwise.
@@ -81,7 +90,10 @@ impl SourceTick {
     fn build_adapter(&self) -> Result<Box<dyn SourceAdapter>, SourceError> {
         let id = self.cfg.source_id.clone();
         Ok(match self.cfg.adapter {
-            AdapterKind::ProductSqlite => Box::new(SqliteProduct::open(self.sqlite.as_deref().ok_or_else(|| SourceError::BadConfig("PULSO_SOURCE_SQLITE is not set".into()))?, id)?),
+            AdapterKind::ProductSqlite => {
+                let path = self.sqlite.as_deref().ok_or_else(|| SourceError::BadConfig("PULSO_SOURCE_SQLITE is not set".into()))?;
+                if self.cfg.platform_cells { Box::new(SqliteProduct::open_platform(path, id)?) } else { Box::new(SqliteProduct::open(path, id)?) }
+            }
             AdapterKind::ProductPostgres => Box::new(PostgresProduct::connect(&dsn("PULSO_PG_PRODUCT_DSN")?, self.schema.as_deref().unwrap_or("product"), id)?),
             AdapterKind::DatasetPg => Box::new(DatasetPg::connect(&dsn("PULSO_PG_DATASET_DSN")?, self.schema.as_deref().unwrap_or("raw"), id)?),
         })

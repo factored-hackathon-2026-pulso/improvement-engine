@@ -219,14 +219,24 @@ fn write_package(work: &Path, snap: &str, config: &Config, adapter: &dyn SourceA
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).map_err(io)?;
     let mut lines = String::new();
+    let payloads = if config.platform_cells {
+        let seqs: Vec<i64> = events.iter().filter(|e| crate::payload::keys_of(&e.event_type).is_some()).filter_map(|e| e.sequence).collect();
+        adapter.read_event_payloads(&seqs)?
+    } else {
+        Default::default()
+    };
     for (i, e) in events.iter().enumerate() {
-        lines.push_str(&json!({"ordinal": i, "sequence": e.sequence, "event_id": e.event_id, "event_type": e.event_type, "entity": e.entity, "entity_id": e.entity_id, "case_id": e.case_id, "actor_role": e.actor_role, "actor_id": e.actor_id, "event_time": e.event_time}).to_string());
+        let mut line = json!({"ordinal": i, "sequence": e.sequence, "event_id": e.event_id, "event_type": e.event_type, "entity": e.entity, "entity_id": e.entity_id, "case_id": e.case_id, "actor_role": e.actor_role, "actor_id": e.actor_id, "event_time": e.event_time});
+        if let Some(p) = e.sequence.and_then(|q| payloads.get(&q)).and_then(|raw| crate::payload::clean(&e.event_type, Some(raw))) {
+            line["payload"] = p;
+        }
+        lines.push_str(&line.to_string());
         lines.push('\n');
     }
     std::fs::write(tmp.join("events.ndjson"), lines).map_err(io)?;
     let dims = config.sensor == SensorKind::RustEvents;
     if dims {
-        std::fs::write(tmp.join("cases.ndjson"), case_dimension(adapter, events)?).map_err(io)?;
+        std::fs::write(tmp.join("cases.ndjson"), case_dimension(config, adapter, events)?).map_err(io)?;
     }
     let mut manifest = json!({"contract": "platform-events-package/0", "contract_version_source": "platform_live 1.2.0", "source_id": config.source_id.as_str(), "data_mode": config.data_mode.as_str(), "adapter": adapter.adapter(), "data_class": adapter.data_class(), "watermark_from": from.encode(), "watermark_to": to.encode(), "events": events.len()});
     if dims {
@@ -239,18 +249,34 @@ fn write_package(work: &Path, snap: &str, config: &Config, adapter: &dyn SourceA
 
 /// Allow-listed `cases` columns (`channel`, `language`, `priority`, `previous_case_id`) for the cases of this batch; opaque case
 /// ids only, never `customer_id`, never text. The sensor needs the cell of each case; events alone do not carry it.
-fn case_dimension(adapter: &dyn SourceAdapter, events: &[&PlatformEvent]) -> Result<String, SourceError> {
+fn case_dimension(config: &Config, adapter: &dyn SourceAdapter, events: &[&PlatformEvent]) -> Result<String, SourceError> {
     let wanted: std::collections::BTreeSet<&str> = events.iter().filter_map(|e| e.case_id.as_deref()).collect();
-    let mut rows = adapter.read_dimension("cases", crate::policy::HARD_CAP)?;
+    let ids: Vec<String> = wanted.iter().map(|s| (*s).to_owned()).collect();
+    // a keyed read: a history with more cases than one capped dimension read keeps the cell of every case of the batch
+    let mut rows = adapter.read_dimension_by_ids("cases", &ids)?;
     rows.retain(|r| r.get("id").and_then(Option::as_deref).is_some_and(|id| wanted.contains(id)));
     rows.sort_by(|a, b| a.get("id").cmp(&b.get("id")));
     let col = |r: &crate::Row, k: &str| r.get(k).cloned().flatten();
     let mut out = String::new();
     for r in &rows {
-        out.push_str(&json!({"case_id": col(r, "id"), "channel": col(r, "channel"), "language": col(r, "language"), "priority": col(r, "priority"), "previous_case_id": col(r, "previous_case_id")}).to_string());
+        let mut line = json!({"case_id": col(r, "id"), "channel": col(r, "channel"), "language": col(r, "language"), "priority": col(r, "priority"), "previous_case_id": col(r, "previous_case_id")});
+        if config.platform_cells {
+            line["case_type"] = json!(col(r, "case_type"));
+            line["opened_at"] = json!(col(r, "opened_at"));
+            line["customer_key"] = json!(col(r, "customer_id").map(|c| customer_key(config, &c)));
+        }
+        out.push_str(&line.to_string());
         out.push('\n');
     }
     Ok(out)
+}
+
+/// Salted hash of a customer id (16 hex): enough to keep the cases of one customer in one split half, useless without the salt to
+/// find a customer by enumerating ids. The id itself never leaves this function.
+fn customer_key(config: &Config, customer_id: &str) -> String {
+    let salt = config.customer_key_salt.as_ref().map_or("", |s| s.expose());
+    let digest = Sha256::digest(format!("{salt}|{}|{customer_id}", config.source_id.as_str()).as_bytes());
+    digest.iter().take(8).map(|b| format!("{b:02x}")).collect()
 }
 
 /// R1G: the real Rust sensor over the cumulative event packages of this source (same `engine-steps/0` sensors input and
