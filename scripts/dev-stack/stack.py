@@ -122,8 +122,17 @@ def serve_ports() -> list[str]:
     calibration with the thresholds the registry-e2e agents reference), as scripts/e2e/serve.ps1 does."""
     if os.environ.get("PULSO_SERVE_E2E") == "1":
         return ["--tools", "testing.e2e_demo:tools", "--classifier", "testing.e2e_demo:classifier_provider",
-                "--field-classifier", "testing.e2e_demo:field_classifier", "--calibration", "testing.e2e_demo:calibration"]
+                "--field-classifier", "testing.e2e_demo:field_classifier",
+                "--calibration", os.environ.get("PULSO_SERVE_CALIBRATION") or "testing.e2e_demo:calibration"]
     return ["--field-classifier", os.environ.get("PULSO_FIELD_CLASSIFIER", "agent_core.composition.classification:field_classifier")]
+
+
+def serve_pythonpath() -> dict[str, str]:
+    """EVT3: a PULSO_SERVE_CALIBRATION module that lives in this directory (serve_ports_platform) must be importable by the Core."""
+    if not os.environ.get("PULSO_SERVE_CALIBRATION"):
+        return {}
+    cur = os.environ.get("PYTHONPATH")
+    return {"PYTHONPATH": str(HERE) + (os.pathsep + cur if cur else "")}
 
 
 def up(args) -> None:
@@ -219,7 +228,7 @@ def up(args) -> None:
          "--lang-thresholds", str(ac / "scripts" / "e2e" / "lang-thresholds.json"), "--agents", os.environ.get("PULSO_SERVE_AGENTS", "pulso-builder"),
          "--field-classifier", "agent_core.composition.classification:field_classifier",
          *serve_ports()],
-        cwd=ac, env={**os.environ, **env}, stdout=log, stderr=log, creationflags=flags)
+        cwd=ac, env={**os.environ, **env, **serve_pythonpath()}, stdout=log, stderr=log, creationflags=flags)
     (STATE / "serve.pid").write_text(str(proc.pid))
     wait(lambda: http_ok(f"http://127.0.0.1:{CORE_PORT}/healthz"), "agent-core serve", tries=60)
     print(f"agent-core up on {CORE_PORT} (pid {proc.pid}); try: python scripts/dev-stack/invoke_builder.py")

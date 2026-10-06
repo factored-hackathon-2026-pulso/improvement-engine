@@ -25,7 +25,7 @@ function Read-JsonFile {
 # Validates the command line BEFORE anything is started and returns the plan. Every refusal names the parameter.
 function Get-DemoLoopPlan {
     param([switch]$Up, [switch]$Cells, [switch]$Loop, [switch]$Show, [switch]$Down, [switch]$Probes, [switch]$Announce, [switch]$All,
-        [switch]$Synthetic, [int]$MaxFindings = 4, [int]$TimeoutMin = 45, [int]$ProbeReps = 3, [string]$CellsFile = '')
+        [switch]$Synthetic, [switch]$Platform, [int]$MaxFindings = 4, [int]$TimeoutMin = 45, [int]$ProbeReps = 3, [string]$CellsFile = '')
     $want = @{ Up = [bool]$Up; Cells = [bool]$Cells; Loop = [bool]$Loop; Probes = [bool]$Probes; Show = [bool]$Show; Announce = [bool]$Announce; Down = [bool]$Down }
     if ($All) { foreach ($k in 'Up', 'Cells', 'Loop', 'Show') { $want[$k] = $true } }
     $steps = @($script:StepOrder | Where-Object { $want[$_] })
@@ -39,9 +39,12 @@ function Get-DemoLoopPlan {
     if ($ProbeReps -lt 1 -or $ProbeReps -gt 5) { throw "-ProbeReps $ProbeReps is outside 1..5" }
     if ($Synthetic -and -not ($want.Cells -or $want.Loop)) { throw '-Synthetic only applies together with -Cells or -Loop' }
     if ($CellsFile -and $Synthetic) { throw '-CellsFile and -Synthetic are two different cell sources: pick one' }
+    # EVT3: the platform event cells (advisor behaviour, SYNTHETIC history) are a third source
+    if ($Platform -and ($Synthetic -or $CellsFile)) { throw '-Platform, -Synthetic and -CellsFile are different cell sources: pick one' }
+    if ($Platform -and -not ($want.Up -or $want.Cells -or $want.Loop -or $want.Down)) { throw '-Platform only applies together with -Up, -Cells, -Loop or -Down' }
     [pscustomobject]@{
-        Steps = $steps; Synthetic = [bool]$Synthetic; MaxFindings = $MaxFindings; TimeoutMin = $TimeoutMin; ProbeReps = $ProbeReps; CellsFile = $CellsFile
-        Mode = $(if ($Synthetic) { 'synthetic-planted' } elseif ($CellsFile) { 'bank-file' } else { 'bank' })
+        Steps = $steps; Synthetic = [bool]$Synthetic; Platform = [bool]$Platform; MaxFindings = $MaxFindings; TimeoutMin = $TimeoutMin; ProbeReps = $ProbeReps; CellsFile = $CellsFile
+        Mode = $(if ($Platform) { 'platform-synthetic' } elseif ($Synthetic) { 'synthetic-planted' } elseif ($CellsFile) { 'bank-file' } else { 'bank' })
     }
 }
 
@@ -58,19 +61,24 @@ function Get-DemoStackSettings {
 
 # Non-secret environment of dev-stack/stack.py (credentials are added by the scrubbed helper, not here).
 function Get-StackEnvironment {
-    param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)][string]$AgentCoreDir, [Parameter(Mandatory)][string]$GatewayDir)
-    [ordered]@{
+    param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)][string]$AgentCoreDir, [Parameter(Mandatory)][string]$GatewayDir,
+        [string]$RegistryDir = '', [string]$ServeAgents = 'disputas,consultas', [string]$ServeCalibration = '')
+    if (-not $RegistryDir) { $RegistryDir = Join-Path $AgentCoreDir 'tests/fixtures/registry-e2e' }
+    $h = [ordered]@{
         PULSO_STACK_PREFIX = $Settings.Prefix; PULSO_PG_PORT = "$($Settings.PgPort)"; PULSO_GW_PORT = "$($Settings.GwPort)"; PULSO_CORE_PORT = "$($Settings.CorePort)"
         PULSO_AGENT_CORE_DIR = $AgentCoreDir; PULSO_LLM_GATEWAY_DIR = $GatewayDir
-        PULSO_REGISTRY_DIR = (Join-Path $AgentCoreDir 'tests/fixtures/registry-e2e'); PULSO_SERVE_E2E = '1'; PULSO_SERVE_AGENTS = 'disputas,consultas'
+        PULSO_REGISTRY_DIR = $RegistryDir; PULSO_SERVE_E2E = '1'; PULSO_SERVE_AGENTS = $ServeAgents
     }
+    # EVT3: the thresholds of the advisor suggester's decision model (stack.py serve_ports / dev-stack/serve_ports_platform.py)
+    if ($ServeCalibration) { $h['PULSO_SERVE_CALIBRATION'] = $ServeCalibration }
+    $h
 }
 
 # Environment of `pulso run` for the value loop. Secrets (gateway key, registry token, admin token, platform token) arrive as parameters
 # and only ever land in the returned hashtable, which is handed to the child process and nowhere else.
 function Get-EngineEnvironment {
     param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)][string]$CellsPath, [Parameter(Mandatory)][string]$WorkDir, [Parameter(Mandatory)][string]$StoreDir,
-        [Parameter(Mandatory)][ValidateSet('bank', 'synthetic')][string]$Source, [int]$MaxFindings = 4,
+        [Parameter(Mandatory)][ValidateSet('bank', 'synthetic')][string]$Source, [ValidateSet('bank', 'platform')][string]$Family = 'bank', [int]$MaxFindings = 4,
         [string]$GatewayKey = '', [string]$RegistryToken = '', [string]$AdminToken = '', [string]$PlatformUrl = '', [string]$PlatformToken = '', [string]$PythonCmd = 'python', [string]$BuilderModel = '')
     $e = [ordered]@{
         PULSO_STORAGE = 'memory'; PULSO_DATA_MODE = 'dataset'; PULSO_SOURCE_ADAPTER = 'stub'; PULSO_SOURCE_ID = 'dataset:demo-loop'
@@ -82,6 +90,10 @@ function Get-EngineEnvironment {
         PULSO_LLM_GATEWAY = 'enabled'; PULSO_LLM_GATEWAY_ADDR = "127.0.0.1:$($Settings.GwPort)"
         PULSO_LLM_GATEWAY_MODEL = 'xiaomi/mimo-v2.6-flash'; PULSO_LLM_GATEWAY_BUILDER_ESCALATION_MODEL = 'xiaomi/mimo-v2.6-pro'
         PULSO_PROBE_GATEWAY = "http://127.0.0.1:$($Settings.GwPort)"
+    }
+    if ($Family -eq 'platform') {
+        if ($Source -ne 'synthetic') { throw 'the platform family runs on synthetic cells here (PULSO_CELLS_FAMILY=platform needs PULSO_CELLS_SOURCE=synthetic)' }
+        $e['PULSO_CELLS_FAMILY'] = 'platform'
     }
     if ($Source -eq 'bank') { $e['PULSO_ALLOW_DERIVED_AGGREGATES'] = '1' }
     if ($BuilderModel) { $e['PULSO_LLM_GATEWAY_BUILDER_MODEL'] = $BuilderModel }

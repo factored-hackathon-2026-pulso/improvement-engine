@@ -690,7 +690,7 @@ mod w11 {
         assert_eq!(tried, vec![("template:t/estado_pqr".to_string(), "not_announced:not_fixed".to_string()), ("prompt:p/resumen_radicado".to_string(), "announced".to_string())]);
         assert_eq!(*by.built.lock().unwrap(), vec!["template:t/estado_pqr", "prompt:p/resumen_radicado"]);
         let cands = rec["candidates"].as_array().unwrap();
-        assert_eq!(cands.len(), 5, "Phone: the advisor copilot is a candidate too");
+        assert_eq!(cands.len(), 7, "Phone: the advisor copilot is a candidate too, and since FLOW1 (127) the two flow edits of consulta-pqr");
         assert_eq!(cands.iter().filter(|c| c["tried"] == true).count(), 2);
         assert!(cands.iter().all(|c| c["justification"].as_str().is_some_and(|j| !j.is_empty())));
         assert_eq!(cands[2]["not_tried_because"], "over_the_candidate_cap");

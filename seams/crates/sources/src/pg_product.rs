@@ -27,6 +27,26 @@ pub(crate) fn connect_read_only(dsn: &str) -> Result<Client, SourceError> {
     Ok(c)
 }
 
+/// Sequences per payload query (a keyed read, never a min..max range over events the feed does not need).
+pub(crate) const PAYLOAD_CHUNK: usize = 5000;
+
+/// Query of the platform-cells feed for the payload of given sequences: only `sequence` and `payload`, keyed by `ANY($1)`.
+pub(crate) fn payload_sql(schema: &str) -> String {
+    format!("SELECT sequence, payload::text FROM {schema}.event_log WHERE sequence = ANY($1)")
+}
+
+/// Sorted, de-duplicated sequences in chunks of `PAYLOAD_CHUNK`.
+pub(crate) fn payload_chunks(sequences: &[i64]) -> Vec<Vec<i64>> {
+    let set: std::collections::BTreeSet<i64> = sequences.iter().copied().collect();
+    let all: Vec<i64> = set.into_iter().collect();
+    all.chunks(PAYLOAD_CHUNK).map(<[i64]>::to_vec).collect()
+}
+
+/// Keyed read of a dimension table by id: allow-listed columns only, ids as one `ANY($1)` parameter (never interpolated).
+pub(crate) fn dimension_by_ids_sql(schema: &str, table: &str, cols: &[&str]) -> String {
+    format!("SELECT {} FROM {schema}.{table} WHERE id::text = ANY($1)", cols.iter().map(|c| format!("{c}::text")).collect::<Vec<_>>().join(", "))
+}
+
 pub struct PostgresProduct {
     id: SourceId,
     schema: String,
@@ -143,14 +163,19 @@ impl SourceAdapter for PostgresProduct {
     }
 
     fn read_event_payloads(&self, sequences: &[i64]) -> Result<std::collections::BTreeMap<i64, String>, SourceError> {
-        let (Some(lo), Some(hi)) = (sequences.iter().min(), sequences.iter().max()) else { return Ok(Default::default()) };
+        if sequences.is_empty() {
+            return Ok(Default::default());
+        }
         policy::assert_columns_allowed("event_log", &["sequence", "payload"])?;
-        let want: std::collections::BTreeSet<i64> = sequences.iter().copied().collect();
-        let sql = format!("SELECT sequence, payload::text FROM {}.event_log WHERE sequence >= $1 AND sequence <= $2", self.schema);
+        let sql = payload_sql(&self.schema);
         let mut c = self.client.lock().unwrap_or_else(|p| p.into_inner());
-        // a role without a grant on `payload` (the default read-only role) yields no payloads: the feed degrades, it never fails
-        let Ok(rows) = c.query(&sql, &[lo, hi]) else { return Ok(Default::default()) };
-        Ok(rows.iter().filter_map(|r| Some((r.get::<_, i64>(0), r.get::<_, Option<String>>(1)?))).filter(|(q, _)| want.contains(q)).collect())
+        let mut out = std::collections::BTreeMap::new();
+        for chunk in payload_chunks(sequences) {
+            // a role without a grant on `payload` (the default read-only role) yields no payloads: the feed degrades, it never fails
+            let Ok(rows) = c.query(&sql, &[&chunk]) else { return Ok(Default::default()) };
+            out.extend(rows.iter().filter_map(|r| Some((r.get::<_, i64>(0), r.get::<_, Option<String>>(1)?))));
+        }
+        Ok(out)
     }
 
     fn read_dimension_by_ids(&self, table: &str, ids: &[String]) -> Result<Vec<Row>, SourceError> {
@@ -164,7 +189,7 @@ impl SourceAdapter for PostgresProduct {
             return Ok(vec![]);
         }
         policy::assert_columns_allowed(&t, &cols)?;
-        let sql = format!("SELECT {} FROM {}.{t} WHERE id::text = ANY($1)", cols.iter().map(|c| format!("{c}::text")).collect::<Vec<_>>().join(", "), self.schema);
+        let sql = dimension_by_ids_sql(&self.schema, &t, &cols);
         let mut c = self.client.lock().unwrap_or_else(|p| p.into_inner());
         let mut out = vec![];
         for chunk in ids.chunks(1000) {
@@ -173,5 +198,45 @@ impl SourceAdapter for PostgresProduct {
             out.extend(rows.iter().map(|r| cols.iter().enumerate().map(|(i, c)| ((*c).to_owned(), r.get::<_, Option<String>>(i))).collect::<Row>()));
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_payload_query_reads_only_sequence_and_payload_by_a_keyed_any() {
+        let sql = payload_sql("product");
+        assert_eq!(sql, "SELECT sequence, payload::text FROM product.event_log WHERE sequence = ANY($1)");
+        for denied in ["actor_id", "tenant_id", "customer_id", "event_time", "*", "min(", "BETWEEN", ">="] {
+            assert!(!sql.contains(denied), "{denied} in {sql}");
+        }
+    }
+
+    #[test]
+    fn payload_sequences_are_sorted_deduplicated_and_chunked_so_sparse_ranges_cost_nothing() {
+        assert!(payload_chunks(&[]).is_empty());
+        assert_eq!(payload_chunks(&[9, 3, 3, 1_000_000_000]), vec![vec![3, 9, 1_000_000_000]]);
+        let many: Vec<i64> = (0..(PAYLOAD_CHUNK as i64 * 2 + 1)).rev().collect();
+        let chunks = payload_chunks(&many);
+        assert_eq!(chunks.iter().map(Vec::len).collect::<Vec<_>>(), vec![PAYLOAD_CHUNK, PAYLOAD_CHUNK, 1]);
+        assert_eq!(chunks[0][0], 0);
+        assert_eq!(chunks.concat().len(), many.len());
+    }
+
+    #[test]
+    fn the_keyed_dimension_query_passes_ids_as_a_parameter_and_selects_the_given_columns_only() {
+        let sql = dimension_by_ids_sql("product", "cases", &["id", "case_type", "opened_at"]);
+        assert_eq!(sql, "SELECT id::text, case_type::text, opened_at::text FROM product.cases WHERE id::text = ANY($1)");
+        assert!(!sql.contains("LIMIT"), "a keyed read has no cap that could drop a case: {sql}");
+    }
+
+    #[test]
+    fn schema_and_identifiers_stay_closed() {
+        assert!(ident("product").is_ok());
+        for bad in ["", "Product", "a-b", "1a", "x; drop table y", "a b"] {
+            assert!(ident(bad).is_err(), "{bad}");
+        }
     }
 }
