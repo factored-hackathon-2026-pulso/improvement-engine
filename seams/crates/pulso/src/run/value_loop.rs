@@ -14,7 +14,7 @@
 //! texts came from the live registry; the models are whatever the ports are (the live ports are the real gateway; there is no
 //! scripted fallback in this module); derived aggregates reach a hosted model only with the explicit opt-in. Records hold reason
 //! codes, ids and numbers only: never model free text, never a token.
-use crate::run::profile::Profile;
+use crate::run::profile::{Family, Profile};
 use crate::run::registry_auth::RegistryAuth;
 use core_client::authorizer::Jws;
 use reasoning::catalog::Catalog;
@@ -64,6 +64,30 @@ pub struct ProofConfig {
     pub proofs: PathBuf,
 }
 
+/// Builds the platform cells (scripts/aggregate/platform_event_cells.py --package-root) from the packages the monitor tick wrote.
+pub struct CellsRefresh {
+    pub python: Vec<String>,
+    pub script: PathBuf,
+    pub packages: PathBuf,
+    pub source_id: String,
+}
+
+impl CellsRefresh {
+    pub fn run(&self, out: &std::path::Path) -> Result<(), String> {
+        let (exe, rest) = self.python.split_first().ok_or("PULSO_REGRESSION_PYTHON is blank")?;
+        let r = std::process::Command::new(exe)
+            .args(rest)
+            .arg(&self.script)
+            .arg("--package-root")
+            .arg(&self.packages)
+            .args(["--source-id", &self.source_id, "--out"])
+            .arg(out)
+            .output()
+            .map_err(|e| format!("cells refresh: {e}"))?;
+        if r.status.success() { Ok(()) } else { Err(format!("cells refresh failed: {}", String::from_utf8_lossy(&r.stderr).chars().take(300).collect::<String>())) }
+    }
+}
+
 pub struct ValueLoop {
     pub cells: PathBuf,
     pub source: Source,
@@ -87,6 +111,11 @@ pub struct ValueLoop {
     pub max_exploratory: usize,
     /// `PULSO_PROFILE` (R4): `standard` or `demo` (lowered SUPPORT floors, synthetic data only). Travels in the run summary.
     pub profile: Profile,
+    /// EVT2 PULSO_CELLS_FAMILY: bank (default) or platform (the P_* event families through Config::platform).
+    pub family: Family,
+    /// EVT2: rebuild the cells from the monitor packages before each run (PULSO_PLATFORM_PACKAGES), so a tick -> cells -> sensor -> roles
+    /// run needs no external sync step.
+    pub refresh: Option<CellsRefresh>,
     pub proof: Option<ProofConfig>,
     /// ANN1: tells the support platform about an `announced` proposal AFTER agent-core accepted it (best effort, never fails the delivery).
     /// `PULSO_ANNOUNCE_TO_PLATFORM` / `PULSO_PLATFORM_URL` / `PULSO_PLATFORM_SERVICE_TOKEN`; default OFF.
@@ -115,6 +144,22 @@ impl ValueLoop {
         let source = Source::parse(&source).ok_or("PULSO_CELLS_SOURCE is not synthetic|bank|e0")?;
         let addr = get("PULSO_REGISTRY_ADDR").filter(|v| !v.is_empty()).ok_or("PULSO_REGISTRY_ADDR (host:port of the agent-core registry) is required with PULSO_CELLS_NDJSON")?;
         let profile = Profile::from_lookup(get, source)?;
+        let family = Family::from_lookup(get)?;
+        if family == Family::Platform && source == Source::BankTreated {
+            return Err("PULSO_CELLS_FAMILY=platform needs PULSO_CELLS_SOURCE=synthetic|platform".into());
+        }
+        let refresh = match get("PULSO_PLATFORM_PACKAGES").filter(|v| !v.is_empty()) {
+            None => None,
+            Some(dir) => Some(CellsRefresh {
+                python: get("PULSO_REGRESSION_PYTHON").unwrap_or_else(|| "python".into()).split_whitespace().map(str::to_string).collect(),
+                script: get("PULSO_PLATFORM_CELLS_SCRIPT").map(PathBuf::from).unwrap_or_else(|| default_script_dir().join("../aggregate/platform_event_cells.py")),
+                packages: PathBuf::from(dir),
+                source_id: get("PULSO_SOURCE_ID").filter(|v| !v.is_empty()).ok_or("PULSO_PLATFORM_PACKAGES needs PULSO_SOURCE_ID")?,
+            }),
+        };
+        if refresh.is_some() && family != Family::Platform {
+            return Err("PULSO_PLATFORM_PACKAGES needs PULSO_CELLS_FAMILY=platform".into());
+        }
         let auth = RegistryAuth::from_lookup(get)?;
         let via = match get("PULSO_REGISTRY_VIA").as_deref().unwrap_or("api") {
             "api" => Via::RegistryApi,
@@ -194,6 +239,8 @@ impl ValueLoop {
             max_findings: get("PULSO_LOOP_MAX_FINDINGS").and_then(|v| v.parse().ok()),
             max_exploratory: get("PULSO_LOOP_MAX_EXPLORATORY").and_then(|v| v.parse().ok()).unwrap_or(profile.default_max_exploratory()),
             profile,
+            family,
+            refresh,
             proof,
             announcer: registry_writer::announce::Announcer::from_lookup(get)?,
             caps: Caps { new_agent_admin: truthy(get("PULSO_NEW_AGENT_ADMIN")) },
@@ -215,8 +262,11 @@ impl ValueLoop {
 
     /// As `run`; `run_id` is the debug-api run id of this job (`value-loop-<job>`): the session and the trace key of every story.
     pub fn run_as(&self, persist: &dyn Persist, run_id: &str) -> Result<Value, String> {
+        if let Some(r) = &self.refresh {
+            r.run(&self.cells)?;
+        }
         let ndjson = std::fs::read_to_string(&self.cells).map_err(|e| format!("cells package: {e}"))?;
-        let sensor = steps::cells::run_with(&ndjson, &self.profile.sensor_config(self.max_exploratory));
+        let sensor = steps::cells::run_with(&ndjson, &self.profile.sensor_config_for(self.family, self.max_exploratory));
         let report: Value = serde_json::from_str(&sensor.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         let (mut findings, skipped) = Finding::from_report_with(&report, self.source, self.max_exploratory)?;
         let total_corroborated = findings.iter().filter(|f| !f.is_exploratory()).count();
@@ -318,7 +368,7 @@ impl ValueLoop {
         Ok(json!({
             "contract": "value-loop/b3-0", "sensor": "claude-standin (steps::cells, real code, labelled stand-in)", "data_source": self.source.as_str(),
             "baseline": {"label": refreshed.catalog.label, "live": refreshed.live.len(), "fixture": refreshed.fixture.len()},
-            "support_profile": self.profile.as_str(), "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
+            "support_profile": self.profile.as_str(), "cells_family": self.family.as_str(), "opt_in_derived_aggregates": self.allow_derived, "models": self.model_label, "quality_claims": "forbidden",
             "summary": {"corroborated": total_corroborated, "reasoned": findings.len(), "skipped_not_corroborated": skipped.len(), "proposed": n("proposed"), "no_change": n("no_change"), "unlinked": n("unlinked"), "human_owned": n("human_owned"), "policy_hypothesis": n("policy_hypothesis"), "needs_owner_ack": n("needs_owner_ack"), "blocked": n("blocked"),
                         "delivered": delivered, "denied": denied, "announced": announced, "not_announced": not_announced,
                         // unlinked findings are descriptive with an explicit reason, never a failure; only `blocked` counts against the roles

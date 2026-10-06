@@ -34,6 +34,20 @@ impl SensorKind {
     }
 }
 
+/// A secret value that never prints (the customer-key salt).
+#[derive(Clone, PartialEq, Eq)]
+pub struct Secret(String);
+impl Secret {
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Secret(<redacted>)")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     pub data_mode: DataMode,
@@ -49,6 +63,10 @@ pub struct Config {
     pub sensor: SensorKind,
     pub k_anon: u32,
     pub min_cell_cases: u32,
+    /// EVT2 real feed: keep the allow-listed payload keys of the platform event types and write `case_type`, `opened_at` and a salted
+    /// customer hash into the package (`platform_cells = on`). Off: the package is the R1G one.
+    pub platform_cells: bool,
+    pub customer_key_salt: Option<Secret>,
 }
 
 impl Config {
@@ -58,7 +76,7 @@ impl Config {
         let bad = |m: String| SourceError::BadConfig(m);
         let mut get: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
         for (k, v) in pairs {
-            const KEYS: &[&str] = &["data_mode", "adapter", "source_id", "work_dir", "runner_exe", "poll_interval_secs", "batch_cap", "min_history_days", "min_history_cases", "min_support", "sensor", "k_anon", "min_cell_cases"];
+            const KEYS: &[&str] = &["data_mode", "adapter", "source_id", "work_dir", "runner_exe", "poll_interval_secs", "batch_cap", "min_history_days", "min_history_cases", "min_support", "sensor", "k_anon", "min_cell_cases", "platform_cells", "customer_key_salt"];
             if !KEYS.contains(k) {
                 return Err(bad(format!("unknown config key {k:?}")));
             }
@@ -91,7 +109,23 @@ impl Config {
             Some("stand-in") => SensorKind::StandIn,
             Some(other) => return Err(bad(format!("unknown sensor {other:?}"))),
         };
+        let platform_cells = match get.get("platform_cells").copied() {
+            None | Some("off") => false,
+            Some("on") => true,
+            Some(_) => return Err(bad("platform_cells must be on or off".into())),
+        };
+        let customer_key_salt = match get.get("customer_key_salt").copied() {
+            None => None,
+            Some(v) if !platform_cells => {
+                let _ = v;
+                return Err(bad("customer_key_salt needs platform_cells = on".into()));
+            }
+            Some("") => return Err(bad("customer_key_salt is blank".into())),
+            Some(v) => Some(Secret(v.to_owned())),
+        };
         Ok(Config {
+            platform_cells,
+            customer_key_salt,
             data_mode,
             adapter,
             source_id: SourceId::new(data_mode, req("source_id")?)?,

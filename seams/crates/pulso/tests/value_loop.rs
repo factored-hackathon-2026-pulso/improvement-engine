@@ -145,6 +145,8 @@ fn value_loop(work: &Path, wire: Arc<dyn Transport + Send + Sync>) -> ValueLoop 
         max_findings: None,
         max_exploratory: 0,
         profile: pulso::run::profile::Profile::Standard,
+        family: pulso::run::profile::Family::Bank,
+        refresh: None,
         proof: None,
         announcer: None,
         caps: Default::default(),

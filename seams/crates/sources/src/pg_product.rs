@@ -141,4 +141,37 @@ impl SourceAdapter for PostgresProduct {
         let rows = c.query(&sql, &[]).map_err(pg)?;
         Ok(rows.iter().map(|r| cols.iter().enumerate().map(|(i, c)| ((*c).to_owned(), r.get::<_, Option<String>>(i))).collect()).collect())
     }
+
+    fn read_event_payloads(&self, sequences: &[i64]) -> Result<std::collections::BTreeMap<i64, String>, SourceError> {
+        let (Some(lo), Some(hi)) = (sequences.iter().min(), sequences.iter().max()) else { return Ok(Default::default()) };
+        policy::assert_columns_allowed("event_log", &["sequence", "payload"])?;
+        let want: std::collections::BTreeSet<i64> = sequences.iter().copied().collect();
+        let sql = format!("SELECT sequence, payload::text FROM {}.event_log WHERE sequence >= $1 AND sequence <= $2", self.schema);
+        let mut c = self.client.lock().unwrap_or_else(|p| p.into_inner());
+        // a role without a grant on `payload` (the default read-only role) yields no payloads: the feed degrades, it never fails
+        let Ok(rows) = c.query(&sql, &[lo, hi]) else { return Ok(Default::default()) };
+        Ok(rows.iter().filter_map(|r| Some((r.get::<_, i64>(0), r.get::<_, Option<String>>(1)?))).filter(|(q, _)| want.contains(q)).collect())
+    }
+
+    fn read_dimension_by_ids(&self, table: &str, ids: &[String]) -> Result<Vec<Row>, SourceError> {
+        let t = policy::assert_table_allowed(table)?;
+        if t == "event_log" {
+            return Err(SourceError::AccessDenied("event_log is read through read_events".into()));
+        }
+        let visible = self.columns()?;
+        let cols: Vec<&str> = policy::allowed_columns(&t).unwrap_or(&[]).iter().copied().filter(|c| visible.iter().any(|(vt, vc)| *vt == t && vc == c)).collect();
+        if !cols.contains(&"id") {
+            return Ok(vec![]);
+        }
+        policy::assert_columns_allowed(&t, &cols)?;
+        let sql = format!("SELECT {} FROM {}.{t} WHERE id::text = ANY($1)", cols.iter().map(|c| format!("{c}::text")).collect::<Vec<_>>().join(", "), self.schema);
+        let mut c = self.client.lock().unwrap_or_else(|p| p.into_inner());
+        let mut out = vec![];
+        for chunk in ids.chunks(1000) {
+            let list: Vec<&str> = chunk.iter().map(String::as_str).collect();
+            let rows = c.query(&sql, &[&list]).map_err(pg)?;
+            out.extend(rows.iter().map(|r| cols.iter().enumerate().map(|(i, c)| ((*c).to_owned(), r.get::<_, Option<String>>(i))).collect::<Row>()));
+        }
+        Ok(out)
+    }
 }

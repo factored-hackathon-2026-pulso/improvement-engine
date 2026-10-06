@@ -26,12 +26,20 @@ fn open_ro(path: &Path) -> Result<Connection, SourceError> {
 }
 
 fn guard(ctx: AuthContext<'_>) -> Authorization {
+    guard_with(ctx, false)
+}
+
+/// `payload`: the EVT2 platform-cells feed may read `event_log.payload` (and nothing else beyond the default allow-list).
+fn guard_with(ctx: AuthContext<'_>, payload: bool) -> Authorization {
     match ctx.action {
         AuthAction::Select | AuthAction::Function { .. } | AuthAction::Recursive => Authorization::Allow,
         AuthAction::Read { table_name, column_name } => {
             let t = table_name.to_ascii_lowercase();
             if t == "sqlite_master" || t == "sqlite_schema" {
                 return Authorization::Allow; // schema names only
+            }
+            if payload && t == "event_log" && column_name.eq_ignore_ascii_case("payload") {
+                return Authorization::Allow;
             }
             let cols = if t == "event_log" { Some(EVENT_READ_COLUMNS) } else { policy::allowed_columns(&t) };
             if DENIED_TABLES.contains(&t.as_str()) || cols.is_none_or(|c| !column_name.is_empty() && !c.contains(&column_name.to_ascii_lowercase().as_str())) {
@@ -48,6 +56,13 @@ impl SqliteProduct {
     pub fn open(path: &Path, id: SourceId) -> Result<SqliteProduct, SourceError> {
         let conn = open_ro(path)?;
         conn.authorizer(Some(guard)).map_err(io)?;
+        Ok(SqliteProduct { id, path: path.to_owned(), conn })
+    }
+
+    /// As `open`, and the engine-level guard also admits `event_log.payload` (platform-cells feed only; free text is cleaned by `payload::clean`).
+    pub fn open_platform(path: &Path, id: SourceId) -> Result<SqliteProduct, SourceError> {
+        let conn = open_ro(path)?;
+        conn.authorizer(Some(|ctx: AuthContext<'_>| guard_with(ctx, true))).map_err(io)?;
         Ok(SqliteProduct { id, path: path.to_owned(), conn })
     }
 
@@ -185,5 +200,49 @@ impl SourceAdapter for SqliteProduct {
             .map_err(io)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(io)
+    }
+
+    fn read_event_payloads(&self, sequences: &[i64]) -> Result<BTreeMap<i64, String>, SourceError> {
+        let (Some(lo), Some(hi)) = (sequences.iter().min(), sequences.iter().max()) else { return Ok(BTreeMap::new()) };
+        policy::assert_columns_allowed("event_log", &["sequence", "payload"])?;
+        let want: std::collections::BTreeSet<i64> = sequences.iter().copied().collect();
+        let mut st = match self.conn.prepare("SELECT sequence, payload FROM event_log WHERE sequence >= ?1 AND sequence <= ?2") {
+            Ok(s) => s,
+            Err(_) => return Ok(BTreeMap::new()), // the plain adapter's guard refuses the payload column: no payloads, never an error
+        };
+        let rows = st.query_map(rusqlite::params![lo, hi], |r| Ok((r.get::<_, i64>(0)?, text(r.get_ref(1)?)))).map_err(io)?;
+        let mut out = BTreeMap::new();
+        for r in rows {
+            let (seq, p) = r.map_err(io)?;
+            if let (true, Some(p)) = (want.contains(&seq), p) {
+                out.insert(seq, p);
+            }
+        }
+        Ok(out)
+    }
+
+    fn read_dimension_by_ids(&self, table: &str, ids: &[String]) -> Result<Vec<Row>, SourceError> {
+        let t = policy::assert_table_allowed(table)?;
+        if t == "event_log" {
+            return Err(SourceError::AccessDenied("event_log is read through read_events".into()));
+        }
+        let present = self.introspect()?.remove(&t).unwrap_or_default();
+        let cols: Vec<&str> = policy::allowed_columns(&t).unwrap_or(&[]).iter().copied().filter(|c| present.iter().any(|p| p == c)).collect();
+        if cols.is_empty() || !cols.contains(&"id") {
+            return Ok(vec![]);
+        }
+        policy::assert_columns_allowed(&t, &cols)?;
+        let mut out = vec![];
+        for chunk in ids.chunks(500) {
+            let marks = vec!["?"; chunk.len()].join(",");
+            let mut st = self.conn.prepare(&format!("SELECT {} FROM {t} WHERE id IN ({marks})", cols.join(", "))).map_err(io)?;
+            let rows = st
+                .query_map(rusqlite::params_from_iter(chunk.iter()), |r| Ok(cols.iter().enumerate().map(|(i, c)| ((*c).to_owned(), text(r.get_ref(i).unwrap_or(ValueRef::Null)))).collect::<Row>()))
+                .map_err(io)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(io)?;
+            out.extend(rows);
+        }
+        Ok(out)
     }
 }
