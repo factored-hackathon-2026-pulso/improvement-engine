@@ -47,6 +47,8 @@ COPY scripts/regression/build_suite.py scripts/regression/judge_story.py scripts
 COPY agent-core-assets/eval-suites/pulso-min /opt/pulso/agent-core-assets/eval-suites/pulso-min
 COPY agent-core-assets/eval-suites/pulso-w13 /opt/pulso/agent-core-assets/eval-suites/pulso-w13
 COPY --from=console /app/dist /opt/pulso/console
+# The cells aggregator the AWS loader runs after an upload (stdlib only; needs python3 above): one file, not tests or the other aggregators.
+COPY scripts/aggregate/bank_cells.py /opt/pulso/aggregate/bank_cells.py
 USER 10001:10001
 # Non-secret defaults only. A non-loopback bind makes `pulso run` demand PULSO_DEBUG_TOKEN and PULSO_ADMIN_TOKEN (>= 24 chars,
 # different) at run time; without them the container refuses to start (exit 2) rather than serve unauthenticated.

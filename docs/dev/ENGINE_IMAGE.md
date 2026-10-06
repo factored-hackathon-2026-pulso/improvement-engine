@@ -58,3 +58,7 @@ Image build: `exercised` on Podman machine `pulso-dev` (4 GiB), `--format docker
   (monitor + worker tasks, stub adapter) and `pulso healthcheck` exits 0. Not exercised: Postgres-backed mode.
 - On the pulso-dev rootless runtime, `podman run` needs `--pids-limit=0` (cgroup `pids` controller unavailable);
   `podman build` does not take that flag.
+
+## Cells aggregator in the image (CELLS-AUTO)
+
+The runtime image also carries `scripts/aggregate/bank_cells.py` at `/opt/pulso/aggregate/bank_cells.py` (one stdlib file; needs the `python3` of the loop image, PR 130). The AWS loader (infra `deploy/hackathon/engine/loader/run-bank-cells.sh`, `docs/auto-loader.md`) runs it right after the upload, with `--entrypoint python3`, `--network none`, no credentials, a read-only root and a memory cap: `python3 /opt/pulso/aggregate/bank_cells.py --data-root /in --out /out/cells.ndjson --k 10`. `/in` is the loader's copy of the six tables and two reference files under `landing/bank/`; the output is gated (`check_cells_k.py`) and reaches the engine through the inputs mirror (`PULSO_LOOP_INPUTS_DIR`, `cells.ndjson`). Contract test: `scripts/aggregate/tests/test_bank_cells_loader_contract.py`. Not run on real data here.
