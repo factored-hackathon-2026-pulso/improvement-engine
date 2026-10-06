@@ -36,11 +36,16 @@ RUN cargo build --release --locked --manifest-path seams/Cargo.toml -p pulso --b
 # --- stage 3: minimal runtime, non-root ---
 FROM ${RUNTIME_IMAGE}
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates python3 python3-yaml \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin pulso \
     && install -d -o 10001 -g 10001 /var/lib/pulso /var/lib/pulso/work /var/lib/pulso/store
 COPY --from=build /out/pulso /out/pulso-synth-runner /out/steps_cli /usr/local/bin/
+# The regression proof of `pulso loop` (stdlib + PyYAML only): the three scripts it runs, not fixtures, results or tests.
+# build_suite.py resolves agent-core-assets/ two levels above its folder, so the layout mirrors the repo under /opt/pulso.
+COPY scripts/regression/build_suite.py scripts/regression/judge_story.py scripts/regression/prove_fails_on_base.py /opt/pulso/scripts/regression/
+COPY agent-core-assets/eval-suites/pulso-min /opt/pulso/agent-core-assets/eval-suites/pulso-min
+COPY agent-core-assets/eval-suites/pulso-w13 /opt/pulso/agent-core-assets/eval-suites/pulso-w13
 COPY --from=console /app/dist /opt/pulso/console
 USER 10001:10001
 # Non-secret defaults only. A non-loopback bind makes `pulso run` demand PULSO_DEBUG_TOKEN and PULSO_ADMIN_TOKEN (>= 24 chars,
@@ -50,7 +55,9 @@ ENV TMPDIR=/tmp \
     PULSO_ALLOW_NON_LOOPBACK=1 \
     PULSO_CONSOLE_DIR=/opt/pulso/console \
     PULSO_WORK_DIR=/var/lib/pulso/work \
-    PULSO_STORE_DIR=/var/lib/pulso/store
+    PULSO_STORE_DIR=/var/lib/pulso/store \
+    PULSO_REGRESSION_PYTHON=python3 \
+    PULSO_REGRESSION_SCRIPTS=/opt/pulso/scripts/regression
 VOLUME ["/var/lib/pulso"]
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 CMD ["/usr/local/bin/pulso", "healthcheck"]
