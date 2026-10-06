@@ -89,3 +89,7 @@ Why: the monthly k rule (k >= 10 on numerator, complement and denominator per me
 ## Demo support profile (`PULSO_PROFILE=demo`, ENGPROD)
 
 `steps::cells::Config::demo()` lowers only the SUPPORT floors: strict pooled `min_support` 500 -> 100 and exploratory pooled support 200 -> 60 (the exploratory tier is on). `k_min` stays 10 (`K_FLOOR`), alpha, effect, ratio, multiplicity and replication are unchanged. The report says `method.support_profile: "demo"` (`"standard"` otherwise). It exists so a planted effect on small SYNTHETIC cells is not discarded for support; the loop refuses it unless `PULSO_PROFILE=demo` is set explicitly and `PULSO_CELLS_SOURCE=synthetic` (docs/dev/ENGINE_PROD.md section 3).
+
+## Automatic export in AWS (CELLS-AUTO, journal 0672)
+
+The producer needs no change: the loader runs `bank_cells.py` from the engine image over the landing CSV (same table and column names, same `customer_id` for the A/B split), then gates the output with `check_cells_k.py` (k >= 10, allowed keys only) before the pipeline publishes. The pipeline's silver/gold are NOT an input: silver renames tables and drops quarantined rows, gold pseudonymises `customer_id` (every half would change). See `docs/dev/ENGINE_IMAGE.md` and infra `docs/auto-loader.md`. Inputs the loader must sync: `ALLOWED_TABLES` (`call_center_interactions`, `complaints`, `satisfaction_surveys`, `digital_events`, `campaign_sends`, `transactions`) and `REF_COLUMNS` (`customers.csv`, `marketing_campaigns.csv`); a test pins both lists.

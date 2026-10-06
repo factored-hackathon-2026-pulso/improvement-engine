@@ -42,6 +42,8 @@ RUN apt-get update \
     && install -d -o 10001 -g 10001 /var/lib/pulso /var/lib/pulso/work /var/lib/pulso/store
 COPY --from=build /out/pulso /out/pulso-synth-runner /out/steps_cli /usr/local/bin/
 COPY --from=console /app/dist /opt/pulso/console
+# The cells aggregator the AWS loader runs after an upload (stdlib only; needs python3 above): one file, not tests or the other aggregators.
+COPY scripts/aggregate/bank_cells.py /opt/pulso/aggregate/bank_cells.py
 USER 10001:10001
 # Non-secret defaults only. A non-loopback bind makes `pulso run` demand PULSO_DEBUG_TOKEN and PULSO_ADMIN_TOKEN (>= 24 chars,
 # different) at run time; without them the container refuses to start (exit 2) rather than serve unauthenticated.
