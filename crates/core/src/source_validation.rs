@@ -275,7 +275,6 @@ pub struct SourceFileSeal {
 /// Opaque mapping emitted only by the immutable source-artifact registry after
 /// it reparses the stored snapshot bytes. It deliberately carries both digest
 /// domains, rather than pretending they are interchangeable.
-#[cfg(feature = "local-simulation")]
 pub struct VerifiedSourceArtifactBinding {
     artifact_ref: crate::ArtifactReference,
     snapshot_binding_digest: String,
