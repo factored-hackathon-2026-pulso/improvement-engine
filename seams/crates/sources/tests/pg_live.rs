@@ -184,3 +184,63 @@ fn bad_dsn_and_identifiers_are_refused_before_any_connection() {
     let d = SourceId::new(DataMode::Dataset, "dataset:e0:x").unwrap();
     assert!(matches!(DatasetPg::connect("host=nowhere", "public", d), Err(SourceError::BadConfig(_))));
 }
+
+/// EVT3: the platform-cells feed on Postgres. A role with a column grant on `event_log.payload` and on `cases.{case_type, customer_id,
+/// opened_at, ...}`; more cases than the 10,000-row dimension cap, so a capped read would lose cells; payload keys cleaned; the
+/// customer id leaves only as a salted hash. The default read-only role (no payload grant) degrades: no payload, no failure.
+#[test]
+fn platform_cells_feed_reads_payload_and_every_case_by_key_on_postgres() {
+    let Some(db) = Db::create() else { return };
+    let mut a = db.admin.clone();
+    a.dbname(&db.name);
+    let mut a = a.connect(NoTls).unwrap();
+    let tag = db.name.trim_start_matches("r1m_").to_owned();
+    let pl = format!("r1m_pl_{tag}");
+    let (n_cases, n_events) = (10_050, 10_000); // events for the LAST 10,000 cases: a capped (10,000-row) dimension read would lose some of them
+    a.batch_execute(&format!(
+        "CREATE ROLE {pl} LOGIN PASSWORD 'test-{tag}'; ALTER ROLE {pl} SET default_transaction_read_only = on;
+         CREATE TABLE product.cases(id text PRIMARY KEY, customer_id text, channel text, language text, priority text, opened_at timestamptz, previous_case_id text, case_type text, status text, search_text text);
+         INSERT INTO product.cases SELECT 'CASE-'||n, 'CUS-'||(n % 97), 'app_chat', 'es', 'medium', '2026-09-01T09:00:00Z', NULL, 'service_quality', 'open', 'SECRET-SEARCH' FROM generate_series(1, {n_cases}) n;
+         DELETE FROM product.event_log;
+         INSERT INTO product.event_log SELECT n, 'EVT-'||n, 'copilot.suggestion_decided', 'case', 'CASE-'||n, 'CASE-'||n, 'system', 'STF-1', '2026-09-02T10:00:00Z'::timestamptz, now(),
+           jsonb_build_object('subject','reply','decision','discarded','agent','copiloto-sugerencias@1.0.0','release','rel-a','analyst_id','STF-1','note','SECRET-NOTE'), 't'
+           FROM generate_series({n_cases} - {n_events} + 1, {n_cases}) n;
+         GRANT USAGE ON SCHEMA product TO {pl};
+         GRANT SELECT (sequence, event_id, event_type, entity, entity_id, case_id, actor_role, actor_id, event_time, payload) ON product.event_log TO {pl};
+         GRANT SELECT (id, customer_id, channel, language, priority, opened_at, previous_case_id, case_type) ON product.cases TO {pl};"
+    ))
+    .unwrap();
+    let ro_pl = db.ro_dsn.replace(&format!("r1m_ro_{tag}"), &pl);
+    let work = common::temp_path("pgfeed").join("work");
+    let c = MonCfg::from_pairs(&[
+        ("data_mode", "platform"), ("adapter", "product-postgres"), ("source_id", "platform:pgfeed"), ("work_dir", work.to_str().unwrap()),
+        ("runner_exe", env!("CARGO_BIN_EXE_sources-synth-runner")), ("batch_cap", "10000"), ("platform_cells", "on"), ("customer_key_salt", "salt-evt3-pg"),
+    ])
+    .unwrap();
+    let adapter = PostgresProduct::connect(&ro_pl, "product", pid("pgfeed")).unwrap();
+    let store = PgStore::connect(&db.app_dsn).unwrap();
+    let TickOutcome::Processed { events, .. } = tick(&c, &adapter, &store).unwrap() else { panic!("no batch") };
+    assert_eq!(events, n_events);
+    let pkg = std::fs::read_dir(work.join("packages")).unwrap().next().unwrap().unwrap().path();
+    let ev = std::fs::read_to_string(pkg.join("events.ndjson")).unwrap();
+    let cs = std::fs::read_to_string(pkg.join("cases.ndjson")).unwrap();
+    assert_eq!(ev.lines().filter(|l| l.contains("\"payload\":{")).count(), n_events, "every decided event keeps its cleaned payload");
+    assert_eq!(cs.lines().count(), n_events, "no case is lost to the 10,000-row cap of a plain dimension read");
+    for needle in ["SECRET-NOTE", "analyst_id", "SECRET-SEARCH", "CUS-"] {
+        assert!(!ev.contains(needle) && !cs.contains(needle), "{needle} leaked");
+    }
+    let first: serde_json::Value = serde_json::from_str(cs.lines().next().unwrap()).unwrap();
+    assert_eq!(first["case_type"], "service_quality");
+    assert_eq!(first["customer_key"].as_str().unwrap().len(), 16);
+    // the default role has no grant on payload: the feed degrades (no payload), it does not fail
+    let work2 = common::temp_path("pgfeed-ro").join("work");
+    let c2 = MonCfg::from_pairs(&[
+        ("data_mode", "platform"), ("adapter", "product-postgres"), ("source_id", "platform:pgfeed2"), ("work_dir", work2.to_str().unwrap()),
+        ("runner_exe", env!("CARGO_BIN_EXE_sources-synth-runner")), ("batch_cap", "100"), ("platform_cells", "on"), ("customer_key_salt", "salt-evt3-pg"),
+    ])
+    .unwrap();
+    let ro = PostgresProduct::connect(&db.ro_dsn, "product", pid("pgfeed2")).unwrap();
+    assert!(matches!(tick(&c2, &ro, &store).unwrap(), TickOutcome::Processed { .. }));
+    let pkg2 = std::fs::read_dir(work2.join("packages")).unwrap().next().unwrap().unwrap().path();
+    assert!(!std::fs::read_to_string(pkg2.join("events.ndjson")).unwrap().contains("\"payload\""));
+}

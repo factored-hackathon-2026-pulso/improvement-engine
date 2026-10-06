@@ -17,6 +17,9 @@
                else prints exactly what would be sent.
     -Down      stops this script's own stack (-Purge also drops its volume, image and local state). Other lanes' stacks are never touched.
     -All       = -Up -Cells -Loop -Show.
+  -Platform  (EVT3) the PLATFORM EVENT cells family: advisor behaviour (draft acceptance, edits, suggestion none ...) from a SYNTHETIC platform history
+             (scripts/aggregate/platform_event_synth.py, -PlatformCases N, -PlatformSeed S) through platform_event_cells.py; the engine runs with
+             PULSO_CELLS_FAMILY=platform and -Up serves agent-core with the advisor suggester (copiloto-sugerencias, prompt p/sugerir) added to the registry.
   -BuilderModel M  Builder tier (default xiaomi/mimo-v2.6-flash; the larger xiaomi/mimo-v2.6-pro writes the patch more reliably).
   Credentials come only from agent-core.env and llm-gateway.env (next to the worktrees folder, or PULSO_AGENT_CORE_ENV / PULSO_LLM_GATEWAY_ENV),
   are loaded into CHILD process environments only, are never printed, and every line a child prints is masked first.
@@ -25,12 +28,12 @@
 [CmdletBinding()]
 param(
     [switch]$Up, [switch]$Cells, [switch]$Loop, [switch]$Probes, [switch]$Show, [switch]$Announce, [switch]$Down, [switch]$All,
-    [switch]$Synthetic, [switch]$Purge,
+    [switch]$Synthetic, [switch]$Platform, [switch]$Purge,
     [int]$MaxFindings = 4, [int]$TimeoutMin = 45, [int]$ProbeReps = 3,
     [string]$CellsFile = '', [string]$BuilderModel = '', [string]$PulsoExe = '', [string]$AgentCoreDir = '', [string]$GatewayDir = '', [string]$DataRoot = '',
     # own stack and state (the Langfuse closure runs a second one beside the demo's): prefix, ports, state folder, gateway built from -GatewayDir
     [string]$StackPrefix = 'pulso-demo', [int]$PgPort = 55490, [int]$GwPort = 8190, [int]$CorePort = 8191, [int]$EnginePort = 4190,
-    [string]$StateName = 'demo-loop', [switch]$FreshGateway, [ValidateRange(1, 2)][int]$PlantedCount = 1
+    [string]$StateName = 'demo-loop', [switch]$FreshGateway, [ValidateRange(1, 2)][int]$PlantedCount = 1, [int]$PlatformCases = 24000, [int]$PlatformSeed = 7
 )
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { }
@@ -40,7 +43,7 @@ $root = (Resolve-Path (Join-Path $here '../..')).Path
 
 try {
     $plan = Get-DemoLoopPlan -Up:$Up -Cells:$Cells -Loop:$Loop -Show:$Show -Down:$Down -Probes:$Probes -Announce:$Announce -All:$All `
-        -Synthetic:$Synthetic -MaxFindings $MaxFindings -TimeoutMin $TimeoutMin -ProbeReps $ProbeReps -CellsFile $CellsFile
+        -Synthetic:$Synthetic -Platform:$Platform -MaxFindings $MaxFindings -TimeoutMin $TimeoutMin -ProbeReps $ProbeReps -CellsFile $CellsFile
 } catch {
     [Console]::Error.WriteLine("usage error: $($_.Exception.Message)")
     exit 2
@@ -72,6 +75,13 @@ if (-not $DataRoot) { $DataRoot = $(if ($env:PULSO_DEMO_DATA_ROOT) { $env:PULSO_
 $acEnvPath = $devCfg.Values['PULSO_AGENT_CORE_ENV']
 $gwEnvPath = $devCfg.Values['PULSO_LLM_GATEWAY_ENV']
 $podmanArgs = @(Get-DevPodmanArgs)
+
+# EVT3: -Platform serves the advisor suggester too: registry-e2e + the copiloto-sugerencias fixture (a disjoint union, identical shared files)
+$stackEnvArgs = @{ Settings = $settings; AgentCoreDir = $AgentCoreDir; GatewayDir = $GatewayDir }
+if ($Platform) {
+    $mixed = Join-Path $demoDir 'registry-platform'
+    $stackEnvArgs['RegistryDir'] = $mixed; $stackEnvArgs['ServeAgents'] = 'disputas,consultas,copiloto-sugerencias'; $stackEnvArgs['ServeCalibration'] = 'serve_ports_platform:calibration'
+}
 
 # secrets: in memory only; the needles mask them in anything a child prints
 $acEnv = Read-EnvFileValues -Path $acEnvPath
@@ -153,7 +163,7 @@ function Get-CellsInfo {
     foreach ($line in [IO.File]::ReadLines($Path)) {
         if (-not $line.Trim()) { continue }
         $n++
-        if ($line -match '"metric":"([A-Z0-9]+)"') { $by[$Matches[1]] = 1 + [int]$by[$Matches[1]] }
+        if ($line -match '"metric":"([A-Z0-9_]+)"') { $by[$Matches[1]] = 1 + [int]$by[$Matches[1]] }
     }
     $sha = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.Substring(0, 12).ToLower()
     [pscustomobject]@{ Rows = $n; ByMetric = (($by.Keys | Sort-Object | ForEach-Object { "$_=$($by[$_])" }) -join ' '); Sha = $sha }
@@ -180,7 +190,14 @@ foreach ($step in $plan.Steps) {
                 if (-not (Test-Path -LiteralPath (Join-Path $GatewayDir 'Dockerfile'))) { throw "llm-gateway checkout not found at $GatewayDir (-GatewayDir)" }
                 if (-not $acEnv.Count) { throw "no values read from $acEnvPath (names only are ever shown)" }
                 Initialize-GatewayImage -ImageName "$($settings.Prefix)-llm-gateway"
-                $e = Get-StackEnvironment -Settings $settings -AgentCoreDir $AgentCoreDir -GatewayDir $GatewayDir
+                if ($Platform) {
+                    $fx = Join-Path $AgentCoreDir 'tests/fixtures'
+                    if (Test-Path -LiteralPath $mixed) { Remove-Item -LiteralPath $mixed -Recurse -Force }
+                    Copy-Item -LiteralPath (Join-Path $fx 'registry-e2e') -Destination $mixed -Recurse
+                    Get-ChildItem -LiteralPath (Join-Path $fx 'copiloto-sugerencias') -Directory | Where-Object { $_.Name -ne 'casos' } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $mixed -Recurse -Force }
+                    Say "registry: registry-e2e + copiloto-sugerencias (advisor suggester) in $mixed"
+                }
+                $e = Get-StackEnvironment @stackEnvArgs
                 $envAll = @{}; foreach ($k in $secretEnv.Keys) { $envAll[$k] = $secretEnv[$k] }; foreach ($k in $e.Keys) { $envAll[$k] = $e[$k] }
                 # tracing settings the CALLER put in the environment win over the env files (agent-core.env carries a Phoenix endpoint)
                 foreach ($it in (Get-ChildItem Env:)) { if ($it.Name -match '^(OTEL_|LLM_GATEWAY_TRACE_|AGENTCORE_TRACE_|PULSO_GW_|PULSO_CORE_OTEL)') { $envAll[$it.Name] = $it.Value } }
@@ -191,10 +208,21 @@ foreach ($step in $plan.Steps) {
                 Say ("stack up. registry http://127.0.0.1:{0}  gateway http://127.0.0.1:{1}  (agents: disputas, consultas, real registry-e2e artifacts)" -f $settings.CorePort, $settings.GwPort)
             }
             'Cells' {
-                Step-Header 'Cells' $(if ($plan.Synthetic) { 'SYNTHETIC planted-cell table (invented numbers, labelled synthetic)' } else { 'treated bank cells (aggregates only, k >= 10)' })
+                Step-Header 'Cells' $(if ($plan.Platform) { 'SYNTHETIC platform event cells (advisor behaviour; invented history, aggregates only)' } elseif ($plan.Synthetic) { 'SYNTHETIC planted-cell table (invented numbers, labelled synthetic)' } else { 'treated bank cells (aggregates only, k >= 10)' })
                 $cellsDir = Join-Path $demoDir 'cells'
                 $null = New-Item -ItemType Directory -Force -Path $cellsDir
-                if ($plan.Synthetic) {
+                if ($plan.Platform) {
+                    # SYNTHETIC platform history -> aggregates only (k >= 10): the history stays under the demo dir, the cells go to the engine
+                    $synDir = Join-Path $demoDir 'platform-synth'
+                    $out = Join-Path $cellsDir 'platform.ndjson'
+                    if (-not (Test-Path -LiteralPath (Join-Path $synDir 'events.ndjson'))) {
+                        $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts/aggregate/platform_event_synth.py'), '--out', $synDir, '--seed', "$PlatformSeed", '--cases', "$PlatformCases") -Needles $script:Needles -WorkDir $root -Quiet
+                        if ($r.ExitCode -ne 0) { throw 'platform_event_synth.py failed' }
+                    }
+                    $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $root 'scripts/aggregate/platform_event_cells.py'), '--events', (Join-Path $synDir 'events.ndjson'), '--cases', (Join-Path $synDir 'cases.ndjson'), '--out', $out) -Needles $script:Needles -WorkDir $root -Quiet
+                    if ($r.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $out)) { throw 'platform_event_cells.py failed' }
+                    $mode = 'platform-synthetic'; $path = $out
+                } elseif ($plan.Synthetic) {
                     $out = Join-Path $cellsDir 'planted.ndjson'
                     $r = Invoke-Scrubbed -File $python -Arguments @((Join-Path $here 'planted_cells.py'), '--out', $out, '--plant', "$PlantedCount") -Needles $script:Needles -WorkDir $root
                     if ($r.ExitCode -ne 0) { throw 'planted_cells.py failed' }
@@ -224,7 +252,8 @@ foreach ($step in $plan.Steps) {
                 $st = Read-State
                 $cellsPath = $null; $mode = $plan.Mode
                 if ($st.PSObject.Properties['cells_path']) { $cellsPath = [string]$st.cells_path; $mode = [string]$st.cells_mode }
-                if ($plan.Synthetic) { $cellsPath = Join-Path $demoDir 'cells/planted.ndjson'; $mode = 'synthetic-planted' }
+                if ($plan.Platform) { $cellsPath = Join-Path $demoDir 'cells/platform.ndjson'; $mode = 'platform-synthetic' }
+                elseif ($plan.Synthetic) { $cellsPath = Join-Path $demoDir 'cells/planted.ndjson'; $mode = 'synthetic-planted' }
                 elseif ($plan.CellsFile) { $cellsPath = (Resolve-Path -LiteralPath $plan.CellsFile).Path; $mode = 'bank-file' }
                 if (-not $cellsPath -or -not (Test-Path -LiteralPath $cellsPath)) { throw 'no cells table: add -Cells (or -Synthetic -Cells)' }
                 $tok = Get-Tokens
@@ -244,8 +273,9 @@ foreach ($step in $plan.Steps) {
                 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
                 $work = Join-Path $demoDir "work-$runId"; $store = Join-Path $demoDir "store-$runId"
                 $null = New-Item -ItemType Directory -Force -Path $work, $store
-                $src = $(if ($mode -eq 'synthetic-planted') { 'synthetic' } else { 'bank' })
-                $eenv = Get-EngineEnvironment -Settings $settings -CellsPath $cellsPath -WorkDir $work -StoreDir $store -Source $src -MaxFindings $plan.MaxFindings `
+                $src = $(if ($mode -eq 'synthetic-planted' -or $mode -eq 'platform-synthetic') { 'synthetic' } else { 'bank' })
+                $family = $(if ($mode -eq 'platform-synthetic') { 'platform' } else { 'bank' })
+                $eenv = Get-EngineEnvironment -Settings $settings -CellsPath $cellsPath -WorkDir $work -StoreDir $store -Source $src -Family $family -MaxFindings $plan.MaxFindings `
                     -GatewayKey $gwKey -RegistryToken ([string]$tok.builder) -AdminToken $adminTok -PlatformUrl $platUrl -PlatformToken $platTok -PythonCmd $python -BuilderModel $BuilderModel
                 $exe = Find-PulsoExe
                 Say "engine: $exe"
@@ -308,7 +338,7 @@ foreach ($step in $plan.Steps) {
                 $cli = Find-StepsCli
                 if ($cli) {
                     $sensorOut = Join-Path $work 'sensor.json'
-                    Invoke-DevShellLine -Line ('"' + $cli + '" cells < "' + $cellsPath + '" > "' + $sensorOut + '" 2>{NULL}')
+                    Invoke-DevShellLine -Line ('"' + $cli + '" ' + $(if ($family -eq 'platform') { 'cells_platform' } else { 'cells' }) + ' < "' + $cellsPath + '" > "' + $sensorOut + '" 2>{NULL}')
                     if (Test-Path -LiteralPath $sensorOut) {
                         $sj = Read-JsonFile -Path $sensorOut
                         $nc = @($sj.signals | Where-Object { $_.status -eq 'corroborated' -and $_.type -ne 'level_risk' }).Count
@@ -387,7 +417,7 @@ foreach ($step in $plan.Steps) {
             }
             'Down' {
                 Step-Header 'Down' "stopping the stack '$($settings.Prefix)' only"
-                $e = Get-StackEnvironment -Settings $settings -AgentCoreDir $AgentCoreDir -GatewayDir $GatewayDir
+                $e = Get-StackEnvironment @stackEnvArgs
                 $a = @((Join-Path $root 'scripts/dev-stack/stack.py'), 'down'); if ($Purge) { $a += '--purge' }
                 $r = Invoke-Scrubbed -File $python -Arguments $a -Env $e -Needles $script:Needles -WorkDir $root -LogPath $logPath
                 if ($r.ExitCode -ne 0) { throw 'stack.py down failed' }

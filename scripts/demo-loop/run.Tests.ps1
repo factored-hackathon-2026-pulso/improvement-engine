@@ -59,6 +59,37 @@ Describe 'Get-DemoLoopPlan' {
     }
 }
 
+Describe 'EVT3 platform family' {
+    $s = Get-DemoStackSettings
+    It 'labels the platform mode and refuses to mix it with the other cell sources' {
+        (Get-DemoLoopPlan -Cells -Platform).Mode | Should Be 'platform-synthetic'
+        (Get-DemoLoopPlan -Cells -Platform).Platform | Should Be $true
+        { Get-DemoLoopPlan -Cells -Platform -Synthetic } | Should Throw 'different cell sources'
+        { Get-DemoLoopPlan -Cells -Platform -CellsFile 'x.ndjson' } | Should Throw 'different cell sources'
+        { Get-DemoLoopPlan -Show -Platform } | Should Throw '-Platform only applies'
+        (Get-DemoLoopPlan -Up -Platform).Platform | Should Be $true
+    }
+    It 'the platform family reads synthetic cells through the platform sensor and never opts in to derived data' {
+        $e = Get-EngineEnvironment -Settings $s -CellsPath 'c' -WorkDir 'w' -StoreDir 's' -Source synthetic -Family platform
+        $e['PULSO_CELLS_FAMILY'] | Should Be 'platform'
+        $e['PULSO_CELLS_SOURCE'] | Should Be 'synthetic'
+        $e.Contains('PULSO_ALLOW_DERIVED_AGGREGATES') | Should Be $false
+        (Get-EngineEnvironment -Settings $s -CellsPath 'c' -WorkDir 'w' -StoreDir 's' -Source synthetic).Contains('PULSO_CELLS_FAMILY') | Should Be $false
+        { Get-EngineEnvironment -Settings $s -CellsPath 'c' -WorkDir 'w' -StoreDir 's' -Source bank -Family platform } | Should Throw 'platform'
+    }
+    It 'the stack registry and served agents can be overridden for the advisor suggester' {
+        $d = Get-StackEnvironment -Settings $s -AgentCoreDir 'ac' -GatewayDir 'gw' -RegistryDir 'D:
+eg' -ServeAgents 'disputas,copiloto-sugerencias'
+        $d['PULSO_REGISTRY_DIR'] | Should Be 'D:
+eg'
+        $d['PULSO_SERVE_AGENTS'] | Should Be 'disputas,copiloto-sugerencias'
+        $o = Get-StackEnvironment -Settings $s -AgentCoreDir 'ac' -GatewayDir 'gw'
+        $o['PULSO_SERVE_AGENTS'] | Should Be 'disputas,consultas'
+        $o.Contains('PULSO_SERVE_CALIBRATION') | Should Be $false
+        (Get-StackEnvironment -Settings $s -AgentCoreDir 'ac' -GatewayDir 'gw' -ServeCalibration 'serve_ports_platform:calibration')['PULSO_SERVE_CALIBRATION'] | Should Be 'serve_ports_platform:calibration'
+    }
+}
+
 Describe 'Get-DemoStackSettings' {
     It 'uses its own prefix and ports, never the shared stack' {
         $s = Get-DemoStackSettings
