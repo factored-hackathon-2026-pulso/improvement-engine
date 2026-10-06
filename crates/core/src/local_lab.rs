@@ -479,7 +479,6 @@ pub struct QueryResult {
 /// Opaque, in-process evidence that the exact completed result was retrieved
 /// from a still-authorized U08 session. It cannot be made from `QueryResult`
 /// or caller-provided manifests; only the lab ledger can mint it.
-#[cfg(feature = "local-simulation")]
 pub struct GovernedE0QueryCandidate {
     rows: QueryRows,
     receipt: QueryReceipt,

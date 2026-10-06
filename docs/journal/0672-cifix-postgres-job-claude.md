@@ -1,0 +1,9 @@
+# 0672 CIFIX: PostgreSQL artifact migration job red on main (UTC 2026-10-05, CLAUDE)
+
+Lane CIFIX, branch `claude/cifix-postgres-job`. Touches Team Codex crate files (`crates/core/src/{enriched_history,local_lab,source_validation}.rs`); minimal, one line each. Codex is paused: please review when back.
+
+- What broke: commit 917aa523 (`feat: consolidate local E0 composition and evaluation`, Codex) put `#[cfg(feature = "local-simulation")]` on the struct definitions of `VerifiedReplayAvailability`, `GovernedE0QueryCandidate` and `VerifiedSourceArtifactBinding`, while their `impl` blocks and the users (`e0_frozen_memory_cycle`, `e0_frozen_memory_publication`, `e0_frozen_summary`, `e0_query_lab`, `e0_safety_oracle`, `memory_temporal_protocol`) stay ungated. A build without the feature fails with E0432/E0425/E0422. The job `PostgreSQL artifact migration` is the only one that builds `improvement-engine-core` tests without `--features local-simulation` (the `verify` matrix jobs enable it), so only it went red. Last green main run was 00e9ecfb (2026-10-03); every main run since is red.
+- Not a migration problem: the only failing step was `Run isolated platform observation RLS and retention test`, and it failed at compile time. The earlier Postgres migration steps passed.
+- Fix: remove the three struct-level cfg gates (the types are plain data, the constructors that need the simulation stay gated by their own cfg). No test weakened, no job change. `cargo check -p improvement-engine-core --tests` passes with and without `--features local-simulation`.
+- Also adds `docs/journal/0672-*` to OWNERS (L-GOV line) for this entry.
+- Follow-up for Codex: if those types were meant to be simulation-only, gate the whole dependent chain instead, and add a no-feature `cargo check --tests` to the verify matrix so this cannot recur.

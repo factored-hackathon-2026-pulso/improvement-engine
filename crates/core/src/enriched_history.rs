@@ -541,7 +541,6 @@ pub struct EnrichedHistoryAdapter {
 /// temporal/scope commitments needed by a later trusted composition; it never
 /// exposes source rows or permits a caller-provided clock.
 #[allow(dead_code)] // Consumed by the future trusted U04-B/U23 composition root.
-#[cfg(feature = "local-simulation")]
 pub struct VerifiedReplayAvailability {
     tenant_id: String,
     world_ref: String,
