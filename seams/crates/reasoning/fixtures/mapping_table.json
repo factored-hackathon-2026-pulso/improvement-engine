@@ -103,6 +103,22 @@
           "justification": "Last resort: only the part of the complaints that no existing agent covers would go to a new intake specialist, which needs an admin for its release settings before it can be announced.",
           "evidence": "ANATOMY R3, section 2.4; DEMO_LOOP limits",
           "proof_support": "suite:uncovered_topic", "announceable_now": false
+        },
+        {
+          "rank": 6, "target_ref": "flow_edit:consulta-pqr/add_validator", "kind": "flow_edit", "agent": "consultas",
+          "placeholders": [], "mechanisms": ["flow_input_validation"],
+          "params": {"flow": "consulta-pqr", "op": "add_validator", "presets": [{"id": "radicado_token", "validator": {"kind": "extract", "value": "(?i)([a-z]{2,5}-[a-z0-9-]*[0-9]+)"}, "accept": {"es": ["quiero saber el estado de mi PQR, el radicado es pqr-reg-1"], "pt": ["quero saber o estado da minha solicitacao, o protocolo e pqr-reg-1"]}, "reject": {"es": ["hola, quisiera saber algo de mi reclamo", "buenas tardes, necesito ayuda con una queja", "quiero saber como va mi caso por favor"], "pt": ["ola, queria saber sobre minha reclamacao", "boa tarde, preciso de ajuda com uma queixa", "quero saber como esta o meu caso por favor"]}}]},
+          "justification": "consultas asks for the radicado and accepts any non-empty text, so a sentence without an id reaches obtener_pqr; an input check on that existing question keeps the lookup for a real id and re-asks otherwise (hypothesis of where to intervene, not a cause).",
+          "evidence": "docs/dev/FLOW_EDITS.md decision table; ARTIFACT_KINDS_FEASIBILITY 4.1 (flow edits); ANATOMY F2 and D1",
+          "proof_support": "suite:flow_validator", "announceable_now": true
+        },
+        {
+          "rank": 7, "target_ref": "flow_edit:consulta-pqr/insert_notice", "kind": "flow_edit", "agent": "consultas",
+          "placeholders": [], "mechanisms": ["flow_silent_failure"],
+          "params": {"flow": "consulta-pqr", "op": "insert_notice", "presets": [{"id": "notice_handoff", "es": "No pude completar la consulta en este momento. Te paso con un asesor para que continue tu caso.", "pt": "Nao consegui concluir a consulta neste momento. Vou passar voce a um atendente para continuar seu caso."}]},
+          "justification": "When the PQR lookup fails the customer is handed off with no word about why; a short notice before the existing tool_failure escalation says what happens next. Native evaluation cannot tell this edit from the base.",
+          "evidence": "docs/dev/FLOW_EDITS.md decision table; ARTIFACT_KINDS_FEASIBILITY 4.1 (flow edits); ANATOMY F2 and D1",
+          "proof_support": "suite:flow_notice", "announceable_now": false
         }
       ]
     },
@@ -195,6 +211,30 @@
           "justification": "consultas covers PQR status inquiries and its status template never reads the status.",
           "evidence": "ANATOMY F2 / C1",
           "proof_support": "suite:status_message_gap", "announceable_now": true
+        },
+        {
+          "rank": 2, "target_ref": "flow_edit:consulta-pqr/add_validator", "kind": "flow_edit", "agent": "consultas",
+          "placeholders": [], "mechanisms": ["flow_input_validation"],
+          "params": {"flow": "consulta-pqr", "op": "add_validator", "presets": [{"id": "radicado_token", "validator": {"kind": "extract", "value": "(?i)([a-z]{2,5}-[a-z0-9-]*[0-9]+)"}, "accept": {"es": ["quiero saber el estado de mi PQR, el radicado es pqr-reg-1"], "pt": ["quero saber o estado da minha solicitacao, o protocolo e pqr-reg-1"]}, "reject": {"es": ["hola, quisiera saber algo de mi reclamo", "buenas tardes, necesito ayuda con una queja", "quiero saber como va mi caso por favor"], "pt": ["ola, queria saber sobre minha reclamacao", "boa tarde, preciso de ajuda com uma queixa", "quero saber como esta o meu caso por favor"]}}]},
+          "justification": "consultas asks for the radicado and accepts any non-empty text, so a sentence without an id reaches obtener_pqr; an input check on that existing question keeps the lookup for a real id and re-asks otherwise (hypothesis of where to intervene, not a cause).",
+          "evidence": "docs/dev/FLOW_EDITS.md decision table; ARTIFACT_KINDS_FEASIBILITY 4.1 (flow edits); ANATOMY F2 and D1",
+          "proof_support": "suite:flow_validator", "announceable_now": true
+        },
+        {
+          "rank": 3, "target_ref": "flow_edit:consulta-pqr/insert_notice", "kind": "flow_edit", "agent": "consultas",
+          "placeholders": [], "mechanisms": ["flow_silent_failure"],
+          "params": {"flow": "consulta-pqr", "op": "insert_notice", "presets": [{"id": "notice_handoff", "es": "No pude completar la consulta en este momento. Te paso con un asesor para que continue tu caso.", "pt": "Nao consegui concluir a consulta neste momento. Vou passar voce a um atendente para continuar seu caso."}]},
+          "justification": "When the PQR lookup fails the customer is handed off with no word about why; a short notice before the existing tool_failure escalation says what happens next. Native evaluation cannot tell this edit from the base.",
+          "evidence": "docs/dev/FLOW_EDITS.md decision table; ARTIFACT_KINDS_FEASIBILITY 4.1 (flow edits); ANATOMY F2 and D1",
+          "proof_support": "suite:flow_notice", "announceable_now": false
+        },
+        {
+          "rank": 4, "target_ref": "flow_edit:consulta-pqr/insert_ack", "kind": "flow_edit", "agent": "consultas",
+          "placeholders": [], "mechanisms": ["flow_missing_ack"],
+          "params": {"flow": "consulta-pqr", "op": "insert_ack", "presets": [{"id": "ack_recibido", "es": "Recibi tu solicitud y la estoy revisando.", "pt": "Recebi sua solicitacao e estou analisando."}]},
+          "justification": "The status answer comes with no acknowledgement of the request; an acknowledgement message on the normal path. Native evaluation cannot tell this edit from the base.",
+          "evidence": "docs/dev/FLOW_EDITS.md decision table; ARTIFACT_KINDS_FEASIBILITY 4.1 (flow edits); ANATOMY F2 and D1",
+          "proof_support": "suite:flow_ack", "announceable_now": false
         }
       ]
     },
@@ -332,6 +372,22 @@
           "justification": "More charge cases than elsewhere in the same channel leave the assistant for an analyst; the dispute clarify step answers one short static sentence when no charge matches, a place where a customer gives up.",
           "evidence": "ANATOMY D1; PLATFORM_SIGNALS section 4(e) (assistant escalation by case type)",
           "proof_support": "none", "announceable_now": false
+        },
+        {
+          "rank": 2, "target_ref": "flow_edit:disputa-cargo/insert_ask", "kind": "flow_edit", "agent": "disputas",
+          "placeholders": [], "mechanisms": ["flow_missing_context"],
+          "params": {"flow": "disputa-cargo", "op": "insert_ask", "presets": [{"id": "ask_fecha", "slot": "fecha_aproximada", "es": "Para ayudarte mejor, recuerdas la fecha aproximada del cargo?", "pt": "Para ajudar melhor, voce lembra a data aproximada da cobranca?"}, {"id": "ask_comercio", "slot": "comercio_cargo", "es": "Recuerdas en que comercio o tienda aparece el cargo?", "pt": "Voce lembra em qual loja ou comercio aparece a cobranca?"}]},
+          "justification": "Charge disputes leave the assistant for an analyst more than elsewhere; one clarifying question before the charge search collects context that the handoff packet may carry. The question adds one customer turn.",
+          "evidence": "docs/dev/FLOW_EDITS.md decision table; ARTIFACT_KINDS_FEASIBILITY 4.1 (flow edits); ANATOMY F2 and D1",
+          "proof_support": "suite:flow_ask", "announceable_now": true
+        },
+        {
+          "rank": 3, "target_ref": "flow_edit:disputa-cargo/insert_notice", "kind": "flow_edit", "agent": "disputas",
+          "placeholders": [], "mechanisms": ["flow_silent_failure"],
+          "params": {"flow": "disputa-cargo", "op": "insert_notice", "presets": [{"id": "notice_handoff", "es": "No pude completar la consulta en este momento. Te paso con un asesor para que continue tu caso.", "pt": "Nao consegui concluir a consulta neste momento. Vou passar voce a um atendente para continuar seu caso."}]},
+          "justification": "When a lookup of the dispute flow fails the customer is handed off with no word about why; a short notice before the existing escalation. Native evaluation cannot tell this edit from the base.",
+          "evidence": "docs/dev/FLOW_EDITS.md decision table; ARTIFACT_KINDS_FEASIBILITY 4.1 (flow edits); ANATOMY F2 and D1",
+          "proof_support": "suite:flow_notice", "announceable_now": false
         }
       ]
     }

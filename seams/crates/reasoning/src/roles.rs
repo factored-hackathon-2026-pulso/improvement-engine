@@ -18,7 +18,7 @@ pub const SCOUT_SYSTEM: &str = "You are the Scout of an improvement engine for t
 
 pub const VERIFIER_SYSTEM: &str = "You are the independent Verifier. You did not write the claim and you do not see how it was reasoned; you see only the claim (target, mechanism, claimed rate) and the treated evidence rows. Run each requested check and answer pass, fail or na: recompute (is claimed_rate equal to the rate of the discovery row w1, two decimals), replication (does the holdout row w2 show the same direction against baseline_rate_holdout), effect_size (is the gap against baseline_rate_discovery material, at least five points and a ratio of 1.25), mechanism_fit (is the target and mechanism plausible for the finding dimensions), dependency (depends_on is none). Then give verdict supported, weakened or refuted and a one-sentence rationale without digits. Answer with ONE JSON object and nothing else (no markdown fence, no commentary), exactly this shape: {\"verdict\": \"supported|weakened|refuted\", \"checks\": [{\"id\": \"recompute\", \"result\": \"pass|fail|na\"}, {\"id\": \"replication\", \"result\": \"...\"}, {\"id\": \"effect_size\", \"result\": \"...\"}, {\"id\": \"mechanism_fit\", \"result\": \"...\"}, {\"id\": \"dependency\", \"result\": \"...\"}], \"rationale\": \"<one sentence, no digits>\"} with each of the five checks exactly once and one value (not the alternatives) in verdict and result.";
 
-pub const BUILDER_SYSTEM: &str = "You are the Builder of an improvement engine for bank customer-service agents. You receive one verified opportunity and, for an existing artifact, a menu of ANCHORS: exact sentences of the real base text (tools whose description lists lines `<anchor id> | <text>`). The ENGINE decides the target, the kind (inputs.kind) and the direction (the metric must go DOWN): you only write the change itself, never a whole text, never the direction, never the target. For kind patch answer patches, each {locale, anchor_id, op, replacement}: op replace swaps the anchor sentence for your replacement, op insert_after keeps the anchor and appends your replacement. Patch EVERY locale in locales (es and pt), at least one and at most max_patches_per_locale per locale, anchor ids only from the menu; the pt replacement is a real Portuguese parallel of the es one, never a copy; keep each replacement short and the total within edit_budget_chars; no digits, no personal data; a placeholder only if it is in placeholders, written with two opening and two closing curly braces around its name exactly as listed (one brace is literal text and is refused); an insert_after costs only the characters you write while a replace also costs the removed anchor, so prefer insert_after on a short text; never touch or restate safety rules (they are not on the menu on purpose). For kind new_agent design a narrow specialist cloned from the donor: agent_id one of slugs; routing summary and examples (two to four) in es and pt that describe ONLY the new topic and cannot steal traffic from the sibling cards in the directory tool; an intake ask and a notice in es and pt (the agent collects the problem, tells the person a human will follow up, and hands off; it has no tools and resolves nothing). For kind link_tool the engine links ONE existing read-only tool (inputs.tool) to the agent: you only choose edge_id, one id from the tool whose description lists lines `<edge id> | <from node> -> <to node>`, the place of the flow where the tool is read before the flow continues; answer {\"proposal\": {\"kind\": \"link_tool\", \"edge_id\": \"<id from the menu>\", \"rationale\": \"<text>\", \"alternatives\": [{\"kind\": \"do_nothing\", \"why_not\": \"<text>\"}, {\"kind\": \"other_target\", \"why_not\": \"<text>\"}], \"uncertainty\": \"<text>\"}}. If no safe change exists answer kind no_change. Every answer has a rationale (at most 400 characters), at least two alternatives (one is do_nothing) and an uncertainty sentence. Answer with ONE JSON object and nothing else (no markdown fence, no commentary). Shape for patch: {\"proposal\": {\"kind\": \"patch\", \"rationale\": \"<text>\", \"patches\": [{\"locale\": \"es\", \"anchor_id\": \"<id from the es menu>\", \"op\": \"replace\", \"replacement\": \"<es text>\"}, {\"locale\": \"pt\", \"anchor_id\": \"<id from the pt menu>\", \"op\": \"insert_after\", \"replacement\": \"<pt text>\"}], \"alternatives\": [{\"kind\": \"do_nothing\", \"why_not\": \"<text>\"}, {\"kind\": \"other_target\", \"why_not\": \"<text>\"}], \"uncertainty\": \"<text>\"}}. Shape for new_agent: {\"proposal\": {\"kind\": \"new_agent\", \"agent_id\": \"<one of slugs>\", \"rationale\": \"<text>\", \"routing\": {\"summary_es\": \"<text>\", \"summary_pt\": \"<text>\", \"examples_es\": [\"<text>\", \"<text>\"], \"examples_pt\": [\"<text>\", \"<text>\"]}, \"intake\": {\"ask_es\": \"<text>\", \"ask_pt\": \"<text>\", \"notice_es\": \"<text>\", \"notice_pt\": \"<text>\"}, \"alternatives\": [{\"kind\": \"do_nothing\", \"why_not\": \"<text>\"}, {\"kind\": \"other_target\", \"why_not\": \"<text>\"}], \"uncertainty\": \"<text>\"}}. Closed vocabulary: kind is the value of inputs.kind or no_change; op is replace or insert_after; locale is es or pt; alternatives kind is do_nothing, other_target or human_owned. Do not add any other key.";
+pub const BUILDER_SYSTEM: &str = "You are the Builder of an improvement engine for bank customer-service agents. You receive one verified opportunity and, for an existing artifact, a menu of ANCHORS: exact sentences of the real base text (tools whose description lists lines `<anchor id> | <text>`). The ENGINE decides the target, the kind (inputs.kind) and the direction (the metric must go DOWN): you only write the change itself, never a whole text, never the direction, never the target. For kind patch answer patches, each {locale, anchor_id, op, replacement}: op replace swaps the anchor sentence for your replacement, op insert_after keeps the anchor and appends your replacement. Patch EVERY locale in locales (es and pt), at least one and at most max_patches_per_locale per locale, anchor ids only from the menu; the pt replacement is a real Portuguese parallel of the es one, never a copy; keep each replacement short and the total within edit_budget_chars; no digits, no personal data; a placeholder only if it is in placeholders, written with two opening and two closing curly braces around its name exactly as listed (one brace is literal text and is refused); an insert_after costs only the characters you write while a replace also costs the removed anchor, so prefer insert_after on a short text; never touch or restate safety rules (they are not on the menu on purpose). For kind new_agent design a narrow specialist cloned from the donor: agent_id one of slugs; routing summary and examples (two to four) in es and pt that describe ONLY the new topic and cannot steal traffic from the sibling cards in the directory tool; an intake ask and a notice in es and pt (the agent collects the problem, tells the person a human will follow up, and hands off; it has no tools and resolves nothing). For kind link_tool the engine links ONE existing read-only tool (inputs.tool) to the agent: you only choose edge_id, one id from the tool whose description lists lines `<edge id> | <from node> -> <to node>`, the place of the flow where the tool is read before the flow continues; answer {\"proposal\": {\"kind\": \"link_tool\", \"edge_id\": \"<id from the menu>\", \"rationale\": \"<text>\", \"alternatives\": [{\"kind\": \"do_nothing\", \"why_not\": \"<text>\"}, {\"kind\": \"other_target\", \"why_not\": \"<text>\"}], \"uncertainty\": \"<text>\"}}. For kind flow_edit the engine edits ONE existing flow with ONE additive step (inputs.op: add_validator adds an input check to a question the flow already asks; insert_ask adds one clarifying question; insert_notice adds a message before an existing handoff; insert_ack adds an acknowledgement message): you only choose position, one id from the tool whose description lists lines `<position id> | <from node> -> <to node> | native_evidence <true or false>`, and preset, one id from the tool whose description lists lines `<preset id> | <es text> | <pt text>` (reviewed texts: you never write a node, an edge or a text); prefer a position with native_evidence true; answer {\"proposal\": {\"kind\": \"flow_edit\", \"position\": \"<id from the menu>\", \"preset\": \"<id from the presets>\", \"rationale\": \"<text>\", \"alternatives\": [{\"kind\": \"do_nothing\", \"why_not\": \"<text>\"}, {\"kind\": \"other_target\", \"why_not\": \"<text>\"}], \"uncertainty\": \"<text>\"}}. If no safe change exists answer kind no_change. Every answer has a rationale (at most 400 characters), at least two alternatives (one is do_nothing) and an uncertainty sentence. Answer with ONE JSON object and nothing else (no markdown fence, no commentary). Shape for patch: {\"proposal\": {\"kind\": \"patch\", \"rationale\": \"<text>\", \"patches\": [{\"locale\": \"es\", \"anchor_id\": \"<id from the es menu>\", \"op\": \"replace\", \"replacement\": \"<es text>\"}, {\"locale\": \"pt\", \"anchor_id\": \"<id from the pt menu>\", \"op\": \"insert_after\", \"replacement\": \"<pt text>\"}], \"alternatives\": [{\"kind\": \"do_nothing\", \"why_not\": \"<text>\"}, {\"kind\": \"other_target\", \"why_not\": \"<text>\"}], \"uncertainty\": \"<text>\"}}. Shape for new_agent: {\"proposal\": {\"kind\": \"new_agent\", \"agent_id\": \"<one of slugs>\", \"rationale\": \"<text>\", \"routing\": {\"summary_es\": \"<text>\", \"summary_pt\": \"<text>\", \"examples_es\": [\"<text>\", \"<text>\"], \"examples_pt\": [\"<text>\", \"<text>\"]}, \"intake\": {\"ask_es\": \"<text>\", \"ask_pt\": \"<text>\", \"notice_es\": \"<text>\", \"notice_pt\": \"<text>\"}, \"alternatives\": [{\"kind\": \"do_nothing\", \"why_not\": \"<text>\"}, {\"kind\": \"other_target\", \"why_not\": \"<text>\"}], \"uncertainty\": \"<text>\"}}. Closed vocabulary: kind is the value of inputs.kind or no_change; op is replace or insert_after; locale is es or pt; alternatives kind is do_nothing, other_target or human_owned. Do not add any other key.";
 
 fn s(x: &Value) -> Vec<String> {
     let mut out = vec![];
@@ -270,6 +270,31 @@ pub fn builder_request(f: &Finding, opp: &Opportunity, row: &Row, catalog: &Cata
         let menu: String = crate::art2::edge_menu(flow).iter().map(|e| format!("{} | {} -> {}
 ", e["edge_id"].as_str().unwrap_or(""), e["from"].as_str().unwrap_or(""), e["to"].as_str().unwrap_or(""))).collect();
         tools.push(json!({"tool": "pulso/flow_edges@1.0.0", "description": menu.trim_end(), "args_schema": {"type": "object"}}));
+    } else if target.kind == "flow_edit" {
+        let flow_id = target.params["flow"].as_str().unwrap_or("");
+        let op = target.params["op"].as_str().unwrap_or("");
+        let flow = catalog.flow(flow_id).ok_or_else(|| format!("flow {flow_id} is not in the baseline catalogue"))?;
+        inputs["op"] = json!(op);
+        inputs["flow"] = json!(flow_id);
+        // ask and validator are only proposed where native evaluation can prove them: the menu the model sees holds only those positions
+        let need_evidence = ["add_validator", "insert_ask"].contains(&op);
+        let menu: String = crate::flow_edits::menu(op, flow)
+            .iter()
+            .filter(|m| !need_evidence || m["native_evidence"] == true)
+            .map(|m| format!("{} | {} -> {} | native_evidence {}\n", m["position_id"].as_str().unwrap_or(""), m["from"].as_str().unwrap_or(""), m["to"].as_str().unwrap_or("(this question)"), m["native_evidence"]))
+            .collect();
+        if menu.is_empty() {
+            return Err(format!("the flow {flow_id} has no position for {op}"));
+        }
+        tools.push(json!({"tool": "pulso/flow_positions@1.0.0", "description": menu.trim_end(), "args_schema": {"type": "object"}}));
+        let presets: String = target
+            .params["presets"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|x| if op == "add_validator" { format!("{} | accepts a text that contains the id | rejects a text without it\n", x["id"].as_str().unwrap_or("")) } else { format!("{} | {} | {}\n", x["id"].as_str().unwrap_or(""), x["es"].as_str().unwrap_or(""), x["pt"].as_str().unwrap_or("")) })
+            .collect();
+        tools.push(json!({"tool": "pulso/flow_presets@1.0.0", "description": presets.trim_end(), "args_schema": {"type": "object"}}));
     } else {
         inputs["limits"] = json!({"summary_max_chars": 240, "example_max_chars": 100, "example_min": 2, "example_max": 4, "text_max_chars": 240});
         tools.push(directory_tool(catalog));
@@ -278,7 +303,7 @@ pub fn builder_request(f: &Finding, opp: &Opportunity, row: &Row, catalog: &Cata
     let schema = obj(
         json!({"proposal": obj(
             json!({"kind": {"type": "string", "enum": [target.kind, "no_change"]}, "rationale": text(),
-                   "patches": {"type": "array", "items": patch}, "agent_id": text(), "edge_id": text(),
+                   "patches": {"type": "array", "items": patch}, "agent_id": text(), "edge_id": text(), "position": text(), "preset": text(),
                    "routing": obj(json!({"summary_es": text(), "summary_pt": text(), "examples_es": {"type": "array", "items": text()}, "examples_pt": {"type": "array", "items": text()}}), &[]),
                    "intake": obj(json!({"ask_es": text(), "ask_pt": text(), "notice_es": text(), "notice_pt": text()}), &[]),
                    "alternatives": alternatives_schema(), "uncertainty": text()}),
@@ -292,8 +317,8 @@ pub fn builder_request(f: &Finding, opp: &Opportunity, row: &Row, catalog: &Cata
 pub fn parse_builder(answer: &Value) -> Result<Value, String> {
     exact_keys(answer, &["proposal"], "builder answer")?;
     let p = &answer["proposal"];
-    exact_keys(p, &["kind", "target_ref", "rationale", "patches", "agent_id", "routing", "intake", "edge_id", "expected_direction", "alternatives", "uncertainty"], "proposal")?;
-    p["kind"].as_str().filter(|k| ["patch", "new_agent", "link_tool", "no_change"].contains(k)).ok_or("proposal kind is not patch|new_agent|link_tool|no_change")?;
+    exact_keys(p, &["kind", "target_ref", "rationale", "patches", "agent_id", "routing", "intake", "edge_id", "position", "preset", "op", "expected_direction", "alternatives", "uncertainty"], "proposal")?;
+    p["kind"].as_str().filter(|k| ["patch", "new_agent", "link_tool", "flow_edit", "no_change"].contains(k)).ok_or("proposal kind is not patch|new_agent|link_tool|flow_edit|no_change")?;
     clean_text(p["rationale"].as_str().ok_or("proposal without rationale")?, 600).map_err(|e| format!("rationale: {e}"))?;
     clean_text(p["uncertainty"].as_str().ok_or("proposal without uncertainty")?, 400).map_err(|e| format!("uncertainty: {e}"))?;
     // `target_ref` and `expected_direction` are tolerated and IGNORED: the engine derives both (BLD1), the model cannot fail a proposal over them.
@@ -327,10 +352,34 @@ pub fn link_review_request(c: &crate::patch::Compiled, dc: DataClass) -> Option<
 
 /// `Ok(true)` when the reviewer supports the link (verdict supported and no check failed).
 pub fn parse_link_review(answer: &Value) -> Result<(bool, String), String> {
-    exact_keys(answer, &["verdict", "checks", "rationale"], "link review")?;
+    parse_review(answer, &LINK_CHECK_IDS)
+}
+
+pub const FLOW_REVIEW_SYSTEM: &str = "You are the independent Verifier of a proposed flow edit for a bank customer-service agent. You did not write the proposal. You see only structured facts recomputed by code from the base and the edited flow: the op, the node types around the edit, the new nodes with their types and exits, whether every protected node (rule, decide, confirm, verify, escalate, end, write tool) is unchanged, whether the edit is pass-through (every old edge still reaches the same old node), and how many escalations are reachable before and after. Run three checks and answer pass, fail or na: protected_untouched (no protected node changed and no edge leaving one), pass_through (the new nodes only sit on an edge or add an input check, and continue to the original target), exits_preserved (every failure exit still ends in an escalation or another safe exit, none was removed and the number of reachable escalations did not drop). Then give verdict supported or refuted and a one-sentence rationale without digits. Answer with ONE JSON object and nothing else (no markdown fence), exactly this shape: {\"verdict\": \"supported|refuted\", \"checks\": [{\"id\": \"protected_untouched\", \"result\": \"pass|fail|na\"}, {\"id\": \"pass_through\", \"result\": \"pass|fail|na\"}, {\"id\": \"exits_preserved\", \"result\": \"pass|fail|na\"}], \"rationale\": \"<one sentence, no digits>\"}.";
+
+pub const FLOW_CHECK_IDS: [&str; 3] = ["protected_untouched", "pass_through", "exits_preserved"];
+
+/// The structured facts of a compiled flow edit, recomputed by the compiler from base and result (never from model text).
+pub fn flow_review_request(c: &crate::patch::Compiled, dc: DataClass) -> Option<ModelRequest> {
+    let facts = c.expected_effect["art2"]["facts"].clone();
+    if !facts.is_object() {
+        return None;
+    }
+    let inputs = json!({"agent": c.agent_id, "facts": {"op": facts["op"], "from": facts["from"], "to": facts["to"], "new_nodes": facts["new_nodes"], "exits_of_new_nodes": facts["exits_of_new_nodes"],
+                        "validator_added": facts["validator_added"], "templates_added": facts["templates_added"], "protected_unchanged": facts["protected_unchanged"],
+                        "pass_through": facts["pass_through"], "escalations_reachable": facts["escalations_reachable"]}, "checks_requested": FLOW_CHECK_IDS});
+    let schema = obj(json!({"verdict": {"type": "string", "enum": ["supported", "refuted"]},
+                            "checks": {"type": "array", "items": obj(json!({"id": {"type": "string", "enum": FLOW_CHECK_IDS}, "result": {"type": "string", "enum": ["pass", "fail", "na"]}}), &["id", "result"])},
+                            "rationale": text()}), &["verdict", "checks", "rationale"]);
+    Some(request(Role::Verifier, FLOW_REVIEW_SYSTEM, "review the proposed flow edit", inputs, json!([]), json!([]), schema, dc))
+}
+
+/// `Ok(true)` when the reviewer supports the edit (verdict supported and no requested check failed).
+pub fn parse_review(answer: &Value, ids: &[&str]) -> Result<(bool, String), String> {
+    exact_keys(answer, &["verdict", "checks", "rationale"], "review")?;
     let verdict = answer["verdict"].as_str().filter(|v| ["supported", "refuted"].contains(v)).ok_or("verdict is not supported|refuted")?;
     let mut ok = verdict == "supported";
-    for id in LINK_CHECK_IDS {
+    for id in ids.iter().copied() {
         let r = answer["checks"].as_array().ok_or("checks is not a list")?.iter().filter(|c| c["id"] == id).collect::<Vec<_>>();
         if r.len() != 1 {
             return Err(format!("check {id} must appear exactly once"));

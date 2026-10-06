@@ -41,3 +41,6 @@ structured facts only: tool risk_class and source, edge node types, wiring) befo
 edge (`edge_unknown`) and a write tool (`write_tool_human_only`) whatever the model says; a refuting review blocks (`link_review_refuted`). Policy findings take no model call (deterministic hypothesis
 note and tighten draft, `needs_owner_ack`). Live result: see journal 0665. `tool_called.tool_source` (agent-core PR 56) is in the event payload but NOT in the metric catalog
 (`engine.tool_called` = status, latency_ms, attempt), so a scenario assertion cannot use it yet: ask to agent-core to add it to the catalog.
+
+## FLOW1: flow edits (additive only)
+Flows are proposed with four additive ops (validator, ask, notice, ack): see `docs/dev/FLOW_EDITS.md` (decision table, denial codes, what the Core evaluates). Natively evaluated: `add_validator`, `insert_ask`. Guard-run only: `insert_notice`, `insert_ack`.

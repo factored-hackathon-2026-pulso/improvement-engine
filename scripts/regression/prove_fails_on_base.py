@@ -235,6 +235,15 @@ def coverage(bundle: dict, binding: dict, settings: str | None = None) -> dict:
     elif mech == "tool_link":
         native.insert(0, "link_tool_failure_exits")
         not_measured += ["tool_identity", "answer_uses_tool_data", "native_wording"]
+    elif mech == "flow_validator":
+        native.insert(0, "flow_validator_rejects_input")
+        not_measured += ["flow_input_format", "tool_identity", "native_wording"]
+    elif mech == "flow_ask":
+        native.insert(0, "flow_ask_waits_for_answer")
+        not_measured += ["tool_failure_exit_after_extra_turn", "flow_wording", "tool_identity"]
+    elif mech in ("flow_notice", "flow_ack"):
+        native.insert(0, "flow_path_exercised")
+        not_measured += ["flow_wording", "tool_identity"]
     elif mech == "policy_threshold":
         native.insert(0, "policy_boundary_escalation")
         not_measured += ["owner_decision", "native_wording"]

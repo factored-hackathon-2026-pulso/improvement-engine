@@ -429,21 +429,24 @@ pub fn reason_candidate(catalog: &Catalog, f: &Finding, ports: &Ports, opts: &Op
         Asked::Stopped(e) => finish(model_stop(r, "builder", e)),
         Asked::Rejected((st, code, why)) => finish(blocked(r, &code, st, why)),
         Asked::Done(c) => {
-            // ART3: an independent Verifier call reviews a compiled tool link (read-only, valid edge). The compiler already enforced both; the
-            // model can only refute, never widen.
-            if c.kind == "link_tool"
-                && let Some(rq) = roles::link_review_request(&c, dc)
-            {
-                let (rg, n) = ask(&rv, &rq, "link_review", 0, &|a| roles::parse_link_review(a).map_err(|e| ("link_review", "model_invalid".to_string(), e)));
-                attempts.borrow_mut()["link_review"] = json!(n);
+            // ART3 / FLOW1: an independent Verifier call reviews a compiled tool link or flow edit on structured facts (read-only link, valid edge;
+            // protected nodes untouched, pass-through, exits preserved). The compiler already enforced all of it; the model can only refute, never widen.
+            let review = match c.kind.as_str() {
+                "link_tool" => roles::link_review_request(&c, dc).map(|q| ("link_review", "link_review_refuted", &roles::LINK_CHECK_IDS[..], q)),
+                "flow_edit" => roles::flow_review_request(&c, dc).map(|q| ("flow_review", "flow_review_refuted", &roles::FLOW_CHECK_IDS[..], q)),
+                _ => None,
+            };
+            if let Some((stage, refuted, ids, rq)) = review {
+                let (rg, n) = ask(&rv, &rq, stage, 0, &|a| roles::parse_review(a, ids).map_err(|e| (stage, "model_invalid".to_string(), e)));
+                attempts.borrow_mut()[stage] = json!(n);
                 match rg {
                     Asked::Done((ok, why)) => {
-                        r.verification = Some(json!({"status": r.verification.as_ref().map_or(Value::Null, |v| v["status"].clone()), "claim_verification": r.verification.clone(), "link_review": {"supported": ok, "rationale": why}}));
+                        r.verification = Some(json!({"status": r.verification.as_ref().map_or(Value::Null, |v| v["status"].clone()), "claim_verification": r.verification.clone(), stage: {"supported": ok, "rationale": why}}));
                         if !ok {
-                            return finish(blocked(r, "link_review_refuted", "link_review", why));
+                            return finish(blocked(r, refuted, stage, why));
                         }
                     }
-                    Asked::Stopped(e) => return finish(model_stop(r, "link_review", e)),
+                    Asked::Stopped(e) => return finish(model_stop(r, stage, e)),
                     Asked::Rejected((st, code, why)) => return finish(blocked(r, &code, st, why)),
                 }
             }

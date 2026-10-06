@@ -293,6 +293,21 @@ fn diff_text(l: Lang, proposal: &Value) -> String {
     }
     let head = if proposal["kind"].as_str() == Some("link_tool") {
         l.t(&format!("Enlace a una herramienta existente, solo lectura (nodo pass-through y tools_allowed del agente) en {target}: "), &format!("Vínculo a uma ferramenta existente, somente leitura (nó pass-through e tools_allowed do agente) em {target}: ")).to_string()
+    } else if proposal["kind"].as_str() == Some("flow_edit") {
+        let op = proposal["diff"][0]["op"].as_str().unwrap_or("");
+        let what_es = match op {
+            "add_validator" => "validación de entrada de una pregunta existente (el flujo vuelve a preguntar si el texto no trae el dato)",
+            "insert_ask" => "una pregunta aclaratoria adicional (si se agotan los intentos sigue la escalación existente)",
+            "insert_notice" => "un aviso antes de una escalación existente (la escalación y su motivo no cambian)",
+            _ => "un mensaje de acuse en el camino normal",
+        };
+        let what_pt = match op {
+            "add_validator" => "validação de entrada de uma pergunta existente (o fluxo pergunta de novo se o texto não traz o dado)",
+            "insert_ask" => "uma pergunta de esclarecimento adicional (se as tentativas acabam, segue a escalação existente)",
+            "insert_notice" => "um aviso antes de uma escalação existente (a escalação e seu motivo não mudam)",
+            _ => "uma mensagem de confirmação no caminho normal",
+        };
+        l.t(&format!("Edición aditiva del flujo en {target}: {what_es}. Ningún nodo se elimina ni se toca un nodo protegido: "), &format!("Edição aditiva do fluxo em {target}: {what_pt}. Nenhum nó é removido nem se toca um nó protegido: ")).to_string()
     } else if proposal["kind"].as_str() == Some("tighten_policy") {
         l.t(&format!("Umbral de política MAS ESTRICTO (solo endurece) en {target}: "), &format!("Limiar de política MAIS ESTRITO (so endurece) em {target}: ")).to_string()
     } else if proposal["kind"].as_str() == Some("new_agent") {
@@ -383,6 +398,12 @@ fn coverage_text(l: Lang, verdict: Option<&Value>) -> String {
             "response_from_model_path" => l.t("respuesta generada por el modelo (sin plantilla de respaldo)", "resposta gerada pelo modelo (sem template de reserva)"),
             "new_agent_intake_and_handoff" => l.t("el agente nuevo toma el tema, avisa y deriva a una persona sin herramientas", "o agente novo assume o tema, avisa e encaminha a uma pessoa sem ferramentas"),
             "link_tool_failure_exits" => l.t("la herramienta enlazada está en el camino: si responde error, timeout o denegado el flujo toma la salida tool_failure existente", "a ferramenta vinculada está no caminho: se responder erro, timeout ou negado o fluxo toma a saída tool_failure existente"),
+            "flow_validator_rejects_input" => l.t("un texto sin el dato no pasa la validación: el flujo vuelve a preguntar y no llama a la herramienta (la base la llama y resuelve)", "um texto sem o dado não passa na validação: o fluxo pergunta de novo e não chama a ferramenta (a base a chama e resolve)"),
+            "flow_ask_waits_for_answer" => l.t("la pregunta adicional detiene el flujo hasta la respuesta (la base sigue y cierra o llama a la herramienta)", "a pergunta adicional para o fluxo até a resposta (a base segue e fecha ou chama a ferramenta)"),
+            "flow_path_exercised" => l.t("el camino editado se ejercita y los guardas pasan; el evaluador nativo no distingue esta edición de la base (ningún evento trae el id del nodo o de la plantilla)", "o caminho editado é exercitado e os guardas passam; o avaliador nativo não distingue esta edição da base (nenhum evento traz o id do nó ou do template)"),
+            "flow_wording" => l.t("el texto del mensaje (revisado por personas, el evaluador nativo no lo lee)", "o texto da mensagem (revisado por pessoas, o avaliador nativo não o le)"),
+            "flow_input_format" => l.t("que el formato del dato sea el real (viene de datos de mapeo revisados; el aprobador lo confirma)", "que o formato do dado seja o real (vem de dados de mapeamento revisados; o aprovador o confirma)"),
+            "tool_failure_exit_after_extra_turn" => l.t("la salida por falla de herramienta después de la pregunta adicional (el guarda nativo de falla de herramienta toma otro número de turnos con el candidato y se omite)", "a saída por falha de ferramenta depois da pergunta adicional (o guarda nativo de falha de ferramenta toma outro número de turnos com o candidato e é omitido)"),
             "tool_identity" => l.t("qué herramienta se llamó (el evento nativo no trae su id)", "qual ferramenta foi chamada (o evento nativo não traz seu id)"),
             "answer_uses_tool_data" => l.t("que la respuesta use el dato de la herramienta (el enlace solo lo deja disponible al flujo)", "que a resposta use o dado da ferramenta (o vínculo so o deixa disponível ao fluxo)"),
             "policy_boundary_escalation" => l.t("escalamiento en los límites del umbral viejo y del nuevo (casos en la ventana fallan en la base y pasan con el candidato)", "escalonamento nos limites do limiar antigo e do novo (casos na janela falham na base e passam com o candidato)"),
@@ -481,6 +502,10 @@ fn unchanged(l: Lang, proposal: &Value) -> String {
         Some("link_tool") => l.t(
             "Enlace a herramienta existente, solo lectura: no se crea ninguna herramienta ni se enlaza una de escritura; la copia del ToolDef es idéntica a la del registro; las ramas existentes del flujo no cambian (nodo pass-through); la autorización real (clasificador de campos, permisos de campo, regla de principal del tool-service) está fuera del registro y se verificó contra el listado del tool-service. La redacción de la respuesta no cambia.",
             "Vínculo a ferramenta existente, somente leitura: nenhuma ferramenta é criada nem vinculada uma de escrita; a cópia do ToolDef é idêntica à do registro; os ramos existentes do fluxo não mudam (nó pass-through); a autorização real (classificador de campos, permissões de campo, regra de principal do tool-service) está fora do registro e foi verificada contra a listagem do tool-service. A redação da resposta não muda.",
+        ),
+        Some("flow_edit") => l.t(
+            "Edición aditiva del flujo: ningún nodo se elimina; las reglas, decisiones, confirmaciones, verificaciones, escalaciones, cierres y escrituras, y las aristas que salen de ellos, son idénticos a la base (recalculado por el compilador); los nodos nuevos son de paso (cada arista vieja llega al mismo nodo viejo) y toda rama de falla que era una salida segura lo sigue siendo. Ninguna herramienta, política, permiso ni presupuesto cambia; el pin del agente a su flujo sigue la nueva versión. Los textos son revisados, no generados.",
+            "Edição aditiva do fluxo: nenhum nó é removido; as regras, decisões, confirmações, verificações, escalações, fechamentos e escritas, e as arestas que saem deles, são idênticos à base (recalculado pelo compilador); os nós novos são de passagem (cada aresta antiga chega ao mesmo nó antigo) e todo ramo de falha que era uma saída segura continua sendo. Nenhuma ferramenta, política, permissão ou orçamento muda; o pin do agente ao seu fluxo segue a nova versão. Os textos são revisados, não gerados.",
         ),
         Some("tighten_policy") => l.t(
             "Solo endurece: todo valor que la política anterior escalaba se sigue escalando (comparador monótono). Requiere el reconocimiento explícito del responsable (owner_ack) y NUNCA se anuncia automáticamente; el valor lo fija el responsable, no el motor. Ningún flujo, herramienta ni permiso cambia.",

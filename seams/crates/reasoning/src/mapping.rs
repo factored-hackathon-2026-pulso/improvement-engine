@@ -16,10 +16,10 @@
 use crate::finding::Finding;
 use serde_json::{Value, json};
 
-pub const MECHANISMS: [&str; 10] = ["draft_next_step", "uncovered_topic", "repeated_lookup", "status_message_gap", "closing_followup", "wording", "none", "missing_tool", "stale_tool_answer", "policy_threshold"];
+pub const MECHANISMS: [&str; 14] = ["draft_next_step", "uncovered_topic", "repeated_lookup", "status_message_gap", "closing_followup", "wording", "none", "missing_tool", "stale_tool_answer", "policy_threshold", "flow_input_validation", "flow_missing_context", "flow_silent_failure", "flow_missing_ack"];
 
 /// Kinds a target can have. Anything else (policy, tool, flow, model_profile ...) is refused by construction.
-pub const TARGET_KINDS: [&str; 4] = ["patch", "new_agent", "link_tool", "tighten_policy"];
+pub const TARGET_KINDS: [&str; 5] = ["patch", "new_agent", "link_tool", "tighten_policy", "flow_edit"];
 
 /// At most this many candidates of one finding are tried (in rank order, stopping at the first proven one).
 pub const MAX_CANDIDATES: usize = 2;
@@ -166,6 +166,40 @@ pub struct Table {
     human: Vec<HumanDef>,
 }
 
+/// FLOW1: a `flow_edit` candidate names its flow and op in the target ref, carries reviewed presets, and its proof support is the matching
+/// suite mechanism. Validator presets carry accept and reject examples (the suite builder re-runs them).
+fn flow_edit_params(cw: &str, tid: &str, params: &Value, proof_support: &str) -> Result<(), String> {
+    let (flow, op) = tid.split_once('/').unwrap_or(("", ""));
+    if params["flow"].as_str() != Some(flow) || params["op"].as_str() != Some(op) {
+        return Err(format!("{cw}: params.flow and params.op must repeat the target ref {tid}"));
+    }
+    let want = match op {
+        "add_validator" => "suite:flow_validator",
+        "insert_ask" => "suite:flow_ask",
+        "insert_notice" => "suite:flow_notice",
+        _ => "suite:flow_ack",
+    };
+    if proof_support != want {
+        return Err(format!("{cw}: proof_support of {op} must be {want}"));
+    }
+    let presets = params["presets"].as_array().filter(|p| (1..=6).contains(&p.len())).ok_or_else(|| format!("{cw}: one to six presets"))?;
+    let mut seen = std::collections::BTreeSet::new();
+    for pj in presets {
+        let p = crate::flow_edits::Preset::from_json(pj).map_err(|e| format!("{cw}: {e}"))?;
+        crate::flow_edits::check_preset(op, &p).map_err(|d| format!("{cw}: preset {}: {}: {}", p.id, d.code, d.why))?;
+        if !seen.insert(p.id.clone()) {
+            return Err(format!("{cw}: duplicate preset id {}", p.id));
+        }
+        if op == "add_validator" {
+            let ex = |k: &str, loc: &str| pj[k][loc].as_array().filter(|a| !a.is_empty() && a.iter().all(|x| x.as_str().is_some_and(|t| crate::clean_text(t, 200).is_ok()))).is_some();
+            if !["es", "pt"].iter().all(|l| ex("accept", l) && ex("reject", l)) {
+                return Err(format!("{cw}: preset {}: a validator needs clean accept and reject examples in es and pt", p.id));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn need<'a>(v: &'a Value, key: &str, what: &str) -> Result<&'a str, String> {
     v[key].as_str().filter(|s| !s.trim().is_empty()).ok_or_else(|| format!("{what}: missing {key}"))
 }
@@ -210,10 +244,14 @@ impl Table {
                     "patch" => prefix == "template" || prefix == "prompt",
                     "link_tool" => prefix == "tool_link" && tid.split_once('/').is_some_and(|(a, t)| !a.is_empty() && !t.is_empty()),
                     "tighten_policy" => prefix == "policy" && c["params"]["tighten_to"].is_number(),
+                    "flow_edit" => prefix == "flow_edit" && tid.split_once('/').is_some_and(|(f, o)| !f.is_empty() && crate::flow_edits::OPS.contains(&o)),
                     _ => prefix == "new_agent",
                 };
                 if !prefix_ok {
                     return Err(format!("{cw}: target_ref {target_ref} does not match kind {kind}"));
+                }
+                if kind == "flow_edit" {
+                    flow_edit_params(&cw, tid, &c["params"], c["proof_support"].as_str().unwrap_or(""))?;
                 }
                 if tid.starts_with("pulso-") || denied_ids.iter().any(|d| tid.contains(d)) {
                     return Err(format!("{cw}: {tid} is deny-listed"));
@@ -236,6 +274,7 @@ impl Table {
                         "patch" => "patch",
                         "link_tool" => "link_tool",
                         "tighten_policy" => "tighten_policy",
+                        "flow_edit" => "flow_edit",
                         _ => "new_agent",
                     },
                     agent: leak(need(c, "agent", &cw)?),
