@@ -2,6 +2,23 @@
 
 Autonomous detection and improvement service integrating external Agent Core primitives.
 
+> **State checked against `main` at `e0476b4` (5 October 2026).** This repository contains both verified engine foundations and companion integration/demo packages. Do not infer that all present modules form one fully autonomous production loop: `docs/IMPLEMENTATION_STATUS.md` distinguishes integrated boundaries, local simulations, and remaining joins. In particular, the local snapshot runner is a no-provider simulation; it does not prove native Agent Core execution, causal lift, release, or a deployed service.
+
+## System boundary and reading path
+
+The Rust workspace owns source-contract validation, bounded projections, deterministic detection/control boundaries, durable-record interfaces and read APIs. Companion packages compose the external Agent Core primitives, support local platform simulation, and provide an internal engineering debug console. Agent Core remains the owner of Agent/Flow/Jev execution; this repository is not a second agent runtime or LLM gateway. AWS Terraform belongs to the sibling `pulso-factored/infra` repository.
+
+Read [CONTEXT.md](CONTEXT.md) for the domain boundary, [implementation status](docs/IMPLEMENTATION_STATUS.md) for what is integrated versus isolated, and [open gaps](docs/gaps/OPEN_GAPS.md) before relying on a capability. The local runner guide explains the reproducible original/E0 snapshot path and its output limits.
+
+| Concern | Entry point | Important limit |
+|---|---|---|
+| Rust engine and contracts | `crates/*`, `contracts/`, `docs/architecture/` | Unit and contract coverage do not prove one connected runtime. |
+| Agent Core composition | `core-bridge/`, `agent-core-assets/` | Uses the pinned Core; a local bridge proof is not a production deployment. |
+| Support platform boundary | `platform-contract/`, `platform-sim/`, `platform-exporter/` | Simulators are explicitly labelled doubles; only approved, schema-bound observations cross the contract. |
+| Local snapshot E2E | `scripts/run-local-snapshots-e2e.ps1` | Descriptive, isolated, no network/provider calls; see the guide for exact prerequisites and semantics. |
+| Internal debugging | `debug-console/` | Engineering backoffice, not the customer-facing support product. |
+| Cloud infrastructure | sibling `infra` repository | This repository's Podman/LocalStack stack is not AWS infrastructure. |
+
 ## Current slice
 
 Layer 0 provides a minimal Rust workspace, a public tracer for the core crate, and its first read-only source-boundary slice. The source validator loads canonical JSON contracts in deterministic filename order and compares adapter-supplied bytes with a sealed synthetic snapshot; it emits deterministic findings for contract, header, file-digest and policy drift without opening bank data itself. U05 adds an in-memory, typed quota/grant semantic boundary: a quota is global to its tenant/resource/window even when the immutable `RunConfig` changes; grants have explicit expiry/revocation and reservations yield deterministic idempotent receipts. U06 adds the executable reducer contract for durable job admission: it binds a versioned run configuration, trigger and full quota request; grants a fenced, owner-bound lease; records an ambiguous effect as reconciliation-required before dispatch; and never makes a quota-deferred receipt executable. The in-memory reference adapter is exposed behind `DurableJobRepository`; a durable adapter must provide the documented transactional/conditional-update semantics before it can claim restart or multi-process durability. It establishes a reproducible local verification command:
