@@ -145,6 +145,37 @@ mod minting_tests {
         assert_ne!(seen[1], seen[2], "after the refresh window a new one is minted");
     }
 
+    /// A transport whose `send` takes `secs` of (fake) wall time, like an evaluate that runs for minutes.
+    struct Slow {
+        inner: Spy,
+        clock: Arc<AtomicI64>,
+        secs: i64,
+    }
+    impl Transport for Slow {
+        fn send(&self, req: &Request) -> Result<Reply, TransportError> {
+            let r = self.inner.send(req);
+            self.clock.fetch_add(self.secs, Ordering::SeqCst);
+            r
+        }
+    }
+
+    #[test]
+    fn an_evaluate_that_outlives_the_credential_ttl_is_not_resent_and_the_next_request_gets_a_new_credential() {
+        // the Core checks the credential when the request arrives (minted just before, 300 s TTL); the 600 s call must not be
+        // retried or re-signed mid-flight, and the following request must not reuse the long-dead credential
+        let clock = Arc::new(AtomicI64::new(1_800_000_000));
+        let c2 = clock.clone();
+        let clk: Clock = Arc::new(move || c2.load(Ordering::SeqCst));
+        let slow = Arc::new(Slow { inner: Spy { seen: Mutex::new(vec![]), statuses: Mutex::new(vec![]) }, clock: clock.clone(), secs: 600 });
+        let m = MintingTransport::new(slow.clone(), Arc::new(ServiceIdentity::new("k1", [9u8; 32]).with_clock(clk)));
+        let p = Jws::new(String::new());
+        assert_eq!(m.send(&req(&p)).unwrap().status, 200);
+        assert_eq!(m.send(&req(&p)).unwrap().status, 200);
+        let seen = slow.inner.seen.lock().unwrap();
+        assert_eq!(seen.len(), 2, "one send per call, no resend");
+        assert_ne!(seen[0], seen[1], "a credential older than its TTL is never reused");
+    }
+
     #[test]
     fn a_401_is_retried_once_with_a_renewed_credential() {
         // e.g. the Core has not yet re-read a rotated staff-keys file: the same request is repeated once, still minted, never the placeholder

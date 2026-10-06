@@ -818,6 +818,23 @@ mod engprod {
     }
 
     #[test]
+    fn the_evaluate_timeout_defaults_to_fifteen_minutes_for_the_long_suites() {
+        // copiloto-asesor-suite is 22 scenarios x up to 3 runs on one worker: well over 180 s
+        let get = |_: &str| None::<String>;
+        assert_eq!(pulso::run::value_loop::eval_timeout_secs(&get), 900);
+    }
+
+    #[test]
+    fn the_evaluate_timeout_override_is_honoured_and_a_bad_value_never_means_no_timeout() {
+        let with = |v: &'static str| move |k: &str| (k == "PULSO_EVAL_TIMEOUT_SECS").then(|| v.to_string());
+        assert_eq!(pulso::run::value_loop::eval_timeout_secs(&with("1800")), 1800);
+        for bad in ["0", "-5", "abc", "", "  "] {
+            assert_eq!(pulso::run::value_loop::eval_timeout_secs(&with(bad)), 900, "{bad:?}");
+        }
+        assert_eq!(pulso::run::value_loop::eval_timeout_secs(&with("5")), 60, "below one minute is raised: no suite finishes sooner");
+    }
+
+    #[test]
     fn the_old_static_token_path_is_unchanged() {
         let v = mk(&[("PULSO_REGISTRY_TOKEN", "t.o.k")]).unwrap().unwrap();
         assert_eq!(v.credential, "engine builder principal");

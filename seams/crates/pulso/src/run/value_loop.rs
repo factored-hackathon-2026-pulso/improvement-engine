@@ -126,6 +126,16 @@ pub struct ValueLoop {
 }
 
 /// `scripts/regression` of the working directory, else of the checkout the binary was built from.
+/// Read timeout of the evaluate transport. The long suites (copiloto-asesor-suite: 22 scenarios x up to 3 runs, one worker) take over
+/// 180 s, so the default is 900 s. `PULSO_EVAL_TIMEOUT_SECS` overrides it; a value that is not a positive integer falls back to the
+/// default (never "no timeout") and one under a minute is raised to 60 s.
+pub fn eval_timeout_secs(get: &Lookup) -> u64 {
+    match get("PULSO_EVAL_TIMEOUT_SECS").and_then(|v| v.trim().parse::<u64>().ok()) {
+        Some(n) if n >= 1 => n.max(60),
+        _ => 900,
+    }
+}
+
 pub fn default_script_dir() -> PathBuf {
     let local = PathBuf::from("scripts/regression");
     if local.join("judge_story.py").exists() { local } else { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../scripts/regression") }
@@ -211,7 +221,7 @@ impl ValueLoop {
                 if python.is_empty() {
                     return Err("PULSO_REGRESSION_PYTHON is blank".into());
                 }
-                let secs = get("PULSO_EVAL_TIMEOUT_SECS").and_then(|v| v.parse().ok()).unwrap_or(900);
+                let secs = eval_timeout_secs(get);
                 let w11 = work_dir.join("w11");
                 std::fs::create_dir_all(&w11).map_err(|e| format!("work dir for the proof: {e}"))?;
                 Some(ProofConfig {

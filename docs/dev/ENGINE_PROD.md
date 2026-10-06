@@ -49,6 +49,7 @@ One run of the improvement loop as a process of its own (no HTTP service, no job
 | `PULSO_LLM_GATEWAY`, `PULSO_LLM_GATEWAY_ADDR`, `PULSO_LLM_GATEWAY_KEY` (+ `_MODEL`, `_VERIFIER_MODEL`, `_BUILDER_MODEL`, `_BUILDER_ESCALATION_MODEL`, `_ALIAS`, `_MAX_TOKENS`, `_TIMEOUT_S`, `_STRUCTURED`) | R | the model ports: the loop has no scripted configuration. `PULSO_LLM_GATEWAY=enabled` |
 | `PULSO_EVAL_BEFORE_ANNOUNCE` | O | `on` (default for `via=api`) or `off`; `on` needs Python (see section 4) |
 | `PULSO_REGRESSION_PYTHON`, `PULSO_REGRESSION_SCRIPTS`, `PULSO_EVAL_TIMEOUT_SECS` | O | proof runtime (default `python`, `scripts/regression`, 900 s) |
+| `PULSO_EVAL_TIMEOUT_SECS` (detail) | O | read timeout of the evaluate call, default 900 s: copiloto-asesor-suite (22 scenarios x up to 3 runs, one worker) takes over 180 s. Not a positive integer falls back to 900, under 60 is raised to 60. The credential is minted per request (300 s TTL), so a longer call is fine: the Core authenticates on arrival |
 | `PULSO_ANNOUNCE_TO_PLATFORM`, `PULSO_PLATFORM_URL`, `PULSO_PLATFORM_SERVICE_TOKEN` | O | announce to the support platform (on only when both URL and token are set) |
 | `PULSO_PROFILE` | O | `standard` (default) or `demo` (section 3) |
 | `PULSO_LOOP_MAX_FINDINGS`, `PULSO_LOOP_MAX_EXPLORATORY` | O | cost bounds per run (exploratory default 2; 5 under `demo`) |
